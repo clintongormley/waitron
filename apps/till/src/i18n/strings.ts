@@ -2001,7 +2001,16 @@ export const en = {
     "This bill's ticket ({amount}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.",
   "split.confirm": "Reopen to split",
   "split.unserved_held":
-    "These dishes are not marked served, so the bill cannot be reopened yet. Send each held course to the kitchen first, then mark its dishes served and choose Reopen to split again.",
+    "These dishes are not marked served, so the bill cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen to split again.",
+  "split.unserved_no_mark":
+    "These dishes are not marked served, so the bill cannot be reopened yet. This device cannot mark dishes served: mark them served on a device whose profile hands orders over, then choose Reopen to split again.",
+  "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
+  "split.unconfirmed":
+    "Reopen to split got no answer, so it may have been made. Check the table's bills before trying again.",
+  "split.refused_payments":
+    "Part of this bill is paid, so it cannot be reopened. The other guests pay the rest on this ticket with Pay.",
+  "split.refused_payment_in_flight":
+    "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
   "split.done":
     "Credit note {number} issued. Move each guest's dishes to their own bill, then print each one.",
   "split.done_unnumbered":
@@ -4173,7 +4182,16 @@ export const es: Record<StringKey, string> = {
     "El ticket de esta cuenta ({amount}) se abona por completo con una factura rectificativa y sus platos vuelven a una cuenta nueva abierta, para que cada cliente tenga su propio ticket.",
   "split.confirm": "Reabrir para dividir",
   "split.unserved_held":
-    "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Envía antes a cocina cada plato en espera, márcalos como servidos y vuelve a elegir Reabrir para dividir.",
+    "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir para dividir.",
+  "split.unserved_no_mark":
+    "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Este dispositivo no puede marcarlos como servidos: márcalos en un dispositivo cuyo perfil entrega pedidos y vuelve a elegir Reabrir para dividir.",
+  "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
+  "split.unconfirmed":
+    "Reabrir para dividir no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
+  "split.refused_payments":
+    "Parte de esta cuenta ya está pagada, así que no se puede reabrir. Los demás clientes pagan el resto en este ticket con Cobrar.",
+  "split.refused_payment_in_flight":
+    "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir para dividir.",
   "split.done":
     "Factura rectificativa {number} emitida. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
   "split.done_unnumbered":

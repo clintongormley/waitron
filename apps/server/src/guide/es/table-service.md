@@ -673,6 +673,8 @@ nueva**.
 
 Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir para dividir**. El
 ticket se abona y sus platos vuelven en una cuenta nueva, listos para [**Mover platos…**](table-service.md#move-dishes).
+Una vez pagada una parte, la cuenta ya no se puede reabrir: los demás clientes pagan el resto en este
+ticket con **Cobrar**.
 
 Cobra con **Cobrar** como siempre, de una vez o por partes.
 

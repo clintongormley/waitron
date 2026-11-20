@@ -106,10 +106,7 @@ export async function openSplitBill(
   return { billId, billNumber: made!.billNumber! };
 }
 
-/**
- * Copy every line of `fromBillId` onto `toBillId` under new ids, in stored line order, with the comps and discounts, service cancellations and allergy ticks the line holds.
- * Kitchen state, print links and sale links stay with the originals. Answers original id → copy id.
- */
+/** Kitchen state, print links and sale links stay with the originals. Answers original id → copy id. */
 export async function copyBillDishes(
   tx: Transaction,
   fromBillId: string,

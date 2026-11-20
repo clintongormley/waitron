@@ -24,10 +24,7 @@ import {
   resolveVenueClock,
 } from "@waitron/reporting";
 import { thousandthsToDecimal } from "@waitron/shared";
-import {
-  filedKindsBySale,
-  invoiceRecords,
-} from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedSales, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -298,8 +295,8 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       creditNoteNumber: `R/${credits[0]!.invoiceNumber}`,
     });
     const newBill = answer.json.billId as string;
-    expect(await filedKindsBySale(venue.db, [credits[0]!.id])).toEqual(
-      new Map([[credits[0]!.id, "R5"]]),
+    expect(await filedSales(venue.db, [credits[0]!.id])).toEqual(
+      new Map([[credits[0]!.id, { kind: "R5", total: "-48.00" }]]),
     );
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");
     expect(await dishesOf(party.tabId)).toEqual(before);

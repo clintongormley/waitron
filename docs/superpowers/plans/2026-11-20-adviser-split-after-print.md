@@ -89,7 +89,8 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 - The order history entry reuses kind `order_cancelled`
   (`packages/db/src/schema/order-amendments.ts:14`), reason `Bill split after printing to bill <n>`
   (the new bill's `bill_number`; the table has no column for a target bill, `:26-47`); orders lists
-  show the old bill as Cancelled with its dishes (`orders-list.ts:121-132`), which the guide says.
+  show the old bill as Cancelled with its dishes (`orders-list.ts:121-132`). The guide does not
+  say so: staff carry on from the new bill, and the old one asks nothing of them.
 - Same eligibility as Cancel and credit — a `placed` bill with an issued ticket, no payment, no card
   payment in flight, no customer-named invoice — narrowed to a table's bill its party has not left
   unpaid. Same permission: `sale.rectify`, with an approver's PIN when the operator lacks it.

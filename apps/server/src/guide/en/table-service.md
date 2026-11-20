@@ -626,6 +626,8 @@ A printed bill takes no more dishes. If the guests order something else, put it 
 
 If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The ticket is
 credited and its dishes return on a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+Once part of the bill is paid it cannot be reopened: the other guests pay the rest on this ticket
+with **Pay**.
 
 Take payment with **Pay** as usual, in one go or in parts.
 

@@ -12015,7 +12015,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(doneText(el)).toBe(t("split.done").replace("{number}", "R/3"));
   });
 
-  it("offers no Mark served to a person who may not hand over orders", async () => {
+  it("on a device that does not hand orders over, offers no Mark served and says where to mark them", async () => {
     const server = billServer(async () => {
       throw {
         code: "bill.unserved_dishes",
@@ -12029,6 +12029,9 @@ describe("till-app: reopening a printed bill to split it", () => {
 
     expect(dialog(el)!.unserved).toEqual(unserved);
     expect(dialog(el)!.canMarkServed).toBe(false);
+    const box = dialog(el)!.shadowRoot!.querySelector("[data-split-unserved]")!;
+    expect(box.textContent).toContain(t("split.unserved_no_mark"));
+    expect(box.querySelector("[data-split-mark-served]")).toBeNull();
   });
 
   it("says Mark served's refusal and splits nothing more", async () => {

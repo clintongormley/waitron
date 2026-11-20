@@ -31,6 +31,13 @@ const REFUSALS: Record<string, StringKey> = {
   "authorization.not_permitted": "cancel_credit.refused_not_permitted",
 };
 
+const SPLIT_REFUSALS: Record<string, StringKey> = {
+  ...REFUSALS,
+  network: "split.unconfirmed",
+  "bill.payments_received": "split.refused_payments",
+  "order.payment_in_flight": "split.refused_payment_in_flight",
+};
+
 @customElement("till-cancel-credit-dialog")
 export class TillCancelCreditDialog extends LitElement {
   static override styles = [
@@ -148,8 +155,9 @@ export class TillCancelCreditDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     const recovery = recoveryRefusalText(refusal);
     if (recovery !== null) return recovery;
-    return Object.hasOwn(REFUSALS, refusal.code)
-      ? t(REFUSALS[refusal.code]!)
+    const refusals = this.mode === "split" ? SPLIT_REFUSALS : REFUSALS;
+    return Object.hasOwn(refusals, refusal.code)
+      ? t(refusals[refusal.code]!)
       : codeMessage(refusal.code);
   }
 
@@ -242,30 +250,27 @@ export class TillCancelCreditDialog extends LitElement {
     return this.shownRefusal?.code === "bill.unserved_dishes" ? this.unserved : null;
   }
 
-  /** A split refused for dishes not marked served: those the kitchen has can be marked served
-   * here; a dish still held in its course has to be sent first, as Print the bill's list says. */
+  /** Mark served refuses a dish still held in its group (`group.line_held`), so it is not offered. */
   #unservedBody(dishes: MealEndUnservedDish[]) {
     const servable = this.canMarkServed ? dishes.filter((dish) => dish.released) : [];
+    const notice = !this.canMarkServed
+      ? t("split.unserved_no_mark")
+      : servable.length === dishes.length
+        ? codeMessage("bill.unserved_dishes")
+        : t("split.unserved_held");
     return html`<div class="unserved" role="alert" data-split-unserved>
-      <span
-        >${
-          servable.length === dishes.length
-            ? codeMessage("bill.unserved_dishes")
-            : t("split.unserved_held")
-        }</span
-      >
+      <span>${notice}</span>
       <span>${t("meal_end.unserved_heading")}</span>
       <ul>
-        ${dishes.map(
-          (dish) =>
-            html`<li data-unserved-dish>
-              ${
-                compareDecimal(decimal(dish.quantity), decimal("1")) === 0
-                  ? dish.dishName
-                  : `${quantityText(dish.quantity)} × ${dish.dishName}`
-              }
-            </li>`,
-        )}
+        ${dishes.map((dish) => {
+          const name =
+            compareDecimal(decimal(dish.quantity), decimal("1")) === 0
+              ? dish.dishName
+              : `${quantityText(dish.quantity)} × ${dish.dishName}`;
+          return html`<li data-unserved-dish>
+            ${dish.released ? name : t("split.unserved_dish_held").replace("{dish}", () => name)}
+          </li>`;
+        })}
       </ul>
       ${
         servable.length === 0
