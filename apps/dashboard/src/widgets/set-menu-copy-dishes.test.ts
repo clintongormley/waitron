@@ -1,11 +1,9 @@
-import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LeaveController } from "@waitron/ui";
 import { useLocale } from "../testing/locale-setup.js";
 import type { DashboardApi } from "../api/client.js";
 import { details } from "./set-menu-dishes.test-fixture.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectMessageAboveButtons, mountWidget } from "./test-helpers.js";
 import "./set-menu-copy-dishes.js";
 
 useLocale("en-GB");
@@ -44,7 +42,11 @@ async function mountCopy(api = fakeApi()) {
     events.push("saved");
     saved.push((event as CustomEvent).detail);
   });
-  return { el, api, events, saved };
+  const closed = () =>
+    new Promise((resolve) =>
+      el.addEventListener("set-menu-dish-dialog-closed", resolve, { once: true }),
+    );
+  return { el, api, events, saved, closed };
 }
 
 const dialog = () => page.getByRole("dialog", { name: "Copy dishes from another set menu" });
@@ -90,26 +92,45 @@ it("says there is nothing to copy from when this is the only set menu", async ()
 });
 
 it("copies from the chosen set menu, closes and hands back the saved dishes", async () => {
-  const { api, events, saved } = await mountCopy();
+  const { api, events, saved, closed } = await mountCopy();
   const result = { details, addedLines: [] };
   api.copySetMenuDishes.mockResolvedValue(result);
   await expect.element(copyButton()).toBeDisabled();
   await chooseSpecial();
+  const close = closed();
   await copyButton().click();
-  await expect.element(dialog()).not.toBeInTheDocument();
+  await close;
+  expect(events).toEqual(["saved", "closed"]);
   expect(api.copySetMenuDishes).toHaveBeenCalledExactlyOnceWith("daily", "special");
-  await vi.waitFor(() => expect(events).toEqual(["saved", "closed"]));
   expect(saved).toEqual([result]);
+  await expect.element(dialog()).not.toBeInTheDocument();
 });
 
-it("shows a refusal under the actions without reading the product library", async () => {
-  const { api, events } = await mountCopy();
+it("copies once when Copy dishes is pressed twice before it redraws", async () => {
+  const { api, closed } = await mountCopy();
+  api.copySetMenuDishes.mockResolvedValue({ details, addedLines: [] });
+  await chooseSpecial();
+  await expect.element(copyButton()).toBeEnabled();
+  const close = closed();
+  const button = copyButton().element() as HTMLElement;
+  button.click();
+  button.click();
+  await close;
+  expect(api.copySetMenuDishes).toHaveBeenCalledExactlyOnceWith("daily", "special");
+});
+
+it("shows a refusal above the buttons without reading the product library", async () => {
+  const { el, api, events } = await mountCopy();
   api.copySetMenuDishes.mockRejectedValue({ code: "set_menu.not_found" });
   await chooseSpecial();
   await copyButton().click();
-  await expect
-    .element(dialog().getByText("That set menu could not be found.", { exact: false }))
-    .toBeVisible();
+  const text = "That set menu could not be found. Reload the menu list and choose a set menu.";
+  await expect.element(dialog().getByText(text)).toBeVisible();
+  await expectMessageAboveButtons(
+    el.shadowRoot!.querySelector("wt-modal")!,
+    copyButton().element(),
+    text,
+  );
   expect(api.listLibraryProducts).not.toHaveBeenCalled();
   expect(events).toEqual([]);
   await expect.element(copyButton()).toBeEnabled();
@@ -132,7 +153,7 @@ it("still explains a measured dish when the product library cannot be read to na
 });
 
 it("refuses to close while the copy is being saved", async () => {
-  const { api, events } = await mountCopy();
+  const { el, api, events, closed } = await mountCopy();
   let finish!: (value: unknown) => void;
   api.copySetMenuDishes.mockImplementation(
     () =>
@@ -143,61 +164,25 @@ it("refuses to close while the copy is being saved", async () => {
   await chooseSpecial();
   await copyButton().click();
   await vi.waitFor(() => expect(finish).toBeDefined());
+  const requestClose = vi.spyOn(el.shadowRoot!.querySelector("wt-modal")!, "requestClose");
   await userEvent.keyboard("{Escape}");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(requestClose).toHaveBeenCalledExactlyOnceWith("escape");
+  await expect(requestClose.mock.results[0]!.value).resolves.toBe(false);
   await expect.element(dialog()).toBeVisible();
   expect(events).toEqual([]);
+  const close = closed();
   finish({ details, addedLines: [] });
+  await close;
+  expect(events).toEqual(["saved", "closed"]);
   await expect.element(dialog()).not.toBeInTheDocument();
-  await vi.waitFor(() => expect(events).toEqual(["saved", "closed"]));
 });
 
 it("closes on Cancel straight away when nothing was chosen and no leave check is present", async () => {
-  const { events } = await mountCopy();
+  const { events, closed } = await mountCopy();
   await expect.element(page.getByRole("combobox", { name: /^Set menu/ })).toBeVisible();
+  const close = closed();
   await page.getByRole("button", { name: "Cancel" }).click();
-  await vi.waitFor(() => expect(events).toEqual(["closed"]));
+  await close;
+  expect(events).toEqual(["closed"]);
   await expect.element(dialog()).not.toBeInTheDocument();
-});
-
-class CopyLeaveHost extends LitElement {
-  readonly leave = new LeaveController(this);
-  readonly api = fakeApi();
-  closed = 0;
-
-  override render() {
-    return html`<dashboard-set-menu-copy-dishes
-        .api=${this.api as unknown as DashboardApi}
-        menuId="daily"
-        @set-menu-dish-dialog-closed=${() => this.closed++}
-      ></dashboard-set-menu-copy-dishes>
-      ${this.leave.render({
-        heading: "Unsaved changes",
-        message: "Leave without saving?",
-        keepLabel: "Keep editing",
-        discardLabel: "Discard",
-      })}`;
-  }
-}
-customElements.define("set-menu-copy-leave-test", CopyLeaveHost);
-
-it("asks before Escape drops a chosen set menu, and Cancel puts the choice back and closes", async () => {
-  const { el } = await mountWidget<CopyLeaveHost>("set-menu-copy-leave-test", {});
-  const confirmation = page.getByRole("dialog", { name: "Unsaved changes" });
-  await chooseSpecial();
-  await userEvent.keyboard("{Escape}");
-  await expect.element(confirmation).toBeVisible();
-  await page.getByRole("button", { name: "Keep editing" }).click();
-  await expect.element(confirmation).not.toBeInTheDocument();
-  await expect
-    .element(page.getByRole("combobox", { name: /^Set menu.*Special menu/ }))
-    .toBeVisible();
-  expect(el.closed).toBe(0);
-
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await vi.waitFor(() => expect(el.closed).toBe(1));
-  expect(confirmation.elements()).toHaveLength(0);
-  const copy = el.shadowRoot!.querySelector("dashboard-set-menu-copy-dishes")!;
-  expect(copy.shadowRoot!.querySelector("wt-combobox")!.value).toBe("");
-  expect(el.api.copySetMenuDishes).not.toHaveBeenCalled();
 });

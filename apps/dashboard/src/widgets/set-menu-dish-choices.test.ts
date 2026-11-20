@@ -20,6 +20,7 @@ const choices = () =>
       .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
       .shadowRoot!.querySelector("dashboard-set-menu-dish-choices")!,
   );
+const choicesModal = () => choices().element().shadowRoot!.querySelector("wt-modal")!;
 const addDialog = () => page.getByRole("dialog", { name: "Add products" });
 const variantsDialog = () => page.getByRole("dialog", { name: "Variants for Wine" });
 
@@ -119,10 +120,30 @@ it("stays open on Escape while the chosen dishes are being added", async () => {
   await page.getByRole("button", { name: "Add selected" }).click();
   await vi.waitFor(() => expect(api.addSetMenuDishes).toHaveBeenCalled());
 
+  const requestClose = vi.spyOn(choicesModal(), "requestClose");
   await userEvent.keyboard("{Escape}");
+  expect(requestClose).toHaveBeenCalledExactlyOnceWith("escape");
+  await expect(requestClose.mock.results[0]!.value).resolves.toBe(false);
   await expect.element(addDialog()).toBeVisible();
   finish();
   await expect.element(addDialog()).not.toBeInTheDocument();
+});
+
+it("adds the dishes once when Add products is pressed twice before it redraws", async () => {
+  const { api } = await mountDishes();
+  api.addSetMenuDishes.mockResolvedValue({ details: wineDetails, addedLines: [] });
+  await openAdd();
+  await page.getByRole("checkbox", { name: "Wine" }).click();
+  await page.getByRole("button", { name: "Add selected" }).click();
+  const add = page.getByRole("button", { name: "Add products", exact: true }).last();
+  await expect.element(add).toBeEnabled();
+  const button = add.element() as HTMLElement;
+  button.click();
+  button.click();
+  await expect.element(addDialog()).not.toBeInTheDocument();
+  expect(api.addSetMenuDishes).toHaveBeenCalledExactlyOnceWith("daily", [
+    { productId: "wine", excludedVariantIds: [] },
+  ]);
 });
 
 it("marks an over-limit variant surcharge and holds Save until it is fixed", async () => {
@@ -159,6 +180,25 @@ it("keeps the variants dialog open with the server's refusal and sends a blank s
     .element(choices().getByText("That set menu could not be found.", { exact: false }))
     .toBeVisible();
   await expect.element(bottle).not.toBeChecked();
+});
+
+it("saves the variant choices once when Save is pressed twice before it redraws", async () => {
+  const { api } = await mountDishes(wineDetails);
+  api.saveSetMenuVariantChoices.mockResolvedValue(wineDetails);
+  await openVariants();
+  const bottle = choices().getByRole("switch", { name: "Include Bottle" });
+  (bottle.element() as HTMLInputElement).focus();
+  await userEvent.keyboard(" ");
+  const save = choices().getByRole("button", { name: "Save", exact: true });
+  await expect.element(save).toBeEnabled();
+  const button = save.element() as HTMLElement;
+  button.click();
+  button.click();
+  await expect.element(variantsDialog()).not.toBeInTheDocument();
+  expect(api.saveSetMenuVariantChoices).toHaveBeenCalledExactlyOnceWith("daily", "wine-item", [
+    { variantId: "glass", included: true, surcharge: null },
+    { variantId: "bottle", included: false, surcharge: null },
+  ]);
 });
 
 it("closes the variants dialog on Cancel without saving", async () => {

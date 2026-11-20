@@ -79,6 +79,23 @@ it("removes a course from a line and a whole line, and saves the rest on Enter",
   );
 });
 
+it("saves once when Save is pressed twice before it redraws", async () => {
+  const { saveSetMenuLines } = await mount([{ id: "first", count: 1, courseIds: ["starters"] }]);
+  saveSetMenuLines.mockResolvedValue({
+    lines: [{ id: "first", count: 2, courseIds: ["starters"] }],
+  });
+  await page.getByRole("spinbutton", { name: "Number of dishes" }).fill("2");
+  const save = page.getByRole("button", { name: "Save" });
+  await expect.element(save).toBeEnabled();
+  const button = save.element() as HTMLElement;
+  button.click();
+  button.click();
+  await expect.element(save).toBeDisabled();
+  expect(saveSetMenuLines).toHaveBeenCalledExactlyOnceWith("daily", [
+    { count: 2, courseIds: ["starters"] },
+  ]);
+});
+
 it("shows the server's refusal and keeps the edited count", async () => {
   const { saveSetMenuLines } = await mount([{ id: "first", count: 1, courseIds: ["starters"] }]);
   saveSetMenuLines.mockRejectedValueOnce({ code: "set_menu.invalid", params: { field: "lines" } });
