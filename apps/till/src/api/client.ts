@@ -1027,8 +1027,8 @@ export interface TillSaleLine {
    *  Presentation only — never hashed, never a fiscal figure. */
   parentLineNo?: number | null;
   /** On a line taking an advance off this invoice: the advance's number and its issue day
-   *  (`YYYY-MM-DD`, the venue's zone); `fullAmount` where only part of it is taken off. */
-  advance?: { invoiceNumber: string; issuedOn: string; fullAmount?: string };
+   *  (`YYYY-MM-DD`, the venue's zone). */
+  advance?: { invoiceNumber: string; issuedOn: string };
 }
 
 /** An amount a comp or a discount took off; `amount` is positive, as a decimal string. */

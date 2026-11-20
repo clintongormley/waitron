@@ -1372,7 +1372,7 @@ CREATE TABLE `bill_advances` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`advance_sale_id` text NOT NULL,
-	`bill_payment_id` text,
+	`bill_payment_id` text NOT NULL,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`advance_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -1380,7 +1380,7 @@ CREATE TABLE `bill_advances` (
 );
 --> statement-breakpoint
 CREATE INDEX `bill_advances_working_order_idx` ON `bill_advances` (`working_order_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `bill_advances_bill_payment_key` ON `bill_advances` (`bill_payment_id`) WHERE "bill_advances"."bill_payment_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `bill_advances_bill_payment_key` ON `bill_advances` (`bill_payment_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `bill_advances_advance_sale_key` ON `bill_advances` (`advance_sale_id`);--> statement-breakpoint
 CREATE TABLE `sale_lines` (
 	`id` text PRIMARY KEY NOT NULL,

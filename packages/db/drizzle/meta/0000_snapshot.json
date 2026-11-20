@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7a775f7c-939b-490b-b3ad-d43ad4f2776b",
+  "id": "f6f11d80-e6ef-4abb-9e03-8facae2be571",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8863,7 +8863,7 @@
           "name": "bill_payment_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "created_at": {
@@ -8887,8 +8887,7 @@
           "columns": [
             "bill_payment_id"
           ],
-          "isUnique": true,
-          "where": "\"bill_advances\".\"bill_payment_id\" is not null"
+          "isUnique": true
         },
         "bill_advances_advance_sale_key": {
           "name": "bill_advances_advance_sale_key",

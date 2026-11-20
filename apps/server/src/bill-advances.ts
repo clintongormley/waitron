@@ -312,14 +312,13 @@ export async function readBillAdvances(
       gross,
     });
     credits.set(advance.workingOrderId, list);
-    if (advance.billPaymentId !== null)
-      payments.set(advance.billPaymentId, {
-        saleId: advance.saleId,
-        left: gross,
-        correctives: own.length,
-        tipGivenBack:
-          tipsGivenBack.find((row) => row.billPaymentId === advance.billPaymentId)?.tips ?? 0,
-      });
+    payments.set(advance.billPaymentId, {
+      saleId: advance.saleId,
+      left: gross,
+      correctives: own.length,
+      tipGivenBack:
+        tipsGivenBack.find((row) => row.billPaymentId === advance.billPaymentId)?.tips ?? 0,
+    });
   }
   return { credits, payments };
 }

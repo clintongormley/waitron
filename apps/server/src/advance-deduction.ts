@@ -32,8 +32,6 @@ export interface AdvanceCredit {
 }
 
 export interface DeductionOptions {
-  /** Take credit off only up to the meal's total (piece 4's agreed price). */
-  cap?: "meal";
   /** The sale's invoice languages, for the stored words of each deduction line. */
   languages: readonly string[];
 }
@@ -48,38 +46,23 @@ interface Take {
   rate: Decimal;
   base: Decimal;
   gross: Decimal;
-  /** False where only part of the advance's gross at this rate is taken off: that part has no
-   * filed base of its own. */
-  whole: boolean;
   lineTotal?: Decimal;
 }
 
 const ZERO = decimal("0.00");
 const sameRate = (a: Decimal, b: Decimal) => compareDecimal(a, b) === 0;
 
-function takesOf(priced: PricedLines, advances: readonly AdvanceCredit[], cap?: "meal"): Take[] {
+function takesOf(advances: readonly AdvanceCredit[]): Take[] {
   const takes: Take[] = [];
-  let room = cap === "meal" ? priced.total : null;
   for (const advance of advances) {
     for (const group of advance.groups) {
       if (isZeroDecimal(group.base) && isZeroDecimal(group.tax)) continue;
-      const gross = addDecimal(group.base, group.tax);
-      const take = {
+      takes.push({
         advance,
         rate: toScale(group.rate, MONEY_SCALE),
         base: group.base,
-        gross,
-        whole: true,
-      };
-      if (room === null) {
-        takes.push(take);
-      } else if (compareDecimal(gross, room) <= 0) {
-        takes.push(take);
-        room = subtractDecimal(room, gross);
-      } else if (compareDecimal(room, ZERO) > 0) {
-        takes.push({ ...take, gross: room, whole: false });
-        room = ZERO;
-      }
+        gross: addDecimal(group.base, group.tax),
+      });
     }
   }
   return takes;
@@ -88,9 +71,9 @@ function takesOf(priced: PricedLines, advances: readonly AdvanceCredit[], cap?: 
 /**
  * The rest's invoice of a bill on which advances were taken: what is left at each rate, and one
  * line per advance and rate taking it off. At each rate the rest files the meal's base and VAT less
- * each advance's own filed figures (ruling L1), unless AEAT's sign rule would refuse that pair, or
- * an advance is only partly taken off; there what is left is worked out from its gross and the last
- * deduction line at that rate takes the difference. Each rate's line bases then sum to its filed
+ * each advance's own filed figures (ruling L1), unless AEAT's sign rule would refuse that pair;
+ * there what is left is worked out from its gross and the last deduction line at that rate takes
+ * the difference. Each rate's line bases then sum to its filed
  * base, and its line grosses to its base plus VAT.
  */
 export function deductAdvances(
@@ -98,7 +81,7 @@ export function deductAdvances(
   advances: readonly AdvanceCredit[],
   options: DeductionOptions,
 ): { priced: PricedLines; deductionLines: DeductionLine[] } {
-  const takes = takesOf(priced, advances, options.cap);
+  const takes = takesOf(advances);
   if (takes.length === 0) return { priced, deductionLines: [] };
 
   const credit = sumDecimals(takes.map((take) => take.gross));
@@ -125,7 +108,7 @@ export function deductAdvances(
     };
     let row = left;
     for (const take of at) take.lineTotal = negateDecimal(take.base);
-    if (at.some((take) => !take.whole) || vatSignRefused(left.base, left.tax, rate)) {
+    if (vatSignRefused(left.base, left.tax, rate)) {
       const mealGross = addDecimal(meal.base, meal.tax);
       row = splitGross(subtractDecimal(mealGross, sumDecimals(at.map((t) => t.gross))), rate);
       const mealLineBases = sumDecimals(

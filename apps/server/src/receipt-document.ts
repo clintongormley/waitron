@@ -222,12 +222,11 @@ export function buildReceiptDocument({
   // The advance is named as read from it, never from the words stored on the line.
   const itemName = (line: TillSaleLine): string => {
     if (line.advance === undefined) return lineName(line.descriptions, namesLocale);
-    const { invoiceNumber, issuedOn, fullAmount } = line.advance;
-    const named = label.advanceTakenOff
+    const { invoiceNumber, issuedOn } = line.advance;
+    return label.advanceTakenOff
       .replace("{paymentOnAccount}", () => label.paymentOnAccount)
       .replace("{number}", () => invoiceNumber)
       .replace("{date}", () => receiptDayNumeric(issuedOn, locale));
-    return fullAmount === undefined ? named : `${named} (${formatMoney(fullAmount, locale)})`;
   };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number, suffix = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;

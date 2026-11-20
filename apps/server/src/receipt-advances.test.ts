@@ -6,7 +6,6 @@ import { decimal, sumDecimals } from "@waitron/shared";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readCustomerInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
-import { formatMoney } from "./receipt-money.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { readOrderRevision } from "./working-order.js";
 import { readSettledTicket, type TillSaleLine, type TillSaleResult } from "./till-sale.js";
@@ -279,25 +278,6 @@ const advanceLine = (gross: string, advance: TillSaleLine["advance"]): TillSaleL
 });
 
 describe("the advance line as the ticket draws it", () => {
-  it("example 3's agreed price: the caption adds the advance's full amount in brackets", () => {
-    const printed = ticketWith(
-      [
-        advanceLine("-800.00", {
-          invoiceNumber: "F/3",
-          issuedOn: "2026-12-05",
-          fullAmount: "1000.00",
-        }),
-      ],
-      "0.00",
-    );
-
-    const words = spanish.advanceTakenOff
-      .replace("{paymentOnAccount}", spanish.paymentOnAccount)
-      .replace("{number}", "F/3")
-      .replace("{date}", "05/12/2026");
-    expect(printed.join(" ")).toContain(`1 ${words} (${formatMoney("1000.00", "es-ES")}) -800,00`);
-  });
-
   it("two lines with the same words and amount never merge, even with the same advance", () => {
     const same = { invoiceNumber: "A/12", issuedOn: "2026-11-19" };
     const printed = ticketWith(

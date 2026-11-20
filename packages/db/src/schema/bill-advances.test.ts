@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
@@ -88,11 +88,15 @@ describe("bill_advances and a sale line's advance columns", () => {
         openedAt: AT,
       })
     ).id;
-    const [payment] = await db
+    paymentId = await payment(1);
+  });
+
+  async function payment(n: number): Promise<string> {
+    const [row] = await db
       .insert(billPayments)
       .values({
         workingOrderId: billId,
-        submissionId: "submission-1",
+        submissionId: `submission-${n}`,
         fingerprint: "fingerprint",
         kind: "contribution",
         method: "cash",
@@ -105,8 +109,8 @@ describe("bill_advances and a sale line's advance columns", () => {
         deviceId,
       })
       .returning({ id: billPayments.id });
-    paymentId = payment!.id;
-  });
+    return row!.id;
+  }
 
   it("refuses a second advance for the same bill payment", async () => {
     await db.insert(billAdvances).values({
@@ -124,24 +128,34 @@ describe("bill_advances and a sale line's advance columns", () => {
     expect(
       refusalOn(again, UNIQUE_VIOLATION, { table: "bill_advances", columns: ["bill_payment_id"] }),
     ).toBe(true);
-    // Several advances may name no bill payment.
-    await db
-      .insert(billAdvances)
-      .values({ workingOrderId: billId, advanceSaleId: await sale(1000), billPaymentId: null });
-    await db
-      .insert(billAdvances)
-      .values({ workingOrderId: billId, advanceSaleId: await sale(1000), billPaymentId: null });
     const sameSale = await sale(1000);
     await db
       .insert(billAdvances)
-      .values({ workingOrderId: billId, advanceSaleId: sameSale, billPaymentId: null });
-    const twice = await captureError(() =>
-      db
-        .insert(billAdvances)
-        .values({ workingOrderId: billId, advanceSaleId: sameSale, billPaymentId: null }),
+      .values({ workingOrderId: billId, advanceSaleId: sameSale, billPaymentId: await payment(2) });
+    const twice = await captureError(async () =>
+      db.insert(billAdvances).values({
+        workingOrderId: billId,
+        advanceSaleId: sameSale,
+        billPaymentId: await payment(3),
+      }),
     );
     expect(
       refusalOn(twice, UNIQUE_VIOLATION, { table: "bill_advances", columns: ["advance_sale_id"] }),
+    ).toBe(true);
+  });
+
+  it("refuses an advance that names no bill payment", async () => {
+    const missing = await captureError(async () =>
+      db.run(
+        sql`insert into bill_advances (id, working_order_id, advance_sale_id, created_at)
+          values ('advance-without-payment', ${billId}, ${await sale(1000)}, ${AT})`,
+      ),
+    );
+    expect(
+      refusalOn(missing, NOT_NULL_VIOLATION, {
+        table: "bill_advances",
+        columns: ["bill_payment_id"],
+      }),
     ).toBe(true);
   });
 

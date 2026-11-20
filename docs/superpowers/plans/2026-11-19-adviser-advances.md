@@ -995,7 +995,7 @@ today are refused: STOP for the owner at once.
 
 **Interfaces:**
 - `billAdvances`: `id`, `working_order_id` (FK, restrict), `advance_sale_id` (FK `sales`, restrict,
-  unique), `bill_payment_id` (FK, restrict, unique where not null; null for a booking's advance),
+  unique), `bill_payment_id` (FK, restrict, not null, unique),
   `created_at`. `appendOnly()`, classified `ledger`.
 - `sale_lines.advance_role` (`'payment_on_account' | 'deduction'`, nullable) and
   `sale_lines.deducts_sale_id` (FK `sales`, nullable), CHECK
@@ -1039,7 +1039,7 @@ today are refused: STOP for the owner at once.
   €0.00 line goes to −0.01.
 - `AdvanceCredit { saleId; invoiceNumber; issuedAt; groups: { rate; base; tax }[]; gross }` (the
   advance plus its correctives).
-- `deductAdvances(priced, advances, { cap?: "meal" }): { priced; deductionLines }` — unchanged
+- `deductAdvances(priced, advances, { languages }): { priced; deductionLines }` — unchanged
   `priced` and no lines when there is no credit. Otherwise, per rate `r` an advance touches
   (ruling L1):
   - **Subtract the advances' own figures:** `left_base[r] = meal_base[r] − Σ advance base at r`
@@ -1059,9 +1059,6 @@ today are refused: STOP for the owner at once.
   - Either way each rate's line bases equal its breakdown base and its line grosses equal base
     plus VAT, which a whole credit checks (`record-correction.ts:412-465`); the total is the meal
     less the credit.
-  - With `cap: "meal"` (piece 4's agreed price), credit is taken off only up to the meal, and a
-    rate where only part of an advance is taken off is worked out from its gross as in the
-    fallback, since that part has no filed base of its own.
   - One deduction line per advance and rate (`advanceRole: "deduction"`, `deductsSaleId`,
     quantity 1, `lineGross` −gross), numbered after the meal's last line; the caller appends them
     after `withReceiptListPrices` and `linkSaleDishes`. **What it stores as text (ruling L5):**
@@ -1071,8 +1068,8 @@ today are refused: STOP for the owner at once.
     Catalan, Galician and Basque words are not yet confirmed by a native speaker); Task 1.5's
     printed caption builds on it rather than repeating the words. Nothing formatted is stored: the
     number and date are read through `deducts_sale_id` when the invoice is printed (Task 1.5).
-  - Throws `advance.exceeds_bill { mealTotal, advances }` when the total left is below zero,
-    unless `cap: "meal"`. Piece 1 cannot reach it through any route (ruling L4): every route that
+  - Throws `advance.exceeds_bill { mealTotal, advances }` when the total left is below zero.
+    Piece 1 cannot reach it through any route (ruling L4): every route that
     lowers the meal checks the bill first (`assertBillInvariant` at `adjustments-apply.ts:1433`,
     `bill-actions.ts:366`, `table-actions.ts:431`, `set-menu-count.ts:146`, `working-order.ts:3324`,
     `:3344`, `:3411`, `:7066`; grep, RUN), Task 1.4b makes that check count advances, and a payment
@@ -1088,8 +1085,7 @@ gains the one-cent rule; `deductAdvances` works out the rest's figures that `rec
   to the meal file 0.00 at every rate" (including a meal whose subtraction leaves a base and VAT
   of opposite signs; find one with the sweep below); "two advances at one rate each take off their
   own base; on a fallback the last one takes the difference"; "a corrected advance takes off what
-  is left of it"; "advances worth more than the meal throw advance.exceeds_bill" (unit only); "with
-  cap meal, €1,000 against €800 takes off 800 and leaves 0.00", and example 3's mixed meal; "every
+  is left of it"; "advances worth more than the meal throw advance.exceeds_bill" (unit only); "every
   rest passes AEAT's checks, and the bases filed across advance and rest add up to the meal's
   wherever the subtraction is used" (`buildAltaRecord` and `validate` from `@waitron/verifactu`
   over seeded random meals of 1 to 15 dishes of €1.05 to €22.00 at 10%, and of mixed 10% and 21%
@@ -1246,7 +1242,7 @@ Test: `apps/server/src/advance-final.test.ts`.
 ### Task 1.5: what the rest's invoice prints (owner, 21:00; ruling L1)
 
 **Files:** `apps/server/src/till-sale.ts` (`TillSaleLine` `:265` gains `advance?: { invoiceNumber;
-issuedOn; fullAmount? }` on a deduction line), the code that builds a sale's receipt lines on the
+issuedOn }` on a deduction line), the code that builds a sale's receipt lines on the
 final paths and on a reprint (`transaction-receipt.ts:84-90`, which reads every stored line and
 works out each line's gross with `receiptGrosses`), `receipt-document.ts` (lines block `:450-463`;
 a deduction line never merges in `mergeIdenticalGroups`, `receipt-lines.ts:148`),
@@ -1259,10 +1255,9 @@ screen that lists a sale's lines (grep it in `apps/till/src`). Test:
 - A sale with deduction lines prints its dishes exactly as today, then each deduction line as
   «Pago a cuenta n.º A/12, 19/11/2026» with its amount (negative; with its rate letter on a
   ticket, as every line has; on a full invoice its stored base in the base column, as every line
-  there has). Nothing is printed under it: no base and no VAT (ruling L1). Under the agreed price
-  (piece 4) the caption adds the advance's full amount in brackets. Then **TOTAL**, the VAT table,
-  and the payments and any amount owed as #3752 prints them. The lines sum to TOTAL. A sale with no
-  deduction lines prints exactly as today. An advance's own invoice prints like any ticket.
+  there has). Nothing is printed under it: no base and no VAT (ruling L1). Then **TOTAL**, the
+  VAT table, and the payments and any amount owed as #3752 prints them. The lines sum to TOTAL. A
+  sale with no deduction lines prints exactly as today. An advance's own invoice prints like any ticket.
 - **The VAT table is the rest's own record.** It is the sale's stored breakdown, which is what was
   filed (`receipt-document.ts:467-503` prints it today), so the paper and the record cannot differ.
 - The number is the advance's series and number as printed on its own ticket; the date is its
@@ -1286,7 +1281,7 @@ screen that lists a sale's lines (grep it in `apps/till/src`). Test:
   under it, TOTAL 90.00 and VAT table 81.82 / 8.18; example 8 prints seven dishes, the A/12 line
   −3.00, TOTAL 4.35 and VAT table 3.92 / 0.43 / 4.35, and that table equals the record's `Desglose`
   (ruling L1: the one-line examples cannot show a rounding difference); example 2 (the 10% VAT row
-  negative); example 3's agreed price caption; example 6; the A4 full invoice of example 1 (line
+  negative); example 6; the A4 full invoice of example 1 (line
   base −27.27 and Base imponible 10% 81.82) and of example 8 (line base −2.73, Base imponible 10%
   3.92); "the lines sum to TOTAL and the VAT table equals the record" over examples 1, 2, 6 and 8;
   a duplicate prints the same as the original; two advances of the same amount print two lines
@@ -1512,6 +1507,7 @@ core's, payments' and fiscal-verifactu's starting migrations, rebuilt.
   (bank transfer), origin `{ source: "dashboard", deviceId: null }`.
 - `seatTable` takes `advanceSaleIds` and writes their `bill_advances` rows (no bill payment). It
   does not change the bill's invoice choice: the rest's invoice is as the bill is set.
+- Piece 4 makes `bill_advances.bill_payment_id` nullable for these rows, its unique index partial.
 - **A booking's advance counts only when the meal ends:** it enters `readAdvanceCredits`, the
   rest's invoice, `issueWhenFullyPaid` and `advance.exceeds_bill`; `assertBillInvariant` leaves it
   out; **Paid so far** includes it only up to the meal so far. `holdsPayment`
@@ -1592,7 +1588,10 @@ How each choice is invoiced and filed (example 3):
   (with a negative 10% line beside a positive 21% one on a mixed meal, example 3), and the excess
   stays declared, with its VAT, on the advance's own invoice, which already says what the company
   paid. Outcome `agreed_price`. The rest's invoice prints the advance's line with its full amount
-  in brackets and −800.00 (Task 1.5).
+  in brackets and −800.00.
+- Piece 4 adds `deductAdvances`'s `cap: "meal"`: credit only up to the meal, a part-taken rate
+  worked out from its gross as in the fallback. Tests: €1,000 against €800 leaves 0.00; example 3.
+- Piece 4 adds `TillSaleLine.advance.fullAmount` for that caption, tested on example 3.
 - **Record it as a tip:** held until Q8, as the owner agreed; not offered.
 - Each needs `sale.rectify`, asked for in place with a manager's sign-in, and a safe **Stop**.
 - [ ] **Step 1: Failing tests:** "advances worth more than the meal refuse Print the bill with

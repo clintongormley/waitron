@@ -51,9 +51,7 @@ function advance(saleId: string, gross: string, rate: Decimal = TEN): AdvanceCre
 const deduct = (
   priced: PricedLines,
   advances: readonly AdvanceCredit[],
-  cap?: "meal",
-): ReturnType<typeof deductAdvances> =>
-  deductAdvances(priced, advances, { languages: LANGUAGES, ...(cap ? { cap } : {}) });
+): ReturnType<typeof deductAdvances> => deductAdvances(priced, advances, { languages: LANGUAGES });
 
 const breakdownOf = (priced: PricedLines) =>
   priced.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
@@ -217,71 +215,22 @@ describe("deductAdvances — the rules", () => {
     );
   });
 
-  it("with cap meal, €1,000 against €800 takes off 800 and leaves 0.00", () => {
-    const { priced, deductionLines } = deduct(
-      meal([["800.00", "reduced"]]),
-      [advance("3", "1000.00")],
-      "meal",
-    );
-    expect(breakdownOf(priced)).toEqual([{ rate: "10.00", base: "0.00", tax: "0.00" }]);
-    expect(priced.total).toBe("0.00");
-    expect(deductionLines.map((l) => [l.deductsSaleId, l.lineGross, l.lineTotal])).toEqual([
-      ["3", "-800.00", "-727.27"],
-    ]);
-  });
-
-  it("with cap meal, example 3's mixed meal keeps what is left at each rate", () => {
-    const { priced, deductionLines } = deduct(
-      meal([
-        ["600.00", "reduced"],
-        ["200.00", "general"],
-      ]),
-      [advance("3", "1000.00")],
-      "meal",
-    );
-    expect(breakdownOf(priced)).toEqual([
-      { rate: "10.00", base: "-181.82", tax: "-18.18" },
-      { rate: "21.00", base: "165.29", tax: "34.71" },
-    ]);
-    expect(priced.total).toBe("0.00");
-    expect(deductionLines.map((l) => [l.lineGross, l.lineTotal])).toEqual([["-800.00", "-727.27"]]);
-  });
-
-  it("with cap meal, an advance the meal already covers is taken off whole, and one after it not at all", () => {
-    const { priced, deductionLines } = deduct(
-      meal([["50.00", "reduced"]]),
-      [advance("1", "50.00"), advance("2", "20.00")],
-      "meal",
-    );
-    expect(priced.total).toBe("0.00");
-    expect(deductionLines.map((l) => [l.deductsSaleId, l.lineGross])).toEqual([["1", "-50.00"]]);
-  });
-
   it("each rate's line bases equal its breakdown base and its line grosses its base plus VAT", () => {
-    const cases: [PricedLines, AdvanceCredit[], "meal" | undefined][] = [
-      [meal([["120.00", "reduced"]]), [advance("12", "30.00")], undefined],
+    const cases: [PricedLines, AdvanceCredit[]][] = [
+      [meal([["120.00", "reduced"]]), [advance("12", "30.00")]],
       [
         meal([
           ["20.00", "reduced"],
           ["80.00", "general"],
         ]),
         [advance("12", "50.00")],
-        undefined,
       ],
-      [meal([["30.05", "reduced"]]), [advance("12", "30.00")], undefined],
-      [meal(times(7, "1.05", "reduced")), [advance("12", "3.00")], undefined],
-      [meal([["30.05", "reduced"]]), [advance("12", "20.00"), advance("13", "10.00")], undefined],
-      [
-        meal([
-          ["600.00", "reduced"],
-          ["200.00", "general"],
-        ]),
-        [advance("3", "1000.00")],
-        "meal",
-      ],
+      [meal([["30.05", "reduced"]]), [advance("12", "30.00")]],
+      [meal(times(7, "1.05", "reduced")), [advance("12", "3.00")]],
+      [meal([["30.05", "reduced"]]), [advance("12", "20.00"), advance("13", "10.00")]],
     ];
-    for (const [given, advances, cap] of cases) {
-      const { priced, deductionLines } = deduct(given, advances, cap);
+    for (const [given, advances] of cases) {
+      const { priced, deductionLines } = deduct(given, advances);
       expect(lineInvariantFailures(given, priced, deductionLines)).toEqual([]);
     }
   });

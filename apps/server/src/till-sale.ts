@@ -260,9 +260,8 @@ export interface TillSaleLine {
    *  cannot rewrite what a completed sale says was ordered. An extras pick is a child line instead. */
   optionSnapshots?: OptionSnapshot[];
   /** On a line taking an advance off this invoice: the advance as its own ticket names it, read
-   *  through the line's `deducts_sale_id`. `issuedOn` is its issue day in the venue's zone;
-   *  `fullAmount` is the advance's whole amount where only part of it is taken off. */
-  advance?: { invoiceNumber: string; issuedOn: string; fullAmount?: string };
+   *  through the line's `deducts_sale_id`. `issuedOn` is its issue day in the venue's zone. */
+  advance?: { invoiceNumber: string; issuedOn: string };
 }
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
