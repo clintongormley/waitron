@@ -4,7 +4,10 @@ On test Cloud, sign up or sign in before entering the venue details. Registratio
 find addresses and choose Cloud for setup email. You can continue locally if Cloud is unavailable.
 Connected services still require explicit trial consent. The owner set registration timing on
 20 November at 13:11, recorded in Lane D's questions.md. The guest-menu tier remains open.
-A1186, SMS, upgrades, production enablement and A1171's dashboard integration are separate.
+Cloud's billing design puts address lookup and email in Registered and puts remote access,
+backups, translation, the rota solver and eligibility for Cloud failover in Connected
+(Cloud `docs/superpowers/specs/2026-10-29-cloud-billing-design.md:75–76`). A1186, SMS, upgrades,
+production enablement and A1171's dashboard integration are separate.
 
 ## 1. Register before the venue form and enable address lookup
 
@@ -65,8 +68,8 @@ account email. Estimate 100–160 code and 80–120 test lines for Waitron.
 
 ## 3. Offer the trial from a Connected service
 
-In the dashboard's Cloud services screen, send the Registered remote-access action to
-Cloud `/account/billing`. Identify the paired venue in the existing selector by its ID.
+When a Connected action on the dashboard's Cloud services screen requires a plan, offer Cloud
+`/account/billing`. Remote access is the first walkthrough. Identify the paired venue in the existing selector by its ID.
 Cloud starts the trial only on **Start free trial** via `POST /api/account/billing/start-trial`.
 Keep existing pairing for unregistered boxes. Test the venue handoff in
 `cloud-services-screen.billing.test.ts` and the remote-access gate before and after consent
