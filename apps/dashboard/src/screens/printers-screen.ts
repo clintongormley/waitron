@@ -277,6 +277,8 @@ function jobWaitMessage(job: PrintJobRow): string | undefined {
 
 function jobErrorMessage(job: PrintJobRow): string | undefined {
   if (job.lastError === null) return undefined;
+  if (job.kind === "a4" && job.lastError === "switched")
+    return t("printers.job_switched_to_receipt");
   return job.kind === "a4" ? pageFailureReason(job.lastError) : jobReason(job.lastError);
 }
 

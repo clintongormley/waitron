@@ -60,6 +60,7 @@ import {
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { deleteCardReader } from "./card-reader-delete.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
 import type { SealedStateStatus } from "./sealed-state.js";
@@ -974,6 +975,18 @@ async function readAlerts(now = NOW) {
 }
 
 describe("printingAlertSource — agent.silent", () => {
+  it("warns when the serving spare's agent with no office assignment goes quiet", async () => {
+    await seedFixtureVenue();
+    const spare = randomUUID();
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId: SERVING_NODE, contactUrl: "https://main.example" },
+      { nodeId: spare, contactUrl: "https://spare.example" },
+    );
+    const agent = await seedAgent({ name: "Serving spare", nodeId: spare, lastSeenAt: minsAgo(6) });
+    expect(await readAlerts()).toMatchObject([{ key: `agent.silent:${agent}` }]);
+  });
+
   it("drops a former primary's warning once its office printer moves to the serving box", async () => {
     await seedFixtureVenue();
     const former = await seedAgent({

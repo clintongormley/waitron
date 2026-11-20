@@ -5617,9 +5617,10 @@ it("shows office printer holds and uncertain pages without receipt actions", asy
   };
   const held = { ...office, id: "held-page", status: "printing", printerHold: "paper_out" };
   const failed = { ...office, id: "failed-page", status: "failed", lastError: "printer_refused" };
+  const switched = { ...failed, id: "switched-page", lastError: "switched" };
   const uncertain = { ...office, id: "uncertain-page", status: "unknown", printerHold: null };
   const liveData = new LiveData();
-  const listRecentJobs = vi.fn().mockResolvedValue([held, failed, uncertain]);
+  const listRecentJobs = vi.fn().mockResolvedValue([held, failed, switched, uncertain]);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ liveData, listRecentJobs }),
   });
@@ -5629,6 +5630,7 @@ it("shows office printer holds and uncertain pages without receipt actions", asy
   );
   expect(text(el, "[data-test=job-status-uncertain-page]")).toBe("May have printed");
   expect(text(el, "[data-test=job-error-failed-page]")).toBe("the printer refused it");
+  expect(text(el, "[data-test=job-error-switched-page]")).toBe("Switched to a receipt printer");
   expect(text(el, "[data-test=job-attempts-failed-page]")).toBe("—");
   expect(q(el, "[data-test=view-job-held-page]")).toBeNull();
   expect(q(el, "[data-test=resend-job-held-page]")).toBeNull();
@@ -5636,6 +5638,7 @@ it("shows office printer holds and uncertain pages without receipt actions", asy
   listRecentJobs.mockResolvedValue([
     { ...held, status: "done", printerHold: null },
     failed,
+    switched,
     uncertain,
   ]);
   liveData.invalidate([{ type: "print_jobs", id: "held-page" }]);

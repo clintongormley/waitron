@@ -40,6 +40,9 @@ import { readInvoiceDocument } from "./invoice-document.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
+import { mountDeviceApi } from "./device-api.js";
+import { devicePrinterNoticeSources } from "./box-staff-notices.js";
+import { createPageTestPages } from "./page-test-pages.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { TradingContext } from "./trading-context.js";
@@ -304,12 +307,19 @@ async function venue() {
   const app = new Hono();
   const pairingMode = createPairingMode();
   pairingMode.open();
+  const testPages = createPageTestPages();
+  const deviceSources = devicePrinterNoticeSources({
+    now: () => new Date(),
+    testPages,
+    cacheMs: 0,
+  });
   mountPrintApi(
     app,
     {
       db: suite.db,
       cfg,
       pairingMode,
+      testPages,
       readMembership: async () => null,
       venueLocale: "es-ES",
       now: () => new Date(Date.now() + serverClock.ahead),
@@ -323,6 +333,17 @@ async function venue() {
     { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
     () => {},
   );
+  mountDeviceApi(
+    app,
+    {
+      db: suite.db,
+      cfg,
+      pairingMode,
+      secureCookies: false,
+      notices: { sources: () => [], deviceSources, clock, filing: () => ({ enabled: false }) },
+    },
+    () => {},
+  );
   mountTillApi(
     app,
     {
@@ -331,6 +352,7 @@ async function venue() {
       backend,
       clock,
       cfg,
+      testPages,
       secureCookies: false,
       venueLocale: "es-ES",
     },
@@ -364,24 +386,26 @@ async function tillSession(
   cfg: TradingContext,
   app: Hono,
   personId: string,
-): Promise<{ tillCookie: string; tillProfileId: string }> {
+): Promise<{ tillCookie: string; deviceCookie: string; tillProfileId: string }> {
   const [profile] = await seedDeviceProfiles(suite.db, {
     name: "Till",
     formFactor: "till",
     capabilities: [...CAPABILITY_FLAGS],
   });
   const device = await enrolDeviceForTest(suite.db, cfg, { name: "Till", profileId: profile!.id });
+  const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   const login = await app.request("/api/session", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+      cookie: deviceCookie,
     },
     body: JSON.stringify({ personId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
   return {
-    tillCookie: `${login.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    tillCookie: `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`,
+    deviceCookie,
     tillProfileId: profile!.id,
   };
 }
@@ -876,6 +900,23 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
         originalCompleted: false,
         actions: { retryOriginal: null, print: null, receiptInstead: null },
       });
+      const readEquipment = async () => {
+        const response = await v.app.request("/api/device/equipment", {
+          headers: { cookie: v.deviceCookie },
+        });
+        expect(response.status).toBe(200);
+        return (await response.json()) as { notices: unknown[] };
+      };
+      expect((await readEquipment()).notices).toMatchObject([
+        {
+          code: "invoice_delivery.office_print",
+          params: {
+            printer: "Back office",
+            hold: "paper_out",
+            reason: "held",
+          },
+        },
+      ]);
 
       const other = await printOnA4(await fullInvoice(v), kitchenOffice);
       await running.agent.runOnce();
@@ -916,6 +957,7 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
         current: { id: held.id, status: "sent", printerHold: null },
         originalCompleted: true,
       });
+      expect((await readEquipment()).notices).toEqual([]);
       const [printed, queued, ...again] = ipp!.printJobs();
       expect(again).toEqual([]);
       expect(printed!.data.equals(await originalPdf(v, saleId))).toBe(true);

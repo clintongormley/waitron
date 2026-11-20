@@ -22,10 +22,12 @@ import {
   printJobs,
   isReceiptPrinter,
   printers,
+  readNodeMembership,
   sales,
   type Transaction,
 } from "@waitron/db";
 import { listDevices } from "@waitron/layouts";
+import { routableServers } from "@waitron/membership";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
@@ -456,6 +458,12 @@ export function printingAlertSource(nodeId: string): AlertSource {
       const alerts: OngoingAlert[] = [];
 
       const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS).toISOString();
+      const servingNodes = [
+        nodeId,
+        ...routableServers(await readNodeMembership(tx))
+          .filter((node) => node.standing !== "sell-only")
+          .map((node) => node.nodeId),
+      ];
       const agents = await tx
         .select({ id: printAgents.id, name: printAgents.name, seen: printAgents.lastSeenAt })
         .from(printAgents)
@@ -467,7 +475,7 @@ export function printingAlertSource(nodeId: string): AlertSource {
             lt(printAgents.lastSeenAt, silentBefore),
             or(
               isNull(printAgents.nodeId),
-              eq(printAgents.nodeId, nodeId),
+              inArray(printAgents.nodeId, servingNodes),
               exists(
                 tx
                   .select({ one: sql`1` })

@@ -525,10 +525,11 @@ export const en = {
   "staff_notice.invoice_delivery.office_print": "An invoice is waiting to print at {printer}.",
   "staff_notice.invoice_delivery.office_held": "A full invoice is waiting to print.",
   "staff_notice.invoice_delivery.office_failed":
-    "An invoice failed to print at {printer}. Check Print Queue.",
+    "An invoice failed to print at {printer}. Check the printer before trying again.",
   "staff_notice.invoice_delivery.office_uncertain":
     "An invoice may have printed at {printer}. Check the printer before trying again.",
-  "invoice.office_hold": "{printer} reports {reason}. Check the printer. It will print when ready.",
+  "invoice.office_hold":
+    "Waiting at {printer} ({reason}). Check the printer. It will print when ready.",
   "invoice.delivery_hold_paper_jam": "paper jam",
   "invoice.delivery_hold_cover_open": "a cover is open",
   "invoice.delivery_hold_tray_missing": "a tray is missing",
@@ -2764,11 +2765,11 @@ export const es: Record<StringKey, string> = {
     "Hay una factura pendiente de imprimir en {printer}.",
   "staff_notice.invoice_delivery.office_held": "Hay una factura completa pendiente de imprimir.",
   "staff_notice.invoice_delivery.office_failed":
-    "No se ha podido imprimir una factura en {printer}. Revisa la cola de impresión.",
+    "No se ha podido imprimir una factura en {printer}. Revisa la impresora antes de volver a intentarlo.",
   "staff_notice.invoice_delivery.office_uncertain":
     "Puede que se haya impreso una factura en {printer}. Revisa la impresora antes de volver a intentarlo.",
   "invoice.office_hold":
-    "{printer} indica este problema ({reason}). Revisa la impresora. Se imprimirá cuando esté lista.",
+    "En espera en {printer} ({reason}). Revisa la impresora. Se imprimirá cuando esté lista.",
   "invoice.delivery_hold_paper_jam": "atasco de papel",
   "invoice.delivery_hold_cover_open": "hay una tapa abierta",
   "invoice.delivery_hold_tray_missing": "falta una bandeja",
