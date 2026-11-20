@@ -132,8 +132,8 @@ export interface PrinterInTrouble {
 const ticketId = sql<string | null>`case when ${reprintCanStandIn} then ${printJobs.id} end`;
 
 /**
- * The troubled jobs of every active printer ({@link printJobInTrouble}), less those an Unpair
- * ended, in one pass: per printer, one row with a null `ticketId` totalling the jobs no Reprint can
+ * The troubled jobs of every active printer ({@link printJobInTrouble}), in one pass: per printer,
+ * one row with a null `ticketId` totalling the jobs no Reprint can
  * stand in for ({@link reprintCanStandIn}), and one row for each job one can, named by `ticketId`.
  */
 export function printersInTroubleQuery(tx: Transaction, now: Date) {

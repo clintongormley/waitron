@@ -110,8 +110,8 @@ const ROUND_AFTER_MS = 10 * 60_000;
 const OWED_FOR_MS = 24 * 60 * 60_000;
 const ROUND_EVERY_MS = 60_000;
 const LOOK_AGAIN_MS = 60 * 60_000;
-// A job ended because its printer went away or it moved elsewhere may already have printed (an
-// unpairing can end a job mid-print), so a fresh round there could print a second original.
+// Delete can end a job that already reached the printer. A fresh round for a deleted or moved job
+// could print a second original.
 const ENDED_NOT_FAILED = [PRINTER_DELETED, PRINT_JOB_MOVED];
 
 /** The newest original of each owed sale issued in the last day, given up on an active printer. */

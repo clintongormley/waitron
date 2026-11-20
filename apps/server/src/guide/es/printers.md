@@ -22,9 +22,9 @@ estaciones de preparación.
 
 **Eliminar** también pide a cada caja que indica que la impresora Bluetooth está emparejada que la
 desvincule. Para recuperarla, ponla en modo de emparejamiento y elige **Emparejar y añadir**. Si
-Waitron avisa de que la impresora puede seguir vinculada a una caja, comprueba que esté encendida y
-espera a que termine cualquier solicitud Bluetooth. Después, añade la impresora y vuelve a elegir
-**Eliminar**.
+Waitron avisa de que la impresora puede seguir vinculada a una caja, comprueba que esa caja esté
+encendida y espera a que termine cualquier solicitud Bluetooth. Después, añade la impresora y
+vuelve a elegir **Eliminar**.
 
 Para imprimir comandas de estación, elige la impresora en cada estación en **Estaciones de
 preparación**. Una impresora elegida en todas las estaciones imprime todo lo que se envía, para el

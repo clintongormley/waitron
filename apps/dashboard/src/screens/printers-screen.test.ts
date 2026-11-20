@@ -10523,6 +10523,7 @@ describe("Deleting a printer", () => {
         "Bar box",
       );
     }
+    expect(text(el, "[data-test=bluetooth-delete-warning]:last-child")).toContain("Kitchen box");
   });
 
   it.each(["failed", "unanswered", "page left"] as const)(
