@@ -56,7 +56,7 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("Saved venue");
   expect(text).toContain("89890001K");
   expect(text).toContain("Saved venue");
-  expect(text).toContain("Keep older paper keys until no older backup remains.");
+  expect(text).toContain("Keep older server keys until no older backup remains.");
   expect(text).not.toContain("archive-secret");
   expect(child(el)!.outerHTML).not.toContain("archive-secret");
 });

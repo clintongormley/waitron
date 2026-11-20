@@ -60,7 +60,7 @@ export const finishEn = {
   "done.clock.set_refused":
     "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
   "done.clock.key_refused":
-    "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the server key from the selected backup's paper there.",
+    "The server did not accept the server key this page holds. Open any of the server's pages on a phone, computer or till on the venue's network and enter the selected backup's server key there.",
   "done.clock.unanswered":
     "This page could not get the two times from the server, so Confirm the time and This device stay off. Keep this page open: it asks the server again by itself.",
   "done.description.dashboard":
@@ -87,10 +87,16 @@ export const finishEn = {
   "done.break_glass.backups":
     "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
   "done.break_glass.warning":
-    "Write this down and store it offline. It is shown once and will not be shown again.",
+    "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
   "done.break_glass.restore":
-    "Write the name and key on paper and keep it with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+    "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
+  "done.break_glass.save": "Save as a file",
+  "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
+  "done.break_glass.file_title": "Waitron server key",
+  "done.break_glass.file_purpose": "You need it to restore this venue from its bucket.",
+  "done.break_glass.file_keep":
+    "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
   "done.break_glass.replacement":
     "The server key was issued when setup finished. If you did not save it, sign in to Backups and make a recovery pack with a new server key before taking your first bucket copy.",
   "done.break_glass.open_backups": "Open Backups",
@@ -167,7 +173,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.clock.set_refused":
     "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
   "done.clock.key_refused":
-    "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor del papel de la copia elegida.",
+    "El servidor no ha aceptado la clave del servidor que guarda esta página. Abre cualquier página del servidor en un móvil, ordenador o caja de la red del local e introduce allí la clave del servidor de la copia elegida.",
   "done.clock.unanswered":
     "Esta página no ha podido obtener las dos horas del servidor, así que Confirmar la hora y Este dispositivo siguen desactivados. Mantén esta página abierta: vuelve a preguntar al servidor por sí sola.",
   "done.description.dashboard":
@@ -195,11 +201,17 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.backups":
     "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
   "done.break_glass.warning":
-    "Anótala y guárdala fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
+    "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
     "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
   "done.break_glass.restore":
-    "Anota el nombre y la clave en papel y guárdalo con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+    "Guarda el nombre y la clave en un archivo o anótalos en papel, y guárdalos con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
+  "done.break_glass.save": "Guardar en un archivo",
+  "done.break_glass.save_failed": "No se pudo guardar el archivo. Anota la clave.",
+  "done.break_glass.file_title": "Clave del servidor de Waitron",
+  "done.break_glass.file_purpose": "La necesitas para restaurar este local desde su bucket.",
+  "done.break_glass.file_keep":
+    "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
   "done.break_glass.replacement":
     "La clave del servidor se generó al terminar la configuración. Si no la guardaste, inicia sesión en Copias de seguridad y crea un paquete de recuperación con una clave nueva antes de hacer la primera copia en el bucket.",
   "done.break_glass.open_backups": "Abrir Copias de seguridad",

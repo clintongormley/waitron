@@ -791,11 +791,11 @@ command against it treat that entrypoint differently:
   in a bucket. The dashboard no longer shows either restore code on screen; both are in the
   recovery pack.
 
-  **Keep older paper server keys.** Restoring an older backup also restores the server key
+  **Keep older server keys.** Restoring an older backup also restores the server key
   from that time. A replaced key can work again on the restored box, while its replacement
-  can be refused. Keep the older paper until every backup made before the replacement has
+  can be refused. Keep the older key until every backup made before the replacement has
   been deleted. When the restored copy contains a key name, `restore.recovery_key_selected`
-  names the paper you need. The server key authenticates recovery; the separate recovery key opens
+  names the key you need. The server key authenticates recovery; the separate recovery key opens
   the backup file.
 
   A restore that fails while it writes the backup's secrets or moves its database into place

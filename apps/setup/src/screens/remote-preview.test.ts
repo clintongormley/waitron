@@ -75,7 +75,7 @@ it.each(["bucket", "cloud"])(
     expect(child(el).shadowRoot!.textContent).toContain("2026-10-01");
     expect(child(el).shadowRoot!.textContent).toContain("Saved venue");
     expect(child(el).shadowRoot!.textContent).toContain(
-      "Keep older paper keys until no older backup remains.",
+      "Keep older server keys until no older backup remains.",
     );
     expect(child(el).shadowRoot!.textContent).not.toContain("private-kit");
     expect(transport.mock.calls.map(([url]) => String(url))).toEqual([

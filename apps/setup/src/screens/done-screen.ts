@@ -4,11 +4,13 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
-import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
+
+const KEY_NAME = /^(\d{4}-\d{2}-\d{2}) · ([34679ACDEFHJKMNPQRTUVWXY]{4})$/;
 
 export const BACKUP_SETUP_URL = "/backup";
 
@@ -55,6 +57,7 @@ export class SetupDoneScreen extends LitElement {
     helpLinkStyles,
     baseStyles,
     statusStyles,
+    errorStyles,
     introStyles,
     modePillStyles,
     css`
@@ -118,6 +121,9 @@ export class SetupDoneScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
+      .break-glass-save {
+        margin: var(--wt-space-2) 0 0;
+      }
     `,
   ];
 
@@ -153,6 +159,8 @@ export class SetupDoneScreen extends LitElement {
   @property({ attribute: false }) nodeRecoveryKey?: string;
 
   @state() private ready = false;
+
+  @state() private breakGlassSaveFailed = false;
 
   @state() private startFailed = false;
 
@@ -409,7 +417,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   #keyName(name: string): string {
-    const parts = /^(\d{4}-\d{2}-\d{2}) · ([34679ACDEFHJKMNPQRTUVWXY]{4})$/.exec(name);
+    const parts = KEY_NAME.exec(name);
     if (parts === null) return name;
     const date = new Date(`${parts[1]}T00:00:00Z`);
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== parts[1])
@@ -425,9 +433,58 @@ export class SetupDoneScreen extends LitElement {
     });
   }
 
+  #breakGlassFileName(): string {
+    const parts = KEY_NAME.exec(this.breakGlassKeyName ?? "");
+    return parts === null
+      ? "waitron-server-key.txt"
+      : `waitron-server-key-${parts[1]}-${parts[2]}.txt`;
+  }
+
+  #saveBreakGlass(secret: string): void {
+    const lines = [
+      t("done.break_glass.file_title"),
+      ...(this.breakGlassKeyName === undefined ? [] : [this.#keyName(this.breakGlassKeyName)]),
+      "",
+      secret,
+      "",
+      t(
+        this.#preparation()
+          ? "done.break_glass.file_purpose"
+          : this.mirrorJoin
+            ? "done.break_glass.take_over"
+            : "done.break_glass.promote",
+      ),
+      t("done.break_glass.backups"),
+      "",
+      t("done.break_glass.file_keep"),
+    ];
+    const anchor = document.createElement("a");
+    let url: string | undefined;
+    try {
+      url = URL.createObjectURL(
+        new Blob([`${lines.join("\n")}\n`], { type: "text/plain;charset=utf-8" }),
+      );
+      anchor.href = url;
+      anchor.download = this.#breakGlassFileName();
+      document.body.append(anchor);
+      anchor.click();
+      this.breakGlassSaveFailed = false;
+    } catch {
+      this.breakGlassSaveFailed = true;
+    } finally {
+      anchor.remove();
+      if (url) URL.revokeObjectURL(url);
+    }
+  }
+
+  #preparation(): boolean {
+    return this.onboardingIntent === "prepare" && !this.mirrorJoin;
+  }
+
   #breakGlass(): TemplateResult | null {
-    if (this.breakGlassSecret === undefined) return null;
-    const preparation = this.onboardingIntent === "prepare" && !this.mirrorJoin;
+    const secret = this.breakGlassSecret;
+    if (secret === undefined) return null;
+    const preparation = this.#preparation();
     return html`<div class="break-glass" data-test="break-glass">
       <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
@@ -439,9 +496,21 @@ export class SetupDoneScreen extends LitElement {
         }
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
-      <code class="break-glass-secret" data-test="break-glass-secret"
-        >${this.breakGlassSecret}</code
+      <code class="break-glass-secret" data-test="break-glass-secret">${secret}</code>
+      <wt-button
+        class="break-glass-save"
+        data-test="break-glass-save"
+        variant="secondary"
+        @click=${() => this.#saveBreakGlass(secret)}
+        >${t("done.break_glass.save")}</wt-button
       >
+      ${
+        this.breakGlassSaveFailed
+          ? html`<p class="error" role="alert" data-test="break-glass-save-error">
+              ${t("done.break_glass.save_failed")}
+            </p>`
+          : nothing
+      }
       <p data-test="break-glass-backup-warning">${t("done.break_glass.backups")}</p>
     </div>`;
   }

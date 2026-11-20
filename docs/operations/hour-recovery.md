@@ -262,7 +262,7 @@ shows both times on the same page, with **Confirm the time** and **This device**
 screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
 "asks for the time on the screen itself when the restore's start waits for it"). If that page was
 reloaded or closed, open any page at the box's address on a phone, computer or till and enter the
-node recovery key (the paper calls it the server key) from the backup's paper: the waiting page then shows the same step
+node recovery key (the server key): the waiting page then shows the same step
 (`apps/server/src/start-clock-waiting-page.test.ts`, "with the key, shows the done screen's step
 with both times and their dates"). The key is taken as printed, in any case and spacing, or as the
 secret the setup page sends (the same file's "takes the server key as printed on the recovery pack,
