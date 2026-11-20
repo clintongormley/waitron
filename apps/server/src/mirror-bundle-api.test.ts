@@ -489,6 +489,32 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     },
   );
 
+  it("answers 409 mirror.not_provisioned when this box's database carries no deployment stamp", async () => {
+    const { designated } = await setupVenue();
+    await db.execute(sql`delete from deployment where id = 1`);
+    const res = await post(mountApp(designated), {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "mirror.not_provisioned", params: {} } });
+  });
+
+  it("answers 500 module.config_invalid when this box's stored module settings are broken", async () => {
+    const { designated } = await setupVenue();
+    await db.execute(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('modules', 1, 1, '{"modules":{"bookings":"yes"}}', '2026-11-20T12:00:00.000Z') on conflict (module) do update set doc = excluded.doc`,
+    );
+    const res = await post(mountApp(designated), {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: { code: "module.config_invalid" } });
+  });
+
   it("reads module settings once for a join", async () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);

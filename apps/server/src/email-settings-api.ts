@@ -44,6 +44,8 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       "authorization.not_permitted": 403,
       "email.settings_not_allowed": 409,
       "email.settings_invalid": 400,
+      "email.test_recipient_missing": 409,
+      "server.credential_unusable": 500,
     },
     "email_settings.failed",
   );
@@ -134,7 +136,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
           .from(persons)
           .where(eq(persons.id, session.authorizedBy));
         if (person?.email === null || person?.email === undefined)
-          throw new AppError("email.settings_invalid", { field: "recipient" });
+          throw new AppError("email.test_recipient_missing", {});
         return { recipient: person.email, senderName: (await readVenue(tx)).name };
       });
       const value = parseEmailSettings(await readJsonBody<Record<string, unknown>>(c));

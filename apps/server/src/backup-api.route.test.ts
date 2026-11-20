@@ -835,7 +835,7 @@ describe("backup admin routes", () => {
         retention: RETENTION,
       }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
     // The key file and then the settings were written before the refusal, and the row was re-locked
     // after each.
@@ -880,7 +880,7 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ recoveryKey: KEY_2 }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
     expect(sup.current().recoveryKey).toBe(KEY_1);
     expect(recorder.seen).toEqual([KEY_2]);
@@ -964,7 +964,7 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ recoveryKey: KEY_2 }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
     expect(recorder.seen).toEqual([KEY_2]);
   }, 60_000);
@@ -1301,14 +1301,15 @@ describe("backup admin routes", () => {
         .recoveryKeySet,
     ).toBe(false);
     // rotate with no key → request_invalid; with a bad key → unstorable; with a good key but nothing
-    // configured to rotate → request_invalid (field "config"). All before any write.
+    // configured to rotate → not_configured. All before any write.
     expect((await post("/api/backup/rotate", {})).status).toBe(400);
     const badKey = await post("/api/backup/rotate", { recoveryKey: "bad key " });
     expect(await badKey.json()).toMatchObject({
       error: { code: "backup.recovery_key_unstorable" },
     });
     const noConfig = await post("/api/backup/rotate", { recoveryKey: KEY_1 });
-    expect(await noConfig.json()).toMatchObject({ error: { code: "backup.request_invalid" } });
+    expect(noConfig.status).toBe(409);
+    expect(await noConfig.json()).toEqual({ error: { code: "backup.not_configured", params: {} } });
     // recovery-key on an unconfigured box → null, not a throw.
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
     expect((await rk.json()).key).toBeNull();
@@ -2792,10 +2793,8 @@ describe("backup admin routes", () => {
     it("disable with nothing stored is refused", async () => {
       const { post } = await primaryApp();
       const res = await post("/api/backup/disable");
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "backup.request_invalid", params: { field: "config" } },
-      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "backup.not_configured", params: {} } });
     }, 60_000);
 
     it("refuses unknown, null and mistyped fields by name", async () => {

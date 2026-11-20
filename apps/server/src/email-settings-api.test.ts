@@ -484,7 +484,7 @@ describe("SMTP settings boundary cases", () => {
         }),
         venue.admin,
       );
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(500);
       expect(await response.json()).toEqual({
         error: {
           code: "server.credential_unusable",
@@ -544,9 +544,9 @@ describe("SMTP settings boundary cases", () => {
       headers: { cookie: venue.manager, "content-type": "application/json" },
       body: JSON.stringify(settings),
     });
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "email.settings_invalid", params: { field: "recipient" } },
+      error: { code: "email.test_recipient_missing", params: {} },
     });
     expect(await suite.db.select().from(venueCredentials)).toHaveLength(0);
   });

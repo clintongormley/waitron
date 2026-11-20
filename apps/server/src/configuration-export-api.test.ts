@@ -180,6 +180,48 @@ describe("configuration export API", () => {
     }
   });
 
+  it("answers the box's own missing invoice series as a server failure", async () => {
+    await suite.db.execute(
+      sql`update invoice_series set retired_at = '2026-09-01T00:00:00.000Z' where purpose = 'full' and retired_at is null`,
+    );
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: { code: "configuration_export.source_invalid", params: { field: "venue" } },
+      });
+    } finally {
+      await suite.db.execute(
+        sql`update invoice_series set retired_at = null where purpose = 'full' and retired_at = '2026-09-01T00:00:00.000Z'`,
+      );
+    }
+  });
+
+  it("keeps a pending day-start change as a refusal of the request", async () => {
+    await suite.db.execute(
+      sql`insert into day_cutover_changes (effective_business_day, day_cutover) values ('2026-09-20', '07:00:00')`,
+    );
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field: "businessDayStart" } },
+      });
+    } finally {
+      await suite.db.execute(
+        sql`delete from day_cutover_changes where effective_business_day = '2026-09-20'`,
+      );
+    }
+  });
+
   it("awaits asynchronous encryption while the event loop keeps turning", async () => {
     encoding.observe = true;
     encoding.order = [];

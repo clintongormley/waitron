@@ -750,8 +750,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Waitron Cloud no ha podido confirmar si se ha enviado este correo. Aún puede llegar. Solicita un correo nuevo si necesitas otro enlace o código.",
   },
   "email.settings_invalid": {
-    en: "Check the mail server settings and your account email address, then try again.",
-    es: "Revisa la configuración de correo y la dirección de tu cuenta, y vuelve a intentarlo.",
+    en: "Check the mail server settings, then try again.",
+    es: "Revisa la configuración de correo y vuelve a intentarlo.",
+  },
+  "email.test_recipient_missing": {
+    en: "Your own account has no email address to send the test to. Add one to your account, then send the test again.",
+    es: "Tu cuenta no tiene una dirección de correo a la que enviar la prueba. Añade una a tu cuenta y vuelve a enviar la prueba.",
   },
   "email.settings_not_allowed": {
     en: "You cannot change mail settings in Demo or Prepare mode.",
@@ -1349,6 +1353,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "backup.stream_test_failed": {
     en: "The bucket failed the test. Check the address, the key and the bucket's permissions.",
     es: "El bucket no ha superado la prueba. Revisa la dirección, la clave y los permisos del bucket.",
+  },
+  "backup.not_configured": {
+    en: "This box has no backup settings yet. Reload the page, then choose Turn on backups.",
+    es: "Este servidor aún no tiene ajustes de copia de seguridad. Recarga la página y elige Activar las copias.",
   },
   "backup.stream_not_configured": {
     en: "Set up the bucket copy first.",

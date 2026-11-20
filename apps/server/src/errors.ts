@@ -183,6 +183,8 @@ declare module "@waitron/shared" {
     /** The local capture inbox holds no message with the requested id. */
     "email.message_not_found": Record<string, never>;
     "email.settings_not_allowed": Record<string, never>;
+    /** A test message was asked for by someone whose own account has no email address to send to. */
+    "email.test_recipient_missing": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
     /** A production start of a bundle whose release stamp names no release version. */
@@ -1350,6 +1352,9 @@ declare module "@waitron/shared" {
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
+    /** The configuration export found this box's own stored data or a module's table declarations
+     * unusable; `field` names which part, for the log. */
+    "configuration_export.source_invalid": { field: string };
     "setup.mode_not_allowed": { environment: "production" } | { installationOrigin: "usb" };
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
@@ -1647,9 +1652,7 @@ declare module "@waitron/shared" {
       sealedState?: "no_key" | "failed";
     };
     /**
-     * A backup admin route body failed shape validation before any write; or `field: "config"` when
-     * `disable` finds no stored archive record, or `rotate` finds no readable archive record, no
-     * destination loaded and no key held. `field`
+     * A backup admin route body failed shape validation before any write. `field`
      * names the offending field, never the value, which could be the recovery key. */
     "backup.cloud_needs_daily": { field: "schedule" };
     "backup.cloud_unavailable": { field: "cloud" };
@@ -1657,6 +1660,9 @@ declare module "@waitron/shared" {
     "backup.stream_test_failed": { reason: ProbeFailure };
     /** Archives in the stream's bucket were asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;
+    /** `disable` found no stored archive record, or `rotate` found no readable archive record, no
+     * destination loaded and no key held. */
+    "backup.not_configured": Record<string, never>;
     /** The stored archive settings (`backup.archive`) are not a record this server wrote.
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
