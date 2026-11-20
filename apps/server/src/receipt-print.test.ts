@@ -2938,7 +2938,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
           resendOf: jobs[0]!.id,
           printerId: jobs[0]!.printerId,
           payload: await withTransaction(suite.db, (tx) =>
-            saleReceiptLayout(backend, cfg)(tx, saleId, true, roll!),
+            saleReceiptLayout(backend, cfg)(tx, saleId, true, roll!, null),
           ),
         });
         expect(decodeTicket(new Uint8Array(copy!.payload!))).toContain(

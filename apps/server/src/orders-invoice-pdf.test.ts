@@ -576,7 +576,7 @@ describe("tax office copy: a ticket at ticket width, a full invoice on A4", () =
   it("draws a ticket read back whole but taller than a PDF page may be on an A4 page", async () => {
     const saleId = await seededTicket(1_400);
     const bytes = await inTx(venue, (tx) =>
-      layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, true, DEFAULT_PRINTER),
+      layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, true, DEFAULT_PRINTER, null),
     );
     expect(previewPrintJob(bytes, { widthDots: 512 }).truncated).toBe(false);
     const { code, number } = await numberOf(saleId);

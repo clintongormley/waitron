@@ -966,7 +966,8 @@ CREATE TABLE `print_jobs` (
 	CONSTRAINT "print_jobs_page_document_ck" CHECK("print_jobs"."page_document" in ('invoice', 'receipt')),
 	CONSTRAINT "print_jobs_page_designation_ck" CHECK("print_jobs"."page_designation" in ('original', 'duplicate')),
 	CONSTRAINT "print_jobs_page_ck" CHECK(("print_jobs"."kind" = 'a4') = ("print_jobs"."page_document" is not null)
-        and ("print_jobs"."page_document" is 'receipt') = ("print_jobs"."page_language" is not null)
+        and (("print_jobs"."page_document" is 'receipt') = ("print_jobs"."page_language" is not null)
+          or ("print_jobs"."kind" = 'document' and "print_jobs"."sale_id" is not null))
         and ("print_jobs"."page_document" is 'receipt') = ("print_jobs"."page_designation" is not null)),
 	CONSTRAINT "print_jobs_printer_hold_ck" CHECK("print_jobs"."printer_hold" in ('paper_jam', 'cover_open', 'paper_out', 'tray_missing', 'ink_or_toner_out', 'output_full', 'paused', 'stopped')),
 	CONSTRAINT "print_jobs_a4_hold_ck" CHECK("print_jobs"."printer_hold" is null or "print_jobs"."kind" = 'a4'),

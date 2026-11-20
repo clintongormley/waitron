@@ -1014,7 +1014,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
       expect(jobs.find((job) => job.id === jobId)).toMatchObject({
         payload: await withTransaction(suite.db, (tx) =>
-          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!),
+          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!, null),
         ),
         printerId,
         resendOf: original.jobId,

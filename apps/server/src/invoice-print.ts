@@ -56,13 +56,13 @@ async function laidOutAgain(
 ): Promise<{ printerId: string; payload: Uint8Array } | undefined> {
   // Read now: an expired invoice claim may have ended the job since the caller read it.
   const job = (await tx.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!;
-  const { saleId, receiptCopy, printerId } = job;
+  const { saleId, receiptCopy, printerId, pageLanguage } = job;
   if (saleId === null || receiptCopy === null || !canResendPrintJob(job)) return undefined;
   const [printer] = await tx
     .select({ ...receiptRollColumns })
     .from(printers)
     .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
-  return { printerId, payload: await layOut(tx, saleId, receiptCopy, printer!) };
+  return { printerId, payload: await layOut(tx, saleId, receiptCopy, printer!, pageLanguage) };
 }
 
 /**

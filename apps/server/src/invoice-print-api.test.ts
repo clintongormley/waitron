@@ -74,7 +74,7 @@ async function laidOut(saleId: string, duplicate: boolean, printerId: string) {
     .select({ ...receiptRollColumns })
     .from(printers)
     .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
-  return withTransaction(suite.db, (tx) => layOut(tx, saleId, duplicate, roll!));
+  return withTransaction(suite.db, (tx) => layOut(tx, saleId, duplicate, roll!, null));
 }
 const clock: TrustedClock = {
   now: () => ({

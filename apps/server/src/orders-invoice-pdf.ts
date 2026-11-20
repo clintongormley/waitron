@@ -113,6 +113,7 @@ export async function copyOfSale(
       saleId,
       true,
       printer,
+      null,
     );
     const drawing = ticketDrawing(bytes, printer, new Date(sale.issuedAt));
     if (drawing !== undefined) return { kind: "ticket", drawing, ...named };

@@ -123,6 +123,7 @@ export async function requestPrintDelivery(
     sale.id,
     print.designation === "duplicate",
     setting!,
+    null,
   );
   const row = await enqueueInvoiceReceipt(
     tx,

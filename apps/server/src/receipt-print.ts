@@ -396,6 +396,7 @@ export async function enqueueReceiptCopy(
   const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
     saleId,
     receiptCopy: true,
+    language: language ?? null,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId);
   return job;
@@ -408,8 +409,17 @@ export async function requireReceiptBytes(
   saleId: string,
   duplicate: boolean,
   printer: EscSetting,
+  language: string | null,
 ): Promise<Uint8Array> {
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  const bytes = await buildReceiptBytes(
+    tx,
+    cfg,
+    ticket,
+    saleId,
+    duplicate,
+    printer,
+    language ?? undefined,
+  );
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
   if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
   /* v8 ignore stop */
@@ -421,12 +431,14 @@ export type LayOutSaleReceipt = (
   saleId: string,
   duplicate: boolean,
   printer: EscSetting,
+  /** The language chosen at the till, the job's `pageLanguage`; null prints the sale's own. */
+  language: string | null,
 ) => Promise<Uint8Array>;
 
 /** {@link layOutSaleReceipt} over `backend` and `cfg`. */
 export function saleReceiptLayout(backend: FiscalBackend, cfg: TradingContext): LayOutSaleReceipt {
-  return (tx, saleId, duplicate, printer) =>
-    layOutSaleReceipt(backend, tx, cfg, saleId, duplicate, printer);
+  return (tx, saleId, duplicate, printer, language) =>
+    layOutSaleReceipt(backend, tx, cfg, saleId, duplicate, printer, language);
 }
 
 /** A filed sale's receipt laid out for `printer`, with today's trim, logo and address. */
@@ -437,9 +449,10 @@ export async function layOutSaleReceipt(
   saleId: string,
   duplicate: boolean,
   printer: EscSetting,
+  language: string | null,
 ): Promise<Uint8Array> {
   const ticket = await readTransactionReceipt(backend, tx, cfg, saleId);
-  return requireReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
+  return requireReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer, language);
 }
 
 /**
@@ -644,14 +657,27 @@ export async function refreshWaitingOriginals(
   workingOrderId: string,
 ): Promise<void> {
   const waiting = await tx
-    .select({ id: printJobs.id, saleId: sales.id, ...receiptRollColumns })
+    .select({
+      id: printJobs.id,
+      saleId: sales.id,
+      pageLanguage: printJobs.pageLanguage,
+      ...receiptRollColumns,
+    })
     .from(sales)
     .innerJoin(printJobs, and(eq(printJobs.saleId, sales.id), waitingOriginal))
     .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
     .where(eq(sales.workingOrderId, workingOrderId));
   for (const job of waiting) {
     const laidOut = await optionalDocument(tx, "refreshWaitingOriginal", job.saleId, async () => {
-      const payload = await layOutSaleReceipt(backend, tx, cfg, job.saleId, false, job);
+      const payload = await layOutSaleReceipt(
+        backend,
+        tx,
+        cfg,
+        job.saleId,
+        false,
+        job,
+        job.pageLanguage,
+      );
       await tx
         .update(printJobs)
         .set({ payload })
@@ -716,6 +742,7 @@ export async function enqueueOriginalReceipt(
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     saleId,
     receiptCopy: duplicate,
+    language: language ?? null,
     whileSwitchedOff: printers.whileSwitchedOff === true,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);

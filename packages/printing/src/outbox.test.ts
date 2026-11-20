@@ -426,6 +426,51 @@ describe("resendPrintJob", () => {
     });
   });
 
+  it("stores a receipt's chosen language and copies it to a resend on either printer", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const { saleId } = await seedCashSale(tx);
+      const printer = await createPrinter(tx, {
+        name: "Receipts",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const other = await createPrinter(tx, {
+        name: "Bar receipts",
+        transport: "network_tcp",
+        host: "bar.local",
+      });
+      const chosen = await enqueuePrintJob(tx, printer.id, Uint8Array.of(1), "document", {
+        saleId,
+        receiptCopy: true,
+        language: "es",
+      });
+      const own = await enqueuePrintJob(tx, printer.id, Uint8Array.of(2), "document", {
+        saleId,
+        receiptCopy: true,
+      });
+      const exhausted = { status: "failed", attempts: 5 } as const;
+      await tx
+        .update(printJobs)
+        .set(exhausted)
+        .where(inArray(printJobs.id, [chosen.jobId, own.jobId]));
+      const same = await resendPrintJob(tx, chosen.jobId);
+      const moved = await resendPrintJob(tx, chosen.jobId, {
+        printerId: other.id,
+        payload: Uint8Array.of(3),
+      });
+      const ownResend = await resendPrintJob(tx, own.jobId);
+
+      const language = async (jobId: string) =>
+        (await tx.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!.pageLanguage;
+      expect(await language(chosen.jobId)).toBe("es");
+      expect(await language(same.jobId)).toBe("es");
+      expect(await language(moved.jobId)).toBe("es");
+      expect(await language(own.jobId)).toBeNull();
+      expect(await language(ownResend.jobId)).toBeNull();
+    });
+  });
+
   it("carries the refund id when resending the original job and its retry", async () => {
     await setup();
     await withTransaction(suite.db, async (tx) => {

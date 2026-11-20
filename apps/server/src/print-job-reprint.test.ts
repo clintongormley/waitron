@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
+  deviceProfiles,
+  devices,
   kitchenPrintJobs,
   kitchenStations,
   parties,
@@ -32,7 +34,18 @@ import { deletePrinter } from "./printer-delete.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
-import { layOutSaleReceipt, readOriginalReceiptPrint } from "./receipt-print.js";
+import {
+  RECEIPT_OUT_OF_DATE,
+  enqueueOriginalReceipt,
+  enqueueReceiptCopy,
+  layOutSaleReceipt,
+  readOriginalReceiptPrint,
+  refreshWaitingOriginals,
+  resolveReceiptPrinter,
+} from "./receipt-print.js";
+import { startFreshRounds } from "./owed-receipts.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { inTx, send as rawGroupSend } from "./testing/bill-venue.js";
@@ -80,8 +93,13 @@ const at80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 const at80fine: EscSetting = { paperWidth: "80mm", resolution: "203dpi" };
 const dots = (setting: EscSetting) => textGrid(setting.paperWidth, setting.resolution).widthDots;
 
-const layOut = (tx: Transaction, saleId: string, duplicate: boolean, printer: EscSetting) =>
-  layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer);
+const layOut = (
+  tx: Transaction,
+  saleId: string,
+  duplicate: boolean,
+  printer: EscSetting,
+  language: string | null = null,
+) => layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer, language);
 
 function reprint(jobId: string, printerId: string, ownPrinterUnseen = false) {
   return inTx(venue, (tx) =>
@@ -641,5 +659,166 @@ describe("the print queue's resend to another printer", () => {
     const moved = await resend(offUnseen, await printerAt(at80));
     expect(moved.status).toBe(202);
     expect((await jobRow(offUnseen)).lastError).toBe("print_job.moved");
+  });
+});
+
+describe("a receipt printed at the till in a language other than the sale's", () => {
+  function printApi(): Hono {
+    const app = new Hono();
+    mountPrintApi(
+      app,
+      {
+        db: venue.db,
+        cfg: venue.cfg,
+        pairingMode: createPairingMode(),
+        readMembership: async () => null,
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: layOut,
+        venueLocale: "es-ES",
+      },
+      () => {},
+    );
+    return app;
+  }
+
+  function resend(jobId: string, printerId?: string) {
+    return printApi().request(`/management-api/print-jobs/${jobId}/resend`, {
+      method: "POST",
+      headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
+      body: JSON.stringify(printerId === undefined ? {} : { printerId }),
+    });
+  }
+
+  /** Runs `act` with the till's profile allowed to print receipts, as a counter till's is. */
+  async function withReceiptPrinting<T>(act: () => Promise<T>): Promise<T> {
+    const [profile] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+        .from(deviceProfiles)
+        .innerJoin(devices, eq(devices.deviceProfileId, deviceProfiles.id))
+        .where(eq(devices.id, venue.deviceId)),
+    );
+    const setCapabilities = (capabilities: string[]) =>
+      inTx(venue, (tx) =>
+        tx.update(deviceProfiles).set({ capabilities }).where(eq(deviceProfiles.id, profile!.id)),
+      );
+    await setCapabilities([...(profile!.capabilities as string[]), "print-receipt"]);
+    try {
+      return await act();
+    } finally {
+      await setCapabilities(profile!.capabilities as string[]);
+    }
+  }
+
+  const catalan = (text: string) => /Tipus +Base/u.test(text) && !/Tipo +Base/u.test(text);
+  const spanish = (text: string) => /Tipo +Base/u.test(text) && !/Tipus +Base/u.test(text);
+
+  /** A paid counter bill and its receipt, original or copy, printed at the till in `language`. */
+  async function printedIn(language: string | undefined, kind: "original" | "copy") {
+    const billId = await placedIssuedBill(venue, "Paella");
+    expect((await collect(venue, billId, "35.00")).status).toBe(200);
+    const { saleId, jobId } = await inTx(venue, async (tx) => {
+      const [sale] = await tx
+        .select({ id: sales.id, locale: sales.locale })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId));
+      expect(sale!.locale).toBe("es-ES");
+      const ticket = await readTransactionReceipt(venue.backend, tx, venue.cfg, sale!.id);
+      const printer = (await resolveReceiptPrinter(tx, venue.cfg.origin))!;
+      const job =
+        kind === "copy"
+          ? await enqueueReceiptCopy(tx, venue.cfg, ticket, sale!.id, printer, language)
+          : await enqueueOriginalReceipt(tx, venue.cfg, ticket, sale!.id, {
+              printers: async () => printer,
+              language,
+            });
+      if (typeof job !== "object") throw new Error(`no receipt queued: ${job}`);
+      return { saleId: sale!.id, jobId: job.jobId };
+    });
+    const job = await jobRow(jobId);
+    expect(decodeTicket(job.payload)).toSatisfy(language === "ca-ES" ? catalan : spanish);
+    return { billId, saleId, job };
+  }
+
+  it("stores the language it was printed in, and null when none was chosen", async () => {
+    expect((await printedIn("ca-ES", "copy")).job.pageLanguage).toBe("ca-ES");
+    expect((await printedIn(undefined, "copy")).job.pageLanguage).toBeNull();
+  });
+
+  it("keeps the language when the till retries its original", async () => {
+    const { billId, job } = await printedIn("ca-ES", "original");
+    await setJob(job.id, exhausted);
+    const retried = await withReceiptPrinting(() =>
+      rawGroupSend(venue.app, venue.cookie, "POST", `/api/sales/${billId}/receipt/retry`, {}),
+    );
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    const { jobId } = retried.json as unknown as { jobId: string };
+    const resent = await jobRow(jobId);
+    expect(resent).toMatchObject({ resendOf: job.id, pageLanguage: "ca-ES" });
+    expect(decodeTicket(resent.payload)).toSatisfy(catalan);
+  });
+
+  it("keeps the language when the print queue resends it on its own printer", async () => {
+    const { job } = await printedIn("ca-ES", "copy");
+    await setJob(job.id, { status: "done" });
+    const response = await resend(job.id);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    expect(decodeTicket((await jobRow(jobId)).payload)).toSatisfy(catalan);
+  });
+
+  it("still resends a receipt printed in the sale's own language in that language", async () => {
+    const { job } = await printedIn(undefined, "copy");
+    await setJob(job.id, { status: "done" });
+    const response = await resend(job.id);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const resent = await jobRow(jobId);
+    expect(resent.pageLanguage).toBeNull();
+    expect(decodeTicket(resent.payload)).toSatisfy(spanish);
+  });
+
+  it("keeps the language when the print queue moves it to another printer", async () => {
+    const { job } = await printedIn("ca-ES", "original");
+    await setJob(job.id, exhausted);
+    const target = await printerAt(at58);
+    const response = await resend(job.id, target);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const moved = await jobRow(jobId);
+    expect(moved).toMatchObject({ printerId: target, pageLanguage: "ca-ES" });
+    expect(decodeTicket(moved.payload)).toSatisfy(catalan);
+  });
+
+  it("keeps the language when a payment refreshes the original still waiting to print", async () => {
+    const { billId, job } = await printedIn("ca-ES", "original");
+    await setJob(job.id, { payload: Uint8Array.of(27, 64) });
+    await inTx(venue, (tx) => refreshWaitingOriginals(venue.backend, tx, venue.cfg, billId));
+    expect(decodeTicket((await jobRow(job.id)).payload)).toSatisfy(catalan);
+  });
+
+  it("previews an out-of-date original in its language", async () => {
+    const { job } = await printedIn("ca-ES", "original");
+    await setJob(job.id, { ...exhausted, lastError: RECEIPT_OUT_OF_DATE });
+    const response = await printApi().request(`/management-api/print-jobs/${job.id}/preview`, {
+      headers: { cookie: venue.adminDashboard },
+    });
+    expect(response.status).toBe(200);
+    const { text } = (await response.json()) as { text: string };
+    expect(text).toSatisfy(catalan);
+  });
+
+  it("keeps the language when the background round resends an owed original", async () => {
+    const { job } = await printedIn("ca-ES", "original");
+    const now = new Date();
+    await setJob(job.id, {
+      ...exhausted,
+      claimedAt: new Date(now.getTime() - 11 * 60_000).toISOString(),
+    });
+    const { resent } = await startFreshRounds(venue.db, layOut, now, () => {});
+    const rows = await Promise.all(resent.map(jobRow));
+    const retry = rows.find((row) => row.resendOf === job.id);
+    expect(retry?.pageLanguage).toBe("ca-ES");
+    expect(decodeTicket(retry!.payload)).toSatisfy(catalan);
   });
 });

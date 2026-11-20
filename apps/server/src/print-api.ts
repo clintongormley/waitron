@@ -1937,6 +1937,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             kind: printJobs.kind,
             saleId: printJobs.saleId,
             receiptCopy: printJobs.receiptCopy,
+            pageLanguage: printJobs.pageLanguage,
             lastError: printJobs.lastError,
             payload: printJobs.payload,
             ...receiptRollColumns,
@@ -1952,7 +1953,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           job,
           payload:
             job.lastError === RECEIPT_OUT_OF_DATE
-              ? await deps.layOutSaleReceipt(tx, job.saleId!, job.receiptCopy!, job)
+              ? await deps.layOutSaleReceipt(
+                  tx,
+                  job.saleId!,
+                  job.receiptCopy!,
+                  job,
+                  job.pageLanguage,
+                )
               : job.payload!,
         };
       });

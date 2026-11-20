@@ -154,7 +154,7 @@ export async function reprintJobOn(
   const printerDots = textGrid(target.paperWidth, target.resolution).widthDots;
   let payload: Uint8Array;
   if (job.saleId !== null) {
-    payload = await layOut(tx, job.saleId, job.receiptCopy === true, target);
+    payload = await layOut(tx, job.saleId, job.receiptCopy === true, target, job.pageLanguage);
   } else {
     const linked =
       job.tenderRefundId !== null ||

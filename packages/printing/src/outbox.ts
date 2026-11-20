@@ -23,11 +23,13 @@ export async function enqueuePrintJob(
     saleId = null,
     receiptCopy = null,
     tenderRefundId = null,
+    language = null,
     whileSwitchedOff = false,
   }: {
     saleId?: string | null;
     receiptCopy?: boolean | null;
     tenderRefundId?: string | null;
+    language?: string | null;
     whileSwitchedOff?: boolean;
   } = {},
 ): Promise<{ jobId: string }> {
@@ -36,6 +38,7 @@ export async function enqueuePrintJob(
     saleId,
     receiptCopy,
     tenderRefundId,
+    language,
     whileSwitchedOff,
   });
 }
@@ -67,6 +70,7 @@ async function insertPrintJob(
     receiptCopy,
     tenderRefundId,
     pageDocument,
+    language = null,
     createdAt,
     whileSwitchedOff = false,
   }: {
@@ -75,6 +79,7 @@ async function insertPrintJob(
     receiptCopy: boolean | null;
     tenderRefundId: string | null;
     pageDocument?: "invoice";
+    language?: string | null;
     createdAt?: string;
     whileSwitchedOff?: boolean;
   },
@@ -105,6 +110,7 @@ async function insertPrintJob(
       receiptCopy,
       tenderRefundId,
       pageDocument,
+      pageLanguage: language,
       createdAt,
     })
     .returning({ id: printJobs.id });
@@ -197,6 +203,7 @@ export async function resendPrintJob(
       saleId: job.saleId,
       receiptCopy: job.receiptCopy,
       tenderRefundId: job.tenderRefundId,
+      language: job.pageLanguage,
     },
   );
 }
