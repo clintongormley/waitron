@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import { cleanupWidgets, mountWidget as mountBaseWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  declareTouchScreen,
+  mountWidget as mountBaseWidget,
+} from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import type { BarTable } from "../state/bar-tables.js";
@@ -20,7 +24,16 @@ const mountWidget = <T extends TillShell>(
   theme?: "light" | "dark",
 ) => mountBaseWidget<T>(tag, { formFactor: "tablet-landscape", ...props }, theme);
 
-afterEach(cleanupWidgets);
+// Many cases here list More's or the name menu's contents, which hold the vibrate switch only on a
+// touch screen; headless Chromium has none.
+let forgetTouchScreen = (): void => {};
+beforeEach(() => {
+  forgetTouchScreen = declareTouchScreen();
+});
+afterEach(() => {
+  forgetTouchScreen();
+  cleanupWidgets();
+});
 
 describe("till-shell", () => {
   it.each([

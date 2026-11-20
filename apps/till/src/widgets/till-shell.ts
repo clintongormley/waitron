@@ -22,6 +22,7 @@ import {
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { canPressBuzz } from "../press-buzz.js";
 import { PressBuzzController, pressBuzzOn, setPressBuzz } from "../press-buzz-choice.js";
 import { HelpIdleController } from "../state/help-idle.js";
 import type { FormFactor } from "../layout.js";
@@ -1198,7 +1199,7 @@ export class TillShell extends LitElement {
   }
 
   #pressBuzzSwitch(): TemplateResult | typeof nothing {
-    if (typeof navigator.vibrate !== "function") return nothing;
+    if (!canPressBuzz()) return nothing;
     return html`<wt-switch
       class="press-buzz-switch"
       data-test="press-buzz-switch"

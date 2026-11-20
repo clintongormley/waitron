@@ -1,6 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  declareTouchScreen,
+  mountWidget,
+  expectNoA11yViolations,
+} from "./test-helpers.js";
 import type { ShellAffordance, TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./till-shell.js";
@@ -242,6 +247,7 @@ it("a short handheld More menu follows ☰ through a rotation and back", async (
 it("a handheld More menu with the vibrate switch follows ☰ through a rotation and still reaches Log out", async () => {
   await page.viewport(390, 844);
   Object.defineProperty(navigator, "vibrate", { value: () => true, configurable: true });
+  const forgetTouchScreen = declareTouchScreen();
   try {
     const more = await openHandheldMore([]);
     expect(more.menu.querySelector('[data-test="press-buzz-switch"]')).not.toBeNull();
@@ -263,6 +269,7 @@ it("a handheld More menu with the vibrate switch follows ☰ through a rotation 
     await more.expectPopupUnderTrigger();
   } finally {
     delete (navigator as { vibrate?: unknown }).vibrate;
+    forgetTouchScreen();
     await page.viewport(1280, 900);
   }
 });

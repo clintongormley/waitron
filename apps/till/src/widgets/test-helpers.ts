@@ -127,6 +127,17 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
+/**
+ * Makes this browser report a touch screen, which headless Chromium lacks; the returned function
+ * undoes it.
+ */
+export function declareTouchScreen(points = 1): () => void {
+  Object.defineProperty(navigator, "maxTouchPoints", { value: points, configurable: true });
+  return () => {
+    delete (navigator as { maxTouchPoints?: unknown }).maxTouchPoints;
+  };
+}
+
 /** Vitest's own default frame, which `resetPage` puts back. */
 const DEFAULT_FRAME = [414, 896] as const;
 
