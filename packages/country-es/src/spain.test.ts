@@ -352,6 +352,16 @@ describe("receipt labels", () => {
     );
   });
 
+  it.each([
+    ["en-GB", "TEST — not an invoice"],
+    ["es-ES", "PRUEBA — no es una factura"],
+    ["ca-ES", "PROVA — no és una factura"],
+    ["gl-ES", "PROBA — non é unha factura"],
+    ["eu-ES", "PROBA — ez da faktura"],
+  ])("marks a printer's %s test page as no invoice", (locale, words) => {
+    expect(SPAIN.receiptLabels?.[locale]?.testPage).toBe(words);
+  });
+
   it.each([...SPAIN.invoiceLocales, "en-GB"])(
     "gives %s every label as non-empty text",
     (locale) => {

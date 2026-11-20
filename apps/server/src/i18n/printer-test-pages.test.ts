@@ -1,21 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-describe("printer test page wording", () => {
-  it.each([
-    ["en-GB", "Test page", "If this is centred and readable, this printer is set up correctly."],
-    [
-      "es-ES",
-      "Página de prueba",
-      "Si esto sale centrado y legible, la impresora está bien configurada.",
-    ],
-  ] as const)("provides the %s title and setup verdict", async (locale, title, verdict) => {
-    const { PRINTER_TEST_PAGE_WORDS, PRINTER_TEST_SAMPLE_TEXT } =
-      await import("./printer-test-page.js");
-    expect(PRINTER_TEST_PAGE_WORDS[locale]).toEqual({ title, verdict });
-    expect(PRINTER_TEST_SAMPLE_TEXT).toBe("Café, jamón, niño · 5 € · ¿Sí? ¡Sí!");
-  });
-});
-
 describe("calibration ruler wording", () => {
   it.each([
     [

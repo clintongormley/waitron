@@ -79,6 +79,8 @@ export interface ReceiptDocumentInput {
   simulatedCardPayment?: boolean;
   duplicate?: boolean;
   guests?: number;
+  /** A printer's test page: marked as no invoice, ending with the printer's own line. */
+  testPage?: { printer: string };
 }
 
 export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
@@ -160,6 +162,7 @@ export function buildReceiptDocument({
   simulatedCardPayment = false,
   duplicate = false,
   guests,
+  testPage,
 }: ReceiptDocumentInput): ReceiptDocument {
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
@@ -221,8 +224,9 @@ export function buildReceiptDocument({
   if (simulated) {
     text(label.practice);
     if (simulatedCardPayment) text(label.noRealCharge);
-    rule();
   }
+  if (testPage) text(label.testPage);
+  if (simulated || testPage) rule();
 
   if (result.qr !== "") {
     align("center");
@@ -565,10 +569,14 @@ export function buildReceiptDocument({
     part("footerMessage", () => text(footerMessage));
     align("left");
   }
+  if (simulated || testPage) rule();
   if (simulated) {
-    rule();
     text(label.practice);
     if (simulatedCardPayment) text(label.noRealCharge);
+  }
+  if (testPage) {
+    text(label.testPage);
+    text(testPage.printer);
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 

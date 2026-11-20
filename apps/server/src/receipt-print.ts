@@ -31,7 +31,7 @@ import { deviceOrigin, resolveReceiptTrim } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { formatReceipt } from "./receipt-ticket.js";
+import { formatReceipt, type FormatReceiptInput } from "./receipt-ticket.js";
 import { readPrintedGuests } from "./receipt-guests.js";
 import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { optionalDocument } from "./optional-document.js";
@@ -211,16 +211,21 @@ async function readDevicePrinters(
   );
 }
 
-/** Use the filed issuer where available and the current optional trim, address and logo. */
-async function buildReceiptBytes(
+/** The parts of a receipt the venue prints today, whatever the document. */
+export type PrintedVenue = Pick<FormatReceiptInput, "issuer" | "receipt" | "venueAddress" | "logo">;
+
+/**
+ * The taxpayer as issuer, and the current optional trim, address and logo of `departmentId` (none
+ * for `null`) in `invoiceLocale`: the same for a sale's receipt and a printer's test page.
+ * `undefined` when there is no taxpayer.
+ */
+export async function readPrintedVenue(
   tx: Transaction,
   cfg: Pick<TradingContext, "practiceMode">,
-  ticket: TillSaleResult,
-  saleId: string,
-  duplicate: boolean,
+  departmentId: string | null,
   printer: EscSetting,
-  language?: string,
-): Promise<Uint8Array | undefined> {
+  invoiceLocale: string,
+): Promise<PrintedVenue | undefined> {
   const taxpayer = await readTaxpayer(tx);
   /* v8 ignore start */
   if (taxpayer === null) {
@@ -233,8 +238,6 @@ async function buildReceiptBytes(
     receiptId?: 1;
     departmentId?: string;
   }) => console.warn("receipt.optional_read_failed", event);
-  const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
-  const departmentId = header?.departmentId ?? null;
   const current = await readReceiptLanguage(tx);
   const department =
     departmentId === null
@@ -243,7 +246,7 @@ async function buildReceiptBytes(
           tx,
           {
             ...cfg,
-            receiptLanguages: [...new Set([language ?? ticket.locale, current.locale])],
+            receiptLanguages: [...new Set([invoiceLocale, current.locale])],
             receiptDiagnostic: diagnostic,
           },
           departmentId,
@@ -251,20 +254,45 @@ async function buildReceiptBytes(
         );
   const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(authored, venue, language ?? ticket.locale, current.locale);
+  const receipt = resolveReceiptTrim(authored, venue, invoiceLocale, current.locale);
   const venueAddress = await readReceiptAddress(tx, {
     printAddress: authored?.printAddress === true,
   });
+  return {
+    issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+    receipt,
+    venueAddress,
+    logo,
+  };
+}
+
+/** Use the filed issuer where available and the current optional trim, address and logo. */
+async function buildReceiptBytes(
+  tx: Transaction,
+  cfg: Pick<TradingContext, "practiceMode">,
+  ticket: TillSaleResult,
+  saleId: string,
+  duplicate: boolean,
+  printer: EscSetting,
+  language?: string,
+): Promise<Uint8Array | undefined> {
+  const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
+  const departmentId = header?.departmentId ?? null;
+  const invoiceLocale = language ?? ticket.locale;
+  const venue = await readPrintedVenue(tx, cfg, departmentId, printer, invoiceLocale);
+  /* v8 ignore start */
+  if (venue === undefined) {
+    return undefined;
+  }
+  /* v8 ignore stop */
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
   const guests = await readPrintedGuests(tx, saleId);
   return formatReceipt({
     result: ticket,
-    issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-    receipt,
-    venueAddress,
-    logo,
+    ...venue,
+    issuer: ticket.issuer ?? venue.issuer,
     receiptHeader,
-    invoiceLocale: language ?? ticket.locale,
+    invoiceLocale,
     namesLocale: ticket.namesLocale ?? ticket.locale,
     printer,
     simulated: cfg.practiceMode,

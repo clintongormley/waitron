@@ -153,7 +153,7 @@ test "flags bare Spanish prose in a line comment"). It should be fixed whatever 
 | `apps/server/src/attendance-export-pdf.ts:29–160` | «Registro de jornada», «Desde», «continuación», «Página» | Manager, representatives, inspector: the PDF's frame | Inline choices; body labels come from `workforce-es` |
 | `apps/server/src/category-sales-page.ts:48–65` (13) | «Categorías en el momento de la venta», «Sin categoría» | Manager, printed report | `STRINGS: Record<SupportedLocale, …>` at `:32` |
 | `apps/server/src/guide-pages.ts:73–85` (9) | «Guía de Waitron», «Página no encontrada» | Staff and owners, the guide frame | `GUIDE_TEXT: { en, es }` at `:60` |
-| `apps/server/src/printer-test-page.ts:26–29`, `test-page.ts:21–25` | «Página de prueba», «Mida con una regla…» | Owner, printer test and ruler pages | `Record<SupportedLocale, …>` tables |
+| `apps/server/src/test-page.ts:21–25` | «Mida con una regla…» | Owner, the ruler page | `Record<SupportedLocale, …>` table |
 | `apps/server/src/recovery-surface.ts:107–425` (about 50) | «Waitron no ha arrancado», «Reintentar un arranque normal» | Operator, the page shown when the box fails to start | Tables keyed by language; must stay loadable without the database |
 | `packages/dashboard-kit/src/codes.ts:9`, `alert-messages.ts:21` (and `table-strings.ts`) | «Algo salió mal, inténtalo de nuevo», «Algo requiere atención» | Owner and managers, fallback error and alert | `{ en, es }` pairs in generic code; the guard skips them (they are not listed words) |
 
@@ -211,7 +211,6 @@ the provisioned station breaks that lookup; finding it by `is_default` (as `dev-
 | `apps/server/src/invoice-selection.ts:31` | Spain-only check in general code: a full-invoice address must end with «España», or staff get `invoice.recipient_invalid`. Home: `country-es`, beside the tax ID check it already uses |
 | `packages/ui/demo/main.ts:66–274` | About 45 Spanish strings in the ui package's developer showcase («Cobrar», «Modo formación»); not shipped, not scanned |
 | `apps/setup/src/receipt-languages.ts:6–9` | «Español», «Català», «Galego», «Euskara» on setup's review screen; the venue screen shows translated labels instead, so the two disagree |
-| `apps/server/src/i18n/printer-test-page.ts:3` | «Café, jamón, niño · 5 € · ¿Sí? ¡Sí!» — the printer test page's character sample, printed in every language |
 | `apps/server/scripts/receipt-look.ts` | A developer tool drawing Spanish sample receipts as pictures; never run by CI, writes no database |
 | `apps/server/README.md:152–156` | Example setup values «Mostrador», «Calle Mayor 1» |
 | `apps/server/scripts/cloud-translation-vectors.ts:36` | `{ ca: "Cigaló", es: "Carajillo" }` — sample translation in the Cloud contract's test data; translation is its subject |

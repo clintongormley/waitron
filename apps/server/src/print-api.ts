@@ -28,7 +28,6 @@ import {
   isReceiptPrinter,
   printers,
   receiptPrintTransport,
-  readVenue,
   stationPrinterPairs,
   withTransaction,
   type Database,
@@ -87,7 +86,7 @@ import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
-import { formatPrinterTestPage } from "./printer-test-page.js";
+import { layOutPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 import { setPrinterPortable, type ProfilePrinterRole } from "@waitron/layouts";
@@ -1629,19 +1628,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printers)
           .where(and(isReceiptPrinter(), eq(printers.id, id), eq(printers.active, true)));
         if (printer === undefined) throw new AppError("printer.not_found", { id });
-        const venue = await readVenue(tx);
-        const locale = await resolveSessionLocale(
-          tx,
-          sessionId,
-          c.req.header("Accept-Language"),
-          deps.venueLocale,
-        );
-        const payload = formatPrinterTestPage({
-          locale,
+        const payload = await layOutPrinterTestPage(tx, deps.cfg, {
           printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
           printerName: printer.name,
           now: (deps.now ?? (() => new Date()))(),
-          timeZone: venue.timeZone,
+          qrText: deps.receiptQrText,
         });
         return enqueuePrintJob(tx, id, payload);
       });
