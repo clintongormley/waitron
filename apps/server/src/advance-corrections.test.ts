@@ -502,9 +502,9 @@ describe("an advance once the rest's invoice has taken it off", () => {
 
   /** A correction for the whole of `advanceId`, opened while the table's bill was still open and
    * still open once the bill's €90 rest was paid; its id and the refusal giving its money back
-   * meets. The till refuses that payment while the correction is open (`advance.correction_open`),
-   * so the correction is opened through the route, closed, and written back open in the database
-   * after the payment, as one left open before that refusal existed would be. */
+   * meets. No route reaches this (`advance.correction_open` refuses the payment), so the
+   * correction is opened, closed, and written back open in the database after the payment: the
+   * two cases below test `reserveTenderRefund`'s guard for an issuing path nobody found. */
   async function openedBeforeTheRest(billId: string, advanceId: string) {
     const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
     expect(opened.status, JSON.stringify(opened.json)).toBe(200);
