@@ -4556,6 +4556,8 @@ async function bootServer(
     owedReceiptJob({
       db,
       layOutSaleReceipt: saleReceiptLayout(nodeBackend, tradingContext),
+      backend: nodeBackend,
+      cfg: tradingContext,
       isPrimary: () => holders.singletonRole.current === "primary",
       log,
     }),
