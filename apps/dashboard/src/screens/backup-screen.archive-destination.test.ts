@@ -1554,6 +1554,19 @@ describe("switching off", () => {
     await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledTimes(2));
   });
 
+  it("a Turn off refused because the box holds no backup settings says so", async () => {
+    const { el } = await mount(LOCAL_ONLY, {
+      disableBackup: vi.fn().mockRejectedValue({ code: "backup.not_configured", params: {} }),
+    });
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    await vi.waitFor(() =>
+      expect(text(banner(el)!)).toContain(
+        "This box has no backup settings yet. Reload the page, then choose Turn on backups.",
+      ),
+    );
+  });
+
   for (const locale of ["en-GB", "es-ES"] as const) {
     it(`a refused Turn off for unreadable settings names the buttons that replace them (${locale})`, async () => {
       const previous = currentLocale();

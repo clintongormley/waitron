@@ -121,6 +121,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.invalid": 400,
   "zone.name_taken": 409,
   "menu.not_found": 404,
+  "menu.reset_required": 500,
   "set_menu.wrong_place": 409,
   "category.parent_cycle": 409,
   "category.name_taken": 409,
@@ -129,7 +130,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.period_invalid": 409,
   "station.not_found": 404,
   "station.destination_invalid": 400,
-  "time_zone.unreadable": 409,
+  "time_zone.unreadable": 500,
   "hours.invalid": 400,
   "hours.clock_change_conflict": 409,
   "hours.clock_changed": 409,
@@ -147,6 +148,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "floor_plan_set.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
+// These routes ask the clock only about checked `from`..`to` dates and the day after each, so
+// `business_day.clock_invalid` here means the stored clock is broken.
+const runServiceTimes = createErrorBoundary(
+  { ...STATUS, "business_day.clock_invalid": 500 },
+  "venue_service.failed",
+);
 /** For a route where these codes can only name an id the request body sent, never its path. */
 const runBodyIds = (...codes: string[]) =>
   createErrorBoundary(
@@ -538,7 +545,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     mountFloorPlanSetRoutes(app, ctx, log, run);
 
     app.get("/management-api/venue-service/stations/service-times", (c) =>
-      run(c, log, async () => {
+      runServiceTimes(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const from = c.req.query("from") ?? "";
         const to = c.req.query("to") ?? "";
@@ -549,7 +556,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
-      run(c, log, async () => {
+      runServiceTimes(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const stationId = requireUuidParam(c.req.param("stationId"), "stationId");
         const from = c.req.query("from") ?? "";

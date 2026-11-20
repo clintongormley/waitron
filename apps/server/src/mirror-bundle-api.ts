@@ -113,6 +113,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
+  "mirror.not_provisioned": 409,
+  "module.config_invalid": 500,
   ...JOIN_REFUSAL_STATUS,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,

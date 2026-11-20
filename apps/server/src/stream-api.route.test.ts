@@ -1322,7 +1322,7 @@ describe("stream settings routes", () => {
             method: "PUT",
             ...json(cookie, BODY),
           });
-          expect(res.status).toBe(409);
+          expect(res.status).toBe(500);
           expect(await res.json()).toMatchObject({
             error: { code: "backup.archive_settings_unreadable", params: { reason: code } },
           });

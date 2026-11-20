@@ -19,8 +19,22 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
+  "configuration_export.source_invalid": 500,
 };
 const run = createErrorBoundary(STATUS, "configuration_export.failed");
+
+// The builder reads only the box's own rows and declarations, so its `setup.request_invalid` is a
+// fault in this box's data, not in the request; a pending day-start change is the one state refusal.
+function sourceFault(error: unknown): never {
+  if (
+    error instanceof AppError &&
+    error.code === "setup.request_invalid" &&
+    error.params.field !== "businessDayStart"
+  ) {
+    throw new AppError("configuration_export.source_invalid", { field: error.params.field });
+  }
+  throw error;
+}
 
 export interface ConfigurationExportDeps {
   db: Database;
@@ -59,7 +73,7 @@ export function mountConfigurationExportApi(
           deps.modules,
           (deps.now ?? (() => new Date()))(),
           deps.moduleVersions,
-        );
+        ).catch(sourceFault);
       });
       const artifactReady = previousExport.then(() =>
         encodeConfigurationBundleAsync(bundle, passphrase),

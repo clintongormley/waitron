@@ -381,15 +381,15 @@ it("refuses a programmatic unchanged save even when all fields validate", async 
 it("explains a missing account recipient without marking a mail-server field", async () => {
   const client = api();
   vi.mocked(client.testEmailSettings).mockRejectedValue({
-    code: "email.settings_invalid",
-    params: { field: "recipient" },
+    code: "email.test_recipient_missing",
+    params: {},
   });
   const { el } = await mount(stored, client);
   await credentials(el);
   button(el, "test").click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
-      "Check the mail server settings and your account email address, then try again.",
+      "Your own account has no email address to send the test to. Add one to your account, then send the test again.",
     ),
   );
   expect(field(el, "from").error).toBe("");

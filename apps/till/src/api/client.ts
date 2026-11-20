@@ -3755,7 +3755,12 @@ export class TillApi {
         throw new TypeError("The payment response could not be read", { cause: error });
       }
       const refusal = error as { code?: string; status?: number; field?: string };
-      if (isNetworkFailure(error) || (refusal.status ?? 0) >= 500)
+      // The payment route raises `menu.reset_required` only after its submission lookup found no
+      // payment, inside a transaction it undoes, so this 500 recorded nothing.
+      if (
+        isNetworkFailure(error) ||
+        ((refusal.status ?? 0) >= 500 && refusal.code !== "menu.reset_required")
+      )
         this.#unansweredWholeBills.set(id, sent);
       else if (refusal.code !== "handover.stepping_down" || earlier === undefined)
         this.#unansweredWholeBills.delete(id);

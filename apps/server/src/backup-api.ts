@@ -105,15 +105,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.request_invalid": 400,
   "backup.cloud_needs_daily": 400,
   "backup.cloud_unavailable": 400,
-  "backup.effective_mismatch": 400,
+  "backup.effective_mismatch": 500,
+  "backup.not_configured": 409,
   "backup.archive_namespace_overlap": 400,
   "backup.stream_not_configured": 409,
   "backup.recovery_key_missing": 409,
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
-  "backup.archive_settings_unreadable": 409,
-  "backup.stream_settings_unreadable": 409,
+  "backup.archive_settings_unreadable": 500,
+  "backup.stream_settings_unreadable": 500,
 };
 
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
@@ -544,7 +545,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
         }
         const held = read.settings;
-        if (held === null) throw requestInvalid("config");
+        if (held === null) throw new AppError("backup.not_configured", {});
         await storeSettings({ ...withoutRevision(held), enabled: false }, personId);
         return writeAnswer(c, await reloadAfterWrite());
       });
@@ -588,7 +589,12 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
-          if (!(await keyPresent())) throw requestInvalid("config");
+          if (!(await keyPresent())) {
+            if (unreadableCode !== undefined) {
+              throw new AppError("backup.archive_settings_unreadable", { reason: unreadableCode });
+            }
+            throw new AppError("backup.not_configured", {});
+          }
           await persistKey({ recoveryKey, keyRotatedAt });
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});

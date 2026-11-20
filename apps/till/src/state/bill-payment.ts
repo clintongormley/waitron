@@ -233,6 +233,9 @@ function billPaymentUnconfirmed(error: unknown, earlierUnanswered: boolean): boo
   // The gate and the restarted box both answer this before any payment route runs, so it says
   // nothing of what an earlier attempt that got no answer did.
   if (code === "handover.stepping_down") return earlierUnanswered;
+  // Raised only after the route's submission lookup found no payment, inside a transaction it
+  // undoes: nothing is recorded under this id.
+  if (code === "menu.reset_required") return false;
   const status = (error as { status?: unknown } | null)?.status;
   return (
     isNetworkFailure(error) ||

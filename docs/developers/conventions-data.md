@@ -103,7 +103,10 @@ project (§4).
 
 The owner's rule (2026-10-08): the thing the request's path points at is missing → 404; something
 the body (a form, a bundle, an import) refers to is missing or unusable → 400; a clash with stored
-data → 409; a file or copy that cannot be opened → 422. So one code can rightly answer 404 on one
+data → 409; a file or copy that cannot be opened → 422. A fault in the box's own stored data, or in a
+file of its own that the request neither sent nor chose, answers 500, and a request the box is not
+set up for answers 409 (the A394 plan's question
+12, settled by the watcher on 2026-11-20 on the owner's delegation). So one code can rightly answer 404 on one
 route and 400 on another: `service_zone.not_found` for `GET /api/service-zones/:zoneId/offers`,
 and for a zone a body names. A boundary (`createErrorBoundary`,
 `packages/server-kit/src/error-boundary.ts`) answers the status its table gives a code, and 400
@@ -115,7 +118,11 @@ boundary over a spread of the table, as `runVariant` in `apps/server/src/menu-ap
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
 status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
 "already set up" (`setup-app.ts`) and the menus screen's `!== 200`; refusals are told apart by
-code. Nothing guards the rule. The routes that broke it on that date, and the follow-ups that fix
+code. That grep misses range reads such as `>= 500`, which
+`git grep -nE 'status.{0,8}(>=|<) ?[0-9]{3}'` finds: the till's payment client treats a 5xx as a send
+that may have been recorded (`apps/till/src/api/client.ts`,
+`apps/till/src/state/bill-payment.ts`), so a change moving a code into or out of 5xx greps for range
+reads first. Nothing guards the rule. The routes that broke it on that date, and the follow-ups that fix
 them: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
 ## A recorded incident code needs an area claim and English and Spanish alert wording

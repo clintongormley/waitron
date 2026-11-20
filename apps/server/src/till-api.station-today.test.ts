@@ -665,7 +665,7 @@ describe("the till's station day", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Clock"}) where module = 'business_day'`,
     );
     const clock = await call("PUT", today(), close());
-    expect(clock.status).toBe(409);
+    expect(clock.status).toBe(500);
     expect(clock.json).toMatchObject({ code: "time_zone.unreadable" });
     expect(await rows()).toEqual([]);
   });

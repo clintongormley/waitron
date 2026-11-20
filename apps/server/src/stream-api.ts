@@ -102,7 +102,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
-  "backup.archive_settings_unreadable": 409,
+  "backup.archive_settings_unreadable": 500,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
   "backup.stream_request_failed": 502,
 };

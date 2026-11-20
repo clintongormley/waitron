@@ -258,9 +258,9 @@ it("keeps waiting for a refresh requested after an earlier read started and then
   const refresh = controller.refresh().then(() => {
     refreshed = true;
   });
-  answers[0]!(Response.json({ error: { code: "menu.reset_required" } }, { status: 409 }));
+  answers[0]!(Response.json({ error: { code: "menu.reset_required" } }, { status: 500 }));
   await initial;
-  expect(errors).toEqual([{ code: "menu.reset_required", status: 409 }]);
+  expect(errors).toEqual([{ code: "menu.reset_required", status: 500 }]);
   expect(refreshed).toBe(false);
   await vi.advanceTimersByTimeAsync(100);
   answers[1]!(Response.json({ home: { status: 200, body: { handheld: { columns: 5 } } } }));

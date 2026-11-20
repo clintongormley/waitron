@@ -3,7 +3,15 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { addProductToMenu, createMenu, createCategory, createProduct } from "@waitron/menu";
+import {
+  addProductToMenu,
+  buildMenuDocument,
+  createMenu,
+  createCategory,
+  createProduct,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/menu";
 import {
   departments,
   CORE_MIGRATIONS,
@@ -37,6 +45,7 @@ import {
 } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";
+import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -3434,6 +3443,17 @@ describe.each(["individual", "batch"])("%s station service-times planning route"
       );
     }
   });
+  it("answers the box's unreadable stored time zone as a server fault", async () => {
+    const f = await fixture();
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
+    const response = await send(f.app, "GET", path(f.stationId), f.managerCookie);
+    expect(await response.json()).toEqual({
+      error: { code: "business_day.clock_invalid", params: { reason: "invalid_time_zone" } },
+    });
+    expect(response.status).toBe(500);
+  });
   it.each([
     ["staff", 403, "authorization.not_permitted"],
     ["anonymous", 401, "management_session.required"],
@@ -3906,6 +3926,36 @@ it("editing a department preserves its previously read receipt defaults", async 
     dining: "eat_in",
     diningStartsAs: "eat_in",
   });
+});
+
+it("answers a live menu stored in an earlier document format as a server fault with the venue-reset code", async () => {
+  const fx = await fixture();
+  await withTransaction(db, async (tx) => {
+    const department = await createDepartment(tx, { name: "Dining" });
+    await tx
+      .update(floorZones)
+      .set({ departmentId: department.id })
+      .where(eq(floorZones.id, fx.zoneId));
+    await offerMenuThroughZone(tx, fx.zoneId, fx.menuId);
+    const { document } = await buildMenuDocument(tx, fx.menuId);
+    const [person] = (await tx.execute<{ id: string }>(sql`select id from persons limit 1`)).rows;
+    const hash = menuDocumentHash(document);
+    const { versionId } = await publishMenu(tx, fx.menuId, hash, person!.id);
+    const earlier = randomUUID();
+    await tx.execute(sql`
+      insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
+      select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 1), 'earlier',
+        created_at, created_by
+      from menu_versions where id = ${versionId}`);
+    await tx.execute(
+      sql`update menu_releases set version_id = ${earlier} where menu_id = ${fx.menuId} and state = 'live'`,
+    );
+  });
+  const read = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+  expect(await read.json()).toEqual({
+    error: { code: "menu.reset_required", params: { menuId: fx.menuId } },
+  });
+  expect(read.status).toBe(500);
 });
 
 describe("department description setup in the live model", () => {

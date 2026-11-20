@@ -199,6 +199,8 @@ describe("the submission id of a confirmation", () => {
     const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     expect(unansweredAfter(sent, { code: "bill.tip_not_allowed", status: 409 })).toEqual(sent);
     expect(unansweredAfter(sent, { code: "bill.tip_not_allowed", status: "502" })).toEqual(sent);
+    expect(unansweredAfter(sent, { code: "menu.reset_required", status: 500 })).toEqual(sent);
+    expect(unansweredAfter(sent, { code: "menu.reset_required", status: 500 }, true)).toEqual(sent);
     const refund = refundSubmissionFor(
       "wo-1",
       "payment-1",
