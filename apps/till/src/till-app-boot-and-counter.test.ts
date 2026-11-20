@@ -2281,6 +2281,37 @@ describe("till-app simplified-invoice limit", () => {
     }
   });
 
+  it.each([
+    [
+      "en-GB",
+      "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
+    ],
+    [
+      "es-ES",
+      "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
+    ],
+  ])(
+    "says in %s why the invoice cannot be emailed when the server refuses the sale for it",
+    async (locale, message) => {
+      try {
+        const { el } = await mountApp({
+          recordSale: vi
+            .fn()
+            .mockRejectedValue({ code: "invoice_delivery.email_unavailable", status: 409 }),
+        });
+        const c = await toCounter(el);
+        setLocale(locale);
+        c.store.addProduct(c.products[0]!, "1");
+        emit(c, "confirm-payment", { method: "cash", amount: "5" });
+        await flush(el);
+        expect(banner(el)!.textContent!.trim()).toBe(message);
+        expect(c.store.lines).toHaveLength(1);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
   it("says the department needs a tax-agency description when the server refuses the sale for it", async () => {
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({

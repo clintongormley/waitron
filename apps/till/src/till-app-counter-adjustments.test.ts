@@ -1445,6 +1445,25 @@ describe("till-app: comping a stored counter order", () => {
     expect(store.lines[1]!.quantity.toString()).toBe(quantity);
   });
 
+  it("names the counter order in the options read behind Full invoice", async () => {
+    const getInvoiceDeliveryOptions = vi
+      .fn()
+      .mockResolvedValue({ invoicePrinter: null, emailAvailable: false });
+    const el = await placeCounter({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      getInvoiceDeliveryOptions,
+    });
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+    expect(getInvoiceDeliveryOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: counter(el).store.id }),
+    );
+  });
+
   it("replays a lost placing reply without saving the confirmed recipient again", async () => {
     const placeOrder = vi
       .fn()

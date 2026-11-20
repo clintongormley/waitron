@@ -462,8 +462,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ahora no se puede volver a imprimir el recibo original. Comprueba su estado",
   },
   "invoice_delivery.email_unavailable": {
-    en: "Invoice email is unavailable. Ask a manager.",
-    es: "No se puede enviar la factura por correo. Avisa a un responsable.",
+    en: "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
+    es: "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas.",
   },
   "invoice.choice_locked": {
     en: "This bill's invoice type can no longer change: its receipt has been issued, or it is set to a full invoice and has already taken a payment.",

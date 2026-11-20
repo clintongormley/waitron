@@ -277,7 +277,11 @@ import {
   retryEmailDelivery,
   switchToReceipt,
 } from "./invoice-delivery-actions.js";
-import { canEmailInvoice } from "./invoice-email-contact.js";
+import {
+  canEmailInvoice,
+  resolveInvoiceEmailContact,
+  type InvoiceEmailContactSource,
+} from "./invoice-email-contact.js";
 import { completeTillSetup, readTillSetup, setupRevisionOf } from "./till-setup.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
@@ -2244,12 +2248,21 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/invoice-delivery-options", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const printer = await deps.db.withWriteLock(() =>
-        resolveInvoicePrinter(deps.db, requestCfg(deps.cfg, session).origin),
-      );
+      const orderId = c.req.query("orderId");
+      const source: InvoiceEmailContactSource =
+        orderId === undefined
+          ? { kind: "default" }
+          : { kind: "order", orderId: requireUuidId(orderId, "working_order.not_found") };
+      const transport = await readEmailTransport();
+      const { printer, contact } = await deps.db.withWriteLock(async () => ({
+        printer: await resolveInvoicePrinter(deps.db, requestCfg(deps.cfg, session).origin),
+        // Staging an email choice also needs a contact for the bill's receipt, so Email is offered
+        // only when that staging would accept it.
+        contact: transport ? await resolveInvoiceEmailContact(deps.db, source) : null,
+      }));
       // Only an A4 invoice printer is offered at payment; a receipt one is reached from the sale.
       const invoicePrinter = printer?.kind === "a4" ? { id: printer.id, name: printer.name } : null;
-      return c.json({ invoicePrinter, emailAvailable: await readEmailTransport() });
+      return c.json({ invoicePrinter, emailAvailable: contact !== null });
     }),
   );
 

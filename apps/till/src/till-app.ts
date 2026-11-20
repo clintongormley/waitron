@@ -1268,6 +1268,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "station.no_default",
   "order.dining_fixed",
   "order.dining_locked",
+  "invoice_delivery.email_unavailable",
 ]);
 
 /** A counter basket save refused because it would change, lower or leave out a dish already sent. */
@@ -7590,6 +7591,7 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOrderId = orderId;
     this.invoiceRecipientBill = undefined;
     void this.#openInvoiceRecipient(
+      orderId,
       () =>
         this.invoiceRecipientOrderId === orderId &&
         this.#store.id === orderId &&
@@ -7599,11 +7601,11 @@ export class TillApp extends LitElement {
   }
 
   /** Null when the read fails or outlasts {@link INVOICE_OPTIONS_LIMIT_MS}. */
-  async #readInvoiceDeliveryOptions(): Promise<InvoiceDeliveryOptions | null> {
+  async #readInvoiceDeliveryOptions(orderId: string): Promise<InvoiceDeliveryOptions | null> {
     const limit = limited(INVOICE_OPTIONS_LIMIT_MS);
     try {
       return await Promise.race([
-        this.api.getInvoiceDeliveryOptions({ signal: limit.signal }),
+        this.api.getInvoiceDeliveryOptions({ orderId, signal: limit.signal }),
         pause(limit.signal).then(() => null),
       ]);
     } catch {
@@ -7616,13 +7618,14 @@ export class TillApp extends LitElement {
   /** A failed or timed-out read reaches the dialog as null options, and the dialog then keeps
    * `saved` unless the person changes Delivery. */
   async #openInvoiceRecipient(
+    orderId: string,
     stillAsked: () => boolean,
     saved?: InvoiceDeliveryChoice,
   ): Promise<void> {
     const ask = {};
     this.#invoiceRecipientAsk = ask;
     this.invoiceRecipientReading = true;
-    const options = await this.#readInvoiceDeliveryOptions();
+    const options = await this.#readInvoiceDeliveryOptions(orderId);
     if (this.#invoiceRecipientAsk !== ask) return;
     this.invoiceRecipientReading = false;
     if (!this.isConnected || !stillAsked()) return;
@@ -21442,6 +21445,7 @@ export class TillApp extends LitElement {
     this.invoiceRecipientRefusal = "";
     this.invoiceRecipientRefusalField = "";
     void this.#openInvoiceRecipient(
+      workingOrderId,
       () => this.invoiceRecipientBill === target && this.#operatorSession === target.session,
       bill.invoiceDelivery,
     );
@@ -21516,7 +21520,7 @@ export class TillApp extends LitElement {
             ? field
             : "";
         if (code === "invoice_delivery.printer_invalid") {
-          const options = await this.#readInvoiceDeliveryOptions();
+          const options = await this.#readInvoiceDeliveryOptions(bill.orderId);
           if (options !== null && current()) this.invoiceRecipientOptions = options;
         }
       }

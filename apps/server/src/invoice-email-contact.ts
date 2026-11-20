@@ -3,7 +3,7 @@ import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export type InvoiceEmailContactSource =
-  { kind: "order"; orderId: string } | { kind: "sale"; saleId: string };
+  { kind: "order"; orderId: string } | { kind: "sale"; saleId: string } | { kind: "default" };
 
 export async function resolveInvoiceEmailContact(
   tx: Transaction,
@@ -12,7 +12,9 @@ export async function resolveInvoiceEmailContact(
   const departmentId =
     source.kind === "sale"
       ? await VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId)
-      : await VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);
+      : source.kind === "order"
+        ? await VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId)
+        : null;
   const contact = async (id: string | null) => {
     if (id === null) return null;
     try {

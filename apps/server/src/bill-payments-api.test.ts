@@ -427,6 +427,32 @@ async function groupedTabWith(...names: string[]): Promise<string> {
   });
 }
 
+/** Runs `body` with a contact email on every department's receipt, then restores them. */
+async function withContact(body: () => Promise<void>) {
+  const original = await inTx((tx) => tx.select().from(departments));
+  const receipt = { email: "dining@example.test", phone: "910000000" };
+  try {
+    await inTx(async (tx) => {
+      const rows = await tx.select({ id: departments.id }).from(departments);
+      for (const { id } of rows) {
+        await seedDepartmentReceipt(tx, id, receipt);
+      }
+    });
+    await body();
+  } finally {
+    await inTx(async (tx) => {
+      await tx.update(departments).set({
+        receiptText: null,
+        receiptLogoImageId: null,
+        receiptLogoRasters: null,
+        receiptUpdatedAt: null,
+      });
+      for (const row of original)
+        await tx.update(departments).set(row).where(eq(departments.id, row.id));
+    });
+  }
+}
+
 function bill120(): Promise<string> {
   return tabWith("Paella", "Steak", "Wine bottle", "Salad", "Cake");
 }
@@ -2338,19 +2364,63 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     it("answers whether invoice email can be sent, as staging an email choice decides it", async () => {
       try {
-        for (const [onboardingIntent, devMode, emailAvailable] of [
-          ["live", false, false],
-          ["demo", false, true],
-          ["live", true, true],
-          ["prepare", false, false],
-          ["prepare", true, true],
-        ] as const) {
-          invoiceMailMode = { onboardingIntent, devMode };
-          expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
-            status: 200,
-            json: { invoicePrinter: null, emailAvailable },
+        await withContact(async () => {
+          for (const [onboardingIntent, devMode, emailAvailable] of [
+            ["live", false, false],
+            ["demo", false, true],
+            ["live", true, true],
+            ["prepare", false, false],
+            ["prepare", true, true],
+          ] as const) {
+            invoiceMailMode = { onboardingIntent, devMode };
+            expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
+              status: 200,
+              json: { invoicePrinter: null, emailAvailable },
+            });
+          }
+        });
+      } finally {
+        invoiceMailMode = { onboardingIntent: "live", devMode: false };
+      }
+    });
+
+    it("answers email unavailable while mail is set up but neither the bill's department nor the default one has a receipt email", async () => {
+      invoiceMailMode = { onboardingIntent: "demo", devMode: false };
+      try {
+        const billId = await tabWith("Steak");
+        const departmentId = await inTx(async (tx) => {
+          const department = await createDepartment(tx, {
+            name: `Terrace ${randomUUID()}`,
+            tradingName: "Terrace",
+            orderStart: "table",
           });
-        }
+          await tx
+            .update(workingOrders)
+            .set({ departmentId: department.id })
+            .where(eq(workingOrders.id, billId));
+          return department.id;
+        });
+        const options = (query: string) => request("GET", `/api/invoice-delivery-options${query}`);
+        expect(await options(`?orderId=${billId}`)).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: false },
+        });
+        await inTx((tx) =>
+          seedDepartmentReceipt(tx, departmentId, { email: "terrace@example.test" }),
+        );
+        expect(await options(`?orderId=${billId}`)).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: true },
+        });
+        // With no bill named, the default department decides, and it has no receipt email.
+        expect(await options("")).toEqual({
+          status: 200,
+          json: { invoicePrinter: null, emailAvailable: false },
+        });
+        expect(await options("?orderId=not-a-bill")).toEqual({
+          status: 404,
+          json: { code: "working_order.not_found", params: { workingOrderId: "not-a-bill" } },
+        });
       } finally {
         invoiceMailMode = { onboardingIntent: "live", devMode: false };
       }
@@ -2443,31 +2513,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       invoiceMailMode = { onboardingIntent: "live", devMode: false };
       vi.restoreAllMocks();
     });
-
-    async function withContact(body: () => Promise<void>) {
-      const original = await inTx((tx) => tx.select().from(departments));
-      const receipt = { email: "dining@example.test", phone: "910000000" };
-      try {
-        await inTx(async (tx) => {
-          const rows = await tx.select({ id: departments.id }).from(departments);
-          for (const { id } of rows) {
-            await seedDepartmentReceipt(tx, id, receipt);
-          }
-        });
-        await body();
-      } finally {
-        await inTx(async (tx) => {
-          await tx.update(departments).set({
-            receiptText: null,
-            receiptLogoImageId: null,
-            receiptLogoRasters: null,
-            receiptUpdatedAt: null,
-          });
-          for (const row of original)
-            await tx.update(departments).set(row).where(eq(departments.id, row.id));
-        });
-      }
-    }
 
     function emailChoice(revision: number) {
       return {

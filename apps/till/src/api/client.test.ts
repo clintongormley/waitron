@@ -2341,6 +2341,13 @@ describe("TillApi", () => {
       undefined,
     ],
     [
+      "getInvoiceDeliveryOptions for a bill",
+      (api: TillApi) => api.getInvoiceDeliveryOptions({ orderId: "wo 1" }),
+      "/api/invoice-delivery-options?orderId=wo%201",
+      "GET",
+      undefined,
+    ],
+    [
       "askDraftDeadEnds",
       (api: TillApi) => api.askDraftDeadEnds("v1", "d1", ["l1"]),
       "/api/dead-ends/draft",

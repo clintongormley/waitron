@@ -3295,10 +3295,15 @@ export class TillApi {
     );
   }
 
-  /** How a full invoice can be delivered here → `GET /api/invoice-delivery-options`. */
-  getInvoiceDeliveryOptions(options: ReadOptions = {}): Promise<InvoiceDeliveryOptions> {
+  /** How a full invoice can be delivered here → `GET /api/invoice-delivery-options`; `orderId`
+   * names the bill, whose department decides whether it can be emailed. */
+  getInvoiceDeliveryOptions(
+    options: ReadOptions & { orderId?: string } = {},
+  ): Promise<InvoiceDeliveryOptions> {
     return this.#request<InvoiceDeliveryOptions>(
-      "/api/invoice-delivery-options",
+      options.orderId === undefined
+        ? "/api/invoice-delivery-options"
+        : `/api/invoice-delivery-options?orderId=${encodeURIComponent(options.orderId)}`,
       "GET",
       undefined,
       options.signal,

@@ -8931,6 +8931,39 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     });
   });
 
+  it("names the bill in each options read, so Email is offered only where the bill can be emailed", async () => {
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "invoice_delivery.printer_invalid" });
+    const getPartyBills = vi.fn().mockResolvedValue([billOf({ revision: 7 })]);
+    const { el } = await mountApp({
+      ...fullInvoicesOn(),
+      getInvoiceDeliveryOptions,
+      setOrderInvoiceChoice,
+      getPartyBills,
+    });
+    const order = await openTable(el);
+    order
+      .shadowRoot!.querySelector<HTMLElement>(
+        "[data-choose-bill-invoice]:not([data-table-menu] *)",
+      )!
+      .click();
+    await flush(el);
+    emit(recipientDialog(el)!, "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient,
+      delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    });
+    await flush(el);
+
+    expect(
+      getInvoiceDeliveryOptions.mock.calls.map(
+        ([options]) => (options as { orderId?: string }).orderId,
+      ),
+    ).toEqual(["wo-4", "wo-4"]);
+  });
+
   it("re-reads the options after a refused invoice printer, so the retry names the current one", async () => {
     const getInvoiceDeliveryOptions = vi
       .fn()
