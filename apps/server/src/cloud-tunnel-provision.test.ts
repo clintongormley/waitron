@@ -1,10 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFile, execFileSync } from "node:child_process";
-import { promisify } from "node:util";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { settleOrRelease } from "../test/settle-or-release.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 
@@ -573,24 +573,14 @@ it("refuses a FIFO public-key file without waiting for a writer", async () => {
     const path = join(f.directory, "public-key");
     await rm(path);
     execFileSync("mkfifo", [path]);
-    const script = `import { createCloudConnection } from ${JSON.stringify(new URL("./cloud-client.ts", import.meta.url).href)};
-      try { await createCloudConnection({ ...${JSON.stringify(f.options)}, readVenueId: async () => ${JSON.stringify(await f.options.readVenueId())}, readVenueName: async () => "", recordVenueId: async () => {} }).refresh(); console.log("resolved"); }
-      catch(error) { console.log(error.code); }`;
-    const result = await promisify(execFile)(
-      process.execPath,
-      ["--import", "tsx", "--input-type=module", "-e", script],
-      { timeout: 8000 },
-    ).then(
-      (value) => ({ value, error: undefined }),
-      (error) => ({ value: undefined, error }),
-    );
+    const result = await settleOrRelease(f.client.refresh(), path, 5000);
     expect(
-      result.error,
-      "the key read must finish without a child-process timeout",
-    ).toBeUndefined();
-    expect(result.value?.stdout.trim()).toBe("cloud.tunnel_unavailable");
+      result.settled,
+      "the refresh must settle within 5 s; a key read waiting for a FIFO writer never does",
+    ).toBe(true);
+    expect(result).toMatchObject({ error: { code: "cloud.tunnel_unavailable" } });
     expect(f.submissions()).toHaveLength(0);
   } finally {
     await f.close();
   }
-}, 15000);
+});

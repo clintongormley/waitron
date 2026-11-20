@@ -1,11 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as files from "node:fs/promises";
 import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
+import { settleOrRelease } from "../test/settle-or-release.js";
 import { createCloudConnection } from "./cloud-client.js";
+import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -363,27 +365,15 @@ it("refuses a pipe key without blocking the Cloud connection", async () => {
   try {
     await f.client.refresh();
     const state = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
-    await rm(join(f.tunnelDir, "public-key"));
-    execFileSync("mkfifo", [join(f.tunnelDir, "public-key")], { timeout: 1000 });
-    const child = spawnSync(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        "--input-type=module",
-        "--eval",
-        `
-      import { readFileSync } from 'node:fs';
-      import { writeTunnelConfiguration } from './src/cloud-tunnel.ts';
-      const { directory, state } = JSON.parse(readFileSync(0, 'utf8'));
-      try { await writeTunnelConfiguration(directory, state); process.exitCode = 2; }
-      catch (error) { process.stdout.write(JSON.stringify({code: error.code})); }
-    `,
-      ],
-      { input: JSON.stringify({ directory: f.tunnelDir, state }), encoding: "utf8", timeout: 3000 },
-    );
-    expect(child.status, child.stderr).toBe(0);
-    expect(JSON.parse(child.stdout)).toEqual({ code: "cloud.tunnel_unavailable" });
+    const path = join(f.tunnelDir, "public-key");
+    await rm(path);
+    execFileSync("mkfifo", [path], { timeout: 1000 });
+    const result = await settleOrRelease(writeTunnelConfiguration(f.tunnelDir, state), path, 5000);
+    expect(
+      result.settled,
+      "the configuration write must settle within 5 s; a key read waiting for a FIFO writer never does",
+    ).toBe(true);
+    expect(result).toMatchObject({ error: { code: "cloud.tunnel_unavailable" } });
   } finally {
     await f.close();
   }

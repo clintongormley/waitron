@@ -169,19 +169,6 @@ has not been established. Logs, trace and history are retained in
 failed-job rerun on the same head; a pass is not a repair. A second occurrence needs a priority
 root-cause fix with its trace retained before retrying.
 
-**A Cloud tunnel key test ran out of its child's 8-second limit once (PR #3840, 2026-11-19).**
-Run [44550777232](https://github.com/clintongormley/waitron/actions/runs/44550777232), attempt 1,
-`test-server (11)`: `apps/server/src/cloud-tunnel-provision.test.ts` "refuses a FIFO public-key
-file without waiting for a writer" failed with "the key read must finish without a child-process
-timeout" after 8,082 ms; attempt 2 passed. The branch changed no Cloud or tunnel code. The same
-case passed in 4,649 ms in run 44230970971 (2026-11-18) and 6,330 ms in run 44545824388 (attempt 1,
-2026-11-19); searching the logs of the 40 most recent failed `ci.yml` runs found it in those two
-and no other failure of it. Log:
-`~/waitron-campaign-b/receipts/a1553/run44550777232-attempt1-test-server-11.log`. Again on PR #3398
-(2026-11-20), run [44740208596](https://github.com/clintongormley/waitron/actions/runs/44740208596),
-`test-server (22)`, both attempts: 8,099 ms, then 8,088 ms; the branch changed no Cloud or tunnel
-code. Next: find what in the child takes those seconds before raising any limit.
-
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
 Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
