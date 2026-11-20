@@ -36,7 +36,7 @@ export function composeRecipientAddress(draft: RecipientAddressDraft): string {
   return [draft.streetAddress.trim(), place, draft.province.trim()].filter(Boolean).join(", ");
 }
 
-/** The inverse of `composeRecipientAddress`: composing the result gives back `address` exactly. */
+/** For an address `composeRecipientAddress` built, composing the result gives it back exactly. */
 export function recipientAddressFields(
   address: string,
   countryCode: string,
