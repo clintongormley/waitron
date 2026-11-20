@@ -14,16 +14,16 @@ the local primary, management permission, same-origin and fresh sign-in checks i
 its required checks in Waitron. The box registers automatically. Send the saved venue name,
 trading address, country and tax number from local settings. Cloud finds or creates the business
 within that account by tax number, then creates the venue without a matching prompt. Boxes with
-a Cloud venue ID retain it. Restore and replacement keep their own paths.
+a Cloud venue ID retain it. Use this entry for new connections on eligible test boxes. Keep the
+code flow for replacement, an in-progress connection and boxes outside the test rollout.
 
-Agree with K on proposed `POST /api/box-registration/{login,signup-request,signup-complete}`
-and their challenge continuations. K owns email verification on the box and the required Cloud
-sign-in checks. Completed authentication returns an installation and lease for the box public key.
-Save that key and operation ID before calling Cloud. Replay within the same account returns the
-same installation. Reuse
-`apps/server/src/{cloud-client,cloud-signed-request,cloud-installation}.ts` and the existing
-connection state and venue ID write. Send the profile to that installation with the same signed
-request used in setup. Keep Cloud passwords and challenges transient and out of logs.
+Agree with K on the sign-in and signup boundary. K raised the Cloud sign-in window decision in
+its questions.md at 14:00. Reuse K's authentication outcome and send the saved venue details
+with the signed registration. Accept the current full registration and lease, including expiry
+and the business and organisation names. Save the box key and operation ID before calling Cloud.
+Replay within the same account returns the same installation. Refuse an account switch while
+that registration is unresolved. Reuse `apps/server/src/{cloud-client,cloud-signed-request,cloud-installation}.ts`,
+the durable connection state and the existing venue ID write.
 
 Change `apps/dashboard/src/{screens/cloud-services-screen.ts,api/client.ts}`,
 `apps/server/src/{cloud-api.ts,cloud-client.ts,boot.ts}` and the signing contracts it uses. Add
@@ -40,23 +40,26 @@ Billing and backup history remain in Cloud.
 
 There is no existing setup-owner proof before Venue. Admin Next writes a browser draft and
 navigates to Venue (`apps/setup/src/screens/admin-screen.ts:188–208`). The setup routes are
-unauthenticated at that point (`apps/server/src/setup-api.ts:695–711)). The server creates the
+unauthenticated at that point (`apps/server/src/setup-api.ts:695–711`). The server creates the
 first-fiscal owner capability only after receiving the venue and administrator together
 (`apps/setup/src/setup-app.ts:1280–1286`, `apps/server/src/setup-first-fiscal-api.ts:383–445`).
 The setup password verifier comes from that claim
 (`packages/provisioning/src/first-setup-owner.ts:191–235`). An origin check identifies the page
 (`apps/server/src/own-page.ts:12–19`). A browser on the venue network can load that page.
 
-Keep the administrator form staged. Before this slice, agree with the watcher on authority that
-can distinguish the installer before Venue on the intended test box. After Admin and that
-proof, reuse PR 1’s account flow and keep **Skip**. Hold a pending installation and lease in the
-Cloud connection state, linked to this setup attempt. The setup client has no local venue row.
+Keep the administrator form staged. Agree with the watcher on who can start registration on
+the intended test box. Apply this to fresh Live and Prepare setup. After Admin and that proof,
+reuse PR 1's account flow and keep **Skip**. K must agree a pre-venue lease for this slice.
+Use the box key for the pending installation across an edited or replaced first-fiscal claim.
+The setup client holds it in Cloud connection state until provision creates local venue settings.
+Start again discards the pending local registration. Cloud owners can remove the old entry.
 Supply the Venue screen’s `addressProvider` with signed `POST /api/installations/address-lookup`
 suggest and validate calls. At the server-accepted Venue save, send the saved name, address,
 country and tax number to proposed signed `POST /api/installations/profile`. The first save
 creates the venue under the right business. A retry returns its ID. A later accepted save updates
-that same venue. Provision writes that ID with the local venue settings. K must supply address
-access and the test relay grant before those screens need them.
+that venue. K owns reassignment when the accepted tax number changes. Provision writes that ID
+with the local venue settings. K must supply address access and the test relay grant. Apply
+A1171's relevant lookup rules for provider attribution, selection confirmation and allowances.
 
 On the Email step, offer Cloud account email with its active grant from signed
 `POST /api/installations/configuration`. Accept it without SMTP. Keep manual entry and the SMTP
@@ -74,8 +77,8 @@ authority agreed with the watcher can be reused.
 ## 3. Keep explicit trial consent for remote access
 
 From Cloud services, offer the trial for the current venue when remote access requires Connected.
-Propose the existing Cloud Billing selector and `POST /api/account/billing/start-trial`.
-Confirm the destination with the watcher. Exercise the same venue before and after explicit
+The existing start-trial request requires a Cloud account session. Confirm with the watcher
+whether to hand off to Cloud Billing or use a trial action agreed with K. Exercise the same venue before and after explicit
 consent in `apps/dashboard/src/screens/cloud-services-screen.billing.test.ts` and the test Cloud
 walkthrough. Estimate 60–110 code and 60–100 test lines.
 
