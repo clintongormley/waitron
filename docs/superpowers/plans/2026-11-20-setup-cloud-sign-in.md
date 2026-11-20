@@ -1,72 +1,69 @@
-# Sign in to Waitron Cloud during setup
+# Cloud sign-in at the start of setup
 
-When you start a new venue, you can sign up or sign in on Cloud and give the box access to basic
-services. You can finish local setup and sign in later from Cloud services. Requesting a Connected
-service leads to explicit trial consent. The separate A1186 completion invitation stays parked.
+On test Cloud, sign up or sign in before entering the venue details. The box registers at that
+point so the setup form can look up addresses and the setup email step can send through Cloud.
+You can continue locally if Cloud is unavailable. A Connected service still requires an explicit
+trial choice. The owner set the registration timing on 20 November at 13:11, recorded by the watcher
+in Lane D's questions.md. The guest-menu tier is still open. A1186, SMS, automatic upgrades,
+production enablement and A1171's broader dashboard integration are outside these three PRs.
 
-**Finish line for all three pull requests is test Cloud only.** The owner named email and SMS as
-basic services on 19 November at 18:50. Lane D proposes account email first. Production email
-enablement, SMS, automatic upgrades and the A1171 address-provider bridge are separate work.
-Cloud's billing design groups remote access, backups and recovery, translation, the rota solver
-and Cloud failover eligibility under Connected. The owner is deciding when Cloud records the venue
-and box, and whether public guest menus keep their current access without a trial. The watcher will
-clear the chosen route before build.
+## 1. Register and find an address before saving the venue
 
-## PR 1 — Setup sign-in and saved key
+- On the new-venue path, **Sign in to Cloud** starts pairing over HTTPS from the setup page.
+  Reuse the one-click `/connect` link (#3860 and Cloud #1331, joint walkthrough reported by K at
+  01:27). Cloud signup creates the account and business. The person approves the selected business
+  on Cloud. The originating setup browser checks and completes it without a second box click.
+  Keep the administrator confirmations for dashboard pairing and the existing later sign-in path.
+- Add `POST /setup-api/cloud-sign-in/start` and `POST /setup-api/cloud-sign-in/check`. Start issues a
+  secure browser token, stored hashed with the pending setup registration. Check requires that
+  token and the setup origin, and completes only the same Cloud-approved request. Setup has no
+  local administrator yet, and the first-fiscal owner claim already needs the venue form
+  (`setup-api.ts:697`, `setup-first-fiscal-api.ts:383`). The setup click and Cloud approval are
+  the proposed authority for this path.
+- Reuse signed `POST /api/pairing/start`, `/status` and `/complete` with blank venue ID and name
+  at start. Omit the address. Save the request and installation key on the box before the form.
+  Reuse them on retry. At the successful venue save in `/setup-api/provision`, bind exactly the
+  returned Cloud venue ID in the shared provision transaction (`provision.ts:188`,
+  `first-fiscal-activation.ts:130`). Restore, join and existing bindings need their own identity.
+- Send the committed trading name and address after provision, when the form's data is first
+  saved as venue settings. Propose signed `POST /api/installations/profile` to K. Cloud derives
+  the venue from the installation's key and lease. Pairing currently sets only the display name
+  (Cloud `packages/registration/src/pairing.ts:154`). Retry a refused or interrupted sync from
+  the same saved registration and committed settings. A Cloud failure leaves local setup usable.
+- Hand the venue form's existing address lookup a provider using same-browser
+  `POST /setup-api/cloud-sign-in/address-lookup` and Cloud's signed
+  `POST /api/installations/address-lookup` for suggestions and selection. Keep manual entry.
+  K must enable the private test route for the newly registered installation. It currently checks
+  an exact account, venue and installation (Cloud `packages/account-http/src/address-lookup.ts:51–69`).
 
-Offer Cloud sign-in at the start of the new-venue path. Use Cloud's existing sign-up and sign-in
-pages. Proposed Waitron requests: `POST /setup-api/cloud-sign-in/start` returns a link and
-`GET /setup-api/cloud-sign-in/status` reports the result to the same secure setup browser. Offer
-**Try again** and **Continue without Cloud**. Reuse the dashboard's Cloud services entry for a
-local administrator signing in later from the primary box.
+Change setup's `setup-app.ts`, `api/client.ts` and Cloud step, and server `boot.ts`, `setup-api.ts`,
+`cloud-client.ts` and the shared provision call. Start with `setup-app-cloud-sign-in.test.ts` and
+`setup-api.cloud-sign-in.test.ts` for same-browser completion, retry, local continuation, address
+selection and committed profile delivery. Exercise both provision variants and a restart with the
+same binding. Finish by finding an address on a newly registered test box. Estimate 350–500 code
+and 180–260 test lines for Waitron.
 
-- **Register when setup completes.** If sign-in comes first, Lane K must define how Cloud carries
-  that sign-in through to registration after `POST /setup-api/provision` creates the venue. Reuse
-  the signed `POST /api/pairing/start`, `/api/pairing/status` and `/api/pairing/complete` requests for
-  the installation credential. Today's flow requires a Cloud business choice and a fresh local
-  administrator confirmation. The early sign-in route needs a decision on those steps. After
-  provision, the existing pairing flow already has the venue ID and name. Moving sign-in there
-  would reuse that flow with its confirmations, and needs the owner's agreement on timing.
-- **Register when a Connected service is requested.** The setup start and status requests must let
-  the box obtain basic access before Cloud has a venue or installation. Lane K owns the Cloud
-  exchange, including how it binds approval to the account and box and scopes revocation and
-  allowances. Its design is parked until the owner answers. Defer installation to PR 3 and keep
-  the basic credential out of the existing installation record, which requires venue and pairing IDs.
+## 2. Send email during setup
 
-Keep private credentials on the box and save them with the existing durable Cloud state facilities
-on successful setup. Use `apps/setup/src/{setup-app,api/client}.ts`, a setup screen and EN/ES strings,
-`apps/server/src/{boot,setup-api,cloud-client}.ts` and the dashboard's `cloud-services-screen.ts`.
-Start with `setup-app-cloud-sign-in.test.ts` for sign-in and finishing locally after a refusal, and
-`setup-api.cloud-sign-in.test.ts` for same-browser status and key persistence through
-`POST /setup-api/provision` (standard setup and the first-fiscal setup variant) and a restart.
-Treat an active installation as connected, including when a restored primary holds valid credentials.
-On test Cloud, complete sign-in and confirm the box retains the chosen credential. Estimate
-250–380 code lines and 100–150 test lines on the Waitron side. Re-estimate if timing changes.
+Offer a fixed Cloud test email on the existing Email step. Keep the SMTP option. Propose a
+test-only `setup_test` message to K, addressed by Cloud to the verified pairing account. The setup
+browser can request the message through `POST /setup-api/cloud-sign-in/email-test` with its PR 1
+authority and no recipient or free text. Reuse the installation configuration, grant and lease
+and `POST /v1/installations/email/submit` and `/status`. The present relay accepts invitations,
+resets and email changes (`cloud-email.ts:110`). This proposal needs K's relay contract and watcher
+clearance. Change setup's `email-screen.ts`, `setup-app.ts` and `api/client.ts`, and the server's
+setup Cloud routes and `cloud-email.ts`. In `email-screen.test.ts` and `cloud-email.test.ts`, prove
+the fixed setup send and grant refusal. Confirm a message reaches the test inbox before provision
+and ordinary account email works after it. Estimate 100–160 code and 80–120 test lines.
 
-## PR 2 — Send account email using that key
+## 3. Start a trial when asking for a Connected service
 
-A test venue can send a real account invitation or password reset via Cloud. Reuse message and
-result handling in `cloud-email.ts`, `cloud-client.ts` and `boot.ts`. With quiet registration,
-use the signed installation configuration, email submit and email status requests
-(`POST /api/installations/configuration`, `POST /v1/installations/email/submit` and
-`POST /v1/installations/email/status`). These currently require a test installation and its lease.
-With deferred registration, Lane K must specify basic-key equivalents for reading relay permission,
-submitting a message and reading its status, with local-origin and consent checks. Agree which
-credential serves email after registration before implementing that route. Keep existing local mail
-and invoice email choices. Test the real request and refusal in `cloud-email.test.ts` and verify
-delivery on test Cloud. Update EN/ES Email guides. Estimate 100–130 code and 60–90 test lines.
+On the dashboard's Cloud services screen, offer Billing when Registered remote access requires a
+plan. Use the paired venue ID to identify the venue in Cloud's existing `/account/billing` selector.
+The person's **Start free trial** submits `POST /api/account/billing/start-trial` on Cloud. Preserve
+the existing pairing action for unregistered boxes. In `cloud-services-screen.billing.test.ts`,
+prove the handoff identifies the correct venue. On test Cloud verify the gate before consent and
+availability afterwards. Estimate 60–100 code and 50–80 test lines.
 
-## PR 3 — Open the trial from a Connected service
-
-Lane K's Cloud pairing is on main (#1331). After Lane C's Waitron link lands and both pass joint
-qualification, reuse them from `cloud-services-screen.ts` and `cloud-api.ts`. Complete pairing with
-the confirmations in force if the venue is still unregistered. Open the linked venue's Billing page
-for explicit consent through `POST /api/account/billing/start-trial` with its venue ID.
-Test administrator admission and the Billing handoff in the existing Cloud API and dashboard suites.
-On a test box, confirm remote access is refused before consent and works after a trial starts.
-Update EN/ES Servers guides and inspect both languages, themes and screen widths. Estimate 75–150
-code lines and 65–110 test lines.
-
-Sources: owner's requests in Lane K questions (19 November, 18:50 and 18:58), watcher's Lane D correction
-(20 November, 00:24), Cloud's pairing PR #1331 at `7806b254a7`, `billing-account.ts` and
-`guest-menu.ts` in Cloud, and `cloud-client.ts` and `cloud-email.ts` in Waitron.
+Run each slice's focused tests before and after implementation. Update affected EN/ES strings and
+guide sections. Check the screens in both themes and at phone and desktop widths.
