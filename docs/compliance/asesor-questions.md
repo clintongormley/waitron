@@ -36,8 +36,7 @@ operation date. This replaces the meal-completion proposal above and A444 is clo
 sends no enquiry.
 [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
 _2026-11-15, LATER-SALE-DATE:_ an invoice issued on a later day than the sale now also carries
-the sale's date; the adviser is asked to confirm it in Q3 of the
-[19 November sheet](2026-11-19-adviser-meeting.md).
+the sale's date.
 
 **Owner, 2026-10-22 (what has been sent):** The [shortened list (2026-10-09)](#the-shortened-list-2026-10-09) went to the adviser about a week before this note, around 2026-10-15. That date is the owner's estimate, not a recorded one. Everything added after the shortened list, from [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31)(d) and [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) onward, is the next batch. The owner will send it later. No lane sends questions.
 
@@ -109,7 +108,7 @@ On **2026-10-05 at 15:35** (A231), the owner provisionally chose **the date the 
 full invoice shows only the date it was created, with no separate operation date, pending the
 adviser's answer to S4. [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
 _2026-11-15, LATER-SALE-DATE:_ an invoice issued on a later day than the sale now also carries
-the sale's date; asked as Q3 of the [19 November sheet](2026-11-19-adviser-meeting.md).
+the sale's date.
 
 On **2026-10-04** (W41s prevention and offline recovery): **Q5(f) and Q33–Q40 revised; Q41
 added** for issued invoices missing from a restored backup. The current formulations below
@@ -369,8 +368,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
   the date it was created, the same date AEAT receives, with no separate operation date.
   [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
   _2026-11-15:_ an invoice issued on a later day than the sale now also carries the sale's date,
-  and the VAT return counts it in that day's period; asked in questions 3 and 7 of the
-  [19 November sheet](2026-11-19-adviser-meeting.md).
+  and the VAT return counts it in that day's period.
 - **S5. Short payment and cash rounding.** Is accepting less at the till as payment in full, after
   the meal but before the ticket is issued, a discount under LIVA 78.Tres.2º, given AEAT reads
   "simultáneamente" as at devengo? On rounding a cash total up to 5 cents: do the extra cents go
@@ -488,8 +486,7 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
 > factura completa muestra solo la fecha en que se crea, la misma que recibe la AEAT, sin una fecha
 > de operación aparte.
 > _15-11-2026:_ la factura expedida un día posterior al de la venta indica además la fecha de la
-> operación, y la declaración de IVA la imputa a ese periodo; se plantea en las preguntas 3 y 7 de la
-> [hoja del 19 de noviembre](2026-11-19-adviser-meeting.md).
+> operación, y la declaración de IVA la imputa a ese periodo.
 >
 > **S5. Pago inferior y redondeo en efectivo.** Aceptar en caja un importe menor como pago total, tras
 > la comida pero antes de expedir la factura, ¿es un descuento del art. 78.Tres.2º LIVA, si la AEAT
@@ -2844,11 +2841,8 @@ and Q42. Two different events are affected:
   order open across the change pays the new rate on every line.** A New Year's Eve table opened
   before midnight and paid after it is invoiced entirely at the new rate, including what was served
   before midnight, because the invoice is issued after midnight.
-  *2026-11-15 (LATER-SALE-DATE):* an invoice now takes the rates of the calendar day the sale closed
-  when that day is earlier than its own date. A table whose dishes were all marked served on
-  31 December and that pays on a later trading day keeps the old rate.
-  *2026-11-19 (LATER-SALE-DATE rework):* serving marks no longer date an invoice, so that table's
-  invoice takes the rates of the day it is issued.
+  *2026-11-19 (LATER-SALE-DATE):* an invoice issued on a later calendar day than its meal ended
+  takes that day's rates; this table's invoice still takes the new rate.
 - **A set-up error corrected mid-service**, for example a drink configured in the 10% class that
   should always have been in the 21% class. Once the product is corrected and the menu published
   again, new lines record the 21% class. Lines already in open orders keep the class they recorded,

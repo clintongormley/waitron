@@ -440,6 +440,8 @@ rates, with "Date of the sale: …" printed. Serving marks no longer date anythi
 by printing the bill or taking a payment, "day" means the venue's calendar day of that moment
 (decision D1, for the owner to confirm); the date of a meal ended by the close of the trading day is
 left to ADVISER-CLOSE-OF-DAY-TICKET (decision D2, for the owner).
+_2026-11-19 17:05: the owner answered D1 "Calendar day it ended" and D2 "Yes, leave them to close
+of day" (lane L `questions.md`); §9 passes the close's moment._
 
 **2. Paths on main that issue an invoice for a meal.** Re-sweep of every `recordSale`,
 `issueUnpaidInvoice` and `issueIfFullyPaid` caller outside tests (RUN: `git grep` at `db6a22acc9`;

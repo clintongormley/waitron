@@ -236,7 +236,7 @@ describe("a card recovered on a later day files the day it was asked", () => {
     },
   );
 
-  it("files 31 March after SumUp's own check finds a card tapped at 00:01 and Pay is pressed at 09:00", async () => {
+  it("files 31 March after SumUp's own check finds a card whose checkout began at 23:58 and Pay is pressed at 09:00", async () => {
     const venue = await provisionBillVenue(suite.db);
     const id = await tabWith(venue, "Croquettes");
     const client = new FakeSumUp();

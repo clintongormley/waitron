@@ -1166,9 +1166,7 @@ answers, relayed by the watcher at 12:12 (lane L `questions.md`): Q1 "Monday, la
 paid on Monday whose last unserved dish is removed on Wednesday files Monday, and an unpaid
 departure recorded days later follows the same rule; Q2 "sale day" for the VAT return and the
 export. The export picks such an invoice by its sale day, else its issue date, keeping both dates:
-the owner's "(a) By meal date", relayed by the watcher at 20:59 (lane L `questions.md`). The
-adviser is asked about these points in questions 3 and 7 of the
-[19 November sheet](../compliance/2026-11-19-adviser-meeting.md).
+the owner's "(a) By meal date", relayed by the watcher at 20:59 (lane L `questions.md`).
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
 _2026-11-19 (LATER-SALE-DATE rework): the owner's answer to D2, "Yes, leave them to close of day"
 (relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"), retired the note above's
