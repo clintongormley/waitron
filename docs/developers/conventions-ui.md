@@ -654,7 +654,10 @@ was (W100).
   `apps/server/src/device-session.ts`); the operator always needs
   `cash.drawer` or the PIN of someone holding it; then the device's drawer must resolve, through
   `resolveDrawerPrinter`, to an active printer (`drawer.no_printer`) that has a drawer
-  (`drawer.not_attached`).
+  (`drawer.not_attached`). The till shows the button only where both the profile allows it and
+  the device equipment answer's `opensDrawer` (`deviceOpensDrawer`, the same `drawerPrinter`
+  check) says the device has such a drawer, so a handheld with the permission but no drawer
+  printer is offered none.
 - **Taking cash.** A cash collection
   (`POST /api/working-orders/:id/collect`) and a cash bill payment
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device

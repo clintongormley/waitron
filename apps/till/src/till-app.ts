@@ -3887,15 +3887,16 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
+  get #sessionPersonId(): string {
+    return this.#tabPerson?.personId ?? "";
+  }
+
   get #mayOpenDrawer(): boolean {
     return (
       this.capabilities.includes("open-cash-drawer") && this.deviceEquipment?.opensDrawer === true
     );
   }
 
-  get #sessionPersonId(): string {
-    return this.#tabPerson?.personId ?? "";
-  }
   /** The person every request names, one object per sign-in: a refusal hands back the object its
    * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
    * sign-out keeps it, so the sign-out itself names who is leaving. */
