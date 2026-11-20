@@ -263,9 +263,13 @@ pin today's number are in the part named.
   `mirror.no_relay`, `mirror.not_provisioned`, `module.config_invalid` on the mirror bundle;
   `menu.reset_required` (catalogue, stored data). In the same family, answered 409:
   `time_zone.unreadable` (catalogue `:317`, venue-service `:123`), a broken venue setting.
+  (Done 2026-11-20 by A394-21: each answers 500, the export under
+  `configuration_export.source_invalid`; `mirror.not_provisioned` 409; the location row and
+  `mirror.no_relay` no longer exist.)
 - **Stored state answered 400**: `backup.request_invalid {field:"config"}` on rotate with no loaded
   destination (`backup-api.ts:184-186`); `email.settings_invalid {field:"recipient"}` when the
-  caller's own account has no email (`email-settings-api.ts:136-137`).
+  caller's own account has no email (`email-settings-api.ts:136-137`). (Done 2026-11-20 by
+  A394-21: `backup.not_configured` 409 and `email.test_recipient_missing` 409.)
 - **Wrong code for the cause**: `booking.not_found` 404 when the booking exists but is no longer
   booked (`packages/bookings/src/bookings.ts:117,146-148`; a state clash, 409 as
   `booking.invalid_transition`); `payments-api.ts:628-629` answers `management.request_invalid
@@ -378,7 +382,9 @@ recommended answer (the owner agreed, 2026-11-20 14:31, that the watcher settle 
 
 ## Follow-up items
 
-"Clients" means a client that reads the status; none was found for any item, so every pure
+"Clients" means a client that reads the status; none was found for any item when this was written
+(that search matched only `status ===`/`!==`; A394-21 found the till's payment client reading
+`>= 500`), so every pure
 renumbering is a light-path change by that measure. Items that ADD a by-id existence check (the
 defect fixes) touch the "by-id read" risk trigger in `~/.claude/CLAUDE.md` and take the full path.
 "Tests to change" are the tests the parts found pinning today's number (proximity matches — check
@@ -809,8 +815,17 @@ Status changes:
   `mirror.not_provisioned` 409 and `module.config_invalid` 500; `menu.reset_required` 500 on the
   menu, till, guest menu and venue-service boundaries; `time_zone.unreadable` 500 on the menu and
   till boundaries. The location settings row and `mirror.no_relay` no longer exist.
-  venue-service's `time_zone.unreadable` row keeps 409: none of its routes reaches the code.
-  A394-21 is done.
+  venue-service's `time_zone.unreadable` row answers 500 as well, though none of its routes
+  reaches the code today. A backup settings record that cannot be read answers 500
+  (`backup.archive_settings_unreadable` on the backup and stream boundaries, which rotate now
+  raises instead of `backup.not_configured` when the record cannot be read and there is no key to
+  change;
+  `backup.stream_settings_unreadable` on the backup boundary). `business_day.clock_invalid` answers
+  500 on the two venue-service station service-times reads, whose dates are checked first; every
+  other boundary still leaves it at 400, unaudited. The till reads a 5xx on
+  `POST /api/working-orders/:id/payments` as a send that may have been recorded, so it now takes
+  `menu.reset_required` as a plain refusal whatever its status (`apps/till/src/api/client.ts`,
+  `apps/till/src/state/bill-payment.ts`). A394-21 is done.
 - **A394-22 — Malformed path ids, one answer everywhere.** Files:
   `packages/server-kit/src/request-screens.ts` and every table that maps `shared.invalid_id`, plus the
   three till 409s (re-check them first). Statuses per question 7. Size: split by package or
@@ -1149,7 +1164,7 @@ department is retired (`operations.ts:434-435`; pinned by `routes.test.ts:381`).
 `hours-routes.test.ts:830,841`).
 
 **Looks wrong.** `time_zone.unreadable` 409 (`:123`, raised at `station-times.ts:75`) is a broken
-venue setting, not a clash. `zone.table_in_use` 409 is in the table, but I could not establish
+venue setting, not a clash. (Done 2026-11-20 by A394-21: 500.) `zone.table_in_use` 409 is in the table, but I could not establish
 that any route raises it (`deactivateServiceZone`, `operations.ts:294`, is not imported by routes.ts).
 
 **2026-11-10 (A394-8):** the body-id rows above now answer 400, except PATCH
@@ -1424,18 +1439,21 @@ path `:nodeId` (`membership-removal.ts:116`); the other refusals are clashes, 40
    box's OWN venue row or series is missing (`configuration-transfer.ts:99-107`), when stored
    `invoice_locales` is not JSON (`:22,25`), and when a module's transfer declaration is wrong
    (`:174-195,264-279`). These are stored-data or programming faults, not request faults.
+   (Done 2026-11-20 by A394-21: 500 `configuration_export.source_invalid`.)
 3. **email-settings-api.ts — `server.credential_unusable` at default 400** on GET
    /management-api/email/settings (`email-settings-api.ts:98`): the STORED SMTP credential cannot be
    read. Not a request fault. Same family: `email.settings_invalid` `{field:"recipient"}` 400 on POST
    .../test (`:136-137`) is the caller's own account lacking an email — stored state, nearest 409.
+   (Done 2026-11-20 by A394-21: 500, and 409 `email.test_recipient_missing`.)
 4. **backup-api.ts — `backup.effective_mismatch` 400** (`backup-api.ts:294,333,342`): raised AFTER a
    successful write, when the reloaded box encrypts under a different key. A server-side fault, not a
    bad request. Also `backup.request_invalid` `{field:"config"}` 400 on POST /api/backup/rotate
    (`backup-api.ts:184-186`, via `fromCurrent`) is the box having no loaded destination — stored
-   state, nearest 409.
+   state, nearest 409. (Done 2026-11-20 by A394-21: 500, and 409 `backup.not_configured`.)
 5. **location-settings-api.ts — `management.request_invalid` `{field:"locationId"}` 400** when the
    box's OWN configured location row is missing (`location-settings-api.ts:42,123,154`;
-   `venue-details.ts:78,84`). No request carries a location id.
+   `venue-details.ts:78,84`). No request carries a location id. (Gone by 2026-11-20:
+   `location-settings-api.ts` no longer exists.)
 6. **device-api.ts — `device_profile.not_found` 404 on POST /api/device/join in dev mode** when the
    venue has no till profile (`device-api.ts:203`): stored state, not the request's address.
 
@@ -1515,6 +1533,9 @@ Outside the rule (listed for the owner, not counted as mismatches):
 | `mirror.no_relay` | 400 (`:51`) | No relay URL in the server's own configuration (`:118`); nothing in the request is wrong. |
 | `mirror.not_provisioned` | default 400 | The deployment row is missing (`mirror-bundle.ts:119`); server state, not the request. |
 | `module.config_invalid` | default 400 | The server's own `modules.json` cannot be parsed (`module-config.ts:26`), read at `mirror-bundle.ts:123`. A server file, not a file the request sends, so I believe the 422 clause does not cover it. |
+
+(Done 2026-11-20 by A394-21: `mirror.not_provisioned` 409, `module.config_invalid` 500;
+`mirror.no_relay` was retired.)
 
 ### node-api.ts — boundary `node-api.ts:39` (map `:31`, empty)
 
@@ -1753,7 +1774,9 @@ not the request; I read it as a clash and count it as fitting.
   answers a malformed path id with `working_order.not_found` 404. The rule does not say which a
   malformed address is; the two boundaries disagree.
 - `mirror.no_relay`, `mirror.not_provisioned`, `module.config_invalid` (mirror bundle) answer 400 for
-  server-side configuration faults the request did not cause (see that section).
+  server-side configuration faults the request did not cause (see that section). (Done 2026-11-20
+  by A394-21: `mirror.not_provisioned` 409, `module.config_invalid` 500; `mirror.no_relay` was
+  retired.)
 
 ### Not audited or not established
 
