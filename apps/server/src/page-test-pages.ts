@@ -46,7 +46,7 @@ interface TestPage extends TestPageView {
  * next request replaces once it has finished. A test page is never a delivery and has no row. Its
  * limits run on the `steady` clock.
  */
-export function createPageTestPages(steady: () => number = steadyNow) {
+export function createPageTestPages(steady: () => number = steadyNow, onHoldChange?: () => void) {
   const pages = new Map<string, TestPage>();
 
   const finish = (
@@ -70,6 +70,7 @@ export function createPageTestPages(steady: () => number = steadyNow) {
         past(page.claim!.touchedAt, INVOICE_DELIVERY_LEASE_MS)
       ) {
         finish(page, "unknown", "timeout", at);
+        if (page.claim!.hold !== null) onHoldChange?.();
       } else if (page.finishedAt !== undefined && past(page.finishedAt, TEST_PAGE_OUTCOME_MS)) {
         pages.delete(printerId);
       }
@@ -210,7 +211,10 @@ export function createPageTestPages(steady: () => number = steadyNow) {
       const page = held(claim);
       if (page?.status !== "printing") return false;
       page.claim!.touchedAt = at;
-      page.claim!.hold = hold;
+      if (page.claim!.hold !== hold) {
+        page.claim!.hold = hold;
+        onHoldChange?.();
+      }
       return true;
     },
 
@@ -223,11 +227,13 @@ export function createPageTestPages(steady: () => number = steadyNow) {
       const page = held(claim);
       if (page === undefined) return false;
       if (page.reported) return true;
+      const wasHeld = page.status === "printing" && page.claim!.hold !== null;
       page.status = outcome.status;
       if (outcome.status === "sent") delete page.failureCode;
       else page.failureCode = outcome.failureCode;
       page.finishedAt = at;
       page.reported = true;
+      if (wasHeld) onHoldChange?.();
       return true;
     },
   };

@@ -15,6 +15,7 @@ import {
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { t } from "../i18n/t.js";
+import { officePrinterHoldText } from "../i18n/staff-notices.js";
 import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -159,6 +160,12 @@ function deliveryWords(
 ): string | undefined {
   if (attempt.medium === "receipt") return undefined;
   const hold = attempt.printerHold;
+  if (
+    attempt.printerName !== undefined &&
+    hold !== null &&
+    (attempt.status === "queued" || attempt.status === "sending")
+  )
+    return officePrinterHoldText(attempt.printerName, hold);
   switch (attempt.status) {
     case "queued":
       return t(

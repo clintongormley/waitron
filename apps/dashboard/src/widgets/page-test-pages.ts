@@ -16,6 +16,12 @@ const TEST_PAGE_REASON: Record<NonNullable<PageTestPage["failureCode"]>, StringK
   timeout: "printers.test_page_reason_timeout",
 };
 
+export function pageFailureReason(code: string): string | undefined {
+  return Object.hasOwn(TEST_PAGE_REASON, code)
+    ? t(TEST_PAGE_REASON[code as keyof typeof TEST_PAGE_REASON])
+    : undefined;
+}
+
 const isOut = (page: PageTestPage | null | undefined): boolean =>
   page?.status === "waiting" || page?.status === "printing";
 
@@ -152,7 +158,8 @@ export class PageTestPages implements ReactiveController {
   noteFor(row: PagePrinterRow): TemplateResult | typeof nothing {
     const page = this.testPages.get(row.id);
     if (page === undefined) return nothing;
-    const reason = page.failureCode === undefined ? "" : t(TEST_PAGE_REASON[page.failureCode]);
+    const reason =
+      page.failureCode === undefined ? "" : (pageFailureReason(page.failureCode) ?? "");
     const note = {
       waiting: t("printers.test_page_waiting"),
       printing: this.#printingNote(page.hold),

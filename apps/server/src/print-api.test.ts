@@ -19,6 +19,7 @@ import {
   devices,
   joinRequests,
   installChangeFeed,
+  invoiceDeliveries,
   subscribeToChanges,
   nowIso,
   printAgents,
@@ -28,7 +29,7 @@ import {
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedCashSale, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedCashSale, seedDevice, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashSessionToken,
   persons,
@@ -2715,22 +2716,85 @@ describe("mountPrintApi — management: print-test-page", () => {
 
 describe("mountPrintApi — management: recent jobs", () => {
   async function officeHistory(status: "done" | "failed") {
-    await withTransaction(suite.db, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       const printerId = await insertA4Printer(tx);
       const { saleId } = await seedCashSale(tx);
       const at = "2100-01-01T00:00:00.000Z";
-      await tx.insert(printJobs).values({
-        printerId,
-        saleId,
-        kind: "a4",
-        pageDocument: "invoice",
-        status,
-        createdAt: at,
-        attempts: MAX_DELIVERY_ATTEMPTS,
-        deliveredAt: status === "done" ? at : null,
-      });
+      const [job] = await tx
+        .insert(printJobs)
+        .values({
+          printerId,
+          saleId,
+          kind: "a4",
+          pageDocument: "invoice",
+          status,
+          createdAt: at,
+          attempts: MAX_DELIVERY_ATTEMPTS,
+          deliveredAt: status === "done" ? at : null,
+        })
+        .returning({
+          id: printJobs.id,
+          createdAt: printJobs.createdAt,
+          deliveredAt: printJobs.deliveredAt,
+        });
+      return job!;
     });
   }
+
+  it("lists office pages with the active paper hold and distinguishes failed from uncertain", async () => {
+    const app = mountApp();
+    const ids = await withTransaction(suite.db, async (tx) => {
+      const printerId = await insertA4Printer(tx);
+      const personId = await seedPerson(tx, { displayName: "Invoice operator" });
+      const jobs = [];
+      for (const status of ["printing", "queued", "failed", "unknown"] as const) {
+        const { saleId } = await seedCashSale(tx);
+        const [job] = await tx
+          .insert(printJobs)
+          .values({
+            printerId,
+            saleId,
+            kind: "a4",
+            pageDocument: "invoice",
+            status: status === "unknown" ? "failed" : status,
+            printerHold: status === "printing" ? "paper_out" : null,
+          })
+          .returning({ id: printJobs.id });
+        if (status === "unknown")
+          await tx.insert(invoiceDeliveries).values({
+            saleId,
+            printerId,
+            printJobId: job!.id,
+            medium: "a4",
+            designation: "original",
+            status,
+            generation: 1,
+            requestKey: randomUUID(),
+            expiredAt: nowIso(),
+            personId,
+          });
+        jobs.push(job!.id);
+      }
+      return jobs;
+    });
+    const response = await send(app, "GET", "/management-api/print-jobs", {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(200);
+    const rows = (await response.json()) as { id: string }[];
+    expect(ids.map((id) => rows.find((row) => row.id === id))).toMatchObject([
+      {
+        pageDocument: "invoice",
+        status: "printing",
+        printerHold: "paper_out",
+        canResend: false,
+        reprintPrinterIds: [],
+      },
+      { pageDocument: "invoice", status: "queued", printerHold: "paper_out" },
+      { pageDocument: "invoice", status: "failed", printerHold: null },
+      { pageDocument: "invoice", status: "unknown", printerHold: null },
+    ]);
+  });
 
   it("shows Demo paper and drawer openings newest first, only to managers in practice mode", async () => {
     const app = mountApp({ practiceMode: true });
@@ -3032,7 +3096,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           }),
         )
         .returning({ id: printJobs.id, deliveredAt: printJobs.deliveredAt });
-      await officeHistory("done");
+      const office = await officeHistory("done");
       const result = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -3051,7 +3115,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           .map((job) => job.id)
           .sort(),
       ).toEqual(
-        completed
+        [...completed, office]
           .sort((a, b) => Date.parse(b.deliveredAt!) - Date.parse(a.deliveredAt!))
           .slice(0, 100)
           .map((job) => job.id)
@@ -3106,7 +3170,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           })),
         )
         .returning({ id: printJobs.id, createdAt: printJobs.createdAt });
-      await officeHistory("failed");
+      const office = await officeHistory("failed");
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,
       });
@@ -3117,7 +3181,7 @@ describe("mountPrintApi — management: recent jobs", () => {
         status: string;
         attempts: number;
       }[];
-      const mine = rows.filter((row) => row.printerId === printerId);
+      const mine = rows.filter((row) => row.printerId === printerId || row.id === office.id);
       expect(mine).toHaveLength(403);
       expect(
         mine
@@ -3131,7 +3195,7 @@ describe("mountPrintApi — management: recent jobs", () => {
           .map((row) => row.id)
           .sort(),
       ).toEqual(
-        failed
+        [...failed, office]
           .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
           .slice(0, 100)
           .map((row) => row.id)
@@ -4934,9 +4998,11 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(restored.status).toBe(201);
       expect(await restored.json()).toMatchObject({ id: printerId });
       const alertsFor = async (now: Date) =>
-        (await withTransaction(suite.db, (tx) => printingAlertSource().read({ tx, now }))).filter(
-          (a) => a.key === `printer.jobs_waiting:${printerId}`,
-        );
+        (
+          await withTransaction(suite.db, (tx) =>
+            printingAlertSource("serving-box").read({ tx, now }),
+          )
+        ).filter((a) => a.key === `printer.jobs_waiting:${printerId}`);
       // Past the waiting window, so an ordinary job not yet printed counts as stuck.
       const later = new Date(Date.now() + JOBS_WAITING_MS + 60_000);
 
@@ -5373,7 +5439,7 @@ describe("a deleted printer's alerts", () => {
     const later = new Date(Date.now() + JOBS_WAITING_MS + 60_000);
     const read = () =>
       withTransaction(suite.db, async (tx) => ({
-        waiting: (await printingAlertSource().read({ tx, now: later }))
+        waiting: (await printingAlertSource("serving-box").read({ tx, now: later }))
           .map((alert) => alert.key)
           .filter((key) => key.endsWith(deleted) || key.endsWith(live))
           .sort(),

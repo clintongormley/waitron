@@ -21,6 +21,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import {
   seedTaxpayer,
   seedDevice,
@@ -914,6 +915,7 @@ async function seedAgent(t: {
   name: string;
   lastSeenAt: string | null;
   active?: boolean;
+  nodeId?: string;
 }): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
@@ -922,6 +924,7 @@ async function seedAgent(t: {
       tokenHash: "hash",
       active: t.active ?? true,
       lastSeenAt: t.lastSeenAt,
+      nodeId: t.nodeId,
     })
     .returning({ id: printAgents.id });
   return row!.id;
@@ -962,13 +965,37 @@ async function setStatus(
 
 const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
 
+const SERVING_NODE = randomUUID();
+
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
-    return printingAlertSource().read({ tx, now });
+    return printingAlertSource(SERVING_NODE).read({ tx, now });
   });
 }
 
 describe("printingAlertSource — agent.silent", () => {
+  it("drops a former primary's warning once its office printer moves to the serving box", async () => {
+    await seedFixtureVenue();
+    const former = await seedAgent({
+      name: "Former primary",
+      lastSeenAt: minsAgo(30),
+      nodeId: randomUUID(),
+    });
+    const current = await seedAgent({
+      name: "Serving box",
+      lastSeenAt: minsAgo(6),
+      nodeId: SERVING_NODE,
+    });
+    const office = await withTransaction(suite.db, (tx) =>
+      insertA4Printer(tx, { agentId: former }),
+    );
+    const silent = async () => (await readAlerts()).map((alert) => alert.key).sort();
+    expect(await silent()).toEqual([`agent.silent:${former}`, `agent.silent:${current}`].sort());
+
+    await suite.db.update(printers).set({ agentId: current }).where(eq(printers.id, office));
+    expect(await silent()).toEqual([`agent.silent:${current}`]);
+  });
+
   it("stays quiet for an agent seen 4 minutes ago", async () => {
     await seedFixtureVenue();
     await seedAgent({ name: "Kitchen agent", lastSeenAt: minsAgo(4) });

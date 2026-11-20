@@ -17,7 +17,12 @@ import {
 } from "../test/bill-pay-app.js";
 
 import { transactionRow } from "../test/find-bill-fixtures.js";
-import type { InvoiceDeliveryStatus, TillApi, TillProduct } from "./api/client.js";
+import type {
+  DeviceEquipmentRead,
+  InvoiceDeliveryStatus,
+  TillApi,
+  TillProduct,
+} from "./api/client.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import { SessionActivity } from "./session-activity.js";
 import { diag } from "./diagnostics.js";
@@ -543,6 +548,44 @@ const signOutBy = {
 };
 
 const signedInName = (el: TillApp) => (el as unknown as { operatorName: string }).operatorName;
+
+it("keeps an office invoice hold visible on the PIN screen after the document window closes", async () => {
+  let notices: NonNullable<DeviceEquipmentRead["notices"]> = [
+    {
+      owner: "office-invoices",
+      key: "back-office:held",
+      code: "invoice_delivery.office_print",
+      severity: "warning",
+      params: { printer: "Back office", reason: "held", hold: "paper_out" },
+    },
+  ];
+  const equipment = vi.fn().mockImplementation(async () => ({ roles: [], readers: [], notices }));
+  const api = closingApi({
+    getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 300 }),
+    getDeviceEquipment: equipment,
+    printReceipt: vi.fn().mockResolvedValue(undefined),
+  });
+  const el = await mountForSignOut(api);
+  await payAtCounter(el, api);
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  try {
+    emit(el, "pointerdown");
+    await vi.advanceTimersByTimeAsync(315_000);
+    await el.updateComplete;
+    expect(documents(el)).toBeNull();
+    const notice = () => lock(el).shadowRoot!.querySelector("[data-office-invoice-notice]");
+    expect(notice()?.textContent ?? "").toContain("Back office is out of paper.");
+
+    notices = [];
+    await vi.advanceTimersByTimeAsync(15_000);
+    await el.updateComplete;
+    expect(notice()).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 function samSigningInApi(overrides: Record<string, unknown>): TillApi {
   // The screen remembers the last person to sign in, and would skip the roster.

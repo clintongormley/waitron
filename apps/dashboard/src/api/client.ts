@@ -1241,7 +1241,7 @@ export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
 
-export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
+export type PrintJobStatus = "queued" | "printing" | "done" | "failed" | "unknown";
 
 export interface PrintAgentRow {
   id: string;
@@ -1497,6 +1497,9 @@ export interface PrintJobRow {
   attempts: number;
   lastError: string | null;
   waitReason?: "printer.not_visible";
+  kind?: "a4";
+  pageDocument?: "invoice" | "receipt" | null;
+  printerHold?: string | null;
   createdAt: string;
   deliveredAt: string | null;
   /** `any` receipt printer, one `wide_enough` for the printout, or only its `own`. */

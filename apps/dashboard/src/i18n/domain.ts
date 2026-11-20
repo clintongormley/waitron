@@ -134,6 +134,7 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
   printing: { en: "Printing", es: "Imprimiendo" },
   done: { en: "Done", es: "Hecho" },
   failed: { en: "Failed", es: "Fallido" },
+  unknown: { en: "May have printed", es: "Puede haberse impreso" },
 };
 
 export function roleName(value: string, locale: string = currentLocale()): string {

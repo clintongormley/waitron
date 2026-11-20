@@ -8,6 +8,7 @@ import { cardReaders } from "@waitron/payments";
 import { formatEquipmentLabel } from "./equipment-label.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
+import { pagePrinterHold, readSendingPagePrinters } from "./invoice-delivery-status.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -26,6 +27,7 @@ import {
   printPaperWidth,
   printResolution,
   isReceiptPrinter,
+  isA4Printer,
   printers,
   receiptPrintTransport,
   readVenue,
@@ -1721,7 +1723,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
-          .where(and(ne(printJobs.kind, "a4"), eq(printJobs.status, "done")))
+          .where(eq(printJobs.status, "done"))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
         const recentFailed = tx
@@ -1729,9 +1731,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printJobs)
           .where(
             and(
-              ne(printJobs.kind, "a4"),
               eq(printJobs.status, "failed"),
-              or(eq(printJobs.kind, "drawer"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              or(ne(printJobs.kind, "document"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
@@ -1747,6 +1748,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             printerLocalKey: printers.localKey,
             status: printJobs.status,
             kind: printJobs.kind,
+            pageDocument: printJobs.pageDocument,
+            printerHold: printJobs.printerHold,
+            deliveryStatus: invoiceDeliveries.status,
             receiptCopy: printJobs.receiptCopy,
             saleId: printJobs.saleId,
             attempts: printJobs.attempts,
@@ -1762,20 +1766,27 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               else 0 end`,
           })
           .from(printJobs)
-          .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
-          .where(
+          .innerJoin(
+            printers,
             and(
-              ne(printJobs.kind, "a4"),
+              eq(printers.id, printJobs.printerId),
               or(
-                and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
-                and(
-                  eq(printJobs.kind, "document"),
-                  eq(printJobs.status, "failed"),
-                  lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
-                ),
-                inArray(printJobs.id, recentCompleted),
-                inArray(printJobs.id, recentFailed),
+                and(isA4Printer(), eq(printJobs.kind, "a4")),
+                and(isReceiptPrinter(), ne(printJobs.kind, "a4")),
               ),
+            ),
+          )
+          .leftJoin(invoiceDeliveries, eq(invoiceDeliveries.printJobId, printJobs.id))
+          .where(
+            or(
+              and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
+              and(
+                eq(printJobs.kind, "document"),
+                eq(printJobs.status, "failed"),
+                lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+              ),
+              inArray(printJobs.id, recentCompleted),
+              inArray(printJobs.id, recentFailed),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
@@ -1839,9 +1850,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         };
         const visible = visibleNow();
         const seenNow: PrinterSeen = (printer) => seen(printer, visible);
+        const sendingHolds = jobs.some((job) => job.kind === "a4" && job.status === "queued")
+          ? new Map((await readSendingPagePrinters(tx)).map((row) => [row.printerId, row.hold]))
+          : new Map();
         return jobs.map(
           ({
             kind,
+            pageDocument,
+            printerHold,
+            deliveryStatus,
             printerDeletedAt,
             printerActive,
             printerTransport,
@@ -1852,6 +1869,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             linked,
             ...job
           }) => {
+            if (kind === "a4") {
+              return {
+                ...job,
+                kind,
+                pageDocument,
+                status: deliveryStatus === "unknown" ? ("unknown" as const) : job.status,
+                printerHold:
+                  job.status === "queued"
+                    ? pagePrinterHold(job.printerId, sendingHolds, testPages)
+                    : job.status === "printing"
+                      ? printerHold
+                      : null,
+                reprintRule: "own" as const,
+                reprintPrinterIds: [],
+                stuck: false,
+                canResend: false,
+              };
+            }
             const where = reprint({ printerId: job.printerId, saleId, head, linked });
             const printer = {
               active: printerActive,

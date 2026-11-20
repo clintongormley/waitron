@@ -2,7 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import { and, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { deliversAsFullInvoiceSql } from "./invoice-selection.js";
 import {
@@ -40,7 +40,12 @@ import type { BackupStatus } from "./backup-status.js";
 import type { StaffNoticesRead } from "./staff-notices.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
-import { type InvoiceDeliveryStatus, readInvoiceDeliveriesFor } from "./invoice-delivery-status.js";
+import {
+  type InvoiceDeliveryStatus,
+  pagePrinterHold,
+  readInvoiceDeliveriesFor,
+  readSendingPagePrinters,
+} from "./invoice-delivery-status.js";
 import { latestNextAttempt } from "./invoice-delivery.js";
 import type { PageTestPages } from "./page-test-pages.js";
 import type { AwaitingCertStatus } from "./pass.js";
@@ -443,7 +448,7 @@ export function certificateAlertSource(
 export const AGENT_SILENT_MS = 5 * 60 * 1000;
 
 /** The printing alert source. A drawer pulse never counts — only document jobs surface here. */
-export function printingAlertSource(): AlertSource {
+export function printingAlertSource(nodeId: string): AlertSource {
   return {
     area: "printing",
     permission: "hardware.manage",
@@ -460,6 +465,22 @@ export function printingAlertSource(): AlertSource {
             // A NULL `last_seen_at` (an agent never seen) is UNKNOWN under `lt`, so it is excluded and
             // `seen` below is always a real timestamp.
             lt(printAgents.lastSeenAt, silentBefore),
+            or(
+              isNull(printAgents.nodeId),
+              eq(printAgents.nodeId, nodeId),
+              exists(
+                tx
+                  .select({ one: sql`1` })
+                  .from(printers)
+                  .where(
+                    and(
+                      isA4Printer(),
+                      eq(printers.active, true),
+                      eq(printers.agentId, printAgents.id),
+                    ),
+                  ),
+              ),
+            ),
           ),
         );
       for (const a of agents) {
@@ -549,7 +570,7 @@ export function undeliveredInvoice(
   const due = stampedAhead ? now.toISOString() : current.at!;
   if (!stampedAhead && now.getTime() - Date.parse(due) < A4_UNCLAIMED_AFTER_MS) return null;
   const printer = officePrinter();
-  const hold = context.sendingHolds.get(printer.id) ?? context.testPages.holdOn(printer.id);
+  const hold = pagePrinterHold(printer.id, context.sendingHolds, context.testPages);
   if (hold !== null) return { kind: "queued_behind_hold", since: due, printer: printer.name, hold };
   if (context.sendingPrinters.has(printer.id)) return null;
   return { kind: "office_printer_unclaimed", since: due, printer: printer.name };
@@ -572,11 +593,7 @@ async function readUndeliveredContext(
       ),
     )
     .where(inArray(invoiceDeliveries.saleId, [...saleIds]));
-  const sending = await tx
-    .select({ printerId: printJobs.printerId, hold: printJobs.printerHold })
-    .from(printers)
-    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-    .where(and(isA4Printer(), eq(printJobs.kind, "a4"), eq(printJobs.status, "printing")));
+  const sending = await readSendingPagePrinters(tx);
   const holds = sending.filter((row) => row.hold !== null);
   return {
     officePrinters: new Map(attempts.map((a) => [a.id, { id: a.printerId, name: a.name }])),
@@ -679,6 +696,26 @@ async function undeliveredCandidates(tx: Transaction) {
   return [...tracked, ...untracked];
 }
 
+export async function readUndeliveredInvoices(
+  tx: Transaction,
+  now: Date,
+  testPages: Pick<PageTestPages, "holdOn">,
+) {
+  const candidates = await undeliveredCandidates(tx);
+  if (candidates.length === 0) return [];
+  const ids = candidates.map((sale) => sale.id);
+  const statuses = await readInvoiceDeliveriesFor(tx, ids, { emailAvailable: false });
+  const context = await readUndeliveredContext(tx, ids, testPages);
+  return candidates.flatMap((sale) => {
+    const status = statuses.get(sale.id)!;
+    const found = undeliveredInvoice(status, now, context);
+    if (found === null) return [];
+    const attemptId = status.current?.id;
+    const officePrinter = attemptId == null ? undefined : context.officePrinters.get(attemptId);
+    return [{ sale, found, officePrinter }];
+  });
+}
+
 /** An alert's params name the invoice by number and never its customer. */
 export function invoiceDeliveryAlertSource(deps: {
   testPages: Pick<PageTestPages, "holdOn">;
@@ -688,15 +725,7 @@ export function invoiceDeliveryAlertSource(deps: {
     permission: "report.view",
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
-      const candidates = await undeliveredCandidates(tx);
-      const ids = candidates.map((sale) => sale.id);
-      // An alert reads no offered action.
-      const statuses = await readInvoiceDeliveriesFor(tx, ids, { emailAvailable: false });
-      const context = await readUndeliveredContext(tx, ids, deps.testPages);
-      for (const sale of candidates) {
-        // Null only for a sale with no counterparty, which no candidate is.
-        const found = undeliveredInvoice(statuses.get(sale.id)!, now, context);
-        if (found === null) continue;
+      for (const { sale, found } of await readUndeliveredInvoices(tx, now, deps.testPages)) {
         const invoice = formatInvoiceNumber(sale.code, sale.number);
         const alert = {
           key: `invoice_delivery.undelivered:${sale.id}`,

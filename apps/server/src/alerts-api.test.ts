@@ -485,7 +485,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
       sealedStateAlertSource({ failedSince: null, errorCode: null }),
       firstStartAlertSource({ failedSince: null }),
       awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),
-      printingAlertSource(),
+      printingAlertSource("serving-box"),
       batteryAlertSource({
         providers: [stubCardProvider()],
         runtimeDeps: cardRuntimeDeps,

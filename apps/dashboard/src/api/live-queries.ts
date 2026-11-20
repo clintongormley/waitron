@@ -110,7 +110,7 @@ export const QUERY_DEPENDENCIES = {
     "device_approved_profiles",
     "device_profiles",
   ],
-  listRecentJobs: ["print_jobs", "printers", "print_agents"],
+  listRecentJobs: ["print_jobs", "printers", "print_agents", "invoice_deliveries"],
   listAgents: ["print_agents"],
   listReaders: ["card_readers", "device_profiles", "devices"],
   // Its provider check also reads `venue_credentials`, which no module declares as a live resource.

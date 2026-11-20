@@ -7,9 +7,10 @@ quiet without raising a warning.
 ## 1. Detect and explain a stop
 
 - Check the HP attempt's saved delivery status, failure and job hold, plus any recorded IPP
-  replies. The existing held-and-resumed server test passes. Change `apps/print-agent/src/ipp-print.ts`
-  only if the evidence points there. First reproduce both job and printer states in
-  `ipp-print.test.ts`. Keep the existing claim and same-job polling. Assert one submission.
+  replies. The Lenovo saved `paper_out` and completed the invoice in one attempt. The available log
+  has no first-hold timestamp or raw reply. Keep the agent's polling as it is. If a saved attempt
+  shows no hold or a hold first reported near the 120-second limit, reproduce the HP reply and ask
+  for its printer state on each unfinished poll. Keep the same-job claim and assert one submission.
 - In `apps/server/src/invoice-delivery-status.ts`, read the attempt's office printer by its saved
   id. Reuse the alert's per-printer hold lookup for jobs queued behind a hold, including a
   test page. Extend `page-print-agent-e2e.test.ts` to assert the hold and printer name.
@@ -36,11 +37,12 @@ quiet without raising a warning.
 
 ## 4. Keep waiting visible after the dialog closes
 
-- Check the till's diagnostics, screen after closure, idle setting and box session log. Trace
-  idle or session loss, server switch, reload and dialog close. Reproduce the confirmed path in
-  `till-app-settlement-documents.test.ts`. The existing idle sign-out case passes.
+- The Lenovo's till had a five-minute idle setting and its session ended at 22:06 local time. The
+  retained log does not establish what ended that session. Exercise the existing idle lock and
+  document close path in `till-app-settlement-documents.test.ts`.
 - For an intended close, extend `apps/server/src/box-staff-notices.ts` and its tests to show a
-  printer-scoped A4 notice through the existing equipment read. Clear it on confirmed print.
+  printer-scoped A4 notice through the existing equipment read. Use the same held, waiting, failed
+  and uncertain outcomes as the dashboard bell and clear the notice when that alert ends.
   Keep the same notice visible during an idle lock with just the printer and reason. Reuse
   `apps/till/src/till-app.ts`, `screens/till-lock-screen.ts` and `i18n/staff-notices.ts` plus
   translated strings. Test the notice on the lock screen and its clearance after printing.

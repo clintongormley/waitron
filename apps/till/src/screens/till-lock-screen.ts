@@ -207,7 +207,7 @@ export class TillLockScreen extends LitElement {
 
   @property({ type: Boolean }) loggedOutByOther = false;
   @property({ attribute: false }) clockNotice?: StaffNotice;
-  @property({ attribute: false }) storageNotices: readonly StaffNotice[] = [];
+  @property({ attribute: false }) notices: readonly StaffNotice[] = [];
 
   /** `undefined` while the fetch is in flight. */
   @state() private staff?: StaffMember[];
@@ -409,9 +409,16 @@ export class TillLockScreen extends LitElement {
       </div>
       <div class="screen">
         ${this.#renderLogo()} ${this.selected ? this.#renderPin(this.selected) : this.#renderList()}
-        ${this.storageNotices.map(
+        ${this.notices.map(
           (notice) =>
-            html`<div class="clock" role="status" data-storage-notice>${noticeLine(notice)}</div>`,
+            html`<div
+              class="clock"
+              role="status"
+              ?data-storage-notice=${notice.owner === "box"}
+              ?data-office-invoice-notice=${notice.owner === "office-invoices"}
+            >
+              ${noticeLine(notice)}
+            </div>`,
         )}
         ${
           this.loggedOutByOther

@@ -34,7 +34,7 @@ import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import "../widgets/page-printer-add.js";
-import { PageTestPages } from "../widgets/page-test-pages.js";
+import { PageTestPages, pageFailureReason } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
 import "../widgets/print-job-reprint-dialog.js";
@@ -48,6 +48,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
+import { holdReason } from "../i18n/a4-holds.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -187,7 +188,7 @@ function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
 }
 
-const JOB_STATUSES: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed"];
+const JOB_STATUSES: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed", "unknown"];
 
 function pageSize(media: PagePrinterRow["media"]): string {
   return t(
@@ -262,6 +263,22 @@ const LOCALIZED_JOB_REASONS = new Set([
 
 const jobReason = (lastError: string): string =>
   LOCALIZED_JOB_REASONS.has(lastError) ? codeMessage(lastError) : lastError;
+
+function jobWaitMessage(job: PrintJobRow): string | undefined {
+  if (job.waitReason !== undefined) return codeMessage(job.waitReason);
+  if (job.printerHold == null) return undefined;
+  if (job.printerHold === "paper_out")
+    return fill("printers.job_paper_out", { printer: job.printerName });
+  const reason = holdReason(job.printerHold);
+  return reason === undefined
+    ? undefined
+    : fill("printers.job_held", { printer: job.printerName, reason });
+}
+
+function jobErrorMessage(job: PrintJobRow): string | undefined {
+  if (job.lastError === null) return undefined;
+  return job.kind === "a4" ? pageFailureReason(job.lastError) : jobReason(job.lastError);
+}
 
 const refusedField = (error: unknown): unknown =>
   (error as { params?: { field?: unknown } } | null)?.params?.field;
@@ -525,6 +542,9 @@ export class PrintersScreen extends LitElement {
       }
       wt-data-table::part(job-failed)::before {
         background: var(--wt-color-danger);
+      }
+      wt-data-table::part(job-unknown)::before {
+        background: var(--wt-color-warning);
       }
       wt-data-table::part(job-printing)::before {
         background: var(--wt-color-primary);
@@ -4313,19 +4333,31 @@ export class PrintersScreen extends LitElement {
         cell: (j) => {
           const printer = this.printers.find((p) => p.id === j.printerId);
           return html`<span data-test=${`job-row-${j.id}`}
+              >${
+                printer
+                  ? html`<wt-button
+                      variant="ghost"
+                      part="printer-name"
+                      data-test=${`job-printer-${j.id}`}
+                      @click=${(event: Event) =>
+                        this.#showPrinterStatus(printer.id, event.currentTarget as HTMLElement)}
+                      >${printer.name}</wt-button
+                    >`
+                  : html`<span data-test=${`job-printer-${j.id}`}>${j.printerName}</span>`
+              }</span
             >${
-              printer
-                ? html`<wt-button
-                    variant="ghost"
-                    part="printer-name"
-                    data-test=${`job-printer-${j.id}`}
-                    @click=${(event: Event) =>
-                      this.#showPrinterStatus(printer.id, event.currentTarget as HTMLElement)}
-                    >${printer.name}</wt-button
-                  >`
-                : html`<span data-test=${`job-printer-${j.id}`}>${j.printerName}</span>`
-            }</span
-          >`;
+              j.kind !== "a4"
+                ? nothing
+                : html`<p part="job-reason">
+                    ${t(
+                      j.pageDocument === "invoice"
+                        ? "printers.job_a4_invoice"
+                        : j.pageDocument === "receipt"
+                          ? "printers.job_a4_receipt"
+                          : "printers.job_a4_page",
+                    )}
+                  </p>`
+            }`;
         },
       },
       {
@@ -4343,24 +4375,28 @@ export class PrintersScreen extends LitElement {
           options: JOB_STATUSES.map((status) => ({ value: status, label: jobStatusName(status) })),
         },
         searchValue: (j) =>
-          [
-            jobStatusName(j.status),
-            j.lastError === null ? "" : jobReason(j.lastError),
-            j.waitReason === undefined ? "" : codeMessage(j.waitReason),
-          ].join(" "),
-        cell: (j) =>
-          html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
+          [jobStatusName(j.status), jobErrorMessage(j) ?? "", jobWaitMessage(j) ?? ""].join(" "),
+        cell: (j) => {
+          const waiting = jobWaitMessage(j);
+          const error = jobErrorMessage(j);
+          return html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span
-            >${j.lastError === null ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}${j.waitReason === undefined ? nothing : html`<p part="job-reason" data-test=${`job-wait-${j.id}`}>${codeMessage(j.waitReason)}</p>`}`,
+            >${error === undefined ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${error}</p>`}${waiting === undefined ? nothing : html`<p part="job-reason" data-test=${`job-wait-${j.id}`}>${waiting}</p>`}`;
+        },
       },
       {
         key: "attempts",
         choosable: "shown",
         label: t("printers.job_attempts"),
-        sortValue: (j) => j.attempts,
+        // A terminal office job is stamped with the retry cap even after a single submission.
+        sortValue: (j) => (j.kind === "a4" ? null : j.attempts),
         cell: (j) =>
           html`<span data-test=${`job-attempts-${j.id}`}
-            >${j.lastError !== null && ENDED_BY_SERVER.has(j.lastError) ? "—" : j.attempts}</span
+            >${
+              j.kind === "a4" || (j.lastError !== null && ENDED_BY_SERVER.has(j.lastError))
+                ? "—"
+                : j.attempts
+            }</span
           >`,
       },
       {
@@ -4381,22 +4417,24 @@ export class PrintersScreen extends LitElement {
         key: "preview",
         label: t("printers.actions"),
         cell: (j) =>
-          html`<div part="job-actions">
-            <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
-              >${t("printers.view_job")}</wt-button
-            >${
-              j.canResend
-                ? html`<wt-button
-                    data-test=${`resend-job-${j.id}`}
-                    ?loading=${this.reprintsSending.has(j.id)}
-                    @click=${() => {
-                      if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
-                    }}
-                    >${t("printers.resend_job")}</wt-button
-                  >`
-                : nothing
-            }
-          </div>`,
+          j.kind === "a4"
+            ? nothing
+            : html`<div part="job-actions">
+                <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
+                  >${t("printers.view_job")}</wt-button
+                >${
+                  j.canResend
+                    ? html`<wt-button
+                        data-test=${`resend-job-${j.id}`}
+                        ?loading=${this.reprintsSending.has(j.id)}
+                        @click=${() => {
+                          if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
+                        }}
+                        >${t("printers.resend_job")}</wt-button
+                      >`
+                    : nothing
+                }
+              </div>`,
       },
     ];
   }

@@ -845,6 +845,22 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(line(el)).not.toContain("{reason}");
   });
 
+  it.each(["sending", "queued"] as const)(
+    "says how to clear a named printer's %s paper hold",
+    async (status) => {
+      const { el } = await mountF1({
+        deliveries: statusOf(
+          attempt({ status, printerName: "Back office", printerHold: "paper_out" }),
+        ),
+      });
+      expect(line(el)).toBe("Back office is out of paper. Add paper and it will print.");
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(line(el)).toBe("Back office se ha quedado sin papel. Añade papel y se imprimirá.");
+    },
+  );
+
   it("leaves a receipt attempt to the original's print status, as before", async () => {
     const { el } = await mountF1({
       deliveries: statusOf(attempt({ medium: "receipt", status: "queued" })),

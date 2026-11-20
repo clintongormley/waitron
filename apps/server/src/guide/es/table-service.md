@@ -162,6 +162,10 @@ Para una factura completa antigua sin cuenta, ábrela en **Transacciones** y eli
 Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
 comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
 
+Si el TPV indica que la impresora de oficina se ha quedado sin papel, añade papel y espera la
+factura. El aviso puede seguir en la pantalla de inicio de sesión si el TPV se bloquea. Si puede que
+la factura se haya impreso, revisa la impresora antes de volver a enviarla.
+
 ## Imprimir desde Pedidos del panel {#dashboard-documents}
 
 Para buscar una cuenta anterior, elige **Cualquier fecha** o indica el intervalo de fechas. La búsqueda

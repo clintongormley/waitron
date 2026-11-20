@@ -104,7 +104,7 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
       "till-lock-screen",
       {
         api: stubApi(),
-        storageNotices: [
+        notices: [
           {
             owner: "box",
             key: "storage.disk_full",
