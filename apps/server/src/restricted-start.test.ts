@@ -40,7 +40,6 @@ describe("startRestricted", () => {
   });
 
   it.each([
-    "/api/sales",
     "/api/pay",
     "/api/working-orders/wo-1/payments",
     "/api/working-orders/wo-1/payments/pay-1/refunds",

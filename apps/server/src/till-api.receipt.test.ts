@@ -502,14 +502,18 @@ async function ringSale(
 
 /** A counter cash sale whose payer asked for a payment slip. */
 async function cashSaleAskingSlip(app: Hono, cookie: string, menuItemId: string) {
-  const res = await app.request("/api/sales", {
+  const workingOrderId = randomUUID();
+  const res = await app.request(`/api/working-orders/${workingOrderId}/payments`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       dining: "eat_in",
-      workingOrderId: randomUUID(),
-      lines: [{ menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
+      submissionId: workingOrderId,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "1.50",
+      basket: { lines: [{ menuItemId, quantity: "1" }] },
       printCardSlip: true,
     }),
   });

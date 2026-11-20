@@ -25,7 +25,6 @@ export interface RestrictedStartDeps {
 }
 
 export const MONEY_AND_DRAWER_WRITES = [
-  "/api/sales",
   "/api/pay",
   "/api/working-orders/:id/payments",
   "/api/working-orders/:id/payments/:paymentId/refunds",

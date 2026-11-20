@@ -202,21 +202,6 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/service-zones/${id}/products/${id}/availability`),
   ["GET", `/api/device/stations/${id}/today`, "prepare-orders", forbidden("prepare-orders")],
   preparing("PUT", `/api/device/stations/${id}/today`),
-  ["POST", "/api/sales", "take-orders", forbidden("take-orders"), { lines: [] }],
-  [
-    "POST",
-    "/api/sales",
-    "take-cash",
-    { status: 403, error: { code: "device.cash_not_allowed", params: {} } },
-    { lines: [], tender: cash },
-  ],
-  [
-    "POST",
-    "/api/sales",
-    "hand-keyed-card-payment",
-    forbidden("hand-keyed-card-payment"),
-    { lines: [], tender: card },
-  ],
   ordering("POST", "/api/pay"),
   ["POST", "/api/pay", "integrated-card-payment", forbidden("pay"), {}],
   ordering("POST", "/api/working-orders"),
@@ -1175,7 +1160,6 @@ describe("a shared kitchen display", () => {
     const order = await counterOrder(v, "Caña");
     for (const [path, body] of [
       ["/api/working-orders", { dining: "eat_in", id: randomUUID(), lines: [] }],
-      ["/api/sales", { dining: "eat_in", lines: [], tender: cash }],
       ["/api/pay", { dining: "eat_in" }],
       [`/api/working-orders/${order}/collect`, { tender: cash }],
       [`/api/working-orders/${order}/payments`, cash],

@@ -3861,25 +3861,6 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
 });
 
 describe("the single-payment routes on a bill holding bill payments (design §7)", () => {
-  it("refuses a cash sale of the whole bill", async () => {
-    const billId = await bill120();
-    expect((await contribute(billId, "50.00")).status).toBe(200);
-
-    const refused = await request("POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "120.00" },
-      workingOrderId: billId,
-    });
-
-    expect(refused.status).toBe(409);
-    expect(refused.json).toMatchObject({
-      code: "bill.payments_received",
-      params: { workingOrderId: billId },
-    });
-    expect(await saleOf(billId)).toEqual([]);
-  });
-
   it("refuses a card pay before filing a capture the bill payment already took", async () => {
     const billId = await bill120();
     expect((await contribute(billId, "50.00")).status).toBe(200);

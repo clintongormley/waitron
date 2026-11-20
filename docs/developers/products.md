@@ -270,20 +270,22 @@ added from a zone's menu offer, which carries the product's and the variant's pr
 menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a
 short dish prep station name typed after publishing reaches all three surfaces on lines added once the
 menu is published again. A blank prep station name shows the staff name, including the variant's staff
-name on a variant line. A
-venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
-routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the starting zone of
-the device's profile when the profile has a department — or, when that zone is switched off or has
-left the department, the first by position of the profile's zones still usable — and refuse
-`device_profile.no_service_zone` when none is; a profile with no
-department takes the venue's counter-default zone, refused `service_zone.default_missing` when the
-venue has none (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveNewOrderZone` and
+name on a variant line.
+
+A venue with no service zone sells nothing. When the request supplies lines without a zone,
+`POST /api/working-orders`, `POST /api/pay` and `POST /api/working-orders/:id/payments` with a
+basket use the device profile's starting zone if the profile has a department. If that zone is
+switched off or has left the department, they use the first usable zone in the profile's list
+and refuse `device_profile.no_service_zone` if there is none. A profile with no department uses
+the venue's counter-default zone and receives `service_zone.default_missing` when the venue has none
+(`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveNewOrderZone` and
 `readProfileZones`, `packages/venue-service/src/`). Public hierarchy Delete
 refuses removal of the last usable profile zone and replaces a removed starting zone with a
 permitted survivor. The fallback above still handles moved or invalid stored scope.
 
 Every new order, including an empty bill, records its zone at creation. Direct server callers
-use the same profile/counter rule when they omit a zone; a delivery table supplies its own zone.
+use the same profile and counter defaults when they omit a zone. When order creation names a
+delivery table, the order writer uses that table's zone.
 Splits retain their source's recorded zone and payment flow. A missing source context refuses
 the split; a removed order context refuses payment before filing. The creation and damaged-order
 cases are in `apps/server/src/order-creation-zone.test.ts` and

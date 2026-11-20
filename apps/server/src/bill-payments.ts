@@ -1,7 +1,7 @@
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { withIssuanceTransaction } from "@waitron/core";
-import { prepareIssueClock } from "@waitron/fiscal";
+import { prepareIssueClock, type TrustedReading } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -1467,7 +1467,7 @@ async function beginBillPayment(
   basket?: CounterPayment,
 ): Promise<
   | { replay: PaymentRow }
-  | { payment: PaymentRow; total: Decimal; issued: IssuedSale | undefined }
+  | { payment: PaymentRow; total: Decimal; issued: IssuedSale | undefined; reading: TrustedReading }
   | { settled: SettledBill }
 > {
   // Before the replay lookup: a retry the route would now refuse is refused too.
@@ -1640,7 +1640,7 @@ async function beginBillPayment(
   await captureBillPaymentAttendance(tx, payment!, attendance, {
     at: reading.instant.toISOString(),
   });
-  return { payment: payment!, total, issued };
+  return { payment: payment!, total, issued, reading };
 }
 
 async function captureBillPaymentAttendance(
@@ -1710,7 +1710,7 @@ export async function takeBillPayment(
       );
       if ("settled" in begun) return begun.settled;
       if ("replay" in begun) return resultOf(tx, deps, cfg, begun.replay, null);
-      const { payment } = begun;
+      const { payment, reading } = begun;
       const receivedAt = new Date(payment.receivedAt!);
       const printers = printerLookup(tx, cfg.origin);
       if (req.method === "card") {
@@ -1731,7 +1731,7 @@ export async function takeBillPayment(
       }
       const { invoice, total } = await issueWhenFullyPaid(
         tx,
-        deps,
+        { ...deps, clock: pinnedAt(deps.clock, reading) },
         cfg,
         workingOrderId,
         operator.personId,

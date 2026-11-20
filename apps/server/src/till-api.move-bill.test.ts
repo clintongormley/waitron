@@ -634,19 +634,11 @@ describe("paying a moved bill, by its state", () => {
       tendered: "15.00",
       basket: { lines: [] },
     });
-    const legacy = await post("/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "15.00" },
-      workingOrderId: firstParty.tabId,
-      zoneId: venue.zoneId,
-    });
     const refusedPayments = await paymentRows(venue, firstParty.tabId);
     const rest = await cashContribution(firstParty.tabId, "15.00");
 
     expect([collected.status, collected.json.code]).toEqual([409, "working_order.not_placed"]);
     expect([sold.status, sold.json.code]).toEqual([409, "bill.payments_received"]);
-    expect([legacy.status, legacy.json.code]).toEqual([409, "bill.payments_received"]);
     expect(refusedPayments.map((p) => [p.applied, p.state])).toEqual([[500, "received"]]);
     expect(rest.status).toBe(200);
     expect(rest.json).toMatchObject({ outcome: "received", invoice: { total: "20.00" } });

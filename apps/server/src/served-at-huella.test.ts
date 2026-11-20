@@ -49,7 +49,7 @@ import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-devi
 import type { TradingContext } from "./trading-context.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
-// a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's
+// a `working_order_lines` field the pay path never reads: bill payment files from the tab's
 // STORED locked lines. Two tabs built from the IDENTICAL basket, one with every line served and one
 // with none, must file registros with the IDENTICAL huella — each a genuine chained record filed
 // through the real pay path.
@@ -320,7 +320,7 @@ describe("served_at is not part of the huella", () => {
  * stamp the order's `collected_at`, then pay it through the real pay path with the FROZEN clock,
  * returning the filed huella (registro #1 at secuencia 1).
  *
- * `collected_at` is stamped by a direct UPDATE; the filing path stays `payWorkingOrder`, as in the
+ * `collected_at` is stamped by a direct UPDATE. This case files through bill payment, as in the
  * sibling tests.
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
@@ -409,7 +409,7 @@ async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
 }
 
 // The KDS fields — `ticket_items` and `working_orders.collected_at` — are off the fiscal path:
-// `payWorkingOrder` files from the tab's STORED locked lines. Two shops file the IDENTICAL basket,
+// Bill payment files from the tab's stored lines. Two shops file the IDENTICAL basket,
 // one whose order ran the full kitchen lifecycle and one filed plain, and must file the IDENTICAL
 // huella.
 describe("KDS state (ticket items + collected_at) is not part of the huella", () => {

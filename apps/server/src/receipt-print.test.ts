@@ -96,7 +96,6 @@ import {
   payWorkingOrderIntegratedOrchestration as readerPay,
   printSaleReceipt,
   readSettledTicket,
-  recordTillSaleOrchestration as recordTillSale,
   reprintSale,
 } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
@@ -667,21 +666,18 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
       where id = (select department_id from floor_zones where id = ${zoneId})
     `);
   }
-  /** The reads a cash sale of a parked order takes; only a sale with an operator opens the drawer. */
-  async function readsOfSale(operatorId: string | undefined): Promise<number> {
+  async function readsOfSale(): Promise<number> {
     const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-    });
+    const operator = await counterOperator(cfg);
     const selects = vi.spyOn(suite.db, "select");
     try {
-      await recordTillSale(
+      await payFreshCounterInCash(
         { ...deps(), admission: testTradingAdmission() },
         cfg,
-        { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
-        operatorId,
+        operator,
+        id,
+        { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+        "2.00",
       );
       return selects.mock.calls.filter(
         ([fields]) => fields !== undefined && "hasCashDrawer" in fields && "capabilities" in fields,
@@ -691,15 +687,9 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
     }
   }
   await collectionNumber("numbered");
-  await readsOfSale(OPERATOR);
 
-  const all = await readsOfSale(OPERATOR);
-  const noDrawer = await readsOfSale(undefined);
-  await collectionNumber("none");
-  const receiptOnly = await readsOfSale(undefined);
-
-  expect(await drawerOpensFor(cfg)).toHaveLength(2);
-  expect([all, noDrawer, receiptOnly]).toEqual([1, 1, 0]);
+  expect(await readsOfSale()).toBe(1);
+  expect(await drawerOpensFor(cfg)).toHaveLength(1);
 });
 
 it("a cash bill payment that pays the bill in full reads the device's printers once for its drawer and receipt", async () => {
@@ -1295,26 +1285,6 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("hand-keyed CARD but NO operator: prints the receipt, but no kick and no audit row", async () => {
-    const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
-
-    const unattributedPrintOrder1 = randomUUID();
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
-      workingOrderId: unattributedPrintOrder1,
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      tender: { method: "card", amount: "1.50" },
-    });
-    await printSaleReceipt(deps(), cfg, unattributedPrintOrder1, "original");
-
-    const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(1);
-    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-  });
-
   it("hand-keyed CARD: files the sale and enqueues only the drawer job for the card slip", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
@@ -1446,28 +1416,6 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await fiscalRecordCount(cfg)).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
-  });
-
-  it("auto + printer + CASH but NO operator: prints the receipt, but no kick and no audit row", async () => {
-    const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter();
-    await configureReceipt(cfg, { printerId });
-
-    // No operator: the kick and its audit row are skipped; the customer receipt still prints.
-    const unattributedPrintOrder2 = randomUUID();
-    await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
-      workingOrderId: unattributedPrintOrder2,
-      zoneId,
-      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
-    });
-    await printSaleReceipt(deps(), cfg, unattributedPrintOrder2, "original");
-
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    const jobs = await printJobsFor(cfg);
-    expect(jobs).toHaveLength(1); // the receipt is still enqueued
-    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false); // no kick
-    expect(await drawerOpensFor(cfg)).toEqual([]); // no audit row
   });
 
   it("an explicit original print of an unpaid invoice routes to the issuing device's printer", async () => {

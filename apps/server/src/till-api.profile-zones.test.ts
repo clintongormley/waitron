@@ -128,7 +128,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/service-zones/:zoneId/zone-extension          | path zone              | till-api.keep-open.test.ts: refuses a zone outside the profile department |
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
- * | POST /api/sales                                         | body zone; body order  | refuses POST /api/sales (zone), (order)              |
  * | POST /api/pay                                           | body zone; body order  | refuses POST /api/pay (zone), (order)                |
  * | POST /api/working-orders                                | body zone; body order  | refuses POST /api/working-orders (zone), (order)     |
  * | GET  /api/working-orders                                | list, by order zone    | "lists only the profile's zones, tables and orders"  |
@@ -240,7 +239,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * `kitchen_screen.zone_not_allowed`.
  *
  * Where the check runs: first inside the route's own transaction, except where the route's work
- * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
+ * runs in a helper that opens its own transaction — `/api/pay`, POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
  * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
  * `/reprint` and the four bill-payment routes — where it reads just before, outside any
@@ -576,30 +575,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     () => "/api/dead-ends/sale",
     (x) => ({ step: "edit", lines: [], workingOrderId: x.deliOrder }),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/sales (zone)",
-    "POST",
-    () => "/api/sales",
-    (x) => ({
-      dining: "eat_in",
-      lines: saleLines(x),
-      zoneId: x.deliCounter,
-      tender: { method: "cash", amount: "2.00" },
-    }),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/sales (order)",
-    "POST",
-    () => "/api/sales",
-    (x) => ({
-      dining: "eat_in",
-      workingOrderId: x.deliOrder,
-      lines: [],
-      tender: { method: "cash", amount: "2.00" },
-    }),
     deliOrderZone,
   ],
   [

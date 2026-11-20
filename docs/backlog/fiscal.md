@@ -279,7 +279,7 @@ with no backward-compatibility implementation.
 
 The till offers **Full invoice**. A saved recipient can be invoiced through table bill
 payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
-window. Direct counter cash/manual-card sales (`POST /api/sales`), integrated-card payment
+window. Direct integrated-card payment
 (`POST /api/pay`), unissued counter
 collection and closing a counter bill by transfer still refuse F1 with `sale.full_invoice_unavailable`.
 The shared Full invoice control and automatic recipient prompt are visible at the counter; the
@@ -1074,7 +1074,7 @@ The owner chose to keep counter full invoices through the shared Pay window as m
 "keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
 is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
 from **Print on {printer}** in the window that follows it (from 19 November 2026, ADVISER-NO-NONE,
-closing that window also prints the receipt unless an original was emailed or sent to an A4 printer). Direct `POST /api/sales`, `POST /api/pay`, unissued
+closing that window also prints the receipt unless an original was emailed or sent to an A4 printer). Direct `POST /api/pay`, unissued
 `/collect`, closing a counter bill by transfer and zero-total counter bills still refuse F1 with
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
 `apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's

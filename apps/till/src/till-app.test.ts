@@ -8530,7 +8530,7 @@ describe("till-app", () => {
 
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
     // A lost pay response then an operator re-tap must replay against the same working-order id, not
-    // mint a second one — otherwise a second POST /api/sales files a second chained fiscal record
+    // mint a second one — otherwise a payment on a new bill files a second chained fiscal record
     // (the client holds the id stable across retries). The first attempt rejects (response
     // lost); the re-tap succeeds. Both must carry the identical store id.
     const recordSale = vi

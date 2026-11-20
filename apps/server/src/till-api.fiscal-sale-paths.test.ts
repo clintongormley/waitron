@@ -498,6 +498,15 @@ describe("POST /api/session (PIN login body handling)", () => {
 });
 
 describe("the fiscal sale path over HTTP", () => {
+  it("returns 404 for the retired sale writer", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const answer = await app.request("/api/sales", { method: "POST", headers: { cookie } });
+    expect(answer.status).toBe(404);
+  });
+
   it.each(["voucher", "deferred", "other"])(
     "refuses the unsupported %s payment method before saving a basket",
     async (method) => {

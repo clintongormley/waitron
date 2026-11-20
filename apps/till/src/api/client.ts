@@ -542,7 +542,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
 }
 
 /**
- * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
+ * One basket line the till sends to the order writer. The server prices it from the menu.
  *
  * `options` answers the dish's options lists, one entry per list, naming the list and the chosen
  * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it and
@@ -993,7 +993,7 @@ export interface CardTender extends OutsideCardDetails {
   externalRef?: string;
 }
 
-/** Either tender `POST /api/sales` accepts. The server distinguishes them on `method`. */
+/** A cash or hand-keyed card tender. */
 export type Tender = CashTender | CardTender;
 
 /** A tender with the payer's payment slip choice, which the client sends beside the tender. */

@@ -1075,7 +1075,9 @@ describe("withServerTarget", () => {
       storage: memoryStorage(),
     });
     r.setServers([{ url: CLOUD }]);
-    const pending = withServerTarget(base, r)("/api/sales", { method: "POST" });
+    const pending = withServerTarget(base, r)("/api/working-orders/order-1/payments", {
+      method: "POST",
+    });
     await r.probeNow();
     expect(r.current).toBe(BOX);
     release();

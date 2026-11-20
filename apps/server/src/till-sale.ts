@@ -13,7 +13,6 @@ import { linkSaleDishes } from "./order-portions.js";
 import type { Dining, ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { randomUUID } from "node:crypto";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
@@ -41,7 +40,6 @@ import {
 import {
   billPayments,
   invoiceSeries,
-  isUniqueViolation,
   nowIso,
   saleSettlements,
   sales,
@@ -84,7 +82,6 @@ import {
   readInvoiceNumber,
   readStoredOrder,
   refuseOrderPaymentMarked,
-  refusePaymentInFlight,
   refusePendingPartPayment,
   refuseRefundInProgress,
   toVatBreakdown,
@@ -176,15 +173,6 @@ function signedInAdmission(cfg: DeviceRequestConfig, operator: TillMoneyOperator
     });
 }
 
-export function recordTillSale(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: TillSaleRequest,
-  operator: TillMoneyOperator,
-): Promise<TillSaleResult> {
-  return runTillSale(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
-}
-
 export function collectOrder(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
@@ -212,56 +200,6 @@ export interface TillTender extends OutsideCardDetails {
   amount: string;
   externalRef?: string;
   addedTip?: string;
-}
-
-/**
- * A walk-up sale as the counter till captures it. Deliberately carries NO price — the server prices
- * from the zone's menu offers, so a browser cannot influence the filed total.
- *
- * `workingOrderId` is the pay-idempotency key: held stable across a lost-response retry, a re-sent pay
- * REPLAYS rather than filing a second chained record. Absent, `recordTillSale` mints a fresh one. To
- * pay a parked order, the till sends that order's own id.
- */
-export interface TillSaleRequest {
-  expectedEdit: BillEditExpected | null;
-  kitchenNote?: string | null;
-  /** A line MAY carry `options`, `extras` and per-line `LineExtras` (NON-FISCAL, never threaded into
-   *  a sale/fiscal projection). The server validates them against the dish's own definitions. */
-  lines: ({
-    menuItemId: string;
-    quantity: string;
-    extras?: ExtraSelection[];
-    options?: OptionSelection[];
-  } & LineExtras)[];
-  /**
-   * `cash` — `amount` is the money tendered; the sale settles at the total and the change is
-   * `amount − total`. `card` — a MANUAL card tender charged on a separate terminal: `amount` is
-   * ignored, the card charges the exact total, and a captured `payments` row is filed beside the
-   * tender. Any other method is refused `sale.unsupported_tender`.
-   */
-  tender: TillTender;
-  /** The payer asked for a payment slip. */
-  printCardSlip?: boolean;
-  invoiceType?: unknown;
-  recipient?: unknown;
-  workingOrderId?: string;
-  /** The selected service zone for a new counter order. Existing orders use their stored context. */
-  zoneId?: string;
-  /**
-   * Deliver this counter sale to a dining table (`working_orders.delivery_table_id`). Only the
-   * WALK-UP create path writes it; a retrieved order ignores it. An unknown id is refused
-   * `table.not_found`.
-   */
-  deliveryTableId?: string;
-  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
-  receiptLanguage?: string;
-  /** The guest count the sale's simplified receipts print; absent takes the default (`saleReceiptFacts`). */
-  guestCount?: number | null;
-  /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
-  lateSend?: LateSendConfirmation;
-  /** The way the till showed: a new order's is checked against its department, an existing
-   *  order's against its own (`working_order.out_of_date`). Absent, neither is checked. */
-  dining?: Dining;
 }
 
 /**
@@ -513,15 +451,13 @@ export interface PayWorkingOrderRequest {
   expectedEdit: BillEditExpected | null;
   id: string;
   kitchenNote?: string | null;
-  /** The walk-up basket; IGNORED for a retrieved order. Carries the same per-line fields as
-   *  `TillSaleRequest.lines`. */
+  /** The walk-up basket, ignored for a retrieved order. */
   lines: ({
     menuItemId: string;
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
   } & LineExtras)[];
-  /** Same shape and rules as `TillSaleRequest.tender`. */
   tender: TillTender;
   printCardSlip?: boolean;
   invoiceType?: unknown;
@@ -585,8 +521,7 @@ export interface IntegratedPayRequest {
   kitchenNote?: string | null;
   invoiceType?: unknown;
   recipient?: unknown;
-  /** The walk-up basket; IGNORED for a retrieved/placed order. Carries the same per-line fields as
-   *  `TillSaleRequest.lines`. */
+  /** The walk-up basket, ignored for a retrieved or placed order. */
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -646,170 +581,6 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** Report a known charge separately when storage, the clock or held issuance prevents its invoice. */
   sayCardChargedNotRecorded?: boolean;
 };
-
-/**
- * Pay and settle a working order idempotently, so a lost-response retry never files a SECOND chained
- * fiscal record (CLAUDE.md §5). The order's settle, the sale, its tender/settlement and its chained
- * fiscal record commit in ONE transaction.
- *
- * Keyed on `req.id`:
- *  1. Read the order's status. A concurrent pay cannot interleave: one write transaction runs on the
- *     venue file at a time, so the second pay's whole transaction starts only after the first has
- *     committed, and reads the row `settled` (`assertExtraListForWrite`,
- *     `packages/menu/src/extras.ts`).
- *  2. Already `settled` → IDEMPOTENT REPLAY: return the existing sale's ticket, file NOTHING.
- *  3. Any other non-`open` status → `working_order.not_open`.
- *  4. Absent → WALK-UP: create it `open` with freshly-priced lines (`createOpenOrder`) and file that
- *     price.
- *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
- *     re-price of `req.lines`.
- *  Steps 4 and 5 give the kitchen the dishes it has not been given, a later course's dish held for
- *  its course, in the same transaction, for the orders `fireDishesAtPayment` names; a zoned
- *  order's dish no station can take is not sent and is named in a `route.dish_not_sent` alert
- *  instead, or logged under that code if the alert is refused.
- *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
- *     serialises pays in this process; the backstop stays because `sales_working_order_id_key`
- *     refuses a second sale for one working order whatever wrote it.
- *
- * `operatorId` is the person who rang the sale, for attribution.
- */
-export async function payWorkingOrder(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: PayWorkingOrderRequest,
-  operatorId?: string,
-): Promise<TillSaleResult> {
-  return runPayWorkingOrder(deps, cfg, req, operatorId, trustedWrite);
-}
-
-async function runPayWorkingOrder(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: PayWorkingOrderRequest,
-  operatorId: string | undefined,
-  admit: WriteAdmission,
-): Promise<TillSaleResult> {
-  // Awaited only while `since()` names a refusal: otherwise the sale enters the write queue in this
-  // turn.
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-  try {
-    return await withIssuanceTransaction(
-      deps.db,
-      async (tx) => {
-        await admit(tx);
-        // Step 1; the doc comment says what serialises a concurrent pay against this read.
-        const [locked] = await tx
-          .select({
-            status: workingOrders.status,
-            partyId: workingOrders.partyId,
-            revision: workingOrders.revision,
-            receiptLocale: workingOrders.receiptLocale,
-            dining: workingOrders.dining,
-          })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, req.id));
-
-        if (locked?.status === "settled") {
-          return readSettledTicket(deps.backend, tx, cfg, req.id);
-        }
-        await requireEconomicWrite(tx, cfg, deps.admission);
-        if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
-        const reading = deps.clock.now();
-        await deps.backend.refuseUntilRecordable(tx, reading);
-        await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
-
-        const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
-
-        refuseUnavailableInvoiceRequest(req.invoiceType, req.recipient);
-
-        // The domain code, rather than the raw `working_orders_enforce_transition` trigger error the
-        // settle UPDATE would otherwise raise.
-        if (locked !== undefined && locked.status !== "open") {
-          throw new AppError("working_order.not_open", { workingOrderId: req.id });
-        }
-        if (locked !== undefined) {
-          refuseOtherDining(req.id, locked, req.dining);
-          await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
-          await assertBillHasNoUnsent(tx, req.id);
-          // Before the in-flight check, so the answer names the money already on the bill.
-          await refuseBillWithPayments(tx, req.id);
-          // A card payment of this order would file its own sale after this one (plan D22).
-          await refusePaymentInFlight(tx, [req.id]);
-          await refuseUnavailableFullInvoice(tx, req.id);
-        }
-
-        // The till is a network boundary. AFTER the replay check, so a retry of an already-settled
-        // order is never refused for the shape of its retry body.
-        if (req.tender.method !== "cash" && req.tender.method !== "card") {
-          throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-        }
-
-        let order: GrossOrder;
-        if (locked === undefined) {
-          // Walk-up only, because a retrieved order ignores `req.lines`.
-          if (req.lines.length === 0) {
-            throw new AppError("sale.empty_basket", {});
-          }
-          order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
-            kitchenNote: req.kitchenNote,
-            deliveryTableId: req.deliveryTableId,
-            zoneId: req.zoneId,
-            receiptLocale: req.receiptLanguage,
-            creditedTo: operatorId,
-            invalidMakeAt: "ignore",
-            lateSend: req.lateSend,
-            dining: req.dining,
-            invoiceChoice: {
-              invoiceType: req.invoiceType,
-              recipient: req.recipient,
-              recipientNameMaxLength: deps.backend.recipientNameMaxLength,
-            },
-          });
-        } else {
-          await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
-          order = await priceStoredOrderForIssuance(tx, req.id);
-        }
-
-        // A walk-up is created with no party.
-        const ticket = await fireAndFileSale(
-          tx,
-          { ...deps, clock: pinnedAt(deps.clock, reading) },
-          cfg,
-          req.id,
-          req.tender,
-          order,
-          locked?.partyId ?? null,
-          req.guestCount,
-          operatorId,
-          req.printCardSlip,
-        );
-        await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-        return ticket;
-      },
-      deps.log,
-    );
-  } catch (error) {
-    // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
-    if (!isUniqueViolation(error)) {
-      throw error;
-    }
-    return withTransaction(deps.db, async (tx) => {
-      await admit(tx);
-      const [row] = await tx
-        .select({ status: workingOrders.status })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
-      /* v8 ignore start */
-      if (row?.status !== "settled") {
-        // No settled winner: not the idempotency case. Surface the original error rather than report
-        // a success with no sale behind it.
-        throw error;
-      }
-      /* v8 ignore stop */
-      return readSettledTicket(deps.backend, tx, cfg, req.id);
-    });
-  }
-}
 
 /**
  * Give the kitchen the dishes paying sends ({@link fireDishesAtPayment}), file the sale
@@ -890,7 +661,7 @@ export async function readSettledTicket(
   /* v8 ignore start */
   if (issued === undefined) {
     // The settle UPDATE and the sale INSERT commit in one transaction, so this is corruption.
-    throw new Error(`payWorkingOrder: settled working order ${workingOrderId} has no sale`);
+    throw new Error(`readSettledTicket: settled working order ${workingOrderId} has no sale`);
   }
   /* v8 ignore stop */
 
@@ -908,7 +679,7 @@ export async function readSettledTicket(
   if (filed === undefined && issued.fiscalBackend !== "none") {
     // Fail rather than reprint a legal receipt with an invented breakdown (§5).
     throw new Error(
-      `payWorkingOrder: settled working order ${workingOrderId} has no filed fiscal record`,
+      `readSettledTicket: settled working order ${workingOrderId} has no filed fiscal record`,
     );
   }
 
@@ -2440,57 +2211,6 @@ export async function settleIssuedOrder(
     .where(eq(workingOrders.id, order.workingOrderId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [order.workingOrderId]);
   await clearBillRequestIfPaid(tx, order.workingOrderId, log);
-}
-
-/**
- * Ring one sale through `payWorkingOrder`, under `req.workingOrderId` or a freshly minted id. A till
- * that re-sends the same id after a lost response REPLAYS rather than filing a second record; sending
- * a parked order's id pays that order.
- */
-export function recordTillSaleOrchestration(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: TillSaleRequest,
-  operatorId?: string,
-): Promise<TillSaleResult> {
-  return runTillSale(deps, cfg, req, operatorId, trustedWrite);
-}
-
-async function runTillSale(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: TillSaleRequest,
-  operatorId: string | undefined,
-  admit: WriteAdmission,
-): Promise<TillSaleResult> {
-  // There is deliberately NO empty-basket guard here: a retrieved order is paid with `lines: []`,
-  // and only `payWorkingOrder` knows whether the id names an existing order.
-  if (req.tender.method !== "cash" && req.tender.method !== "card") {
-    throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-  }
-
-  return runPayWorkingOrder(
-    deps,
-    cfg,
-    {
-      id: req.workingOrderId ?? randomUUID(),
-      expectedEdit: req.expectedEdit,
-      lines: req.lines,
-      tender: req.tender,
-      printCardSlip: req.printCardSlip,
-      kitchenNote: req.kitchenNote,
-      invoiceType: req.invoiceType,
-      recipient: req.recipient,
-      deliveryTableId: req.deliveryTableId,
-      zoneId: req.zoneId,
-      receiptLanguage: req.receiptLanguage,
-      guestCount: req.guestCount,
-      lateSend: req.lateSend,
-      dining: req.dining,
-    },
-    operatorId,
-    admit,
-  );
 }
 
 export async function reprintSale(
