@@ -258,7 +258,7 @@ ensure_bluez() {
   command -v apt-get >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 || return 0
   [ "$(dpkg-query -W -f '${db:Status-Status}' bluez 2>/dev/null)" != installed ] || return 0
   if ! (apt_get update && apt_get install -y --no-install-recommends bluez); then
-    echo "waitron.sh: could not install BlueZ, the Linux Bluetooth service — Bluetooth printers will not be found until it is installed; install the bluez package and re-run this command" >&2
+    echo "waitron.sh: carrying on without Bluetooth: could not install BlueZ, the Linux Bluetooth service, so Bluetooth printers will not be found until it is installed; install the bluez package and re-run this command" >&2
     return 0
   fi
   as_root systemctl enable --now bluetooth || true

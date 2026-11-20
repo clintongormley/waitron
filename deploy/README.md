@@ -110,8 +110,8 @@ refuses, so the printer, whose PIN is 1234, never paired. With the plugin off it
 file is in effect, the operator types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
 the file changed, so installing again does not interrupt it. On a host with apt and systemd where
 the `bluez` package (the Linux Bluetooth service) is missing, `install` first installs it and
-starts Bluetooth; if apt cannot install it, `install` says Bluetooth printers will not be found
-until it is installed, and carries on. A box still with no `bluetooth.service` gets one line saying
+starts Bluetooth; if apt cannot install it, `install` says it is carrying on without Bluetooth and
+that Bluetooth printers will not be found until BlueZ is installed. A box still with no `bluetooth.service` gets one line saying
 so. If the file cannot be written or Bluetooth will not restart, `install`
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
 `install` tries again. If Bluetooth will not restart even without the file, `install` says Bluetooth
@@ -285,7 +285,8 @@ and installing in one run", does not take the upgrade path on such a box: once i
 and confirmation pass, it wipes the box as `reset` does and installs. On a host with apt, an upgrade
 installs the `libatomic1` package when it is missing, because the host runtime needs it, and the
 `bluez` package when it is missing, so the print agent can find Bluetooth printers. On a host
-without apt, install the library that provides `libatomic.so.1` before upgrading.
+without apt, install the library that provides `libatomic.so.1` before upgrading, and BlueZ if the
+box uses Bluetooth printers.
 
 An already-stopped app skips the online trial, so you can repair a broken version through
 the same stopped-copy checks and mandatory sale. The trial copy is discarded and is never
