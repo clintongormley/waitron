@@ -2,7 +2,7 @@ import { SETUP_OPERATION_FILE } from "@waitron/store";
 import { RESET_REQUEST_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
-import { readFile, readdir, rm } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, rmdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { hasOperationalVenue, readTaxpayerIdentities } from "@waitron/provisioning";
@@ -140,7 +140,8 @@ export async function runStagedReset(
     // The other venue's authority and key ring may be here, so the box's own go with them and the
     // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key.
     // Before the operation record, whose removal makes a re-run discard; the joined record goes
-    // last of them, so a re-run still finds this box joined.
+    // last of them, so a re-run still finds this box joined. The emptied folder goes too, a link
+    // excepted: a start finding `tls/` takes it for a lost certificate and asks for repair.
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
@@ -152,6 +153,9 @@ export async function runStagedReset(
         }
       }
       await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
+      if ((await lstat(tlsDir)).isDirectory() && (await readdir(tlsDir)).length === 0) {
+        await rmdir(tlsDir);
+      }
     }
     for (const file of [PENDING_ADOPTION_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });

@@ -849,7 +849,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(record?.phase).toBe("venue_committed");
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
     expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
-    expect(await readdir(join(stateDir, "tls"))).toEqual([]);
+    expect(existsSync(join(stateDir, "tls"))).toBe(false);
 
     // Control: a join stopped before its first write leaves no marker, and no record past "started",
     // so the reset route offers no reset.

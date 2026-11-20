@@ -590,7 +590,8 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
   trust this box does not need to trust it again after a plain `reset`. The exception is a box that
   joined another server as a spare (its `tls/` holds `joined.json`): joining replaced this box's
   certificate authority with that server's, so a plain `reset` removes `tls/` there, and the box
-  mints a new authority on its next boot. Devices then have to trust it again. A plain `reset`
+  mints a new authority on its next boot. Devices then have to trust it again. A linked `tls/` is
+  only emptied, keeping its link, and the box then asks for connection repair instead. A plain `reset`
   also removes a `tls/` it finds empty, since it holds no certificate.
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
   and the files a Move set aside or unreadable module records that Start again kept
@@ -636,8 +637,8 @@ restarts and, before the server opens the database, removes the venue's database
 `node.db` and their side files, and Litestream's folder beside them),
 `pending-adoption.json`, the record of the stopped join and, last, its own request file,
 `reset-request.json`. If the join got far enough to write `tls/joined.json`, the box may already
-hold the other server's certificate authority and key ring, so it also removes everything in `tls/`
-and `secrets.env`, and the next boot makes a new set; devices then have to trust the box again. It
+hold the other server's certificate authority and key ring, so it also removes `tls/` (a linked `tls/` is
+only emptied) and `secrets.env`, and the next boot makes a new set; devices then have to trust the box again. It
 also removes `backup.env`, which may hold the other server's backup settings and recovery key; the
 box then has no backup settings until someone sets them. Otherwise the box's own files in `tls/`,
 `secrets.env` and `backup.env` are kept. It does nothing if the box has meanwhile got a `trading.env` or
