@@ -1065,16 +1065,16 @@ it("sends staff to Correct invoice on the table's receipt once it took the advan
   );
 });
 
-it("tells staff to finish or close the advance's open correction before the table's bill, naming the advance", () => {
+it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "A correction of the payment on account A/12 is still open. Finish or close that correction in Correct invoice, then try again.",
+    "The table's receipt cannot be issued while a correction of the payment on account A/12 is open. In Correct invoice, use Finish now or Discard, then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "Hay una rectificación del pago a cuenta A/12 todavía abierta. Termínala o ciérrala en Rectificar factura y vuelve a intentarlo.",
+    "El ticket de la mesa no se puede emitir mientras siga abierta una rectificación del pago a cuenta A/12. En Rectificar factura, usa Terminar ahora o Descartar y vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
-    /^A correction of the payment on account is still open\. /,
+    /while a correction of the payment on account is open\. /,
   );
 });
 

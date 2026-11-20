@@ -666,8 +666,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
   },
   "advance.correction_open": {
-    en: "A correction of the payment on account{invoiceNumber} is still open. Finish or close that correction in Correct invoice, then try again.",
-    es: "Hay una rectificación del pago a cuenta{invoiceNumber} todavía abierta. Termínala o ciérrala en Rectificar factura y vuelve a intentarlo.",
+    en: "The table's receipt cannot be issued while a correction of the payment on account{invoiceNumber} is open. In Correct invoice, use Finish now or Discard, then try again.",
+    es: "El ticket de la mesa no se puede emitir mientras siga abierta una rectificación del pago a cuenta{invoiceNumber}. En Rectificar factura, usa Terminar ahora o Descartar y vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
