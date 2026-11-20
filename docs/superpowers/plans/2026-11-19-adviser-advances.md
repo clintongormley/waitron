@@ -235,8 +235,10 @@ beside them and must be answered before the PR lands.
    what is left; its record carries €81.82 plus €8.18 VAT (the meal's €109.09 and €10.91 less A/12's
    own €27.27 and €2.73). Find a bill shows Ana's ticket under table 7, so a copy can be printed for
    her. A part payment nobody wants a receipt for works as
-   today: it is listed among the payments on the bill's invoice. **Refund** on a payment that has
-   its own ticket opens **Correct invoice** on that ticket. On a bill set for a full invoice the
+   today: it is listed among the payments on the bill's invoice. Before the bill has an invoice,
+   **Refund** on a payment that has its own ticket opens **Correct invoice** on that ticket; once
+   the table's invoice has taken it off, the till refuses (`advance.taken_off_final_invoice`) and
+   names Correct invoice on the table's invoice (owner, 20 November, 14:26). On a bill set for a full invoice the
    question is not asked until piece 1b. The staff guide, in English and Spanish, says all of this.
    Test venues are reset.
 2. **Piece 3: correctives of full invoices (its own plan).** Today no full invoice can be
@@ -1149,7 +1151,7 @@ includes it, `takeBillPayment`, `completeBillPayment`), `apps/server/src/bill-pa
   (`:1515`) and `completeBillPayment` (`:1729`), in the same transaction, so a failure rolls the
   payment back.
 - `ownReceipt: true` on a bill set for a full invoice is refused with
-  `advance.full_invoice_not_built` until piece 1b (the till does not ask there).
+  `advance.full_invoice_unsupported` until piece 1b (the till does not ask there).
 
 - [ ] **Step 1: Failing tests** (real routes, `useVenueDb`): "a €30 cash payment that needs a
   receipt, on a €120 bill, issues an advance ticket with one line at 10%" (no bill on the sale, one
@@ -1169,7 +1171,7 @@ includes it, `takeBillPayment`, `completeBillPayment`), `apps/server/src/bill-pa
   zones); "a duplicate of the advance ticket prints as the original, with table 7"; "a correction
   of the advance keeps table 7's zone"; "the day's cash count counts an advance's cash once"
   (`computeDailyClose`); "a flagged payment on a bill set for a full invoice is refused with
-  advance.full_invoice_not_built"; "a retry with a different ownReceipt is a different request".
+  advance.full_invoice_unsupported"; "a retry with a different ownReceipt is a different request".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/bill-advances.test.ts src/bill-payments-api.test.ts`.
   Expected: new tests FAIL; the pinned test at `bill-payments-api.test.ts:822` still PASSES,
   unedited.
@@ -1303,7 +1305,7 @@ screen that lists a sale's lines (grep it in `apps/till/src`). Test:
 `checkPartialCorrectionHistory`, which `recordCorrection` checks before it files a partial
 corrective, learn the line that takes an advance off. `recordCorrection` itself does not change.
 
-- `refundBillPayment` refuses a payment with an advance: `bill.payment_has_ticket { paymentId,
+- `refundBillPayment` refuses a payment with an advance: `bill.refund_of_advance { paymentId,
   saleId, invoiceNumber }`.
 - For a sale with deduction lines, `readHistory` hands the allocator the meal's lines only, and
   each deduction as an earlier correction already taken at its rate, spread from the last line
@@ -1325,8 +1327,9 @@ corrective, learn the line that takes an advance off. `recordCorrection` itself 
   `sale.correction_exceeds_total`); example 2 (10% has nothing left; €50 at 21% files −41.32/−8.68); "a
   whole credit of the rest's invoice files a whole credit and reverses every line, the deduction
   line included" (example 1: −81.82/−8.18; example 8: −3.92/−0.43; `assertReversesLineForLine`
-  and `wholeInvoiceBreakdown` pass); "a refund larger than the rest's invoice is refused, and
-  correcting the advance for the rest succeeds"; "correcting an advance before the meal ends
+  and `wholeInvoiceBreakdown` pass); "a refund larger than the rest's invoice is refused, and the
+  whole of the rest's invoice can be corrected" (correcting the advance itself is refused once the
+  rest's invoice took it off: owner, 20 November, 14:26); "correcting an advance before the meal ends
   reduces what the rest's invoice takes off"; "an item advance corrected to zero frees its lines";
   "the correction lines of a rest's invoice list its dishes and not the advance's line"
   (`GET /api/transactions/:saleId/corrections/lines`).
@@ -1354,7 +1357,7 @@ corrective, learn the line that takes an advance off. `recordCorrection` itself 
 
 **Files:** `apps/till/src/widgets/bill-pay-dialog.ts`, `bill-refund-dialog.ts`,
 `apps/till/src/i18n/strings.ts` and `codes.ts` (the question; wording for
-`bill.payment_has_ticket` and `advance.full_invoice_not_built`; `advance.exceeds_bill`'s wording
+`bill.refund_of_advance` and `advance.full_invoice_unsupported`; `advance.exceeds_bill`'s wording
 comes with Task 4.3, ruling L4), the till's bill-payment request type
 (`ownReceipt?: true`); `bill-payments.ts` (`toView` `:609`: `BillPaymentView` gains `hasTicket`
 and the advance's `saleId`); tests in `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`,
@@ -1371,8 +1374,8 @@ and the advance's `saleId`); tests in `bill-pay-dialog.test.ts`, `bill-pay-dialo
   **Split equally** and **Items** ask the question with neither answer chosen; **Yes** sends
   `ownReceipt: true`, **No** sends without it; answering it changes no payment-slip choice. Never asked: **Whole
   bill**; an amount that pays the bill off; a bill with an invoice; a bill set for a full invoice.
-  **Refund** on a payment with `hasTicket` opens **Correct invoice** (`invoice-correction-dialog.ts`)
-  on that ticket. Axe in both themes for the question. Spy on the API client, not on screen text.
+  **Refund** on a payment with `hasTicket`, on a bill with no invoice yet, opens **Correct invoice**
+  (`invoice-correction-dialog.ts`) on that ticket. Axe in both themes for the question. Spy on the API client, not on screen text.
 - [ ] **Steps 2–5:** run (`pnpm --filter @waitron/till exec vitest run <files>`), implement, run,
   commit.
 
@@ -1434,7 +1437,7 @@ Own plan, own fresh-context review.
 
 **Files:** `apps/server/src/bill-advances.ts` (`issueAdvance` takes `{ kind: "full", counterparty
 }`), `bill-payments.ts` and `bill-payments-api.ts` (the request carries the choice and the
-customer; drop `advance.full_invoice_not_built`), `apps/till/src/widgets/bill-pay-dialog.ts` (after
+customer; drop `advance.full_invoice_unsupported`), `apps/till/src/widgets/bill-pay-dialog.ts` (after
 **Yes**, **Ticket** or **Full invoice**, the customer's details through the till's existing
 recipient fields, filled in from the bill's customer when the bill is set for a full invoice), the
 guide's `#pay-window`; tests beside each.

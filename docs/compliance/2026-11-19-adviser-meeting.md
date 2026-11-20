@@ -3,7 +3,8 @@
 Internal copy, for the owner. Rewritten with the owner on 18 November 2026: the 26 questions of the
 earlier version became 11, written to the adviser, with internal references removed. The shared
 Google Doc "Waitron adviser meeting, 19 November 2026" holds the two parts below side by side,
-English beside Spanish; this header and everything after Part 2 are not in it.
+English beside Spanish; this header and everything after Part 2 are not in it. Question 12 was
+added to both parts after the meeting (see [Added after the meeting](#added-after-the-meeting)).
 
 **Decisions taken while rewriting (owner, 18 November).**
 

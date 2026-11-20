@@ -94,7 +94,12 @@ asked in question 12 of the 19 November sheet (the advances plan's Q4). Its reco
 VAT"). **No** keeps a plain part payment, which issues no invoice
 (`apps/server/src/bill-payments-api.test.ts:822`, "leaves €70.00 outstanding on a €120.00 bill,
 changes no line's price, and issues no invoice"). Printing the bill issues the ticket before
-payment; a payment after that is not an advance (question 2).
+payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
+advance off, the till refuses to give the advance back on its own and names Correct invoice on the
+table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
+this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
+invoice can give back at most what it carries, so money beyond it, such as any of an advance that
+equals the meal, has no way back through the till.
 
 To build: an advance as a full invoice (the advances plan's piece 1b), and an advance paid before the
 day, such as a company's €1,000 for its staff dinner, where staff record the transfer against the
