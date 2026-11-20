@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -70,8 +71,8 @@ describe("payment reservations and previously received money", () => {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/working-orders/${billId}/collect`,
-      { tender: { method, amount: "18.00" } },
+      `/api/working-orders/${billId}/payments`,
+      billShare(method, "18.00"),
     );
     expect(paid.status).toBe(409);
     expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });

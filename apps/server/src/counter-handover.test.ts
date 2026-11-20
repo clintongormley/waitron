@@ -14,6 +14,7 @@ import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { issueOrderInvoice } from "./testing/issue-order.js";
+import { readBillEditState } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   advanceTicketItem,
@@ -31,6 +32,7 @@ import {
   tabWith,
 } from "./testing/bill-venue.js";
 import {
+  closeZeroBill,
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,
@@ -39,10 +41,7 @@ import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { openTillSession } from "./testing/session-device.js";
-import {
-  collectOrderOrchestration as collectOrder,
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-} from "./testing/whole-payment-fixture.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 
@@ -313,13 +312,34 @@ describe("handing over a counter order sent without payment", () => {
 /** Long enough that two writes a case compares land on different milliseconds. */
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-/** Pays a placed order in cash through the till's collect. */
 function collectCash(id: string, amount = "50.00") {
-  return collectOrder({ ...deps(), admission: testTradingAdmission() }, venue.cfg, {
+  return paySavedBillInCash(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    operator,
     id,
-    lines: [],
-    tender: { method: "cash", amount },
-  });
+    amount,
+  );
+}
+
+async function closeCreditedBill(id: string) {
+  const { invoice } = await closeZeroBill(
+    { ...deps(), admission: testTradingAdmission() },
+    venue.cfg,
+    id,
+    {
+      expectedEdit: await readBillEditState(venue.db, id),
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "0.00",
+      method: "cash",
+      tendered: "50.00",
+      applied: "0.00",
+      tip: "0.00",
+    },
+    operator,
+  );
+  return invoice;
 }
 
 /** Pays a placed order on the card reader through the till's integrated card collect. */
@@ -429,7 +449,7 @@ describe("paying a counter order that was handed over before payment", () => {
     await creditWholeInvoice(id);
     await tick();
 
-    const ticket = await collectCash(id);
+    const ticket = await closeCreditedBill(id);
 
     expect(ticket.tender).toEqual({ method: "unpaid" });
     const after = await orderRow(id);
@@ -470,7 +490,7 @@ async function stationQueuesListing(id: string): Promise<{ listing: number; stat
 /** Pays a placed already-issued order whose credit note leaves nothing owed. */
 async function collectOwingNothing(id: string): Promise<void> {
   await creditWholeInvoice(id);
-  expect((await collectCash(id)).tender).toEqual({ method: "unpaid" });
+  expect((await closeCreditedBill(id)).tender).toEqual({ method: "unpaid" });
 }
 
 describe("paying a counter order sent without payment, before it is handed over", () => {
@@ -1007,7 +1027,7 @@ describe("GET /api/orders/counter-waiting", () => {
 
     expect(rows.find((r) => r.id === credited)!.total).toBe("0.00");
     expect(rows.find((r) => r.id === uncredited)!.total).toBe("18.00");
-    expect((await collectCash(credited)).tender).toEqual({ method: "unpaid" });
+    expect((await closeCreditedBill(credited)).tender).toEqual({ method: "unpaid" });
   });
 
   it("leaves out a handed-over paid order, an open order, a table bill, an abandoned order and a paid order with nothing fired", async () => {

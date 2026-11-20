@@ -150,6 +150,22 @@ export async function payCounterBasket(
   return result.invoice;
 }
 
+export function billShare(
+  method: "cash" | "card",
+  applied: string,
+  fields: Partial<BillPaymentRequest> = {},
+): BillPaymentRequest {
+  return {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    applied,
+    tip: "0.00",
+    ...(method === "cash" ? { method, tendered: applied } : { method, entry: "manual" }),
+    ...fields,
+  };
+}
+
 export async function paySavedBillInCash(
   deps: BillPaymentDeps,
   cfg: DeviceRequestConfig,

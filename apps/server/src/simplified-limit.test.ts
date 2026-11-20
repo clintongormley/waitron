@@ -9,9 +9,9 @@ import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { devices } from "@waitron/db";
+import { devices, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
@@ -644,11 +644,20 @@ describe("a bill payment", () => {
 });
 
 describe("placing and collecting a ticket-then-pay counter order", () => {
-  it("places a saved F1 choice without filing, then refuses unavailable original delivery at collection", async () => {
+  it("places a saved full-invoice choice without filing, then refuses it before taking money when the venue has no tax address", async () => {
+    const [saved] = await venue.db
+      .select({ taxpayerDomicile: taxpayer.taxpayerDomicile })
+      .from(taxpayer)
+      .where(eq(taxpayer.id, 1));
+    onTestFinished(async () => {
+      await venue.db.update(taxpayer).set(saved!).where(eq(taxpayer.id, 1));
+    });
+    await venue.db.update(taxpayer).set({ taxpayerDomicile: null }).where(eq(taxpayer.id, 1));
+
     const id = await parked(venue.app, ticketThenPay, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
       recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
-      recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
+      recipient_address = 'Calle Mayor 2, 28013 Madrid, Madrid', recipient_country_code = 'ES'
       where id = ${id}`);
     const before = written();
 
@@ -656,12 +665,20 @@ describe("placing and collecting a ticket-then-pay counter order", () => {
     expect(placed).toEqual({ status: 200, json: { id, status: "placed" } });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("placed");
-    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "4000.00" },
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "4000.00",
+      applied: "1600.00",
+      tip: "0.00",
     });
 
-    expect(answer.status).toBe(409);
-    expect(answer.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "fiscal.taxpayer_domicile_missing", params: {} },
+    });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("placed");
   });
@@ -684,8 +701,14 @@ describe("placing and collecting a ticket-then-pay counter order", () => {
     expect(placed.json).toEqual({ id, status: "placed" });
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("placed");
-    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "4000.00" },
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "4000.00",
+      applied: "3000.01",
+      tip: "0.00",
     });
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual({ ...REFUSED, params: { total: "3000.01", limit: "3000.00" } });

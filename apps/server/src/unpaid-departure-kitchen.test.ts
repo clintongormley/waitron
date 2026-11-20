@@ -55,6 +55,7 @@ import {
   billOwes,
 } from "./testing/party-close-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { cashPayment } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
@@ -208,11 +209,11 @@ describe("unpaid departure stops kitchen work", () => {
       (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0],
     ).toMatchObject({ partyId: destination.partyId, collectedAt: beforeBill.collectedAt });
     expect(await jobs()).toEqual(beforeJobs);
-    const response = await venue.app.request(`/api/working-orders/${order.billId}/collect`, {
+    const response = await venue.app.request(`/api/working-orders/${order.billId}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: venue.cookie.manager },
       body: JSON.stringify({
-        tender: { method: "cash", amount: "12.00" },
+        ...billShare("cash", "12.00"),
         expectedEdit: await readBillEditState(venue.db, order.billId),
       }),
     });
@@ -694,11 +695,11 @@ describe("unpaid departure stops kitchen work", () => {
       .select()
       .from(sales)
       .where(eq(sales.workingOrderId, order.billId));
-    const response = await venue.app.request(`/api/working-orders/${order.billId}/collect`, {
+    const response = await venue.app.request(`/api/working-orders/${order.billId}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: venue.cookie.manager },
       body: JSON.stringify({
-        tender: { method: "cash", amount: "12.00" },
+        ...billShare("cash", "12.00"),
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, order.billId)),
       }),
     });

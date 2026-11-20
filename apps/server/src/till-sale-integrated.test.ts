@@ -17,12 +17,9 @@ import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { TradingAdmission } from "./trading-admission.js";
-import { payCounterBasket } from "./testing/bill-payment-fixture.js";
+import { billShare, payCounterBasket, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
-import {
-  payWorkingOrderIntegratedOrchestration as readerPay,
-  collectOrderOrchestration as collectOrder,
-} from "./testing/whole-payment-fixture.js";
+import { payWorkingOrderIntegratedOrchestration as readerPay } from "./testing/whole-payment-fixture.js";
 import {
   parkOrder,
   priceForIssuance,
@@ -255,6 +252,14 @@ describe("saved-zone payment transactions", () => {
       await markOrderPlaced(tx, clock, zoneVenue.cfg, req.id, zoneVenue.operatorId);
     });
   }
+  async function zoneOperator() {
+    const personId = zoneVenue.operatorId;
+    const sessionId = await openTillSession(zoneDb.db, {
+      personId,
+      deviceId: zoneVenue.cfg.origin.deviceId,
+    });
+    return { personId, sessionId };
+  }
   it("pays and replays a presented no-fiscal bill", async () => {
     const { clock } = zoneClock();
     const config = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat");
@@ -264,11 +269,13 @@ describe("saved-zone payment transactions", () => {
       environment: deploymentEnvironment(process.env),
     });
     const deps = { ...zoneDeps(clock), backend };
-    const req = { ...zoneRequest(), tender: { method: "cash" as const, amount: "3.00" } };
+    const req = zoneRequest();
     await zonePlaced(req, clock, true, backend);
 
-    const paid = await collectOrder(deps, zoneVenue.cfg, req);
-    const replay = await collectOrder(deps, zoneVenue.cfg, req);
+    const operator = await zoneOperator();
+    const payment = billShare("cash", "2.50", { tendered: "3.00" });
+    const paid = (await takeBillPayment(deps, zoneVenue.cfg, req.id, payment, operator)).invoice!;
+    const replay = (await takeBillPayment(deps, zoneVenue.cfg, req.id, payment, operator)).invoice;
 
     expect(paid.total).toBe("2.50");
     expect(paid.tender).toEqual({ method: "cash", change: "0.50" });
@@ -343,7 +350,13 @@ describe("saved-zone payment transactions", () => {
         source.set("2026-10-25T02:30:00.000Z");
         if (method === "reader") await readerPay(deps, zoneVenue.cfg, req);
         else
-          await collectOrder(deps, zoneVenue.cfg, { ...req, tender: { method, amount: "2.50" } });
+          await takeBillPayment(
+            deps,
+            zoneVenue.cfg,
+            req.id,
+            billShare(method, "2.50"),
+            await zoneOperator(),
+          );
         expect(before).toEqual([nightFacts]);
         expect(await issueFacts(req.id)).toEqual(before);
       },
@@ -359,27 +372,17 @@ describe("saved-zone payment transactions", () => {
           const deps = zoneDeps(source.clock, admission);
           const req = zoneRequest();
           if (method === "collection") await zonePlaced(req, source.clock, true);
-          const personId = zoneVenue.operatorId;
-          const sessionId =
-            method === "cash" || method === "card"
-              ? await openTillSession(zoneDb.db, {
-                  personId,
-                  deviceId: zoneVenue.cfg.origin.deviceId,
-                })
-              : undefined;
+          const operator = method === "reader" ? undefined : await zoneOperator();
           const before = economicSnapshot();
           const run =
             method === "reader"
               ? readerPay(deps, zoneVenue.cfg, req)
               : method === "collection"
-                ? collectOrder(deps, zoneVenue.cfg, {
-                    ...req,
-                    tender: { method: "cash", amount: "2.50" },
-                  })
+                ? takeBillPayment(deps, zoneVenue.cfg, req.id, billShare("cash", "2.50"), operator!)
                 : payCounterBasket(
                     deps,
                     zoneVenue.cfg,
-                    { personId, sessionId: sessionId! },
+                    operator!,
                     req.id,
                     { lines: req.lines },
                     method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
@@ -676,10 +679,13 @@ describe("saved-zone payment transactions", () => {
       const source = zoneClock();
       const req = zoneRequest();
       await zonePlaced(req, source.clock, false);
-      await collectOrder(zoneDeps(source.clock), zoneVenue.cfg, {
-        ...req,
-        tender: { method, amount: "2.50" },
-      });
+      await takeBillPayment(
+        zoneDeps(source.clock),
+        zoneVenue.cfg,
+        req.id,
+        billShare(method, "2.50"),
+        await zoneOperator(),
+      );
       expect(await issueFacts(req.id)).toEqual([nightFacts]);
     },
   );

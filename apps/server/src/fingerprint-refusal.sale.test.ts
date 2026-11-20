@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -121,8 +122,8 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
       expect(parked.status).toBe(200);
       const placed = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`);
       expect(placed.status).toBe(200);
-      path = `/api/working-orders/${id}/collect`;
-      body = { tender: { method: "cash", amount: "100.00" } };
+      path = `/api/working-orders/${id}/payments`;
+      body = { ...billShare("cash", (product.unitPrice / 100).toFixed(2), { tendered: "100.00" }) };
     } else {
       id = await tabWith(venue, product!.name);
       if (kind.startsWith("bill")) {

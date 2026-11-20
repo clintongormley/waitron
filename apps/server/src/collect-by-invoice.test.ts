@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -22,7 +23,6 @@ import { payments } from "@waitron/payments";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { parkOrder } from "./working-order.js";
-import { collectOrderOrchestration as collectOrder } from "./testing/whole-payment-fixture.js";
 import {
   closeZeroBill,
   takeBillPayment,
@@ -33,6 +33,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   cashPayment,
+  send,
   inTx,
   provisionBillVenue,
   fiscalRecordCount,
@@ -320,16 +321,21 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   it("refuses a manual tip on an issued bill while tips are off", async () => {
     const { billId, saleId } = await correctedCake();
     await expect(
-      collectOrder(
-        {
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-          admission: testTradingAdmission(),
-        },
+      takeBillPayment(
+        paymentDeps(),
         { ...venue.cfg, tipsEnabled: false },
-        { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
-        venue.operatorId,
+        billId,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "15.58",
+          method: "card",
+          entry: "manual",
+          applied: "15.58",
+          addedTip: "0.30",
+          tip: "0.30",
+        },
+        await operator(),
       ),
     ).rejects.toMatchObject({ code: "bill.tip_not_allowed", params: { chargeable: "15.58" } });
     expect(await tendersOf(saleId)).toEqual([]);
@@ -340,16 +346,22 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     async (tipsEnabled) => {
       const { billId } = await correctedCake({ total: "-18.00", base: "14.88" });
       await expect(
-        collectOrder(
-          {
-            db: venue.db,
-            backend: venue.backend,
-            clock: venue.clock,
-            admission: testTradingAdmission(),
-          },
+        closeZeroBill(
+          paymentDeps(),
           { ...venue.cfg, tipsEnabled },
-          { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
-          venue.operatorId,
+          billId,
+          {
+            expectedEdit: await readBillEditState(venue.db, billId),
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "0.00",
+            method: "card",
+            entry: "manual",
+            applied: "0.00",
+            addedTip: "0.30",
+            tip: "0.30",
+          },
+          await operator(),
         ),
       ).rejects.toMatchObject({ code: "bill.tip_not_allowed" });
       expect(await statusOf(venue, billId)).toBe("placed");
@@ -463,22 +475,20 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
-  it("refuses a cash collection with a malformed amount on a bill that owes nothing, and leaves it open", async () => {
+  it("refuses malformed cash input and leaves the zero-owing bill placed", async () => {
     const { billId, saleId } = await correctedCake(wholeInvoice);
 
-    await expect(
-      collectOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: billId, lines: [], tender: { method: "cash", amount: "not-money" } },
-        venue.operatorId,
-      ),
-    ).rejects.toMatchObject({ code: "shared.invalid_decimal", params: { value: "not-money" } });
+    expect(
+      await send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+        ...billShare("cash", "0.00", { tendered: "not-money" }),
+        kind: "contribution",
+        shareOf: undefined,
+        amount: "0.00",
+      }),
+    ).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "tendered" } },
+    });
 
     expect(await tendersOf(saleId)).toEqual([]);
     expect((await salesOf(billId))[0]!.settledAt).toBeNull();
@@ -539,15 +549,16 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     });
 
     await expect(
-      collectOrder(
+      takeBillPayment(
         paymentDeps(),
         venue.cfg,
-        { id: billId, lines: [], tender: { method: "cash", amount: "20.00" } },
-        venue.operatorId,
+        billId,
+        billShare("cash", "0.00", { tendered: "20.00" }),
+        await operator(),
       ),
     ).rejects.toMatchObject({
-      code: "sale.tender_shortfall",
-      params: { due: "-2.00", charged: "0" },
+      code: "bill.nothing_outstanding",
+      params: { workingOrderId: billId },
     });
 
     expect(await tendersOf(issued!.id)).toEqual([]);
