@@ -127,8 +127,11 @@ describe("Router", () => {
     ["http://127.0.0.2:8443", true],
     ["http://localhost:8080", true],
     ["https://[::1]", true],
+    ["https://[::ffff:127.0.0.1]", true],
+    ["https://localhost.", true],
     ["https://waitron.local", false],
     ["https://192.168.1.10", false],
+    ["https://[::ffff:192.168.1.10]", false],
     ["https://127.example.test", false],
   ])(
     "marks a spare only when the configured address %s is the box's own loopback",

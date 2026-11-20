@@ -38,10 +38,17 @@ function parseHttpOrigin(url: string): string | undefined {
   return parsed.origin;
 }
 
-/** The URL parser has already turned every IPv4 spelling into dotted decimal. */
+/** Matches the hostname the URL parser prints: dotted decimal for any IPv4 spelling, lower case,
+ * and an IPv4-mapped IPv6 address in hex (`[::ffff:127.0.0.1]` becomes `[::ffff:7f00:1]`). */
 function isLoopbackOrigin(origin: string): boolean {
   const host = new URL(origin).hostname;
-  return host === "localhost" || host === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(host);
+  return (
+    host === "localhost" ||
+    host === "localhost." ||
+    host === "[::1]" ||
+    /^127\.\d+\.\d+\.\d+$/.test(host) ||
+    /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(host)
+  );
 }
 
 /**
