@@ -328,7 +328,7 @@ describe("on a full disk with a change waiting to be delivered", () => {
     return {
       now: () => new Date("2026-10-22T09:00:00Z"),
       notices: {
-        sources: [],
+        sources: () => [],
         clock: { now: () => ({ at: new Date("2026-10-22T09:00:00Z"), trusted: true }) as never },
         filing: () => true,
         log: createStaffNoticeLog(() => {}),

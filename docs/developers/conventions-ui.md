@@ -25,7 +25,9 @@ in-place sign-in that would have given them one (A1127's slice 4) was declined. 
 strip's words, the `storage.disk_full` branch of `staffNoticeText` in `apps/till/src/i18n/staff-notices.ts`. The owner extended it on
 2026-11-06 (A1384) to the till's other full-disk refusals, `storage.disk_full` in
 `apps/till/src/i18n/codes.ts` and the `sale.disk_full` group in `apps/till/src/i18n/strings.ts`, for
-the same reason; it is stated at both sites.
+the same reason; it is stated at both sites. The till's Payments are paused dialog
+(`apps/till/src/widgets/payments-paused-dialog.ts`) shows the strip's own words, hint included, and
+points at the strip's statement.
 
 A third exception, the owner's of 2026-10-28 (A1167 slice 1): the two backup-room alerts name no
 next step. They are «Low disk space: the box deleted its oldest backup ({date}).» (or its {count}

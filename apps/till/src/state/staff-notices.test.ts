@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
-import { checkTimeOffered, nextNotices, waitingStartNotice } from "./staff-notices.js";
+import {
+  checkTimeOffered,
+  nextNotices,
+  pausingNotice,
+  waitingStartNotice,
+} from "./staff-notices.js";
 
 const notice = (
   owner: string,
@@ -195,6 +200,28 @@ describe("the box's waiting-start notice the PIN screen shows", () => {
     expect(waitingStartNotice(undefined, blind)).toBeUndefined();
     expect(
       waitingStartNotice(waiting, read({ notices: [], noticesUnavailable: ["fiscal"] })),
+    ).toBeUndefined();
+  });
+});
+
+describe("the notice that pauses payments", () => {
+  const waiting = {
+    ...notice("box-clock", "clock.unconfirmed", "error"),
+    code: "clock.unconfirmed",
+  };
+  const unusable = { ...notice("fiscal", "clock.unusable", "error"), code: "clock.unusable" };
+  const disk = { ...notice("box", "storage.disk_full", "error"), code: "storage.disk_full" };
+  const marker = { ...notice("box-clock", "clock.check_time", "error"), code: "clock.check_time" };
+
+  it("is the first waiting-start, wrong-clock or full-disk notice, in the order given", () => {
+    expect(pausingNotice([marker, unusable, disk, waiting])).toEqual(unusable);
+    expect(pausingNotice([waiting, unusable])).toEqual(waiting);
+    expect(pausingNotice([disk, waiting])).toEqual(disk);
+  });
+
+  it("is none for the check-the-time marker or another owner's waiting or full-disk notice", () => {
+    expect(
+      pausingNotice([marker, { ...waiting, owner: "fiscal" }, { ...disk, owner: "fiscal" }]),
     ).toBeUndefined();
   });
 });

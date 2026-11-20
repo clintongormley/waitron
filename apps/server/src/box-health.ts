@@ -54,7 +54,8 @@ export interface BoxHealth {
 export interface BoxHealthReaders {
   now: () => Date;
   notices: {
-    sources: readonly OwnedStaffNoticeSource[];
+    /** Settled before the first source's turn, so a wait here holds no write lock. */
+    sources: () => readonly OwnedStaffNoticeSource[] | Promise<readonly OwnedStaffNoticeSource[]>;
     clock: Pick<TrustedClock, "now">;
     filing: () => boolean;
     log: StaffNoticeLog;
@@ -127,9 +128,10 @@ export async function collectBoxHealth(
   const filing = readers.notices.filing();
   const noticeLog = readers.notices.log;
   const noticeRead = noticeLog.begin();
+  const sources = await readers.notices.sources();
   const read = await readStaffNoticesInTurns(
     db,
-    readers.notices.sources.map(({ owner, source }) => ({
+    sources.map(({ owner, source }) => ({
       owner,
       source: { read: (ctx) => source.read({ ...ctx, filing: { enabled: filing } }) },
     })),

@@ -28,7 +28,7 @@ function stubReaders(
   return {
     now: () => NOW,
     notices: {
-      sources: [],
+      sources: () => [],
       clock: { now: () => READING },
       filing: () => filing,
       log: createStaffNoticeLog(log),

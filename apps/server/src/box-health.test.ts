@@ -8,6 +8,7 @@ import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { sql } from "drizzle-orm";
 import { collectBoxHealth, type BoxHealthReaders } from "./box-health.js";
+import { deviceNoticeSources } from "./box-staff-notices.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 
 const NOW = new Date("2026-10-22T10:00:00.000Z");
@@ -27,7 +28,7 @@ function stubReaders(over: Partial<BoxHealthReaders> = {}): BoxHealthReaders {
   return {
     now: () => NOW,
     notices: {
-      sources: [],
+      sources: () => [],
       clock: { now: () => READING },
       filing: () => true,
       log: createStaffNoticeLog(() => {}),
@@ -225,6 +226,42 @@ describe("collectBoxHealth", () => {
     expect(health.disk.lowSince).toBe("2026-10-20T08:00:00.000Z");
   });
 
+  it("reads the disk for a noted full-disk stop without holding the write lock", async () => {
+    let markAsked!: () => void;
+    const asked = new Promise<void>((resolve) => (markAsked = resolve));
+    let answer!: (full: boolean) => void;
+    const answered = new Promise<boolean>((resolve) => (answer = resolve));
+    const disk = {
+      since: () => NOW,
+      full: () => {
+        markAsked();
+        return answered;
+      },
+    };
+    const space = { current: () => ({ freeBytes: null, readAt: null, lowSince: null }) };
+    const health = collectBoxHealth(
+      suite.db,
+      stubReaders({
+        notices: { ...stubReaders().notices, sources: deviceNoticeSources({ disk, space }, []) },
+      }),
+    );
+    const events: string[] = [];
+    await asked;
+    const write = suite.db.withWriteLock(() => {
+      events.push("wrote");
+      return Promise.resolve();
+    });
+    // A free lock runs the write in this turn's microtasks; one held by the read cannot.
+    await new Promise((resolve) => setImmediate(resolve));
+    events.push("disk answered");
+    answer(true);
+    await write;
+    expect(events).toEqual(["wrote", "disk answered"]);
+    expect((await health).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+      { key: "storage.disk_full", owner: "box" },
+    ]);
+  });
+
   it("keeps an answering source's notices with their owner and names a failing source's owner", async () => {
     const sources: OwnedStaffNoticeSource[] = [
       {
@@ -246,7 +283,7 @@ describe("collectBoxHealth", () => {
     ];
     const health = await collectBoxHealth(
       suite.db,
-      stubReaders({ notices: { ...stubReaders().notices, sources } }),
+      stubReaders({ notices: { ...stubReaders().notices, sources: () => sources } }),
     );
     expect(health.notices).toEqual([
       { owner: "storage", key: "disk", code: "storage.disk_full", severity: "error", params: {} },
@@ -269,7 +306,7 @@ describe("collectBoxHealth", () => {
     ];
     const health = await collectBoxHealth(
       suite.db,
-      stubReaders({ notices: { ...stubReaders().notices, sources } }),
+      stubReaders({ notices: { ...stubReaders().notices, sources: () => sources } }),
     );
     expect(health.noticesUnavailable).toEqual(["writer"]);
     expect(await suite.db.select().from(printers)).toEqual([]);
@@ -289,7 +326,7 @@ describe("collectBoxHealth", () => {
     ];
     const notices = (filing: boolean) => ({
       ...stubReaders().notices,
-      sources,
+      sources: () => sources,
       filing: () => filing,
     });
     const on = await collectBoxHealth(suite.db, stubReaders({ notices: notices(true) }));
@@ -365,7 +402,9 @@ describe("collectBoxHealth", () => {
         },
       },
     ];
-    const readers = stubReaders({ notices: { ...stubReaders().notices, sources, log } });
+    const readers = stubReaders({
+      notices: { ...stubReaders().notices, sources: () => sources, log },
+    });
     await collectBoxHealth(suite.db, readers);
     fail = false;
     await collectBoxHealth(suite.db, readers);

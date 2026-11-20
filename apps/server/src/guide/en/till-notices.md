@@ -55,9 +55,9 @@ start again in the same ways.
 checks the time. · Check the time** is red. Devices agreeing with the server do not start payments
 again: use **Check the time**.
 
-While payments wait, a button that starts a payment opens **Payments are paused** instead, saying
-why; the order stays open. Use **Check the time** there when it shows, or **Close** it and pay once
-the red line has gone.
+While payments wait, or while the server's clock is wrong or its disk is full, a button that starts
+a payment opens **Payments are paused** instead, saying why; the order stays open. Use **Check the
+time** there when it shows, or **Close** it and pay once the red line has gone.
 
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the server's
 clock is in doubt and the server could not confirm it by itself. It ends any of the red
