@@ -8,7 +8,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -3148,6 +3148,28 @@ describe("provider-confirmed partial-refund release", () => {
     expect(slipsPrinted()).toEqual(["taken"]);
   });
 
+  it("retaining money keeps the payment received when its slip's write ends the transaction", async () => {
+    const { v, bill, payment, evidence } = await partial({ bill: "pending", slipWanted: true });
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    evidence.refunds.pop();
+    const warn = slipsEndTheirTransaction();
+    expect((await post(v, retainPath(payment.id), allocation)).status).toBe(200);
+    expect((await billPaymentOf(bill!)).state).toBe("received");
+    expect(slipsPrinted()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      "receipt.optional_document_failed",
+      expect.objectContaining({ operation: "printSettledPaymentSlip" }),
+    );
+  });
+
+  it("releasing a charge refunded in full prints no slip, though one was asked for", async () => {
+    const { v, bill, payment } = await partial({ bill: "pending", slipWanted: true });
+    await slipPrinterFor(v.cfg.origin.deviceId);
+    expect((await send(v, "POST", releasePath(payment.id))).status).toBe(200);
+    expect((await billPaymentOf(bill!)).state).toBe("failed");
+    expect(slipsPrinted()).toEqual([]);
+  });
+
   it("shows a bill-first excess as tip and issues net tenders, refusing it when tips are off", async () => {
     const { v, orderId, payment, evidence, lookup } = await partial({ amount: "2.00", mark: true });
     evidence.refunds.pop();
@@ -3490,6 +3512,22 @@ async function slipPrinterFor(deviceId: string): Promise<void> {
   });
 }
 
+/**
+ * From here until the case ends, queueing a document ends the whole transaction it is in, as a full
+ * disk can (conventions-data.md, "A full disk sometimes ends the whole transaction"). Answers the
+ * silenced `console.warn`.
+ */
+function slipsEndTheirTransaction() {
+  suite.db.run(sql`create temp trigger slip_ends_transaction before insert on print_jobs
+    when new.kind = 'document' begin select raise(rollback, 'no room for the slip'); end`);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  onTestFinished(() => {
+    suite.db.run(sql`drop trigger slip_ends_transaction`);
+    warn.mockRestore();
+  });
+  return warn;
+}
+
 /** Each payment slip queued so far: "taken", "not taken", or "other" for any other document. */
 function slipsPrinted(): string[] {
   const labels = ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"].map(receiptLabelsFor);
@@ -3566,6 +3604,53 @@ describe("a slip asked for on a payment a manager settles", () => {
     expect((await post(v, attestPath(id), body)).status).toBe(409);
     expect(slipsPrinted()).toEqual([slip]);
   });
+
+  it.each([
+    ["Resolve", "charged", "received"],
+    ["Resolve", "not charged", "failed"],
+    ["Resolve", "cancelled at the provider", "failed"],
+    ["Record outcome", "received", "received"],
+    ["Record outcome", "failed", "failed"],
+  ] as const)(
+    "%s (%s) keeps the outcome when the slip's write ends the transaction",
+    async (route, outcome, state) => {
+      const v = await setup();
+      await slipPrinterFor(v.cfg.origin.deviceId);
+      const provided: Provided =
+        route === "Record outcome"
+          ? { kind: "failed" }
+          : outcome === "charged"
+            ? { kind: "attempting", intent: { status: "succeeded", amountReceived: 150 } }
+            : outcome === "cancelled at the provider"
+              ? { kind: "attempting", intent: { status: "requires_payment_method" } }
+              : { kind: "none" };
+      const id = await strandBillPayment(
+        v,
+        await openOrder(v),
+        provided,
+        "1.50",
+        undefined,
+        undefined,
+        true,
+      );
+      const warn = slipsEndTheirTransaction();
+      const answer =
+        route === "Resolve"
+          ? await send(v, "POST", billResolvePath(id))
+          : await post(v, attestPath(id), {
+              outcome,
+              note: "Checked with the provider",
+              pin: "1234",
+            });
+      expect(answer.status).toBe(200);
+      expect((await billPaymentOf(id)).state).toBe(state);
+      expect(slipsPrinted()).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        "receipt.optional_document_failed",
+        expect.objectContaining({ operation: "printSettledPaymentSlip" }),
+      );
+    },
+  );
 
   it("prints at the slip printer of the device the payment began on", async () => {
     const v = await setup();

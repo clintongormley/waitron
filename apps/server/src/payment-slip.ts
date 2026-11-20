@@ -20,7 +20,6 @@ export interface PaymentSlipInput {
   reference?: string | null;
   machine?: string | null;
   card: CardDetails | null;
-  /** A card payment that charged nothing: no amount is printed as charged. */
   notTaken?: true;
   invoiceLocale: string;
   /** The receipt printer's settings, which set the image width and the column count. */

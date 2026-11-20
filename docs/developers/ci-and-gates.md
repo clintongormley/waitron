@@ -4368,12 +4368,13 @@ rehearsal's send gate and interrupt suites, `apps/server/src/aws-send-gate.e2e.t
 and `apps/server/src/start-from-spare.e2e.test.ts`, the backup-room file,
 `apps/server/src/backup-room.e2e.test.ts`, and the handover files,
 `apps/server/src/handover-refetch-full-disk.e2e.test.ts` and
-`apps/server/src/handover-placement-full-disk.e2e.test.ts`, and the restore file,
-`apps/server/src/restore-full-disk.e2e.test.ts`,
+`apps/server/src/handover-placement-full-disk.e2e.test.ts`, the restore file,
+`apps/server/src/restore-full-disk.e2e.test.ts`, and the payment-slip file,
+`apps/server/src/payment-slip-full-disk.e2e.test.ts`,
 which need a small filesystem the job mounts rather than a binary: one tmpfs each, 48 MiB for
 `start-from-spare.e2e.test.ts`, 64 MiB for `handover-placement-full-disk.e2e.test.ts` and 32 MiB for
 the others. `WAITRON_FULL_DISK_ROOT` names their parent folder; its `start`, `start-again`,
-`from-spare`, `backup-room`, `handover`, `placement` and `restore` subfolders each hold one tmpfs
+`from-spare`, `backup-room`, `handover`, `placement`, `restore` and `payment-slip` subfolders each hold one tmpfs
 ([testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).
 `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,

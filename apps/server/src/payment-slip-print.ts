@@ -16,6 +16,7 @@ import {
   centsToDecimal,
   decimalToCents,
   decimal,
+  diskFullIn,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -23,7 +24,7 @@ import { enqueuePrintJob } from "@waitron/printing";
 import { profileAllows } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/menu";
 import { cardDetailsOf } from "./card-details.js";
-import { optionalDocument } from "./optional-document.js";
+import { optionalDocument, reportOptionalDocumentFailure } from "./optional-document.js";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -74,43 +75,109 @@ export async function freezeWantedSlip(
   return { printerId: printer.id, locale: await orderSlipLocale(tx, workingOrderId) };
 }
 
-/**
- * The slip asked for on a reader payment, printed as it leaves `pending` on any path but the live
- * one that charged while the till waited, which prints its own. A pending row leaves `pending` once
- * (`bill_payments_guard_update`), so a caller at that move prints once. A printer problem never
- * undoes the outcome.
- */
-export async function printSettledPaymentSlip(
+/** Queues, in its caller's transaction, the slip asked for on a reader payment that has left `pending`. */
+export type SettledSlipPrinter = (
   tx: Transaction,
   billPaymentId: string,
-): Promise<void> {
+) => Promise<{ slipPrintFailed?: true }>;
+
+/**
+ * Runs `attempt`, whose one transaction moves a reader payment out of `pending` and hands it to the
+ * printer it is given. A full disk can end the whole transaction the slip was queued in
+ * (conventions-data.md, "A full disk sometimes ends the whole transaction"), so when the attempt
+ * fails after a slip was queued in it, it runs once more with a printer that queues nothing.
+ * `frozen` is the printer and language the live path chose before the reader was asked.
+ */
+export async function withSettledSlip<T>(
+  attempt: (print: SettledSlipPrinter) => Promise<T>,
+  options: { frozen?: CardSlipRequest; log?: Logger } = {},
+): Promise<T> {
+  let queued: { workingOrderId: string; error?: unknown } | undefined;
+  try {
+    return await attempt((tx, id) =>
+      printSettledPaymentSlip(tx, id, options, (workingOrderId) => {
+        queued = { workingOrderId };
+      }),
+    );
+  } catch (error) {
+    if (queued === undefined) throw error;
+    queued.error = error;
+  }
+  const answer = await attempt(async (tx, id) =>
+    (await slipDue(tx, id)) === undefined ? {} : { slipPrintFailed: true },
+  );
+  const { workingOrderId, error } = queued;
+  options.log?.("warn", "payment.slip_print_failed", { workingOrderId, reason: "enqueue_failed" });
+  reportOptionalDocumentFailure({
+    operation: "printSettledPaymentSlip",
+    workingOrderId,
+    code: diskFullIn(error) ? "storage.disk_full" : "receipt.document_failed",
+  });
+  return answer;
+}
+
+/**
+ * The payment and its provider row when its asked-for slip is due: it has left `pending`, and it is
+ * not a charge refunded in full, which was neither taken nor declined.
+ */
+async function slipDue(tx: Transaction, billPaymentId: string) {
   const [row] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
   if (row?.slipWanted !== true) return;
   const settledAt = row.state === "received" ? row.receivedAt : row.failedAt;
   if (settledAt === null) return;
-  await optionalDocument(tx, "enqueueRequestedPaymentSlip", row.workingOrderId, async () => {
-    const printer = await resolvePaymentSlipPrinter(tx, storedDeviceOrigin(row));
-    if (printer === undefined) throw new Error("No payment slip printer");
-    const [provided] = await tx.select().from(payments).where(eq(payments.billPaymentId, row.id));
-    await enqueueSlips(
-      tx,
-      printer,
-      row.workingOrderId,
-      [
-        {
-          charged: row.applied + row.tip,
-          paidAt: settledAt,
-          tip: row.tip,
-          scheme: provided?.cardScheme ?? null,
-          last4: provided?.cardLast4 ?? null,
-          entryMode: provided?.cardEntryMode ?? null,
-          authCode: provided?.cardAuthCode ?? null,
-          ...(row.state === "failed" ? { notTaken: true as const } : {}),
-        },
-      ],
-      await orderSlipLocale(tx, row.workingOrderId),
-    );
-  });
+  const [provided] = await tx.select().from(payments).where(eq(payments.billPaymentId, row.id));
+  if (row.state === "failed" && provided?.state === "refunded") return;
+  return { row, settledAt, provided };
+}
+
+async function printSettledPaymentSlip(
+  tx: Transaction,
+  billPaymentId: string,
+  options: { frozen?: CardSlipRequest; log?: Logger },
+  onQueue: (workingOrderId: string) => void,
+): Promise<{ slipPrintFailed?: true }> {
+  const due = await slipDue(tx, billPaymentId);
+  if (due === undefined) return {};
+  const { row, settledAt, provided } = due;
+  const { frozen, log } = options;
+  if (frozen === null) return { slipPrintFailed: true };
+  let reason = "enqueue_failed";
+  const printed = await optionalDocument(
+    tx,
+    "printSettledPaymentSlip",
+    row.workingOrderId,
+    async () => {
+      const printer = await resolvePaymentSlipPrinter(tx, storedDeviceOrigin(row));
+      if (printer === undefined) throw new Error("No payment slip printer");
+      if (frozen !== undefined && printer.id !== frozen.printerId) {
+        reason = "printer_changed";
+        throw new Error("Payment slip printer changed");
+      }
+      onQueue(row.workingOrderId);
+      await enqueueSlips(
+        tx,
+        printer,
+        row.workingOrderId,
+        [
+          {
+            charged: row.applied + row.tip,
+            paidAt: settledAt,
+            tip: row.tip,
+            scheme: provided?.cardScheme ?? null,
+            last4: provided?.cardLast4 ?? null,
+            entryMode: provided?.cardEntryMode ?? null,
+            authCode: provided?.cardAuthCode ?? null,
+            ...(row.state === "failed" ? { notTaken: true as const } : {}),
+          },
+        ],
+        frozen?.locale ?? (await orderSlipLocale(tx, row.workingOrderId)),
+      );
+      return true;
+    },
+  );
+  if (printed === true) return {};
+  log?.("warn", "payment.slip_print_failed", { workingOrderId: row.workingOrderId, reason });
+  return { slipPrintFailed: true };
 }
 
 async function orderSlipLocale(tx: Transaction, workingOrderId: string): Promise<string> {

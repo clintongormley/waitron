@@ -1728,7 +1728,7 @@ fill in a second.
 
 **Where the filesystem comes from** (`apps/server/src/testing/full-disk.ts`, `openSmallDisk`):
 
-- Set `WAITRON_FULL_DISK_ROOT` to a parent folder holding seven separate small-filesystem mount points,
+- Set `WAITRON_FULL_DISK_ROOT` to a parent folder holding eight separate small-filesystem mount points,
   one per file as named below. Each test file uses its own mount point. They refuse it when its filesystem
   holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
   refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
@@ -1841,6 +1841,15 @@ venue folders on a small disk and its staging folder on the normal one. With too
 a 4 MiB database it fails `ENOSPC` copying the database. Both times the box's database, identity and
 secrets are left as they were. It calls `openSmallDisk("restore", 32)`, and CI
 mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/restore` in the same step.
+
+`apps/server/src/payment-slip-full-disk.e2e.test.ts` keeps its suite's database on a small disk
+(it points `TMPDIR` there before `useVenueDb` makes it), fills the disk to 1 MiB free and makes the
+payment slip 8 MiB. A card payment the payment check settles, and one charged while the till
+waits, are recorded `received` with no slip queued; with the second attempt without the slip
+removed from `withSettledSlip` (`apps/server/src/payment-slip-print.ts`), both stayed unrecorded
+with `storage.disk_full` (2026-11-20, macOS HFS+ image). It calls `openSmallDisk("payment-slip",
+32)`, and CI mounts an eighth 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/payment-slip` in the same
+step.
 
 **A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
 The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus

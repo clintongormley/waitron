@@ -333,12 +333,13 @@ export function mountBillPaymentsApi(
             {
               ...fiscal,
               provider,
-              settleCapturedReplay: async (tx, paymentId, now, guestCount) => {
+              settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
                 const settled = await settleFromProviderRow(
                   tx,
                   { ...fiscal, cfg: saleCfg },
                   paymentId,
                   now,
+                  print,
                   guestCount,
                 );
                 return settled.settled === "received" ? settled.invoice : null;

@@ -20,7 +20,7 @@ import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import type { TradingContext } from "./trading-context.js";
-import { printSettledPaymentSlip } from "./payment-slip-print.js";
+import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import type { GuestCountChoice } from "./receipt-guests.js";
 import "./errors.js";
@@ -96,6 +96,7 @@ export async function settleFromProviderRow(
   deps: BillPaymentsLoopDeps,
   billPaymentId: string,
   now: Date,
+  print: SettledSlipPrinter,
   guestCount?: GuestCountChoice,
 ): Promise<SettledFromRow> {
   await requireEconomicWrite(tx, deps.cfg, deps.admission);
@@ -106,7 +107,7 @@ export async function settleFromProviderRow(
   }
   const failed = async (): Promise<SettledFromRow> => {
     await failBillPayment(tx, billPaymentId, now, undefined);
-    await printSettledPaymentSlip(tx, billPaymentId);
+    await print(tx, billPaymentId);
     return { settled: "failed" };
   };
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
@@ -139,7 +140,7 @@ export async function settleFromProviderRow(
     undefined,
     guestCount,
   );
-  await printSettledPaymentSlip(tx, billPaymentId);
+  await print(tx, billPaymentId);
   return { settled: "received", invoice: done.invoice };
 }
 
@@ -177,10 +178,12 @@ export async function settlePendingBillPayments(
     if (deps.clockUnconfirmed?.() === true) break;
     const now = deps.clock.now().instant;
     try {
-      const { settled } = await withIssuanceTransaction(
-        deps.db,
-        (tx) => settleFromProviderRow(tx, deps, id, now),
-        deps.log,
+      const { settled } = await withSettledSlip((print) =>
+        withIssuanceTransaction(
+          deps.db,
+          (tx) => settleFromProviderRow(tx, deps, id, now, print),
+          deps.log,
+        ),
       );
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;

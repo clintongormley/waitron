@@ -18,6 +18,9 @@ import { TradingAdmission } from "./trading-admission.js";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 import { send } from "./testing/bill-venue.js";
 
+/** These payments asked for no slip. */
+const noSlip = async () => ({});
+
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
 const suite = useVenueDb({
   timeoutMs: 60_000,
@@ -69,7 +72,7 @@ describe("bill payment admission and issue clocks", () => {
     await Promise.all([
       settlePendingBillPayments(v.deps),
       withTransaction(v.db, (tx) =>
-        settleFromProviderRow(tx, v.deps, p!.id, new Date("2026-10-14T23:30:00.000Z")),
+        settleFromProviderRow(tx, v.deps, p!.id, new Date("2026-10-14T23:30:00.000Z"), noSlip),
       ),
       takeReaderBillPayment(v.deps, v.cfg, id, request, v.operator),
     ]);
@@ -79,7 +82,9 @@ describe("bill payment admission and issue clocks", () => {
     ]);
     const saved = v.snapshot();
     expect(
-      await withTransaction(v.db, (tx) => settleFromProviderRow(tx, v.deps, p!.id, new Date())),
+      await withTransaction(v.db, (tx) =>
+        settleFromProviderRow(tx, v.deps, p!.id, new Date(), noSlip),
+      ),
     ).toEqual({ settled: "left", providerState: "pending" });
     expect(v.snapshot()).toEqual(saved);
     expect(v.card.collectCalls).toHaveLength(calls);
@@ -364,7 +369,13 @@ describe("bill payment admission and issue clocks", () => {
     const before = v.snapshot();
     await expect(
       withTransaction(v.db, (tx) =>
-        settleFromProviderRow(tx, { ...v.deps, admission: close("invalid") }, p.id, new Date()),
+        settleFromProviderRow(
+          tx,
+          { ...v.deps, admission: close("invalid") },
+          p.id,
+          new Date(),
+          noSlip,
+        ),
       ),
     ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
     expect(v.snapshot()).toEqual(before);
@@ -374,7 +385,13 @@ describe("bill payment admission and issue clocks", () => {
     const pending = await v.pending(id, false);
     const before = v.snapshot();
     const result: unknown = await withTransaction(v.db, (tx) =>
-      settleFromProviderRow(tx, { ...v.deps, admission: close("invalid") }, pending.id, new Date()),
+      settleFromProviderRow(
+        tx,
+        { ...v.deps, admission: close("invalid") },
+        pending.id,
+        new Date(),
+        noSlip,
+      ),
     ).catch((error: unknown) => error);
     expect(v.snapshot()).toEqual(before);
     expect(result).toMatchObject({

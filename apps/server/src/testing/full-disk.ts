@@ -136,7 +136,14 @@ function hdiutilImage(sizeMiB: number): { ok: true; disk: SmallDisk } {
 }
 
 export type FullDiskFolder =
-  "start" | "start-again" | "from-spare" | "backup-room" | "handover" | "placement" | "restore";
+  | "start"
+  | "start-again"
+  | "from-spare"
+  | "backup-room"
+  | "handover"
+  | "placement"
+  | "restore"
+  | "payment-slip";
 
 /** Each filling test file has its own filesystem; imageMiB sizes the macOS image only. */
 export function openSmallDisk(

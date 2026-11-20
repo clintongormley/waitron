@@ -7,10 +7,13 @@ type SaleDocument =
   | "reserveStagedInvoiceDelivery"
   | "refreshWaitingOriginal";
 
+type PaymentSlip = "enqueueRequestedPaymentSlip" | "printSettledPaymentSlip";
+const isPaymentSlip = (operation: SaleDocument | PaymentSlip): operation is PaymentSlip =>
+  operation === "enqueueRequestedPaymentSlip" || operation === "printSettledPaymentSlip";
+
 /** A payment slip can come before the sale exists, so it names the order. */
 export type OptionalDocumentDiagnostic = (
-  | { operation: SaleDocument; saleId: string }
-  | { operation: "enqueueRequestedPaymentSlip"; workingOrderId: string }
+  { operation: SaleDocument; saleId: string } | { operation: PaymentSlip; workingOrderId: string }
 ) & {
   code: AppError["code"] | "receipt.document_failed";
   field?: "operatorId";
@@ -46,7 +49,7 @@ export async function optionalDocument<T>(
     if (!failed || error !== bodyError) throw error;
     try {
       reportOptionalDocumentFailure({
-        ...(operation === "enqueueRequestedPaymentSlip"
+        ...(isPaymentSlip(operation)
           ? { operation, workingOrderId: id }
           : { operation, saleId: id }),
         code: error instanceof AppError ? error.code : "receipt.document_failed",
