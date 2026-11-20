@@ -122,7 +122,10 @@ the cause was not found.
   "No default controller available" and exited 0.
 - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
   the agent has joined and is not out of touch, `/status.json` and the setup page's Bluetooth line
-  answer only loopback callers (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
+  answer only loopback callers (`networkRefused`, `apps/print-agent/src/setup-page.ts`). The agent
+  also sends its Bluetooth state to the server with every pull once it has checked, and the
+  dashboard's Add a printer dialog shows the reason for each active agent that cannot use
+  Bluetooth.
 
 ## Measure one-job print pulls on the box
 

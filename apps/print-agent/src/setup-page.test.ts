@@ -572,6 +572,7 @@ describe("createSetupApp — mutations", () => {
     // A reset already under way keeps its countdown and its Cancel.
     state.resetAt = 301_000;
     const pending = await (await request(app, "/", undefined, "192.168.20.5")).text();
+    expect(pending).toContain("Resetting in");
     expect(pending).toContain('action="/network/reset/cancel"');
   });
 

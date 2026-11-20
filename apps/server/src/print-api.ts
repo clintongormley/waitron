@@ -1104,16 +1104,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const address = deps.listIpv4?.()[0];
       const now = Date.now();
       return c.json(
-        rows.map(({ setupPort, ...row }) => ({
-          ...row,
-          onThisBox: row.nodeId !== null && row.nodeId === deps.cfg.nodeId,
-          bluetooth: listedBluetooth(row.id, now),
-          setupUrl:
-            row.setupUrl ??
-            (row.nodeId === deps.cfg.nodeId && setupPort !== null && address !== undefined
-              ? new URL(`http://${address}:${setupPort}`).origin
-              : null),
-        })),
+        rows.map(({ setupPort, ...row }) => {
+          const onThisBox = row.nodeId !== null && row.nodeId === deps.cfg.nodeId;
+          return {
+            ...row,
+            onThisBox,
+            bluetooth: listedBluetooth(row.id, now),
+            setupUrl:
+              row.setupUrl ??
+              (onThisBox && setupPort !== null && address !== undefined
+                ? new URL(`http://${address}:${setupPort}`).origin
+                : null),
+          };
+        }),
       );
     }),
   );

@@ -1,11 +1,13 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
-import type { AgentPhase, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
+import type {
+  AgentPhase,
+  AgentSetupSnapshot,
+  AgentStatus,
+  BluetoothUnavailableReason,
+} from "@waitron/print-agent";
 import { Hono, type Context } from "hono";
 import { isIP } from "node:net";
-import type {
-  BluetoothAvailability,
-  BluetoothUnavailableReason,
-} from "./bluetooth-availability.js";
+import type { BluetoothAvailability } from "./bluetooth-availability.js";
 
 export interface SetupDeps {
   snapshot: () => Promise<AgentSetupSnapshot>;

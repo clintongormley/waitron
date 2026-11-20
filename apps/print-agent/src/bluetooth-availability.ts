@@ -1,7 +1,5 @@
 import type { BluetoothUnavailableReason } from "@waitron/print-agent";
 
-export type { BluetoothUnavailableReason };
-
 export type BluetoothAvailability =
   { available: true } | { available: false; reason: BluetoothUnavailableReason; detail: string };
 

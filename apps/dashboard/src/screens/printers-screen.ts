@@ -184,9 +184,11 @@ function printerRowId(r: PrinterTableRow): string {
   return r.kind === "receipt" ? r.printer.id : r.row.id;
 }
 
-function agentProvenance(agent: PrintAgentRow): string | null {
+function agentProvenance(agent: PrintAgentRow): { text: string; self: boolean } | null {
   if (agent.nodeId === null) return null;
-  return agent.onThisBox ? t("printers.provenance_self") : t("printers.provenance_other_box");
+  return agent.onThisBox
+    ? { text: t("printers.provenance_self"), self: true }
+    : { text: t("printers.provenance_other_box"), self: false };
 }
 
 function hasErrors(errors: DetailEditErrors): boolean {
@@ -2762,9 +2764,10 @@ export class PrintersScreen extends LitElement {
         key: "host",
         choosable: "shown",
         label: t("printers.agent_host"),
-        searchValue: (a) => [a.host ?? "", agentProvenance(a) ?? ""].join(" "),
-        cell: (a) =>
-          html`${
+        searchValue: (a) => [a.host ?? "", agentProvenance(a)?.text ?? ""].join(" "),
+        cell: (a) => {
+          const provenance = agentProvenance(a);
+          return html`${
             a.setupUrl && /^https?:\/\//i.test(a.setupUrl)
               ? html`<a href=${a.setupUrl} target="_blank" rel="noopener noreferrer"
                   >${a.host ?? t("printers.agent_setup")}</a
@@ -2772,14 +2775,15 @@ export class PrintersScreen extends LitElement {
               : (a.host ?? (a.nodeId === null ? t("printers.not_reported") : nothing))
           }
           ${
-            a.nodeId === null
+            provenance === null
               ? nothing
               : html` <span
                   part="printer-provenance"
-                  data-test=${a.onThisBox ? `agent-provenance-${a.id}` : `agent-provenance-other-${a.id}`}
-                  >${agentProvenance(a)}</span
+                  data-test=${provenance.self ? `agent-provenance-${a.id}` : `agent-provenance-other-${a.id}`}
+                  >${provenance.text}</span
                 >`
-          }`,
+          }`;
+        },
       },
       {
         key: "lastSeen",
@@ -2863,7 +2867,7 @@ export class PrintersScreen extends LitElement {
                 .map(
                   (agent) =>
                     html`<p data-test=${`retained-agent-${agent.id}`}>
-                      ${agent.name}${agent.nodeId !== null ? html` · ${agentProvenance(agent)}` : nothing}
+                      ${agent.name}${agent.nodeId !== null ? html` · ${agentProvenance(agent)?.text}` : nothing}
                       <wt-button
                         variant="primary"
                         data-test=${`allow-agent-${agent.id}`}

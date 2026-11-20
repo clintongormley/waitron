@@ -232,6 +232,7 @@ describe("createContainerHost — the rest of the seam", () => {
 
   it("exposes the injected device seam as its visibleDevices/scan/pair/pairedBluetooth/forgetBluetooth/resolve", async () => {
     const devices = {
+      ...noDevices,
       visibleDevices: vi.fn(async () => [
         { transport: "usb" as const, localKey: "SN-1", make: "Epson", model: "TM-T20" },
       ]),
@@ -241,7 +242,6 @@ describe("createContainerHost — the rest of the seam", () => {
       pair: vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" })),
       pairedBluetooth: vi.fn(async () => [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Star" }]),
       forgetBluetooth: vi.fn(async () => ({ ok: true })),
-      bluetoothAvailability: () => undefined,
       resolve: vi.fn(async () => ({
         id: "p1",
         transport: "usb" as const,
