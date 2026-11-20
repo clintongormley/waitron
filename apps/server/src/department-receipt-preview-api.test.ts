@@ -207,7 +207,7 @@ describe("replacement department receipt preview", () => {
       .where(eq(departments.id, departmentId));
     const before = await snapshot();
     const response = await ask(draft());
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "department.not_found", params: { departmentId } },
     });
