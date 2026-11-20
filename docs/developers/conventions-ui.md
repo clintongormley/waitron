@@ -2140,6 +2140,8 @@ Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows
 revision"): courses reach an open table, the
 same revision reads nothing, a failed read is tried again, and an older read never undoes a newer
 one across a poll, a profile switch, a change of zones and a server switch.
+That suite checks the default reader beside a profile switch. The other values listed above ride on
+the same assignment in `#applyVenueSetup`.
 The Equipment poll also picks up a replaced profile reader for **Pay**. Run the
 "offers the changed profile default" case in `apps/till/src/till-app.test.ts`.
 On the server, `apps/server/src/till-api.setup-revision.test.ts` checks that the revision matches on both

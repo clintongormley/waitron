@@ -508,10 +508,11 @@ describe("a device's card reader", () => {
     "gives the replacement default to the till that held the removed reader by %s",
     async (selection) => {
       const s = await seed();
+      const oldHolder = s.deviceA > s.deviceB ? s.deviceA : s.deviceB;
       await list(s, [s.r1], s.r1);
       await inTx((tx) =>
         selectDeviceReader(tx, {
-          deviceId: s.deviceB,
+          deviceId: oldHolder,
           selection: selection === "default" ? "default" : { id: s.r1 },
           via: "list",
         }),
@@ -519,8 +520,8 @@ describe("a device's card reader", () => {
 
       await list(s, [s.r2], s.r2);
 
-      expect(await holders(s.r1, s.r2)).toEqual({ [s.r2]: s.deviceB });
-      expect(await chosen(s.deviceB)).toBeNull();
+      expect(await holders(s.r1, s.r2)).toEqual({ [s.r2]: oldHolder });
+      expect(await chosen(oldHolder)).toBeNull();
     },
   );
 
