@@ -47,14 +47,15 @@ export function sampleSale(
   };
 }
 
-/** A realistic but unmistakably non-fiscal document: a sample receipt, or an office printer's test page. */
+/** The sample sale and its sample dishes, at most `maxDishes` of them, as a practice document from a made-up issuer. */
 export function sampleDocument(
   qrText: ReceiptQrText | undefined,
   receiptLocale: string,
+  maxDishes?: number,
 ): ReceiptDocumentInput {
   const labels = receiptLabelsFor(receiptLocale);
   const sale = sampleSale(qrText, receiptLocale);
-  const names = receiptSampleItemsFor(receiptLocale);
+  const names = receiptSampleItemsFor(receiptLocale).slice(0, maxDishes);
   const count = decimal(String(names.length));
   const plus = (base: string, each: string): Decimal =>
     toScale(addDecimal(decimal(base), multiplyDecimal(decimal(each), count)), MONEY_SCALE);

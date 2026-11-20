@@ -43,7 +43,9 @@ on the printer's details runs it again.
 
 Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
 **Edit** changes its name and, for a network
-receipt printer, its address. **Calibrate printer** runs calibration again. An A4 printer's
+receipt printer, its address. **Calibrate printer** runs calibration again. In a receipt
+printer's row menu, **Print test page** prints a sample receipt with the venue's header, in the
+venue's receipt language, marked as a test and not an invoice. An A4 printer's
 details have no calibration; **Print test page** checks one. To remove it, choose **Delete** in
 its row menu. The confirmation lists the assignments removed and work ended. To use it again,
 choose **Add a printer**, then **Add as A4 printer** beside it and **Add**. It keeps its saved

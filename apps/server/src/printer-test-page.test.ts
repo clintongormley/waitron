@@ -10,7 +10,8 @@ import {
 } from "@waitron/printing";
 import { formatPrinterTestPage, type PrinterTestPageInput } from "./printer-test-page.js";
 import { qrModules } from "./qr-matrix.js";
-import { sampleDocument } from "./sample-receipt.js";
+import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   bytesInclude,
   commandNames,
@@ -48,7 +49,7 @@ function lines(bytes: Uint8Array): string[] {
 }
 
 function qrBytes(printer: EscSetting): Uint8Array {
-  const matrix = qrModules(sampleDocument(QR_WORDS, "en-GB").result.qr);
+  const matrix = qrModules("https://example.invalid/waitron/sample-receipt");
   const dots = chooseQrDots(
     matrix.length,
     dpiValue(printer.resolution),
@@ -90,11 +91,53 @@ describe("formatPrinterTestPage", () => {
     expect(printed.filter((line) => line === "PRUEBA — no es una factura")).toHaveLength(2);
     expect(printed.some((line) => /^1 +Café y tostada +5,50$/.test(line))).toBe(true);
     expect(printed.some((line) => /^1 +Jamón con melón +2,20$/.test(line))).toBe(true);
-    expect(printed.some((line) => /^TOTAL +16,50 €$/.test(line))).toBe(true);
-    expect(printed.some((line) => /^10% +15,00 +1,50 +16,50$/.test(line))).toBe(true);
-    expect(printed.some((line) => /^Cambio +3,50 €$/.test(line))).toBe(true);
+    expect(printed.some((line) => /^TOTAL +9,90 €$/.test(line))).toBe(true);
+    expect(printed.some((line) => /^10% +9,00 +0,90 +9,90$/.test(line))).toBe(true);
+    expect(printed.some((line) => /^Cambio +0,10 €$/.test(line))).toBe(true);
     expect(printed.at(-1)).toBe("Front Epson · 58mm · 180dpi");
   });
+
+  it.each([
+    ["en-GB", ["Coffee and toast"], { total: "5.50", base: "5.00", tax: "0.50", change: "4.50" }],
+    [
+      "es-ES",
+      ["Café y tostada", "Atún con piña", "Jamón con melón"],
+      { total: "9.90", base: "9.00", tax: "0.90", change: "0.10" },
+    ],
+    [
+      "ca-ES",
+      ["Cafè i torrada", "Pa amb tomàquet", "Pastís de préssec"],
+      { total: "9.90", base: "9.00", tax: "0.90", change: "0.10" },
+    ],
+    [
+      "gl-ES",
+      ["Café e torrada", "Polbo á feira", "Queixo do país"],
+      { total: "9.90", base: "9.00", tax: "0.90", change: "0.10" },
+    ],
+    [
+      "eu-ES",
+      ["Kafea eta ogi txigortua", "Iruñeko txistorra"],
+      { total: "7.70", base: "7.00", tax: "0.70", change: "2.30" },
+    ],
+  ] as const)(
+    "prints at most three sale lines in %s, totalled, taxed and changed from those lines alone",
+    (locale, names, sums) => {
+      const labels = receiptLabelsFor(locale);
+      const printed = lines(page({ printer: PRINTER_80, receiptLocale: locale })).map((line) =>
+        line.replace(/ +/g, " "),
+      );
+      const amount = (value: string) => formatAmount(value, locale);
+      expect(printed.filter((line) => line.startsWith("1 "))).toEqual(
+        names.map((name, at) => `1 ${name} ${amount(at === 0 ? "5.50" : "2.20")}`),
+      );
+      expect(printed).toContain(`${labels.total} ${formatMoney(sums.total, locale)}`);
+      expect(printed).toContain(
+        `${formatVatRate("10", locale)} ${amount(sums.base)} ${amount(sums.tax)} ${amount(sums.total)}`,
+      );
+      expect(printed).toContain(`${labels.cash} ${formatMoney("10.00", locale)}`);
+      expect(printed).toContain(`${labels.change} ${formatMoney(sums.change, locale)}`);
+    },
+  );
 
   it("prints no trading name the department does not print, and the practice marker too in practice", () => {
     const printed = lines(

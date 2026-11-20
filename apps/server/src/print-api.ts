@@ -165,6 +165,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.office_printer": 409,
   "agent.not_found": 404,
   "station.not_found": 404,
+  "venue.not_found": 409,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,

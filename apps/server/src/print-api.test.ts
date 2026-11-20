@@ -25,6 +25,7 @@ import {
   printJobs,
   printers,
   departments,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
@@ -2671,6 +2672,44 @@ describe("mountPrintApi — management: print-test-page", () => {
     expect(text).toContain("Santet Deli S.L.");
     expect(text).toContain("NIF: B76543210");
     expect(text.indexOf("Deli")).toBeLessThan(text.indexOf("Santet Deli S.L."));
+  });
+
+  it("prints no trading name when the venue has no active default department", async () => {
+    await suite.db.insert(departments).values([
+      { name: "Bar", tradingName: "Bar Santet", isDefault: false },
+      { name: "Deli", tradingName: "Deli Santet", isDefault: true, active: false },
+    ]);
+    const app = mountApp({ now: () => NOW });
+    const printerId = await savedPrinter(app, "10.0.0.127", "Headerless", {
+      paperWidth: "80mm",
+      resolution: "203dpi",
+    });
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(202);
+    const [job] = await jobsFor(printerId);
+    const text = printedLines(job!.payload)
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+    expect(text).not.toContain("Bar Santet");
+    expect(text).not.toContain("Deli Santet");
+    expect(text.at(-1)).toBe("Headerless · 80mm · 203dpi");
+  });
+
+  it("refuses with 409 venue.not_found, queueing nothing, when the venue has no taxpayer", async () => {
+    const app = mountApp({ now: () => NOW });
+    const printerId = await savedPrinter(app, "10.0.0.128", "No taxpayer", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+    });
+    await suite.db.delete(taxpayer);
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
+    expect(await jobsFor(printerId)).toEqual([]);
   });
 
   it("follows the printer's saved paper width: a 58mm and an 80mm printer differ", async () => {

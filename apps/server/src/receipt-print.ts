@@ -217,7 +217,8 @@ export type PrintedVenue = Pick<FormatReceiptInput, "issuer" | "receipt" | "venu
 /**
  * The taxpayer as issuer, and the current optional trim, address and logo of `departmentId` (none
  * for `null`) in `invoiceLocale`: the same for a sale's receipt and a printer's test page.
- * `undefined` when there is no taxpayer.
+ * `currentLocale` is the venue's receipt language, read here when not given. `undefined` when there
+ * is no taxpayer.
  */
 export async function readPrintedVenue(
   tx: Transaction,
@@ -225,20 +226,19 @@ export async function readPrintedVenue(
   departmentId: string | null,
   printer: EscSetting,
   invoiceLocale: string,
+  currentLocale?: string,
 ): Promise<PrintedVenue | undefined> {
   const taxpayer = await readTaxpayer(tx);
-  /* v8 ignore start */
   if (taxpayer === null) {
     return undefined;
   }
-  /* v8 ignore stop */
   const diagnostic = (event: {
     operation: string;
     code: string;
     receiptId?: 1;
     departmentId?: string;
   }) => console.warn("receipt.optional_read_failed", event);
-  const current = await readReceiptLanguage(tx);
+  const current = currentLocale ?? (await readReceiptLanguage(tx)).locale;
   const department =
     departmentId === null
       ? null
@@ -246,7 +246,7 @@ export async function readPrintedVenue(
           tx,
           {
             ...cfg,
-            receiptLanguages: [...new Set([invoiceLocale, current.locale])],
+            receiptLanguages: [...new Set([invoiceLocale, current])],
             receiptDiagnostic: diagnostic,
           },
           departmentId,
@@ -254,7 +254,7 @@ export async function readPrintedVenue(
         );
   const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(authored, venue, invoiceLocale, current.locale);
+  const receipt = resolveReceiptTrim(authored, venue, invoiceLocale, current);
   const venueAddress = await readReceiptAddress(tx, {
     printAddress: authored?.printAddress === true,
   });

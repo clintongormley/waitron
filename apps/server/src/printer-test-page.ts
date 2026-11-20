@@ -3,13 +3,17 @@ import { departments, readVenue, type Transaction } from "@waitron/db";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import { readReceiptLanguage } from "@waitron/menu";
 import type { EscSetting } from "@waitron/printing";
-import { timeZoneOffsetMinutes } from "@waitron/shared";
+import { AppError, timeZoneOffsetMinutes } from "@waitron/shared";
+import "./errors.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { readPrintedVenue, type PrintedVenue } from "./receipt-print.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { sampleDocument } from "./sample-receipt.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TradingContext } from "./trading-context.js";
+
+/** Beside the sample's first line, so the page stays a few lines long in every language. */
+const SAMPLE_DISHES = 2;
 
 export interface PrinterTestPageInput extends PrintedVenue {
   receiptHeader?: ReceiptDocumentInput["receiptHeader"];
@@ -33,7 +37,7 @@ export function formatPrinterTestPage({
   practice,
   ...venue
 }: PrinterTestPageInput): Uint8Array {
-  const sample = sampleDocument(qrText, receiptLocale);
+  const sample = sampleDocument(qrText, receiptLocale, SAMPLE_DISHES);
   return formatReceipt({
     ...sample,
     ...venue,
@@ -58,7 +62,8 @@ export async function layOutPrinterTestPage(
   const receiptHeader =
     departmentId === null ? undefined : await readTradingNameHeader(tx, departmentId);
   const { locale } = await readReceiptLanguage(tx);
-  const venue = (await readPrintedVenue(tx, cfg, departmentId, page.printer, locale))!;
+  const venue = await readPrintedVenue(tx, cfg, departmentId, page.printer, locale, locale);
+  if (venue === undefined) throw new AppError("venue.not_found", {});
   return formatPrinterTestPage({
     ...page,
     ...venue,
@@ -72,7 +77,7 @@ export async function layOutPrinterTestPage(
 async function readTradingNameHeader(
   tx: Transaction,
   departmentId: string,
-): Promise<NonNullable<ReceiptDocumentInput["receiptHeader"]>> {
+): Promise<ReceiptDocumentInput["receiptHeader"]> {
   const [department] = await tx
     .select({
       tradingName: departments.tradingName,
@@ -80,5 +85,5 @@ async function readTradingNameHeader(
     })
     .from(departments)
     .where(eq(departments.id, departmentId));
-  return department!;
+  return department;
 }
