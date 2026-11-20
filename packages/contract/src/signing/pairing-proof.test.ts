@@ -321,6 +321,7 @@ it("refuses a non-UUID request or a timestamp sent as text", () => {
   malformedTime[6] = String(now);
   expect(() => checkV4(signed(malformedId), "status")).toThrow(PairingError);
   expect(() => checkV4(signed(malformedTime), "status")).toThrow(PairingError);
+  expect(() => checkV4(signed(v4Vector("status", [], now + 0.5)), "status")).toThrow(PairingError);
 });
 
 it("refuses non-Ed25519 and noncanonical keys even with valid signatures", () => {
@@ -349,10 +350,13 @@ it.each([
   ["start", ["https://box.example.test/a\tb", state, challenge]],
   ["start", [callback, state.slice(1), challenge]],
   ["start", [callback, state, challenge + "="]],
+  ["start", [callback, state, challenge, ""]],
   ["redeem", [code.slice(0, -1) + "x", verifier]],
   ["redeem", [code, verifier.slice(1)]],
+  ["redeem", [code, verifier, ""]],
   ["status", [state]],
   ["complete", profile.slice(1)],
+  ["complete", [...profile, ""]],
 ] as const)("refuses malformed v4 %s arguments %j", (action, args) =>
   expect(() => checkV4(signed(v4Vector(action, args)), action)).toThrow(PairingError),
 );
@@ -363,6 +367,7 @@ it.each([
   ["ES", "", profile[2], "", profile[4]],
   ["ES", "😀".repeat(121), profile[2], "", profile[4]],
   ["ES", profile[1], ["Only a street"], "", profile[4]],
+  ["ES", profile[1], [...profile[2], ""], "", profile[4]],
   ["ES", profile[1], "abcde", "", profile[4]],
   ["ES", profile[1], ["a".repeat(201), "", "", "", ""], "", profile[4]],
   ["ES", profile[1], ["", "", "a".repeat(21), "", ""], "", profile[4]],
