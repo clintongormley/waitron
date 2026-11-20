@@ -87,6 +87,9 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   rectificativeSeriesCode: "off",
 };
 
+/** A browser can offer the person's own name for an input named `name`, even with autocomplete off. */
+const INPUT_NAME: Readonly<Partial<Record<TextField, string>>> = { name: "venueName" };
+
 const CODE_FIELDS: ReadonlySet<TextField> = new Set([
   "taxId",
   "seriesCode",
@@ -176,9 +179,9 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   name: "venue.help.name",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
-  seriesCode: "venue.help.series_code",
-  fullSeriesCode: "venue.help.full_series_code",
-  rectificativeSeriesCode: "venue.help.rectificative_series_code",
+  seriesCode: "venue.help.series_codes",
+  fullSeriesCode: "venue.help.series_codes",
+  rectificativeSeriesCode: "venue.help.series_codes",
 };
 
 const hasHint = (key: TextField): key is HintedField => key in FIELD_HINT;
@@ -828,7 +831,7 @@ export class SetupVenueScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${label}
-      name=${key}
+      name=${INPUT_NAME[key] ?? key}
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
       autocapitalize=${code ? "none" : nothing}
       autocorrect=${code ? "off" : nothing}
@@ -917,6 +920,44 @@ export class SetupVenueScreen extends LitElement {
           >${t("venue.staff_language.help")}</wt-help-tooltip
         ></wt-combobox
       >
+      ${this.#addressSearch("address", pack)}
+      ${this.#field(t("venue.label.address_line1"), "addressLine1")}
+      ${this.#field(t("venue.label.address_line2"), "addressLine2")}
+      <div class="pair">
+        ${this.#field(t("venue.label.postal_code"), "postalCode")}
+        ${this.#field(t("venue.label.city"), "city")}
+      </div>
+      ${
+        pack !== undefined && pack.administrativeAreas.length > 0
+          ? html`<wt-combobox
+              class="field"
+              label=${t("venue.label.province")}
+              name="province"
+              required
+              search="auto"
+              placeholder=${selectProvince}
+              searchPlaceholder=${t("venue.combobox_search")}
+              noResultsLabel=${t("venue.combobox_no_results")}
+              data-test="province"
+              ?invalid=${errors.has("province")}
+              error=${errors.get("province") ?? ""}
+              .options=${pack.administrativeAreas.map((candidate) => ({
+                value: candidate.code,
+                label: candidate.name,
+              }))}
+              .value=${area?.code ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onProvince(event)}
+              >${this.#help("province")}</wt-combobox
+            >`
+          : this.#field(t("venue.label.province_region"), "province")
+      }
+      <p class="facts" data-test="facts">
+        ${
+          fiscalTerritory === undefined
+            ? nothing
+            : html`<span data-test="fiscalTerritory">${fiscalTerritory}</span> · `
+        }<span data-test="timeZone">${timeZone}</span>
+      </p>
       ${
         this.#demo
           ? nothing
@@ -967,44 +1008,6 @@ export class SetupVenueScreen extends LitElement {
               ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
             </fieldset> `
       }
-      ${this.#addressSearch("address", pack)}
-      ${this.#field(t("venue.label.address_line1"), "addressLine1")}
-      ${this.#field(t("venue.label.address_line2"), "addressLine2")}
-      <div class="pair">
-        ${this.#field(t("venue.label.postal_code"), "postalCode")}
-        ${this.#field(t("venue.label.city"), "city")}
-      </div>
-      ${
-        pack !== undefined && pack.administrativeAreas.length > 0
-          ? html`<wt-combobox
-              class="field"
-              label=${t("venue.label.province")}
-              name="province"
-              required
-              search="auto"
-              placeholder=${selectProvince}
-              searchPlaceholder=${t("venue.combobox_search")}
-              noResultsLabel=${t("venue.combobox_no_results")}
-              data-test="province"
-              ?invalid=${errors.has("province")}
-              error=${errors.get("province") ?? ""}
-              .options=${pack.administrativeAreas.map((candidate) => ({
-                value: candidate.code,
-                label: candidate.name,
-              }))}
-              .value=${area?.code ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onProvince(event)}
-              >${this.#help("province")}</wt-combobox
-            >`
-          : this.#field(t("venue.label.province_region"), "province")
-      }
-      <p class="facts" data-test="facts">
-        ${
-          fiscalTerritory === undefined
-            ? nothing
-            : html`<span data-test="fiscalTerritory">${fiscalTerritory}</span> · `
-        }<span data-test="timeZone">${timeZone}</span>
-      </p>
       ${
         this.#demo
           ? nothing

@@ -1707,3 +1707,45 @@ it("advances from a country whose filing module offers no description", async ()
     packs.pop();
   }
 });
+
+describe("owner's fixes of 2026-11-20", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("names the venue-name input for the venue, so a browser does not offer the person's own name", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const field = q(el, "[data-test=name]") as HTMLElement & { updateComplete: Promise<unknown> };
+    await field.updateComplete;
+    const native = field.shadowRoot!.querySelector("input")!;
+    expect(native.getAttribute("name")).toBe("venueName");
+    expect(native.getAttribute("autocomplete")).toBe("off");
+  });
+
+  it("asks for the receipt language after the province, which decides the languages offered", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const province = q(el, "[data-test=province]")!;
+    const facts = q(el, "[data-test=facts]")!;
+    const locales = q(el, "fieldset.locales")!;
+    expect(
+      province.compareDocumentPosition(locales) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(facts.compareDocumentPosition(locales) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      locales.compareDocumentPosition(q(el, "[data-test=dayCutover]")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["en-GB", "Leave the defaults unless you have a good reason to change them."],
+    ["es-ES", "Deja los valores predeterminados salvo que tengas un buen motivo para cambiarlos."],
+  ] as const)("tells the person to keep the invoice series defaults (%s)", async (locale, text) => {
+    setLocale(locale);
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    for (const field of ["seriesCode", "fullSeriesCode", "rectificativeSeriesCode"]) {
+      expect(
+        q(el, `[data-test=${field}] wt-help-tooltip[slot=help]`)!.textContent!.trim(),
+        field,
+      ).toBe(text);
+    }
+  });
+});
