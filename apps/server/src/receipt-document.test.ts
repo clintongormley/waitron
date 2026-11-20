@@ -458,8 +458,8 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
         result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
       });
       const marks = simulated
-        ? ["DOCUMENTO DE PRUEBA", "PRUEBA — no es una factura"]
-        : ["PRUEBA — no es una factura"];
+        ? ["DOCUMENTO DE PRUEBA", "Este documento no es una factura"]
+        : ["Este documento no es una factura"];
       const top = kinds.indexOf(marks[0]!);
       expect(kinds[top - 1]).not.toBe("rule");
       expect(kinds.slice(top, top + marks.length + 1)).toEqual([...marks, "rule"]);

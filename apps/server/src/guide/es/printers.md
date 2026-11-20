@@ -49,8 +49,8 @@ Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de
 abrir sus detalles. **Editar** cambia su nombre y, si
 es una impresora de recibos de red, su dirección. **Calibrar impresora** repite la calibración.
 En el menú de la fila de una impresora de recibos, **Imprimir página de prueba** imprime un recibo
-de muestra con la cabecera del local, en el idioma del ticket del local, marcado como prueba y no
-como factura.
+de muestra con la cabecera del local pero con un nombre de empresa y un NIF inventados, en el
+idioma del ticket del local, marcado como prueba y no como factura.
 Los detalles de una impresora A4 no tienen calibración;
 **Imprimir página de prueba** la comprueba. Para quitarla, elige **Eliminar** en su menú. La
 confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a

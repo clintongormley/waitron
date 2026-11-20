@@ -79,7 +79,10 @@ export interface ReceiptDocumentInput {
   simulatedCardPayment?: boolean;
   duplicate?: boolean;
   guests?: number;
-  /** A printer's test page: marked as no invoice, ending with the printer's own line. */
+  /**
+   * A printer's test page: the no-invoice notice prints at the top and bottom, after the practice
+   * mark where there is one, and the printer's own line ends the page.
+   */
   testPage?: { printer: string };
 }
 
@@ -225,7 +228,7 @@ export function buildReceiptDocument({
     text(label.practice);
     if (simulatedCardPayment) text(label.noRealCharge);
   }
-  if (testPage) text(label.testPage);
+  if (testPage) text(label.paymentNotice);
   if (simulated || testPage) rule();
 
   if (result.qr !== "") {
@@ -575,7 +578,7 @@ export function buildReceiptDocument({
     if (simulatedCardPayment) text(label.noRealCharge);
   }
   if (testPage) {
-    text(label.testPage);
+    text(label.paymentNotice);
     text(testPage.printer);
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();

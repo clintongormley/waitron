@@ -7,6 +7,7 @@ import {
   attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { readReceiptLanguage } from "@waitron/menu";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -2600,11 +2601,11 @@ describe("mountPrintApi — management: print-test-page", () => {
   });
 
   it.each([
-    { locale: "es-ES", marker: "PRUEBA — no es una factura" },
-    { locale: "ca-ES", marker: "PROVA — no és una factura" },
+    { locale: "es-ES", marks: ["DOCUMENTO DE PRUEBA", "Este documento no es una", "factura"] },
+    { locale: "ca-ES", marks: ["PROVA", "Aquest document no és una", "factura"] },
   ] as const)(
     "enqueues one document job drawn at the printer's saved setting, in the $locale receipt language",
-    async ({ locale, marker }) => {
+    async ({ locale, marks }) => {
       await seedVenueSettings(suite.db, { invoiceLocales: [locale] });
       const words = { caption: "QR tributario:", legend: "VERI*FACTU" };
       const app = mountApp({ now: () => NOW, receiptQrText: words });
@@ -2635,20 +2636,22 @@ describe("mountPrintApi — management: print-test-page", () => {
           timeZone: "Atlantic/Canary",
           receiptLocale: locale,
           qrText: words,
-          practice: false,
         }),
       ]);
       const text = printedLines(jobs[0]!.payload)
         .map((line) => line.trim())
         .filter((line) => line !== "");
-      expect(text.filter((line) => line === marker)).toHaveLength(2);
+      expect(text.slice(0, 3)).toEqual(marks);
+      expect(text.slice(-4, -1)).toEqual(marks);
+      for (const mark of marks.slice(0, 2))
+        expect(text.filter((line) => line === mark)).toHaveLength(2);
       expect(text.at(-1)).toBe(`Front ${locale} · 58mm · 203dpi`);
       expect(text.some((line) => line.endsWith("01/10/2026 14:05"))).toBe(true);
       expect(text).toContain("VERI*FACTU");
     },
   );
 
-  it("prints the taxpayer's legal name and NIF under the default department's trading name", async () => {
+  it("prints the sample issuer and tax number, not the taxpayer's, under the default department's trading name", async () => {
     await suite.db.run(
       sql`update taxpayer set legal_name = 'Santet Deli S.L.', tax_id = 'B76543210' where id = 1`,
     );
@@ -2669,10 +2672,38 @@ describe("mountPrintApi — management: print-test-page", () => {
     const text = printedLines(job!.payload).map((line) => line.trim());
     expect(text).toContain("Deli");
     expect(text).not.toContain("Bar Santet");
-    expect(text).toContain("Santet Deli S.L.");
-    expect(text).toContain("NIF: B76543210");
-    expect(text.indexOf("Deli")).toBeLessThan(text.indexOf("Santet Deli S.L."));
+    expect(text.some((line) => line.includes("Santet Deli S.L."))).toBe(false);
+    expect(text.some((line) => line.includes("B76543210"))).toBe(false);
+    const { locale } = await withTransaction(suite.db, (tx) => readReceiptLanguage(tx));
+    const issuerName = receiptLabelsFor(locale).sampleIssuerName;
+    expect(text).toContain("NIF: B00000000");
+    expect(text.indexOf("Deli")).toBeLessThan(text.indexOf(issuerName));
   });
+
+  it.each([false, true])(
+    "marks the page once above the QR and once above the printer's line, practice mode %s",
+    async (practiceMode) => {
+      await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
+      const words = { caption: "QR tributario:", legend: "VERI*FACTU" };
+      const app = mountApp({ now: () => NOW, receiptQrText: words, practiceMode });
+      const printerId = await savedPrinter(app, "10.0.0.130", "Marked", {
+        paperWidth: "80mm",
+        resolution: "203dpi",
+      });
+      const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+        cookie: managerCookie,
+      });
+      expect(res.status).toBe(202);
+      const [job] = await jobsFor(printerId);
+      const text = printedLines(job!.payload)
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !/^-+$/.test(line));
+      const marks = ["DOCUMENTO DE PRUEBA", "Este documento no es una factura"];
+      expect(text.filter((line) => marks.includes(line))).toEqual([...marks, ...marks]);
+      expect(text.slice(0, 3)).toEqual([...marks, "QR tributario:"]);
+      expect(text.slice(-3)).toEqual([...marks, "Marked · 80mm · 203dpi"]);
+    },
+  );
 
   it("prints no trading name when the venue has no active default department", async () => {
     await suite.db.insert(departments).values([

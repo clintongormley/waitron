@@ -28,7 +28,6 @@ const QR_WORDS = { caption: "QR tributario:", legend: "VERI*FACTU" };
 
 function page(overrides: Partial<PrinterTestPageInput> = {}): Uint8Array {
   return formatPrinterTestPage({
-    issuer: { venueName: "Santet Deli S.L.", nif: "B12345678" },
     receipt: {},
     receiptHeader: { tradingName: "Deli", printTradingName: true },
     printer: PRINTER_58,
@@ -37,7 +36,6 @@ function page(overrides: Partial<PrinterTestPageInput> = {}): Uint8Array {
     timeZone: "Atlantic/Canary",
     receiptLocale: "en-GB",
     qrText: QR_WORDS,
-    practice: false,
     ...overrides,
   });
 }
@@ -59,11 +57,11 @@ function qrBytes(printer: EscSetting): Uint8Array {
 }
 
 describe("formatPrinterTestPage", () => {
-  it("prints the venue's header, the sample sale and the test marker at the top and bottom", () => {
+  it("prints the venue's trading name over the sample issuer, and the sample sale", () => {
     const printed = lines(page());
     expect(printed).toContain("Deli");
-    expect(printed).toContain("Santet Deli S.L.");
-    expect(printed).toContain("NIF: B12345678");
+    expect(printed.indexOf("Deli")).toBeLessThan(printed.indexOf("Waitron - Sample receipt"));
+    expect(printed).toContain("NIF: B00000000");
     expect(printed).toContain("QR tributario:");
     expect(printed).toContain("VERI*FACTU");
     expect(printed.some((line) => /^Outside 6 +Order 41$/.test(line))).toBe(true);
@@ -71,14 +69,24 @@ describe("formatPrinterTestPage", () => {
     expect(printed.some((line) => /^1 +Coffee and toast +5\.50$/.test(line))).toBe(true);
     expect(printed.some((line) => /^TOTAL +€5\.50$/.test(line))).toBe(true);
     expect(printed.some((line) => /^Change +€4\.50$/.test(line))).toBe(true);
-    expect(printed.filter((line) => line === "TEST — not an invoice")).toHaveLength(2);
-    expect(printed.indexOf("TEST — not an invoice")).toBeLessThan(
-      printed.indexOf("QR tributario:"),
-    );
-    expect(printed.at(-2)).toBe("TEST — not an invoice");
-    expect(printed.at(-1)).toBe("Front Epson · 58mm · 180dpi");
-    expect(printed).not.toContain("TEST DOCUMENT");
   });
+
+  it.each([
+    [PRINTER_58, ["TEST DOCUMENT", "This document is not an", "invoice"]],
+    [PRINTER_80, ["TEST DOCUMENT", "This document is not an invoice"]],
+  ])(
+    "marks the page as a test and no invoice once above the QR and once above the printer's line: %o",
+    (printer, marks) => {
+      const printed = lines(page({ printer }));
+      expect(printed.slice(0, marks.length + 1)).toEqual([...marks, "QR tributario:"]);
+      expect(printed.slice(-(marks.length + 1))).toEqual([
+        ...marks,
+        `Front Epson · ${printer.paperWidth} · ${printer.resolution}`,
+      ]);
+      for (const mark of marks.slice(0, 2))
+        expect(printed.filter((line) => line === mark)).toHaveLength(2);
+    },
+  );
 
   it("prints the VAT table of the sample sale", () => {
     const printed = lines(page());
@@ -88,7 +96,12 @@ describe("formatPrinterTestPage", () => {
 
   it("prints the sample dishes, VAT and marker in the receipt language", () => {
     const printed = lines(page({ receiptLocale: "es-ES" }));
-    expect(printed.filter((line) => line === "PRUEBA — no es una factura")).toHaveLength(2);
+    const marks = ["DOCUMENTO DE PRUEBA", "Este documento no es una", "factura"];
+    expect(printed.slice(0, 3)).toEqual(marks);
+    expect(printed.slice(-4, -1)).toEqual(marks);
+    expect(printed.filter((line) => line === "DOCUMENTO DE PRUEBA")).toHaveLength(2);
+    expect(printed.filter((line) => line === "Este documento no es una")).toHaveLength(2);
+    expect(printed).toContain("Waitron - Recibo de muestra");
     expect(printed.some((line) => /^1 +Café y tostada +5,50$/.test(line))).toBe(true);
     expect(printed.some((line) => /^1 +Jamón con melón +2,20$/.test(line))).toBe(true);
     expect(printed.some((line) => /^TOTAL +9,90 €$/.test(line))).toBe(true);
@@ -139,13 +152,12 @@ describe("formatPrinterTestPage", () => {
     },
   );
 
-  it("prints no trading name the department does not print, and the practice marker too in practice", () => {
+  it("prints no trading name the department does not print", () => {
     const printed = lines(
-      page({ receiptHeader: { tradingName: "Deli", printTradingName: false }, practice: true }),
+      page({ receiptHeader: { tradingName: "Deli", printTradingName: false } }),
     );
     expect(printed).not.toContain("Deli");
-    expect(printed.filter((line) => line === "TEST DOCUMENT")).toHaveLength(2);
-    expect(printed.filter((line) => line === "TEST — not an invoice")).toHaveLength(2);
+    expect(printed).toContain("Waitron - Sample receipt");
   });
 
   it("dates the page now, in the time zone it is given, as an 80mm receipt prints it", () => {

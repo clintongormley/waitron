@@ -211,12 +211,12 @@ async function readDevicePrinters(
   );
 }
 
-/** The parts of a receipt the venue prints today, whatever the document. */
+/** The parts of a sale's receipt the venue prints today. */
 export type PrintedVenue = Pick<FormatReceiptInput, "issuer" | "receipt" | "venueAddress" | "logo">;
 
 /**
  * The taxpayer as issuer, and the current optional trim, address and logo of `departmentId` (none
- * for `null`) in `invoiceLocale`: the same for a sale's receipt and a printer's test page.
+ * for `null`) in `invoiceLocale`; a printer's test page uses all of it but the issuer.
  * `currentLocale` is the venue's receipt language, read here when not given. `undefined` when there
  * is no taxpayer.
  */
