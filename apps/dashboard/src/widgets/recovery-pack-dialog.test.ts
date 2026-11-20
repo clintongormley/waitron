@@ -425,6 +425,17 @@ describe("the server key was not replaced", () => {
     );
   });
 
+  it("names the original setup pack when replacing the key fails", async () => {
+    setLocale("en-GB");
+    const { el } = await failedKey({
+      ...UNRECEIVED,
+      unreceived: { ...UNRECEIVED.unreceived!, offeredAtSetup: true },
+    });
+    expect(words(el.shadowRoot!.querySelector("[data-test=key-failed]"))).toContain(
+      "The current key, on recovery pack 3 made on 12 October, still works.",
+    );
+  });
+
   it("says only that the key was not replaced when the status names no pack holding a key", async () => {
     const { el } = await failedKey(status());
     expect(words(el.shadowRoot!.querySelector("[data-test=key-failed]"))).toBe(first());

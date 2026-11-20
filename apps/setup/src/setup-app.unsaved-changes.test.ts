@@ -642,11 +642,14 @@ describe("setup root draft unsaved changes", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("provisioning");
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(true);
-    expect(api.provision).toHaveBeenCalledOnce();
-    expect(vi.mocked(api.provision).mock.calls[0]![0]).toEqual({
-      mode: "prepare",
-      venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
-    });
+    expect(api.provision).toHaveBeenCalledExactlyOnceWith(
+      {
+        mode: "prepare",
+        venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+      },
+      undefined,
+      "en-GB",
+    );
     accept();
     await expect.poll(() => (el as unknown as State).screen).toBe("done");
     expect(unload()).toBe(false);
@@ -1361,9 +1364,12 @@ it("the actual Done links leave a successfully provisioned root without another 
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
   }
-  expect(api.provision).toHaveBeenCalledOnce();
-  expect(vi.mocked(api.provision).mock.calls[0]![0]).toEqual({
-    mode: "prepare",
-    venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
-  });
+  expect(api.provision).toHaveBeenCalledExactlyOnceWith(
+    {
+      mode: "prepare",
+      venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+    },
+    undefined,
+    "en-GB",
+  );
 });

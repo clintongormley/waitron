@@ -600,7 +600,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
   });
 
   it("still delivers a usable key when the recovery document evidence cannot be read", async () => {
+    const log = vi.fn<Logger>();
     const response = await realApp(PREPRODUCTION_BOX, {
+      log,
       recoveryPackEvidence: async () => {
         throw new Error("evidence unreadable");
       },
@@ -613,6 +615,9 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     const secret = FISCAL_SERVER_KEY_AS_TYPED(result.breakGlassSecret);
     expect(typeof secret).toBe("string");
     expect(await verifyBreakGlass(venueDb.node, id, secret!)).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "setup.recovery_pack_drawing_failed", {
+      reason: "unexpected",
+    });
   });
 
   it.each([

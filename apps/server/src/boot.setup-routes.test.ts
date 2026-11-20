@@ -478,7 +478,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }: {
       extraPortCount?: number;
       beforeStart?: (stateDir: string) => Promise<void>;
-      onStarted?: (server: StartedServer) => void;
+      onStarted?: (server: StartedServer, close: () => Promise<void>) => void;
       seams?: StartServerSeams;
       /** The real environment, which `startServer` takes beside the merged one. */
       base?: NodeJS.ProcessEnv;
@@ -534,7 +534,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           base,
           { testClock, ...seams },
         );
-        onStarted?.(server);
+        let closing: Promise<void> | undefined;
+        const close = () => (closing ??= server.close());
+        onStarted?.(server, close);
         let closeTls: (() => Promise<void>) | undefined;
         try {
           await adoption?.bound;
@@ -587,7 +589,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           try {
             await closeTls?.();
           } finally {
-            await server.close();
+            await close();
           }
         }
       });
@@ -1030,7 +1032,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const keptStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-till-state-"));
     try {
       let trading: Record<string, string> = {};
-      let activeSetup: StartedServer;
+      let closeSetup: () => Promise<void>;
       let shuttingDown: Promise<void> | undefined;
       await withSetupBoot(
         venue.directory,
@@ -1065,12 +1067,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         },
         {
-          onStarted: (server) => {
-            activeSetup = server;
+          onStarted: (_server, close) => {
+            closeSetup = close;
           },
           seams: {
             restart: () => {
-              shuttingDown = activeSetup.close();
+              shuttingDown = closeSetup();
             },
           },
         },

@@ -362,6 +362,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
         : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea un paquete nuevo con una clave del servidor nueva.",
     );
     expect(row(el, "server-key")).toContain("1");
+    expect(line(el)).toBe("");
   });
 
   it("explains that a newly configured bucket needs an updated setup pack", async () => {
