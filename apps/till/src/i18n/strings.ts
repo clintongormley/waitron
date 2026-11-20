@@ -2012,7 +2012,7 @@ export const en = {
   "split.refused_payments":
     "Part of this bill is paid, so it cannot be split this way. The other guests pay the rest of this receipt with Pay.",
   "split.refused_left_unpaid":
-    "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split. Cancel and credit still credits its receipt.",
+    "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
   "split.refused_not_at_table": "Only a table's bill can be split this way. Nothing was credited.",
   "split.refused_not_issued": "This bill has no receipt yet, so nothing was credited.",
   "split.refused_payment_in_flight":
@@ -4203,7 +4203,7 @@ export const es: Record<StringKey, string> = {
   "split.refused_payments":
     "Parte de esta cuenta ya está pagada, así que no se puede dividir así. Los demás clientes pagan el resto de este ticket con Cobrar.",
   "split.refused_left_unpaid":
-    "Esta cuenta se registró como no pagada: los clientes se han ido y no hay nada que dividir. Cancelar y abonar sigue abonando su ticket.",
+    "Esta cuenta se registró como no pagada: los clientes se han ido y no hay nada que dividir.",
   "split.refused_not_at_table":
     "Solo la cuenta de una mesa se puede dividir así. No se ha abonado nada.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket, así que no se ha abonado nada.",

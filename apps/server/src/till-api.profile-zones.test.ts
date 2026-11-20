@@ -157,7 +157,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
- * | POST /api/working-orders/:id/split-after-print         | order                  | refuses POST .../split-after-print                   |
+ * | POST /api/working-orders/:id/split-after-print          | order                  | refuses POST /api/working-orders/:id/split-after-print |
  * | GET  /api/tables/state, /api/zones                      | list, by table or zone | "lists only the profile's zones, tables and orders"  |
  * | POST /api/tables/:id/seat                               | table                  | refuses POST /api/tables/:id/seat                    |
  * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |

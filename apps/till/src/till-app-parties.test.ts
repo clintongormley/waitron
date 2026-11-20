@@ -11905,8 +11905,11 @@ describe("till-app: reopening a printed bill to split it", () => {
       .trim() ?? null;
 
   /** The server's side: `splitAfterPrint` cancels the bill and opens `wo-split`, unless it rejects. */
-  function billServer(refuse: () => Promise<void> = async () => {}) {
-    let bills: PartyBill[] = [tabBill, invoiced];
+  function billServer(
+    refuse: () => Promise<void> = async () => {},
+    first: PartyBill[] = [tabBill, invoiced],
+  ) {
+    let bills: PartyBill[] = first;
     return {
       getPartyBills: vi.fn(async () => bills),
       splitAfterPrint: vi.fn(async () => {
@@ -11920,6 +11923,11 @@ describe("till-app: reopening a printed bill to split it", () => {
       /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
       cancelledElsewhere: () => {
         bills = [tabBill, cancelled];
+      },
+      /** Cancel and credit on another till of the party's only bill in use: the server opens it a
+       * fresh empty bill (`ensureFamilyBill`). */
+      cancelledElsewhereLeavingEmptyBill: () => {
+        bills = [cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
       },
     };
   }
@@ -11938,7 +11946,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     });
     await openPartyTable(mounted.el);
     const order = tableOrder(mounted.el)!;
-    await switchToBill(order, "wo-check");
+    if (order.orderId !== "wo-check") await switchToBill(order, "wo-check");
     await flush(mounted.el);
     order
       .shadowRoot!.querySelector<HTMLElement>("[data-table-menu] [data-split-after-print]")!
@@ -12014,6 +12022,19 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(doneText(el)).not.toContain("Move each guest");
     expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
     expect(tableOrder(el)!.orderId).not.toBe("wo-split");
+  });
+
+  it("a split refused as no longer waiting, because the party's only bill was cancelled and credited elsewhere and an empty bill opened in its place, does not say it split", async () => {
+    const server = billServer(async () => {}, [invoiced]);
+    server.splitAfterPrint.mockImplementationOnce(async () => {
+      server.cancelledElsewhereLeavingEmptyBill();
+      throw { code: "working_order.not_placed", status: 409 };
+    });
+    const { el } = await openSplit(server);
+
+    await confirmSplit(el);
+
+    expect(doneText(el)).toBe(t("split.credited_elsewhere").replace("{number}", "R/3"));
   });
 
   it("without the permission, asks for an approver's PIN and sends it with the split", async () => {

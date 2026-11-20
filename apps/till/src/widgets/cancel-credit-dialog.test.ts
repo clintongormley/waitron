@@ -426,7 +426,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     ],
     [
       "bill.left_unpaid",
-      "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split. Cancel and credit still credits its receipt.",
+      "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
     ],
     ["bill.not_at_table", "Only a table's bill can be split this way. Nothing was credited."],
     ["bill.not_issued", "This bill has no receipt yet, so nothing was credited."],

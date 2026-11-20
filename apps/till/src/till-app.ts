@@ -21126,10 +21126,14 @@ export class TillApp extends LitElement {
     if (this.cancelCrediting !== shown || this.#hasLeftParty(open.partyId, sent)) return;
     const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
     if (!CANCEL_MAY_HAVE_LANDED.has(refusal.code) || bill?.status !== "abandoned") return;
+    // Only the split's own bill holds copies of the dishes; a credit elsewhere may open an empty one.
     const creditedElsewhere =
       open.mode === "split" &&
       !bills!.some(
-        (row) => row.status === "open" && !open.billsBefore.includes(row.workingOrderId),
+        (row) =>
+          row.status === "open" &&
+          !open.billsBefore.includes(row.workingOrderId) &&
+          compareDecimal(decimal(row.total), decimal(bill.total)) === 0,
       );
     this.#showCancelCredited(open.id, {
       creditNote: creditNoteOf(bills, open.workingOrderId),
