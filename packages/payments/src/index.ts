@@ -107,7 +107,13 @@ export { PAYMENTS_ALERTS } from "./alerts.js";
 export { PAYMENTS_HANDOVER, summariseOpenPayments } from "./handover-summary.js";
 export type { OpenPayments, OpenPaymentState } from "./handover-summary.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
-export { DEFAULT_SETTLEMENT_LAG_MS, classify, reconcilePayments } from "./reconcile.js";
+export {
+  DEFAULT_SETTLEMENT_LAG_MS,
+  SUMUP_BACKUP_AUDIT_PADDING_MS,
+  SUMUP_BACKUP_MATCH_WINDOW_MS,
+  classify,
+  reconcilePayments,
+} from "./reconcile.js";
 export type { OrphanRemediation } from "./errors.js";
 export type {
   Classification,

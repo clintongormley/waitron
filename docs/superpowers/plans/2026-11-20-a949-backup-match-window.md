@@ -33,8 +33,10 @@ same-amount candidate from the connected account within 30 minutes either way.
    `docs/backlog.md` and `docs/backlog/payments.md` with that result. Preserve the live
    test venue and key. Signature qualification remains open.
 
-The midnight run can finish before a matching entry exists. The watcher needs to settle
-whether to include a follow-up sweep through the existing scheduler before this plan is
-cleared. The planned window, readers and copy are about 30 added and 20 removed
+The watcher cleared one later daily check on 20 November at 15:16. Let SumUp’s first
+run for each day start at 01:00 UTC so a late entry and its rival can both be present.
+Use a first-run delay in the existing scheduler and keep the stored UTC day boundaries
+and retry times. Add a server scheduler test for the one SumUp run and Stripe’s midnight
+run. Change the comparison’s expected availability in the English and Spanish copy. The planned window, readers and copy are about 30 added and 20 removed
 production lines, 50 added and 15 removed test lines, plus guide and backlog updates
 and a disposable replay. The slice uses the existing audit, storage and dashboard.

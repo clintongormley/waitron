@@ -2,6 +2,7 @@ import { refundsPaused, refundRefused, type BillRefundDeps } from "./bill-refund
 import { requireEconomicWrite } from "./trading-admission.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import type { Purpose } from "@waitron/credentials";
+import { SUMUP_BACKUP_AUDIT_PADDING_MS } from "@waitron/payments";
 import type {
   ReconcileMoneyGates,
   DutyOutcome,
@@ -23,6 +24,7 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
   return {
     name: `payments.reconcile.${reconciler.provider}`,
     cadence: "daily",
+    ...(reconciler.provider === "sumup" ? { firstRunDelayMs: SUMUP_BACKUP_AUDIT_PADDING_MS } : {}),
     retryParkedAfterMs: DAY_MS,
     longestResweepMs: DAY_MS,
     async run(period: RunPeriod, now: Date): Promise<DutyOutcome> {

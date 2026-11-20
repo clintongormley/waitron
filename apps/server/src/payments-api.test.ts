@@ -3389,7 +3389,7 @@ it.each(["sumup", "manual"])(
       externalRef: provider === "manual" ? "machine-operation" : "refund-charge",
       amount: 1000,
       state: "captured",
-      settledAt: provider === "manual" ? "2026-06-01T23:59:00.000Z" : "2026-06-01T12:00:00.000Z",
+      settledAt: provider === "manual" ? "2026-06-01T23:40:00.000Z" : "2026-06-01T12:00:00.000Z",
     });
     for (const day of ["2026-07-01", "2026-07-02"])
       await suite.db.insert(reconciliationRuns).values({

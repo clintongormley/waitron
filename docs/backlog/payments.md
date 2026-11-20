@@ -80,8 +80,8 @@ its own bill and matched SumUp's `SUCCESSFUL` transaction. The owner's 17 Novemb
 check captured €1.40. The next daily audit checked that charge by reference and amount with no
 discrepancies. The owner saw both completed checks in SumUp comparison, with no rows in the two
 payment lists. On 19 November the owner paid €1.40 by chip and online PIN. The Waitron capture
-and the saved SumUp transaction agree by reference and amount. A live backup-machine match and
-signature qualification remain open. Idle reader battery refresh timing remains unqualified.
+and the saved SumUp transaction agree by reference and amount. A live audit with the wider
+backup matching window and signature qualification remain open. Idle reader battery refresh timing remains unqualified.
 Waitron omits old or undated SumUp battery snapshots. Check charge on the reader when no percentage
 is shown. See the script's dated battery provenance and the existing alert-cache limit.
 
@@ -144,7 +144,10 @@ source, machine and operation number, current payment state and successful refun
 The 20 November audit listed the manually recorded €1.40 payment as unmatched, as expected for
 a charge on the owner's other SumUp account. It also listed both sides of the same-account €1.50
 payment as unmatched. The standalone Solo charge was recorded in Waitron 10 minutes and 4 seconds
-later, outside the five-minute matching window. The live positive match remains open.
+later, outside the original five-minute matching window. On 20 November the saved audit rows
+were replayed through the reconciler in an isolated database. The 30-minute window matched the
+€1.50 pair and left the €1.40 entry for a manager to check. The replay used the saved rows, so
+a live audit with the wider window remains open.
 
 ## The SumUp reconciler
 

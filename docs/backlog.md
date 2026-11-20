@@ -934,9 +934,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   successful €10 Virtual B payment on 16 November. The €11 late result needed manager confirmation;
   €42.51 used generic decline wording. The daily SumUp audit matched the owner's 17 November
   €1.40 paired-Solo charge. The 19 November chip-and-PIN check matched by reference and amount.
-  The backup-machine audit showed the expected unmatched entry and left the same-account pair
-  unmatched because its timestamps were over five minutes apart. A live positive match and
-  signature qualification remain open.
+  A replay of the saved standalone Solo sample matched the €1.50 pair with the 30-minute
+  window and kept the separate €1.40 entry unmatched. A live audit with the wider window and
+  a signature-required card check remain open.
   Idle SumUp battery refresh timing is unqualified. Check missing battery percentages on the
   reader itself. No further paid request unattended.
   [Detail](backlog/payments.md#the-sumup-solo-experiments)
@@ -954,8 +954,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   identified refunds.
   Backup payment entry now records optional source, machine and operation details, including
   Other card machine on a counter with a configured reader. The day report and accountant workbook
-  carry those details, current payment state and successful-refund totals. Physical second-Solo,
-  other-provider and cash-only qualification remains open.
+  carry those details, current payment state and successful-refund totals. Qualification still
+  needs a live audit with the wider window, an other-provider payment and a cash-only session.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have

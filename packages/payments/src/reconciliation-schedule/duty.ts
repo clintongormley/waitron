@@ -33,6 +33,8 @@ export interface PeriodDuty {
    * that duty's history and restarts derivation from the most recent complete period. */
   readonly name: string;
   readonly cadence: "daily";
+  /** Wait this long after each period closes before claiming its first run. */
+  readonly firstRunDelayMs?: number;
   /** When set, a run that parks queues the next generation of the same period, due this long
    * after the park. Unset, a parked period is never tried again. */
   readonly retryParkedAfterMs?: number;

@@ -53,9 +53,9 @@ calendar date rather than business-day cutover.
 
 In **Check card payments** under Reporting, open **SumUp comparison** to check a calendar day in the venue’s
 time zone. A match links one same-account entry to one SumUp charge with the same amount,
-including tips, within five minutes. Check ambiguous or unmatched charges in SumUp before making
+including tips, within 30 minutes. Check ambiguous or unmatched charges in SumUp before making
 any correction. The comparison sends no refunds. An incomplete day waits for the remaining daily
-check; the complete day is available after the following UTC midnight’s check.
+check; the complete day is available after the 01:00 UTC check.
 
 The refund groups compare the saved SumUp check with your current refund records. Refresh after
 recording an outcome. A confirmed match has the same refund ID and amount; an amount agreement is
