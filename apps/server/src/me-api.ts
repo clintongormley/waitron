@@ -62,7 +62,6 @@ export interface MeApiDeps {
   describeShifts?: WaitronModule["describeShifts"];
   /** The language the dashboard defaults to before a signed-in person's own preference is known. */
   venueLocale: string;
-  /** The setup journey that created this installation, shown persistently by the dashboard. */
   onboardingIntent?: OnboardingIntent;
   simulatedCardPayments?: boolean;
   /** The enabled module names, `core` included. */

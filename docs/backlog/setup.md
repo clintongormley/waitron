@@ -158,10 +158,11 @@ browser's preferred supported language, falling back to English when none is sup
 - A change of country cannot import a configuration. Setup refuses an export whose country
   differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
   countries needs its own design.
-- Should a preproduction box inherit its original setup choice when it joins a venue? Joining and
-  taking over can leave the test box without a recorded choice, so Backups offers no configuration
-  export. Saving the original choice during join could also change practice mode, simulated card
-  payments and whether the box can send test fiscal records. The owner needs to decide whether
+- Should a preproduction box inherit its original setup choice when it joins a venue? A box that
+  took over after joining, or that was restored from its backup, can have no saved setup choice.
+  Backups then offers no configuration export, including when the first box chose Live in
+  development mode. For a venue set up in Prepare, keeping the choice would restore practice mode
+  and could change card simulation and test fiscal submission. The owner needs to decide whether
   those behaviours should carry over together.
 
 ## Loose ends left by #334.
