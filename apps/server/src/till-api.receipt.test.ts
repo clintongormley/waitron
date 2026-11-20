@@ -20,6 +20,8 @@ import {
   drawerOpens,
   printAgents,
   printers,
+  isReceiptPrinter,
+  receiptRollColumns,
   printJobs,
   sales,
   saleLines,
@@ -98,7 +100,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
-import { DRAWER_KICK } from "./receipt-print.js";
+import { DRAWER_KICK, layOutSaleReceipt } from "./receipt-print.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";
 import { deletePrinter } from "./printer-delete.js";
 import {
@@ -1006,8 +1008,14 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       }
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(2);
+      const [roll] = await suite.db
+        .select({ ...receiptRollColumns })
+        .from(printers)
+        .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
       expect(jobs.find((job) => job.id === jobId)).toMatchObject({
-        payload: new Uint8Array([27, 64]),
+        payload: await withTransaction(suite.db, (tx) =>
+          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!),
+        ),
         printerId,
         resendOf: original.jobId,
         receiptCopy: false,

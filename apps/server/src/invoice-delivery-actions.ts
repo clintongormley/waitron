@@ -30,7 +30,11 @@ import {
 } from "./invoice-delivery-status.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
-import { enqueueInvoiceReceipt, enqueueOriginalReceipt } from "./receipt-print.js";
+import {
+  enqueueInvoiceReceipt,
+  enqueueOriginalReceipt,
+  saleReceiptLayout,
+} from "./receipt-print.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { readSettledTicket } from "./till-sale.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -269,7 +273,14 @@ export async function switchToReceipt(
       requestKey: request.requestKey,
     });
   } else {
-    await resendInvoicePrintJob(tx, receipt.jobId, request.personId, undefined, request.requestKey);
+    await resendInvoicePrintJob(
+      tx,
+      saleReceiptLayout(deps.backend, deps.cfg),
+      receipt.jobId,
+      request.personId,
+      undefined,
+      request.requestKey,
+    );
   }
   // `enqueueOriginalReceipt` queues nothing when the till resolves no receipt printer.
   const made = await replayed(tx, sale.id, request.requestKey, isReceipt);

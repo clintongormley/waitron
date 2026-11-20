@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { Hono } from "hono";
 import { beforeEach, describe, expect, expectTypeOf, it, onTestFinished, vi } from "vitest";
 import {
   billPayments,
@@ -12,6 +13,7 @@ import {
   printers,
   saleSettlements,
   sales,
+  taxpayer,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -41,8 +43,19 @@ import {
   tabWith,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { refreshWaitingOriginals } from "./receipt-print.js";
+import { startFreshRounds } from "./owed-receipts.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { mountPrintApi } from "./print-api.js";
+import {
+  layOutSaleReceipt,
+  refreshWaitingOriginals,
+  type LayOutSaleReceipt,
+} from "./receipt-print.js";
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
+import { readOrderRevision } from "./working-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
@@ -643,13 +656,32 @@ describe("a payment after the ticket was issued", () => {
     expectTypeOf<Payment["machine"]>().toEqualTypeOf<string | null>();
   });
 
-  /** A bill whose ticket was issued and its original printed through Print the bill. */
-  async function billPrintedByPrintTheBill(): Promise<{
+  /**
+   * A bill whose ticket was issued and its original printed through Print the bill; a full invoice
+   * to `recipient` when one is given.
+   */
+  async function billPrintedByPrintTheBill(
+    recipient?: Record<"taxId" | "legalName" | "address" | "countryCode", string>,
+  ): Promise<{
     id: string;
     saleId: string;
     invoiceNumber: string;
   }> {
     const party = await seatedWith(venue, "Red wine bottle");
+    if (recipient !== undefined) {
+      const [{ taxpayerDomicile }] = await venue.db
+        .select({ taxpayerDomicile: taxpayer.taxpayerDomicile })
+        .from(taxpayer);
+      await venue.db.update(taxpayer).set({ taxpayerDomicile: "1 Main Street, 28013 Madrid" });
+      onTestFinished(async () => {
+        await venue.db.update(taxpayer).set({ taxpayerDomicile });
+      });
+      await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, party.tabId, {
+        revision: await withTransaction(venue.db, (tx) => readOrderRevision(tx, party.tabId)),
+        invoiceType: "F1",
+        recipient,
+      });
+    }
     const edit = await withTransaction(venue.db, (tx) => readBillEditState(tx, party.tabId));
     const printed = await send(
       venue.app,
@@ -1112,18 +1144,8 @@ describe("a payment after the ticket was issued", () => {
     }
   }
 
-  async function expectNextOriginalListsTheCash(bill: { id: string; saleId: string }) {
-    const asked = await send(venue.app, venue.cookie, "POST", `/api/sales/${bill.id}/receipt`, {});
-    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
-    const text = decodeTicket((await claimOriginal(bill.saleId)).payload);
-    expect(text).toMatch(/Efectivo\s+5,00/u);
-    expect(text).toMatch(owedLine("25,00"));
-    expect(text).not.toContain(labels.duplicate);
-  }
-
-  it("an original that cannot be laid out again never prints without a payment taken before it", async () => {
-    const bill = await billPrintedByPrintTheBill();
-    const stale = await originalOf(bill.saleId);
+  /** Pays €5 cash on the bill while laying out a receipt fails, as a broken layout would. */
+  async function payWhileLayoutFails(bill: { id: string; saleId: string }) {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
     const filed = vi.spyOn(venue.backend, "filedReceiptFor").mockImplementation(() => {
@@ -1135,58 +1157,100 @@ describe("a payment after the ticket was issued", () => {
     } finally {
       filed.mockRestore();
     }
-
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(warn).toHaveBeenCalledWith(
       "receipt.optional_document_failed",
       expect.objectContaining({ operation: "refreshWaitingOriginal", saleId: bill.saleId }),
     );
+  }
+
+  /** The waiting original was given up, never laid out again: no printer may print its bytes. */
+  async function expectOutOfDate(stale: typeof printJobs.$inferSelect) {
+    expect(await originalOf(stale.saleId!)).toMatchObject({
+      id: stale.id,
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      lastError: "receipt.out_of_date",
+      payload: stale.payload,
+    });
+    const handedOut = await claimEverythingOn(stale.printerId);
+    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
+  }
+
+  /** The job a resend queued: the original laid out again, listing the €5 cash and what is owed. */
+  async function expectResentWithTheCash(jobId: string, stale: typeof printJobs.$inferSelect) {
+    const [resent] = await venue.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(resent).toMatchObject({
+      status: "queued",
+      saleId: stale.saleId,
+      printerId: stale.printerId,
+      receiptCopy: false,
+      resendOf: stale.id,
+    });
+    expect(Buffer.from(resent!.payload!).equals(Buffer.from(stale.payload!))).toBe(false);
+    const text = decodeTicket(resent!.payload);
+    expect(text).toMatch(/Efectivo\s+5,00/u);
+    expect(text).toMatch(owedLine("25,00"));
+    expect(text).not.toMatch(owedLine("30,00"));
+    expect(text).not.toContain(labels.duplicate);
+  }
+
+  function retryOriginal(bill: { id: string }) {
+    return send(venue.app, venue.cookie, "POST", `/api/sales/${bill.id}/receipt/retry`, {});
+  }
+
+  it("an original that cannot be laid out again never prints without a payment taken before it", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const stale = await originalOf(bill.saleId);
+
+    await payWhileLayoutFails(bill);
+
     const received = await venue.db
       .select()
       .from(billPayments)
       .where(eq(billPayments.workingOrderId, bill.id));
     expect(received.map((row) => row.state)).toEqual(["received"]);
-    const handedOut = await claimEverythingOn(stale.printerId);
-    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
-    await expectNextOriginalListsTheCash(bill);
+    await expectOutOfDate(stale);
+    const shown = await send(venue.app, venue.cookie, "GET", `/api/sales/${bill.id}/receipt`);
+    expect(shown.json).toEqual({ status: "failed", jobId: stale.id, canRetry: true });
+    const retried = await retryOriginal(bill);
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    await expectResentWithTheCash(retried.json.jobId as string, stale);
   });
 
-  it("an invoice print that cannot be laid out again goes with its waiting delivery", async () => {
-    const bill = await billPrintedByPrintTheBill();
-    const stale = await originalOf(bill.saleId);
-    await withTransaction(venue.db, (tx) =>
-      tx.insert(invoiceDeliveries).values({
-        saleId: bill.saleId,
-        printJobId: stale.id,
-        requestKey: randomUUID(),
-        medium: "receipt",
-        designation: "original",
-        status: "queued",
-        generation: 1,
-        personId: venue.operatorId,
-      }),
-    );
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    onTestFinished(() => warn.mockRestore());
-    const filed = vi.spyOn(venue.backend, "filedReceiptFor").mockImplementation(() => {
-      throw new Error("layout failed");
+  it("an invoice print that cannot be laid out again keeps its waiting delivery for the resend", async () => {
+    const bill = await billPrintedByPrintTheBill({
+      taxId: "B12345674",
+      legalName: "Customer Ltd",
+      address: "2 Main Street, 28013 Madrid, Madrid",
+      countryCode: "ES",
     });
-    let paid: Awaited<ReturnType<typeof billPayment>>;
-    try {
-      paid = await billPayment(bill.id, cash("5.00"));
-    } finally {
-      filed.mockRestore();
-    }
+    const stale = await originalOf(bill.saleId);
+    const [waiting] = await venue.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.saleId, bill.saleId));
+    expect(waiting).toMatchObject({ printJobId: stale.id, medium: "receipt", status: "queued" });
 
-    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    await payWhileLayoutFails(bill);
+
+    await expectOutOfDate(stale);
     expect(
       await venue.db
         .select()
         .from(invoiceDeliveries)
         .where(eq(invoiceDeliveries.saleId, bill.saleId)),
-    ).toEqual([]);
-    const handedOut = await claimEverythingOn(stale.printerId);
-    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
+    ).toEqual([waiting]);
+    const retried = await retryOriginal(bill);
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    const jobId = retried.json.jobId as string;
+    await expectResentWithTheCash(jobId, stale);
+    expect(
+      await venue.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.saleId, bill.saleId)),
+    ).toEqual([{ ...waiting, printJobId: jobId }]);
   });
 
   it("an original whose new layout the database refuses for space never prints without the payment", async () => {
@@ -1218,9 +1282,141 @@ describe("a payment after the ticket was issued", () => {
       .from(billPayments)
       .where(eq(billPayments.workingOrderId, bill.id));
     expect(received.map((row) => row.state)).toEqual(["received"]);
-    const handedOut = await claimEverythingOn(stale.printerId);
-    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
-    await expectNextOriginalListsTheCash(bill);
+    await expectOutOfDate(stale);
+    const retried = await retryOriginal(bill);
+    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+    await expectResentWithTheCash(retried.json.jobId as string, stale);
+  });
+
+  describe("a receipt resent after a payment it does not list", () => {
+    const layOut: LayOutSaleReceipt = (tx, saleId, duplicate, printer) =>
+      layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer);
+    let adminDashboard: string | undefined;
+
+    async function printQueueResend(jobId: string, printerId?: string) {
+      adminDashboard ??= `${MANAGEMENT_COOKIE}=${
+        (
+          await withTransaction(venue.db, (tx) =>
+            startManagementSession(tx, { method: "password", personId: venue.adminId }),
+          )
+        ).token
+      }`;
+      const app = new Hono();
+      mountPrintApi(
+        app,
+        {
+          db: venue.db,
+          cfg: venue.cfg,
+          pairingMode: createPairingMode(),
+          readMembership: async () => null,
+          readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+          layOutSaleReceipt: layOut,
+          venueLocale: "es-ES",
+        },
+        () => {},
+      );
+      const response = await app.request(`/management-api/print-jobs/${jobId}/resend`, {
+        method: "POST",
+        headers: { cookie: adminDashboard, "content-type": "application/json" },
+        body: JSON.stringify(printerId === undefined ? {} : { printerId }),
+      });
+      expect(response.status, await response.clone().text()).toBe(202);
+      return ((await response.json()) as { jobId: string }).jobId;
+    }
+
+    const resends = {
+      "the till's Retry original": async (bill: { id: string }) => {
+        const retried = await retryOriginal(bill);
+        expect(retried.status, JSON.stringify(retried.json)).toBe(200);
+        return retried.json.jobId as string;
+      },
+      "the print queue's resend": (_bill: unknown, stale: typeof printJobs.$inferSelect) =>
+        printQueueResend(stale.id),
+      "the print queue's resend on its own printer": (
+        _bill: unknown,
+        stale: typeof printJobs.$inferSelect,
+      ) => printQueueResend(stale.id, stale.printerId),
+      "the automatic fresh round": async (
+        bill: { saleId: string },
+        stale: typeof printJobs.$inferSelect,
+      ) => {
+        const [sale] = await venue.db.select().from(sales).where(eq(sales.id, bill.saleId));
+        const now = new Date(Date.parse(sale!.issuedAt) + 11 * 60_000);
+        const { resent } = await startFreshRounds(venue.db, layOut, now, () => {});
+        const ours = await venue.db
+          .select()
+          .from(printJobs)
+          .where(and(eq(printJobs.resendOf, stale.id), inArray(printJobs.id, resent)));
+        expect(ours).toHaveLength(1);
+        return ours[0]!.id;
+      },
+    } as const;
+
+    it.each([
+      ["given up on its printer", "the till's Retry original"],
+      ["given up on its printer", "the print queue's resend"],
+      ["given up on its printer", "the print queue's resend on its own printer"],
+      ["given up on its printer", "the automatic fresh round"],
+      ["given up when it could not be laid out again", "the till's Retry original"],
+      ["given up when it could not be laid out again", "the print queue's resend"],
+      [
+        "given up when it could not be laid out again",
+        "the print queue's resend on its own printer",
+      ],
+    ] as const)(
+      "an original %s and resent through %s lists the payment and what is owed",
+      async (givenUp, resend) => {
+        const bill = await billPrintedByPrintTheBill();
+        const stale = await originalOf(bill.saleId);
+        if (givenUp === "given up on its printer") {
+          const [sale] = await venue.db.select().from(sales).where(eq(sales.id, bill.saleId));
+          await withTransaction(venue.db, (tx) =>
+            tx
+              .update(printJobs)
+              .set({
+                status: "failed",
+                attempts: MAX_DELIVERY_ATTEMPTS,
+                lastError: "printer.offline",
+                claimedAt: sale!.issuedAt,
+              })
+              .where(eq(printJobs.id, stale.id)),
+          );
+          expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
+          expect(Buffer.from((await originalOf(bill.saleId)).payload!)).toEqual(
+            Buffer.from(stale.payload!),
+          );
+        } else {
+          await payWhileLayoutFails(bill);
+          await expectOutOfDate(stale);
+        }
+
+        const jobId = await resends[resend](bill, stale);
+
+        await expectResentWithTheCash(jobId, stale);
+      },
+    );
+
+    it("a payment slip resent from the print queue prints the bytes it was queued with", async () => {
+      const bill = await billPrintedByPrintTheBill();
+      const before = await jobCount();
+      expect((await billPayment(bill.id, { ...cash("5.00"), printCardSlip: true })).status).toBe(
+        200,
+      );
+      const [slip] = await slipsSince(before);
+      expect(slip).toMatchObject({ saleId: null, receiptCopy: null });
+      await withTransaction(venue.db, (tx) =>
+        tx
+          .update(printJobs)
+          .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "printer.offline" })
+          .where(eq(printJobs.id, slip!.id)),
+      );
+
+      const jobId = await printQueueResend(slip!.id);
+
+      const [resent] = await venue.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+      expect(resent).toMatchObject({ resendOf: slip!.id, saleId: null, receiptCopy: null });
+      expect(Buffer.from(resent!.payload!).equals(Buffer.from(slip!.payload!))).toBe(true);
+    });
   });
 
   it.each(["taken by its printer", "tried and failed", "resent from the print queue"] as const)(

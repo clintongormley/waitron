@@ -24,7 +24,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { prepareImage, uploadImage, saveImage, renderRendition } from "@waitron/media";
 import { drawLogoRasters } from "./receipt-logo.js";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import type { Transaction } from "@waitron/db";
@@ -36,6 +36,7 @@ import {
   drawerOpens,
   invoiceDeliveries,
   invoiceSeries,
+  isReceiptPrinter,
   mediaImages,
   tenders,
   workingOrders,
@@ -44,6 +45,7 @@ import {
   printers,
   printJobs,
   readTaxpayer,
+  receiptRollColumns,
   sales,
   taxpayer,
   withTransaction,
@@ -108,6 +110,7 @@ import {
   resolveInvoicePrinter,
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
+  saleReceiptLayout,
 } from "./receipt-print.js";
 import {
   decodeTicket,
@@ -2974,17 +2977,27 @@ describe("automatic F1 receipt delivery enrollment", () => {
           .set({ status: "done" })
           .where(eq(printJobs.id, jobs[0]!.id));
         const resent = await withTransaction(suite.db, (tx) =>
-          resendInvoicePrintJob(tx, jobs[0]!.id, personId),
+          resendInvoicePrintJob(tx, saleReceiptLayout(backend, cfg), jobs[0]!.id, personId),
         );
         const [copy] = await suite.db
           .select()
           .from(printJobs)
           .where(eq(printJobs.id, resent.jobId));
+        const [roll] = await suite.db
+          .select({ ...receiptRollColumns })
+          .from(printers)
+          .where(and(isReceiptPrinter(), eq(printers.id, jobs[0]!.printerId)));
         expect(copy).toMatchObject({
           receiptCopy: true,
           resendOf: jobs[0]!.id,
-          payload: jobs[0]!.payload,
+          printerId: jobs[0]!.printerId,
+          payload: await withTransaction(suite.db, (tx) =>
+            saleReceiptLayout(backend, cfg)(tx, saleId, true, roll!),
+          ),
         });
+        expect(decodeTicket(new Uint8Array(copy!.payload!))).toContain(
+          receiptLabelsFor(LOCALE).duplicate,
+        );
       } else {
         await expect(print()).rejects.toMatchObject({ code: "invoice_delivery.active" });
         expect(await suite.db.select().from(printJobs)).toEqual([]);

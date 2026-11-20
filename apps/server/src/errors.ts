@@ -1232,6 +1232,10 @@ declare module "@waitron/shared" {
     /** A receipt-language change refused because `count` open orders hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     "receipt.not_printed": Record<string, never>;
+    /** An original receipt ended where it waited because a payment taken before any printer took
+     * it could not be added to it. Not thrown; stored as the job's `last_error` by
+     * `refreshWaitingOriginals`. */
+    "receipt.out_of_date": Record<string, never>;
     /** A receipt, original or copy, asked of a device with no active receipt printer. */
     "receipt.no_printer": Record<string, never>;
     /**

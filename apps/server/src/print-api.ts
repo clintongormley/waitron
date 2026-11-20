@@ -1891,7 +1891,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         sessionId,
         (tx, personId) =>
           printerId === undefined
-            ? resendInvoicePrintJob(tx, id, personId, deps.now?.())
+            ? resendInvoicePrintJob(tx, deps.layOutSaleReceipt, id, personId, deps.now?.())
             : reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
                 seen,
               }),

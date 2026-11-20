@@ -94,6 +94,7 @@ import {
   readOriginalReceiptPrint,
   resolveDrawerPrinter,
   resolveInvoicePrinter,
+  saleReceiptLayout,
   type OriginalReceiptPrint,
 } from "./receipt-print.js";
 import { listZones } from "./tables.js";
@@ -2601,7 +2602,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         if (!original.canRetry)
           throw new AppError("print_job.not_resendable", { id: original.jobId });
         if (withdrawn) throw new AppError("invoice_delivery.printer_invalid", {});
-        return resendInvoicePrintJob(tx, original.jobId, session.personId);
+        return resendInvoicePrintJob(
+          tx,
+          saleReceiptLayout(deps.backend, deps.cfg),
+          original.jobId,
+          session.personId,
+        );
       });
       return c.json(result);
     }),

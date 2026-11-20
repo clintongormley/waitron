@@ -34,6 +34,7 @@ import { codeOf } from "@waitron/server-kit";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 const ownOriginal = alias(printJobs, "owed_own_original");
 const laterOriginal = alias(printJobs, "owed_later_original");
@@ -137,6 +138,7 @@ const dueAt = (claimedAt: string) => Date.parse(claimedAt) + ROUND_AFTER_MS;
  */
 export async function startFreshRounds(
   db: Database,
+  layOut: LayOutSaleReceipt,
   now: Date,
   log: Logger,
   signal?: AbortSignal,
@@ -157,7 +159,7 @@ export async function startFreshRounds(
         if (signal?.aborted) return undefined;
         const [still] = await givenUpOriginals(tx, now, id);
         if (still === undefined || dueAt(still.claimedAt!) > now.getTime()) return undefined;
-        return resendInvoicePrintJob(tx, id, null, now);
+        return resendInvoicePrintJob(tx, layOut, id, null, now);
       });
       if (retry !== undefined) resent.push(retry.jobId);
     } catch (error) {
@@ -170,6 +172,7 @@ export async function startFreshRounds(
 
 export function owedReceiptJob(deps: {
   db: Database;
+  layOutSaleReceipt: LayOutSaleReceipt;
   isPrimary: () => boolean;
   log: Logger;
 }): JobDefinition {
@@ -182,7 +185,13 @@ export function owedReceiptJob(deps: {
     maxSleepMs: LOOK_AGAIN_MS,
     backoff: { firstMs: ROUND_EVERY_MS, maxMs: ROUND_EVERY_MS },
     async pass({ now, signal }) {
-      const { resent, nextDueAt } = await startFreshRounds(deps.db, now, deps.log, signal);
+      const { resent, nextDueAt } = await startFreshRounds(
+        deps.db,
+        deps.layOutSaleReceipt,
+        now,
+        deps.log,
+        signal,
+      );
       for (const jobId of resent) deps.log("info", "receipt.fresh_round", { jobId });
       return { nextDueAt };
     },

@@ -301,7 +301,7 @@ import { createPageTestPages } from "./page-test-pages.js";
 import { configureDemoPrinter, demoPrinterJob } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
-import { layOutSaleReceipt } from "./receipt-print.js";
+import { saleReceiptLayout } from "./receipt-print.js";
 import { readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { invoiceMail } from "./invoice-mail.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -3228,8 +3228,7 @@ async function bootServer(
         receiptQrText: nodeBackend.receiptQrText,
         readInvoiceDocument: (tx, saleId) =>
           readInvoiceDocument(nodeBackend, tx, tradingContext, saleId),
-        layOutSaleReceipt: (tx, saleId, duplicate, printer) =>
-          layOutSaleReceipt(nodeBackend, tx, tradingContext, saleId, duplicate, printer),
+        layOutSaleReceipt: saleReceiptLayout(nodeBackend, tradingContext),
         testPages,
       },
       log,
@@ -4522,6 +4521,7 @@ async function bootServer(
   jobRunner.add(
     owedReceiptJob({
       db,
+      layOutSaleReceipt: saleReceiptLayout(nodeBackend, tradingContext),
       isPrimary: () => holders.singletonRole.current === "primary",
       log,
     }),
