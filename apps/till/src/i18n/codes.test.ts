@@ -1052,6 +1052,19 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
   );
 });
 
+it("sends staff to Correct invoice on the table's receipt once it took the advance off, naming it", () => {
+  const final = { invoiceNumber: "A/45" };
+  expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
+    "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+  );
+  expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+  );
+  expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
+    /^This payment on account was already taken off the table's receipt\. /,
+  );
+});
+
 it("tells staff an open correction carries on from Correct invoice", () => {
   expect(codeMessage("invoice_correction.already_open", "en")).toBe(
     "A correction of this invoice is under way. Open Correct invoice to carry on with it.",

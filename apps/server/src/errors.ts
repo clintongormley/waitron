@@ -877,6 +877,13 @@ declare module "@waitron/shared" {
     /** A payer asked for their own receipt for part of a bill set for a full invoice, which the
      * till cannot issue as an advance yet. */
     "advance.full_invoice_not_built": { workingOrderId: string };
+    /** A refund or correction of the advance `saleId` after the invoice `finalSaleId`, numbered
+     * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice. */
+    "advance.taken_off_final_invoice": {
+      saleId: string;
+      finalSaleId: string;
+      invoiceNumber: string;
+    };
     /**
      * A payment was asked of a bill with nothing left to pay and no card pending on it, or Print
      * the bill of a bill its payments already cover, that has no dishes, or that was cancelled.
@@ -961,7 +968,8 @@ declare module "@waitron/shared" {
     "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
     "tender.refund_exceeds_cancelled": { tenderId: string; cancelled: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
-     * `invoiceNumber`) took: a payment on account is not refunded this way. */
+     * `invoiceNumber`) took: a payment on account is not refunded this way. Once an invoice took
+     * it off, `advance.taken_off_final_invoice` instead. */
     "tender.refund_of_advance": { tenderId: string; saleId: string; invoiceNumber: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
@@ -976,7 +984,8 @@ declare module "@waitron/shared" {
      */
     "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
     /** A bill refund of a payment that paid for its own ticket, an advance (`saleId`, numbered
-     * `invoiceNumber`): a payment on account is not refunded this way. */
+     * `invoiceNumber`): a payment on account is not refunded this way. Once an invoice took
+     * it off, `advance.taken_off_final_invoice` instead. */
     "bill.payment_has_ticket": { paymentId: string; saleId: string; invoiceNumber: string };
     /**
      * A standalone-terminal refund lacks explicit confirmation, or the connected provider offers

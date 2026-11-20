@@ -407,6 +407,14 @@ stops and reports to you rather than editing the test.
    what the table's invoice cannot take. The plan goes ahead with the recommendation unless you
    say otherwise.
 
+   **Answered 2026-11-20 14:26 (owner): refuse it.** "Once a table's final invoice exists, the till
+   refuses to refund an advance on its own", naming Correct invoice on the table's invoice, which
+   takes the amount off the dishes at their own rates; before that invoice, refunding an advance
+   works as planned. Built as `advance.taken_off_final_invoice` (`advance-taken-off.ts`), refused
+   by Correct invoice on the advance's ticket and by a plain or bill refund of its money, and still
+   refused after a whole credit of the table's invoice. The €10 beyond what the table's invoice
+   carries therefore has no way back through the till.
+
 Your 21:00 answers settled the last three earlier questions: the rest's invoice lists the dishes
 and takes the advance off by its number and amount (example 1); the till's "own receipt" for an
 amount is built now; every advance is charged at 10%, with Task 1.0 at AEAT's test service and the

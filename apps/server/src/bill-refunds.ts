@@ -11,6 +11,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
+import { refuseTakenOffAdvance } from "./advance-taken-off.js";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { IssuanceRefusedError } from "@waitron/fiscal";
@@ -640,12 +641,14 @@ async function refundOverrideToCheck(
   );
 }
 
-/** A payment that paid an advance is not refunded from the bill. */
+/** A payment that paid an advance is not refunded from the bill; once an invoice took the advance
+ * off, the refusal names that invoice. */
 async function refuseAdvanceRefund(
   tx: Transaction,
   paymentId: string,
   saleId: string,
 ): Promise<never> {
+  await refuseTakenOffAdvance(tx, saleId);
   const [ticket] = await tx
     .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
     .from(sales)

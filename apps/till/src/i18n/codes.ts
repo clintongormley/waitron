@@ -661,6 +661,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
     es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   },
+  "advance.taken_off_final_invoice": {
+    en: "This payment on account was already taken off the table's receipt{invoiceNumber}. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+  },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
     es: "Este pago no se puede devolver aquí. Vuelve a cargar la transacción y revisa sus pagos",
@@ -1121,7 +1125,11 @@ export function codeMessage(
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
   const message = pickLocale(entry, locale);
-  if (code === "tender.refund_of_advance" || code === "bill.payment_has_ticket")
+  if (
+    code === "tender.refund_of_advance" ||
+    code === "bill.payment_has_ticket" ||
+    code === "advance.taken_off_final_invoice"
+  )
     return message.replace(
       "{invoiceNumber}",
       typeof params?.invoiceNumber === "string" ? ` ${params.invoiceNumber}` : "",
