@@ -101,10 +101,11 @@ export interface InvoiceCorrectionView {
     | null;
 }
 
-export type InvoiceCorrectionDeps = Pick<
-  TenderRefundDeps,
-  "db" | "backend" | "clock" | "admission" | "attendance" | "log"
->;
+export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
+
+/** What {@link closeInvoiceCorrection} needs besides, to issue the bill of an advance it ends. */
+export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
+  Pick<TenderRefundDeps, "db" | "admission" | "log">;
 
 const ZERO = decimal("0.00");
 
@@ -404,7 +405,6 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
-  await issueAdvanceBill(tx, deps, cfg, saleId, endedBy);
   if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;
@@ -454,7 +454,7 @@ const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
  */
 export async function closeInvoiceCorrection(
   tx: Transaction,
-  deps: InvoiceCorrectionDeps,
+  deps: InvoiceCorrectionEndDeps,
   cfg: DeviceRequestConfig,
   correctionId: string,
   actor: { personId: string },
@@ -480,30 +480,30 @@ export async function closeInvoiceCorrection(
     .returning({ id: invoiceCorrections.id });
   if (ended.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  // Refused when issuing the table's invoice is refused (`clock.unconfirmed`, say); retrying once
+  // that cause clears issues it.
   await issueAdvanceBill(tx, deps, cfg, correction.originalSaleId, actor.personId);
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 
 /**
  * When `saleId` is an advance, issues its bill's invoice if the bill is paid off: a payment taken
- * while the advance's correction was open issued none (`advance.correction_open`), and its money
- * has already moved.
+ * while the advance's correction was open issued none, and its money has already moved. Filing
+ * needs no such step: it raises what the bill owes by the money given back.
  */
 async function issueAdvanceBill(
   tx: Transaction,
-  deps: InvoiceCorrectionDeps,
+  deps: InvoiceCorrectionEndDeps,
   cfg: DeviceRequestConfig,
   saleId: string,
-  operatorId: string | null,
+  operatorId: string,
 ): Promise<void> {
   const [advance] = await tx
     .select({ workingOrderId: billAdvances.workingOrderId })
     .from(billAdvances)
     .where(eq(billAdvances.advanceSaleId, saleId));
   if (advance === undefined) return;
-  await issueIfFullyPaid(tx, deps, cfg, advance.workingOrderId, operatorId ?? undefined, {
-    moneyMoved: true,
-  });
+  await issueIfFullyPaid(tx, deps, cfg, advance.workingOrderId, operatorId, { moneyMoved: true });
 }
 
 /** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`

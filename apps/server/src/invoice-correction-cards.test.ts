@@ -49,13 +49,7 @@ afterEach(async () => {
   await stopTenderRefundResolvers(v.db);
 });
 
-const deps = () => ({
-  db: v.db,
-  backend: v.backend,
-  clock: v.deps.clock,
-  admission: testTradingAdmission(),
-  attendance: recordAttendanceFact,
-});
+const deps = () => ({ backend: v.backend, clock: v.deps.clock, attendance: recordAttendanceFact });
 const rectify = { authorizedBy: "", permission: "sale.rectify", viaOverride: false };
 
 /** A €24.20 ticket paid €14.20 in cash, then €10.00 on the reader; its sale and card payment. */
@@ -182,7 +176,15 @@ const fileNow = (correctionId: string, expectedSplit: Awaited<ReturnType<typeof 
     ),
   );
 const close = (correctionId: string) =>
-  inTx(v, (tx) => closeInvoiceCorrection(tx, deps(), v.cfg, correctionId, { personId: v.adminId }));
+  inTx(v, (tx) =>
+    closeInvoiceCorrection(
+      tx,
+      { ...deps(), db: v.db, admission: testTradingAdmission() },
+      v.cfg,
+      correctionId,
+      { personId: v.adminId },
+    ),
+  );
 const salesCount = () => v.db.all<{ n: number }>(sql`select count(*) as n from sales`)[0]!.n;
 
 describe("a correction's connected card legs", () => {

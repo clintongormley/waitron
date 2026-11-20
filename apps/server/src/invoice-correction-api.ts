@@ -18,7 +18,7 @@ import {
   previewInvoiceCorrection,
   readInvoiceCorrection,
   readInvoiceCorrectionLines,
-  type InvoiceCorrectionDeps,
+  type InvoiceCorrectionEndDeps,
   type InvoiceCorrectionRequest,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
@@ -38,7 +38,7 @@ export function mountInvoiceCorrectionApi(
   log: Logger,
   pinThrottle: PinThrottle,
 ): void {
-  const correctionDeps: InvoiceCorrectionDeps = {
+  const correctionDeps: InvoiceCorrectionEndDeps = {
     db: deps.db,
     backend: deps.backend,
     clock: deps.clock,

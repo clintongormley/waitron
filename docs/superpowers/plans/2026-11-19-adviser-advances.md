@@ -419,9 +419,10 @@ stops and reports to you rather than editing the test.
    A correction of an advance still open holds the table's invoice back
    (`advance.correction_open`, `refuseWhileAdvanceCorrectionOpen` in `bill-advances.ts`), so it
    cannot file a credit note after that invoice took the advance off. A reader payment started
-   before the correction keeps its money with no invoice; when the correction is filed, closed or
+   before the correction keeps its money with no invoice; when the correction is closed or
    discarded, the table's invoice is issued if the bill is then paid off (`issueAdvanceBill` in
-   `invoice-corrections.ts`; tested with Discard).
+   `invoice-corrections.ts`; tested with Discard), and ending it is refused when issuing that
+   invoice is refused, as while the box waits for its time.
 
 Your 21:00 answers settled the last three earlier questions: the rest's invoice lists the dishes
 and takes the advance off by its number and amount (example 1); the till's "own receipt" for an

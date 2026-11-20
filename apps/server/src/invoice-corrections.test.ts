@@ -176,10 +176,8 @@ async function payFor(id: string, parts: readonly (string | { card: string })[],
 }
 
 const deps = (clock: TrustedClock = venue.clock) => ({
-  db: venue.db,
   backend: venue.backend,
   clock,
-  admission: testTradingAdmission(),
   attendance: recordAttendanceFact,
 });
 const actor = () => ({
@@ -1346,7 +1344,13 @@ async function fileNow(
 
 async function close(correctionId: string, { backend = venue.backend, personId = managerId } = {}) {
   return inTx(venue, (tx) =>
-    closeInvoiceCorrection(tx, { ...deps(), backend }, venue.cfg, correctionId, { personId }),
+    closeInvoiceCorrection(
+      tx,
+      { ...deps(), backend, db: venue.db, admission: testTradingAdmission() },
+      venue.cfg,
+      correctionId,
+      { personId },
+    ),
   );
 }
 
