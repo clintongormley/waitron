@@ -1024,8 +1024,8 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         pageLanguage: "ca-ES",
       });
       const text = decodeTicket(new Uint8Array(resent.payload!));
-      expect(text).toMatch(/Base imposable/u);
-      expect(text).not.toMatch(/Base imponible/u);
+      expect(text).toContain(receiptLabelsFor("ca-ES").taxableBase);
+      expect(text).not.toContain(receiptLabelsFor("es-ES").taxableBase);
       expect(await saleCount()).toBe(1);
       expect(await fiscalRecordCount()).toBe(1);
       expect(await drawerOpensFor(cfg)).toEqual([]);

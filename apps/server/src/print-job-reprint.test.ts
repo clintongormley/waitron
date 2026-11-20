@@ -13,6 +13,7 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedCompletedCashRefund } from "@waitron/db/testing/seed.js";
@@ -661,8 +662,12 @@ describe("the print queue's resend to another printer", () => {
 });
 
 describe("a receipt queued in a language other than the sale's", () => {
-  const catalan = (text: string) => /Tipus +Base/u.test(text) && !/Tipo +Base/u.test(text);
-  const spanish = (text: string) => /Tipo +Base/u.test(text) && !/Tipus +Base/u.test(text);
+  const heading = (locale: string) => {
+    const labels = receiptLabelsFor(locale);
+    return new RegExp(`\\b${labels.taxRateColumn} +${labels.taxBaseColumn}\\b`, "u");
+  };
+  const catalan = (text: string) => heading("ca-ES").test(text) && !heading("es-ES").test(text);
+  const spanish = (text: string) => heading("es-ES").test(text) && !heading("ca-ES").test(text);
 
   /** A paid bill's receipt, original or copy, queued through the receipt helpers in `language`. */
   async function printedIn(language: string | undefined, kind: "original" | "copy") {
