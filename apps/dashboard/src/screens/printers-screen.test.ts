@@ -9807,7 +9807,7 @@ describe("Bluetooth calibration transport outcomes", () => {
   for (const theme of ["light", "dark"] as const) {
     for (const locale of ["en", "es-ES"] as const) {
       it.each([390, 1280])(
-        `shows transport failures and unpaired jobs in ${locale} ${theme} at %ipx`,
+        `shows a transport failure in ${locale} ${theme} at %ipx`,
         async (width) => {
           const before = currentLocale();
           await page.viewport(width, 900);
@@ -9815,22 +9815,12 @@ describe("Bluetooth calibration transport outcomes", () => {
           try {
             const { el } = await mountWith(
               {
-                listRecentJobs: vi.fn().mockResolvedValue([
-                  ended,
-                  job({
-                    id: "j12",
-                    status: "failed",
-                    attempts: 5,
-                    lastError: "printer.unpaired",
-                  }),
-                ]),
+                listRecentJobs: vi.fn().mockResolvedValue([ended]),
               },
               theme,
             );
             expect(text(el, "[data-test=job-error-j11]")).toBe(TRANSPORT_FAILURE);
             expect(text(el, "[data-test=job-attempts-j11]")).toBe("5");
-            expect(text(el, "[data-test=job-error-j12]")).toBe(codeMessage("printer.unpaired"));
-            expect(text(el, "[data-test=job-attempts-j12]")).toBe("—");
             await page.screenshot({
               path: `__screenshots__/a984-jobs-${theme}-${locale}-${width}.png`,
             });
@@ -9842,66 +9832,6 @@ describe("Bluetooth calibration transport outcomes", () => {
       );
     }
   }
-});
-
-describe("A job ended because its printer was unpaired", () => {
-  const bluetoothPrinter: Printer = {
-    ...printers[0]!,
-    id: "p5",
-    name: "Bar Bluetooth",
-    transport: "bluetooth",
-    host: null,
-    port: null,
-    localKey: "5A:4A:45:D4:FB:BB",
-  };
-  const unpaired: PrintJobRow = {
-    id: "j11",
-    printerId: "p5",
-    printerName: "Bar Bluetooth",
-    status: "failed",
-    canResend: true,
-    attempts: 5,
-    lastError: "printer.unpaired",
-    createdAt: "2026-09-29T17:00:00.000Z",
-    deliveredAt: null,
-    reprintRule: "own",
-    reprintPrinterIds: [],
-    stuck: false,
-  };
-
-  async function mountWithUnpaired() {
-    const api = stubApi({
-      listPrinters: vi.fn().mockResolvedValue([...printers, bluetoothPrinter]),
-      listRecentJobs: vi.fn().mockResolvedValue([unpaired, jobs[0]]),
-    });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    return el;
-  }
-
-  it("words the job's reason, and counts no attempts for it", async () => {
-    const el = await mountWithUnpaired();
-
-    expect(text(el, "[data-test=job-error-j11]")).toBe(
-      "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
-    );
-    expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
-    expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
-  });
-
-  it("words the job's reason in English", async () => {
-    const before = currentLocale();
-    setLocale("en");
-    try {
-      const el = await mountWithUnpaired();
-
-      expect(text(el, "[data-test=job-error-j11]")).toBe(
-        "The printer was unpaired, so this job will not be retried.",
-      );
-    } finally {
-      setLocale(before);
-    }
-  });
 });
 
 describe("Print test page in a printer's row menu", () => {
@@ -10595,8 +10525,8 @@ describe("Deleting a printer", () => {
     }
   });
 
-  it.each(["failed", "unanswered"] as const)(
-    "warns about a %s unpair after removing the row and closing Add",
+  it.each(["failed", "unanswered", "page left"] as const)(
+    "follows an unpair after Delete (%s)",
     async (outcome) => {
       const address = "00:11:22:33:44:55";
       const command = {
@@ -10616,6 +10546,10 @@ describe("Deleting a printer", () => {
         paired: true as const,
         lastSeenAt: "2026-11-20T18:00:00.000Z",
       };
+      const removed = { ...reported, alreadyRegistered: false, printerId: null };
+      const failed = (id: string): DiscoveredPrinter[] => [
+        { ...removed, bluetoothCommand: { ...command, id, state: "failed" } },
+      ];
       const discover = vi.fn(async (): Promise<DiscoveredPrinter[]> => [reported]);
       const { api, el } = await mounted({
         listPrinters: vi.fn(async (): Promise<Printer[]> => [
@@ -10636,33 +10570,43 @@ describe("Deleting a printer", () => {
       try {
         confirmOf(el).click();
         await flush(el);
-        discover.mockResolvedValue([{ ...reported, alreadyRegistered: false, printerId: null }]);
+        discover.mockResolvedValue([removed]);
         q(el, "[data-test=open-add-printer]")!.click();
         await flush(el);
         expect(q(el, '[data-test="forget-device-a1:00:11:22:33:44:55"]')).toBeNull();
         await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
 
-        discover.mockResolvedValue([
-          {
-            ...reported,
-            printerId: null,
-            alreadyRegistered: false,
-            bluetoothCommand: { ...command, id: "older", state: "failed" },
-          },
-        ]);
+        if (outcome === "failed") {
+          discover.mockRejectedValueOnce({ code: "connection.failed" });
+          await vi.advanceTimersByTimeAsync(3000);
+          await flush(el);
+          expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+        }
+
+        discover.mockResolvedValue(failed("older"));
         await vi.advanceTimersByTimeAsync(3000);
         await flush(el);
         expect(q(el, "[data-test=bluetooth-delete-warning]")).toBeNull();
-        if (outcome === "failed")
-          discover.mockResolvedValue([
-            {
-              ...reported,
-              printerId: null,
-              alreadyRegistered: false,
-              bluetoothCommand: { ...command, state: "failed" },
-            },
-          ]);
-        await vi.advanceTimersByTimeAsync(outcome === "failed" ? 3000 : 9000);
+
+        if (outcome === "page left") {
+          const reads = discover.mock.calls.length;
+          el.remove();
+          await vi.advanceTimersByTimeAsync(3000);
+          expect(discover).toHaveBeenCalledTimes(reads);
+          return;
+        }
+
+        if (outcome === "failed") {
+          expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+          discover.mockResolvedValue(failed(command.id));
+          await vi.advanceTimersByTimeAsync(3000);
+        } else {
+          const stalled = deferred<DiscoveredPrinter[]>();
+          discover.mockReturnValue(stalled.promise);
+          await vi.advanceTimersByTimeAsync(9000);
+          expect(q(el, "[data-test=bluetooth-delete-warning]")).not.toBeNull();
+          stalled.resolve([]);
+        }
         await flush(el);
         expect(text(el, "[data-test=bluetooth-delete-warning]")).toContain("Kitchen box");
         expect(q(el, "[data-test=printer-row-p1]")).toBeNull();

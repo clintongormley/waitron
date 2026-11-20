@@ -23,7 +23,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
 import { closeStationForToday } from "@waitron/venue-service";
 import { withStationDishes } from "./station-closing.js";
@@ -163,7 +162,7 @@ describe("station output status", () => {
     expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at))).toEqual([]);
   });
 
-  it("scopes printer trouble to the requested station and excludes Unpair", async () => {
+  it("scopes printer trouble to the requested station", async () => {
     const f = await setup();
     const one = await f.printer(f.grill, "Grill printer");
     const two = await f.printer(f.bar, "Bar printer");
@@ -172,13 +171,6 @@ describe("station output status", () => {
     expect(
       await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at, [f.grill])),
     ).toMatchObject([{ printerId: one }]);
-    await suite.db
-      .update(printJobs)
-      .set({ lastError: PRINTER_UNPAIRED })
-      .where(eq(printJobs.printerId, one));
-    expect(await withTransaction(suite.db, (tx) => stationPrintersDown(tx, at, [f.grill]))).toEqual(
-      [],
-    );
   });
 
   it("keeps a given-up ticket down overnight and ignores a young queued ticket", async () => {

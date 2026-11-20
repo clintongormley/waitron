@@ -389,10 +389,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "No result was reported. The drawer may have opened. This command will not be retried.",
     es: "No se recibió el resultado. El cajón puede haberse abierto. Esta orden no se volverá a intentar.",
   },
-  "printer.unpaired": {
-    en: "The printer was unpaired, so this job will not be retried.",
-    es: "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
-  },
   "printer.deleted": {
     en: "The printer was deleted, so this job will not be retried.",
     es: "La impresora se eliminó, así que este trabajo no se volverá a intentar.",

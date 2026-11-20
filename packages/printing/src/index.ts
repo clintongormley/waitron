@@ -49,7 +49,6 @@ export {
 export type { PaperWidth, Resolution, TextGrid } from "./layout.js";
 export {
   MAX_DELIVERY_ATTEMPTS,
-  PRINTER_UNPAIRED,
   PRINT_RETRY_MAX_WAIT_MS,
   PULL_BATCH_LIMIT,
   claimPrintJobs,

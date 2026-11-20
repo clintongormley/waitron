@@ -175,9 +175,6 @@ export async function claimPrintJobs(
   });
 }
 
-/** A persisted job reason for a Bluetooth printer whose waiting job ended at unpairing. */
-export const PRINTER_UNPAIRED = "printer.unpaired";
-
 /** Invoice receipts report through their token-checking adapter. */
 export async function reportPrintJob(
   tx: Transaction,
