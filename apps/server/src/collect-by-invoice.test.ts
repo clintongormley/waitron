@@ -320,16 +320,21 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   it("refuses a manual tip on an issued bill while tips are off", async () => {
     const { billId, saleId } = await correctedCake();
     await expect(
-      collectOrder(
-        {
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-          admission: testTradingAdmission(),
-        },
+      takeBillPayment(
+        paymentDeps(),
         { ...venue.cfg, tipsEnabled: false },
-        { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
-        venue.operatorId,
+        billId,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "15.58",
+          method: "card",
+          entry: "manual",
+          applied: "15.58",
+          addedTip: "0.30",
+          tip: "0.30",
+        },
+        await operator(),
       ),
     ).rejects.toMatchObject({ code: "bill.tip_not_allowed", params: { chargeable: "15.58" } });
     expect(await tendersOf(saleId)).toEqual([]);
@@ -340,16 +345,22 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     async (tipsEnabled) => {
       const { billId } = await correctedCake({ total: "-18.00", base: "14.88" });
       await expect(
-        collectOrder(
-          {
-            db: venue.db,
-            backend: venue.backend,
-            clock: venue.clock,
-            admission: testTradingAdmission(),
-          },
+        closeZeroBill(
+          paymentDeps(),
           { ...venue.cfg, tipsEnabled },
-          { id: billId, lines: [], tender: { method: "card", amount: "18.00", addedTip: "0.30" } },
-          venue.operatorId,
+          billId,
+          {
+            expectedEdit: await readBillEditState(venue.db, billId),
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "0.00",
+            method: "card",
+            entry: "manual",
+            applied: "0.00",
+            addedTip: "0.30",
+            tip: "0.30",
+          },
+          await operator(),
         ),
       ).rejects.toMatchObject({ code: "bill.tip_not_allowed" });
       expect(await statusOf(venue, billId)).toBe("placed");
