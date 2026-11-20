@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtSwitch } from "@waitron/ui/src/components/wt-switch.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, declareTouchScreen, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -11,8 +11,10 @@ import { PRESS_BUZZ_STORAGE_KEY, setPressBuzz } from "../press-buzz-choice.js";
 
 let originalLocale = currentLocale();
 let originalViewport = { width: 0, height: 0 };
+let forgetTouchScreen = (): void => {};
 
 beforeEach(async () => {
+  forgetTouchScreen = declareTouchScreen();
   originalLocale = currentLocale();
   originalViewport = { width: window.innerWidth, height: window.innerHeight };
   setLocale("en-GB");
@@ -24,6 +26,7 @@ afterEach(async () => {
   setPressBuzz(true);
   window.localStorage.removeItem(PRESS_BUZZ_STORAGE_KEY);
   delete (navigator as { vibrate?: unknown }).vibrate;
+  forgetTouchScreen();
   setLocale(originalLocale);
   await page.viewport(originalViewport.width, originalViewport.height);
 });
@@ -113,6 +116,26 @@ describe("the press buzz switch", () => {
     expect(switchIn(nameMenu(tillShell))).toBeNull();
   });
 
+  it("is not drawn where the browser can vibrate but the device has no touch screen", async () => {
+    forgetTouchScreen = declareTouchScreen(0);
+    Object.defineProperty(navigator, "vibrate", { value: () => true, configurable: true });
+    const { el } = await handheld();
+    expect(switchIn(moreMenu(el))).toBeNull();
+    expect(moreMenu(el).querySelector("[data-test=theme-choices]")).not.toBeNull();
+    cleanupWidgets();
+    const { el: tillShell } = await till();
+    expect(switchIn(nameMenu(tillShell))).toBeNull();
+  });
+
+  it("is drawn where the browser can vibrate and the device has a touch screen", async () => {
+    Object.defineProperty(navigator, "vibrate", { value: () => true, configurable: true });
+    const { el } = await handheld();
+    expect(switchIn(moreMenu(el))).not.toBeNull();
+    cleanupWidgets();
+    const { el: tillShell } = await till();
+    expect(switchIn(nameMenu(tillShell))).not.toBeNull();
+  });
+
   it("follows another tab's choice and another tab clearing local storage while More is open", async () => {
     const { el } = await handheld();
     const more = moreMenu(el);
@@ -156,7 +179,7 @@ describe("the press buzz switch", () => {
     const vibrate = vi.fn(() => true);
     const root = document.createElement("div");
     document.body.append(root);
-    const remove = installPressBuzz(root, { vibrate });
+    const remove = installPressBuzz(root, { vibrate, maxTouchPoints: 1 });
     try {
       const button = document.createElement("button");
       root.append(button);

@@ -12,7 +12,7 @@ beforeEach(() => {
   root = document.createElement("div");
   document.body.append(root);
   vibrate = vi.fn(() => true);
-  remove = installPressBuzz(root, { vibrate });
+  remove = installPressBuzz(root, { vibrate, maxTouchPoints: 1 });
 });
 
 afterEach(() => {
@@ -121,10 +121,22 @@ test("a press outside any button does not buzz", () => {
 
 test("a browser without vibration ignores the press", () => {
   remove();
-  remove = installPressBuzz(root, {});
+  remove = installPressBuzz(root, { maxTouchPoints: 1 });
   const button = document.createElement("button");
   root.append(button);
   expect(() => press(button)).not.toThrow();
+  expect(vibrate).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["reports no touch points", { maxTouchPoints: 0 }],
+  ["does not report touch points", {}],
+])("a browser that can vibrate but %s ignores the press", (_, touch) => {
+  remove();
+  remove = installPressBuzz(root, { vibrate, ...touch });
+  const button = document.createElement("button");
+  root.append(button);
+  press(button);
   expect(vibrate).not.toHaveBeenCalled();
 });
 
@@ -139,17 +151,38 @@ test("removing the listener stops the buzz", () => {
 test("by default it buzzes through the browser's own navigator", () => {
   remove();
   const ownVibrate = vi.spyOn(navigator, "vibrate").mockReturnValue(true);
-  remove = installPressBuzz(root);
-  const button = document.createElement("button");
-  root.append(button);
-  press(button);
+  Object.defineProperty(navigator, "maxTouchPoints", { value: 1, configurable: true });
+  try {
+    remove = installPressBuzz(root);
+    const button = document.createElement("button");
+    root.append(button);
+    press(button);
+  } finally {
+    delete (navigator as { maxTouchPoints?: unknown }).maxTouchPoints;
+  }
   expect(ownVibrate.mock.calls).toEqual([[15]]);
+  ownVibrate.mockRestore();
+});
+
+test("by default it stays still on the browser's own navigator without a touch screen", () => {
+  remove();
+  const ownVibrate = vi.spyOn(navigator, "vibrate").mockReturnValue(true);
+  Object.defineProperty(navigator, "maxTouchPoints", { value: 0, configurable: true });
+  try {
+    remove = installPressBuzz(root);
+    const button = document.createElement("button");
+    root.append(button);
+    press(button);
+  } finally {
+    delete (navigator as { maxTouchPoints?: unknown }).maxTouchPoints;
+  }
+  expect(ownVibrate).not.toHaveBeenCalled();
   ownVibrate.mockRestore();
 });
 
 test("a press does not buzz while the buzz is turned off", () => {
   remove();
-  remove = installPressBuzz(root, { vibrate }, () => false);
+  remove = installPressBuzz(root, { vibrate, maxTouchPoints: 1 }, () => false);
   const button = document.createElement("button");
   root.append(button);
   press(button);
@@ -159,7 +192,7 @@ test("a press does not buzz while the buzz is turned off", () => {
 test("the choice is read at each press", () => {
   remove();
   let on = true;
-  remove = installPressBuzz(root, { vibrate }, () => on);
+  remove = installPressBuzz(root, { vibrate, maxTouchPoints: 1 }, () => on);
   const button = document.createElement("button");
   root.append(button);
   press(button);
@@ -170,7 +203,7 @@ test("the choice is read at each press", () => {
 
 test("by default it follows the stored choice", () => {
   remove();
-  remove = installPressBuzz(root, { vibrate });
+  remove = installPressBuzz(root, { vibrate, maxTouchPoints: 1 });
   const button = document.createElement("button");
   root.append(button);
   press(button);

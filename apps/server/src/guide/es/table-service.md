@@ -476,9 +476,9 @@ Inicio abre **Sala** y Fin abre la última mesa.
 Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
 Todo lo demás está en **Más** (☰): tu nombre, con las acciones de fichaje si fichas en este
 dispositivo, cuando no cabe en la barra, lo que en un móvil ocurre siempre; las pantallas que
-permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma**, **Tema** y, si el
-navegador de este dispositivo admite la vibración, **Vibrar al pulsar un botón**, bajo el título
-**Ajustes**; **Acerca de Waitron**; **Salir**; y, mientras el local tiene un logotipo, **Con la
+permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma**, **Tema** y, si este
+dispositivo tiene pantalla táctil y su navegador admite la vibración, **Vibrar al pulsar un
+botón**, bajo el título **Ajustes**; **Acerca de Waitron**; **Salir**; y, mientras el local tiene un logotipo, **Con la
 tecnología de Waitron** debajo.
 
 ## Tomar un pedido en un móvil {#phone-order}
