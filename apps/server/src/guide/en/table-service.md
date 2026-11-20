@@ -82,6 +82,9 @@ Press **Done** or close the window to carry on. Unless you emailed it, the recei
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
 not printed by the next day, print it from the sale. If the device has no receipt printer, nothing
 prints: choose one or send the email before closing. You close the table separately.
+After a bill is printed with **Print the bill**, the window after the last payment offers a copy
+instead of the original, which printed with the bill; print the copy only if the guest asks for
+another receipt.
 For a document later, open the sale and choose **Print/Reprint**.
 
 ## Check a card before cancelling {#cancel-pending-card}
@@ -165,13 +168,19 @@ If that printer is unavailable, choose again. When you open the printer list, a 
 printer starts selected.
 Use **Refresh printers** when none are listed, or **Cancel** to leave without printing.
 
-## Avoid duplicate card slips {#reader-slips}
+## Payment slips {#reader-slips}
 
-Select **Print card slip** before taking the card if the payer wants one. It starts off for each payer and prints after the card is confirmed. If the reader answer is unclear or the box restarts before printing, use a copy instead.
+A payment slip is optional; the receipt or invoice is not. If the payer wants a slip, turn on
+**Print payment slip** before taking the payment, by cash, **Other card machine** or card reader.
+It is offered when your device has a payment slip printer, and starts off for each payer. The slip
+shows that payment and how it was paid, not what is still owed; for **Other card machine** it also
+shows the machine and operation number when you entered them. If a card payment is not taken, the
+slip says **PAYMENT NOT TAKEN**. If the reader's answer is lost, the slip prints once the payment is
+settled, which can be later, at the device where the payment began.
 
-To print a card payment again before the bill is fully paid, reopen **Pay** and choose **Print a copy** beside the received payment under **Payments on this bill**. The copy shows what remained when that card was taken.
-
-For an order listed as **Paid, not handed over**, open it in **Find a bill** and press **Payment slip** if it is offered. It prints a copy marked as a duplicate. If several cards paid, choose that payer's card.
+A slip prints once; the till cannot print it again. To replace a lost slip, use **Reprint** in
+[Print Queue](printers.md#print-queue). If the till says **Payment received, but the payment slip
+could not print.**, the payment is recorded: do not take it again.
 
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
 reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves
@@ -181,8 +190,6 @@ its printer's settings. It starts off for a new reader.
 Adding a recognised reader again keeps your choice. See [Card readers](printers.md#card-readers)
 to delete a reader or add it again. A configuration export carries payment policy, not card readers
 or this setting.
-
-When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
 
 ## Trust the server before opening the till {#certificate-trust}
 

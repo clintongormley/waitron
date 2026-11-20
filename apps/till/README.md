@@ -149,7 +149,6 @@ Kitchen-ticket frames and collection-number captions read the saved default cont
 each new render: Spanish selects Spanish, every other default or missing setting selects English.
 Kitchen reprints use the current frame and recorded names and bilingual allergy instructions;
 resending an existing job to its own printer keeps its bytes, and on another printer keeps its words, only centred. Snapshot-unit selection still reads the formatter locale.
-Card slips use the saved sale's receipt language for words, dates and money.
 
 You do not supply a venue setting: the box serves the one venue in its database. An adopted spare serves its pending status before looking for its own node row.
 

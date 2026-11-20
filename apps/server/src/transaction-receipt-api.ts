@@ -24,6 +24,7 @@ import {
   enqueueReceiptCopy,
   resolveInvoicePrinter,
   resolveReceiptPrinter,
+  saleReceiptLayout,
 } from "./receipt-print.js";
 import { requestCfg } from "./request-config.js";
 import type { Run, TillApiDeps } from "./till-api.js";
@@ -123,7 +124,12 @@ export function mountTransactionReceiptApi(
           throw new AppError("print_job.not_resendable", { id: state.receipt.jobId });
         if (state.receiptPrinterWithdrawn)
           throw new AppError("invoice_delivery.printer_invalid", {});
-        return resendInvoicePrintJob(tx, state.receipt.jobId, session.personId);
+        return resendInvoicePrintJob(
+          tx,
+          saleReceiptLayout(deps.backend, deps.cfg),
+          state.receipt.jobId,
+          session.personId,
+        );
       });
       return c.json(result);
     }),

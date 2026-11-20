@@ -240,7 +240,15 @@ it("refuses an office job in receipt resend", async () => {
   const jobId = (await row(id)).printJobId!;
 
   await expect(
-    withTransaction(suite.db, (tx) => resendInvoicePrintJob(tx, jobId, "staff-one", at(0))),
+    withTransaction(suite.db, (tx) =>
+      resendInvoicePrintJob(
+        tx,
+        () => Promise.reject(new Error("No receipt is laid out here")),
+        jobId,
+        "staff-one",
+        at(0),
+      ),
+    ),
   ).rejects.toMatchObject({ code: "print_job.not_found", params: { id: jobId } });
 });
 

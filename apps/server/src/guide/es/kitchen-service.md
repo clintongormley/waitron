@@ -483,10 +483,6 @@ Los nombres de platos y mesas y tus notas siguen como se registraron. Una reimpr
 instrucciones originales sobre alergias y elige su texto guardado en inglés o español para que
 coincida con las cabeceras.
 
-Para imprimir un justificante al cobrar, activa **Imprimir justificante de tarjeta** antes de Tarjeta. Empieza desactivado para cada pago.
-
-Para recuperar un justificante de tarjeta antes de completar la cuenta, usa [Imprimir una copia en Pagos](table-service.md#reader-slips).
-
 ## Elige adónde van los platos sin ruta {#default-station}
 
 En **Estaciones de preparación**, abre **Rutas** y elige **Los platos sin ruta van a**.

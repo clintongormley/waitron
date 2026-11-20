@@ -6,7 +6,7 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/client.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import { cardSlipChoice } from "./pay-equipment.js";
+import { paymentSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -70,7 +70,7 @@ export type ConfirmPaymentDetail = (
       externalRef?: string;
     } & OutsideCardDetails)
 ) &
-  ReceiptGuestsDetail;
+  ReceiptGuestsDetail & { printCardSlip?: boolean };
 
 /** `guestCount` is absent unless the screen asks for it; null prints no guests line. */
 export interface ReceiptGuestsDetail {
@@ -700,7 +700,7 @@ export class TillTenderPay extends LitElement {
           : {}),
         ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
         ...this.#guestsDetail(),
-        ...(this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
+        ...(this.#readerSlipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
       });
     });
   }
@@ -841,6 +841,7 @@ export class TillTenderPay extends LitElement {
       method: "cash",
       amount: this.#enteredDecimal(),
       ...this.#guestsDetail(),
+      ...this.#slipDetail(),
     };
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
@@ -877,6 +878,7 @@ export class TillTenderPay extends LitElement {
       ...(ref === "" ? {} : { externalRef: ref }),
       ...outsideCardValues(this.outside),
       ...this.#guestsDetail(),
+      ...this.#slipDetail(),
     };
     this.#resetTip();
     this.view = "idle";
@@ -1198,18 +1200,29 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  #slipAvailable(): boolean {
+  #readerSlipAvailable(): boolean {
     return this.slipPrinterAvailable && this.#displayedReader?.printsOwnSlipAutomatically !== true;
   }
 
+  #slipDetail(): { printCardSlip?: boolean } {
+    return this.slipPrinterAvailable ? { printCardSlip: this.printCardSlip } : {};
+  }
+
+  /** One switch serves every method; a reader that prints its own slip is simply not sent it. */
   #renderCardExtras() {
-    if (this.cardProvider === "none") return nothing;
+    const slip = paymentSlipChoice(
+      this.slipPrinterAvailable,
+      this.printCardSlip,
+      this.busy,
+      (value) => {
+        this.printCardSlip = value;
+      },
+    );
+    if (this.cardProvider === "none")
+      return this.slipPrinterAvailable ? html`<div class="card-extras">${slip}</div>` : nothing;
     return html`
       <div class="card-extras">
-        ${this.#renderReaderControl()}
-        ${cardSlipChoice(this.#slipAvailable(), this.printCardSlip, this.busy, (value) => {
-          this.printCardSlip = value;
-        })}
+        ${this.#renderReaderControl()} ${slip}
         ${
           this.cardProvider === "simulator" && this.chosenReaderId === undefined
             ? html`<div

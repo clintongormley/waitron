@@ -989,7 +989,7 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
 it("offers an initially off slip only with a printer and forgets it on reopening", async () => {
   const el = await mount({ slipPrinterAvailable: true });
   const box = () =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
   expect(box()).not.toBeNull();
   expect(box()!.checked).toBe(false);
   box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
@@ -1003,7 +1003,48 @@ it("offers an initially off slip only with a printer and forgets it on reopening
   await el.updateComplete;
   expect(box()!.checked).toBe(false);
   await pick(el, "cash");
-  expect(box()).toBeNull();
+  expect(box()).not.toBeNull();
+});
+
+describe("till-presented-pay-dialog: a payment slip for cash and another card machine", () => {
+  const slip = (el: TillPresentedPayDialog) =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
+
+  it.each(["cash", "manual"] as const)(
+    "offers %s a slip unticked, sends the choice, and forgets it for the next payer",
+    async (method) => {
+      const el = await mount({ slipPrinterAvailable: true });
+      await pick(el, method);
+      if (method === "cash") await type(el, "tendered", "62.40");
+      expect(slip(el)!.checked).toBe(false);
+      slip(el)!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
+      );
+      await el.updateComplete;
+      const seen = capture<PresentedPayDetail>(el, "presented-pay");
+      await take(el);
+      expect(seen.at(-1)).toMatchObject({ method, printCardSlip: true });
+      el.open = false;
+      await el.updateComplete;
+      el.open = true;
+      await el.updateComplete;
+      await pick(el, method);
+      expect(slip(el)!.checked).toBe(false);
+      el.slipPrinterAvailable = false;
+      await el.updateComplete;
+      expect(slip(el)).toBeNull();
+    },
+  );
+
+  it("offers cash a slip beside a reader that prints its own, but not that reader's card", async () => {
+    const equipment = equipmentWith(SECOND_READER);
+    const terminal = equipment.roles.find((role) => role.role === "card_terminal")!;
+    terminal.resolved = { ...terminal.resolved!, printsOwnSlipAutomatically: true };
+    const el = await mount({ slipPrinterAvailable: true, equipment });
+    expect(slip(el)).toBeNull();
+    await pick(el, "cash");
+    expect(slip(el)).not.toBeNull();
+  });
 });
 
 describe("till-presented-pay-dialog: Close as deferred payment", () => {

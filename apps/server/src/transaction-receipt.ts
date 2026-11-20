@@ -3,6 +3,7 @@ import {
   invoiceSeries,
   readTaxpayer,
   saleLines,
+  saleSettlements,
   sales,
   workingOrderLines,
   type Transaction,
@@ -28,12 +29,8 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readInvoiceTyping } from "./invoice-typing.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
-import {
-  readBillTenderLines,
-  readTenderBlock,
-  receiptQr,
-  type TillSaleResult,
-} from "./till-sale.js";
+import { readReceiptPayments } from "./receipt-payments.js";
+import { readTenderBlock, receiptQr, type TillSaleResult } from "./till-sale.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import "./errors.js";
 
@@ -75,9 +72,10 @@ export async function readTransactionReceipt(
 ): Promise<TillSaleResult> {
   const scope = await resolveTransactionScope(tx, saleId);
   const [issued] = await tx
-    .select({ sale: sales, code: invoiceSeries.code })
+    .select({ sale: sales, code: invoiceSeries.code, settlementId: saleSettlements.id })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("sale.not_found", { saleId });
   const { sale } = issued;
@@ -118,7 +116,6 @@ export async function readTransactionReceipt(
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
-  const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const issuer = await readReceiptIssuer(backend, tx, brandSaleId(saleId), sale);
   const taxpayer = issuer.issuer === undefined ? await readTaxpayer(tx) : null;
   const groupId =
@@ -149,7 +146,12 @@ export async function readTransactionReceipt(
     vatBreakdown: sale.vatBreakdown,
     ...lines,
     tender: await readTenderBlock(tx, brandSaleId(saleId), sale.workingOrderId),
-    ...(payments.length === 0 ? {} : { payments }),
+    ...(await readReceiptPayments(
+      tx,
+      brandSaleId(saleId),
+      sale.workingOrderId,
+      issued.settlementId !== null,
+    )),
     ...receiptQr(backend, filed?.verificationUrl),
   };
 }

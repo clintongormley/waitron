@@ -1,12 +1,23 @@
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 
-export interface OptionalDocumentDiagnostic {
-  operation: "enqueueSaleReceipt" | "enqueueCorrectiveReceipt" | "reserveStagedInvoiceDelivery";
-  saleId: string;
+type SaleDocument =
+  | "enqueueSaleReceipt"
+  | "enqueueCorrectiveReceipt"
+  | "reserveStagedInvoiceDelivery"
+  | "refreshWaitingOriginal";
+
+type PaymentSlip = "enqueueRequestedPaymentSlip" | "printSettledPaymentSlip";
+const isPaymentSlip = (operation: SaleDocument | PaymentSlip): operation is PaymentSlip =>
+  operation === "enqueueRequestedPaymentSlip" || operation === "printSettledPaymentSlip";
+
+/** A payment slip can come before the sale exists, so it names the order. */
+export type OptionalDocumentDiagnostic = (
+  { operation: SaleDocument; saleId: string } | { operation: PaymentSlip; workingOrderId: string }
+) & {
   code: AppError["code"] | "receipt.document_failed";
   field?: "operatorId";
-}
+};
 
 export function reportOptionalDocumentFailure(event: OptionalDocumentDiagnostic): void {
   console.warn("receipt.optional_document_failed", event);
@@ -19,7 +30,7 @@ export function reportOptionalDocumentFailure(event: OptionalDocumentDiagnostic)
 export async function optionalDocument<T>(
   tx: Transaction,
   operation: OptionalDocumentDiagnostic["operation"],
-  saleId: string,
+  id: string,
   body: () => Promise<T>,
 ): Promise<T | undefined> {
   let failed = false;
@@ -38,8 +49,9 @@ export async function optionalDocument<T>(
     if (!failed || error !== bodyError) throw error;
     try {
       reportOptionalDocumentFailure({
-        operation,
-        saleId,
+        ...(isPaymentSlip(operation)
+          ? { operation, workingOrderId: id }
+          : { operation, saleId: id }),
         code: error instanceof AppError ? error.code : "receipt.document_failed",
         ...(error instanceof AppError &&
         error.code === "management.request_invalid" &&

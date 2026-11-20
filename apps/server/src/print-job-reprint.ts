@@ -107,7 +107,7 @@ export async function reprintJobOn(
   if (found === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const { job } = found;
   assertPrintPayload(job);
-  if (printerId === job.printerId) return resendInvoicePrintJob(tx, jobId, personId, now);
+  if (printerId === job.printerId) return resendInvoicePrintJob(tx, layOut, jobId, personId, now);
   const resendable = canResendPrintJob(job);
   const stuck = !resendable && isStuckJob(job, found.printer, seen);
   if (!resendable && !stuck) throw new AppError("print_job.not_resendable", { id: jobId });
@@ -149,5 +149,8 @@ export async function reprintJobOn(
     await endMovedPrintJob(tx, jobId);
     await endInvoicePrintDeliveries(tx, [jobId], now);
   }
-  return resendInvoicePrintJob(tx, jobId, personId, now, undefined, { printerId, payload });
+  return resendInvoicePrintJob(tx, layOut, jobId, personId, now, undefined, {
+    printerId,
+    payload,
+  });
 }

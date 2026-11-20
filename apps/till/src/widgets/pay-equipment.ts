@@ -514,7 +514,7 @@ declare global {
   }
 }
 
-export function cardSlipChoice(
+export function paymentSlipChoice(
   available: boolean,
   checked: boolean,
   disabled: boolean,
@@ -522,7 +522,7 @@ export function cardSlipChoice(
 ): TemplateResult | typeof nothing {
   return available
     ? html`<wt-switch
-        name="printCardSlip"
+        name="printSlip"
         .label=${t("payment_slip.request")}
         .checked=${checked}
         .disabled=${disabled}

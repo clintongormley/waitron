@@ -82,7 +82,8 @@ el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 **Reimprimir** vuelve a enviar una impresión, a su impresora o a otra: un ticket o una factura, a
 cualquier impresora de tickets; una comanda de estación o un justificante de devolución, a una al menos
 igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
-ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
+ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora. Un justificante de pago solo se vuelve a imprimir desde aquí:
+reimprime cuanto antes uno perdido, porque la lista guarda solo las últimas impresiones terminadas.
 
 Si la cola indica que los datos guardados de una impresión han caducado, abre **Pedidos**
 para imprimir el ticket o la factura desde la venta. Ya no puedes reimprimir desde ese trabajo

@@ -24,7 +24,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { prepareImage, uploadImage, saveImage, renderRendition } from "@waitron/media";
 import { drawLogoRasters } from "./receipt-logo.js";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import type { Transaction } from "@waitron/db";
@@ -36,6 +36,7 @@ import {
   drawerOpens,
   invoiceDeliveries,
   invoiceSeries,
+  isReceiptPrinter,
   mediaImages,
   tenders,
   workingOrders,
@@ -44,6 +45,7 @@ import {
   printers,
   printJobs,
   readTaxpayer,
+  receiptRollColumns,
   sales,
   taxpayer,
   withTransaction,
@@ -108,6 +110,7 @@ import {
   resolveInvoicePrinter,
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
+  saleReceiptLayout,
 } from "./receipt-print.js";
 import {
   decodeTicket,
@@ -1490,7 +1493,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
-  it("an explicitly printed unpaid original is retained; collection only opens and audits the drawer", async () => {
+  it("an explicitly printed unpaid original no printer has taken lists the collection's cash; collection opens and audits the drawer", async () => {
     const base = await setupVenue("ticket_then_pay");
     const { cfg } = base;
     const printerId = await makePrinter();
@@ -1535,7 +1538,11 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
     expect(jobs[0]!.printerId).toBe(printerId);
-    expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(original));
+    const receipts = jobs.filter((job) => !opensDrawer(job.payload));
+    expect(receipts).toHaveLength(1);
+    const listed = decodeTicket(receipts[0]!.payload);
+    expect(listed).toMatch(/Efectivo\s+2,00/u);
+    expect(listed).not.toContain("DUPLICADO");
     expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(DRAWER_KICK));
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
@@ -2970,17 +2977,27 @@ describe("automatic F1 receipt delivery enrollment", () => {
           .set({ status: "done" })
           .where(eq(printJobs.id, jobs[0]!.id));
         const resent = await withTransaction(suite.db, (tx) =>
-          resendInvoicePrintJob(tx, jobs[0]!.id, personId),
+          resendInvoicePrintJob(tx, saleReceiptLayout(backend, cfg), jobs[0]!.id, personId),
         );
         const [copy] = await suite.db
           .select()
           .from(printJobs)
           .where(eq(printJobs.id, resent.jobId));
+        const [roll] = await suite.db
+          .select({ ...receiptRollColumns })
+          .from(printers)
+          .where(and(isReceiptPrinter(), eq(printers.id, jobs[0]!.printerId)));
         expect(copy).toMatchObject({
           receiptCopy: true,
           resendOf: jobs[0]!.id,
-          payload: jobs[0]!.payload,
+          printerId: jobs[0]!.printerId,
+          payload: await withTransaction(suite.db, (tx) =>
+            saleReceiptLayout(backend, cfg)(tx, saleId, true, roll!),
+          ),
         });
+        expect(decodeTicket(new Uint8Array(copy!.payload!))).toContain(
+          receiptLabelsFor(LOCALE).duplicate,
+        );
       } else {
         await expect(print()).rejects.toMatchObject({ code: "invoice_delivery.active" });
         expect(await suite.db.select().from(printJobs)).toEqual([]);

@@ -14,6 +14,7 @@ import {
   type IntegratedPayRequest as ReaderRequest,
 } from "../till-sale.js";
 export * from "../till-sale.js";
+export { readBillTenderLines } from "../receipt-payments.js";
 
 type ContentRequest<T> = Omit<T, "expectedEdit"> & { expectedEdit?: BillEditExpected | null };
 export type PayWorkingOrderRequest = ContentRequest<PayRequest>;

@@ -1205,6 +1205,7 @@ const STREAM_TEST_FILES = [
   "src/handover-refetch-full-disk.e2e.test.ts",
   "src/handover-placement-full-disk.e2e.test.ts",
   "src/restore-full-disk.e2e.test.ts",
+  "src/payment-slip-full-disk.e2e.test.ts",
   "src/spare-store.test.ts",
   "src/spare-join.e2e.test.ts",
 ];
@@ -4515,6 +4516,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     ["handover", "32m"],
     ["placement", "64m"],
     ["restore", "32m"],
+    ["payment-slip", "32m"],
   ])(
     "mounts a small filesystem at %s before it runs them, under the shared test root",
     (folder, size) => {

@@ -1,7 +1,7 @@
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { provisionBillVenue, send } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { printSalePaymentSlip } from "./payment-slip-print.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 import { payments } from "@waitron/payments";
@@ -17,7 +17,9 @@ import {
   orderGroups,
   sales,
   invoiceSeries,
+  deviceProfiles,
 } from "@waitron/db";
+import { validateCapabilities } from "@waitron/layouts";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, resendPrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
@@ -285,52 +287,66 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
     const offered = await offerProducts(tx, cfg);
     return { zoneId: offered.zoneId, menuItemId: offered.offerFor(product.id) };
   });
-  const id = randomUUID();
-  const paid = await send(v.app, v.cookie, "POST", `/api/working-orders/${id}/payments`, {
-    dining: "eat_in",
-    submissionId: id,
-    kind: "share",
-    shareOf: 1,
-    method: "card",
-    entry: "reader",
-    basket: { zoneId: offers.zoneId, lines: [{ menuItemId: offers.menuItemId, quantity: "1" }] },
-    receiptLanguage: "es-ES",
+  // A slip prints only on a device whose profile may print receipts.
+  await inTx(v, async (tx) => {
+    for (const profile of await tx.select().from(deviceProfiles))
+      await tx
+        .update(deviceProfiles)
+        .set({ capabilities: [...validateCapabilities(profile.capabilities), "print-receipt"] })
+        .where(eq(deviceProfiles.id, profile.id));
   });
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  expect(paid.json.outcome).toBe("received");
-  const [payment] = await v.db.select().from(payments).where(eq(payments.workingOrderId, id));
-  expect(payment!.settledAt).not.toBeNull();
-  const before = await v.db.select().from(printJobs);
-  const frozenSales = await v.db.select().from(sales);
-  const frozenSeries = await v.db.select().from(invoiceSeries);
-  const frozenRecords = v.db.all(sql`select * from registros_facturacion`);
-  expect(frozenSales).toHaveLength(1);
-  expect(frozenRecords).toHaveLength(1);
-  expect(frozenSales[0]!.locale).toBe("es-ES");
-  let first: Uint8Array | undefined;
+  // Not the venue's default receipt language, so a dropped choice prints in another.
+  const slipHeading = receiptLabelsFor("ca-ES").paymentHeading;
+  expect(receiptLabelsFor("es-ES").paymentHeading).not.toBe(slipHeading);
   for (const language of ["en", "es"] as const) {
     await inTx(v, (tx) =>
-      writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] }),
+      writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es", "ca"] }),
     );
-    const old = await v.db.select().from(printJobs);
-    await printSalePaymentSlip(v.db, cfg, id, payment!.id);
+    const before = await v.db.select().from(printJobs);
+    const frozenSales = await v.db.select().from(sales);
+    const frozenSeries = await v.db.select().from(invoiceSeries);
+    const frozenRecords = v.db.all(sql`select * from registros_facturacion`);
+    const id = randomUUID();
+    const paid = await send(v.app, v.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      dining: "eat_in",
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      basket: { zoneId: offers.zoneId, lines: [{ menuItemId: offers.menuItemId, quantity: "1" }] },
+      receiptLanguage: "ca-ES",
+      printCardSlip: true,
+    });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json.outcome).toBe("received");
+    expect(paid.json).not.toHaveProperty("slipPrintFailed");
+    const [payment] = await v.db.select().from(payments).where(eq(payments.workingOrderId, id));
+    expect(payment!.settledAt).not.toBeNull();
+    const [sale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(sale!.locale).toBe("ca-ES");
     const next = (await v.db.select().from(printJobs)).filter(
-      (j) => !old.some((o) => o.id === j.id),
+      (j) => !before.some((o) => o.id === j.id) && text(j.payload!).includes(slipHeading),
     );
     expect(next).toHaveLength(1);
     const paper = text(next[0]!.payload!);
-    expect(paper).toContain(receiptDateTime(payment!.settledAt!, "es-ES"));
-    expect(paper).toContain(formatMoney("1234.56", "es-ES"));
+    expect(paper).toContain(receiptDateTime(payment!.settledAt!, "ca-ES"));
+    expect(paper).toContain(formatMoney("1234.56", "ca-ES"));
     expect(formatMoney("1234.56", "en-GB")).not.toBe(formatMoney("1234.56", "es-ES"));
     expect(receiptDateTime(payment!.settledAt!, "en-GB")).not.toBe(
       receiptDateTime(payment!.settledAt!, "es-ES"),
     );
-    if (first !== undefined) expect(next[0]!.payload).toEqual(first);
-    first = next[0]!.payload!;
+    const after = await v.db.select().from(printJobs);
+    for (const j of before) expect(after.find((o) => o.id === j.id)).toEqual(j);
+    const salesAfter = await v.db.select().from(sales);
+    for (const row of frozenSales) expect(salesAfter.find((o) => o.id === row.id)).toEqual(row);
+    expect(salesAfter).toHaveLength(frozenSales.length + 1);
+    // The new sale moves its series on; no series is added or lost.
+    expect((await v.db.select().from(invoiceSeries)).map((row) => row.id).sort()).toEqual(
+      frozenSeries.map((row) => row.id).sort(),
+    );
+    expect(
+      v.db.all(sql`select * from registros_facturacion`).slice(0, frozenRecords.length),
+    ).toEqual(frozenRecords);
   }
-  const after = await v.db.select().from(printJobs);
-  for (const j of before) expect(after.find((o) => o.id === j.id)).toEqual(j);
-  expect(await v.db.select().from(sales)).toEqual(frozenSales);
-  expect(await v.db.select().from(invoiceSeries)).toEqual(frozenSeries);
-  expect(v.db.all(sql`select * from registros_facturacion`)).toEqual(frozenRecords);
 });

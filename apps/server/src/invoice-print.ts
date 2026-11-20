@@ -6,11 +6,13 @@ import {
   isReceiptPrinter,
   printers,
   printJobs,
+  receiptRollColumns,
   sales,
   type Transaction,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
+  canResendPrintJob,
   claimPrintJobs,
   reportPrintJob,
   resendPrintJob,
@@ -19,12 +21,14 @@ import {
 } from "@waitron/printing";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 import {
   invoicePrintDue,
   expireInvoiceDeliveryClaims,
   latestNextAttempt,
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
+  takeOverReceiptDelivery,
   tokenHash,
 } from "./invoice-delivery.js";
 
@@ -41,8 +45,34 @@ export function assertPrintPayload(
   }
 }
 
+/**
+ * A sale's receipt, original or copy, resent on its own printer: laid out again from the sale with
+ * the job's marking, so it lists every payment taken since. Anything else keeps its bytes.
+ */
+async function laidOutAgain(
+  tx: Transaction,
+  layOut: LayOutSaleReceipt,
+  jobId: string,
+): Promise<{ printerId: string; payload: Uint8Array } | undefined> {
+  // Read now: an expired invoice claim may have ended the job since the caller read it.
+  const job = (await tx.select().from(printJobs).where(eq(printJobs.id, jobId)))[0]!;
+  const { saleId, receiptCopy, printerId } = job;
+  if (saleId === null || receiptCopy === null || !canResendPrintJob(job)) return undefined;
+  const [printer] = await tx
+    .select({ ...receiptRollColumns })
+    .from(printers)
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
+  return { printerId, payload: await layOut(tx, saleId, receiptCopy, printer!) };
+}
+
+/**
+ * Resends a job, as {@link resendPrintJob} does, with a sale's receipt laid out again unless `to`
+ * brings its bytes. A full invoice's resend takes over the delivery still waiting on the job, or
+ * reserves a new one.
+ */
 export async function resendInvoicePrintJob(
   tx: Transaction,
+  layOut: LayOutSaleReceipt,
   jobId: string,
   personId: string | null,
   now = new Date(),
@@ -53,6 +83,8 @@ export async function resendInvoicePrintJob(
   if (job === undefined || job.kind === "a4")
     throw new AppError("print_job.not_found", { id: jobId });
   assertPrintPayload(job);
+  const resend = async () =>
+    resendPrintJob(tx, jobId, to ?? (await laidOutAgain(tx, layOut, jobId)));
   const [invoice] = await tx
     .select({
       saleId: sales.id,
@@ -64,8 +96,7 @@ export async function resendInvoicePrintJob(
     .innerJoin(sales, eq(sales.id, printJobs.saleId))
     .where(eq(printJobs.id, jobId));
   const full = invoice !== undefined && deliversAsFullInvoice(invoice);
-  if (invoice === undefined || (!full && invoice.receiptCopy !== false))
-    return resendPrintJob(tx, jobId, to);
+  if (invoice === undefined || (!full && invoice.receiptCopy !== false)) return resend();
   await expireInvoiceDeliveryClaims(tx, now);
   if (!full) {
     const emails = await tx
@@ -83,9 +114,10 @@ export async function resendInvoicePrintJob(
       )
     )
       throw new AppError("print_job.not_resendable", { id: jobId });
-    return resendPrintJob(tx, jobId, to);
+    return resend();
   }
-  const retry = await resendPrintJob(tx, jobId, to);
+  const retry = await resend();
+  if (await takeOverReceiptDelivery(tx, invoice.saleId, jobId, retry.jobId)) return retry;
   try {
     await reserveInvoiceDelivery(tx, invoice.saleId, {
       requestKey: requestKey ?? retry.jobId,

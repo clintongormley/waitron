@@ -307,23 +307,6 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it.each([1, 2])("has no violations offering %i card slips", async (count) => {
-    const { host } = await mountWidget<TillTicketView>(
-      "till-ticket-view",
-      {
-        result: {
-          ...result,
-          paymentSlips: [
-            { id: "pay-1", charged: "4.40", last4: "1111" },
-            { id: "pay-2", charged: "5.00", last4: null },
-          ].slice(0, count),
-        },
-      },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
-
   it.each(["en-GB", "es-ES"])("has no violations on an F1 in %s", async (locale) => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

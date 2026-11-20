@@ -339,14 +339,6 @@ const ROUTES: readonly Row[] = [
     {},
   ],
   ["POST", `/api/sales/${id}/receipt`, "print-receipt", forbidden("receipt"), {}],
-  ["POST", `/api/sales/${id}/payment-slip/${id}`, "print-receipt", forbidden("payment-slip"), {}],
-  [
-    "POST",
-    `/api/working-orders/${id}/payments/${id}/slip-copy`,
-    "print-receipt",
-    forbidden("slip-copy"),
-    {},
-  ],
   ["POST", `/api/sales/${id}/reprint`, "print-receipt", forbidden("reprint"), {}],
   ["POST", "/api/drawer/open", "open-cash-drawer", forbidden("drawer_open"), {}],
   [
@@ -945,6 +937,24 @@ describe("each till route checks the profile action it needs", () => {
       expect({ status: answer.status, error: answer.body.error }).toEqual(expected);
     });
   }
+});
+
+it.each([
+  ["POST", `/api/sales/${id}/payment-slip/${id}`],
+  ["POST", `/api/working-orders/${id}/payments/${id}/slip-copy`],
+  ["GET", `/api/sales/${id}/payment-slip-copy/${id}`],
+  ["POST", `/api/sales/${id}/payment-slip-copy/${id}`],
+])("no slip copy route exists: %s %s answers 404", async (method, path) => {
+  // A session lacking print-receipt: a mounted copy route would refuse it 403 first.
+  const answer = await app.request(path, {
+    method,
+    headers: { cookie: sessions.get("print-receipt")!, "content-type": "application/json" },
+    ...(method === "POST" ? { body: "{}" } : {}),
+  });
+  expect({ status: answer.status, body: await answer.text() }).toEqual({
+    status: 404,
+    body: "404 Not Found",
+  });
 });
 
 describe("A803 split: the panel's read", () => {

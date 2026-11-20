@@ -894,7 +894,7 @@ declare module "@waitron/shared" {
      */
     "bill.received_exceeds_total": { workingOrderId: string; excess: string };
     /**
-     * Money has been taken on the bill before its invoice. Paying it in one go by the
+     * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it
      * and another are refused while it has any pending or received bill payment, even one given
      * back in full; abandoning it and finishing its table are refused while it still holds money.
@@ -913,15 +913,8 @@ declare module "@waitron/shared" {
      * dish on `workingOrderId`.
      */
     "bill.merge_invoice_choice_required": { workingOrderId: string; intoWorkingOrderId: string };
-    /**
-     * No payment was found for `paymentId`, the id the caller sent: a bill payment's id, or, on the
-     * Payment slip press, a captured card payment's.
-     */
+    /** No bill payment was found for `paymentId`, the id the caller sent. */
     "bill.payment_not_found": { paymentId: string };
-    /** This device has no payment slip printer it can use for the copy `paymentId` asks for. */
-    "bill.payment_slip_no_printer": { paymentId: string };
-    /** The payment exists here, but no copy of a card slip is offered for it. */
-    "bill.payment_slip_unavailable": { paymentId: string };
     "bill.payment_not_stuck": { paymentId: string };
     /**
      * What became of a pending card bill payment is not confirmed, so nothing was recorded and the
@@ -1239,6 +1232,10 @@ declare module "@waitron/shared" {
     /** A receipt-language change refused because `count` open orders hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     "receipt.not_printed": Record<string, never>;
+    /** An original receipt ended where it waited because a payment taken before any printer took
+     * it could not be added to it. Not thrown; stored as the job's `last_error` by
+     * `refreshWaitingOriginals`. */
+    "receipt.out_of_date": Record<string, never>;
     /** A receipt, original or copy, asked of a device with no active receipt printer. */
     "receipt.no_printer": Record<string, never>;
     /**

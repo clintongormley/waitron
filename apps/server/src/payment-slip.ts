@@ -14,10 +14,14 @@ export interface PaymentSlipInput {
   amount: string;
   tip: string;
   charged: string;
+  /** Cash or a card typed into another machine, which has no card facts to print. */
+  method?: "cash" | "card";
+  /** Another card machine's operation number and name, as typed; printed only with a `card` method. */
+  reference?: string | null;
+  machine?: string | null;
   card: CardDetails | null;
+  notTaken?: true;
   invoiceLocale: string;
-  remaining?: string | null;
-  copy?: boolean;
   /** The receipt printer's settings, which set the image width and the column count. */
   printer: EscSetting;
 }
@@ -34,8 +38,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
       b.line(line);
     }
   };
-  text(labels.paymentHeading);
-  if (input.copy) text(labels.duplicate);
+  text(input.notTaken === true ? labels.paymentNotTakenHeading : labels.paymentHeading);
   text(labels.paymentNotice);
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
   text(receiptDateTime(input.paidAt, input.invoiceLocale));
@@ -52,13 +55,16 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
     if (entry !== undefined) row(labels.paymentEntry, entry);
     if (input.card.authCode !== null) row(labels.paymentAuthorization, input.card.authCode);
     b.line();
+  } else if (input.method === "cash") {
+    text(labels.cash);
+  } else if (input.method === "card") {
+    text([labels.card, input.machine].filter(Boolean).join(" · "));
+    if (input.reference) text(`${labels.reference} ${input.reference}`);
   }
   row(labels.paymentAmount, formatMoney(input.amount, input.invoiceLocale));
   // A zero tip prints no line. `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which
   // always renders two places, so a zero tip is "0.00" and nothing else.
   if (input.tip !== "0.00") row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
-  row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
-  if (input.remaining != null)
-    row(labels.paymentRemaining, formatMoney(input.remaining, input.invoiceLocale));
+  if (input.notTaken !== true) row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
   return b.feedAndCut().bytes();
 }

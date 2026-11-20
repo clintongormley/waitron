@@ -3,7 +3,17 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceDeliveries, sales, deferredClosures, workingOrders } from "@waitron/db";
+import {
+  deferredClosures,
+  deviceProfiles,
+  invoiceDeliveries,
+  printJobs,
+  sales,
+  workingOrders,
+} from "@waitron/db";
+import { receiptLabelsFor } from "@waitron/country-packs";
+import { validateCapabilities } from "@waitron/layouts";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import { markServed, readOrderRevision } from "./working-order.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import {
@@ -11,6 +21,7 @@ import {
   inTx,
   placedCounterBillMovedTo,
   seatedWith,
+  send,
   tendersOfBill,
 } from "./testing/bill-venue.js";
 import {
@@ -29,6 +40,7 @@ import "./errors.js";
 // Close one bill as a deferred payment, new work only: every case calls the writer directly on
 // a real venue that files Veri*Factu records, in its own transaction.
 let t: DeferredCloseKit;
+const labels = receiptLabelsFor("es-ES");
 
 useVenueDb({
   resetPerTest: false,
@@ -214,6 +226,45 @@ describe("closeBillDeferredTx, new work", () => {
       readSettledTicket(t.venue.backend, tx, t.venue.cfg, billId),
     );
     expect(ticket.tender).toEqual({ method: "deferred" });
+  });
+
+  it("lays out again an original receipt still waiting to print, as a deferred payment", async () => {
+    await inTx(t.venue, async (tx) => {
+      for (const profile of await tx.select().from(deviceProfiles)) {
+        const capabilities = validateCapabilities(profile.capabilities);
+        if (!capabilities.includes("print-receipt"))
+          await tx
+            .update(deviceProfiles)
+            .set({ capabilities: [...capabilities, "print-receipt"] })
+            .where(eq(deviceProfiles.id, profile.id));
+      }
+    });
+    const billId = await t.counterOrder("placed", true);
+    const queued = await send(
+      t.venue.app,
+      t.venue.cookie,
+      "POST",
+      `/api/sales/${billId}/receipt`,
+      {},
+    );
+    expect(queued.status, JSON.stringify(queued.json)).toBe(200);
+    const [sale] = await inTx(t.venue, (tx) =>
+      tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    const [waiting] = await inTx(t.venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
+    );
+    expect(decodeTicket(waiting!.payload)).toMatch(new RegExp(`${labels.owed}\\s+18,00`, "u"));
+
+    await t.close(await t.requestFor(billId, "18.00", null));
+
+    const [after] = await inTx(t.venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
+    );
+    expect(after!.id).toBe(waiting!.id);
+    const text = decodeTicket(after!.payload);
+    expect(text).toContain(labels.deferredPayment);
+    expect(text).not.toContain(labels.owed);
   });
 
   it("freezes the receipt grouping of a presented party bill it issues", async () => {

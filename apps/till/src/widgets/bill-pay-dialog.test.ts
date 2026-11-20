@@ -1439,23 +1439,6 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
   const row = (el: TillBillPayDialog, id: string) =>
     root(el).querySelector<HTMLElement>(`[data-payment="${id}"]`)!;
 
-  it("offers a copy for an eligible reader capture while the bill still owes money", async () => {
-    const el = await mount({
-      canPrintReceipt: true,
-      balance: balanceOf({
-        payments: [paymentOf({ method: "card", entry: "reader", canCopySlip: true }), cardPaid],
-      }),
-    });
-    const copies = () => root(el).querySelectorAll<HTMLElement>("[data-payment-slip-copy]");
-    expect(copies()).toHaveLength(1);
-    const asked = capture<{ paymentId: string }>(el, "bill-slip-copy");
-    copies()[0]!.click();
-    expect(asked).toEqual([{ paymentId: "pay-1" }]);
-    el.canPrintReceipt = false;
-    await el.updateComplete;
-    expect(copies()).toHaveLength(0);
-  });
-
   it("lists each payment with how it was paid, what it paid off, its tip and its state", async () => {
     const el = await mount({
       balance: balanceOf({ payments: [cashPaid, cardPaid, cardAtReader, declined] }),
@@ -3404,7 +3387,7 @@ it("starts the reader slip unticked, forwards the choice, and resets for the nex
     },
   });
   const box = () =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
   expect(box()).not.toBeNull();
   expect(box()!.checked).toBe(false);
   box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
@@ -3418,6 +3401,93 @@ it("starts the reader slip unticked, forwards the choice, and resets for the nex
   el.slipPrinterAvailable = false;
   await el.updateComplete;
   expect(box()).toBeNull();
+});
+
+describe("till-bill-pay-dialog: a payment slip for cash and another card machine", () => {
+  const ownSlipReader = {
+    printsOwnSlipAutomatically: true,
+    id: "r-own",
+    name: "Bar reader",
+    provider: "stripe_terminal" as const,
+  };
+  const cashAsked: PayRequest = {
+    choice: { kind: "contribution", amount: "10.00" },
+    pay: { method: "cash", tendered: "10.00" },
+  };
+  const cashPreview = {
+    kind: "allocated" as const,
+    choice: null,
+    applied: "10.00",
+    tip: "0.00",
+    change: "0.00",
+    charged: null,
+  };
+  const machineAsked: PayRequest = {
+    choice: { kind: "contribution", amount: "10.00" },
+    pay: { method: "card" },
+    card: { entry: "manual" },
+  };
+  const machinePreview = { ...cashPreview, change: null, charged: "10.00" };
+  const slip = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
+
+  it.each([
+    ["cash", cashAsked, cashPreview],
+    ["another card machine", machineAsked, machinePreview],
+  ] as const)(
+    "offers %s a slip unticked, sends the choice, and resets it for the next payer",
+    async (_method, asked, preview) => {
+      const el = await mount({ way: "contribution", slipPrinterAvailable: true, asked, preview });
+      expect(slip(el)).not.toBeNull();
+      expect(slip(el)!.checked).toBe(false);
+      slip(el)!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
+      );
+      await el.updateComplete;
+      const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
+      await click(el, "[data-pay-confirm]");
+      expect(seen.at(-1)).toMatchObject({ printCardSlip: true });
+      el.paymentAccepted();
+      await el.updateComplete;
+      expect(slip(el)!.checked).toBe(false);
+      el.slipPrinterAvailable = false;
+      await el.updateComplete;
+      expect(slip(el)).toBeNull();
+    },
+  );
+
+  it("sends an unticked slip choice as false with cash", async () => {
+    const el = await mount({
+      way: "contribution",
+      slipPrinterAvailable: true,
+      asked: cashAsked,
+      preview: cashPreview,
+    });
+    const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
+    await click(el, "[data-pay-confirm]");
+    expect(seen.at(-1)).toMatchObject({ printCardSlip: false });
+  });
+
+  it("offers cash a slip beside a reader that prints its own, but not that reader's card", async () => {
+    const el = await mount({
+      way: "contribution",
+      slipPrinterAvailable: true,
+      cardReader: "stripe_terminal",
+      readers: [ownSlipReader],
+      defaultReaderId: "r-own",
+      asked: cashAsked,
+      preview: cashPreview,
+    });
+    expect(slip(el)).not.toBeNull();
+    el.asked = {
+      choice: { kind: "contribution", amount: "10.00" },
+      pay: { method: "card" },
+      card: { entry: "reader", readerId: "r-own" },
+    };
+    el.preview = machinePreview;
+    await el.updateComplete;
+    expect(slip(el)).toBeNull();
+  });
 });
 
 describe("till-bill-pay-dialog: Close as deferred payment", () => {

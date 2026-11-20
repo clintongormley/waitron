@@ -3252,6 +3252,7 @@ describe("an order being paid by card cannot be changed from another device (pla
           { admission: testTradingAdmission(), db: suite.db, backend, clock, cfg: t.cfg },
           billId,
           clock.now().instant,
+          async () => ({}),
         ),
       );
       expect(result).toEqual(

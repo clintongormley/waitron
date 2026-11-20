@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import {
   invoiceSeries,
   readTaxpayer,
+  saleSettlements,
   sales,
   saleLines,
   workingOrderLines,
@@ -27,7 +28,8 @@ import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
 import { resolvePrintedLogo } from "./receipt-venue-logo.js";
-import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
+import { readReceiptPayments } from "./receipt-payments.js";
+import { readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 /** The A4 document of a sale delivered as a full invoice; refuses any other sale. */
@@ -68,9 +70,10 @@ async function readDocument(
   admits: (sale: typeof sales.$inferSelect) => boolean,
 ): Promise<ReceiptDocumentInput> {
   const [issued] = await tx
-    .select({ sale: sales, code: invoiceSeries.code })
+    .select({ sale: sales, code: invoiceSeries.code, settlementId: saleSettlements.id })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("invoice_delivery.not_found", {});
   const { sale } = issued;
@@ -143,7 +146,6 @@ async function readDocument(
   const { venue, logo } = await resolvePrintedLogo(tx, department, "80mm", diagnostic);
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, sale.locale, current.locale);
-  const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const guests = await readReceiptGuests(tx, saleId);
   return {
     surface: "a4",
@@ -172,7 +174,12 @@ async function readDocument(
       vatBreakdown: sale.vatBreakdown,
       ...lines,
       tender: await readTenderBlock(tx, brandSaleId(saleId), sale.workingOrderId),
-      ...(payments.length === 0 ? {} : { payments }),
+      ...(await readReceiptPayments(
+        tx,
+        brandSaleId(saleId),
+        sale.workingOrderId,
+        issued.settlementId !== null,
+      )),
       ...receiptQr(backend, filed?.verificationUrl),
     },
   };

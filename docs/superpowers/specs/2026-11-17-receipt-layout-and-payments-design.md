@@ -25,13 +25,17 @@ to say what is still owed.
    (`Base imponible 10% … / IVA 10% …`).
 4. **Solid dividing lines.** On thermal paper, the section rules are drawn as a thin solid line
    instead of a row of `-` characters, in the same places they print today.
-5. **Payments as they stand when printed.** Every print of a receipt (simplified or full, original
+5. **Payments as they stand when printed.** _20 November 2026: see the dated note under
+   Constraints; a copy, and an original a printer has taken, keep their queued bytes._ Every print of a receipt (simplified or full, original
    or duplicado, thermal or A4/PDF) shows the payments recorded at the moment it is printed:
    - each card payment with its brand and last four digits (`Visa ****4034`), how it was presented
      (`Sin contacto`, `Chip`, `Banda`) and its authorisation code, when the payment row holds them;
    - a **Pendiente** line with the amount still owed when the sale is not settled and owes more
      than zero.
 6. **The payment slip** (`apps/server/src/payment-slip.ts`):
+   _19 November 2026: the second point is superseded: a payment slip prints only when the payer
+   asks, for any method, and is never reprinted from the till; see the [plan's 19 November
+   rework](../plans/2026-11-17-receipt-layout-and-payments.md#rework-2026-11-19-payment-slips-are-optional)._
    - never shows an amount owed: the existing remaining line (`remaining`, from
      `bill_payments.remaining_after`) is removed;
    - prints for every payment that settles a ticket issued before the payment (cash, a card typed
@@ -79,7 +83,16 @@ to say what is still owed.
   said 32 for 58 mm.)
 - The receipt is rebuilt from the database each time it prints (`readSettledTicket`,
   `readTransactionReceipt`); only a retry of a failed original reuses stored bytes
-  (`receipt-print.ts:559`). Goal 5 relies on that.
+  (`enqueueOriginalReceipt` in `receipt-print.ts`). Goal 5 relies on that.
+  _20 November 2026: wrong as written: a receipt's bytes are built when it is queued. An original
+  no printer has taken or tried, a resend included, is laid out again after each payment
+  (`refreshWaitingOriginals`, `receipt-print.ts`); one a printer has taken or tried keeps its bytes.
+  Every resend of a sale's receipt, original or copy, is laid out again from the sale, in the
+  sale's own language (`resendInvoicePrintJob`, `invoice-print.ts`); a payment slip and other
+  printouts keep the bytes they were queued with._
+- _20 November 2026: a card reader payment's slip request is stored with the payment and its slip
+  prints once the payment is settled, however late; see the plan's "20 November 2026" note under
+  the 19 November rework._
 - After a ticket is issued, a payment must settle the whole amount due (`settle-sale.ts`). Part
   payments are bill payments, kept in `bill_payments` until the sale settles; only settlement
   writes `tenders`, which is all today's receipt reads (`readBillTenderLines`). So for an issued,

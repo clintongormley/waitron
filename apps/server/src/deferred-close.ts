@@ -36,6 +36,7 @@ import {
   type BillInvoiceDelivery,
 } from "./parties.js";
 import { readReceiptOrder } from "./receipt-order.js";
+import { refreshWaitingOriginals } from "./receipt-print.js";
 import { refusePlacedPaymentInFlight, settleIssuedOrder } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -189,6 +190,7 @@ export async function closeBillDeferredTx(
     closedAt,
     deps.log,
   );
+  await refreshWaitingOriginals(deps.backend, tx, cfg, billId);
 
   const attendance =
     deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock };

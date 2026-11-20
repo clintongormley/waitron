@@ -40,7 +40,7 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
-  cardSlipChoice,
+  paymentSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -514,7 +514,6 @@ export class TillBillPayDialog extends LitElement {
   /** Set after each refund made from the bill's payments list. */
   @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
-  @property({ type: Boolean }) canPrintReceipt = false;
   @property({ type: Boolean }) slipPrinterAvailable = false;
   @state() private printCardSlip = false;
   @property({ type: Boolean }) confirmationLocked = false;
@@ -1027,7 +1026,9 @@ export class TillBillPayDialog extends LitElement {
     return !this.handheld || this.#methods().length > 0;
   }
 
-  #slipAvailable(): boolean {
+  #slipAvailable(onReader: boolean): boolean {
+    if (!this.slipPrinterAvailable) return false;
+    if (!onReader) return true;
     const reader =
       this.handheld && this.fixedReader?.id === undefined && this.fixedReader !== null
         ? undefined
@@ -1036,7 +1037,7 @@ export class TillBillPayDialog extends LitElement {
           : this.readers.find(
               (reader) => reader.id === (this.chosenReaderId ?? this.defaultReaderId),
             );
-    return this.slipPrinterAvailable && reader?.printsOwnSlipAutomatically !== true;
+    return reader?.printsOwnSlipAutomatically !== true;
   }
 
   #readyReader(): FixedReader | null {
@@ -1428,19 +1429,6 @@ export class TillBillPayDialog extends LitElement {
             : nothing
         }
       </div>
-      ${
-        this.canPrintReceipt && payment.canCopySlip === true
-          ? html`<wt-button
-              variant="secondary"
-              size="sm"
-              data-payment-slip-copy=${payment.id}
-              aria-label=${t("bill_pay.slip_copy_label").replace("{n}", String(n))}
-              .disabled=${this.busy}
-              @click=${() => this.#emit("bill-slip-copy", { paymentId: payment.id })}
-              >${t("bill_pay.slip_copy")}</wt-button
-            >`
-          : nothing
-      }
       ${
         refundOffered(payment, status)
           ? html`<wt-button
@@ -2088,7 +2076,7 @@ export class TillBillPayDialog extends LitElement {
     this.#sharePaying = asked.choice.kind === "share" ? asked.choice.shareOf : null;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
-      ...(onReader && this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
+      ...(this.#slipAvailable(onReader) ? { printCardSlip: this.printCardSlip } : {}),
       ...(reader?.id === undefined ? {} : { readerId: reader.id }),
     } satisfies BillPayConfirmDetail);
   }
@@ -2190,8 +2178,8 @@ export class TillBillPayDialog extends LitElement {
         }
       </dl>
       ${this.#equipmentRow(onReader)}
-      ${cardSlipChoice(
-        onReader && this.#slipAvailable(),
+      ${paymentSlipChoice(
+        this.#slipAvailable(onReader),
         this.printCardSlip,
         this.busy || this.confirmationLocked,
         (value) => {

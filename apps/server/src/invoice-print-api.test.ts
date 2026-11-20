@@ -2,7 +2,7 @@ import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash, randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
@@ -14,6 +14,8 @@ import {
   printJobs,
   printAgents,
   printers,
+  isReceiptPrinter,
+  receiptRollColumns,
   taxpayer,
   withTransaction,
 } from "@waitron/db";
@@ -57,8 +59,23 @@ import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+/** Stands in for a sale's receipt laid out again: bytes naming the sale, its marking and the roll. */
+const layOut: LayOutSaleReceipt = async (_tx, saleId, duplicate, printer) =>
+  new TextEncoder().encode(
+    `${saleId} ${duplicate ? "copy" : "original"} ${printer.paperWidth} ${printer.resolution}`,
+  );
+
+/** What {@link layOut} gives for the sale on printer `printerId`. */
+async function laidOut(saleId: string, duplicate: boolean, printerId: string) {
+  const [roll] = await suite.db
+    .select({ ...receiptRollColumns })
+    .from(printers)
+    .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
+  return withTransaction(suite.db, (tx) => layOut(tx, saleId, duplicate, roll!));
+}
 const clock: TrustedClock = {
   now: () => ({
     instant: new Date("2026-10-07T12:00:00.000Z"),
@@ -180,7 +197,7 @@ async function setup(bluetooth = false) {
       pairingMode: createPairingMode(),
       readMembership: async () => null,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
-      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
+      layOutSaleReceipt: layOut,
       venueLocale: "es-ES",
       now: () => now,
     },
@@ -699,7 +716,7 @@ describe("management invoice receipt resends", () => {
       .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
       .where(eq(printJobs.id, original.jobId));
     const { jobId } = await withTransaction(suite.db, (tx) =>
-      resendInvoicePrintJob(tx, original.jobId, "staff", ctx.now()),
+      resendInvoicePrintJob(tx, layOut, original.jobId, "staff", ctx.now()),
     );
     expect(jobId).not.toBe(original.jobId);
     expect(
@@ -775,7 +792,7 @@ describe("management invoice receipt resends", () => {
     const beforeDeliveries = await suite.db.select().from(invoiceDeliveries);
     await expect(
       withTransaction(suite.db, (tx) =>
-        resendInvoicePrintJob(tx, ctx.job.jobId, "staff", ctx.now(), undefined, {
+        resendInvoicePrintJob(tx, layOut, ctx.job.jobId, "staff", ctx.now(), undefined, {
           printerId: ctx.printer.id,
           payload: new Uint8Array([27, 64]),
         }),
@@ -805,7 +822,7 @@ describe("management invoice receipt resends", () => {
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([delivery]);
   });
 
-  it("resends marked copy bytes after the original completes", async () => {
+  it("resends a marked copy laid out again after the original completes", async () => {
     const ctx = await setup();
     const original = await held(ctx);
     await ctx.result({ status: "done", invoiceClaim: original });
@@ -833,7 +850,7 @@ describe("management invoice receipt resends", () => {
     expect(job).toMatchObject({
       receiptCopy: true,
       resendOf: copy.jobId,
-      payload: new Uint8Array([68, 85, 80]),
+      payload: await laidOut(ctx.sale.saleId, true, ctx.printer.id),
     });
   });
 
@@ -858,7 +875,7 @@ describe("management invoice receipt resends", () => {
   });
 
   it.each(["failed", "unknown"] as const)(
-    "enrolls a %s original retry with the same bytes and a new authenticated claim",
+    "enrolls a %s original retry laid out again with a new authenticated claim",
     async (status) => {
       const ctx = await setup();
       const originalClaim = await held(ctx);
@@ -888,7 +905,7 @@ describe("management invoice receipt resends", () => {
       const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
       expect(job).toMatchObject({
         printerId: ctx.printer.id,
-        payload: (await ctx.jobRow()).payload,
+        payload: await laidOut(ctx.sale.saleId, false, ctx.printer.id),
         saleId: ctx.sale.saleId,
         receiptCopy: false,
         resendOf: ctx.job.jobId,
@@ -932,7 +949,7 @@ describe("management invoice receipt resends", () => {
     );
     const payload = new Uint8Array([27, 64, 66]);
     const { jobId } = await withTransaction(suite.db, (tx) =>
-      resendInvoicePrintJob(tx, ctx.job.jobId, "staff", ctx.now(), undefined, {
+      resendInvoicePrintJob(tx, layOut, ctx.job.jobId, "staff", ctx.now(), undefined, {
         printerId: other.id,
         payload,
       }),

@@ -108,7 +108,7 @@ import {
   type PrinterSeen,
   type ReprintRule,
 } from "./print-job-reprint.js";
-import type { LayOutSaleReceipt } from "./receipt-print.js";
+import { RECEIPT_OUT_OF_DATE, type LayOutSaleReceipt } from "./receipt-print.js";
 
 export interface PrintApiDeps {
   bus?: LiveEvents;
@@ -1891,7 +1891,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         sessionId,
         (tx, personId) =>
           printerId === undefined
-            ? resendInvoicePrintJob(tx, id, personId, deps.now?.())
+            ? resendInvoicePrintJob(tx, deps.layOutSaleReceipt, id, personId, deps.now?.())
             : reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
                 seen,
               }),
@@ -1905,24 +1905,35 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const [job] = await gated(sessionId, (tx) =>
-        tx
+      const { job, payload } = await gated(sessionId, async (tx) => {
+        const [job] = await tx
           .select({
             id: printJobs.id,
             kind: printJobs.kind,
             saleId: printJobs.saleId,
+            receiptCopy: printJobs.receiptCopy,
+            lastError: printJobs.lastError,
             payload: printJobs.payload,
             ...receiptRollColumns,
           })
           .from(printJobs)
           .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
-          .where(eq(printJobs.id, id)),
-      );
-      if (job === undefined) throw new AppError("print_job.not_found", { id });
-      assertPrintPayload(job);
+          .where(eq(printJobs.id, id));
+        if (job === undefined) throw new AppError("print_job.not_found", { id });
+        assertPrintPayload(job);
+        // Only a sale's original gives up as out of date; its saved bytes never print, and a
+        // resend lays it out again, so that is what it shows.
+        return {
+          job,
+          payload:
+            job.lastError === RECEIPT_OUT_OF_DATE
+              ? await deps.layOutSaleReceipt(tx, job.saleId!, job.receiptCopy!, job)
+              : job.payload!,
+        };
+      });
       // The printer's setting now sizes only a job that draws no line of text.
       return c.json(
-        previewPrintJob(job.payload!, {
+        previewPrintJob(payload, {
           widthDots: textGrid(job.paperWidth, job.resolution).widthDots,
         }),
       );

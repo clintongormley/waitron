@@ -259,6 +259,34 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     expect(declined).toHaveProperty("remainingAfter", 2000);
   });
 
+  it("keeps the slip choice it was written with, through every change of state", async () => {
+    const unasked = await insertPayment();
+    const [row] = await inTx((tx) =>
+      tx.select().from(billPayments).where(eq(billPayments.id, unasked)),
+    );
+    expect(row).toHaveProperty("slipWanted", false);
+    const asked = await insertPayment({ slipWanted: true });
+    for (const change of [
+      "slip_wanted = 0",
+      "state = 'received', received_at = '2026-09-27T12:00:00.000Z', slip_wanted = 0",
+      "state = 'failed', failed_at = '2026-09-27T12:05:00.000Z', slip_wanted = 0",
+    ]) {
+      expect(
+        triggerRaised(
+          await captureError(() => updatePayment(asked, change)),
+          BILL_PAYMENT_CHANGE_REFUSAL,
+        ),
+      ).toBe(true);
+    }
+    await updatePayment(asked, "state = 'received', received_at = '2026-09-27T12:00:00.000Z'");
+    expect(
+      triggerRaised(
+        await captureError(() => updatePayment(asked, "state = 'declined', slip_wanted = 0")),
+        BILL_PAYMENT_CHANGE_REFUSAL,
+      ),
+    ).toBe(true);
+  });
+
   describe("bill_payments columns and checks", () => {
     it("writes and reads back a pending card contribution", async () => {
       const id = await insertPayment();

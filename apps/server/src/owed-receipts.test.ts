@@ -31,6 +31,7 @@ import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import type { Transaction } from "@waitron/db";
 import type { Logger } from "./logger.js";
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 import {
   givenUpOriginals,
   owedReceiptJob,
@@ -41,6 +42,10 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const STAFF = "dddddddd-0000-4000-8000-000000000001";
+
+/** Stands in for the sale's receipt laid out again: bytes naming the sale, the copy marking and the roll. */
+const layOut: LayOutSaleReceipt = async (_tx, saleId, duplicate, printer) =>
+  new TextEncoder().encode(`${saleId} ${duplicate} ${printer.paperWidth}`);
 const AT = "2026-11-19T12:00:00.000Z";
 
 /** A recorded sale on its own bill, and a receipt printer to print it on. */
@@ -299,7 +304,7 @@ describe("startFreshRounds", () => {
   };
   const run = async (at = NOW) => {
     warnings = [];
-    return (await startFreshRounds(suite.db, at, log)).resent;
+    return (await startFreshRounds(suite.db, layOut, at, log)).resent;
   };
   // Each refusal below is the round's own filter, not a resend that threw and was logged.
   const leftAlone = async (saleId: string, at = NOW) => {
@@ -323,6 +328,9 @@ describe("startFreshRounds", () => {
       status: "queued",
       resendOf: first,
     });
+    expect(new TextDecoder().decode(jobs.find((job) => job.id === resent)!.payload!)).toMatch(
+      new RegExp(`^${saleId} false `, "u"),
+    );
   });
 
   it("leaves an original that gave up 9 minutes ago", async () => {
@@ -376,11 +384,16 @@ describe("startFreshRounds", () => {
     await receiptJob(saleId, printerId, givenUpAt(11));
     const stopped = new AbortController();
     stopped.abort();
-    expect(await startFreshRounds(suite.db, NOW, log, stopped.signal)).toEqual({
+    expect(await startFreshRounds(suite.db, layOut, NOW, log, stopped.signal)).toEqual({
       resent: [],
       nextDueAt: null,
     });
-    const job = owedReceiptJob({ db: suite.db, isPrimary: () => true, log });
+    const job = owedReceiptJob({
+      db: suite.db,
+      layOutSaleReceipt: layOut,
+      isPrimary: () => true,
+      log,
+    });
     expect(await job.pass({ now: NOW, signal: stopped.signal })).toEqual({ nextDueAt: null });
     expect(await jobsOf(saleId)).toHaveLength(1);
   });
@@ -418,7 +431,7 @@ describe("startFreshRounds", () => {
     });
     await holds;
     warnings = [];
-    const round = startFreshRounds(watching(asked), NOW, log, signal);
+    const round = startFreshRounds(watching(asked), layOut, NOW, log, signal);
     await holder;
     return (await round).resent;
   }
@@ -489,6 +502,7 @@ describe("startFreshRounds", () => {
       expect(
         await startFreshRounds(
           watching(() => locks++),
+          layOut,
           NOW,
           log,
         ),
@@ -502,9 +516,12 @@ describe("startFreshRounds", () => {
 
   it("says when the next given-up original falls due, and nothing when none waits", async () => {
     const { saleId, printerId } = await issued();
-    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({ resent: [], nextDueAt: null });
+    expect(await startFreshRounds(suite.db, layOut, NOW, log)).toEqual({
+      resent: [],
+      nextDueAt: null,
+    });
     await receiptJob(saleId, printerId, givenUpAt(7));
-    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({
+    expect(await startFreshRounds(suite.db, layOut, NOW, log)).toEqual({
       resent: [],
       nextDueAt: new Date(NOW.getTime() + 3 * 60_000),
     });
@@ -513,7 +530,10 @@ describe("startFreshRounds", () => {
   it("looks again in a minute after a resend that failed", async () => {
     const { saleId, printerId } = await issued();
     await receiptJob(saleId, printerId, { ...givenUpAt(11), payload: new Uint8Array() });
-    expect(await startFreshRounds(suite.db, NOW, log)).toEqual({ resent: [], nextDueAt: NOW });
+    expect(await startFreshRounds(suite.db, layOut, NOW, log)).toEqual({
+      resent: [],
+      nextDueAt: NOW,
+    });
   });
 
   it("leaves a sale that no longer owes its original", async () => {
@@ -610,7 +630,12 @@ describe("startFreshRounds", () => {
 describe("owedReceiptJob", () => {
   it("runs on the primary only, at most once a minute, woken by what can make a receipt owed", async () => {
     let primary = false;
-    const job = owedReceiptJob({ db: suite.db, isPrimary: () => primary, log: () => {} });
+    const job = owedReceiptJob({
+      db: suite.db,
+      layOutSaleReceipt: layOut,
+      isPrimary: () => primary,
+      log: () => {},
+    });
     expect(job).toMatchObject({
       name: "receipt.owed",
       minSleepMs: 60_000,
@@ -628,7 +653,12 @@ describe("owedReceiptJob", () => {
       ...GIVEN_UP,
       claimedAt: AT,
     });
-    const job = owedReceiptJob({ db: suite.db, isPrimary: () => true, log: () => {} });
+    const job = owedReceiptJob({
+      db: suite.db,
+      layOutSaleReceipt: layOut,
+      isPrimary: () => true,
+      log: () => {},
+    });
     expect(
       await job.pass({
         now: new Date(Date.parse(AT) + 11 * 60_000),

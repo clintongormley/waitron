@@ -18,11 +18,15 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
-import { cardDetailsOf, type StoredCard } from "./card-details.js";
+import {
+  enqueueRequestedPaymentSlip,
+  freezeCardSlip,
+  printCapturedCardSlip,
+} from "./payment-slip-print.js";
+import { cardOf } from "./card-details.js";
+import { readReceiptPayments, type BillTenderLine } from "./receipt-payments.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
 import {
   addDecimal,
   AppError,
@@ -35,11 +39,11 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import {
-  billPaymentRefunds,
   billPayments,
   invoiceSeries,
   isUniqueViolation,
   nowIso,
+  saleSettlements,
   sales,
   tenders,
   withTransaction,
@@ -108,7 +112,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment, pinnedAt } from "./issue-moment.js";
-import { cashChange, ZERO } from "./bill-allocation.js";
+import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import {
   afterCardCharged,
@@ -118,7 +122,7 @@ import {
   refuseBillHoldingMoney,
   refuseBillWithPayments,
 } from "./bill-payments.js";
-import { readIssuedSales } from "./sale-due.js";
+import { readIssuedSales, type IssuedSale } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -129,6 +133,7 @@ import {
   enqueueSaleDrawer,
   enqueueOriginalReceipt,
   enqueueReceiptReprint,
+  refreshWaitingOriginals,
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
@@ -235,6 +240,8 @@ export interface TillSaleRequest {
    * tender. Any other method is refused `sale.unsupported_tender`.
    */
   tender: TillTender;
+  /** The payer asked for a payment slip. */
+  printCardSlip?: boolean;
   invoiceType?: unknown;
   recipient?: unknown;
   workingOrderId?: string;
@@ -338,29 +345,9 @@ export type TenderBlock =
       card?: CardDetails;
     };
 
-/**
- * One payment of a bill paid in parts before its invoice, as the ticket lists it. `change` is what
- * the bill payment handed back when it was taken, never derived from the tender, whose amount a
- * refund lowers.
- */
-export type BillTenderLine = (
-  | { method: "cash"; amount: string; tip: string; tendered: string; change: string }
-  | ({
-      method: "card";
-      amount: string;
-      tip: string;
-      reference: string | null;
-      card?: CardDetails;
-    } & OutsideCardDetails)
-) & { refunds: BillTenderRefund[] };
-
-/** Money given back from a bill payment before the invoice: a `completed` refund, oldest first. */
-export interface BillTenderRefund {
-  amount: string;
-  tip: string;
-}
-
 export interface TillSaleResult extends ReceiptPresentation {
+  /** The payer asked for a payment slip and none could be queued. */
+  slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment: boolean;
   invoiceEvidence?: import("@waitron/fiscal").FiledInvoiceEvidence;
@@ -406,8 +393,10 @@ export interface TillSaleResult extends ReceiptPresentation {
   /** The sale's FIRST tender by settle time, read back from the committed tender and payment rows;
    * `payments` lists them all when the bill was paid in parts. */
   tender: TenderBlock;
-  /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
+  /** Every bill payment the sale was paid with, or, while it is unpaid, received so far. */
   payments?: BillTenderLine[];
+  /** What an issued, unsettled sale still owes, tips aside; absent when nothing is. */
+  owed?: string;
   /** Discounts on the whole bill, printed after the goods; absent when there are none. */
   billAdjustments?: ReceiptAdjustment[];
   /** Where a customer can verify the record, or "" when the regime offers none. */
@@ -509,101 +498,6 @@ const CARD_COLUMNS = {
   authCode: payments.cardAuthCode,
 };
 
-function cardOf(row: StoredCard | undefined): { card?: CardDetails } {
-  const card = row === undefined ? null : cardDetailsOf(row);
-  return card === null ? {} : { card };
-}
-
-const capturedCards = alias(payments, "captured_card");
-
-/** The payments of a sale whose tenders were taken as bill payments, in the order they were taken. */
-export async function readBillTenderLines(
-  tx: Transaction,
-  saleId: SaleId,
-): Promise<BillTenderLine[]> {
-  const rows = await tx
-    .select({
-      billPaymentId: billPayments.id,
-      method: tenders.method,
-      amount: tenders.amount,
-      tip: tenders.tipAmount,
-      applied: billPayments.applied,
-      paymentTip: billPayments.tip,
-      tendered: billPayments.tendered,
-      reference: payments.externalRef,
-      externalProvider: payments.externalProvider,
-      externalMachine: payments.externalMachine,
-      scheme: capturedCards.cardScheme,
-      last4: capturedCards.cardLast4,
-      entryMode: capturedCards.cardEntryMode,
-      authCode: capturedCards.cardAuthCode,
-    })
-    .from(tenders)
-    .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
-    .leftJoin(
-      payments,
-      and(eq(payments.billPaymentId, billPayments.id), eq(payments.provider, "manual")),
-    )
-    .leftJoin(
-      capturedCards,
-      and(eq(capturedCards.billPaymentId, billPayments.id), isNotNull(capturedCards.settledAt)),
-    )
-    .where(eq(tenders.saleId, saleId))
-    // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
-    // written in.
-    .orderBy(tenders.settledAt, sql`${billPayments}.rowid`);
-  const refundRows =
-    rows.length === 0
-      ? []
-      : await tx
-          .select({
-            billPaymentId: billPaymentRefunds.billPaymentId,
-            amount: billPaymentRefunds.appliedAmount,
-            tip: billPaymentRefunds.tipAmount,
-          })
-          .from(billPaymentRefunds)
-          .where(
-            and(
-              inArray(
-                billPaymentRefunds.billPaymentId,
-                rows.map((row) => row.billPaymentId),
-              ),
-              eq(billPaymentRefunds.state, "completed"),
-            ),
-          )
-          .orderBy(billPaymentRefunds.completedAt, sql`${billPaymentRefunds}.rowid`);
-  return rows.map((row) => {
-    const amount = centsToDecimal(row.amount);
-    const tip = centsToDecimal(row.tip);
-    const refunds = refundRows
-      .filter((refund) => refund.billPaymentId === row.billPaymentId)
-      .map((refund) => ({
-        amount: centsToDecimal(refund.amount),
-        tip: centsToDecimal(refund.tip),
-      }));
-    if (row.method === "cash") {
-      const tendered = centsToDecimal(row.tendered!);
-      return {
-        method: "cash",
-        amount,
-        tip,
-        tendered,
-        change: cashChange(row.tendered!, row.applied, row.paymentTip),
-        refunds,
-      };
-    }
-    return {
-      method: "card",
-      amount,
-      tip,
-      reference: row.reference ?? null,
-      ...outsideCardDetails(row),
-      ...cardOf(row),
-      refunds,
-    };
-  });
-}
-
 /**
  * A pay-and-settle over a PERSISTED working order, keyed by its client-minted id. `id` is the
  * idempotency key: `sales_working_order_id_key` makes at most one sale per working order.
@@ -629,6 +523,7 @@ export interface PayWorkingOrderRequest {
   } & LineExtras)[];
   /** Same shape and rules as `TillSaleRequest.tender`. */
   tender: TillTender;
+  printCardSlip?: boolean;
   invoiceType?: unknown;
   recipient?: unknown;
   /** Deliver a WALK-UP sale to a dining table; ignored for a retrieved order. An unknown id is
@@ -732,7 +627,10 @@ export type IntegratedPayOutcome = (
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" }
-) & { captureWarning?: CaptureMismatch; slipPrintFailed?: true };
+) & {
+  captureWarning?: CaptureMismatch;
+  slipPrintFailed?: true;
+};
 
 /** {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`. */
 export type IntegratedPayDeps = TillSaleDeps & {
@@ -883,6 +781,7 @@ async function runPayWorkingOrder(
           locked?.partyId ?? null,
           req.guestCount,
           operatorId,
+          req.printCardSlip,
         );
         await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
         return ticket;
@@ -928,6 +827,7 @@ async function fireAndFileSale(
   partyId: string | null,
   guestCount: GuestCountChoice,
   operatorId?: string,
+  printSlip?: boolean,
 ): Promise<TillSaleResult> {
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
 
@@ -940,6 +840,7 @@ async function fireAndFileSale(
     order,
     guestCount,
     operatorId,
+    printSlip,
   );
   if (notSent !== null) {
     const [sale] = await tx
@@ -979,9 +880,11 @@ export async function readSettledTicket(
       invoiceLocales: sales.invoiceLocales,
       fiscalBackend: sales.fiscalBackend,
       vatBreakdown: sales.vatBreakdown,
+      settlementId: saleSettlements.id,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
     .where(eq(sales.workingOrderId, workingOrderId));
 
   /* v8 ignore start */
@@ -1010,7 +913,6 @@ export async function readSettledTicket(
   }
 
   const tender = await readTenderBlock(tx, brandSaleId(issued.saleId), workingOrderId);
-  const billTenders = await readBillTenderLines(tx, brandSaleId(issued.saleId));
 
   return {
     ...(await readReceiptOrder(tx, workingOrderId)),
@@ -1024,7 +926,12 @@ export async function readSettledTicket(
     vatBreakdown: filed === undefined ? issued.vatBreakdown : toVatBreakdown(filed.vatBreakdown),
     ...ticketLines,
     tender,
-    ...(billTenders.length === 0 ? {} : { payments: billTenders }),
+    ...(await readReceiptPayments(
+      tx,
+      brandSaleId(issued.saleId),
+      workingOrderId,
+      issued.settlementId !== null,
+    )),
     ...receiptQr(backend, filed?.verificationUrl),
     ...(await readReceiptIssuer(backend, tx, brandSaleId(issued.saleId))),
   };
@@ -1118,6 +1025,7 @@ async function fileImmediateSale(
   order: GrossOrder,
   guestCount: GuestCountChoice,
   operatorId?: string,
+  printSlip?: boolean,
 ): Promise<TillSaleResult> {
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "order",
@@ -1221,16 +1129,30 @@ async function fileImmediateSale(
 
   const printers = printerLookup(tx, cfg.origin);
   await enqueueSaleReceipt(tx, cfg, ticket, saleId, printers);
-  if (taken !== null) {
-    await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId, printers);
-  }
-  return ticket;
+  if (taken === null) return ticket;
+  await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId, printers);
+  const slip = await enqueueRequestedPaymentSlip(
+    tx,
+    cfg,
+    workingOrderId,
+    printSlip,
+    {
+      method: taken.method,
+      charged: decimalToCents(addDecimal(decimal(taken.settledAmount), tip)),
+      tip: decimalToCents(tip),
+      paidAt: settledAt.toISOString(),
+      reference: taken.externalRef ?? null,
+      machine: outsideCardDetails(taken).externalMachine ?? null,
+    },
+    printers,
+  );
+  return { ...ticket, ...slip };
 }
 
 export async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,
-): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
+): Promise<IssuedSale | undefined> {
   return (await readIssuedSales(tx, [workingOrderId])).get(workingOrderId);
 }
 
@@ -1669,6 +1591,7 @@ async function retainShortCapture(
         .update(workingOrders)
         .set({ paymentAttemptAt: null })
         .where(eq(workingOrders.id, orderId));
+    await refreshWaitingOriginals(deps.backend, tx, cfg, orderId);
   }
   return {
     outcome: "partial",
@@ -2205,6 +2128,7 @@ async function finalizeSettle(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -2281,6 +2205,7 @@ async function finalizeSettleRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -2430,9 +2355,18 @@ async function runCollectOrder(
           .where(eq(workingOrders.id, req.id));
         await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
         await clearBillRequestIfPaid(tx, req.id, deps.log);
+        await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
         const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-        await enqueueSaleDrawer(tx, cfg, outstanding.saleId, req.tender.method, operatorId);
+        const printers = printerLookup(tx, cfg.origin);
+        await enqueueSaleDrawer(
+          tx,
+          cfg,
+          outstanding.saleId,
+          req.tender.method,
+          operatorId,
+          printers,
+        );
         await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
         return ticket;
       }
@@ -2543,6 +2477,7 @@ async function runTillSale(
       expectedEdit: req.expectedEdit,
       lines: req.lines,
       tender: req.tender,
+      printCardSlip: req.printCardSlip,
       kitchenNote: req.kitchenNote,
       invoiceType: req.invoiceType,
       recipient: req.recipient,

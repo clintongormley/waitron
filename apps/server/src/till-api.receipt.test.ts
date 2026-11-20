@@ -1,6 +1,7 @@
 import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
-import { payments, recordVoid } from "@waitron/payments";
+import { payments, recordVoid, type PaymentResult } from "@waitron/payments";
+import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
   seedDeviceProfiles,
@@ -19,6 +20,8 @@ import {
   drawerOpens,
   printAgents,
   printers,
+  isReceiptPrinter,
+  receiptRollColumns,
   printJobs,
   sales,
   saleLines,
@@ -75,6 +78,7 @@ import {
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   jobOrigin,
+  type DeviceId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -96,7 +100,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
-import { DRAWER_KICK } from "./receipt-print.js";
+import { DRAWER_KICK, layOutSaleReceipt } from "./receipt-print.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";
 import { deletePrinter } from "./printer-delete.js";
 import {
@@ -491,19 +495,49 @@ async function ringSale(
   return workingOrderId;
 }
 
-async function expectSlipUnavailable(response: Response): Promise<void> {
-  expect(await response.json()).toMatchObject({
-    error: { code: "bill.payment_slip_unavailable" },
+/** A counter cash sale whose payer asked for a payment slip. */
+async function cashSaleAskingSlip(app: Hono, cookie: string, menuItemId: string) {
+  const res = await app.request("/api/sales", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({
+      dining: "eat_in",
+      workingOrderId: randomUUID(),
+      lines: [{ menuItemId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+      printCardSlip: true,
+    }),
   });
+  expect(res.status).toBe(200);
+  return (await res.json()) as { slipPrintFailed?: true };
 }
 
-/** The Payment slip press for a sale's card payment. */
-async function slipPath(workingOrderId: string): Promise<string> {
+/**
+ * The slip a payer asked for at a reader payment, printed as `/api/pay` prints it once the card is
+ * captured: from the sale's `payments` row, on the paying device's slip printer.
+ */
+async function slipAskedAtPayment(cfg: TradingContext, workingOrderId: string, log?: Logger) {
   const [payment] = await suite.db
-    .select({ id: payments.id })
+    .select()
     .from(payments)
     .where(eq(payments.workingOrderId, workingOrderId));
-  return `/api/sales/${workingOrderId}/payment-slip/${payment!.id}`;
+  const deviceCfg = {
+    ...cfg,
+    origin: { source: "device" as const, deviceId: payment!.deviceId as DeviceId },
+  };
+  const requested = await withTransaction(suite.db, (tx) =>
+    freezeCardSlip(tx, deviceCfg, workingOrderId, true, undefined),
+  );
+  expect(requested).toBeTruthy();
+  return printCapturedCardSlip(
+    suite.db,
+    deviceCfg,
+    workingOrderId,
+    { provider: payment!.provider, paymentRef: payment!.paymentRef } as PaymentResult,
+    requested,
+    undefined,
+    log,
+  );
 }
 
 beforeAll(() => {
@@ -974,8 +1008,14 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       }
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(2);
+      const [roll] = await suite.db
+        .select({ ...receiptRollColumns })
+        .from(printers)
+        .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
       expect(jobs.find((job) => job.id === jobId)).toMatchObject({
-        payload: new Uint8Array([27, 64]),
+        payload: await withTransaction(suite.db, (tx) =>
+          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!),
+        ),
         printerId,
         resendOf: original.jobId,
         receiptCopy: false,
@@ -2388,20 +2428,6 @@ describe("original receipt and payment slip actions", () => {
     expect(await fiscalRecordCount()).toBe(1);
     expect(await saleCount()).toBe(1);
   });
-  it("refuses unknown and malformed payment-slip ids", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    const app = new Hono();
-    mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
-    for (const id of [randomUUID(), "bad-id"]) {
-      const res = await app.request(`/api/sales/${id}/payment-slip/${randomUUID()}`, {
-        method: "POST",
-        headers: { cookie },
-      });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({ error: { code: "working_order.not_found" } });
-    }
-  });
 });
 
 describe("POST /api/sales/:id/receipt with ifOwed (the print when the window closes)", () => {
@@ -2540,7 +2566,7 @@ describe("payment slip persisted capture facts", () => {
     { saved: "es-ES", configured: "en-GB" },
     { saved: "ca-ES", configured: "es-ES" },
   ])(
-    "A965 payment language uses saved $saved after config and venue language changes",
+    "A965 payment language uses saved $saved, not the configured language",
     async ({ saved, configured }) => {
       const { cfg, each, operatorId } = await setupVenue();
       cfg.locale = configured;
@@ -2573,41 +2599,19 @@ describe("payment slip persisted capture facts", () => {
           sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
         ),
       );
-      const slip = await slipPath(id);
-      const ask = () =>
-        app.request(slip, {
-          method: "POST",
-          headers: { cookie, "Accept-Language": configured },
-        });
-      for (const changed of [false, true]) {
-        if (changed) {
-          await seedVenueSettings(suite.db, { invoiceLocales: ["en-GB"] });
-          await withTransaction(suite.db, (tx) =>
-            writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }),
-          );
-        }
-        expect((await ask()).status).toBe(200);
-        const jobs = await printJobsFor(cfg);
-        expect(jobs).toHaveLength(changed ? 2 : 1);
-        const text = decodeTicket(new Uint8Array(jobs.at(-1)!.payload));
-        const labels = receiptLabelsFor(saved);
-        expect(text).toContain(labels.paymentHeading);
-        expect(text).toContain(labels.paymentEntry);
-        expect(text).toContain(labels.paymentContactless);
-        expect(
-          text
-            .split("\n")
-            .some(
-              (line) =>
-                line.startsWith(labels.paymentRemaining) &&
-                line.slice(labels.paymentRemaining.length).trim() === "0,00 €",
-            ),
-        ).toBe(true);
-        expect(text).toContain(labels.duplicate);
-        expect(text).toContain(saved === "ca-ES" ? "1.500,00 €" : "1500,00 €");
-        expect(text).toContain("09:05");
-        expect(text).not.toContain("Sep");
-      }
+      expect(await slipAskedAtPayment(cfg, id)).toEqual({});
+      const jobs = await printJobsFor(cfg);
+      expect(jobs).toHaveLength(1);
+      const text = decodeTicket(new Uint8Array(jobs.at(-1)!.payload));
+      const labels = receiptLabelsFor(saved);
+      expect(text).toContain(labels.paymentHeading);
+      expect(text).toContain(labels.paymentEntry);
+      expect(text).toContain(labels.paymentContactless);
+      expect(text).not.toContain(labels.owed);
+      expect(text).not.toContain(labels.duplicate);
+      expect(text).toContain(saved === "ca-ES" ? "1.500,00 €" : "1500,00 €");
+      expect(text).toContain("09:05");
+      expect(text).not.toContain("Sep");
       expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toEqual([
         savedSale,
       ]);
@@ -2629,11 +2633,7 @@ describe("payment slip persisted capture facts", () => {
           sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
         ),
       );
-      const res = await app.request(await slipPath(id), {
-        method: "POST",
-        headers: { cookie },
-      });
-      expect(res.status).toBe(200);
+      expect(await slipAskedAtPayment(cfg, id)).toEqual({});
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
       const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
@@ -2659,11 +2659,7 @@ describe("payment slip persisted capture facts", () => {
         sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '4034', card_entry_mode = null, card_auth_code = '354739' where working_order_id = ${id}`,
       ),
     );
-    const res = await app.request(await slipPath(id), {
-      method: "POST",
-      headers: { cookie },
-    });
-    expect(res.status).toBe(200);
+    expect(await slipAskedAtPayment(cfg, id)).toEqual({});
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     const text = decodeTicket(new Uint8Array(jobs[0]!.payload));
@@ -2671,47 +2667,6 @@ describe("payment slip persisted capture facts", () => {
     expect(text).toContain("Visa ****4034");
     expect(text).toContain("354739");
     expect(text).not.toContain(labels.paymentEntry);
-  });
-  it.each([true, false])(
-    "reader automatic slip=%s excludes only its own Waitron payment slip",
-    async (automatic) => {
-      const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt({ printerId: await makePrinter() });
-      const app = new Hono();
-      mountTillApi(app, apiDeps(cfg), noopLog);
-      const cookie = await login(app, cfg, operatorId);
-      const id = await ringSale(app, cookie, each.menuItemId, "card");
-      await suite.db.execute(
-        sql`insert into card_readers (id, provider, provider_ref, name, prints_own_slip_automatically, created_at) values (${randomUUID()}, 'sumup', ${randomUUID()}, 'Counter', ${automatic ? 1 : 0}, ${new Date().toISOString()})`,
-      );
-      await liftPaymentGuard(suite.db, () =>
-        suite.db.execute(
-          sql`update payments set provider = 'sumup', reader_id = (select id from card_readers where name = 'Counter' limit 1) where working_order_id = ${id}`,
-        ),
-      );
-      const response = await app.request(await slipPath(id), {
-        method: "POST",
-        headers: { cookie },
-      });
-      expect(response.status).toBe(automatic ? 409 : 200);
-      if (automatic) await expectSlipUnavailable(response);
-      expect(await printJobsFor(cfg)).toHaveLength(automatic ? 0 : 1);
-      expect(await fiscalRecordCount()).toBe(1);
-      expect(await saleCount()).toBe(1);
-    },
-  );
-
-  it("refuses to print a manual card slip", async () => {
-    const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt({ printerId: await makePrinter() });
-    const app = new Hono();
-    mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cookie, each.menuItemId, "card");
-    const res = await app.request(await slipPath(id), { method: "POST", headers: { cookie } });
-    expect(res.status).toBe(409);
-    await expectSlipUnavailable(res);
-    expect(await printJobsFor(cfg)).toEqual([]);
   });
   it("lays the payment slip out for the device printer's paper width and resolution", async () => {
     const { cfg, each, operatorId } = await setupVenue();
@@ -2726,18 +2681,12 @@ describe("payment slip persisted capture facts", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cookie, each.menuItemId, "card");
-    await liftPaymentGuard(suite.db, () =>
-      suite.db.execute(
-        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
-      ),
+    expect(await cashSaleAskingSlip(app, cookie, each.menuItemId)).not.toHaveProperty(
+      "slipPrintFailed",
     );
-    const res = await app.request(await slipPath(id), {
-      method: "POST",
-      headers: { cookie },
-    });
-    expect(res.status).toBe(200);
-    const [job] = await printJobsFor(cfg);
+    const [job] = (await printJobsFor(cfg)).filter((printed) =>
+      decodeTicket(new Uint8Array(printed.payload)).includes("JUSTIFICANTE DE PAGO"),
+    );
     const payload = new Uint8Array(job!.payload);
     const commands = printedCommands(payload);
     expect(commands.slice(0, 2).map((command) => command.name)).toEqual(["ESC @", "GS v 0"]);
@@ -2754,28 +2703,21 @@ describe("payment slip persisted capture facts", () => {
 });
 
 describe("payment slip with nothing to print", () => {
-  it("refuses the press when the device has no payment slip printer", async () => {
+  it("keeps a cash sale whose requested slip finds no payment slip printer, and says so", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: null });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
-    const id = await ringSale(app, cookie, each.menuItemId, "card");
-    await liftPaymentGuard(suite.db, () =>
-      suite.db.execute(sql`update payments set provider = 'sumup' where working_order_id = ${id}`),
-    );
-    const res = await app.request(await slipPath(id), {
-      method: "POST",
-      headers: { cookie },
+    expect(await cashSaleAskingSlip(app, cookie, each.menuItemId)).toMatchObject({
+      slipPrintFailed: true,
     });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "bill.payment_slip_no_printer" },
-    });
+    expect(await saleCount()).toBe(1);
+    expect(await fiscalRecordCount()).toBe(1);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("refuses the press for a capture that records no settlement instant", async () => {
+  it("prints no slip for a capture that records no settlement instant, and says so", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const app = new Hono();
@@ -2787,13 +2729,12 @@ describe("payment slip with nothing to print", () => {
         sql`update payments set provider = 'sumup', settled_at = null where working_order_id = ${id}`,
       ),
     );
-    const res = await app.request(await slipPath(id), {
-      method: "POST",
-      headers: { cookie },
-    });
-    expect(res.status).toBe(409);
-    await expectSlipUnavailable(res);
+    const log = vi.fn<Logger>();
+    expect(await slipAskedAtPayment(cfg, id, log)).toEqual({ slipPrintFailed: true });
     expect(await printJobsFor(cfg)).toEqual([]);
+    expect(log.mock.calls).toEqual([
+      ["warn", "payment.slip_print_failed", { workingOrderId: id, reason: "settlement_missing" }],
+    ]);
   });
 });
 
@@ -3163,16 +3104,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     return app.request(path, { method: "POST", headers: { cookie } });
   }
 
-  async function cardSaleWithCapture(app: Hono, cookie: string, item: string) {
-    const id = await ringSale(app, cookie, item, "card");
-    await liftPaymentGuard(suite.db, () =>
-      suite.db.execute(
-        sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
-      ),
-    );
-    return id;
-  }
-
   it("prints each device's receipt on its own receipt printer", async () => {
     const { cfg, each, app, signIn, r1, r2, s1 } = await venueWithPrinters();
     const a = await enrolPrintingDevice(cfg, {
@@ -3203,7 +3134,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     ]);
   });
 
-  it("prints a card sale's payment slip on the device's payment slip printer, not its receipt printer", async () => {
+  it("prints a requested payment slip on the device's payment slip printer, not its receipt printer", async () => {
     const { cfg, each, app, signIn, r1, s1 } = await venueWithPrinters();
     const a = await enrolPrintingDevice(cfg, {
       capabilities: [...CAPABILITY_FLAGS],
@@ -3211,9 +3142,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [s1],
     });
     const onA = await signIn(a.cookie);
-    const id = await cardSaleWithCapture(app, onA, each.menuItemId);
 
-    expect((await post(app, onA, await slipPath(id))).status).toBe(200);
+    await cashSaleAskingSlip(app, onA, each.menuItemId);
 
     expect((await jobs()).map((job) => job.printerId)).toEqual([s1]);
   });
@@ -3241,7 +3171,6 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [s1, r1],
     });
     const onA = await signIn(a.cookie);
-    const id = await cardSaleWithCapture(app, onA, each.menuItemId);
 
     const switched = await app.request("/api/device/equipment", {
       method: "PUT",
@@ -3249,7 +3178,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       body: JSON.stringify({ role: "payment_slip", selection: { id: r1 }, via: "list" }),
     });
     expect(switched.status).toBe(200);
-    expect((await post(app, onA, await slipPath(id))).status).toBe(200);
+    await cashSaleAskingSlip(app, onA, each.menuItemId);
 
     expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
   });

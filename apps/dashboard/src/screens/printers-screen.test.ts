@@ -5503,6 +5503,22 @@ it("words a job moved to another printer and shows no attempts for it", async ()
   expect(text(el, "[data-test=job-attempts-j40]")).toBe("—");
 });
 
+it("words an original receipt a later payment could not be added to and shows no attempts for it", async () => {
+  const outOfDate: PrintJobRow = {
+    ...jobs[0]!,
+    id: "j41",
+    attempts: 5,
+    lastError: "receipt.out_of_date",
+  };
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue([outOfDate]) }),
+  });
+  await flush(el);
+  expect(text(el, "[data-test=job-error-j41]")).toBe(codeMessage("receipt.out_of_date", "es-ES"));
+  expect(codeMessage("receipt.out_of_date", "es-ES")).not.toBe("receipt.out_of_date");
+  expect(text(el, "[data-test=job-attempts-j41]")).toBe("—");
+});
+
 it("keeps pairing open, polls passively, and makes Scan usable again after listening", async () => {
   const background = {
     joinRequests: vi.fn().mockResolvedValue(pending),

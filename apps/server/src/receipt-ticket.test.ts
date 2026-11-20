@@ -25,7 +25,7 @@ import {
   printedLines,
   withoutRules,
 } from "./testing/decode-ticket.js";
-import type { ReceiptDocumentInput } from "./receipt-document.js";
+import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { FULL_INVOICE_FIXTURE } from "./testing/full-invoice-fixture.js";
 type TillSaleResult = ReceiptDocumentInput["result"];
 
@@ -4596,5 +4596,121 @@ describe("simplified receipt: tax table", () => {
     expect(lines.join("\n")).toContain("Base imponible 21%");
     expect(lines.join("\n")).toContain("IVA 21%");
     expect(lines.some((line) => line.startsWith("Tipo "))).toBe(false);
+  });
+});
+
+describe("what is still owed", () => {
+  const CARD = {
+    scheme: "VISA",
+    last4: "4034",
+    entryMode: "contactless",
+    authCode: "354739",
+  } as const;
+  const UNPAID: TillSaleResult = {
+    ...FILED_SALE,
+    total: "60.00",
+    vatBreakdown: [{ rate: "10", base: "54.55", tax: "5.45" }],
+    lines: [{ descriptions: { "es-ES": "Paella" }, quantity: "1", gross: "60.00" }],
+    tender: { method: "unpaid" },
+    owed: "60.00",
+  };
+  const PART_PAID: TillSaleResult = {
+    ...UNPAID,
+    payments: [
+      {
+        method: "cash",
+        amount: "10.00",
+        tip: "0.00",
+        tendered: "10.00",
+        change: "0.00",
+        refunds: [],
+      },
+      { method: "card", amount: "21.00", tip: "1.00", reference: null, card: CARD, refunds: [] },
+    ],
+    owed: "30.00",
+  };
+  const input = (
+    result: TillSaleResult,
+    printer: EscSetting = PRINTER_80,
+    duplicate = false,
+  ): ReceiptDocumentInput & { printer: EscSetting } => ({
+    result,
+    issuer: ISSUER,
+    receipt: TRIM,
+    invoiceLocale: "es-ES",
+    printer,
+    duplicate,
+  });
+  const printed = (result: TillSaleResult, printer: EscSetting = PRINTER_80): string[] =>
+    paymentLines(formatReceipt(input(result, printer)));
+
+  it("prints Pendiente on an unpaid receipt", () => {
+    const lines = printed(UNPAID);
+    const tax = lines.findIndex((line) => line.startsWith("10%"));
+    expect(withoutRules(lines.slice(tax + 1))).toEqual(["Pendiente 60,00 €", TRIM.footerMessage!]);
+    expect(
+      buildReceiptDocument(input(UNPAID)).elements.filter(
+        (element) => element.kind === "amount" && element.caption === "Pendiente",
+      ),
+    ).toEqual([
+      { kind: "amount", caption: "Pendiente", amount: "60,00 €", indent: 0, style: { bold: true } },
+    ]);
+  });
+
+  it("prints payments then Pendiente on a part-paid receipt", () => {
+    const lines = printed(PART_PAID);
+    const cash = lines.indexOf("Efectivo 10,00 €");
+    expect(withoutRules(lines.slice(cash))).toEqual([
+      "Efectivo 10,00 €",
+      "Visa ****4034 (Sin contacto) 21,00 €",
+      "Autorización 354739",
+      "Propina 1,00 €",
+      "Pendiente 30,00 €",
+      TRIM.footerMessage!,
+    ]);
+  });
+
+  it("prints payments then Pendiente on a part-paid receipt within 58 mm's columns", () => {
+    const bytes = formatReceipt(input(PART_PAID, PRINTER_58));
+    const { columns } = textGrid(PRINTER_58.paperWidth, PRINTER_58.resolution);
+    for (const line of printedLines(bytes)) expect(line.length).toBeLessThanOrEqual(columns);
+    const lines = paymentLines(bytes);
+    const cash = lines.indexOf("Efectivo 10,00 €");
+    expect(withoutRules(lines.slice(cash))).toEqual([
+      "Efectivo 10,00 €",
+      "Visa ****4034 (Sin contacto)",
+      "21,00 €",
+      "Autorización 354739",
+      "Propina 1,00 €",
+      "Pendiente 30,00 €",
+      TRIM.footerMessage!,
+    ]);
+    expect(printedLines(bytes)).toContainEqual(expect.stringMatching(/^Pendiente +30,00 €$/u));
+  });
+
+  it("a duplicate of a settled sale prints no Pendiente", () => {
+    const { payments = [] } = PART_PAID;
+    const settled: TillSaleResult = {
+      ...FILED_SALE,
+      total: UNPAID.total,
+      vatBreakdown: UNPAID.vatBreakdown,
+      lines: UNPAID.lines,
+      tender: { method: "cash", change: "0.00" },
+      payments: [
+        ...payments,
+        {
+          method: "cash",
+          amount: "30.00",
+          tip: "0.00",
+          tendered: "30.00",
+          change: "0.00",
+          refunds: [],
+        },
+      ],
+    };
+    const text = decodeTicket(formatReceipt(input(settled, PRINTER_80, true)));
+    expect(text).toContain("DUPLICADO");
+    expect(text).toContain("30,00");
+    expect(text).not.toContain("Pendiente");
   });
 });

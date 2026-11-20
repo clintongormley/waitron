@@ -94,6 +94,7 @@ import {
   readOriginalReceiptPrint,
   resolveDrawerPrinter,
   resolveInvoicePrinter,
+  saleReceiptLayout,
   type OriginalReceiptPrint,
 } from "./receipt-print.js";
 import { listZones } from "./tables.js";
@@ -211,7 +212,6 @@ import {
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
-import { printSalePaymentSlip, readSalePaymentSlips } from "./payment-slip-print.js";
 import { issueIfFullyPaid, readBillBalance } from "./bill-payments.js";
 import {
   asObject,
@@ -669,8 +669,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.other_party": 409,
   "bill.merge_invoice_choice_required": 409,
   "bill.payment_not_found": 404,
-  "bill.payment_slip_no_printer": 409,
-  "bill.payment_slip_unavailable": 409,
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
   "bill.refund_unsupported": 422,
@@ -1880,6 +1878,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      if (body.printCardSlip !== undefined && typeof body.printCardSlip !== "boolean")
+        throw invalid("printCardSlip");
       const guestCount = readGuestCountChoice(body.guestCount);
       const lateSend = parseLateSend(body.lateSend);
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
@@ -2534,10 +2534,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           throw new AppError("working_order.not_found", { workingOrderId: id });
         const ticket = await readSettledTicket(deps.backend, tx, cfg, id);
         if (c.req.query("receiptPreview") !== "1") return ticket;
-        return {
-          ...(await tillReceiptPreview(tx, sale.id, ticket, cfg.practiceMode === true)),
-          paymentSlips: await readSalePaymentSlips(tx, cfg, sale.id, id),
-        };
+        return tillReceiptPreview(tx, sale.id, ticket, cfg.practiceMode === true);
       });
       return c.json(ticket);
     }),
@@ -2605,7 +2602,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         if (!original.canRetry)
           throw new AppError("print_job.not_resendable", { id: original.jobId });
         if (withdrawn) throw new AppError("invoice_delivery.printer_invalid", {});
-        return resendInvoicePrintJob(tx, original.jobId, session.personId);
+        return resendInvoicePrintJob(
+          tx,
+          saleReceiptLayout(deps.backend, deps.cfg),
+          original.jobId,
+          session.personId,
+        );
       });
       return c.json(result);
     }),
@@ -2807,19 +2809,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ifOwed === true ? "owed" : "original",
         { personId: session.personId },
       );
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/sales/:id/payment-slip/:paymentId", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const cfg = requestCfg(deps.cfg, session);
-      await assertDeviceCapability(deps, c, "print-receipt", "payment-slip", session.device);
-      await assertRequestDevice(deps, c, session);
-      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
-      await printSalePaymentSlip(deps.db, cfg, id, c.req.param("paymentId"));
       return c.body(null, 200);
     }),
   );

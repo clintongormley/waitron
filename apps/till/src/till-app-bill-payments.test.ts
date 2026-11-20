@@ -88,79 +88,6 @@ import type {
 
 let api: TillApi;
 
-it.each([false, true])(
-  "a partial slip copy fails=%s without taking another payment",
-  async (fails) => {
-    const printBillPaymentSlip = fails
-      ? vi.fn().mockRejectedValue(new Error("Printer unavailable"))
-      : vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountApp({
-      printBillPaymentSlip,
-      getBillBalance: vi.fn().mockResolvedValue(
-        balanceOf({
-          payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
-        }),
-      ),
-    });
-    await openTable(el);
-    await openDialog(el, "rest");
-    emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
-    await vi.waitFor(() => expect(printBillPaymentSlip).toHaveBeenCalledWith("wo-4", "pay-1"));
-    expect(api.takeBillPayment).not.toHaveBeenCalled();
-    expect(dialog(el)).not.toBeNull();
-    await flush(el);
-    if (fails)
-      expect(
-        text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!)),
-      ).toBe(t("payment_slip.error"));
-  },
-);
-
-it("a full disk refuses a partial card slip copy while keeping the recorded payment", async () => {
-  const balance = balanceOf({
-    payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
-  });
-  const { el } = await mountApp({
-    printBillPaymentSlip: vi.fn().mockRejectedValue({ code: "storage.disk_full" }),
-    getBillBalance: vi.fn().mockResolvedValue(balance),
-  });
-  await openTable(el);
-  await openDialog(el, "rest");
-
-  emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
-  await flush(el);
-
-  expect(text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!))).toBe(
-    codeMessage("storage.disk_full"),
-  );
-  expect(dialog(el)!.balance).toEqual(balance);
-  expect(api.takeBillPayment).not.toHaveBeenCalled();
-});
-
-it.each(["bill.payment_slip_no_printer", "bill.payment_slip_unavailable"])(
-  "Print a copy shows why it was refused with %s",
-  async (code) => {
-    const balance = balanceOf({
-      payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
-    });
-    const { el } = await mountApp({
-      printBillPaymentSlip: vi.fn().mockRejectedValue({ code }),
-      getBillBalance: vi.fn().mockResolvedValue(balance),
-    });
-    await openTable(el);
-    await openDialog(el, "rest");
-
-    emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
-    await flush(el);
-
-    expect(
-      text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!)),
-    ).toBe(codeMessage(code));
-    expect(dialog(el)!.balance).toEqual(balance);
-    expect(api.takeBillPayment).not.toHaveBeenCalled();
-  },
-);
-
 const fullInvoicesOn = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
 });
@@ -184,11 +111,13 @@ function deepestAt(x: number, y: number): Element | null {
   return hit;
 }
 
+const SLIP_FAILED = "Payment received, but the payment slip could not print.";
+
 /** The Pay window can cover the page's messages, so a part payment's failed slip is said inside it. */
 async function expectSlipFailureInPayWindow(el: TillApp): Promise<void> {
   expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
   expect(text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!))).toBe(
-    t("payment_slip.capture_failed"),
+    SLIP_FAILED,
   );
 }
 
@@ -5123,12 +5052,10 @@ describe("till-app: a partly paid order at the counter", () => {
     await flush(el);
     expect(api.pay).toHaveBeenCalledOnce();
     expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
-    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
-      t("payment_slip.capture_failed_paid"),
-    );
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
   });
 
-  it("points at Print a copy when a short capture's slip could not print", async () => {
+  it("says a short capture's slip could not print", async () => {
     const el = await retrieved({
       pay: vi.fn().mockResolvedValue({
         outcome: "partial",
@@ -5173,7 +5100,7 @@ describe("till-app: a partly paid order at the counter", () => {
       charged: amount,
     });
 
-  it("points at Find a bill when the counter's Pay window takes the last payment and its slip fails", async () => {
+  it("says the slip could not print when the counter's Pay window takes the last payment", async () => {
     const el = await retrieved({
       previewBillPayment: counterReaderPreview("70.00"),
       takeBillPayment: vi.fn().mockResolvedValue({
@@ -5192,9 +5119,7 @@ describe("till-app: a partly paid order at the counter", () => {
     });
     await payCounterWindowByReader(el, "70.00");
     expect(dialog(el)).toBeNull();
-    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
-      t("payment_slip.capture_failed_paid"),
-    );
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
   });
 
   it("says inside the counter's Pay window when a part payment's slip fails", async () => {
@@ -9495,12 +9420,55 @@ it("leaves a part payment's slip failure on the page when the Pay window was clo
   await flush(el);
 
   const alert = el.shadowRoot!.querySelector<HTMLElement>('.error[role="alert"]')!;
-  expect(text(alert)).toBe(t("payment_slip.capture_failed"));
+  expect(text(alert)).toBe(SLIP_FAILED);
   const box = alert.getBoundingClientRect();
   expect(deepestAt(box.left + box.width / 2, box.top + box.height / 2)).toBe(alert);
 });
 
-it("does not point a table bill at Find a bill when its last payment's slip could not print", async () => {
+it("sends a table part payment's cash slip request and says when it failed", async () => {
+  const { el } = await mountApp({
+    previewBillPayment: vi.fn().mockResolvedValue({
+      kind: "allocated",
+      choice: null,
+      applied: "30.00",
+      tip: "0.00",
+      change: "0.00",
+      charged: "30.00",
+    }),
+    takeBillPayment: vi.fn().mockResolvedValue({
+      ...takenOf(
+        { method: "cash", applied: "30.00", change: "0.00" },
+        { received: "30.00", outstanding: "90.00" },
+      ),
+      slipPrintFailed: true,
+    }),
+  });
+  await openTable(el);
+  await openDialog(el, "rest");
+  emit(dialog(el)!, "bill-pay-preview", {
+    choice: { kind: "contribution", amount: "30.00" },
+    pay: { method: "cash", tendered: "30.00" },
+  });
+  await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
+  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
+  expect(sent()[0]).toMatchObject({ method: "cash", printCardSlip: true });
+  await flush(el);
+  await expectSlipFailureInPayWindow(el);
+});
+
+it("sends a table's whole-bill cash slip request and says when it failed", async () => {
+  const { el } = await mountApp({
+    recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), slipPrintFailed: true }),
+  });
+  const order = await openTable(el);
+  emit(order, "pay-tab", { method: "cash", amount: "120.00", printCardSlip: true });
+  await flush(el);
+  expect(vi.mocked(api.recordSale).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
+  expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
+});
+
+it("says a table bill's last payment's slip could not print", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
@@ -9531,7 +9499,5 @@ it("does not point a table bill at Find a bill when its last payment's slip coul
   await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
   await flush(el);
   expect(dialog(el)).toBeNull();
-  expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
-    t("payment_slip.capture_failed_table"),
-  );
+  expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
 });

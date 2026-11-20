@@ -6931,9 +6931,7 @@ own row when the zone offers sending before payment.
 
 ### Shared bill payment window
 
-Eligible reader payments offer Print card slip before Card. It starts off for each payer; printing failure reports that payment was received and points to the copy actions.
-
-The Payments list offers Print a copy beside eligible received reader payments, including an unpaid bill, on devices that can print receipts.
+Every payment method offers Print payment slip when the device has a payment slip printer, except a card reader that prints its own slip. On the Counter's pay panel the one switch stays, and that reader's card payment ignores it. It starts off for each payer; a slip that could not print says the payment was received. No slip is reprinted from the till.
 
 Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
 Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices

@@ -1238,6 +1238,35 @@ describe("a receipt printer as the till's invoice printer", () => {
     expect(await deliveryRows(saleId)).toEqual(rows);
   });
 
+  it("still refuses the retry on a withdrawn printer after a resend took over the waiting delivery", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter();
+    expect((await printInvoice(v, orderId, randomUUID(), undefined, counter)).status).toBe(200);
+    const [original] = await jobsOf(saleId);
+    // As a waiting original ends when a later payment cannot be added to it.
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "receipt.out_of_date" })
+      .where(eq(printJobs.id, original!.id));
+    const retried = await send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {});
+    expect(retried.status).toBe(200);
+    const resent = (retried.body as { jobId: string }).jobId;
+    expect(await deliveryRows(saleId)).toEqual([
+      expect.objectContaining({ printJobId: resent, printerChosen: true, status: "queued" }),
+    ]);
+    await failForGood(resent);
+    await withdraw(v, counter);
+
+    expect(await send(v, "GET", `/api/sales/${orderId}/receipt`)).toEqual({
+      status: 200,
+      body: { status: "failed", jobId: resent, canRetry: true, printerWithdrawn: true },
+    });
+    expect(await send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {})).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+  });
+
   it("refuses the retry of a resend once its original's printer is no longer the till's", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);

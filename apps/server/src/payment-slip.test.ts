@@ -21,21 +21,10 @@ const input = {
   printer: { paperWidth: "80mm", resolution: "180dpi" } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
-  it("marks a copy and shows only a known historical remaining balance", () => {
+  it("shows no amount owed", () => {
     const labels = receiptLabelsFor("en-GB");
-    for (const remaining of [null, "0.00", "20.00"]) {
-      const text = decodeTicket(
-        formatPaymentSlip({ ...input, invoiceLocale: "en-GB", remaining, copy: true }),
-      );
-      expect(text).toContain(labels.duplicate);
-      if (remaining === null) expect(text).not.toContain("Remaining");
-      else
-        expect(
-          text
-            .split("\n")
-            .some((line) => line.startsWith("Remaining") && line.endsWith(`€${remaining}`)),
-        ).toBe(true);
-    }
+    const text = decodeTicket(formatPaymentSlip({ ...input, invoiceLocale: "en-GB" }));
+    expect(text).not.toContain(labels.owed);
   });
 
   it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "ca", "fr-FR"])(
@@ -79,6 +68,56 @@ describe("payment slip (pure renderer, no database)", () => {
       expect(missing).toContain(labels.paymentAmount);
     },
   );
+
+  it.each([
+    ["es-ES", "cash", "Efectivo"],
+    ["es-ES", "card", "Tarjeta"],
+    ["en-GB", "cash", "Cash"],
+    ["en-GB", "card", "Card"],
+  ] as const)(
+    "a %s slip with no card facts names %s on a line of its own",
+    (locale, method, word) => {
+      const lines = decodeTicket(
+        formatPaymentSlip({ ...input, invoiceLocale: locale, method, card: null }),
+      )
+        .split("\n")
+        .map((line) => line.trim());
+      expect(lines.filter((line) => line === word)).toHaveLength(1);
+    },
+  );
+
+  it("a card typed into another machine names the machine and the operation number before the amount", () => {
+    const labels = receiptLabelsFor("es-ES");
+    const linesOf = (extra: { reference: string | null; machine: string | null }) =>
+      decodeTicket(formatPaymentSlip({ ...input, method: "card", card: null, ...extra }))
+        .split("\n")
+        .map((line) => line.trim());
+
+    const typed = linesOf({ reference: "OP-77", machine: "SumUp Solo" });
+    const method = typed.indexOf("Tarjeta · SumUp Solo");
+    const reference = typed.indexOf("Ref. OP-77");
+    const amount = typed.findIndex((line) => line.startsWith(labels.paymentAmount));
+    expect(method).toBeGreaterThan(-1);
+    expect(reference).toBe(method + 1);
+    expect(amount).toBeGreaterThan(reference);
+    expect(typed).not.toContain("Tarjeta");
+
+    const untyped = linesOf({ reference: null, machine: null });
+    expect(untyped.filter((line) => line === "Tarjeta")).toHaveLength(1);
+    expect(untyped.some((line) => line.startsWith(labels.reference))).toBe(false);
+
+    const cash = decodeTicket(
+      formatPaymentSlip({
+        ...input,
+        method: "cash",
+        card: null,
+        reference: "OP-77",
+        machine: "SumUp Solo",
+      }),
+    );
+    expect(cash).not.toContain("OP-77");
+    expect(cash).not.toContain("SumUp Solo");
+  });
 
   it("prints payment identity, grouping and amounts without fiscal identifiers or QR", () => {
     const bytes = formatPaymentSlip({
@@ -190,4 +229,17 @@ describe("payment slip printer layout", () => {
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
     expect(lines).toContain(`Cobrado${" ".repeat(columns - 13)}1,50 €`);
   });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+    "a payment not taken is headed so in %s and says nothing was charged",
+    (invoiceLocale) => {
+      const labels = receiptLabelsFor(invoiceLocale);
+      const text = decodeTicket(formatPaymentSlip({ ...input, invoiceLocale, notTaken: true }));
+      expect(text).toContain(labels.paymentNotTakenHeading);
+      expect(text).not.toContain(labels.paymentHeading);
+      expect(text).toContain(labels.paymentNotice);
+      expect(text).toContain(labels.paymentAmount);
+      expect(text).not.toContain(labels.charged);
+    },
+  );
 });

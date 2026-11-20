@@ -405,6 +405,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   #closed(event: Event): void {
     event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
     this.active = false;
     this.#scope?.dispose();
     this.#scope = undefined;

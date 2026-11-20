@@ -7,6 +7,11 @@ export interface StoredCard {
   authCode: string | null;
 }
 
+export function cardOf(row: StoredCard | undefined): { card?: CardDetails } {
+  const card = row === undefined ? null : cardDetailsOf(row);
+  return card === null ? {} : { card };
+}
+
 export function cardDetailsOf(row: StoredCard): CardDetails | null {
   if (row.scheme === null || row.last4 === null) return null;
   return {

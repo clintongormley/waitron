@@ -108,6 +108,7 @@ BEGIN
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.created_at IS old.created_at
+    AND new.slip_wanted IS old.slip_wanted
     AND (
       (new.state IS old.state
         AND new.received_at IS old.received_at

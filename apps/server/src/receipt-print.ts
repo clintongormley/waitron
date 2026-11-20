@@ -14,7 +14,13 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
+import {
+  MAX_DELIVERY_ATTEMPTS,
+  PRINTER_DELETED,
+  canResendPrintJob,
+  enqueuePrintJob,
+  esc,
+} from "@waitron/printing";
 import type { EscSetting } from "@waitron/printing";
 import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
@@ -371,6 +377,12 @@ export type LayOutSaleReceipt = (
   printer: EscSetting,
 ) => Promise<Uint8Array>;
 
+/** {@link layOutSaleReceipt} over `backend` and `cfg`. */
+export function saleReceiptLayout(backend: FiscalBackend, cfg: TradingContext): LayOutSaleReceipt {
+  return (tx, saleId, duplicate, printer) =>
+    layOutSaleReceipt(backend, tx, cfg, saleId, duplicate, printer);
+}
+
 /** A filed sale's receipt laid out for `printer`, with today's trim, logo and address. */
 export async function layOutSaleReceipt(
   backend: FiscalBackend,
@@ -555,6 +567,66 @@ export async function confirmReceiptHandover(
   return readOriginalReceiptPrint(tx, saleId);
 }
 
+async function hasOriginalReceiptJob(tx: Transaction, saleId: string): Promise<boolean> {
+  const [original] = await tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+    .limit(1);
+  return original !== undefined;
+}
+
+const waitingOriginal = and(
+  eq(printJobs.kind, "document"),
+  eq(printJobs.receiptCopy, false),
+  eq(printJobs.status, "queued"),
+  eq(printJobs.attempts, 0),
+  isNull(printJobs.claimedAt),
+);
+
+/** The `last_error` of a waiting original {@link refreshWaitingOriginals} could not lay out again. */
+export const RECEIPT_OUT_OF_DATE = "receipt.out_of_date";
+
+/**
+ * Lays out again each original receipt of the order's sale that no printer has taken or tried,
+ * a resend included, so it lists every payment taken before it prints. One that cannot be laid out again gives up
+ * where it waits, keeping any invoice delivery waiting on it, so its bytes never print and a
+ * resend lays it out again.
+ */
+export async function refreshWaitingOriginals(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  workingOrderId: string,
+): Promise<void> {
+  const waiting = await tx
+    .select({ id: printJobs.id, saleId: sales.id, ...receiptRollColumns })
+    .from(sales)
+    .innerJoin(printJobs, and(eq(printJobs.saleId, sales.id), waitingOriginal))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
+    .where(eq(sales.workingOrderId, workingOrderId));
+  for (const job of waiting) {
+    const laidOut = await optionalDocument(tx, "refreshWaitingOriginal", job.saleId, async () => {
+      const payload = await layOutSaleReceipt(backend, tx, cfg, job.saleId, false, job);
+      await tx
+        .update(printJobs)
+        .set({ payload })
+        .where(and(eq(printJobs.id, job.id), waitingOriginal));
+      return true;
+    });
+    if (laidOut === undefined)
+      await tx
+        .update(printJobs)
+        .set({
+          status: "failed",
+          attempts: MAX_DELIVERY_ATTEMPTS,
+          lastError: RECEIPT_OUT_OF_DATE,
+          nextAttemptAt: null,
+        })
+        .where(and(eq(printJobs.id, job.id), waitingOriginal));
+  }
+}
+
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the
@@ -575,13 +647,8 @@ export async function enqueueOriginalReceipt(
 ): Promise<"exists" | "not_queued" | { jobId: string; receiptCopy: boolean }> {
   const { personId, requestKey, language } = options;
   const printers = options.printers ?? printerLookup(tx, cfg.origin);
-  const [original] = await tx
-    .select({ id: printJobs.id })
-    .from(printJobs)
-    .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
-    .limit(1);
-  // A failed original is retried through its existing job, preserving its bytes and history.
-  if (original !== undefined) return "exists";
+  // A failed original is retried through its existing job, keeping its history.
+  if (await hasOriginalReceiptJob(tx, saleId)) return "exists";
   let duplicate = false;
   if (ticket.invoiceType !== "F1") {
     const emails = await tx
@@ -634,8 +701,7 @@ async function enqueueBillDrawer(
 }
 
 /**
- * Cash taken against a bill before its invoice opens the drawer {@link drawerPrinter} finds, naming
- * the bill payment.
+ * Cash taken against a bill opens the drawer {@link drawerPrinter} finds, naming the bill payment.
  */
 export async function enqueueBillPaymentDrawer(
   tx: Transaction,

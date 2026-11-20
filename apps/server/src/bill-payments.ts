@@ -1,6 +1,5 @@
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
-import { readBillSlipPayments } from "./payment-slip-print.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -35,13 +34,11 @@ import {
   diskFullIn,
   firstCodeInCauseChain,
   isAppError,
-  MONEY_SCALE,
   multiplyDecimal,
   stringToThousandths,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  toScale,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal, Dining } from "@waitron/shared";
@@ -92,14 +89,15 @@ import {
   enqueueBillPaymentDrawer,
   enqueueSaleReceipt,
   printerLookup,
+  refreshWaitingOriginals,
 } from "./receipt-print.js";
 import type { PrinterLookup } from "./receipt-print.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { storedDeviceOrigin } from "./request-config.js";
+import type { IssuedSale } from "./sale-due.js";
 import {
   captureWholePayment,
   fireDishesAtPayment,
-  readBillTenderLines,
   readSettledTicket,
   readOutstandingSaleForOrder,
   readTenderBlock,
@@ -110,6 +108,13 @@ import {
   storeSentReceiptLanguage,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { readBillTenderLines } from "./receipt-payments.js";
+import {
+  completedRefundsOf,
+  netOfRefunds,
+  owedOf,
+  type RefundMoney,
+} from "./bill-payment-money.js";
 import { fingerprint } from "./parties.js";
 import {
   captureOrderEdit,
@@ -131,7 +136,13 @@ import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
-import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
+import {
+  enqueueRequestedPaymentSlip,
+  freezeWantedSlip,
+  readerSlipWanted,
+  withSettledSlip,
+  type SettledSlipPrinter,
+} from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
@@ -212,7 +223,6 @@ export interface BillRefundView {
 
 export interface BillPaymentView extends OutsideCardDetails {
   externalRef?: string;
-  canCopySlip?: true;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -283,44 +293,16 @@ export interface PaymentMoney {
 
 /** Each payment with what its completed refunds leave of it; `refunds` may hold refunds of other
  * payments, and in other states. */
-function moneyOf(
-  rows: readonly PaymentRow[],
-  refunds: readonly Pick<RefundRow, "billPaymentId" | "appliedAmount" | "tipAmount" | "state">[],
-): PaymentMoney[] {
+function moneyOf(rows: readonly PaymentRow[], refunds: readonly RefundMoney[]): PaymentMoney[] {
   return rows.map((row) => {
-    const own = refunds.filter(
-      (refund) => refund.billPaymentId === row.id && refund.state === "completed",
-    );
-    const refunded = (pick: (refund: (typeof own)[number]) => number) =>
-      own.reduce((sum, refund) => sum + pick(refund), 0);
+    const net = netOfRefunds(row, refunds);
     return {
       row,
-      netApplied: centsToDecimal(row.applied - refunded((refund) => refund.appliedAmount)),
-      netTip: centsToDecimal(row.tip - refunded((refund) => refund.tipAmount)),
-      refunds: own.length,
+      netApplied: centsToDecimal(net.applied),
+      netTip: centsToDecimal(net.tip),
+      refunds: net.own.length,
     };
   });
-}
-
-async function completedRefundsOf(tx: Transaction, rows: readonly PaymentRow[]) {
-  if (rows.length === 0) return [];
-  return tx
-    .select({
-      billPaymentId: billPaymentRefunds.billPaymentId,
-      appliedAmount: billPaymentRefunds.appliedAmount,
-      tipAmount: billPaymentRefunds.tipAmount,
-      state: billPaymentRefunds.state,
-    })
-    .from(billPaymentRefunds)
-    .where(
-      and(
-        inArray(
-          billPaymentRefunds.billPaymentId,
-          rows.map((row) => row.id),
-        ),
-        eq(billPaymentRefunds.state, "completed"),
-      ),
-    );
 }
 
 async function readPaymentRows(
@@ -532,12 +514,11 @@ export async function stillOwedOnIssuedBill(
   workingOrderId: string,
   amountDue: Decimal,
 ): Promise<Decimal> {
-  const { received } = fundsOf(
-    workingOrderId,
+  const money = await readPaymentMoney(tx, [workingOrderId]);
+  return owedOf(
     amountDue,
-    await readPaymentMoney(tx, [workingOrderId]),
+    money.filter(({ row }) => row.state === "received").map(({ netApplied }) => netApplied),
   );
-  return outstandingOf(amountDue, received);
 }
 
 /** Those of these bills that hold money: a pending payment, or received money not given back. */
@@ -602,11 +583,6 @@ export async function readPaymentsByBill(
       received.set(bill, addDecimal(received.get(bill) ?? ZERO, payment.netApplied));
   }
   return { received, holding, holdingMoney };
-}
-
-/** A bill's `total` less what it has received, at the money scale. */
-export function outstandingOf(total: Decimal, received: Decimal | undefined): Decimal {
-  return received === undefined ? total : toScale(subtractDecimal(total, received), MONEY_SCALE);
 }
 
 async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map<string, number>> {
@@ -727,11 +703,25 @@ async function billPaymentTotal(
   id: string,
   pricedTotal?: Decimal,
 ): Promise<Decimal> {
-  return (
-    (await readOutstandingSaleForOrder(tx, id))?.amountDue ??
-    pricedTotal ??
-    (await storedOrderTotal(tx, id))
-  );
+  return (await issuedAndTotal(tx, id, pricedTotal)).total;
+}
+
+interface IssuedAndTotal {
+  issued: IssuedSale | undefined;
+  total: Decimal;
+}
+
+/** {@link billPaymentTotal}, with the sale the bill has already issued, if any. */
+async function issuedAndTotal(
+  tx: Transaction,
+  id: string,
+  pricedTotal?: Decimal,
+): Promise<IssuedAndTotal> {
+  const issued = await readOutstandingSaleForOrder(tx, id);
+  return {
+    issued,
+    total: issued?.amountDue ?? pricedTotal ?? (await storedOrderTotal(tx, id)),
+  };
 }
 
 /**
@@ -757,7 +747,6 @@ export async function readBillBalance(
   const manualCards = await manualCardsOf(tx, rows);
   const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, total), held);
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
-  const copyable = new Set((await readBillSlipPayments(tx, workingOrderId)).map((card) => card.id));
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
   return {
     ...(captureWarning === undefined ? {} : { captureWarning }),
@@ -770,10 +759,7 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map(({ row }) => ({
-      ...toView(row, lines, refunds, lineNos, manualCards),
-      ...(copyable.has(row.id) ? { canCopySlip: true as const } : {}),
-    })),
+    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos, manualCards)),
     paidLines: [...paidQuantitiesOf(held, lines)]
       .flatMap(([lineId, quantity]) => {
         const lineNo = lineNos.get(lineId);
@@ -785,26 +771,45 @@ export async function readBillBalance(
   };
 }
 
-/**
- * {@link issueIfFullyPaid}, answering also the bill's total when it priced the bill. `total` is the
- * bill's total when the caller has priced its current lines in this transaction already.
- */
+type IssueOptions = {
+  moneyMoved?: boolean;
+  closeZero?: boolean;
+  total?: Decimal;
+  alreadyRead?: IssuedAndTotal;
+  printers?: PrinterLookup;
+  guestCount?: GuestCountChoice;
+};
+
+/** {@link issueOrSettleWhenFullyPaid}, then an issued sale's waiting original lists the bill's payments. */
 async function issueWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
-  options: {
-    moneyMoved?: boolean;
-    closeZero?: boolean;
-    total?: Decimal;
-    printers?: PrinterLookup;
-    guestCount?: GuestCountChoice;
-  },
+  options: IssueOptions,
+): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+  const done = await issueOrSettleWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options);
+  await refreshWaitingOriginals(deps.backend, tx, cfg, workingOrderId);
+  return done;
+}
+
+/**
+ * {@link issueIfFullyPaid}, answering also the bill's total when it knows it. `alreadyRead` is the
+ * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
+ * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
+ * caller has priced its current lines in this transaction already.
+ */
+async function issueOrSettleWhenFullyPaid(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  operatorId: string | undefined,
+  options: IssueOptions,
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
-  const notYet = { invoice: null, total: options.total };
+  const notYet = { invoice: null, total: options.alreadyRead?.total ?? options.total };
   const [order] = await tx
     .select({
       status: workingOrders.status,
@@ -826,8 +831,8 @@ async function issueWhenFullyPaid(
   if (options.moneyMoved !== true && (await readBillUnsent(tx, workingOrderId)).length > 0)
     return notYet;
   const held = moneyOf(rows, refunds);
-  const issued = await readOutstandingSaleForOrder(tx, workingOrderId);
-  const total = issued?.amountDue ?? options.total ?? (await storedOrderTotal(tx, workingOrderId));
+  const { issued, total } =
+    options.alreadyRead ?? (await issuedAndTotal(tx, workingOrderId, options.total));
   const zero = compareDecimal(total, ZERO) === 0;
   if (zero && options.closeZero !== true) return { invoice: null, total };
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
@@ -1450,7 +1455,7 @@ async function saveCounterBasket(
  */
 async function beginBillPayment(
   tx: Transaction,
-  deps: BillPaymentDeps,
+  deps: BillPaymentDeps & { readerId?: string },
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
@@ -1461,7 +1466,9 @@ async function beginBillPayment(
   attendance?: AttendanceRecorder,
   basket?: CounterPayment,
 ): Promise<
-  { replay: PaymentRow } | { payment: PaymentRow; total: Decimal } | { settled: SettledBill }
+  | { replay: PaymentRow }
+  | { payment: PaymentRow; total: Decimal; issued: IssuedSale | undefined }
+  | { settled: SettledBill }
 > {
   // Before the replay lookup: a retry the route would now refuse is refused too.
   await assertStillSignedIn(tx, {
@@ -1531,7 +1538,7 @@ async function beginBillPayment(
   const payable = await requirePayableBill(tx, workingOrderId);
   await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
-  const total = await billPaymentTotal(tx, workingOrderId);
+  const { issued, total } = await issuedAndTotal(tx, workingOrderId);
   if (basket !== undefined && held.some(({ row }) => HOLDING_STATES.includes(row.state))) {
     if (
       basket.revision !== undefined &&
@@ -1601,6 +1608,8 @@ async function beginBillPayment(
 
   await requireEconomicWrite(tx, cfg, deps.admission);
   if (state === "pending") await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
+  const slipWanted =
+    state === "pending" && (await readerSlipWanted(tx, cfg, req.printCardSlip, deps.readerId));
   const [payment] = await tx
     .insert(billPayments)
     .values({
@@ -1618,6 +1627,7 @@ async function beginBillPayment(
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? reading.instant.toISOString() : null,
+      slipWanted,
     })
     .returning();
   if (items !== null) {
@@ -1630,7 +1640,7 @@ async function beginBillPayment(
   await captureBillPaymentAttendance(tx, payment!, attendance, {
     at: reading.instant.toISOString(),
   });
-  return { payment: payment!, total };
+  return { payment: payment!, total, issued };
 }
 
 async function captureBillPaymentAttendance(
@@ -1726,12 +1736,27 @@ export async function takeBillPayment(
         workingOrderId,
         operator.personId,
         {
-          total: begun.total,
+          alreadyRead: { issued: begun.issued, total: begun.total },
           printers,
           guestCount: req.guestCount,
         },
       );
-      return resultOf(tx, deps, cfg, payment, invoice, total);
+      const slip = await enqueueRequestedPaymentSlip(
+        tx,
+        cfg,
+        workingOrderId,
+        req.printCardSlip,
+        {
+          method: req.method,
+          charged: payment.applied + payment.tip,
+          tip: payment.tip,
+          paidAt: payment.receivedAt!,
+          reference: req.externalRef ?? null,
+          machine: outsideCardDetails(req).externalMachine ?? null,
+        },
+        printers,
+      );
+      return { ...(await resultOf(tx, deps, cfg, payment, invoice, total)), ...slip };
     },
     deps.log,
   );
@@ -1824,6 +1849,7 @@ export type ReaderBillPaymentDeps = BillPaymentDeps & {
     tx: Transaction,
     paymentId: string,
     now: Date,
+    print: SettledSlipPrinter,
     guestCount: GuestCountChoice,
   ) => Promise<TillSaleResult | null>;
   /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
@@ -2017,67 +2043,73 @@ export async function takeReaderBillPayment(
     // queue in this turn.
     const preRead =
       deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-    const begun = await withIssuanceTransaction(
-      deps.db,
-      async (tx) => {
-        const started = await beginBillPayment(
-          tx,
-          deps,
-          cfg,
-          workingOrderId,
-          req,
-          operator,
-          "pending",
-          () => deps.clock.now(),
-          { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
-          deps.attendance,
-          basket,
-        );
-        if ("settled" in started) return { kind: "replay" as const, result: started.settled };
-        if ("replay" in started) {
-          let payment = started.replay;
-          let invoice: TillSaleResult | null = null;
-          if (
-            payment.state === "pending" &&
-            req.kind === "share" &&
-            req.shareOf === 1 &&
-            deps.settleCapturedReplay !== undefined &&
-            !billPaymentIsLive(deps.db, payment.id) &&
-            (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
-          ) {
-            capturedReplay = true;
-            const reading = deps.clock.now();
-            await deps.backend.refuseUntilRecordable(tx, reading);
-            invoice = await deps.settleCapturedReplay(
-              tx,
-              payment.id,
-              reading.instant,
-              req.guestCount,
-            );
-            const [recorded] = await tx
-              .select()
-              .from(billPayments)
-              .where(eq(billPayments.id, payment.id));
-            payment = recorded!;
+    const begun = await withSettledSlip((print) =>
+      withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          const started = await beginBillPayment(
+            tx,
+            deps,
+            cfg,
+            workingOrderId,
+            req,
+            operator,
+            "pending",
+            () => deps.clock.now(),
+            { diskFull: () => preRead || (deps.disk?.noted() ?? false), log: deps.log },
+            deps.attendance,
+            basket,
+          );
+          if ("settled" in started) return { kind: "replay" as const, result: started.settled };
+          if ("replay" in started) {
+            let payment = started.replay;
+            let invoice: TillSaleResult | null = null;
+            if (
+              payment.state === "pending" &&
+              req.kind === "share" &&
+              req.shareOf === 1 &&
+              deps.settleCapturedReplay !== undefined &&
+              !billPaymentIsLive(deps.db, payment.id) &&
+              (await findPaymentByBillPayment(tx, payment.id))?.state === "captured"
+            ) {
+              capturedReplay = true;
+              const reading = deps.clock.now();
+              await deps.backend.refuseUntilRecordable(tx, reading);
+              invoice = await deps.settleCapturedReplay(
+                tx,
+                payment.id,
+                reading.instant,
+                print,
+                req.guestCount,
+              );
+              const [recorded] = await tx
+                .select()
+                .from(billPayments)
+                .where(eq(billPayments.id, payment.id));
+              payment = recorded!;
+            }
+            return {
+              kind: "replay" as const,
+              result: await resultOf(tx, deps, cfg, payment, invoice),
+            };
           }
+          // Inside the transaction, so no loop pass runs between the insert and its registration.
+          release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
           return {
-            kind: "replay" as const,
-            result: await resultOf(tx, deps, cfg, payment, invoice),
+            kind: "collect" as const,
+            payment: started.payment,
+            slip: await freezeWantedSlip(tx, cfg, workingOrderId, started.payment.slipWanted),
           };
-        }
-        // Inside the transaction, so no loop pass runs between the insert and its registration.
-        release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
-        return {
-          kind: "collect" as const,
-          payment: started.payment,
-          slip: await freezeCardSlip(tx, cfg, workingOrderId, req.printCardSlip, deps.readerId),
-        };
-      },
-      deps.log,
+        },
+        deps.log,
+      ),
     );
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
+    const slip = { frozen: begun.slip, log: deps.log };
     if (deps.disk?.noted() === true) {
+      // No slip while the full-disk stop refuses the till's writes (conventions-data.md, "A full
+      // disk stops the till's writes"); only the reservation is released.
       await withTransaction(deps.db, (tx) =>
         failBillPayment(tx, payment.id, deps.clock.now().instant, undefined),
       );
@@ -2100,10 +2132,15 @@ export async function takeReaderBillPayment(
       });
     } catch (error) {
       if (isAppError(error) && REFUSED_START.has(error.code)) {
-        await withTransaction(deps.db, async (tx) => {
-          await requireEconomicWrite(tx, cfg, deps.admission);
-          return failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
-        });
+        await withSettledSlip(
+          (print) =>
+            withTransaction(deps.db, async (tx) => {
+              await requireEconomicWrite(tx, cfg, deps.admission);
+              await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+              await print(tx, payment.id);
+            }),
+          slip,
+        );
       }
       throw collectFailure(deps, workingOrderId, error);
     }
@@ -2116,52 +2153,55 @@ export async function takeReaderBillPayment(
       const settledAt = result.settledAt!;
       // Wrapped outside the transaction: when a full disk ended it or refused its commit,
       // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
-      const answer = await afterCardCharged(deps, workingOrderId, () =>
-        withIssuanceTransaction(
-          deps.db,
-          async (tx) => {
-            const done = await completeBillPayment(
-              tx,
-              deps,
-              cfg,
-              payment.id,
-              settledAt,
-              undefined,
-              req.guestCount,
-            );
-            return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
-          },
-          deps.log,
+      return await afterCardCharged(deps, workingOrderId, () =>
+        withSettledSlip(
+          (print) =>
+            withIssuanceTransaction(
+              deps.db,
+              async (tx) => {
+                const done = await completeBillPayment(
+                  tx,
+                  deps,
+                  cfg,
+                  payment.id,
+                  settledAt,
+                  undefined,
+                  req.guestCount,
+                );
+                const printed = await print(tx, payment.id);
+                return {
+                  ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.total)),
+                  ...printed,
+                };
+              },
+              deps.log,
+            ),
+          slip,
         ),
       );
-      return {
-        ...answer,
-        ...(await printCapturedCardSlip(
-          deps.db,
-          cfg,
-          workingOrderId,
-          result,
-          begun.slip,
-          undefined,
-          deps.log,
-        )),
-      };
     }
-    return await withTransaction(deps.db, async (tx) => {
-      await requireEconomicWrite(tx, cfg, deps.admission);
-      if (!NO_RETAINED_CHARGE.has(result.state)) {
-        const answer = await resultOf(tx, deps, cfg, payment, null);
-        return { ...answer, outcome: "timeout" };
-      }
-      const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
-      return {
-        ...(await resultOf(tx, deps, cfg, failed, null)),
-        outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
-        ...(result.state === "failed" && result.failureReason !== undefined
-          ? { failureReason: result.failureReason }
-          : {}),
-      };
-    });
+    return await withSettledSlip(
+      (print) =>
+        withTransaction(deps.db, async (tx) => {
+          await requireEconomicWrite(tx, cfg, deps.admission);
+          if (!NO_RETAINED_CHARGE.has(result.state)) {
+            const answer = await resultOf(tx, deps, cfg, payment, null);
+            return { ...answer, outcome: "timeout" };
+          }
+          const failed = await failBillPayment(tx, payment.id, deps.clock.now().instant, undefined);
+          // No `slipPrintFailed` here: the till words it "Payment received, but the payment slip
+          // could not print." (`payment_slip.capture_failed`).
+          await print(tx, payment.id);
+          return {
+            ...(await resultOf(tx, deps, cfg, failed, null)),
+            outcome: result.state === "network_unavailable" ? "network_unavailable" : "declined",
+            ...(result.state === "failed" && result.failureReason !== undefined
+              ? { failureReason: result.failureReason }
+              : {}),
+          };
+        }),
+      slip,
+    );
   } catch (error) {
     if (!capturedReplay) throw error;
     return afterCardCharged(deps, workingOrderId, () => Promise.reject(error));

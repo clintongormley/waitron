@@ -79,7 +79,7 @@ import {
 } from "./testing/bill-payment-fixture.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import { printSalePaymentSlip, readSalePaymentSlips } from "./payment-slip-print.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { createTable } from "./testing/live-table.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
@@ -320,6 +320,49 @@ function take(billId: string, request: BillPaymentRequest) {
     request,
     venue.operator,
   );
+}
+
+/** Two hand-keyed card payments that settle the bill, each asking for its slip. */
+async function cardsWithSlips(
+  billId: string,
+  cfg: typeof venue.cfg,
+  order: readonly { applied: string; tip: string }[],
+  printCardSlip = true,
+) {
+  for (const { applied, tip } of order) {
+    const paid = await takeBillPayment(
+      { ...fiscal(), admission: testTradingAdmission() },
+      { ...cfg, tipsEnabled: true },
+      billId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: applied,
+        method: "card",
+        entry: "manual",
+        applied,
+        addedTip: tip,
+        tip,
+        printCardSlip,
+      },
+      venue.operator,
+    );
+    expect(paid).not.toHaveProperty("slipPrintFailed");
+  }
+}
+
+async function slipsSince(before: readonly { id: string }[]) {
+  // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
+  const jobs = await inTx((tx) =>
+    tx
+      .select({ id: printJobs.id, payload: printJobs.payload })
+      .from(printJobs)
+      .orderBy(sql`rowid`),
+  );
+  return jobs
+    .filter((job) => !before.some((old) => old.id === job.id))
+    .map((job) => decodeTicket(job.payload))
+    .filter((text) => text.includes(receiptLabelsFor("es-ES").paymentHeading));
 }
 
 async function codeOf(promise: Promise<unknown>): Promise<string | undefined> {
@@ -3084,105 +3127,39 @@ describe("the invoice at full payment", () => {
   });
 
   it.each(["es-ES", "en-GB"])(
-    "prints a slip for each card payment, each paired with its own tender (config %s)",
+    "prints a requested slip for each card payment, each with its own tip (config %s)",
     async (locale) => {
       const billId = await tabWith("Steak", "Cake");
-      const early = new Date(Date.now() - 60_000).toISOString();
-      const late = new Date().toISOString();
-      const first = await insertPayment(billId, {
-        applied: 2000,
-        state: "received",
-        receivedAt: early,
-      });
-      const second = await insertPayment(billId, {
-        applied: 2300,
-        tip: 200,
-        state: "received",
-        receivedAt: late,
-      });
-      // The second payment's row sorts first, as the slip reads them.
-      await inTx(async (tx) => {
-        await tx.insert(payments).values([
-          {
-            id:
-              locale === "es-ES"
-                ? "00000000-0000-4000-8000-000000000001"
-                : "00000000-0000-4000-8000-000000000002",
-            workingOrderId: billId,
-            source: venue.cfg.origin.source,
-            deviceId: venue.cfg.origin.deviceId,
-            provider: "simulator",
-            paymentRef: randomUUID(),
-            amount: 2500,
-            state: "captured",
-            settledAt: late,
-            billPaymentId: second,
-          },
-          {
-            id:
-              locale === "es-ES"
-                ? "ffffffff-0000-4000-8000-000000000001"
-                : "ffffffff-0000-4000-8000-000000000002",
-            workingOrderId: billId,
-            source: venue.cfg.origin.source,
-            deviceId: venue.cfg.origin.deviceId,
-            provider: "simulator",
-            paymentRef: randomUUID(),
-            amount: 2000,
-            state: "captured",
-            settledAt: early,
-            billPaymentId: first,
-          },
-        ]);
-      });
-      const issued = await inTx((tx) =>
-        issueIfFullyPaid(
-          tx,
-          { admission: testTradingAdmission(), ...fiscal() },
-          venue.cfg,
-          billId,
-          OPERATOR,
-        ),
-      );
-      expect(issued).toMatchObject({ total: "43.00" });
-      const [sale] = await inTx((tx) =>
-        tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
-      );
-      const linked = await inTx((tx) =>
-        tx
-          .select({ saleId: payments.saleId })
-          .from(payments)
-          .where(eq(payments.workingOrderId, billId)),
-      );
-      expect(linked.map((row) => row.saleId)).toEqual([sale!.id, sale!.id]);
       const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
-      const selects = vi.spyOn(suite.db, "select");
-      try {
-        const cfg = { ...venue.cfg, locale };
-        for (const slip of await inTx((tx) => readSalePaymentSlips(tx, cfg, sale!.id, billId)))
-          await printSalePaymentSlip(suite.db, cfg, billId, slip.id);
-        expect(
-          selects.mock.calls.filter(
+      const settingsReads = async (bill: string, printCardSlip: boolean) => {
+        const selects = vi.spyOn(suite.db, "select");
+        try {
+          await cardsWithSlips(
+            bill,
+            { ...venue.cfg, locale },
+            [
+              { applied: "20.00", tip: "0.00" },
+              { applied: "23.00", tip: "2.00" },
+            ],
+            printCardSlip,
+          );
+          return selects.mock.calls.filter(
             ([fields]) =>
               fields !== undefined &&
               "document" in fields &&
               (fields.document as { module?: unknown })?.module === settings.module,
-          ),
-        ).toHaveLength(0);
-      } finally {
-        selects.mockRestore();
-      }
+          ).length;
+        } finally {
+          selects.mockRestore();
+        }
+      };
+      const unasked = await settingsReads(await tabWith("Steak", "Cake"), false);
+      expect(await slipsSince(before)).toHaveLength(0);
+      expect(await settingsReads(billId, true)).toBe(unasked);
+      expect(await statusOf(billId)).toBe("settled");
 
-      // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
-      const jobs = await inTx((tx) =>
-        tx
-          .select({ id: printJobs.id, payload: printJobs.payload })
-          .from(printJobs)
-          .orderBy(sql`rowid`),
-      );
-      const slips = jobs.filter((job) => !before.some((old) => old.id === job.id));
-      const printed = slips.map((slip) => decodeTicket(slip.payload));
+      const printed = await slipsSince(before);
       expect(printed).toHaveLength(2);
       // In the order the money moved: the €20.00 card with no tip, then the €23.00 one with its tip.
       expect(printed[0]).toContain("20,00");
@@ -3376,75 +3353,14 @@ describe("the bill's payments, taken within one millisecond", () => {
 
   it("prints the card slips in the order the cards were taken", async () => {
     const billId = await tabWith("Steak", "Cake");
-    const at = new Date().toISOString();
-    const untipped = await insertPayment(billId, {
-      applied: 2000,
-      state: "received",
-      receivedAt: at,
-    });
-    const tipped = await insertPayment(billId, {
-      applied: 2300,
-      tip: 200,
-      state: "received",
-      receivedAt: at,
-    });
-    const paymentId = descendingIds();
-    // The cards are taken in the opposite order to their bill payments, so a tie broken by the
-    // tenders' write order gives the wrong answer too.
-    await inTx(async (tx) => {
-      await tx.insert(payments).values([
-        {
-          id: paymentId(),
-          workingOrderId: billId,
-          source: venue.cfg.origin.source,
-          deviceId: venue.cfg.origin.deviceId,
-          provider: "simulator",
-          paymentRef: randomUUID(),
-          amount: 2500,
-          state: "captured",
-          settledAt: at,
-          billPaymentId: tipped,
-        },
-        {
-          id: paymentId(),
-          workingOrderId: billId,
-          source: venue.cfg.origin.source,
-          deviceId: venue.cfg.origin.deviceId,
-          provider: "simulator",
-          paymentRef: randomUUID(),
-          amount: 2000,
-          state: "captured",
-          settledAt: at,
-          billPaymentId: untipped,
-        },
-      ]);
-    });
-    await inTx((tx) =>
-      issueIfFullyPaid(
-        tx,
-        { ...fiscal(), admission: testTradingAdmission() },
-        venue.cfg,
-        billId,
-        OPERATOR,
-      ),
-    );
     const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
-    const [sale] = await inTx((tx) =>
-      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
-    );
-    for (const slip of await inTx((tx) => readSalePaymentSlips(tx, venue.cfg, sale!.id, billId)))
-      await printSalePaymentSlip(suite.db, venue.cfg, billId, slip.id);
+    await cardsWithSlips(billId, venue.cfg, [
+      { applied: "23.00", tip: "2.00" },
+      { applied: "20.00", tip: "0.00" },
+    ]);
 
-    const jobs = await inTx((tx) =>
-      tx
-        .select({ id: printJobs.id, payload: printJobs.payload })
-        .from(printJobs)
-        .orderBy(sql`rowid`),
-    );
-    const printed = jobs
-      .filter((job) => !before.some((old) => old.id === job.id))
-      .map((slip) => decodeTicket(slip.payload));
+    const printed = await slipsSince(before);
     expect(printed).toHaveLength(2);
     expect(printed[0]).toContain("23,00");
     expect(printed[0]).toContain("Propina");

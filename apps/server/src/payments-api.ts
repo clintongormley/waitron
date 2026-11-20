@@ -111,6 +111,7 @@ import {
 import { previewAllocation, MONEY, ZERO } from "./bill-allocation.js";
 import { refuseRefundInProgress } from "./working-order.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
+import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   attestCardRefund,
@@ -448,15 +449,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const pinGated = async <T>(
     sessionId: string,
     pin: unknown,
-    fn: (tx: Transaction, personId: string) => Promise<T>,
+    fn: (tx: Transaction, personId: string, print: SettledSlipPrinter) => Promise<T>,
   ): Promise<T> => {
     const credential = await managerPinToCheck(sessionId, pin);
     const attempts = { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT };
     const transaction = (checked: SecretCheck | undefined) =>
-      gated(sessionId, async (tx, personId) => {
-        await verifyManagerPin(tx, personId, pin, checked);
-        return fn(tx, personId);
-      });
+      withSettledSlip((print) =>
+        gated(sessionId, async (tx, personId) => {
+          await verifyManagerPin(tx, personId, pin, checked);
+          return fn(tx, personId, print);
+        }),
+      );
     if (typeof credential.pin !== "string") {
       // Count malformed attempts after the earlier PIN checks have settled, without deriving a key.
       return inPinTurn(attempts, credential.personId, () => transaction(undefined));
@@ -1542,73 +1545,76 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           ? { kind: "unknown" as const }
           : await provider.lookupCompletedRefunds(before.payment.externalRef);
       let changedEvidence: AppError | undefined;
-      const answer = await gated(sessionId, async (tx, personId) => {
-        const current = await read(tx);
-        if (current.replay) return current.allocation;
-        const { payment, bill, order, allocation, refunds } = current;
-        await acceptRefundEvidence(tx, payment, refunds, evidence, personId, false);
-        const nowFacts = await refundFacts(tx, paymentId, payment.amount);
-        if (compareDecimal(nowFacts.partialRefund.remaining, allocation.remaining) !== 0) {
-          // Keep identified provider refunds visible on refresh; the bill stays held for a new confirmation.
-          changedEvidence = allocationChanged(
-            payment.workingOrderId,
-            await retentionPreview(tx, payment, nowFacts.partialRefund.remaining),
-          );
-          return allocation;
-        }
-        const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
-        const receivedAt = new Date(payment.settledAt!);
-        if (bill) {
-          await completeBillPayment(
-            tx,
-            fiscal,
-            deps.cfg,
-            bill.id,
-            receivedAt,
-            attestation,
-            undefined,
-            { applied: allocation.applied, tip: allocation.tip },
-          );
-          if (order.paymentAttemptAt !== null)
-            await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
-        } else {
-          const [part] = await tx
-            .insert(billPayments)
-            .values({
-              workingOrderId: payment.workingOrderId,
-              submissionId: `capture:${paymentId}`,
-              fingerprint: paymentId,
-              kind: "contribution",
-              method: "card",
-              state: "received",
-              applied: decimalToCents(allocation.applied),
-              tip: decimalToCents(allocation.tip),
-              remainingAfter: decimalToCents(allocation.outstanding),
-              requestedBy: personId,
-              ...storedDeviceOrigin(payment),
-              receivedAt: receivedAt.toISOString(),
-              attestedBy: personId,
-              attestationNote: attestation.note,
-            })
-            .returning();
-          await tx
-            .update(payments)
-            .set({ billPaymentId: part!.id })
-            .where(eq(payments.id, paymentId));
+      const answer = await withSettledSlip((print) =>
+        gated(sessionId, async (tx, personId) => {
+          const current = await read(tx);
+          if (current.replay) return current.allocation;
+          const { payment, bill, order, allocation, refunds } = current;
+          await acceptRefundEvidence(tx, payment, refunds, evidence, personId, false);
+          const nowFacts = await refundFacts(tx, paymentId, payment.amount);
+          if (compareDecimal(nowFacts.partialRefund.remaining, allocation.remaining) !== 0) {
+            // Keep identified provider refunds visible on refresh; the bill stays held for a new confirmation.
+            changedEvidence = allocationChanged(
+              payment.workingOrderId,
+              await retentionPreview(tx, payment, nowFacts.partialRefund.remaining),
+            );
+            return allocation;
+          }
+          const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
+          const receivedAt = new Date(payment.settledAt!);
+          if (bill) {
+            await completeBillPayment(
+              tx,
+              fiscal,
+              deps.cfg,
+              bill.id,
+              receivedAt,
+              attestation,
+              undefined,
+              { applied: allocation.applied, tip: allocation.tip },
+            );
+            await print(tx, bill.id);
+            if (order.paymentAttemptAt !== null)
+              await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
+          } else {
+            const [part] = await tx
+              .insert(billPayments)
+              .values({
+                workingOrderId: payment.workingOrderId,
+                submissionId: `capture:${paymentId}`,
+                fingerprint: paymentId,
+                kind: "contribution",
+                method: "card",
+                state: "received",
+                applied: decimalToCents(allocation.applied),
+                tip: decimalToCents(allocation.tip),
+                remainingAfter: decimalToCents(allocation.outstanding),
+                requestedBy: personId,
+                ...storedDeviceOrigin(payment),
+                receivedAt: receivedAt.toISOString(),
+                attestedBy: personId,
+                attestationNote: attestation.note,
+              })
+              .returning();
+            await tx
+              .update(payments)
+              .set({ billPaymentId: part!.id })
+              .where(eq(payments.id, paymentId));
 
-          if (order.paymentAttemptAt !== null)
-            await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
-          await issueIfFullyPaid(
-            tx,
-            fiscal,
-            { ...deps.cfg, origin: storedDeviceOrigin(payment) },
-            payment.workingOrderId,
-            personId,
-            { moneyMoved: true },
-          );
-        }
-        return allocation;
-      });
+            if (order.paymentAttemptAt !== null)
+              await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
+            await issueIfFullyPaid(
+              tx,
+              fiscal,
+              { ...deps.cfg, origin: storedDeviceOrigin(payment) },
+              payment.workingOrderId,
+              personId,
+              { moneyMoved: true },
+            );
+          }
+          return allocation;
+        }),
+      );
       if (changedEvidence) throw changedEvidence;
       return c.json({ outcome: "retained", ...answer });
     }),
@@ -1661,14 +1667,22 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         before.payment.externalRef === null
           ? { kind: "unknown" as const }
           : await provider.lookupCompletedRefunds(before.payment.externalRef);
-      await gated(sessionId, async (tx, personId) => {
-        const { payment, mark, billState, refunds } = await read(tx);
-        if (payment.state === "refunded") return;
-        await acceptRefundEvidence(tx, payment, refunds, evidence, personId, true);
-        if (payment.billPaymentId !== null && billState === "pending")
-          await settleFromProviderRow(tx, fiscal, payment.billPaymentId, deps.clock.now().instant);
-        if (mark !== null) await clearPaymentAttemptMark(tx, payment.workingOrderId, mark);
-      });
+      await withSettledSlip((print) =>
+        gated(sessionId, async (tx, personId) => {
+          const { payment, mark, billState, refunds } = await read(tx);
+          if (payment.state === "refunded") return;
+          await acceptRefundEvidence(tx, payment, refunds, evidence, personId, true);
+          if (payment.billPaymentId !== null && billState === "pending")
+            await settleFromProviderRow(
+              tx,
+              fiscal,
+              payment.billPaymentId,
+              deps.clock.now().instant,
+              print,
+            );
+          if (mark !== null) await clearPaymentAttemptMark(tx, payment.workingOrderId, mark);
+        }),
+      );
       return c.json({ outcome: "released" });
     }),
   );
@@ -1937,10 +1951,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       });
 
       const fromRow = async () => {
-        const settled = await gated(sessionId, async (tx) => {
-          await requireStuckBillPayment(tx, id);
-          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
-        });
+        const settled = await withSettledSlip((print) =>
+          gated(sessionId, async (tx) => {
+            await requireStuckBillPayment(tx, id);
+            return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant, print);
+          }),
+        );
         switch (settled.settled) {
           case "received":
             return c.json({
@@ -1973,10 +1989,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       if (resolved.outcome === "failed") {
         // The provider's own record says nothing was charged, so the reservation is released.
-        await gated(sessionId, async (tx) => {
-          await requireStuckBillPayment(tx, id);
-          await failBillPayment(tx, id, now, undefined);
-        });
+        await withSettledSlip((print) =>
+          gated(sessionId, async (tx) => {
+            await requireStuckBillPayment(tx, id);
+            await failBillPayment(tx, id, now, undefined);
+            await print(tx, id);
+          }),
+        );
         return c.json({ outcome: "not_charged" });
       }
       return fromRow();
@@ -1993,7 +2012,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await readJsonBody<Record<string, unknown>>(c),
         ["received", "failed"] as const,
       );
-      const answer = await pinGated(sessionId, pin, async (tx, personId) => {
+      const answer = await pinGated(sessionId, pin, async (tx, personId, print) => {
         await refuseUntilRecordable(tx);
         await requireStuckBillPayment(tx, id);
         // A provider row still `attempting` can yet be charged, so no outcome is recorded over it;
@@ -2015,6 +2034,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const now = deps.clock.now().instant;
         if (outcome === "failed") {
           await failBillPayment(tx, id, now, attestation);
+          await print(tx, id);
           return { outcome: "not_charged" as const };
         }
         // Dated when the provider settled it, as the work loop does.
@@ -2023,6 +2043,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             ? now
             : new Date(provided.settledAt);
         const done = await completeBillPayment(tx, fiscal, deps.cfg, id, receivedAt, attestation);
+        await print(tx, id);
         return {
           outcome: "received" as const,
           ...(done.invoice === null ? {} : { invoiceNumber: done.invoice.invoiceNumber }),

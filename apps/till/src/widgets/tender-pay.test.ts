@@ -2692,7 +2692,7 @@ it("offers an unticked whole-card slip and clears it when the order changes", as
     slipPrinterAvailable: true,
   });
   const box = () =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
   expect(box()).not.toBeNull();
   expect(box()!.checked).toBe(false);
   box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
@@ -2708,6 +2708,114 @@ it("offers an unticked whole-card slip and clears it when the order changes", as
   el.requestUpdate();
   await el.updateComplete;
   expect(box()!.checked).toBe(false);
+});
+
+describe("a payment slip for cash and another card machine", () => {
+  const slip = (el: TillTenderPay) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
+  async function tick(el: TillTenderPay): Promise<void> {
+    slip(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
+    );
+    await el.updateComplete;
+  }
+  async function pay(el: TillTenderPay, method: "cash" | "card"): Promise<void> {
+    click(el, method === "cash" ? ".pay" : ".pay-card");
+    await el.updateComplete;
+    if (method === "cash") await type(el, "5");
+    click(el, ".confirm");
+    await el.updateComplete;
+  }
+
+  it.each(["cash", "card"] as const)(
+    "offers a slip unticked with no card provider, sends it with %s, and clears it for the next order",
+    async (method) => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        slipPrinterAvailable: true,
+      });
+      expect(slip(el)!.checked).toBe(false);
+      await tick(el);
+      const sent: unknown[] = [];
+      el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
+      await pay(el, method);
+      expect(sent).toEqual([expect.objectContaining({ method, printCardSlip: true })]);
+      store.clear();
+      store.addProduct(coffee, "1");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(slip(el)!.checked).toBe(false);
+      el.slipPrinterAvailable = false;
+      await el.updateComplete;
+      expect(slip(el)).toBeNull();
+    },
+  );
+
+  it.each(["cash", "card"] as const)(
+    "sends the slip choice with %s when collecting a placed order",
+    async (method) => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "2");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        mode: "ticket_then_pay",
+        stage: "collect",
+        slipPrinterAvailable: true,
+      });
+      await tick(el);
+      const sent: unknown[] = [];
+      el.addEventListener("collect-order", (e) => sent.push((e as CustomEvent).detail));
+      await pay(el, method);
+      expect(sent).toEqual([expect.objectContaining({ method, printCardSlip: true })]);
+    },
+  );
+
+  it("sends the slip choice with another card machine beside a connected reader", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "sumup_cloud",
+      takesManualCard: true,
+      slipPrinterAvailable: true,
+    });
+    await tick(el);
+    const sent: unknown[] = [];
+    el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
+    click(el, ".pay-manual-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+    expect(sent).toEqual([expect.objectContaining({ method: "card", printCardSlip: true })]);
+  });
+
+  it("offers cash a slip beside a reader that prints its own, but sends none with that reader's card", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "1");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+      store,
+      cardProvider: "stripe_terminal",
+      defaultReaderId: "reader-own",
+      activeReaders: [
+        {
+          printsOwnSlipAutomatically: true,
+          id: "reader-own",
+          name: "Front counter",
+          provider: "stripe_terminal",
+        },
+      ],
+      slipPrinterAvailable: true,
+    });
+    expect(slip(el)).not.toBeNull();
+    await tick(el);
+    const collected: Record<string, unknown>[] = [];
+    el.addEventListener("collect-card", (e) => collected.push((e as CustomEvent).detail));
+    click(el, ".pay-card");
+    await el.updateComplete;
+    expect(collected).toHaveLength(1);
+    expect(collected[0]).not.toHaveProperty("printCardSlip");
+  });
 });
 
 it("records a separate-machine card with its details while an integrated reader is configured", async () => {

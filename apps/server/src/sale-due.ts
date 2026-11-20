@@ -16,20 +16,27 @@ import type { Decimal, SaleId } from "@waitron/shared";
  */
 export const correctionsCents = sql`coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`${sales}.id`)}), 0)`;
 
+export interface IssuedSale {
+  saleId: SaleId;
+  locale: string;
+  amountDue: Decimal;
+}
+
 /**
- * The sale each named working order has already issued, with what it owes: `total + corrections`,
- * the same `due` `settleSale` re-derives, so a card charged `amountDue + tip` settles the sale
- * exactly. An order with no sale is absent.
+ * The sale each named working order has already issued, with its language and what it owes:
+ * `total + corrections`, the same `due` `settleSale` re-derives, so a card charged `amountDue + tip`
+ * settles the sale exactly. An order with no sale is absent.
  */
 export async function readIssuedSales(
   tx: Transaction,
   workingOrderIds: readonly string[],
-): Promise<Map<string, { saleId: SaleId; amountDue: Decimal }>> {
+): Promise<Map<string, IssuedSale>> {
   if (workingOrderIds.length === 0) return new Map();
   const rows = await tx
     .select({
       id: sales.id,
       workingOrderId: sales.workingOrderId,
+      locale: sales.locale,
       total: sales.total,
       // Cast to text for `rawCentsToDecimal`, which refuses a number.
       corrections: sql<string>`cast(${correctionsCents} as text)`,
@@ -41,6 +48,7 @@ export async function readIssuedSales(
       row.workingOrderId!,
       {
         saleId: brandSaleId(row.id),
+        locale: row.locale,
         amountDue: addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections)),
       },
     ]),

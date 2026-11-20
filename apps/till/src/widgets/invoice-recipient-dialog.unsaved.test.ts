@@ -186,6 +186,19 @@ it("an accepted recipient save commits only submitted fields; newer edits surviv
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
+it("a window closed by its accepted save reports no cancel once its close lands", async () => {
+  const { app, form } = await mount();
+  await valid(form);
+  submit(form);
+  const closed = new Promise<void>((resolve) =>
+    form.shadowRoot!.querySelector("wt-dialog")!.addEventListener("wt-close", () => resolve(), {
+      once: true,
+    }),
+  );
+  expect(completion(form)()).toBe(true);
+  await closed;
+  expect(app.closes).toBe(0);
+});
 async function offeringSimplified() {
   const { app, form } = await mount();
   form.offerSimplified = true;

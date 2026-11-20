@@ -262,9 +262,9 @@ type OriginalJob = {
 };
 
 /**
- * A print request marks the delivery row of each job it queues (`printerChosen`), and a resend's row
- * is unmarked, so the chain's first row decides; the device's receipt role marks none, and its
- * original is resent wherever it went.
+ * A print request marks the delivery row of each job it queues (`printerChosen`), and a resend's own
+ * row is unmarked, so the chain's first row decides, wherever in the chain a resend that took it
+ * over moved it; the device's receipt role marks none, and its original is resent wherever it went.
  */
 function receiptPrinterWithdrawn(
   rows: InvoiceDelivery[],
@@ -275,8 +275,12 @@ function receiptPrinterWithdrawn(
   if (receipt.status === "not_queued") return false;
   const job = jobs.find((candidate) => candidate.id === receipt.jobId)!;
   const first = job.resendOf ?? job.id;
+  const inChain = (jobId: string | null) =>
+    jobs.some(
+      (candidate) => candidate.id === jobId && (candidate.resendOf ?? candidate.id) === first,
+    );
   return (
-    rows.some((row) => row.printJobId === first && row.printerChosen) &&
+    rows.some((row) => row.printerChosen && inChain(row.printJobId)) &&
     !printers.some((printer) => printer.kind === "receipt" && printer.id === job.printerId)
   );
 }
