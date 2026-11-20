@@ -5,6 +5,7 @@ import { setLocale } from "../i18n/t.js";
 import { chooseFiles, fileControl } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupLiveSourceScreen } from "./live-source-screen.js";
+import type { ConfigurationRequestDetail } from "../events.js";
 
 afterEach(cleanupWidgets);
 
@@ -44,6 +45,19 @@ async function bottomOf(el: SetupLiveSourceScreen): Promise<string> {
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const EXPORT = new File(["encrypted"], "prepared.waitron-config");
+
+/** Presses Import and returns the request it sent, which a refusal of it carries back. */
+async function pressImport(el: SetupLiveSourceScreen): Promise<ConfigurationRequestDetail> {
+  let sent: ConfigurationRequestDetail | undefined;
+  const capture = (event: Event) => {
+    sent = (event as CustomEvent<{ request: ConfigurationRequestDetail }>).detail.request;
+  };
+  el.addEventListener("configuration-requested", capture);
+  q(el, "[data-test=import]")!.click();
+  el.removeEventListener("configuration-requested", capture);
+  await el.updateComplete;
+  return sent!;
+}
 
 describe("SetupLiveSourceScreen", () => {
   it("explains the passphrase with a hint in the empty field and no ?", async () => {
@@ -196,11 +210,13 @@ describe("SetupLiveSourceScreen", () => {
       const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
       chooseExport(el, EXPORT);
       await typePassphrase(el, "twelve-chars");
-      q(el, "[data-test=import]")!.click();
-      await el.updateComplete;
+      const sent = await pressImport(el);
       expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(true);
-      el.errorMessage =
-        "The configuration export could not be opened. Check the file and passphrase.";
+      Object.assign(el, {
+        errorMessage:
+          "The configuration export could not be opened. Check the file and passphrase.",
+        refusedRequest: sent,
+      });
       await el.updateComplete;
       expect(await bottomOf(el)).toBe(
         "The configuration export could not be opened. Check the file and passphrase.",
@@ -272,11 +288,11 @@ it("puts a refused import passphrase under Passphrase, focuses it and allows ret
   const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
   chooseExport(el, EXPORT);
   await typePassphrase(el, "wrong-twelve-chars");
-  q(el, "[data-test=import]")!.click();
-  await el.updateComplete;
+  const sent = await pressImport(el);
   Object.assign(el, {
     errorCode: "recovery.passphrase_invalid",
     errorMessage: "This passphrase does not open the export.",
+    refusedRequest: sent,
   });
   await el.updateComplete;
   const field = el.shadowRoot!.querySelector("wt-input")!;
@@ -295,4 +311,49 @@ it("puts a refused import passphrase under Passphrase, focuses it and allows ret
   host.addEventListener("configuration-requested", requested);
   q(el, "[data-test=import]")!.click();
   expect(requested).toHaveBeenCalledOnce();
+});
+
+it("puts an unreadable export under the export field, focuses it and clears it on a new file", async () => {
+  const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+  chooseExport(el, EXPORT);
+  await typePassphrase(el, "right-twelve-chars");
+  const sent = await pressImport(el);
+  const unreadable =
+    "This file is not a configuration export Waitron can read. Export it again from the box you exported from, then load the new export.";
+  Object.assign(el, {
+    errorCode: "setup.configuration_unreadable",
+    errorMessage: unreadable,
+    refusedRequest: sent,
+  });
+  await el.updateComplete;
+  expect(fieldErrors(el)).toEqual([unreadable]);
+  expect(exportPicker(el).invalid).toBe(true);
+  expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  await expect.poll(() => exportPicker(el).shadowRoot!.activeElement).toBe(exportControl(el));
+  expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
+  chooseExport(el, new File(["other"], "other.waitron-config"));
+  await el.updateComplete;
+  expect(fieldErrors(el)).toEqual([]);
+  expect(exportPicker(el).invalid).toBe(false);
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("clears an unreadable export's message when Import is pressed again", async () => {
+  const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+  chooseExport(el, EXPORT);
+  await typePassphrase(el, "right-twelve-chars");
+  Object.assign(el, {
+    errorCode: "setup.configuration_unreadable",
+    errorMessage: "This file is not a configuration export Waitron can read.",
+    refusedRequest: { artifact: EXPORT, passphrase: "right-twelve-chars" },
+  });
+  await el.updateComplete;
+  expect(fieldErrors(el)).toHaveLength(1);
+  const requested = vi.fn();
+  host.addEventListener("configuration-requested", requested);
+  q(el, "[data-test=import]")!.click();
+  await el.updateComplete;
+  expect(requested).toHaveBeenCalledOnce();
+  expect(fieldErrors(el)).toEqual([]);
+  expect(await bottomOf(el)).toBe("");
 });

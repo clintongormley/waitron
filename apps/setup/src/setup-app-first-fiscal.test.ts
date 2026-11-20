@@ -631,6 +631,64 @@ for (const [locale, shell, ownerStrings] of [
     }
   });
 
+const UNREADABLE_EXPORT = {
+  "en-GB":
+    "The box can no longer read the configuration export imported earlier. Export it again from the box you exported from, then set up this box again and import the new export.",
+  "es-ES":
+    "El servidor ya no puede leer la exportación de configuración importada antes. Vuelve a exportarla desde el servidor del que la exportaste, configura de nuevo este servidor e importa la nueva exportación.",
+} as const;
+const ownerControls = (owner: HTMLElement) =>
+  [...owner.querySelectorAll("wt-button")].map((button) => button.getAttribute("data-test"));
+
+for (const [locale, ownerStrings] of [
+  ["en-GB", initialOwnerStrings.en],
+  ["es-ES", initialOwnerStrings.es],
+] as const)
+  it(`${locale}: a claim refused because the staged export cannot be read says so, not to leave activation alone`, async () => {
+    try {
+      const { app, requests } = await mount({
+        intercept(path) {
+          if (path.endsWith("/claim"))
+            return Response.json(
+              { error: { code: "setup.configuration_unreadable", params: {} } },
+              { status: 422 },
+            );
+        },
+      });
+      await screen(app, "mode");
+      emit(app, "setup-patch", { patch: { mode: "live", venue, configurationImport: true } });
+      emit(app, "setup-goto", { screen: "venue" });
+      await screen(app, "venue");
+      emit(app, "setup-advance");
+      const owner = await screen(app, "first-owner");
+      await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+      expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
+      setLocale(locale);
+      await app.updateComplete;
+      expect(ownerWords(owner)).toBe(UNREADABLE_EXPORT[locale]);
+      expect(ownerWords(owner)).not.toBe(ownerStrings.error);
+      expect(ownerControls(owner)).toEqual(["reconnect-first"]);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  it(`${locale}: an activation refused because the staged export cannot be read gives the same words, beside Abandon and Reconnect`, async () => {
+    try {
+      const { app, owner } = await activationRefused({
+        code: "setup.configuration_unreadable",
+        params: {},
+      });
+      setLocale(locale);
+      await app.updateComplete;
+      expect(ownerWords(owner)).toBe(UNREADABLE_EXPORT[locale]);
+      expect(ownerControls(owner)).toEqual(["abandon-attempt", "reconnect-first"]);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
 it.each([
   [{}, shellEn["shell.first_setup.disk_full_restart_unknown"]],
   [{ restartDeletesLogs: true }, shellEn["shell.first_setup.disk_full"]],

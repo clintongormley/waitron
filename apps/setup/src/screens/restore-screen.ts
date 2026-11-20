@@ -52,6 +52,8 @@ export class SetupRestoreScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
+  @property({ attribute: false }) refusal?: unknown;
   @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) boxAddress?: string;
   /** The field `errorMessage` is about; the message then shows under it, not above Restore. */
@@ -131,7 +133,7 @@ export class SetupRestoreScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("refusal")) this.feedback.newRefusal("refusal");
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;

@@ -871,7 +871,10 @@ describe("setup-venue-screen form errors", () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     next(el).click();
     await el.updateComplete;
-    el.errorMessage = "The country must match the fiscal territory.";
+    Object.assign(el, {
+      errorMessage: "The country must match the fiscal territory.",
+      refusal: {},
+    });
     await el.updateComplete;
     expect(await bottomOf(el)).toBe(`The country must match the fiscal territory. ${FIX_FIELDS}`);
   });

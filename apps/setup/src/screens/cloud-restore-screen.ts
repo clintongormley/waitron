@@ -48,6 +48,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ attribute: false }) view?: CloudRecoveryView;
   @property({ attribute: false }) retryConfirmation?: CloudRestoreConfirmation;
   @property() errorMessage?: string;
+  /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
+  @property({ attribute: false }) refusal?: unknown;
   /** The field `errorMessage` is about. */
   @property() invalidField?: CloudField;
   @property({ type: Boolean }) busy = false;
@@ -83,7 +85,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("refusal")) this.feedback.newRefusal("refusal");
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {

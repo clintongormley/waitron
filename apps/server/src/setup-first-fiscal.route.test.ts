@@ -17,6 +17,7 @@ import {
   withPreparedModuleOperations,
   type ModuleClockSetRequest,
 } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const database = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -409,6 +410,20 @@ it.each([
   const result = await f.post("/setup-api/first-setup/claim", body);
   expect(result.status).toBe(400);
   expect(await result.text()).not.toContain("SECRET-SENTINEL");
+});
+it("answers a staged configuration the claim cannot read with 422 setup.configuration_unreadable", async () => {
+  const f = await fixture();
+  vi.spyOn(f.host.owner, "claimFirstSetup").mockRejectedValue(
+    new AppError("setup.configuration_unreadable", {}),
+  );
+  const refused = await f.post("/setup-api/first-setup/claim", {
+    venue: request,
+    configurationImport: true,
+  });
+  expect({ status: refused.status, body: await refused.json() }).toEqual({
+    status: 422,
+    body: { error: { code: "setup.configuration_unreadable", params: {} } },
+  });
 });
 it("refuses a claim that still sends the retired client nonce, without changing the record", async () => {
   const f = await fixture();

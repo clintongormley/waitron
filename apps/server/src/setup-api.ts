@@ -281,6 +281,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.configuration_outdated": 400,
   "setup.configuration_newer": 400,
   "setup.configuration_parts_differ": 400,
+  "setup.configuration_unreadable": 422,
   "setup.request_invalid": 400,
   "setup.certificate_refused": 422,
   "setup.owner_required": 403,
@@ -291,6 +292,9 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // A present-but-malformed `admin.email` (see `parseVenue`).
   "person.email_invalid": 400,
   "setup.already_provisioned": 409,
+  "provisioning.foreign_taxpayer": 409,
+  "provisioning.second_venue": 409,
+  "provisioning.taxpayer_identity_mismatch": 409,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
   "deployment.already_stamped": 409,
@@ -334,6 +338,9 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.vault_not_empty": 409,
   "mirror.vault_key_differs": 409,
   "mirror.primary_unconfirmed": 409,
+  "mirror.environment_mismatch": 409,
+  "provisioning.second_venue": 409,
+  "provisioning.foreign_taxpayer": 409,
   ...JOIN_REFUSAL_STATUS,
   "password.invalid": 401,
   "totp.required": 401,
@@ -398,6 +405,10 @@ const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   "provisioning.database_ahead": 409,
   "restore.stream_source_live": 409,
   "restore.stream_source_unchecked": 409,
+  "restore.archive_incomplete": 422,
+  "restore.unexpected_entry": 422,
+  "restore.unsafe_entry_path": 422,
+  "restore.identity_incomplete": 422,
   // The 503 cloud-api.ts and cloud-locked-start.ts already give this code, not this file's 502.
   "cloud.unavailable": 503,
 };

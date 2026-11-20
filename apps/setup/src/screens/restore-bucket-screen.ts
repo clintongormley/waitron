@@ -76,6 +76,8 @@ export class SetupRestoreBucketScreen extends LitElement {
   @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) boxAddress?: string;
   @property() errorMessage?: string;
+  /** A new value means a new refusal: it shows `errorMessage` again after the person pressed it away. A language change rewords `errorMessage` without changing this. */
+  @property({ attribute: false }) refusal?: unknown;
   /** The field `errorMessage` is about. */
   @property() invalidField?: BucketField;
   /** When the old server last wrote to its bucket (`restore.stream_source_live`). */
@@ -157,7 +159,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= this.#form();
-    if (changed.has("errorMessage")) this.feedback.newRefusal("refusal");
+    if (changed.has("refusal")) this.feedback.newRefusal("refusal");
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;

@@ -9,6 +9,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     "setup.configuration_outdated": Record<string, never>;
     "setup.configuration_newer": Record<string, never>;
+    /** The export decrypted, but its contents are not a configuration this box can parse. */
+    "setup.configuration_unreadable": Record<string, never>;
     /** Sorted migration-set names: the export's sets this box does not run, and the reverse. */
     "setup.configuration_parts_differ": { exportOnly: string[]; serverOnly: string[] };
     "recovery.passphrase_invalid": Record<string, never>;

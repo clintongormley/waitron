@@ -291,6 +291,7 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
+  "setup.configuration_unreadable": "shell.first_setup.configuration_unreadable",
 };
 /** An attempt in one of these cannot be carried on from the page: only Start again or Recover remain. */
 const pastActivation = (state: FirstSetupState | undefined) =>
@@ -675,6 +676,7 @@ function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
   if (code === "recovery.passphrase_invalid") return say("shell.configuration.passphrase_invalid");
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
+  if (code === "setup.configuration_unreadable") return say("shell.configuration.unreadable");
   if (code === "setup.configuration_newer" || code === "setup.configuration_parts_differ") {
     return say("shell.configuration.newer");
   }
@@ -957,7 +959,11 @@ export class SetupApp extends LitElement {
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
   @state() private cloudLiveUnknown = false;
-  @state() private configurationError?: { code?: string; message: Message };
+  @state() private configurationError?: {
+    code?: string;
+    message: Message;
+    request: ConfigurationRequestDetail;
+  };
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
   @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
@@ -2192,6 +2198,7 @@ export class SetupApp extends LitElement {
       this.configurationError = {
         code: (error as ApiError | null)?.code,
         message: describeConfigurationRefusal(error),
+        request: event.detail.request,
       };
       this.screen = "live-source";
     }
@@ -2729,6 +2736,7 @@ export class SetupApp extends LitElement {
           .api=${this.api}
           .boxAddress=${this.boxAddress}
           .errorMessage=${this.restoreError?.()}
+          .refusal=${this.restoreError}
           .invalidField=${this.restoreInvalidField}
           .liveSince=${this.restoreLiveSince}
           .liveUnknown=${this.restoreLiveUnknown}
@@ -2740,6 +2748,7 @@ export class SetupApp extends LitElement {
           .api=${this.api}
           .boxAddress=${this.boxAddress}
           .errorMessage=${this.bucketRestoreError?.()}
+          .refusal=${this.bucketRestoreError}
           .invalidField=${this.bucketInvalidField}
           .liveSince=${this.bucketLiveSince}
           .liveUnknown=${this.bucketLiveUnknown}
@@ -2754,6 +2763,7 @@ export class SetupApp extends LitElement {
           .view=${this.cloudRecoveryView}
           .retryConfirmation=${this.cloudRetryConfirmation}
           .errorMessage=${this.cloudRecoveryError?.()}
+          .refusal=${this.cloudRecoveryError}
           .invalidField=${this.cloudInvalidField}
           .busy=${this.cloudRecoveryBusy}
           .liveSince=${this.cloudLiveSince}
@@ -2764,6 +2774,7 @@ export class SetupApp extends LitElement {
           data-test="screen-live-source"
           .errorMessage=${this.configurationError?.message()}
           .errorCode=${this.configurationError?.code}
+          .refusedRequest=${this.configurationError?.request}
           .beforeEmpty=${(proceed: () => void, signal: AbortSignal) => this.#requestStartEmpty(proceed, signal)}
         ></setup-live-source-screen>`;
       case "configuration-preview":
@@ -2822,6 +2833,7 @@ export class SetupApp extends LitElement {
           data-test="screen-venue"
           .draft=${this.draft}
           .errorMessage=${this.venueError?.()}
+          .refusal=${this.venueError}
           .invalidField=${this.venueInvalidField}
         ></setup-venue-screen>`;
       case "cert":
@@ -2855,6 +2867,7 @@ export class SetupApp extends LitElement {
           .credentialsRejected=${this.resetCredentialsRejected}
           .invalidField=${this.resetInvalidField}
           .errorMessage=${this.resetError?.()}
+          .refusal=${this.resetError}
           .outcome=${this.resetOutcome && { kind: this.resetOutcome.kind, message: this.resetOutcome.message() }}
         ></setup-reset-screen>`;
       case "done":

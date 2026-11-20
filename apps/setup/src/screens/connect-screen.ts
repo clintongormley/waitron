@@ -139,7 +139,6 @@ export class SetupConnectScreen extends LitElement {
 
   @state() private attempted = false;
 
-  /** Set when Connect is pressed after `errorMessage` arrived; the message is then not shown. */
   @state() private refusalDismissed = false;
 
   @state() private fieldRefusalDismissed = false;
@@ -202,7 +201,8 @@ export class SetupConnectScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     // A returned request is a refused submission, not a saved baseline.
     this.#baseline ??= { ...this.values };
-    if (changed.has("errorMessage")) this.refusalDismissed = false;
+    // Each refusal returns its request; a translated `errorMessage` is not a new refusal.
+    if (changed.has("request")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
       const { primaryUrl, credential, confirmedCaPem } = this.request;

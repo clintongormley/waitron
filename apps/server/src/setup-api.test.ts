@@ -1367,6 +1367,29 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect((await res.json()).error.code).toBe("module.provision_only_disabled");
   });
 
+  it.each([
+    [
+      "provisioning.foreign_taxpayer",
+      new AppError("provisioning.foreign_taxpayer", { database: "venue.db" }),
+    ],
+    ["provisioning.second_venue", new AppError("provisioning.second_venue", {})],
+    [
+      "provisioning.taxpayer_identity_mismatch",
+      new AppError("provisioning.taxpayer_identity_mismatch", {}),
+    ],
+  ])("maps a %s clash from provision to HTTP 409", async (_code, error) => {
+    const app = new Hono();
+    const provision = vi.fn(async () => {
+      throw error;
+    });
+    const { deps } = makeDeps({ provision });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: error.code, params: error.params } });
+  });
+
   it.each(["category.name_taken", "product.name_taken"] as const)(
     "maps a staged configuration's %s, thrown at import, to 409",
     async (code) => {
@@ -1389,6 +1412,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ["backup.artifact_invalid", 422, { reason: "bad_magic" }],
     ["backup.archive_invalid", 422, { reason: "data_truncated" }],
     ["recovery.passphrase_invalid", 422, {}],
+    ["setup.configuration_unreadable", 422, {}],
     ["image.invalid_metadata", 400, {}],
     ["content.language_invalid", 400, {}],
     [
@@ -1838,6 +1862,7 @@ describe("POST /setup-api/configuration", () => {
     ["backup.artifact_invalid", 422, { reason: "bad_magic" }],
     ["backup.archive_invalid", 422, { reason: "data_truncated" }],
     ["recovery.passphrase_invalid", 422, {}],
+    ["setup.configuration_unreadable", 422, {}],
     ["image.invalid_metadata", 400, {}],
     ["content.language_invalid", 400, {}],
   ] as const)(
@@ -1891,6 +1916,10 @@ const SHARED_RESTORE_REFUSALS: [AppError, number][] = [
   [new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }), 409],
   [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00Z" }), 409],
   [new AppError("restore.stream_source_unchecked", { reason: "clock" }), 409],
+  [new AppError("restore.archive_incomplete", { missing: "db.dump" }), 422],
+  [new AppError("restore.unexpected_entry", { name: "extra.bin" }), 422],
+  [new AppError("restore.unsafe_entry_path", { name: "../db.dump" }), 422],
+  [new AppError("restore.identity_incomplete", { missing: "WAITRON_NODE_ID" }), 422],
 ];
 
 describe("the archive and Cloud restore routes, on the refusals they share with the bucket rebuild", () => {
@@ -2195,6 +2224,10 @@ describe("POST /setup-api/restore-bucket", () => {
       [new AppError("recovery.passphrase_invalid", {}), 422],
       [new AppError("backup.artifact_invalid", { reason: "tag" }), 422],
       [new AppError("backup.archive_invalid", { reason: "truncated" }), 422],
+      [new AppError("restore.archive_incomplete", { missing: "db.dump" }), 422],
+      [new AppError("restore.unexpected_entry", { name: "extra.bin" }), 422],
+      [new AppError("restore.unsafe_entry_path", { name: "../db.dump" }), 422],
+      [new AppError("restore.identity_incomplete", { missing: "WAITRON_NODE_ID" }), 422],
       [
         new AppError("backup.stream_request_failed", {
           operation: "get",
@@ -2544,6 +2577,34 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(await res.json()).toEqual({
       error: { code: "mirror.vault_key_differs", params: {} },
     });
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "mirror.environment_mismatch",
+      new AppError("mirror.environment_mismatch", {
+        expected: "production",
+        actual: "preproduction",
+      }),
+    ],
+    ["provisioning.second_venue", new AppError("provisioning.second_venue", {})],
+    [
+      "provisioning.foreign_taxpayer",
+      new AppError("provisioning.foreign_taxpayer", { database: "venue.db" }),
+    ],
+  ])("maps a %s clash from adopt to HTTP 409, restarting nothing", async (_code, error) => {
+    const app = new Hono();
+    const adopt = vi.fn(async () => {
+      throw error;
+    });
+    const { deps, requestRestart } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: error.code, params: error.params } });
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
   });
