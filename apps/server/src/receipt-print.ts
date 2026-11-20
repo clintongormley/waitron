@@ -576,8 +576,8 @@ const waitingOriginal = and(
 /**
  * Lays out again each original receipt of the order's sale that no printer has taken or tried,
  * so it lists every payment taken before it prints. One that cannot be laid out again is taken
- * off the queue, with any invoice delivery waiting on it, so the sale owes its receipt again and
- * the next original printed is laid out afresh.
+ * off the queue, with any invoice delivery waiting on it, so these bytes never print; a receipt
+ * asked for later is laid out afresh unless the sale already holds an earlier original job.
  */
 export async function refreshWaitingOriginals(
   backend: FiscalBackend,
@@ -601,7 +601,6 @@ export async function refreshWaitingOriginals(
       return true;
     });
     if (laidOut === undefined) {
-      // Never handed to a printer, so neither the job nor its delivery holds any history.
       await tx.delete(invoiceDeliveries).where(eq(invoiceDeliveries.printJobId, job.id));
       await tx.delete(printJobs).where(and(eq(printJobs.id, job.id), waitingOriginal));
     }
