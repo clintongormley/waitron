@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   adjustmentLines,
   allergyLineTicks,
+  billAdvances,
   billPayments,
   insertNodeSeriesTx,
   invoiceSeries,
@@ -418,6 +419,59 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       status: 409,
       code: "bill.payments_received",
     });
+  });
+
+  it("refuses a bill holding an advance, whose ticket takes the advance off", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "30.00",
+        method: "cash",
+        tendered: "30.00",
+        applied: "30.00",
+        tip: "0.00",
+        ownReceipt: true,
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const advancesOf = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, party.tabId)),
+      );
+    const [advance] = await advancesOf();
+    expect(advance).toBeDefined();
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    const ticket = await printBill(party, party.tabId);
+    expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+    const invoice = await invoiceOf(party.tabId);
+    const salesOf = () =>
+      inTx(venue, (tx) =>
+        tx
+          .select({ id: sales.id, total: sales.total })
+          .from(sales)
+          .where(inArray(sales.id, [advance!.advanceSaleId, invoice.id]))
+          .orderBy(sales.total),
+      );
+    const issued = await salesOf();
+    expect(issued).toEqual([
+      { id: invoice.id, total: 1800 },
+      { id: advance!.advanceSaleId, total: 3000 },
+    ]);
+
+    await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "bill.payments_received",
+    });
+
+    expect(await salesOf()).toEqual(issued);
+    expect(await creditsOf(invoice.id)).toEqual([]);
+    expect(await advancesOf()).toEqual([advance]);
   });
 
   it("refuses a full invoice naming a customer before its unserved dishes or the permission", async () => {
