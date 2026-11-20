@@ -1772,7 +1772,8 @@ export class DeviceProfilesScreen extends LitElement {
     const from = list.indexOf(printerId);
     const to = list.indexOf(neighbour);
     [list[from], list[to]] = [neighbour, printerId];
-    this.#movedPrinterOrder[key] = visible.map((id) =>
+    const order = this.#movedPrinterOrder[key] ?? this.#loaded?.[key] ?? [];
+    this.#movedPrinterOrder[key] = [...new Set([...order, ...visible])].map((id) =>
       id === printerId ? neighbour : id === neighbour ? printerId : id,
     );
     this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };

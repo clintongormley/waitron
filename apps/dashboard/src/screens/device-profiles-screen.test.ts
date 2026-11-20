@@ -1449,8 +1449,10 @@ describe("device-profiles-screen printer lists", () => {
     expect(button(leading.el, "receipt-printers-up-pr2").disabled).toBe(true);
   });
 
-  it("swaps a moved printer with the printer drawn next to it, past an undelivered one", async () => {
+  it("swaps a moved printer past an undelivered one and shows its place when it arrives", async () => {
+    const liveData = new LiveData();
     const { api, el } = await editListed({
+      liveData,
       getDeviceProfile: vi.fn().mockResolvedValue({
         ...listedProfile,
         receiptPrinterIds: ["pr2", "pr-new", "pr1"],
@@ -1459,6 +1461,13 @@ describe("device-profiles-screen printer lists", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-printers-up-pr1]")!.click();
     await el.updateComplete;
     expect(switchedOn(el, "receipt-printers")).toEqual(["pr1", "pr2"]);
+    vi.mocked(api.listPrinters).mockResolvedValue([
+      ...venuePrinters,
+      printer("pr-new", "Restored"),
+    ]);
+    liveData.invalidate([{ type: "printers", id: "pr-new" }]);
+    await expect.poll(() => switchedOn(el, "receipt-printers")).toContain("pr-new");
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr1", "pr-new", "pr2"]);
     await save(el);
     expect(savedLists(api)).toEqual({
       receiptPrinterIds: ["pr1", "pr-new", "pr2"],
