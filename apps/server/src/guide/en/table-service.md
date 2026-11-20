@@ -129,9 +129,8 @@ invoice. Placing a counter order alone does not issue an invoice.
 When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
 once the invoice is issued. With **Receipt printer**, the invoice prints when you choose **Print
 the bill**; otherwise it prints when you close the window after payment.
-**Email** appears only when a mail server is set up and the department's receipt has a contact
-email. To offer it, add that email on the department's **Receipts** tab in **Departments and
-zones**, in the dashboard.
+If the form says **Email** isn't offered, add a contact email on the department's **Receipts** tab
+in **Departments and zones**, in the dashboard.
 
 ## Choose a document and printer {#invoice-printer}
 

@@ -1351,7 +1351,8 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   const overLimit = overLimitOf(error);
   if (overLimit !== undefined) return overLimit;
   const code = (error as { code?: string } | undefined)?.code;
-  // Its own words also serve the ticket view's email form, which has no printed choice.
+  // The code's own words also serve the ticket view's email form, used after the sale, where Full
+  // invoice's Delivery no longer applies.
   if (code === "invoice_delivery.email_unavailable") return { code, printedInstead: true };
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? withDishes(code, error) : fallback;
 }

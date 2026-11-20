@@ -2284,11 +2284,11 @@ describe("till-app simplified-invoice limit", () => {
   it.each([
     [
       "en-GB",
-      "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones. To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer or A4.",
+      "This invoice can't be emailed from this server. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones. To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer.",
     ],
     [
       "es-ES",
-      "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas. Para terminar esta venta ahora, abre Factura completa y, en Entrega, elige Impresora de tickets o A4.",
+      "Esta factura no se puede enviar por correo desde este servidor. En el panel, revisa el servidor de correo en Sistema → Correo y el campo Correo electrónico de la pestaña Recibos del departamento en Departamentos y zonas. Para terminar esta venta ahora, abre Factura completa y, en Entrega, elige Impresora de tickets.",
     ],
   ])(
     "says in %s why the invoice cannot be emailed, and how to finish the sale on paper, when the server refuses the sale for it",

@@ -2210,7 +2210,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         typeof delivery === "object" &&
         "medium" in delivery &&
         delivery.medium === "email"
-          ? (await deps.invoiceEmailAvailable?.(deps.db)) === true
+          ? (await withTransaction(deps.db, async (tx) => deps.invoiceEmailAvailable?.(tx))) ===
+            true
           : false;
       const revision = await setOrderInvoiceChoice(
         deps.db,
@@ -2252,12 +2253,17 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
       const answer = await deps.db.withWriteLock(async () => {
         const tx = deps.db;
-        await checkZones(tx, session, named({ orderId }, zoneId !== undefined && { zoneId }));
-        const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
         const [saved] = await tx
           .select({ id: workingOrders.id })
           .from(workingOrders)
           .where(eq(workingOrders.id, orderId));
+        // The zone decides only a bill not saved yet.
+        await checkZones(
+          tx,
+          session,
+          named({ orderId }, saved === undefined && zoneId !== undefined && { zoneId }),
+        );
+        const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
         const transport = await readEmailTransport(tx);
         const emailAvailable = await canEmailInvoice(
           tx,

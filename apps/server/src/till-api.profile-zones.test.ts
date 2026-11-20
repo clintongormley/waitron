@@ -1910,6 +1910,19 @@ describe("a Restaurant profile in its own zones", () => {
     }
   });
 
+  it("reads a saved bill's invoice options whatever zone the till sends with it", async () => {
+    expect(
+      await send(
+        restaurant,
+        "GET",
+        `/api/invoice-delivery-options?orderId=${f.restOrder}&zoneId=${f.deliCounter}`,
+      ),
+    ).toEqual({
+      status: 200,
+      body: { invoicePrinter: null, emailAvailable: false, emailNeedsReceiptContact: false },
+    });
+  });
+
   it("lists only the profile's orders waiting at the counter", async () => {
     const deliPlaced = await park(f.deliCounter, f.deliItem);
     const restPlaced = await park(f.bar, f.deliSpecial);

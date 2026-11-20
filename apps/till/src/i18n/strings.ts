@@ -1641,7 +1641,7 @@ export const en = {
   "sale.error": "Could not complete the sale, try again",
   "sale.payment_in_flight": "A card payment for this order is in progress. Wait for it to finish.",
   "sale.email_unavailable_print":
-    "To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer or A4.",
+    "To finish this sale now, open Full invoice and, under Delivery, choose Receipt printer.",
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
@@ -3857,7 +3857,7 @@ export const es: Record<StringKey, string> = {
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.payment_in_flight": "Se está cobrando este pedido con tarjeta. Espera a que termine.",
   "sale.email_unavailable_print":
-    "Para terminar esta venta ahora, abre Factura completa y, en Entrega, elige Impresora de tickets o A4.",
+    "Para terminar esta venta ahora, abre Factura completa y, en Entrega, elige Impresora de tickets.",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró este servidor. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.disk_full":
