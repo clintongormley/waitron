@@ -402,6 +402,24 @@ describe("mountScheduleApi — swaps", () => {
     expect(await swapCount()).toBe(before);
   });
 
+  it("400s (swap.return_shift_not_owned) a return shift the offered person does not own", async () => {
+    const mine = await insertShift(me, "2026-05-08T09:00:00Z", "2026-05-08T17:00:00Z");
+    const alsoMine = await insertShift(me, "2026-05-10T09:00:00Z", "2026-05-10T17:00:00Z");
+    const before = await swapCount();
+    const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
+      cookie: await cookieFor(me, "1111"),
+      body: { fromShiftId: mine, toPersonId: colleague, toShiftId: alsoMine },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "swap.return_shift_not_owned",
+        params: { shiftId: alsoMine, personId: colleague },
+      },
+    });
+    expect(await swapCount()).toBe(before);
+  });
+
   it("403s (swap.not_permitted) offering a from_shift the requester does not own", async () => {
     // A shift owned by the COLLEAGUE, offered by ME — requestSwap refuses it.
     const theirShift = await insertShift(colleague, "2026-05-08T09:00:00Z", "2026-05-08T17:00:00Z");

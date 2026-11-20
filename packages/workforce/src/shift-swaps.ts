@@ -20,8 +20,9 @@ export interface AcceptSwapInput {
 }
 
 /**
- * Records a `requested` swap and returns its id. The requester must own `fromShift`, and a supplied
- * `toShift` must be `toPerson`'s own (`swap.not_permitted`).
+ * Records a `requested` swap and returns its id. The requester must own `fromShift`
+ * (`swap.not_permitted`), and a supplied `toShift` must be `toPerson`'s own
+ * (`swap.return_shift_not_owned`).
  */
 export async function requestSwap(tx: Transaction, input: RequestSwapInput): Promise<string> {
   const fromShiftOwner = await shiftOwner(tx, input.fromShiftId);
@@ -40,7 +41,8 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
       throw new AppError("shift.not_found", { shiftId: input.toShiftId });
     }
     if (toShiftOwner !== input.toPersonId) {
-      throw new AppError("swap.not_permitted", {
+      throw new AppError("swap.return_shift_not_owned", {
+        shiftId: input.toShiftId,
         personId: input.toPersonId,
       });
     }

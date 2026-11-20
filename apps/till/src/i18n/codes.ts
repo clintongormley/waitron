@@ -826,6 +826,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You can only offer your own shifts and accept swaps offered to you",
     es: "Solo puedes ofrecer tus propios turnos y aceptar los cambios que te ofrezcan",
   },
+  "swap.return_shift_not_owned": {
+    en: "The shift offered in return is not that colleague's. Choose one of their shifts",
+    es: "El turno ofrecido a cambio no es de ese compañero. Elige uno de sus turnos",
+  },
   "swap.not_acceptable": {
     en: "That swap can no longer be accepted",
     es: "Ese cambio ya no se puede aceptar",

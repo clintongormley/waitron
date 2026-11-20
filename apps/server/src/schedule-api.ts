@@ -46,6 +46,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shift.not_found": 400,
   "swap.not_found": 404,
   "swap.not_permitted": 403,
+  "swap.return_shift_not_owned": 400,
   "swap.not_acceptable": 409,
   "absence.overlaps": 409,
 };
