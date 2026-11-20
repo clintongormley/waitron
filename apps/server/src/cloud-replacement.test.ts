@@ -569,6 +569,78 @@ it("does not let a corrupt replacement file block Stop access, while start-up an
   await expect(client.check()).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
 });
 
+async function reconnecting() {
+  const { f, cloud } = await connectedReplacement();
+  let venue: string | null = registration.venueId;
+  const options = {
+    stateDir: f.stateDir,
+    origin: f.origin,
+    readVenueId: async () => venue,
+    readVenueName: async () => "Bar Pepe",
+    recordVenueId: async (id: string) => {
+      venue = id;
+    },
+    forgetVenueId: async () => {
+      venue = null;
+    },
+    environment: "test" as const,
+  };
+  const boot = () => {
+    const connection = createCloudConnection(options);
+    return { connection, replacement: createCloudReplacement({ ...f.options, connection }) };
+  };
+  const first = boot();
+  const old = (await first.connection.revoke(async () => {})).requestId;
+  cloud.forgetPairings();
+  return { f, boot, first, old, venue: () => venue, forget: options.forgetVenueId };
+}
+
+it("Connect again sets a completed replacement aside, so a later start cannot bring the old Cloud venue back", async () => {
+  const { f, boot, first, old, venue } = await reconnecting();
+  const again = await first.connection.start(false, () => first.replacement.retire());
+  expect(again.state).toBe("awaiting_cloud");
+  expect(venue()).toBeNull();
+  const { connection, replacement } = boot();
+  await replacement.resume();
+  expect(venue()).toBeNull();
+  expect(await replacement.status()).toBeNull();
+  expect((await connection.status()).requestId).toBe(again.requestId);
+  expect(again.requestId).not.toBe(old);
+  await expect(stat(join(f.stateDir, "cloud/replacement.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(await setAside(f.stateDir)).toHaveLength(1);
+});
+
+it("a start after Connect again forgot the Cloud venue, but before it saved the new pairing, pairs afresh", async () => {
+  const { boot, first, old, venue, forget } = await reconnecting();
+  await first.replacement.retire();
+  await forget();
+  const { connection, replacement } = boot();
+  await replacement.resume();
+  expect(venue()).toBeNull();
+  expect((await connection.status()).state).toBe("not_connected");
+  const retried = await connection.start();
+  expect(retried.state).toBe("awaiting_cloud");
+  expect(retried.requestId).not.toBe(old);
+});
+
+it("Connect again leaves an unfinished or unreadable replacement request where it is", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await client.retire();
+  await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  await client.prepare();
+  const waiting = await readFile(path, "utf8");
+  await client.retire();
+  expect(await readFile(path, "utf8")).toBe(waiting);
+  await chmod(path, 0o640);
+  await client.retire();
+  expect(await readFile(path, "utf8")).toBe(waiting);
+  expect(await setAside(f.stateDir)).toEqual([]);
+});
+
 async function setAside(stateDir: string) {
   return (await readdir(join(stateDir, "cloud"))).filter((name) =>
     name.startsWith("replacement.json.set-aside-"),

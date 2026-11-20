@@ -105,6 +105,7 @@ it.each(["prepare", "check", "reissue"] as const)(
           check: effect,
           reissue: effect,
           recordStop: vi.fn(),
+          retire: vi.fn(),
         },
       },
       () => {},
@@ -184,6 +185,71 @@ it.each(["complete", "revoke", "remote-access"] as const)(
     }
   },
 );
+it("rechecks confirmation inside Cloud start's Connect again before forgetting the Cloud venue", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager");
+    await f.client.revoke(async () => {});
+    f.forgetPairings();
+    const retire = vi.fn(async () => {});
+    const connection = {
+      ...f.client,
+      start: (restart?: boolean, reconnect?: () => Promise<void>) =>
+        f.client.start(
+          restart,
+          reconnect &&
+            (async () => {
+              await withTransaction(suite.db, (tx) =>
+                setFreshManagementSignIn(tx, manager.session, false),
+              );
+              await reconnect();
+            }),
+        ),
+    };
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+        replacement: {
+          status: async () => null,
+          eligible: async () => false,
+          approval: async () => null,
+          hasProposal: async () => false,
+          prepare: vi.fn(),
+          check: vi.fn(),
+          reissue: vi.fn(),
+          recordStop: vi.fn(),
+          retire,
+        },
+      },
+      () => {},
+    );
+    const path = join(f.stateDir, "cloud/connection.json");
+    const before = await readFile(path, "utf8");
+    const response = await app.request("/management-api/cloud/start", {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ reconnect: true }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+    expect(retire).not.toHaveBeenCalled();
+  } finally {
+    await f.close();
+  }
+});
 it.each(["prepare", "check", "reissue"] as const)(
   "rechecks confirmation inside replacement %s",
   async (action) => {
@@ -209,6 +275,7 @@ it.each(["prepare", "check", "reissue"] as const)(
           check: change,
           reissue: change,
           recordStop: async () => {},
+          retire: async () => {},
         },
       },
       () => {},
@@ -566,6 +633,7 @@ it.each(["prepare", "reissue"] as const)(
       check: vi.fn(),
       reissue: vi.fn(),
       recordStop: vi.fn(),
+      retire: vi.fn(),
     };
     replacement[action].mockImplementation(async (authorize?: () => Promise<void>) => {
       entered();
@@ -626,6 +694,7 @@ it("keeps Cloud status visible with a diagnostic when saved replacement state is
         check: vi.fn(),
         reissue: vi.fn(),
         recordStop: vi.fn(),
+        retire: vi.fn(),
       },
     },
     () => {},
@@ -716,6 +785,9 @@ it("rejects malformed or extra browser inputs and reports an unconfigured server
     '{"venueId":"caller"}',
     '{"restart":null}',
     '{"restart":"true"}',
+    '{"reconnect":null}',
+    '{"reconnect":"true"}',
+    '{"reconnect":true,"venueId":"caller"}',
   ]) {
     const result = await app.request("/management-api/cloud/start", {
       method: "POST",
@@ -842,6 +914,7 @@ it("Stop access records the stop with the replacement after the permission reche
           recordStop: async () => {
             stops.push(f.requests.filter((v) => v[2] === "revoke").length);
           },
+          retire: vi.fn(),
         },
       },
       () => {},
@@ -902,6 +975,89 @@ it("Stop access records the stop with the replacement after the permission reche
     expect((await send()).status).toBe(200);
     expect(stops).toEqual([0]);
     expect((await f.client.status()).installation?.state).toBe("revoked");
+  } finally {
+    await f.close();
+  }
+});
+
+it("Connect again rechecks the manager and primary role inside the lock and sets the replacement aside before forgetting the Cloud venue", async () => {
+  const { installationFixture } = await import("../test/cloud-installation-fixture.js");
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager");
+    let primary = true;
+    const retired: (string | null)[] = [];
+    const connection = createCloudConnection(f.options);
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+        replacement: {
+          status: async () => null,
+          eligible: async () => false,
+          approval: async () => null,
+          hasProposal: async () => false,
+          prepare: vi.fn(),
+          check: vi.fn(),
+          reissue: vi.fn(),
+          recordStop: async () => {},
+          retire: async () => {
+            retired.push(await f.options.readVenueId());
+          },
+        },
+      },
+      () => {},
+    );
+    const send = (body: object) =>
+      app.request("/management-api/cloud/start", {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    await connection.revoke(async () => {});
+    f.forgetPairings();
+    const path = join(f.stateDir, "cloud/connection.json");
+    const before = await readFile(path, "utf8");
+    for (const body of [{}, { restart: false }, { restart: true }, { reconnect: false }]) {
+      const response = await send(body);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        state: "complete",
+        installation: { state: "revoked" },
+      });
+    }
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(retired).toEqual([]);
+    const start = connection.start.bind(connection);
+    const lose = vi.spyOn(connection, "start");
+    lose.mockImplementationOnce(async (restart, reconnect) => {
+      await setBuiltInRoleForTest(suite.db, manager.id, "staff");
+      return start(restart, reconnect);
+    });
+    expect((await send({ reconnect: true })).status).toBe(403);
+    await setBuiltInRoleForTest(suite.db, manager.id, "manager");
+    lose.mockImplementationOnce(async (restart, reconnect) => {
+      primary = false;
+      return start(restart, reconnect);
+    });
+    expect((await send({ reconnect: true })).status).toBe(409);
+    primary = true;
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(retired).toEqual([]);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+    const response = await send({ reconnect: true });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ state: "awaiting_cloud" });
+    expect(retired).toEqual([f.venueId]);
+    expect(await f.options.readVenueId()).toBeNull();
   } finally {
     await f.close();
   }

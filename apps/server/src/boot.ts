@@ -74,7 +74,7 @@ import {
   readCloudVenueId,
   readVenueSettings,
   saveCloudVenueId,
-  saveVenueFields,
+  forgetCloudVenueId,
   type Database,
   type NodeDatabase,
   type SingletonRole,
@@ -2585,8 +2585,7 @@ async function bootServer(
         readVenueId: () => readCloudVenueId(db),
         readVenueName: async () => (await readVenueSettings(db)).doc.name,
         recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
-        forgetVenueId: () =>
-          withTransaction(db, (tx) => saveVenueFields(tx, { cloudVenueId: null }, null)),
+        forgetVenueId: () => withTransaction(db, forgetCloudVenueId),
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;

@@ -13,7 +13,7 @@ const server = Object.fromEntries(
     ["box-tls-repair", "certificate repair files and folder moves"],
     ["box-tls-install", "A947 resumable TLS install"],
     ["cloud-remote", "the staff key's create-only link"],
-    ["cloud-replacement", "links an unreadable request aside and flushes"],
+    ["cloud-replacement", "links an unreadable or retired request aside and flushes"],
     ["cloud-tunnel", "tunnel volume outside state"],
     [
       "emergency-copy-placement",

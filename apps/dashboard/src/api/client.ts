@@ -1789,6 +1789,18 @@ export type BackupFreshness =
   | { configured: false; loadErrorCode?: string }
   | { configured: true; destinations: BackupDestinationStatus[] };
 
+interface CloudInstallation {
+  revision: number;
+  lastContactAt: string | null;
+  leaseExpiresAt: string | null;
+  services: {
+    service: "remote_access" | "continuous_backup" | "retained_snapshots" | "content_translation";
+    state: "unconfigured" | "provisioning" | "ready" | "failed";
+    health: "unknown" | "healthy" | "degraded" | "failed";
+    failure: string | null;
+    observedAt: string | null;
+  }[];
+}
 export interface CloudConnectionStatus {
   isRemote?: boolean;
   remoteAccessEnabled?: boolean;
@@ -1812,19 +1824,8 @@ export interface CloudConnectionStatus {
     legalBusinessName: string;
     registration: CloudConnectionStatus["registration"] | null;
   };
-  installation?: {
-    state: "pending" | "active" | "unavailable" | "revoked";
-    revision: number;
-    lastContactAt: string | null;
-    leaseExpiresAt: string | null;
-    services: {
-      service: "remote_access" | "continuous_backup" | "retained_snapshots" | "content_translation";
-      state: "unconfigured" | "provisioning" | "ready" | "failed";
-      health: "unknown" | "healthy" | "degraded" | "failed";
-      failure: string | null;
-      observedAt: string | null;
-    }[];
-  };
+  installation?: CloudInstallation &
+    ({ state: "pending" | "active" | "unavailable" } | { state: "revoked" });
   configured: boolean;
   isPrimary: boolean;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
@@ -5130,6 +5131,9 @@ export class DashboardApi {
   }
   startCloudConnection(restart = false): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/start", "POST", { restart });
+  }
+  reconnectCloudConnection(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/start", "POST", { reconnect: true });
   }
   checkCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/check", "POST", {});

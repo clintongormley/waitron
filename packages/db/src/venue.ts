@@ -46,6 +46,10 @@ export async function saveCloudVenueId(tx: Transaction, venueId: string): Promis
   await saveVenueFields(tx, { cloudVenueId: venueId }, null);
 }
 
+export async function forgetCloudVenueId(tx: Transaction): Promise<void> {
+  await saveVenueFields(tx, { cloudVenueId: null }, null);
+}
+
 export async function readStreamId(tx: Transaction): Promise<string | null> {
   return (await readVenueSettings(tx)).doc.streamId;
 }

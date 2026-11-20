@@ -430,7 +430,9 @@ it("ignores a delayed reply after removal and reloads when the screen is reconne
 it("keeps Start again available after an unavailable request and a later network failure", async () => {
   setLocale("en");
   let checks = 0;
-  const api = new DashboardApi("", async (url) => {
+  const starts: unknown[] = [];
+  const api = new DashboardApi("", async (url, init) => {
+    if (String(url).endsWith("/start")) starts.push(JSON.parse(String(init?.body)));
     if (String(url).endsWith("/check"))
       return Response.json(
         {
@@ -458,6 +460,8 @@ it("keeps Start again available after an unavailable request and a later network
   await expect.poll(() => checks).toBe(2);
   await flush(el);
   expect(el.shadowRoot!.querySelector("#restart")).not.toBeNull();
+  click(el, "restart");
+  await expect.poll(() => starts).toEqual([{ restart: true }]);
 });
 
 for (const locale of ["en", "es"] as const)
@@ -956,7 +960,7 @@ it("says Cloud access has ended and connects again from the start on the primary
   click(el, "connect-again");
   await expect.poll(() => el.shadowRoot!.textContent).toContain("87654321");
   expect(calls.filter((c) => c.url.endsWith("/start"))).toEqual([
-    { url: "/management-api/cloud/start", body: { restart: false } },
+    { url: "/management-api/cloud/start", body: { reconnect: true } },
   ]);
   expect(el.shadowRoot!.textContent).not.toContain("has ended");
 });

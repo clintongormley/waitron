@@ -31,6 +31,7 @@ export interface CloudApiDeps {
     | "check"
     | "reissue"
     | "recordStop"
+    | "retire"
   >;
   managementOrigin: string;
   isPrimary: () => boolean;
@@ -322,22 +323,17 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         if (!body || typeof body !== "object" || Array.isArray(body))
           throw new AppError("cloud.request_invalid", {});
         const data = body as Record<string, unknown>;
-        if (
-          action === "start" &&
-          Object.hasOwn(data, "restart") &&
-          typeof data.restart !== "boolean"
-        )
+        const flags = action === "start" ? ["restart", "reconnect"] : [];
+        if (flags.some((key) => Object.hasOwn(data, key) && typeof data[key] !== "boolean"))
           throw new AppError("cloud.request_invalid", {});
         const keys =
           action === "complete"
             ? ["requestId", "organisationId", "legalBusinessId"]
-            : action === "start" && Object.hasOwn(data, "restart")
-              ? ["restart"]
-              : [];
+            : flags.filter((key) => Object.hasOwn(data, key));
         if (
           Object.keys(data).length !== keys.length ||
           keys
-            .filter((key) => key !== "restart")
+            .filter((key) => !flags.includes(key))
             .some(
               (key) =>
                 typeof data[key] !== "string" ||
@@ -361,7 +357,17 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
                   await deps.replacement?.recordStop();
                 })
               : action === "start"
-                ? await client.start(data.restart === true)
+                ? await client.start(
+                    data.restart === true,
+                    data.reconnect === true
+                      ? async () => {
+                          await authorize(c, true);
+                          primary();
+                          await requireConfirmation(c);
+                          await deps.replacement?.retire();
+                        }
+                      : undefined,
+                  )
                 : action === "check"
                   ? await client.check()
                   : await client.complete(data as unknown as CloudChoice, async () => {

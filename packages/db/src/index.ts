@@ -75,6 +75,7 @@ export {
   readVenueSettings,
   readCloudVenueId,
   saveCloudVenueId,
+  forgetCloudVenueId,
   readStreamId,
   ensureStreamId,
   createVenueSettings,

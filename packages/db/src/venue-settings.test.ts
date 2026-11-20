@@ -186,6 +186,17 @@ describe("the venue document", () => {
     expect((await api.readVenueSettings(suite.db)).doc.cloudVenueId).toBe(id);
   });
 
+  it("forgets Cloud's venue identity and keeps the rest of the venue document", async () => {
+    await seedVenueSettings(suite.db);
+    await withTransaction(suite.db, (tx) =>
+      api.saveCloudVenueId(tx, "33333333-3333-4333-8333-333333333333"),
+    );
+    const before = (await api.readVenueSettings(suite.db)).doc;
+    await withTransaction(suite.db, api.forgetCloudVenueId);
+    expect(await api.readCloudVenueId(suite.db)).toBeNull();
+    expect((await api.readVenueSettings(suite.db)).doc).toEqual({ ...before, cloudVenueId: null });
+  });
+
   it("refuses a missing venue document", async () => {
     await expect(withTransaction(suite.db, api.readVenue)).rejects.toMatchObject({
       code: "venue.not_found",

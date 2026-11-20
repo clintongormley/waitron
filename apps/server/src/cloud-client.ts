@@ -1002,15 +1002,20 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         return project(state);
       });
     },
-    async start(restart = false) {
+    /** `reconnect` is Connect again: given, a revoked installation is forgotten and paired afresh. */
+    async start(restart = false, reconnect?: () => Promise<void>) {
       return run(async () => {
         let state = await read();
-        if (state?.view?.state === "complete") {
-          if (!state.lifecycle?.revoked) return project(state);
-          // Forgotten before the new file is saved: a crash between leaves a file read() ignores.
+        let remoteAccessOff = false;
+        if (reconnect && state) {
+          if (state.view?.state !== "complete" || !state.lifecycle?.revoked) return project(state);
+          await reconnect();
+          remoteAccessOff = state.remoteAccessEnabled === false;
+          // Forgotten before the new file is saved: read() takes a file naming a venue id the
+          // database no longer holds as not connected, so a crash between pairs afresh.
           await options.forgetVenueId();
           state = undefined;
-        }
+        } else if (state?.view?.state === "complete") return project(state);
         if (state && restart) {
           try {
             const latest = await exchange(state, "status");
@@ -1046,6 +1051,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
               .export({ format: "der", type: "pkcs8" })
               .toString("base64url"),
             publicKey: key.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+            ...(remoteAccessOff ? { remoteAccessEnabled: false } : {}),
           };
           await save(state);
         }

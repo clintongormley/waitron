@@ -714,9 +714,10 @@ export class CloudServicesScreen extends LitElement {
       }
     </section>`;
   }
-  /** Never called for a revoked installation: render() shows the ended message instead. */
-  #installation(s: CloudConnectionStatus) {
-    const installation = s.installation;
+  #installation(
+    s: CloudConnectionStatus,
+    installation: Exclude<CloudConnectionStatus["installation"], { state: "revoked" }>,
+  ) {
     const date = (value: string | null | undefined) =>
       value
         ? html`<time datetime=${value}>${new Date(value).toLocaleString(currentLocale())}</time>`
@@ -735,8 +736,7 @@ export class CloudServicesScreen extends LitElement {
           health: "unknown" as const,
           observedAt: null,
         }));
-    const access = (installation?.state ?? "pending") as "pending" | "active" | "unavailable";
-    return html`<p role="status">${t(`cloud.access_${access}`)}</p>
+    return html`<p role="status">${t(`cloud.access_${installation?.state ?? "pending"}`)}</p>
       <dl>
         <dt>${t("cloud.last_contact")}</dt>
         <dd>${date(installation?.lastContactAt)}</dd>
@@ -972,37 +972,37 @@ export class CloudServicesScreen extends LitElement {
                                   >`
                                 : nothing
                             }`
-                    : s.state === "complete" && s.installation?.state === "revoked"
-                      ? html`<p role="status">${t("cloud.ended")}</p>
-                          <p>${t("cloud.ended_help")}</p>
-                          ${s.isPrimary ? button("connect-again", t("cloud.connect_again"), () => this.api.startCloudConnection()) : nothing}`
-                      : s.state === "complete"
-                        ? html`<p role="status">${t("cloud.connected")}</p>
+                    : s.state === "complete"
+                      ? s.installation?.state === "revoked"
+                        ? html`<p role="status">${t("cloud.ended")}</p>
+                            <p>${t("cloud.ended_help")}</p>
+                            ${s.isPrimary ? button("connect-again", t("cloud.connect_again"), () => this.api.reconnectCloudConnection()) : nothing}`
+                        : html`<p role="status">${t("cloud.connected")}</p>
                             <p>${s.legalBusinessName}</p>
-                            ${this.#installation(s)}
+                            ${this.#installation(s, s.installation)}
                             ${readsBilling(s) ? html`${this.#recoveryPanel(s)}${this.#billing(s)}${this.#emergency(s)}` : nothing}`
-                        : html`
-                            ${
-                              s.state === "awaiting_cloud"
-                                ? html`<p>${t("cloud.code")}</p>
-                                    <p class="code">${s.code}</p>
-                                    ${s.expiresAt ? html`<p>${t("cloud.expires")}: <time datetime=${s.expiresAt}>${new Date(s.expiresAt).toLocaleString(currentLocale())}</time></p>` : nothing}
-                                    ${s.openCloudUrl ? html`<a href=${s.openCloudUrl} target="_blank" rel="noopener noreferrer">${t("cloud.open")}</a>` : nothing}`
-                                : html`<p>${t("cloud.confirm_help")}</p>
-                                    <dl>
-                                      <dt>${t("cloud.organisation")}</dt>
-                                      <dd>${s.organisationName}</dd>
-                                      <dt>${t("cloud.business")}</dt>
-                                      <dd>${s.legalBusinessName}</dd>
-                                    </dl>`
-                            }
-                            <wt-form-actions
-                              >${button("check", t("cloud.check"), () => this.api.checkCloudConnection())}
-                              ${s.state === "awaiting_local" && s.isPrimary ? html`<wt-button id="confirm" variant="primary" .disabled=${this.busy} @click=${() => this.#complete()}>${t("cloud.confirm")}</wt-button>` : nothing}
-                            </wt-form-actions>
-                            ${s.isPrimary && !s.expiresAt ? button("retry-start", t("cloud.retry_start"), () => this.api.startCloudConnection()) : nothing}
-                            ${s.isPrimary && (this.requestUnavailable || (!!s.expiresAt && Date.parse(s.expiresAt) < Date.now())) ? button("restart", t("cloud.restart"), () => this.api.startCloudConnection(true)) : nothing}
-                          `
+                      : html`
+                          ${
+                            s.state === "awaiting_cloud"
+                              ? html`<p>${t("cloud.code")}</p>
+                                  <p class="code">${s.code}</p>
+                                  ${s.expiresAt ? html`<p>${t("cloud.expires")}: <time datetime=${s.expiresAt}>${new Date(s.expiresAt).toLocaleString(currentLocale())}</time></p>` : nothing}
+                                  ${s.openCloudUrl ? html`<a href=${s.openCloudUrl} target="_blank" rel="noopener noreferrer">${t("cloud.open")}</a>` : nothing}`
+                              : html`<p>${t("cloud.confirm_help")}</p>
+                                  <dl>
+                                    <dt>${t("cloud.organisation")}</dt>
+                                    <dd>${s.organisationName}</dd>
+                                    <dt>${t("cloud.business")}</dt>
+                                    <dd>${s.legalBusinessName}</dd>
+                                  </dl>`
+                          }
+                          <wt-form-actions
+                            >${button("check", t("cloud.check"), () => this.api.checkCloudConnection())}
+                            ${s.state === "awaiting_local" && s.isPrimary ? html`<wt-button id="confirm" variant="primary" .disabled=${this.busy} @click=${() => this.#complete()}>${t("cloud.confirm")}</wt-button>` : nothing}
+                          </wt-form-actions>
+                          ${s.isPrimary && !s.expiresAt ? button("retry-start", t("cloud.retry_start"), () => this.api.startCloudConnection()) : nothing}
+                          ${s.isPrimary && (this.requestUnavailable || (!!s.expiresAt && Date.parse(s.expiresAt) < Date.now())) ? button("restart", t("cloud.restart"), () => this.api.startCloudConnection(true)) : nothing}
+                        `
                 }`
         }
       </wt-card>`;
