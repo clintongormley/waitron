@@ -44,7 +44,6 @@ import {
 } from "./receipt-print.js";
 import { startFreshRounds } from "./owed-receipts.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { inTx, send as rawGroupSend } from "./testing/bill-venue.js";
@@ -731,6 +730,23 @@ describe("a receipt queued in a language other than the sale's", () => {
     const moved = await jobRow(jobId);
     expect(moved).toMatchObject({ printerId: target, pageLanguage: "ca-ES" });
     expect(decodeTicket(moved.payload)).toSatisfy(catalan);
+  });
+
+  it("keeps the language when the print queue reprints a completed original as a copy", async () => {
+    const { saleId, job } = await printedIn("ca-ES", "original");
+    await setJob(job.id, { status: "done" });
+    const response = await resend(job.id);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const copy = await jobRow(jobId);
+    expect(copy).toMatchObject({ saleId, receiptCopy: true, pageLanguage: "ca-ES" });
+    expect(decodeTicket(copy.payload)).toSatisfy(catalan);
+
+    await setJob(jobId, { status: "done" });
+    const again = await resend(jobId);
+    expect(again.status).toBe(202);
+    const { jobId: againId } = (await again.json()) as { jobId: string };
+    expect(decodeTicket((await jobRow(againId)).payload)).toSatisfy(catalan);
   });
 
   it("keeps the language when a payment refreshes the original still waiting to print", async () => {

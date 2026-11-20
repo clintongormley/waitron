@@ -465,11 +465,16 @@ export async function enqueueInvoiceReceipt(
   printerId: string,
   bytes: Uint8Array,
   designation: "original" | "duplicate",
-  { requestKey, personId }: { requestKey?: string; personId: string },
+  {
+    requestKey,
+    personId,
+    pageLanguage = null,
+  }: { requestKey?: string; personId: string; pageLanguage?: string | null },
 ): Promise<InvoiceDelivery> {
   const job = await enqueuePrintJob(tx, printerId, bytes, "document", {
     saleId,
     receiptCopy: designation === "duplicate",
+    pageLanguage,
   });
   return reserveInvoiceDelivery(tx, saleId, {
     requestKey: requestKey ?? job.jobId,

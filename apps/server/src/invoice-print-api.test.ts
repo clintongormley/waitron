@@ -62,19 +62,28 @@ import { insertCorrective } from "./testing/replacement-fixture.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
-/** Stands in for a sale's receipt laid out again: bytes naming the sale, its marking and the roll. */
-const layOut: LayOutSaleReceipt = async (_tx, saleId, duplicate, printer) =>
+/**
+ * Stands in for a sale's receipt laid out again: bytes naming the sale, its marking, the roll and
+ * any language chosen.
+ */
+const layOut: LayOutSaleReceipt = async (_tx, saleId, duplicate, printer, language) =>
   new TextEncoder().encode(
-    `${saleId} ${duplicate ? "copy" : "original"} ${printer.paperWidth} ${printer.resolution}`,
+    `${saleId} ${duplicate ? "copy" : "original"} ${printer.paperWidth} ${printer.resolution}` +
+      (language === null ? "" : ` ${language}`),
   );
 
 /** What {@link layOut} gives for the sale on printer `printerId`. */
-async function laidOut(saleId: string, duplicate: boolean, printerId: string) {
+async function laidOut(
+  saleId: string,
+  duplicate: boolean,
+  printerId: string,
+  language: string | null = null,
+) {
   const [roll] = await suite.db
     .select({ ...receiptRollColumns })
     .from(printers)
     .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
-  return withTransaction(suite.db, (tx) => layOut(tx, saleId, duplicate, roll!, null));
+  return withTransaction(suite.db, (tx) => layOut(tx, saleId, duplicate, roll!, language));
 }
 const clock: TrustedClock = {
   now: () => ({
@@ -1050,6 +1059,32 @@ describe("management invoice receipt resends", () => {
         .from(invoiceDeliveries)
         .where(eq(invoiceDeliveries.id, ctx.delivery.id)),
     ).toEqual([history]);
+  });
+
+  it("reprints a completed thermal invoice in the language its original was printed in", async () => {
+    const ctx = await setup();
+    await suite.db
+      .update(printJobs)
+      .set({ pageLanguage: "ca-ES" })
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const invoiceClaim = await held(ctx);
+    await ctx.result({ status: "done", invoiceClaim });
+    const command = await manager(ctx);
+
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const [copy] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(copy).toMatchObject({
+      receiptCopy: true,
+      pageLanguage: "ca-ES",
+      payload: await laidOut(ctx.sale.saleId, true, ctx.printer.id, "ca-ES"),
+    });
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({ designation: "duplicate", status: "queued" });
   });
 
   it("reports an outstanding invoice delivery when a completed original is reprinted", async () => {

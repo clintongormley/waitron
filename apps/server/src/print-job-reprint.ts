@@ -150,7 +150,15 @@ export async function reprintJobOn(
   if (target === undefined)
     throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
   if (completedOriginal)
-    return enqueueCompletedReceiptCopy(tx, layOut, job.saleId, target, personId, now);
+    return enqueueCompletedReceiptCopy(
+      tx,
+      layOut,
+      job.saleId,
+      job.pageLanguage,
+      target,
+      personId,
+      now,
+    );
   const printerDots = textGrid(target.paperWidth, target.resolution).widthDots;
   let payload: Uint8Array;
   if (job.saleId !== null) {
@@ -186,11 +194,12 @@ async function enqueueCompletedReceiptCopy(
   tx: Transaction,
   layOut: LayOutSaleReceipt,
   saleId: string,
+  pageLanguage: string | null,
   printer: { id: string } & EscSetting,
   personId: string,
   now: Date,
 ): Promise<{ jobId: string }> {
-  const bytes = await layOut(tx, saleId, true, printer);
+  const bytes = await layOut(tx, saleId, true, printer, pageLanguage);
   const [full] = await tx
     .select({ id: sales.id })
     .from(sales)
@@ -200,11 +209,13 @@ async function enqueueCompletedReceiptCopy(
     ({ jobId } = await enqueuePrintJob(tx, printer.id, bytes, "document", {
       saleId,
       receiptCopy: true,
+      pageLanguage,
     }));
   } else {
     await expireInvoiceDeliveryClaims(tx, now);
     const delivery = await enqueueInvoiceReceipt(tx, saleId, printer.id, bytes, "duplicate", {
       personId,
+      pageLanguage,
     });
     jobId = delivery.printJobId!;
   }
