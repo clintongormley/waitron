@@ -6058,8 +6058,8 @@ A Delete refused `reader.provider_disconnected` re-reads its impact and explains
 registration stays at the provider. A provider unpair that fails leaves the reader unavailable
 and listed. Unpair on its own keeps it listed too; a failed Unpair leaves its earlier state.
 While Delete or Unpair is at the provider, another Unpair, Delete or adoption is refused
-`reader.unpair_in_progress`; an adoption whose list request predates that removal is refused
-`reader.not_listed`. Removing a reader's row menu sends focus to the Payments heading, since
+`reader.unpair_in_progress`; an adoption that a removal at the provider overlapped, even one that failed, is refused
+`reader.removed_while_adding`. Removing a reader's row menu sends focus to the Payments heading, since
 Refresh may still be disabled while status reads finish.
 
 Products use **Archive**, with **Archived** in the Availability column, and **View** for an archived

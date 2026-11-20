@@ -741,12 +741,12 @@ it("says a provider that cannot unpair leaves a deleted reader registered there,
   );
 });
 
-it("says a card reader removed while it was being added can be looked for again, in English and Spanish", () => {
+it("says a card reader that was being unpaired or deleted while it was being added can be looked for again, in English and Spanish", () => {
   expect(codeMessage("reader.removed_while_adding", "en")).toBe(
-    "That card reader was unpaired or deleted while it was being added. Check the list and try again.",
+    "That card reader was being unpaired or deleted while it was being added. Check the list and try again.",
   );
   expect(codeMessage("reader.removed_while_adding", "es")).toBe(
-    "Ese lector de tarjetas se desvinculó o se eliminó mientras se añadía. Revisa la lista e inténtalo de nuevo.",
+    "Ese lector de tarjetas se estaba desvinculando o eliminando mientras se añadía. Revisa la lista e inténtalo de nuevo.",
   );
 });
 

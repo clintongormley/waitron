@@ -516,8 +516,8 @@ declare module "@waitron/shared" {
     /** Adoption names a reference absent from the provider account. Public provider id only. */
     "reader.not_listed": { providerId: string };
     /**
-     * An Unpair or Delete removed the reader an adoption names after the adoption's list request
-     * began. Public provider id only.
+     * An Unpair or Delete asked the provider to remove the reader an adoption names after the
+     * adoption's list request began, whether or not the provider removed it. Public provider id only.
      */
     "reader.removed_while_adding": { providerId: string };
     /**

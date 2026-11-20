@@ -737,14 +737,17 @@ Status changes:
   connect, On/Off, disconnect) and 400 on pair and adopt. A refused or wrong-environment key
   answers 400 on connect, which checks the key the body carries, and 409 elsewhere, where the
   stored key is refused. `reader.not_listed` (adopting a reference the provider does not list) and
-  `payment.pairing_refused` answer 400 (each is about what the body sent). An adoption that an
-  Unpair or Delete of the same reader overtook after the provider's list was read answers a new
-  code, `reader.removed_while_adding`, 409 (it used to answer `reader.not_listed`).
+  `payment.pairing_refused` answer 400 (each is about what the body sent). An adoption during which an
+  Unpair or Delete asked the provider to remove the same reader, whether or not it was removed,
+  answers a new code, `reader.removed_while_adding`, 409 (it used to answer `reader.not_listed`).
   `payment.resolve_unsupported` and `payment.refund_exceeds_capture` answer 409. A test reaches the
   second on partial-refund release: provider refunds that add up to the capture but include
   amounts finer than a cent, which are stored rounded to the cent, take the stored refunds past the
   capture, and the route answers 409 with the payment and refund rows unchanged
-  (`payments-api.stuck.test.ts`). Unpairing a reader whose provider cannot unpair answers a new
+  (`payments-api.stuck.test.ts`). The test feeds the route a stand-in provider's amounts; SumUp's
+  client rounds every refund to the cent (`fromMajorUnits`, `packages/payments-sumup/src/client.ts`)
+  and Stripe's seat has no completed-refund lookup, so no provider the server is built with is
+  known to reach this refusal on release. Unpairing a reader whose provider cannot unpair answers a new
   code, `reader.unpair_unsupported`, 409, in place of `management.request_invalid` naming a
   `providerId` field the request does not have; the dashboard offers Unpair only for a provider
   that can (`apps/dashboard/src/screens/payments-screen.ts`). In `apps/server/src/till-api.ts`, a
@@ -1537,7 +1540,9 @@ code, `stuck_payment.not_found` 404, and a payment that exists but is not stuck 
 `payment.provider_unknown` and `/unpair`'s `management.request_invalid` now sit under A394-20.
 
 **2026-11-20 (A394-20d):** the 422 group, the stored-provider `payment.provider_unknown` rows (409)
-and `/unpair` (`reader.unpair_unsupported` 409) are done; see A394-20 under Follow-up items.
+and `/unpair` (`reader.unpair_unsupported` 409) are done; see A394-20 under Follow-up items. A
+provider switched Off does not raise `payment.provider_unknown`; only a stored provider id the
+server is not built with does.
 
 ### print-api.ts — boundary `print-api.ts:136` (map `:110-134`)
 
