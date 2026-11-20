@@ -906,7 +906,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 
 describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
   it.each(["failed", "unknown"] as const)(
-    "enrolls a synthetic full invoice's %s original retry with the authenticated staff member",
+    "enrolls a synthetic full invoice's %s original retry with the authenticated staff member, in the language it was queued in",
     async (status) => {
       const { cfg, operatorId } = await setupVenue();
       const printerId = await makePrinter();
@@ -956,6 +956,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         const job = await enqueuePrintJob(tx, printerId, new Uint8Array([27, 64]), "document", {
           saleId: sale.saleId,
           receiptCopy: false,
+          pageLanguage: "ca-ES",
         });
         if (status === "unknown") {
           const delivery = await reserveInvoiceDelivery(tx, sale.saleId, {
@@ -1012,14 +1013,19 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
         .select({ ...receiptRollColumns })
         .from(printers)
         .where(and(isReceiptPrinter(), eq(printers.id, printerId)));
-      expect(jobs.find((job) => job.id === jobId)).toMatchObject({
+      const resent = jobs.find((job) => job.id === jobId)!;
+      expect(resent).toMatchObject({
         payload: await withTransaction(suite.db, (tx) =>
-          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!),
+          layOutSaleReceipt(backend, tx, cfg, original.saleId, false, roll!, "ca-ES"),
         ),
         printerId,
         resendOf: original.jobId,
         receiptCopy: false,
+        pageLanguage: "ca-ES",
       });
+      const text = decodeTicket(new Uint8Array(resent.payload!));
+      expect(text).toContain(receiptLabelsFor("ca-ES").taxableBase);
+      expect(text).not.toContain(receiptLabelsFor("es-ES").taxableBase);
       expect(await saleCount()).toBe(1);
       expect(await fiscalRecordCount()).toBe(1);
       expect(await drawerOpensFor(cfg)).toEqual([]);

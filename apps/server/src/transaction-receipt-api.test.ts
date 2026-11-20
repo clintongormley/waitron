@@ -1,4 +1,5 @@
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
+import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
@@ -44,6 +45,8 @@ import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { invoiceDeliveryAlertSource } from "./alert-sources.js";
 import { createPageTestPages } from "./page-test-pages.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { mountPrintApi } from "./print-api.js";
 import {
   abandonInvoiceEmail,
   reserveInvoiceDelivery,
@@ -1133,7 +1136,7 @@ it("prints a replacement corrective's first till print as its original and later
   expect(second.drawers).toEqual([]);
   expect(await snapshot()).toEqual(before);
 });
-it("prints a replacement's original in the language chosen at the till", async () => {
+it("prints a replacement's original in the language chosen at the till, and the print queue resends it in that language", async () => {
   const original = await projectionInvoice({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
   const replacement = await correctiveOf(original.id, true, {
     locale: "ca-ES",
@@ -1146,6 +1149,40 @@ it("prints a replacement's original in the language chosen at the till", async (
   const text = decodeTicket(prints[0]!.payload);
   expect(text).toMatch(/Tipo +Base +IVA +Total/u);
   expect(text).not.toMatch(/Tipus +Base/u);
+  expect(prints[0]!.pageLanguage).toBe("es-ES");
+
+  await inTx(venue, (tx) =>
+    tx
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, prints[0]!.id)),
+  );
+  const printQueue = new Hono();
+  mountPrintApi(
+    printQueue,
+    {
+      db: venue.db,
+      cfg: venue.cfg,
+      pairingMode: createPairingMode(),
+      readMembership: async () => null,
+      readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: saleReceiptLayout(venue.backend, venue.cfg),
+      venueLocale: "es-ES",
+    },
+    () => {},
+  );
+  const retried = await printQueue.request(`/management-api/print-jobs/${prints[0]!.id}/resend`, {
+    method: "POST",
+    headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
+    body: "{}",
+  });
+  expect(retried.status).toBe(202);
+  const { jobId } = (await retried.json()) as { jobId: string };
+  const resent = (await jobs()).prints.find((row) => row.id === jobId)!;
+  expect(resent).toMatchObject({ resendOf: prints[0]!.id, pageLanguage: "es-ES" });
+  const again = decodeTicket(resent.payload);
+  expect(again).toMatch(/Tipo +Base +IVA +Total/u);
+  expect(again).not.toMatch(/Tipus +Base/u);
 });
 it("prints one original when two tills reprint a replacement at once", async () => {
   const original = await projectionInvoice();

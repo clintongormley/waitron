@@ -90,6 +90,8 @@ to say what is still owed.
   Every resend of a sale's receipt, original or copy, is laid out again from the sale, in the
   sale's own language (`resendInvoicePrintJob`, `invoice-print.ts`); a payment slip and other
   printouts keep the bytes they were queued with._
+  _20 November 2026, later: a resend now keeps the language the receipt was first printed in
+  (`print_jobs.page_language`)._
 - _20 November 2026: a card reader payment's slip request is stored with the payment and its slip
   prints once the payment is settled, however late; see the plan's "20 November 2026" note under
   the 19 November rework._

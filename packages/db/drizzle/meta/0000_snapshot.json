@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a32b4f1e-3d0e-4039-b017-7be3b9a2f8d6",
+  "id": "7fb1dd65-279f-4c3a-8953-67cfa181d30e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -6224,7 +6224,7 @@
         },
         "print_jobs_page_ck": {
           "name": "print_jobs_page_ck",
-          "value": "(\"print_jobs\".\"kind\" = 'a4') = (\"print_jobs\".\"page_document\" is not null)\n        and (\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_language\" is not null)\n        and (\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_designation\" is not null)"
+          "value": "(\"print_jobs\".\"kind\" = 'a4') = (\"print_jobs\".\"page_document\" is not null)\n        and ((\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_language\" is not null)\n          or (\"print_jobs\".\"kind\" = 'document' and \"print_jobs\".\"sale_id\" is not null))\n        and (\"print_jobs\".\"page_document\" is 'receipt') = (\"print_jobs\".\"page_designation\" is not null)"
         },
         "print_jobs_printer_hold_ck": {
           "name": "print_jobs_printer_hold_ck",

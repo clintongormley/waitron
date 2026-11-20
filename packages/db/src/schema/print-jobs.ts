@@ -58,6 +58,8 @@ export const printJobs = table(
     // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
     receiptCopy: flag("receipt_copy"),
     pageDocument: enumType(["invoice", "receipt"])("page_document"),
+    // The language the receipt is printed in: an A4 receipt page's, or on a document job naming a
+    // sale the language chosen at the till, where null means the sale's own `locale`.
     pageLanguage: label("page_language"),
     pageDesignation: enumType(["original", "duplicate"])("page_designation"),
     // Staff confirmation of customer handover, separate from the agent's delivered_at stamp.
@@ -102,7 +104,8 @@ export const printJobs = table(
     check(
       "print_jobs_page_ck",
       sql`(${t.kind} = 'a4') = (${t.pageDocument} is not null)
-        and (${t.pageDocument} is 'receipt') = (${t.pageLanguage} is not null)
+        and ((${t.pageDocument} is 'receipt') = (${t.pageLanguage} is not null)
+          or (${t.kind} = 'document' and ${t.saleId} is not null))
         and (${t.pageDocument} is 'receipt') = (${t.pageDesignation} is not null)`,
     ),
     check("print_jobs_printer_hold_ck", enumCheck(t.printerHold)),

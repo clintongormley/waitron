@@ -28,13 +28,14 @@ function insert(
   document: string | null,
   language: string | null = null,
   designation: string | null = null,
-  kind: "a4" | "document" = "a4",
+  kind: "a4" | "document" | "drawer" = "a4",
+  sale: string | null = saleId,
 ) {
   return suite.db.execute(sql`
     insert into print_jobs (id, printer_id, kind, payload, sale_id, created_at,
       page_document, page_language, page_designation)
     values (${randomUUID()}, ${kind === "a4" ? office : thermal}, ${kind},
-      ${kind === "a4" ? null : Uint8Array.of(1)}, ${saleId}, '2026-11-19T00:00:00.000Z',
+      ${kind === "a4" ? null : Uint8Array.of(1)}, ${sale}, '2026-11-19T00:00:00.000Z',
       ${document}, ${language}, ${designation})
     returning page_document, page_language, page_designation
   `);
@@ -52,10 +53,29 @@ it("stores a receipt page with its language and designation", async () => {
   ]);
 });
 
+it("stores a sale's receipt printer job with the language it was printed in", async () => {
+  expect((await insert(null, "es", null, "document")).rows).toEqual([
+    { page_document: null, page_language: "es", page_designation: null },
+  ]);
+});
+
+it.each([
+  ["document", false],
+  ["drawer", true],
+] as const)(
+  "refuses a language on a %s job that prints no sale's receipt (names a sale: %s)",
+  async (kind, namesSale) => {
+    expect(
+      engineErrorMessage(
+        await captureError(() => insert(null, "es", null, kind, namesSale ? saleId : null)),
+      ),
+    ).toBe("CHECK constraint failed: print_jobs_page_ck");
+  },
+);
+
 it.each([
   [null, null, null, "a4"],
   ["invoice", null, null, "document"],
-  [null, "es", null, "document"],
   [null, null, "duplicate", "document"],
   ["invoice", "es", null, "a4"],
   ["invoice", null, "original", "a4"],

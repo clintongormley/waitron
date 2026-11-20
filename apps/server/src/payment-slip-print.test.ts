@@ -1385,8 +1385,8 @@ describe("a payment after the ticket was issued", () => {
   });
 
   describe("a receipt resent after a payment it does not list", () => {
-    const layOut: LayOutSaleReceipt = (tx, saleId, duplicate, printer) =>
-      layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer);
+    const layOut: LayOutSaleReceipt = (tx, saleId, duplicate, printer, language) =>
+      layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer, language);
     let adminDashboard: string | undefined;
 
     async function printQueue() {
