@@ -7439,7 +7439,7 @@ describe("the publish job carries the producer's settings into the image", () =>
   });
 });
 
-const RELEASE_ON_MAIN_STEP = "Refuse a release tag that is not on main";
+const RELEASE_ON_MAIN_STEP = "Read the release tag and check its commit is on main";
 const RELEASE_CHECK_STEP = "Check the release inside the built image";
 const RELEASE_UNPUBLISHED_STEP = "Refuse a release version the registry already holds";
 const AGENT_PUSH_STEP = "Publish the print-agent image to GHCR";
@@ -7608,6 +7608,7 @@ describe("the publish job on a release tag", () => {
         git(work, "remote", "add", "origin", `file://${origin}`);
         git(work, "fetch", "-q", "--no-tags", "--depth", "1", "origin", sha);
         git(work, "checkout", "-q", "--detach", sha);
+        git(work, "tag", tag, sha);
         expect(git(work, "rev-parse", "--is-shallow-repository")).toBe("true");
         const result = spawnSync("bash", ["-c", step().script], {
           cwd: work,
@@ -7646,11 +7647,14 @@ describe("the publish job on a release tag", () => {
       it.each([
         ["v1.2.3", "false"],
         ["v1.2.4", "true"],
-      ])("reads the prerelease flag for %s from its remote annotation", (tag, flag) => {
-        const result = run(tagged, tag);
-        expect(result.status, result.stderr).toBe(0);
-        expect(result.output).toContain(`release_prerelease=${flag}\n`);
-      });
+      ])(
+        "reads the prerelease flag for %s even when checkout has a lightweight tag",
+        (tag, flag) => {
+          const result = run(tagged, tag);
+          expect(result.status, result.stderr).toBe(0);
+          expect(result.output).toContain(`release_prerelease=${flag}\n`);
+        },
+      );
 
       it.each(["v1.2.5", "v1.2.6", "v1.2.7", "v1.2.8", "v1.2.9"])(
         "refuses %s when it does not directly annotate this commit with its version",

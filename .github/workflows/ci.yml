@@ -4515,7 +4515,7 @@ jobs:
       # The checkout is one commit deep, and a shallow fetch of main answers "not an ancestor" for a
       # tag behind main's tip, so main is fetched whole.
       - id: release_tag
-        name: Refuse a release tag that is not on main
+        name: Read the release tag and check its commit is on main
         if: startsWith(github.ref, 'refs/tags/v')
         timeout-minutes: 4
         env:
@@ -4537,7 +4537,6 @@ jobs:
             echo "the tag $GITHUB_REF_NAME is on $GITHUB_SHA, which is not a commit of main" >&2
             exit 1
           fi
-          echo "the tag $GITHUB_REF_NAME is on a commit of main"
           if ! target=$(git cat-file tag "$GITHUB_REF" | sed -n '1,2p') ||
              [ "$target" != "$(printf 'object %s\ntype commit' "$(git rev-parse HEAD)")" ]; then
             echo "$GITHUB_REF_NAME must be an annotated tag pointing directly to this commit" >&2
@@ -4550,10 +4549,11 @@ jobs:
             "Waitron $version:") prerelease=false ;;
             "Waitron prerelease $version:") prerelease=true ;;
             *)
-              echo "$GITHUB_REF_NAME must carry the annotation made by pnpm release tag" >&2
+              echo "$GITHUB_REF_NAME must carry the Waitron release annotation for its version" >&2
               exit 1
               ;;
           esac
+          echo "the tag $GITHUB_REF_NAME is on a commit of main"
           echo "release_prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       # The release image carries the software producer's settings from three repository secrets. A

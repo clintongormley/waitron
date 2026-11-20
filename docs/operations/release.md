@@ -182,8 +182,10 @@ and `tag`, which is why it checks the declaration again. Then it makes the annot
 
 To publish a version for manual installation only, prepare and land its own declaration as above,
 then tag it with `pnpm release tag 1.0.0 --prerelease`. Pick a higher version number and prepare a
-new declaration for the next release. Keep the tag fixed once you push it. The publish job reads
-the annotation when it runs, and the signed release file records the prerelease choice.
+new declaration for the next release. For example, once you tag prerelease `1.1.0`, the next
+release must be higher than `1.1.0`, even for a fix to `1.0.x`. Keep the tag fixed once you push it.
+The publish job reads the annotation when it runs, and the signed release file records the
+prerelease choice.
 
 `main`'s green run proves less than it sounds: an ordinary push to `main` runs no package tests.
 The tag's own CI run is the full one, and publishing the image waits for it.
@@ -205,11 +207,12 @@ gh run watch <run id>
 Pick the run whose branch is `v1.0.0`. It runs every check, as the nightly run does, and then
 two jobs make the release:
 
-1. **`publish`** waits for the whole run to be green. It requires the annotation from step 6 and
-   a tag pointing directly to a commit on `main`. It then builds the image with the version stamped
-   in. The build renders the version's declaration into `/app/declaration/` and fails if the committed
-   `declarations/v1.0.0.md` is missing, carries a blocker line or disagrees with the code. It runs
-   `check-release 1.0.0` inside the built image, refuses a version the registry already holds, and
+1. **`publish`** waits for the whole run to be green. It requires a tag named `v` followed by X.Y.Z,
+   with the annotation from step 6 and a direct pointer to a commit on `main`. It then builds the
+   image with the version stamped in. The build renders the version's declaration into
+   `/app/declaration/` and fails if the committed `declarations/v1.0.0.md` is missing, carries a
+   blocker line or disagrees with the code. It runs `check-release 1.0.0` inside the built image,
+   refuses a version the registry already holds, and
    only then pushes the print agent and tunnel companion's `:1.0.0` tags. It pushes the app last.
 2. **`release`** pulls the published app image by its digest, copies its declaration's PDF and plain text out of
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
@@ -243,9 +246,9 @@ secret matching one of the keys in the tagged commit before retrying. If the tag
 lacks two valid, distinct public keys, cut a new numbered release after you
 correct the keys on main.
 
-If the existing GitHub Release has a different prerelease flag, check its signed file if present.
-Restore the Release's flag to match that file, or the tag's annotation if signing did not finish,
-before retrying.
+If the existing GitHub Release has a different prerelease flag, check the tag's annotation and
+the signed file if one exists. If the two disagree, preserve the signed file and cut a new
+numbered release. Otherwise, restore the Release's flag to match the annotation and retry.
 
 If `publish` fails while pushing, re-run it with `gh run rerun <run id> --failed`. The app image is
 pushed last, so a run that stopped before that push has not published the version, and the re-run
