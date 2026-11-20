@@ -76,7 +76,9 @@ afterEach(() => {
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op (except under WT_RECOVERY_UNIT=1, below) and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
 // which has no systemctl). `timedatectl` is stubbed so no case reaches a real one on a Linux machine,
-// and fails when WT_TIMEDATECTL_FAIL=1. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// and fails when WT_TIMEDATECTL_FAIL=1; WT_LOCAL_RTC_FAIL=1 fails only `set-local-rtc`, and
+// `show -p LocalRTC --value` prints WT_LOCAL_RTC. WT_TIMESYNCD_RESTART_FAIL fails `systemctl try-restart systemd-timesyncd`, and
+// WT_TIMESYNCD_MISSING=1 answers both as systemd does when the unit does not exist. `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
@@ -407,6 +409,10 @@ case "$*" in
     if [ "\${WT_RECOVERY_UNIT}" = "1" ] && [ -e "\${WT_LOG}.locked" ] && [ ! -e "\${WT_LOG}.recovered" ]; then
       echo "A dependency job for docker.service failed. See 'journalctl -xe' for details." >&2; exit 1
     fi ;;
+  "is-active --quiet systemd-timesyncd") [ "\${WT_TIMESYNCD_MISSING}" = "1" ] && exit 4 ;;
+  "try-restart systemd-timesyncd")
+    [ "\${WT_TIMESYNCD_MISSING}" = "1" ] && { echo "Failed to try-restart systemd-timesyncd.service: Unit systemd-timesyncd.service not found." >&2; exit 5; }
+    [ "\${WT_TIMESYNCD_RESTART_FAIL}" = "1" ] && exit 1 ;;
   "restart bluetooth")
     n=$(cat "\${WT_LOG}.restarts" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.restarts"
     [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1
@@ -417,7 +423,10 @@ exit 0
 );
 stub(
   "timedatectl",
-  '[ "${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }; exit 0',
+  `[ "\${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }
+[ "$1" = "set-local-rtc" ] && [ "\${WT_LOCAL_RTC_FAIL}" = "1" ] && { echo "Failed to set local RTC: Access denied" >&2; exit 1; }
+[ "$*" = "show -p LocalRTC --value" ] && echo "\${WT_LOCAL_RTC}"
+exit 0`,
 );
 // `getent group <key>` prints the WT_GROUPS entry (space-separated `name:x:gid:` lines) whose name
 // or number is the key, and exits 2, getent's "not found", when none is.
@@ -527,6 +536,10 @@ function sandbox({
   imagePullFail = "",
   directorySuffix = "",
   timedatectlFail = false,
+  localRtcFail = false,
+  localRtc = "no",
+  timesyncdRestartFail = false,
+  timesyncdMissing = false,
   oldImages = false,
   imageStore = "classic",
   rmiFail = false,
@@ -642,6 +655,10 @@ function sandbox({
       WT_IMAGE_MISSING: imageMissing,
       WT_IMAGE_PULL_FAIL: imagePullFail,
       WT_TIMEDATECTL_FAIL: timedatectlFail ? "1" : "0",
+      WT_LOCAL_RTC_FAIL: localRtcFail ? "1" : "0",
+      WT_LOCAL_RTC: localRtc,
+      WT_TIMESYNCD_RESTART_FAIL: timesyncdRestartFail ? "1" : "0",
+      WT_TIMESYNCD_MISSING: timesyncdMissing ? "1" : "0",
       WT_OLD_IMAGES: oldImages ? "1" : "0",
       WT_IMAGE_STORE: imageStore,
       WT_RMI_FAIL: rmiFail ? "1" : "0",
@@ -2546,6 +2563,71 @@ describe("waitron.sh install and the host's time synchronisation", () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toContain("could not switch on the system's time synchronisation");
     expect(r.stderr).toContain("Unless another time service runs on this machine");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  const timesyncdRestarts = (sb) =>
+    calls(sb).filter((c) => c === "systemctl try-restart systemd-timesyncd");
+
+  it("keeps the hardware clock in UTC before switching synchronisation on, and says so", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const asked = log.indexOf("timedatectl set-local-rtc 0");
+    expect(asked).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("timedatectl set-ntp true")).toBeGreaterThan(asked);
+    expect(r.stdout).toContain(
+      "configured the system to keep the hardware clock in UTC, so the kernel copies the time into it while the system clock is synchronised",
+    );
+    const up = log.findIndex((c) => /^docker compose .*\bup -d\b/.test(c));
+    expect(up).toBeGreaterThan(asked);
+    // Already in UTC: the time service that is running read that when it started.
+    expect(timesyncdRestarts(sb)).toEqual([]);
+  });
+
+  it("restarts a running systemd-timesyncd after switching a hardware clock kept in local time to UTC", () => {
+    const sb = sandbox({ localRtc: "yes" });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const switched = log.indexOf("timedatectl set-local-rtc 0");
+    const restarted = log.indexOf("systemctl try-restart systemd-timesyncd");
+    const read = log.indexOf("timedatectl show -p LocalRTC --value");
+    expect(read).toBeGreaterThanOrEqual(0);
+    expect(read).toBeLessThan(switched);
+    expect(restarted).toBeGreaterThan(switched);
+    expect(timesyncdRestarts(sb)).toHaveLength(1);
+    expect(r.stderr).not.toContain("systemd-timesyncd");
+  });
+
+  it("leaves systemd-timesyncd alone, and says nothing of it, on a system that has none", () => {
+    const sb = sandbox({ localRtc: "yes", timesyncdMissing: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(timesyncdRestarts(sb)).toEqual([]);
+    expect(r.stderr).not.toContain("systemd-timesyncd");
+    expect(r.stdout).toContain("configured the system to keep the hardware clock in UTC");
+  });
+
+  it("carries on, and says what that means, when systemd-timesyncd cannot be restarted", () => {
+    const sb = sandbox({ localRtc: "yes", timesyncdRestartFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not restart systemd-timesyncd");
+    expect(r.stderr).toContain("run 'systemctl restart systemd-timesyncd' as root");
+    expect(r.stdout).toContain("asked the system to keep its clock in step with internet time");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("carries on, and says what that means, when the hardware clock cannot be set to UTC", () => {
+    const sb = sandbox({ localRtcFail: true, localRtc: "yes" });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("asked the system to keep its clock in step with internet time");
+    expect(r.stderr).toContain("could not set the hardware clock to keep UTC");
+    expect(r.stderr).toContain("run 'timedatectl set-local-rtc 0' as root");
+    expect(timesyncdRestarts(sb)).toEqual([]);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
   });
 

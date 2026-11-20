@@ -134,10 +134,20 @@ lets setup, restore and promotion name an invoice series without another device 
 network. `install` switches synchronisation back on even where someone switched it off. So does the
 running server: whenever it reads the box's clock service and finds synchronisation switched off, it
 asks the clock service to switch it back on. While the server trades it reads the clock service about
-once a minute, so a test box whose clock is set wrong on purpose cannot keep synchronisation switched
+once a minute, and every 15 seconds while payments wait for its time to be confirmed, so a test box whose clock is set wrong on purpose cannot keep synchronisation switched
 off for long. After a try that fails, the server waits a minute before trying again, and twice as
 long after each further failure in a row, up to an hour. A try that works, or a reading of
 synchronisation switched on, starts that wait again at a minute. `reset` does not touch it.
+
+Before `set-ntp true`, every `install` runs `timedatectl set-local-rtc 0` as root, with the same
+limit. That configures the system to keep the hardware clock in UTC, so the kernel copies the time
+into it while the system clock is synchronised. On a box whose hardware clock kept local time, such
+as one that came with Windows, that install switches it to UTC, systemd attempts to copy the current
+system time into it, and `install` restarts `systemd-timesyncd` if it is running, since it reads the
+setting only when it starts. While the hardware clock keeps local time, `systemd-timesyncd` leaves
+it alone, so a box that starts after a summer/winter change without a correction can be an hour
+out. It prints one line either way, and a second if that restart fails; each failure line says what
+to run as root, and `install` carries on. `reset` does not touch it.
 
 On a host with systemd, every `install` also installs the box's clock service, which lets Waitron
 set this machine's clock when a confirmed time shows it is wrong; the app's container cannot set it

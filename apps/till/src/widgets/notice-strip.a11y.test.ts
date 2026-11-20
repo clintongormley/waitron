@@ -30,6 +30,12 @@ const UNSENT: StaffNotice = {
 
 const UNUSABLE: StaffNotice = { ...DISK, key: "unusable", code: "clock.unusable" };
 const EXPIRED: StaffNotice = { ...SPACE, key: "drawer", code: "print_job.drawer_expired" };
+const WAITING: StaffNotice = {
+  ...DISK,
+  key: "waiting",
+  code: "clock.unconfirmed",
+  params: { agreed: 0, cause: "start" },
+};
 
 describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (theme) => {
   it("has no violations while the drawer opening is in flight", async () => {
@@ -76,6 +82,7 @@ describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (
     ["Check the time alone", [UNUSABLE]],
     ["Check the time first, open", [UNUSABLE, DISK]],
     ["Check the time second, open", [DISK, UNUSABLE]],
+    ["the time wait first, open", [WAITING, DISK]],
   ])("has no violations with %s", async (_state, notices) => {
     const { el, host } = await mountWidget<TillNoticeStrip>(
       "till-notice-strip",

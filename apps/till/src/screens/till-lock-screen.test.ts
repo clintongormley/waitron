@@ -14,8 +14,14 @@ import {
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { codeMessage } from "../i18n/codes.js";
+import { staffNoticeText } from "../i18n/staff-notices.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  expectChooserFaces,
+  cleanupWidgets,
+  mountWidget,
+  tokenColour,
+} from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
@@ -888,6 +894,60 @@ describe("till-lock-screen", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("[data-clock-notice]")).toHaveLength(0);
   });
+
+  const toned = (code: string, severity: StaffNotice["severity"]): StaffNotice => ({
+    owner: code.startsWith("clock.") ? "box-clock" : "core",
+    key: code,
+    code,
+    severity,
+    params: { agreed: 0, cause: "start" },
+  });
+
+  it.each([
+    ["clock-waiting", "error", "--wt-color-danger"],
+    ["clock-waiting", "warning", "--wt-color-warning"],
+    ["storage", "error", "--wt-color-danger"],
+    ["storage", "warning", "--wt-color-warning"],
+  ] as const)(
+    "paints the %s line in the strip's %s tone: edge and icon %s, bold words",
+    async (kind, severity, token) => {
+      const shown =
+        kind === "storage"
+          ? toned(severity === "error" ? "storage.disk_full" : "storage.space_low", severity)
+          : toned("clock.unconfirmed", severity);
+      const { el, host } = await mountWidget<TillLockScreen>(
+        "till-lock-screen",
+        kind === "storage"
+          ? { api: stubApi(), storageNotices: [shown] }
+          : { api: stubApi(), clockNotice: shown },
+      );
+      await flush(el);
+      const status = el.shadowRoot!.querySelector<HTMLElement>(
+        kind === "storage" ? "[data-storage-notice]" : "[data-clock-notice]",
+      )!;
+      expect(status.getAttribute("role")).toBe("status");
+      const line = status.querySelector<HTMLElement>("[data-notice-tone]");
+      expect(line, "a toned line inside the status").not.toBeNull();
+      expect(line!.dataset.noticeTone).toBe(severity);
+      const expected = tokenColour(host, token);
+      expect(getComputedStyle(line!).borderInlineStartColor).toBe(expected);
+      expect(getComputedStyle(line!.querySelector("wt-icon")!).color).toBe(expected);
+      expect(getComputedStyle(line!).color).toBe(tokenColour(host, "--wt-color-text"));
+      expect(getComputedStyle(line!).backgroundColor).toBe(
+        tokenColour(host, "--wt-color-surface-raised"),
+      );
+      expect(getComputedStyle(line!.querySelector(".main")!).fontWeight).toBe(
+        getComputedStyle(host).getPropertyValue("--wt-font-weight-bold").trim(),
+      );
+      const hint = line!.querySelector(".hint");
+      if (kind === "storage") {
+        expect(getComputedStyle(hint!).color).toBe(tokenColour(host, "--wt-color-text-muted"));
+        expect(status.textContent!.replace(/\s+/g, " ").trim()).toBe(
+          `${staffNoticeText(shown).main} · ${staffNoticeText(shown).hint}`,
+        );
+      } else expect(hint).toBeNull();
+    },
+  );
 
   it("draws the logged-out-by-somebody-else line only while loggedOutByOther is set", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });

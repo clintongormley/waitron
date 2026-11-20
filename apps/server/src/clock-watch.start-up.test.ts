@@ -139,13 +139,13 @@ function startLogs(h: { logs: { event: string; fields: unknown }[] }) {
 }
 
 describe("the clock watch and the start check", () => {
-  it("reads the time service at each waiting look, starting one host read for four looks 15 s apart and a second a minute after the first", async () => {
+  it("reads the time service afresh at each waiting look, starting one host read for each of five looks 15 s apart", async () => {
     const h = harness({ host: async () => NOT_SYNCHRONISED });
     for (let look = 0; look < 4; look++) await h.tick();
     expect(h.clockStatus).toHaveBeenCalledTimes(4);
-    expect(h.host).toHaveBeenCalledTimes(1);
+    expect(h.host).toHaveBeenCalledTimes(4);
     await h.tick();
-    expect(h.host).toHaveBeenCalledTimes(2);
+    expect(h.host).toHaveBeenCalledTimes(5);
     expect(h.startState.status).toBe("waiting");
   });
 
@@ -155,8 +155,9 @@ describe("the clock watch and the start check", () => {
     await h.tick();
     expect(h.startState.status).toBe("waiting");
     answer = SYNCHRONISED;
-    // Past the shared reading's minute, so the host is read again.
-    for (let look = 0; look < 4; look++) await h.tick();
+    // 15 s after the first read, well inside the shared reading's minute.
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(2);
     expect(h.startState.status).toBe("by_internet");
     expect(startLogs(h)).toEqual([
       {
@@ -169,6 +170,40 @@ describe("the clock watch and the start check", () => {
       },
     ]);
   });
+
+  it("leaves the shared reading's minute alone once the start is confirmed", async () => {
+    const h = harness({ host: async () => SYNCHRONISED, readTimeService: true });
+    await h.tick();
+    expect(h.startState.status).toBe("by_internet");
+    expect(h.host).toHaveBeenCalledTimes(1);
+    for (let look = 0; look < 3; look++) await h.tick();
+    expect(h.readTimeService).toHaveBeenCalledTimes(4);
+    expect(h.host).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["by_person", "by_devices"] as const)(
+    "leaves the shared reading's minute alone once the start is confirmed %s, the time service not synchronised",
+    async (by) => {
+      const h = harness({ host: async () => NOT_SYNCHRONISED, readTimeService: true });
+      if (by === "by_person") h.startState.confirm("by_person", { "node-1": 7 });
+      else {
+        h.noteDevice("till-1", "10.0.0.2", 3_000);
+        h.noteDevice("till-2", "10.0.0.3", 4_000);
+      }
+      await h.tick();
+      expect(h.startState.status).toBe(by);
+      expect(h.host).toHaveBeenCalledTimes(1);
+      for (let look = 0; look < 3; look++) await h.tick();
+      expect(h.clockStatus).toHaveBeenCalledTimes(4);
+      expect(h.host).toHaveBeenCalledTimes(1);
+      // Sent back to waiting, the next look reads afresh again.
+      h.startState.backToWaiting("future_date_refused", "2026-10-31");
+      await h.tick();
+      expect(h.host).toHaveBeenCalledTimes(2);
+      await h.tick();
+      expect(h.host).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it("reads no chain heads while no devices agree, and is confirmed by two noted between looks, writing no row", async () => {
     const h = harness({ host: async () => NOT_SYNCHRONISED });
@@ -384,10 +419,23 @@ describe("the clock watch and a jump of the box's clock", () => {
     await h.tick();
     expect(h.startState.status).toBe("by_internet");
     expect(h.host).toHaveBeenCalledTimes(2);
-    // After that one fresh read the shared reading's minute applies again.
+    // Back to waiting, every look reads afresh, inside the shared reading's minute.
     h.startState.backToWaiting("clock_jumped");
     answer = NOT_SYNCHRONISED;
     await h.tick();
-    expect(h.host).toHaveBeenCalledTimes(2);
+    expect(h.host).toHaveBeenCalledTimes(3);
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(4);
+    expect(h.startState.status).toBe("waiting");
+    answer = SYNCHRONISED;
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(5);
+    expect(h.startState.status).toBe("by_internet");
+    // Once confirmed, the start check asks nothing more.
+    const asked = h.clockStatus!.mock.calls.length;
+    await h.tick();
+    await h.tick();
+    expect(h.clockStatus).toHaveBeenCalledTimes(asked);
+    expect(h.host).toHaveBeenCalledTimes(5);
   });
 });

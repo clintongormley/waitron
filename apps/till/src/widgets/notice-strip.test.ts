@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  pageAt,
+  PHONE_FONT,
+  resetPage,
+  tokenColour,
+} from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import type { StaffNotice } from "../api/client.js";
@@ -24,6 +32,7 @@ const DISK = notice("storage.disk_full", "error");
 const SPACE = notice("storage.space_low", "warning");
 const UNSENT = notice("fiscal.records_unsent", "notice", { count: 3, held: 0 });
 const CLOCK = notice("clock.unusable", "error");
+const WAITING = notice("clock.unconfirmed", "error", { agreed: 0, cause: "start" });
 
 const root = (el: TillNoticeStrip) => el.shadowRoot!;
 const announce = (el: TillNoticeStrip) =>
@@ -59,7 +68,7 @@ describe("till-notice-strip", () => {
       expect(requests).toBe(1);
       expect(list(el)).toBeNull();
       await userEvent.click(button(el)!);
-      expect(root(el).querySelectorAll("[data-open-drawer]")).toHaveLength(2);
+      expect(root(el).querySelectorAll("[data-open-drawer]")).toHaveLength(1);
     },
   );
 
@@ -131,7 +140,7 @@ describe("till-notice-strip", () => {
     expect(flat(more().querySelector(".visually-hidden"))).toBe(es["staff_notice.more_label_one"]);
   });
 
-  it("opens the list of every notice in order on a tap, and closes it on a second", async () => {
+  it("opens the list of every other notice in order on a tap, and closes it on a second", async () => {
     const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
       notices: [DISK, SPACE, UNSENT],
     });
@@ -140,12 +149,10 @@ describe("till-notice-strip", () => {
     expect(button(el)!.getAttribute("aria-expanded")).toBe("true");
     const items = [...list(el)!.querySelectorAll("li")];
     expect(items.map((item) => (item as HTMLElement).dataset.noticeTone)).toEqual([
-      "error",
       "warning",
       "notice",
     ]);
     expect(items.map(flat)).toEqual([
-      `${en["staff_notice.storage.disk_full"]} · ${en["staff_notice.tell_manager"]}`,
       `${en["staff_notice.storage.space_low"]} · ${en["staff_notice.see_box_status"]}`,
       `${en["staff_notice.fiscal.records_unsent"].replace("{n}", "3")} · ${en["staff_notice.retried"]}`,
     ]);
@@ -155,6 +162,40 @@ describe("till-notice-strip", () => {
     await settle(el);
     expect(button(el)!.getAttribute("aria-expanded")).toBe("false");
     expect(list(el)).toBeNull();
+  });
+
+  it("shows the summary line's notice once when the list is open", async () => {
+    const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+      notices: [DISK, SPACE],
+    });
+    await userEvent.click(button(el)!);
+    await settle(el);
+    const shown = flat(strip(el));
+    expect(shown.split(en["staff_notice.storage.disk_full"])).toHaveLength(2);
+    expect(shown.split(en["staff_notice.storage.space_low"])).toHaveLength(2);
+    expect([...list(el)!.querySelectorAll("li")].map(flat)).toEqual([
+      `${en["staff_notice.storage.space_low"]} · ${en["staff_notice.see_box_status"]}`,
+    ]);
+  });
+
+  it.each([
+    ["en-GB", en],
+    ["es-ES", es],
+  ] as const)("says Hide on the toggle while the list is open, in %s", async (locale, words) => {
+    setLocale(locale);
+    const { el } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+      notices: [DISK, SPACE],
+    });
+    const more = () => button(el)!.querySelector<HTMLElement>("[data-notice-more]")!;
+    expect(flat(more().querySelector("[aria-hidden='true']"))).toBe("+1");
+    await userEvent.click(button(el)!);
+    await settle(el);
+    expect(flat(more().querySelector("[aria-hidden='true']"))).toBe(words["staff_notice.hide"]);
+    expect(flat(more().querySelector(".visually-hidden"))).toBe(words["staff_notice.hide_label"]);
+    expect(flat(more())).not.toContain("+1");
+    await userEvent.click(button(el)!);
+    await settle(el);
+    expect(flat(more().querySelector("[aria-hidden='true']"))).toBe("+1");
   });
 
   it("lets the open list take keyboard focus and draws the focus ring inside its edges", async () => {
@@ -283,6 +324,50 @@ describe("till-notice-strip", () => {
       },
     );
 
+    describe("on a phone", () => {
+      let phoneFont: FontFace;
+      beforeAll(async () => {
+        phoneFont = await loadPhoneFont();
+      });
+      afterAll(() => {
+        document.fonts.delete(phoneFont);
+      });
+      afterEach(resetPage);
+
+      it.each([
+        ["one notice", [WAITING]],
+        ["two notices", [WAITING, DISK]],
+      ])(
+        "puts Check the time after the whole sentence at 390 px wide, with %s",
+        async (_form, notices) => {
+          await pageAt(390, 844);
+          const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
+            notices,
+            checkTimeOffered: true,
+          });
+          host.style.setProperty("--wt-font-family", PHONE_FONT);
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const line = root(el).querySelector<HTMLElement>("[data-notice-tone]")!;
+          const main = line.querySelector<HTMLElement>(".main")!;
+          expect(getComputedStyle(main).fontFamily).toBe(PHONE_FONT);
+          const action = checkButton(line)!;
+          const rects = main.getClientRects();
+          const last = rects[rects.length - 1]!;
+          const box = action.getBoundingClientRect();
+          expect(rects.length).toBeGreaterThan(1);
+          expect(box.top >= last.bottom - 1 || box.left >= last.right).toBe(true);
+          expect(box.top).toBeGreaterThanOrEqual(main.getBoundingClientRect().bottom - 1);
+          const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+          const control = action.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+          expect(control.height).toBeGreaterThanOrEqual(tapMin);
+          expect(control.width).toBeGreaterThanOrEqual(tapMin);
+          expect(line.getBoundingClientRect().right).toBeLessThanOrEqual(
+            host.getBoundingClientRect().right,
+          );
+        },
+      );
+    });
+
     it("sends one till-check-time out of its shadow root on a press", async () => {
       const { el, host } = await mountWidget<TillNoticeStrip>("till-notice-strip", {
         notices: [CLOCK],
@@ -303,9 +388,8 @@ describe("till-notice-strip", () => {
       await userEvent.click(button(el)!);
       await settle(el);
       const items = [...list(el)!.querySelectorAll("li")];
-      expect(checkButton(items[0]!)).toBeNull();
-      expect(flat(items[0]!)).toContain(en["staff_notice.tell_manager"]);
-      expect(flat(checkButton(items[1]!))).toBe(en["staff_notice.check_time"]);
+      expect(items).toHaveLength(1);
+      expect(flat(checkButton(items[0]!))).toBe(en["staff_notice.check_time"]);
     });
 
     it("keeps the button out of the toggle when the clock notice is the first of two", async () => {
@@ -322,7 +406,7 @@ describe("till-notice-strip", () => {
       await userEvent.click(toggle);
       await settle(el);
       expect(toggle.getAttribute("aria-expanded")).toBe("true");
-      expect(list(el)!.querySelectorAll("li")).toHaveLength(2);
+      expect(list(el)!.querySelectorAll("li")).toHaveLength(1);
     });
 
     it("draws no button without the offer, and the see-Box-status hint", async () => {

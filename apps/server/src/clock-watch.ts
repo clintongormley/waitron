@@ -34,13 +34,14 @@ export function createClockWatch(deps: {
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
   /** The start check: until the internet confirms it, each look reads the time service through
-   * `clockStatus`, and while it waits, offers it the device readings. After a jump it reads the
-   * time service afresh, whatever the status, and sends the box back to waiting unless it is
-   * synchronised; the look after that reads it afresh once more. Never asks AEAT. */
+   * `clockStatus`; while it waits, afresh, offering it the device readings too. After a jump it
+   * reads the time service afresh, whatever the status, and sends the box back to waiting unless
+   * it is synchronised. Never asks AEAT. */
   start?: {
     state: StartClockState;
     clockStatus: () => Promise<ClockServiceStatus>;
-    /** Forgets a cached `clockStatus` reading, which may predate a jump. */
+    /** Forgets a cached `clockStatus` reading, so a look sees a service that has just
+     * synchronised, or a jump the reading predates. */
     clearClockStatus?: () => void;
     heads: (tx: Transaction) => Promise<ChainHeads>;
     /** This box's chain and the latest sale on it above a position that AEAT refused as dated in
@@ -69,9 +70,6 @@ export function createClockWatch(deps: {
   const steps = () => deps.correction?.steps() ?? 0;
   const reading = () => ({ wallMs: wall(), monoMs: monotonic(), steps: steps() });
   let baseline = reading();
-  /** The reading a jump took is not served to the next look, so a service that synchronises
-   * just after the jump is seen then rather than a minute later. */
-  let freshAfterJump = false;
   /** The highest refused position judged while the time service was synchronised: handled, so
    * a later look never sends the box back to waiting for it. */
   let judgedSynchronised = 0;
@@ -91,10 +89,7 @@ export function createClockWatch(deps: {
     const byInternet = () => start.state.status === "by_internet";
     if (byInternet()) return;
     const heads = () => deps.read(start.heads);
-    if (freshAfterJump) {
-      freshAfterJump = false;
-      start.clearClockStatus?.();
-    }
+    if (start.state.status === "waiting") start.clearClockStatus?.();
     await lookAtClockService({ state: start.state, clockStatus: start.clockStatus, heads });
     if (stopped) return;
     if (byInternet()) {
@@ -151,7 +146,6 @@ export function createClockWatch(deps: {
       start?.clearClockStatus?.();
       const backToWaiting =
         start === undefined ? null : await backToWaitingUnlessSynchronised(start, "clock_jumped");
-      if (backToWaiting === true) freshAfterJump = true;
       deps.log(backToWaiting === true ? "warn" : "info", "clock_watch.jumped", {
         wallBefore: new Date(before.wallMs).toISOString(),
         wallAfter: new Date(baseline.wallMs).toISOString(),

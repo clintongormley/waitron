@@ -489,7 +489,7 @@ describe("the open notice list beside an open order", () => {
     await el.updateComplete;
     const list = strip(el).drawn!.querySelector("[data-notice-list]")!;
     expect(list).not.toBeNull();
-    expect(list.querySelectorAll("li")).toHaveLength(2);
+    expect(list.querySelectorAll("li")).toHaveLength(1);
     expect(order).toBe(tableOrder(el));
     const listBox = list.getBoundingClientRect();
     expect(listBox.height).toBeGreaterThan(0);

@@ -6717,23 +6717,33 @@ mode line stay where they are.
   The words stay `--wt-color-text`, bold, then " · " and the hint in `--wt-color-text-muted`.
   There is no tinted background and the words are not coloured: no token names a pale alert
   background, and `color-mix()` is refused here.
-- **One notice** is a plain status line, not a control.
-- **Several** make the whole strip one native `<button>` at least `--wt-tap-min` high, with
-  `aria-expanded` and `aria-controls`, showing the first notice and "+N" at its trailing end.
-  "+N" is hidden from screen readers and visually hidden text beside it says "N more notices"
-  (singular for one). A tap opens a list of every notice, in order, labelled "Notices", in the
-  page's flow under the strip, so it pushes the screen down rather than covering the order, and it
-  scrolls inside itself past half the screen height, and takes keyboard focus so it can be
-  scrolled from the keyboard. Its focus ring, like the button's, is drawn inside its edges, because
-  the strip spans the screen. A second tap closes it, and it closes itself
-  when one notice or none is left.
+- **One notice** is a plain status line, not a control; an action on it is its only button.
+- **Several** make the strip's line one native `<button>` at least `--wt-tap-min` high, with
+  `aria-expanded` and `aria-controls`, showing the first notice and "+N" at its trailing end. When
+  the first notice has an action, the line stays a plain line and only "+N" is that button, beside
+  the action, so a button never holds another. "+N" is hidden from screen readers and visually
+  hidden text beside it says "N more notices" (singular for one). A tap opens a list of the other
+  notices, in order, labelled "Notices", in the page's flow under the strip, so it pushes the
+  screen down rather than covering the order, and it scrolls inside itself past half the screen
+  height, and takes keyboard focus so it can be scrolled from the keyboard. Its focus ring, like the
+  button's, is drawn inside its edges, because the strip spans the screen. While the list is open
+  the toggle shows "Hide" in place of "+N", and its visually hidden text says "Hide the other
+  notices"; a tap there closes it, and it closes itself when one notice or none is left.
+- **Actions.** **Check the time**, drawn in place of the hint, and **Open drawer** are buttons that
+  sit beside the words, never inside the sentence. One wraps below the words, still beside the icon,
+  when the whole sentence and the action do not fit on one row, as on a phone.
+- **The PIN screen** draws its storage notices and its waiting-for-the-time line with the same line
+  (`noticeLine` and `noticeLineStyles`), each inside its own `role="status"` element: the storage
+  lines with their hint, the waiting line without it, and neither with an action.
 - **Announcing.** In both forms a visually hidden `role="status"` region holds the first notice's
   main words, so a new most-serious notice is announced whether or not the strip is a button.
-- **Never in the way.** No close button, no dialog, no timer, no animation, and it sends no
-  events. With no notices it draws nothing. The words wrap on a phone.
+- **Never in the way.** No close button, no dialog, no timer and no animation; it sends an event
+  only from an action (`till-check-time`, `till-open-drawer`). With no notices it draws nothing.
+  The words wrap on a phone.
 
 Cases: `apps/till/src/widgets/notice-strip.test.ts`, its `notice-strip.a11y.test.ts`, "the notices
-slot" in `apps/till/src/widgets/till-shell.test.ts`, and `apps/till/src/till-app.notices.test.ts`.
+slot" in `apps/till/src/widgets/till-shell.test.ts`, `apps/till/src/till-app.notices.test.ts`, and
+the toned-line cases in `apps/till/src/screens/till-lock-screen.test.ts`.
 
 ### The main-server strip (till)
 
