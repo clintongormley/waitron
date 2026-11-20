@@ -17,6 +17,7 @@ import {
   decimalToCents,
   isAppError,
   jobOrigin,
+  type BusinessDayClock,
 } from "@waitron/shared";
 import { clockUnconfirmedRefusal, stillOwedOnIssuedBill } from "./bill-payments.js";
 import { pinnedAt } from "./issue-moment.js";
@@ -35,9 +36,11 @@ import {
 } from "./working-order.js";
 import "./errors.js";
 
-/** What "due" means for one call: bills counted as opened before `dayStartedAt` are due. */
+/** What "due" means for one call: bills counted as opened before `dayStartedAt` are due, and
+ * `venueClock` places a bill's opening in its business day. */
 export interface CloseOfDayRule {
   dayStartedAt: Date;
+  venueClock: BusinessDayClock;
 }
 
 const MONEY_MOVING: ReadonlySet<string> = new Set([
@@ -97,7 +100,7 @@ export async function issueBillAtClose(
     deps.backend,
     cfg,
     billId,
-    await dayEndedAt(tx, bill.openedAt),
+    dayEndedAt(rule.venueClock, bill.openedAt),
   );
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
@@ -162,8 +165,7 @@ async function readDueBill(
 
 /** The end of the business day the bill was opened in: the moment its meal ended, whenever the
  * close issues it. */
-async function dayEndedAt(tx: Transaction, openedAt: string): Promise<string> {
-  const venueClock = await readVenueClock(tx);
+function dayEndedAt(venueClock: BusinessDayClock, openedAt: string): string {
   return businessDayBounds(venueClock, businessDayAt(venueClock, new Date(openedAt))).endAt;
 }
 
@@ -280,8 +282,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
     return undefined;
   }
 
-  async function issueDue(dayStartedAt: Date, holds: number, signal: AbortSignal): Promise<void> {
-    const rule = { dayStartedAt };
+  async function issueDue(rule: CloseOfDayRule, holds: number, signal: AbortSignal): Promise<void> {
     let due: string[];
     try {
       due = await withTransaction(deps.db, (tx) => dueBills(tx, cfg.nodeId, rule));
@@ -386,7 +387,7 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       if (!queryAgain && dayStartedAt.getTime() <= queriedDayStart) return { nextDueAt: null };
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();
-      await issueDue(dayStartedAt, holds, signal);
+      await issueDue({ dayStartedAt, venueClock }, holds, signal);
       return { nextDueAt: null };
     },
   };

@@ -78,7 +78,7 @@ useVenueDb({
     ).zoneId;
     const dayClock = await inTx(venue, (tx) => readVenueClock(tx));
     const nextDayStart = businessDayBounds(dayClock, businessDayAt(dayClock, new Date())).endAt;
-    rule = { dayStartedAt: new Date(nextDayStart) };
+    rule = { dayStartedAt: new Date(nextDayStart), venueClock: dayClock };
     closeClock = clockAt(Date.parse(nextDayStart) + 60_000);
   },
 });
@@ -566,7 +566,7 @@ describe("issueBillAtClose", () => {
 
     it("a bill opened after the day began", async () => {
       const party = await seatedWith(venue, "Red wine bottle");
-      const startedEarlier = { dayStartedAt: new Date(Date.now() - 60_000) };
+      const startedEarlier = { ...rule, dayStartedAt: new Date(Date.now() - 60_000) };
 
       expect(await leftAlone(party, () => close(party.tabId, startedEarlier))).toEqual({
         kind: "not_due",
