@@ -313,6 +313,7 @@ that defined its membership in the condition's `bucketVersion`. To pause
 everyone, dispatch `{"format":1,"entries":[],"default":"none"}`.
 
 Use stable versions for the dispatch tag, offer targets, `atLeast` and `bucketVersion`.
+A box on `1.3.0-rc.1` is below `atLeast: "1.3.0"` and continues through the remaining rules.
 The workflow checks the dispatch tag's signed release file and checks that every target is
 published, signed, and stable. It writes only `waitron-offer.json` on
 the `upgrade-offer` release, then reads it back to compare the exact bytes. The
