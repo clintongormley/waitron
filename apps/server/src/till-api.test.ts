@@ -2493,8 +2493,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The guard runs BEFORE the body is even read. The chained fiscal write and the idempotent replay
-    // are covered in `till-api.fiscal-sale-paths.test.ts`.
+    // The guard runs before it reads the body.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },

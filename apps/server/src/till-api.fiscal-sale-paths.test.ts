@@ -3400,7 +3400,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       error: { code: "submission.id_reused", params: { submissionId: workingOrderId } },
     });
 
-    const replay = await cardSale(app, cookie, body);
+    const replay = await cardSale(app, await on(deviceCookie), body);
     expect(replay.status, await replay.clone().text()).toBe(200);
     expect((await replay.json()).payment).toMatchObject({
       id: payment.id,
