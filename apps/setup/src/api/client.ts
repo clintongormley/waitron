@@ -120,7 +120,7 @@ export interface ProvisionBody {
 export interface ProvisionResult {
   provisioned: true;
   restarting: true;
-  openingHours?: { departmentId: string };
+  recoveryPackPdf?: string;
   breakGlassSecret?: string;
   breakGlassKeyName?: string;
   breakGlassKeyInBackups?: true;

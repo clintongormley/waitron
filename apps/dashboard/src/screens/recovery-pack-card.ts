@@ -385,7 +385,14 @@ export class RecoveryPackCard extends LitElement {
         );
       }
     }
-    if (holder !== null) lines.push(unreceivedWords(holder, status.timeZone));
+    if (holder !== null) {
+      if (status.unreceived?.offeredAtSetup) {
+        warn = lines.length > 0;
+        lines.push(fill("recovery_pack.offered_at_setup", { date: date(holder.madeAt) }));
+      } else {
+        lines.push(unreceivedWords(holder, status.timeZone));
+      }
+    }
     const keep = this.#keep(status, warn);
     if (keep.length > 0) lines.push(keep.join(" "));
     if (status.backupsUseOlderKey) lines.push(t("recovery_pack.older_key"));
@@ -468,7 +475,9 @@ export class RecoveryPackCard extends LitElement {
     const holder = keyHolder(status);
     if (holder !== null)
       return fill(
-        holder.received ? "recovery_pack.server_key_on" : "recovery_pack.server_key_on_unreceived",
+        holder.received || status.unreceived?.offeredAtSetup
+          ? "recovery_pack.server_key_on"
+          : "recovery_pack.server_key_on_unreceived",
         { number: String(holder.number), date: this.#date(holder.madeAt) },
       );
     return t(

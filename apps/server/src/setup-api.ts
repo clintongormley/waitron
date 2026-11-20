@@ -71,6 +71,8 @@ import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { mintBreakGlassKey } from "./break-glass.js";
+import { makePreparationRecoveryPack } from "./backup-recovery-pack-output.js";
+import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { isSecure } from "./encrypted-connection.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
@@ -139,7 +141,7 @@ export interface SetupDeps {
   ) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
-  readOpeningHours?: (result: VenueResult) => Promise<{ departmentId: string } | undefined>;
+  recoveryPackEvidence?: RecoveryDocumentEvidence;
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. */
   seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
@@ -915,7 +917,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const execute = async (
       payload: Awaited<ReturnType<typeof parseProvisionPayload>>,
       rawEmail: unknown,
-      keyOutput: { node: NodeDatabase; format: (secret: string) => string } | undefined,
+      keyOutput:
+        | {
+            node: NodeDatabase;
+            module: (typeof ALL_MODULES)[number];
+            format: (secret: string) => string;
+          }
+        | undefined,
       operation?: ActiveSetupOperation,
     ): Promise<Response> => {
       if (deps.environment === "production" && payload.mode !== "live") {
@@ -997,14 +1005,22 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("secret_sealed");
       }
 
-      let key: { secret: string; name: string } | undefined;
+      let key: { secret: string; name: string; recoveryPackPdf?: string } | undefined;
       if (!setupPhaseReached(operation, "publishing")) {
         if (keyOutput !== undefined) {
-          const minted = await mintBreakGlassKey(
-            { venue: db, node: keyOutput.node },
-            result.nodeId,
-          );
-          key = { secret: keyOutput.format(minted.secret), name: minted.name };
+          const handles = { venue: db, node: keyOutput.node };
+          const minted =
+            deps.recoveryPackEvidence === undefined
+              ? await mintBreakGlassKey(handles, result.nodeId)
+              : await makePreparationRecoveryPack(
+                  handles,
+                  result.nodeId,
+                  keyOutput.module,
+                  venue.admin.locale === "es-ES" ? "es" : "en",
+                  deps.recoveryPackEvidence,
+                  log,
+                );
+          key = { ...minted, secret: keyOutput.format(minted.secret) };
         }
         await persistTrading({
           nodeId: result.nodeId,
@@ -1016,23 +1032,21 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("publishing");
       }
 
-      let openingHours: { departmentId: string } | undefined;
-      try {
-        openingHours = await deps.readOpeningHours?.(result);
-      } catch {
-        log("warn", "setup.opening_hours_read_failed", {});
-      }
       const publicResult = {
         provisioned: true,
         restarting: true,
-        ...(openingHours === undefined ? {} : { openingHours }),
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
       setTimeout(() => requestRestart(), 0);
       if (key === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
-      return c.json({ ...publicResult, breakGlassSecret: key.secret, breakGlassKeyName: key.name });
+      return c.json({
+        ...publicResult,
+        breakGlassSecret: key.secret,
+        breakGlassKeyName: key.name,
+        ...(key.recoveryPackPdf === undefined ? {} : { recoveryPackPdf: key.recoveryPackPdf }),
+      });
     };
     return runProvision(c, log, async () => {
       let succeeded = false;
@@ -1048,18 +1062,18 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           c.req.header("Accept-Language"),
         );
         const rawEmail = (parsed as Record<string, unknown>).email;
-        const formatServerKey =
+        const recoveryModule =
           payload.mode === "prepare" && deps.environment !== "production"
-            ? ALL_MODULES.find((module) => module.fiscal === payload.contribution)?.backup
-                ?.formatServerKey
+            ? ALL_MODULES.find((module) => module.fiscal === payload.contribution)
             : undefined;
+        const formatServerKey = recoveryModule?.backup?.formatServerKey;
         const node = deps.node;
         let keyOutput: Parameters<typeof execute>[2];
-        if (formatServerKey !== undefined) {
+        if (recoveryModule !== undefined && formatServerKey !== undefined) {
           if (!isSecure(c)) throw new AppError("setup.connection_insecure", {});
           if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
           if (node === undefined) throw new AppError("setup.not_ready", {});
-          keyOutput = { node, format: formatServerKey };
+          keyOutput = { node, module: recoveryModule, format: formatServerKey };
         }
         const response =
           deps.operations === undefined

@@ -812,13 +812,7 @@ Pricing reads static period membership, without resolving ranges, dates or the c
 clock cannot be read, timetable resolution leaves the department's period menus orderable.
 
 Provisioning places the first department's starter period (named "Open" in the staff language)
-at 09:00–17:00 Monday to Friday when there is a menu and no existing period. Setup's
-completion screen shows those normal-week hours, with a link to Opening hours' Year, only when its
-saved schedule matches them; the check finds that period by "Open" or any name the starter file
-gives it (`STARTER_OPEN_PERIOD_NAMES`, `menu-timetable.ts`).
-A different authored or demo schedule is not described as that first weekday schedule. The checks are in
-`apps/server/src/setup-opening-hours.test.ts`, with the response and completed-request replay in
-`apps/server/src/setup-api.test.ts`.
+at 09:00–17:00 Monday to Friday when there is a menu and no existing period.
 
 ### Zone closed times
 

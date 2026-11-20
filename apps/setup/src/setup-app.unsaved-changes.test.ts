@@ -1341,10 +1341,6 @@ it("the actual Done links leave a successfully provisioned root without another 
     const link = choice.shadowRoot!.querySelector<HTMLAnchorElement>("a")!;
     links.push([link, path]);
   }
-  links.push([
-    done.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=backup-nudge] a")!,
-    "/backup",
-  ]);
   for (const [link, path] of links) {
     expect(link.pathname).toBe(path);
     let browserDefault = false;

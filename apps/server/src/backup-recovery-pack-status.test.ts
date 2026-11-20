@@ -257,6 +257,22 @@ describe("a pack no browser confirmed receiving", () => {
     expect(answer.keep).toEqual([]);
   });
 
+  it("identifies an unconfirmed setup PDF without treating it as received", () => {
+    const madeAt = "2026-10-20T10:00:00.000Z";
+    const offered = {
+      ...pack(1, madeAt, { received: false, parts: [included.serverKey(KEY_1, true)], name: null }),
+      madeBy: null,
+    };
+    const answer = status([offered]);
+    expect(answer.latest?.received).toBe(false);
+    expect(answer.unreceived).toEqual({
+      number: 1,
+      madeAt,
+      holdsCurrentServerKey: true,
+      offeredAtSetup: true,
+    });
+  });
+
   it("names a ticked unreceived pack even when a received pack was made after it", () => {
     const answer = status(
       [

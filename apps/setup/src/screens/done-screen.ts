@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -121,6 +121,9 @@ export class SetupDoneScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
+      a.break-glass-save {
+        display: inline-block;
+      }
       .break-glass-save {
         margin: var(--wt-space-2) 0 0;
       }
@@ -142,7 +145,8 @@ export class SetupDoneScreen extends LitElement {
    */
   @property({ type: Boolean }) mirrorJoin = false;
 
-  @property({ attribute: false }) openingHours?: { departmentId: string };
+  @property({ attribute: false }) recoveryPackPdf?: string;
+  #recoveryPackUrl?: string;
 
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
@@ -195,6 +199,30 @@ export class SetupDoneScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate("recoveryPackPdf");
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has("recoveryPackPdf")) return;
+    this.#releaseRecoveryPack();
+    if (!this.isConnected || this.recoveryPackPdf === undefined) return;
+    try {
+      const bytes = Uint8Array.from(atob(this.recoveryPackPdf), (character) =>
+        character.charCodeAt(0),
+      );
+      this.#recoveryPackUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    } catch {
+      // The server key can still be saved as text.
+    }
+  }
+
+  #releaseRecoveryPack(): void {
+    if (this.#recoveryPackUrl !== undefined) URL.revokeObjectURL(this.#recoveryPackUrl);
+    this.#recoveryPackUrl = undefined;
+  }
+
   override firstUpdated(): void {
     if (this.mirrorJoin) return;
     this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
@@ -204,6 +232,7 @@ export class SetupDoneScreen extends LitElement {
     super.disconnectedCallback();
     this.#life += 1;
     this.nodeRecoveryKey = undefined;
+    this.#releaseRecoveryPack();
     if (this.#timer !== undefined) clearTimeout(this.#timer);
   }
 
@@ -490,20 +519,34 @@ export class SetupDoneScreen extends LitElement {
       <p class="break-glass-warning" data-test="break-glass-warning">
         ${
           preparation
-            ? t("done.break_glass.restore")
+            ? t(
+                this.#recoveryPackUrl === undefined
+                  ? "done.break_glass.restore"
+                  : "done.break_glass.pack_keep",
+              )
             : html`${t("done.break_glass.warning")}
               ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}`
         }
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret">${secret}</code>
-      <wt-button
-        class="break-glass-save"
-        data-test="break-glass-save"
-        variant="secondary"
-        @click=${() => this.#saveBreakGlass(secret)}
-        >${t("done.break_glass.save")}</wt-button
-      >
+      ${
+        this.#recoveryPackUrl === undefined
+          ? html`<wt-button
+              class="break-glass-save"
+              data-test="break-glass-save"
+              variant="secondary"
+              @click=${() => this.#saveBreakGlass(secret)}
+              >${t("done.break_glass.save")}</wt-button
+            >`
+          : html`<a
+              class="break-glass-save"
+              data-test="download-recovery-pack"
+              href=${this.#recoveryPackUrl}
+              download="waitron-recovery-pack.pdf"
+              >${t("done.break_glass.download_pack")}</a
+            >`
+      }
       ${
         this.breakGlassSaveFailed
           ? html`<p class="error" role="alert" data-test="break-glass-save-error">
@@ -529,24 +572,14 @@ export class SetupDoneScreen extends LitElement {
       <div class="choices" data-test="links">
         ${this.startFailed ? this.#serverLink() : this.#appLinks()}
       </div>
-      ${
-        this.openingHours === undefined || this.startFailed
-          ? nothing
-          : html`<wt-card data-test="opening-hours">
-              <p>${t("done.opening_hours")}</p>
-              <a href="/opening-hours/view/year">${t("done.change_opening_hours")}</a>
-            </wt-card>`
-      }
       ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
       ${this.#breakGlass()}
       ${
-        this.onboardingIntent === "demo" || this.restored === "bucket" || this.startFailed
+        !needsReplacement || this.startFailed
           ? nothing
-          : html`<wt-card data-test="backup-nudge">
-              <p>${t(needsReplacement ? "done.break_glass.replacement" : "done.backup_nudge")}</p>
-              <a href=${BACKUP_SETUP_URL}
-                >${t(needsReplacement ? "done.break_glass.open_backups" : "done.backup_link")}</a
-              >
+          : html`<wt-card data-test="recovery-pack-replacement">
+              <p>${t("done.break_glass.replacement")}</p>
+              <a href=${BACKUP_SETUP_URL}>${t("done.break_glass.open_backups")}</a>
             </wt-card>`
       }
     `;

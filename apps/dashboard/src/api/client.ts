@@ -2348,7 +2348,12 @@ export interface RecoveryPackStatus {
   };
   upToDate: boolean;
   incomplete: boolean;
-  unreceived: null | { number: number; madeAt: string; holdsCurrentServerKey: boolean };
+  unreceived: null | {
+    number: number;
+    madeAt: string;
+    holdsCurrentServerKey: boolean;
+    offeredAtSetup?: true;
+  };
   reasons: RecoveryPackReason[];
   keep: {
     number: number;

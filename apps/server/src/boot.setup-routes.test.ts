@@ -1,3 +1,4 @@
+import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { randomUUID } from "node:crypto";
 import { SETUP_RECEIVE_LIMITS } from "./request-receive-limits.js";
 import { listener } from "./testing/ephemeral-listener.js";
@@ -1044,6 +1045,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           }),
         });
         expect(response.status, await response.clone().text()).toBe(200);
+        const provision = (await response.json()) as {
+          recoveryPackPdf: string;
+          breakGlassKeyName: string;
+        };
+        expect(typeof provision.recoveryPackPdf).toBe("string");
+        const pack = await readRecoveryPackPdf(Buffer.from(provision.recoveryPackPdf, "base64"));
+        expect(pack.serverKeyName).toBe(provision.breakGlassKeyName);
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         // The setup boot's state folder holds the keys the venue was sealed with; it is removed
         // when the setup boot closes, so the trading start runs from a copy.
@@ -2425,13 +2433,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           headers: json,
           body: live(TAX_ID),
         });
-        const [department] = target.store.venue.all<{ id: string }>(
-          sql`select id from departments where active = 1`,
-        );
         expect(await provisioned.json()).toEqual({
           provisioned: true,
           restarting: true,
-          openingHours: { departmentId: department!.id },
         });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);

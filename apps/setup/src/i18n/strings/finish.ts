@@ -40,8 +40,6 @@ export const finishEn = {
   "reset.reload": "Reload",
 
   "done.heading": "Setup complete",
-  "done.opening_hours": "Opening hours: Monday to Friday, 09:00–17:00",
-  "done.change_opening_hours": "Change opening hours",
   "done.heading_rebuilt": "Rebuilt from your bucket",
   "done.heading_restored": "Restored from your backup",
   "done.restarting": "The server is restarting to finish setup. Once it is back, open it here:",
@@ -72,9 +70,6 @@ export const finishEn = {
   "done.link.dashboard": "Dashboard",
   "done.link.server": "Server",
   "done.link.email": "Email inbox",
-  "done.backup_nudge":
-    "Your server is trading — but it has no backups yet, so there is no way back from a disk failure.",
-  "done.backup_link": "Set up backups now",
   "done.devices.intro": "Devices depend on how each was set up:",
   "done.devices.local":
     "Tills, handhelds and station screens that were opened at https://waitron.local reconnect by themselves.",
@@ -92,6 +87,9 @@ export const finishEn = {
   "done.break_glass.restore":
     "Save the name and key as a file or write them on paper, and keep them with your recovery pack. The key is shown once. You need it to restore this venue from its bucket.",
   "done.break_glass.save": "Save as a file",
+  "done.break_glass.download_pack": "Download recovery pack (PDF)",
+  "done.break_glass.pack_keep":
+    "The recovery pack contains the server key. Keep it away from this server. You need the key to restore this venue from its bucket.",
   "done.break_glass.save_failed": "The file could not be saved. Write the key down instead.",
   "done.break_glass.file_title": "Waitron server key",
   "done.break_glass.file_purpose": "You need it to restore this venue from its bucket.",
@@ -152,8 +150,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.reload": "Recargar",
 
   "done.heading": "Configuración completada",
-  "done.opening_hours": "Horario de apertura: de lunes a viernes, 09:00–17:00",
-  "done.change_opening_hours": "Cambiar el horario de apertura",
   "done.heading_rebuilt": "Reconstruido desde tu bucket",
   "done.heading_restored": "Restaurado desde tu copia de seguridad",
   "done.restarting":
@@ -186,9 +182,6 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.link.dashboard": "Panel",
   "done.link.server": "Servidor",
   "done.link.email": "Bandeja de correo",
-  "done.backup_nudge":
-    "Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay forma de recuperarse de un fallo del disco.",
-  "done.backup_link": "Configura ahora las copias de seguridad",
   "done.devices.intro": "Los dispositivos dependen de cómo se configuró cada uno:",
   "done.devices.local":
     "Las cajas, los terminales de mano y las pantallas de estación que se abrieron en https://waitron.local se vuelven a conectar solos.",
@@ -207,6 +200,9 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.restore":
     "Guarda el nombre y la clave en un archivo o anótalos en papel, y guárdalos con tu paquete de recuperación. La clave se muestra una sola vez. La necesitas para restaurar este local desde su bucket.",
   "done.break_glass.save": "Guardar en un archivo",
+  "done.break_glass.download_pack": "Descargar paquete de recuperación (PDF)",
+  "done.break_glass.pack_keep":
+    "El paquete de recuperación contiene la clave del servidor. Guárdalo fuera de este servidor. Necesitas la clave para restaurar este local desde su bucket.",
   "done.break_glass.save_failed": "No se pudo guardar el archivo. Anota la clave.",
   "done.break_glass.file_title": "Clave del servidor de Waitron",
   "done.break_glass.file_purpose": "La necesitas para restaurar este local desde su bucket.",

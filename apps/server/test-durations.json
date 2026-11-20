@@ -1075,7 +1075,6 @@
   "src/setup-first-fiscal-api.disk-full.test.ts": 2.2,
   "src/setup-first-fiscal.route.test.ts": 14.2,
   "src/setup-first-offerings.route.test.ts": 2.1,
-  "src/setup-opening-hours.test.ts": 2.1,
   "src/setup-operation-first-setup.test.ts": 2,
   "src/setup-recovery-preparation-api.test.ts": 2.2,
   "src/setup-tool-download.boot.test.ts": 5.1,

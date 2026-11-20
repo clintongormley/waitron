@@ -64,7 +64,12 @@ export type PackStatus = {
   };
   upToDate: boolean;
   incomplete: boolean;
-  unreceived: null | { number: number; madeAt: string; holdsCurrentServerKey: boolean };
+  unreceived: null | {
+    number: number;
+    madeAt: string;
+    holdsCurrentServerKey: boolean;
+    offeredAtSetup?: true;
+  };
   reasons: Reason[];
   keep: Keep[];
   backupsUseOlderKey: boolean;
@@ -231,6 +236,7 @@ function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
     number: record.number,
     madeAt: record.madeAt.toISOString(),
     holdsCurrentServerKey,
+    ...(record.madeBy === null ? { offeredAtSetup: true as const } : {}),
   });
   const holder = input.records.find(
     (r) => r.receivedAt === null && carriesServerKey(r, input.current.serverKeyName),

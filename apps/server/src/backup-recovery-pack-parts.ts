@@ -120,7 +120,7 @@ function absent(kind: Kind): BuiltPart {
   return { part: { kind, state: "absent" }, record: { part: kind, state: "absent" }, file: {} };
 }
 
-function notSetUp(kind: Kind): BuiltPart {
+export function notSetUp(kind: Kind): BuiltPart {
   return {
     part: { kind, state: "not-set-up" },
     record: { part: kind, state: "not-set-up" },
@@ -359,7 +359,7 @@ export type ServerKeyInput = {
 
 export async function buildServerKeyPart(
   tx: Transaction,
-  context: PartsContext,
+  context: Pick<PartsContext, "locale" | "timeZone" | "madeAt" | "nodeId">,
   input: ServerKeyInput,
 ): Promise<BuiltPart> {
   const { seat } = input;
