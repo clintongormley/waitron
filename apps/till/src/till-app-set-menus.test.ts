@@ -526,7 +526,7 @@ it("refuses a set-menu change while the table's order is locked", async () => {
   const unlock = screen.draftStore!.lockEdits();
 
   await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBe(
-    t("table.reread_failed"),
+    "Something went wrong, try again",
   );
   unlock();
   expect(setSetMenuCount).not.toHaveBeenCalled();

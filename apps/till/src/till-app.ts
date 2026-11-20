@@ -14092,9 +14092,8 @@ export class TillApp extends LitElement {
       !this.#draftReady ||
       sync.store.editsLocked ||
       sync.store.sending
-    ) {
-      return t("table.reread_failed");
-    }
+    )
+      return codeMessage("server.internal");
 
     const current = () =>
       !this.#hasLeftOrder(billId, visit) && this.api === api && this.#draftSync === sync;
