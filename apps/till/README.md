@@ -134,6 +134,10 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    # → http://localhost:5190/till/
    ```
 
+5. **Try it on a phone (Android):** see
+   [the development stack](../../docs/developers/workflow-guide.md#the-development-stack-from-a-worktree)
+   in the workflow guide.
+
 ### Box identity and till settings
 
 | Variable            | Required | Default | What it is                                                        |

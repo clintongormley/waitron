@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig, type PluginOption } from "vite";
-import { devCrossAppLinks, devPort, devServerProxy } from "../../scripts/dev-server-proxy.js";
+import {
+  devCrossAppLinks,
+  devLoopbackTwin,
+  devPort,
+  devServerProxy,
+} from "../../scripts/dev-server-proxy.js";
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 // By path: Vite bundles a relative import, but hands `@waitron/ui-core/theme` to Node, which
 // cannot resolve that package's `.js` specifiers to its `.ts` sources.
@@ -50,7 +55,7 @@ function webManifest(): PluginOption {
 
 export default defineConfig({
   base: "/till/",
-  plugins: [devCrossAppLinks("till"), webManifest(), viteNpmNotices()],
+  plugins: [devCrossAppLinks("till"), devLoopbackTwin(), webManifest(), viteNpmNotices()],
   // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
   // mark cannot go stale. A relative path, not `import.meta.resolve`: `@waitron/ui` has no
   // `exports` map. This line is read as text by `scripts/brand-icons.test.ts`.
