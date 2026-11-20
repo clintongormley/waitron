@@ -1464,6 +1464,43 @@ describe("till-app: comping a stored counter order", () => {
     expect(getInvoiceDeliveryOptions).toHaveBeenCalledWith(counter(el).store.id, expect.anything());
   });
 
+  it("reopens a staged counter invoice with no saved delivery on the receipt printer", async () => {
+    const options = {
+      invoicePrinter: null,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
+    const el = await placeCounter({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      getInvoiceDeliveryOptions: vi
+        .fn()
+        .mockResolvedValueOnce(options)
+        .mockResolvedValue({ ...options, invoicePrinter: { id: "pp-office", name: "Office HP" } }),
+    });
+    const form = () => el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    emit(form(), "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Example Guest",
+        address: "1 Main Street",
+        countryCode: "ES",
+      },
+    });
+    await flush(el);
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    expect(
+      form().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=delivery]",
+      )!.value,
+    ).toBe("receipt");
+  });
+
   it("replays a lost placing reply without saving the confirmed recipient again", async () => {
     const placeOrder = vi
       .fn()

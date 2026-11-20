@@ -126,6 +126,9 @@ it in the receipt language. Order details name it in your screen language.
 At the counter, choose **Full invoice** before **Pay**. Paying the order in full issues the
 invoice. Placing a counter order alone does not issue an invoice.
 
+For a new full invoice, **Delivery** starts on A4 if your till has an invoice printer. Choose
+**Receipt printer** if you need the invoice on receipt paper.
+
 When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
 once the invoice is issued. With **Receipt printer**, the invoice prints when you choose **Print
 the bill**; otherwise it prints when you close the window after payment.

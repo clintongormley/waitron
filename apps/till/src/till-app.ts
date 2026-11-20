@@ -24700,6 +24700,11 @@ export class TillApp extends LitElement {
             ? html`<till-invoice-recipient-dialog
                 .deliveryOptions=${this.invoiceRecipientOptions}
                 .savedDelivery=${this.invoiceRecipientSaved}
+                .staged=${
+                  this.invoiceRecipientBill?.full === true ||
+                  (this.invoiceRecipientOrderId !== undefined &&
+                    this.invoiceChoice?.orderId === this.invoiceRecipientOrderId)
+                }
                 .refusal=${this.invoiceRecipientRefusal}
                 .refusalField=${this.invoiceRecipientRefusalField}
                 .offerSimplified=${this.invoiceRecipientBill?.full === true}

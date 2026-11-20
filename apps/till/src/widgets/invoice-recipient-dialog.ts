@@ -117,6 +117,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
   };
   /** The delivery already staged for the order; kept unless the delivery field is changed. */
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
+  @property({ type: Boolean }) staged = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
@@ -267,9 +268,15 @@ export class TillInvoiceRecipientDialog extends LitElement {
     }
     if (!this.isConnected || !this.active || this.#scope) return;
     if (this.#baseline === undefined) {
-      this.medium = this.#openingMedium();
+      this.medium =
+        !this.staged && this.savedDelivery === undefined && this.#printer() !== null
+          ? "a4"
+          : this.#openingMedium();
       if (this.savedDelivery?.medium === "email") this.email = this.savedDelivery.recipient;
-      this.#baseline = { ...this.#value(), medium: this.#savedMedium() };
+      this.#baseline = {
+        ...this.#value(),
+        medium: this.savedDelivery === undefined ? this.medium : this.#savedMedium(),
+      };
     }
     const { coordinator, scope } = draftScopeFor<RecipientDraft>(this, {
       id: this,

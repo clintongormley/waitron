@@ -124,6 +124,9 @@ siendo factura completa.
 En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 
+Para una factura completa nueva, **Entrega** empieza en A4 si tu caja tiene una impresora de
+facturas. Elige **Impresora de tickets** si necesitas la factura en papel de tickets.
+
 Cuando el formulario muestra **Entrega**, **A4 en {printer}** o **Correo electrónico** envía el
 original por sí solo al emitirse la factura. Con **Impresora de tickets**, la factura se imprime al
 elegir **Imprimir la cuenta**; si no, se imprime al cerrar la ventana posterior al cobro.
