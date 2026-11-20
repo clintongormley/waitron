@@ -32,6 +32,7 @@ services:
       WAITRON_MANAGEMENT_ORIGIN: ${WAITRON_MANAGEMENT_ORIGIN:-https://waitron.local}
       WAITRON_VENUE_DOMAIN: ${WAITRON_VENUE_DOMAIN:-waitron.local}
       WAITRON_CLOUD_ORIGIN: ${WAITRON_CLOUD_ORIGIN:-}
+      WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: ${WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK:-}
       # Prepare uses the local card simulator unless an operator deliberately enables a configured
       # provider whose credential is restricted to its test environment.
       WAITRON_PAYMENT_TEST_PROVIDERS: ${WAITRON_PAYMENT_TEST_PROVIDERS:-}

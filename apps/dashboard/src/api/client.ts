@@ -1802,6 +1802,7 @@ interface CloudInstallation {
   }[];
 }
 export interface CloudConnectionStatus {
+  sameTabSignIn?: boolean;
   isRemote?: boolean;
   remoteAccessEnabled?: boolean;
   remoteAccessPlanRequired?: true;
@@ -5128,6 +5129,9 @@ export class DashboardApi {
   }
   getCloudBilling(): Promise<CloudBilling> {
     return this.#request("/management-api/cloud/billing", "GET");
+  }
+  startCloudSignIn(tab: string): Promise<{ authorizationUrl?: string }> {
+    return this.#request("/management-api/cloud/sign-in/start", "POST", { tab });
   }
   startCloudConnection(restart = false): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/start", "POST", { restart });

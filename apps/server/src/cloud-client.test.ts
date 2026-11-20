@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as fs from "node:fs/promises";
@@ -97,6 +97,218 @@ it("requires a pinned secure Cloud origin except explicit loopback development",
     loadCloudOrigin({ WAITRON_ENV: "production", WAITRON_CLOUD_ORIGIN: "http://127.0.0.1:8000" }),
   ).toThrow();
 });
+async function installedSignInFixture() {
+  const callback = "https://box.waitron.test/cloud/pairing/callback";
+  const expiresAt = new Date(Date.now() + 600_000).toISOString();
+  const code = randomBytes(32).toString("base64url");
+  const key = generateKeyPairSync("ed25519");
+  let attemptState = "awaiting_cloud";
+  let challenge = "";
+  let registered = false;
+  let loseComplete = false;
+  let expired = false;
+  let wrongLogin = false;
+  let profile: Extract<
+    import("@waitron/contract").PairingV4Claims,
+    { action: "complete" }
+  >["args"] = [
+    "ES",
+    "Bar Pepe",
+    ["First", "", "28001", "Madrid", "Madrid"],
+    "B-12345678",
+    "Pepe SL",
+  ];
+  const f = await fixture(undefined, "test", async (values, _saved, _req, res) => {
+    const [, origin, action, requestId, , , , args] = values;
+    if (expired && action === "status") {
+      res.writeHead(400);
+      res.end('{"error":"pairing_unavailable"}');
+      return;
+    }
+    const answer: Record<string, unknown> = { requestId, expiresAt };
+    if (action === "start") {
+      attemptState = "awaiting_cloud";
+      const [redirectUri, state, codeChallenge] = args as string[];
+      expect(redirectUri).toBe(callback);
+      challenge = codeChallenge!;
+      const url = new URL("/login", origin as string);
+      url.search = new URLSearchParams({
+        request_id: requestId as string,
+        state: state!,
+        code_challenge: wrongLogin ? code : challenge,
+        code_challenge_method: "S256",
+      }).toString();
+      answer.authorizationUrl = url.href;
+    } else if (action === "redeem") {
+      const [submitted, verifier] = args as string[];
+      expect(submitted).toBe(code);
+      expect(createHash("sha256").update(verifier!).digest("base64url")).toBe(challenge);
+      attemptState = "account_bound";
+    } else if (action === "complete") {
+      registered = true;
+      attemptState = "complete";
+      if (loseComplete) {
+        res.destroy();
+        return;
+      }
+    }
+    answer.state = attemptState;
+    if (registered)
+      answer.registration = {
+        venueId: f.venueId,
+        installationId: f.installationId,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      };
+    res.end(JSON.stringify(answer));
+  });
+  await f.options.forgetVenueId();
+  await mkdir(join(f.stateDir, "cloud"), { mode: 0o700 });
+  const publicKey = key.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+  const privateKey = key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url");
+  await writeFile(
+    join(f.stateDir, "cloud/connection.json"),
+    JSON.stringify({ version: 4, origin: f.options.origin, publicKey, privateKey }),
+    { mode: 0o600 },
+  );
+  const options = {
+    ...f.options,
+    signIn: { callback, readProfile: async () => profile },
+  };
+  return {
+    ...f,
+    client: () => createCloudConnection(options),
+    binding: { tab: randomUUID(), session: randomUUID() },
+    authorize: async () => {},
+    code,
+    loseComplete: () => {
+      loseComplete = true;
+    },
+    wrongLogin: () => {
+      wrongLogin = true;
+    },
+    expire: () => {
+      expired = true;
+    },
+    invalidProfile: () => {
+      profile = ["ES", "Bar\uD800", ["", "", "", "", ""], "", "Pepe SL"];
+    },
+  };
+}
+
+it("keeps the attempt in its original tab and session and recovers a lost completion", async () => {
+  const f = await installedSignInFixture();
+  try {
+    const client = f.client();
+    const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    const proof = { requestId: query.get("request_id")!, state: query.get("state")!, code: f.code };
+    await expect(
+      client.returnSignIn({ ...f.binding, tab: randomUUID() }, proof, f.authorize),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    await expect(
+      client.returnSignIn({ ...f.binding, session: randomUUID() }, proof, f.authorize),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    expect(f.requests.map((values) => values[2])).toEqual(["start"]);
+    f.loseComplete();
+    await expect(client.returnSignIn(f.binding, proof, f.authorize)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(await f.options.readVenueId()).toBeNull();
+    const resumed = f.client();
+    await resumed.returnSignIn(f.binding, proof, f.authorize);
+    expect((await resumed.status()).registration?.installationId).toBe(f.installationId);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+    expect(f.requests.map((values) => values[2])).toEqual([
+      "start",
+      "redeem",
+      "complete",
+      "status",
+    ]);
+    expect(f.requests[2]![7]).toEqual([
+      "ES",
+      "Bar Pepe",
+      ["First", "", "28001", "Madrid", "Madrid"],
+      "B-12345678",
+      "Pepe SL",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("allows a fresh local session to start again after Cloud says the old attempt expired", async () => {
+  const f = await installedSignInFixture();
+  try {
+    const client = f.client();
+    const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    f.invalidProfile();
+    await expect(
+      client.returnSignIn(
+        f.binding,
+        {
+          requestId: query.get("request_id")!,
+          state: query.get("state")!,
+          code: f.code,
+        },
+        f.authorize,
+      ),
+    ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+    const other = { tab: randomUUID(), session: randomUUID() };
+    await expect(client.startSignIn(other, f.authorize)).rejects.toMatchObject({
+      code: "cloud.binding_conflict",
+    });
+    expect(f.requests.map((values) => values[2])).toEqual(["start", "redeem"]);
+    f.expire();
+    vi.setSystemTime(Date.now() + 600_001);
+    const retry = await client.startSignIn(other, f.authorize);
+    expect(new URL(retry.authorizationUrl!).searchParams.get("request_id")).not.toBe(
+      query.get("request_id"),
+    );
+  } finally {
+    vi.useRealTimers();
+    await f.close();
+  }
+});
+
+it("refuses a Cloud login URL with a different challenge", async () => {
+  const f = await installedSignInFixture();
+  try {
+    f.wrongLogin();
+    await expect(f.client().startSignIn(f.binding, f.authorize)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses malformed venue text before sending completion", async () => {
+  const f = await installedSignInFixture();
+  try {
+    const client = f.client();
+    const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    f.invalidProfile();
+    await expect(
+      client.returnSignIn(
+        f.binding,
+        {
+          requestId: query.get("request_id")!,
+          state: query.get("state")!,
+          code: f.code,
+        },
+        f.authorize,
+      ),
+    ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+    expect(await f.options.readVenueId()).toBeNull();
+    expect(f.requests.map((values) => values[2])).toEqual(["start", "redeem"]);
+  } finally {
+    await f.close();
+  }
+});
+
 it("persists before sending, resumes a failed start after restart and never exposes the private key", async () => {
   const f = await fixture();
   try {

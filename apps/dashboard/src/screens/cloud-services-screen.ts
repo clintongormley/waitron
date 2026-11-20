@@ -351,6 +351,7 @@ export class CloudServicesScreen extends LitElement {
   @state() private busy = false;
   @state() private error: string | undefined;
   @state() private requestUnavailable = false;
+  @state() private signInResult?: "retry" | "cancelled";
   @state() private confirmingStop = false;
   @state() private confirmingRemoteOff = false;
   #generation = 0;
@@ -434,6 +435,14 @@ export class CloudServicesScreen extends LitElement {
   }
   override connectedCallback() {
     super.connectedCallback();
+    this.signInResult = undefined;
+    try {
+      const result = sessionStorage.getItem("waitron-cloud-sign-in-result");
+      sessionStorage.removeItem("waitron-cloud-sign-in-result");
+      if (result === "retry" || result === "cancelled") this.signInResult = result;
+    } catch {
+      // The connection status is still available when the browser blocks tab storage.
+    }
     this.busy = false;
     this.confirmingStop = false;
     this.confirmingRemoteOff = false;
@@ -539,6 +548,22 @@ export class CloudServicesScreen extends LitElement {
     await this.updateComplete;
     if (generation === this.#generation)
       this.shadowRoot?.querySelector<HTMLElement>("[data-test=cloud-error]")?.focus();
+  }
+  #connect() {
+    const status = this.status!;
+    if (!status.sameTabSignIn) return this.api.startCloudConnection();
+    this.signInResult = undefined;
+    const key = "waitron-cloud-sign-in-tab";
+    const tab = sessionStorage.getItem(key) ?? crypto.randomUUID();
+    sessionStorage.setItem(key, tab);
+    const generation = this.#generation;
+    return this.api.startCloudSignIn(tab).then(({ authorizationUrl }) => {
+      if (authorizationUrl) {
+        if (generation === this.#generation) location.assign(authorizationUrl);
+        return status;
+      }
+      return this.api.getCloudStatus();
+    });
   }
   #complete() {
     const s = this.status;
@@ -960,7 +985,14 @@ export class CloudServicesScreen extends LitElement {
                                     : nothing
                             }`
                         : html`<p>${t("cloud.intro")}</p>
-                            ${s.isPrimary ? button("connect", t("cloud.connect"), () => this.api.startCloudConnection()) : nothing}
+                            ${
+                              s.sameTabSignIn && this.signInResult
+                                ? html`<p role="status">
+                                    ${t(this.signInResult === "cancelled" ? "cloud.sign_in_cancelled" : "cloud.sign_in_retry")}
+                                  </p>`
+                                : nothing
+                            }
+                            ${s.isPrimary ? button("connect", t(s.sameTabSignIn ? "cloud.sign_in" : "cloud.connect"), () => this.#connect()) : nothing}
                             ${
                               s.signupUrl
                                 ? html`<a
@@ -978,7 +1010,7 @@ export class CloudServicesScreen extends LitElement {
                             <p>${t("cloud.ended_help")}</p>
                             ${s.isPrimary ? button("connect-again", t("cloud.connect_again"), () => this.api.reconnectCloudConnection()) : nothing}`
                         : html`<p role="status">${t("cloud.connected")}</p>
-                            <p>${s.legalBusinessName}</p>
+                            ${s.legalBusinessName ? html`<p>${s.legalBusinessName}</p>` : nothing}
                             ${this.#installation(s, s.installation)}
                             ${readsBilling(s) ? html`${this.#recoveryPanel(s)}${this.#billing(s)}${this.#emergency(s)}` : nothing}`
                       : html`

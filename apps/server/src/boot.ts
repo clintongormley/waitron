@@ -48,7 +48,7 @@ import { createGuestMenuDelivery } from "./cloud-guest-menu.js";
 import { cloudConnectionJob } from "./cloud-worker.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
-import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { createCloudConnection, loadCloudOrigin, loadCloudSignInCallback } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
@@ -72,6 +72,7 @@ import {
   applicationVersion,
   nodes,
   readCloudVenueId,
+  readTaxpayer,
   readVenueSettings,
   saveCloudVenueId,
   forgetCloudVenueId,
@@ -1277,6 +1278,10 @@ async function bootServer(
   });
   const availableModules = firstSetupHost.modules;
   const cloudOrigin = loadCloudOrigin(env);
+  const cloudSignInCallback =
+    config.environment === "production"
+      ? undefined
+      : loadCloudSignInCallback(env, config.managementOrigin);
   // The addresses this box tells the LAN to reach it on: the leaf's IP SANs, discovery's URLs and the
   // mDNS answers all read this one resolver.
   //
@@ -2582,6 +2587,38 @@ async function bootServer(
           }),
         tunnelDir: config.tunnelControlDir,
         origin: cloudOrigin,
+        ...(cloudSignInCallback === undefined
+          ? {}
+          : {
+              signIn: {
+                callback: cloudSignInCallback,
+                readProfile: () =>
+                  withTransaction(db, async (tx) => {
+                    const owner = await readTaxpayer(tx);
+                    if (!owner) throw new AppError("cloud.request_invalid", {});
+                    const { doc } = await readVenueSettings(tx);
+                    return [
+                      owner.country.trim(),
+                      doc.name.trim(),
+                      [
+                        doc.addressLine1,
+                        doc.addressLine2,
+                        doc.postalCode,
+                        doc.city,
+                        doc.province,
+                      ].map((value) => value?.trim() ?? "") as [
+                        string,
+                        string,
+                        string,
+                        string,
+                        string,
+                      ],
+                      owner.taxId.trim(),
+                      owner.legalName.trim(),
+                    ];
+                  }),
+              },
+            }),
         readVenueId: () => readCloudVenueId(db),
         readVenueName: async () => (await readVenueSettings(db)).doc.name,
         recordVenueId: (id) => withTransaction(db, (tx) => saveCloudVenueId(tx, id)),
@@ -4173,6 +4210,7 @@ async function bootServer(
     {
       db,
       managementOrigin: config.managementOrigin,
+      signInCallback: cloudSignInCallback !== undefined && cloudConnection !== undefined,
       // Roles can change live; fencing takes effect through a server restart.
       isPrimary: cloudPrimary,
       connection: cloudConnection,

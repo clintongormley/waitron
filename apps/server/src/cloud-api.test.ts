@@ -1,6 +1,10 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
+import { getRequestListener } from "@hono/node-server";
+import { createServer } from "node:http";
+import { chromium } from "playwright";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -36,6 +40,125 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it.each([
+  ["start", "https://other.test", true, 403, "authorization.not_permitted"],
+  ["return", "https://other.test", true, 403, "authorization.not_permitted"],
+  ["start", "https://venue.test", false, 400, "management_session.proof_required"],
+  ["return", "https://venue.test", false, 400, "management_session.proof_required"],
+  ["start", "https://venue.test", true, 409, "cloud.not_configured"],
+] as const)(
+  "checks the caller of Cloud sign-in %s from %s with fresh proof %s",
+  async (action, origin, fresh, status, code) => {
+    const manager = await person("manager");
+    if (!fresh)
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, manager.session, false));
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      { db: suite.db, managementOrigin: "https://venue.test", isPrimary: () => true },
+      () => {},
+    );
+    const response = await app.request(`/management-api/cloud/sign-in/${action}`, {
+      method: "POST",
+      headers: { cookie: manager.cookie, origin, "content-type": "application/json" },
+      body: JSON.stringify({
+        tab: "b4956e37-9545-4a3c-aae3-02376eb53efa",
+        ...(action === "return"
+          ? {
+              requestId: "b4956e37-9545-4a3c-aae3-02376eb53efb",
+              state: randomBytes(32).toString("base64url"),
+              code: randomBytes(32).toString("base64url"),
+            }
+          : {}),
+      }),
+    });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: { code, params: {} } });
+  },
+);
+
+it("returns from a different site without exposing the code to the dashboard", async () => {
+  const app = new Hono();
+  const posts: { cookie?: string; from?: string; body: unknown }[] = [];
+  const gets: (string | undefined)[] = [];
+  const tab = randomBytes(16).toString("hex");
+  const code = randomBytes(32).toString("base64url");
+  const state = randomBytes(32).toString("base64url");
+  const query = new URLSearchParams({
+    request_id: "b4956e37-9545-4a3c-aae3-02376eb53efb",
+    state,
+    code,
+  });
+  const callback = "/cloud/pairing/callback";
+  const listener = await retainHttpListener(
+    "127.0.0.1",
+    createServer(getRequestListener(app.fetch)),
+  );
+  const box = `http://127.0.0.1:${listener.port}`;
+  const cloud = `http://localhost:${listener.port}`;
+  app.get("/cloud", (c) => c.html('<a href="' + cloud + '/login">Sign in</a>'));
+  app.get("/login", (c) => c.html('<a href="' + box + callback + "?" + query + '">Return</a>'));
+  app.use(callback, (c, next) => {
+    gets.push(c.req.header("cookie"));
+    return next();
+  });
+  mountCloudApi(
+    app,
+    { db: suite.db, managementOrigin: box, signInCallback: true, isPrimary: () => true },
+    () => {},
+  );
+  const browser = await chromium.launch().catch(async (error) => {
+    await listener.close();
+    throw error;
+  });
+  try {
+    const page = await browser.newPage();
+    await page
+      .context()
+      .addCookies([
+        { name: MANAGEMENT_COOKIE, value: "test-session", url: box, sameSite: "Strict" },
+      ]);
+    // Intercept only the box-side receiver. The browser still sends the actual same-origin request.
+    await page.route("**/management-api/cloud/sign-in/return", async (route) => {
+      const headers = await route.request().allHeaders();
+      posts.push({
+        cookie: headers.cookie,
+        ...(headers.referer === undefined ? {} : { from: headers.referer }),
+        body: route.request().postDataJSON(),
+      });
+      await route.fulfill({ status: 204 });
+    });
+    await page.goto(box + "/cloud");
+    await page.evaluate(
+      (marker) => sessionStorage.setItem("waitron-cloud-sign-in-tab", marker),
+      tab,
+    );
+    await page.getByRole("link", { name: "Sign in" }).click();
+    await page.waitForURL(cloud + "/login");
+    const callbackResponse = page.waitForResponse((r) => r.url().startsWith(box + callback + "?"));
+    await page.getByRole("link", { name: "Return" }).click();
+    const response = await callbackResponse;
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    expect(response.headers()["referrer-policy"]).toBe("no-referrer");
+    await page.waitForURL(box + "/cloud");
+    expect(gets).toEqual([undefined]);
+    expect(posts).toEqual([
+      {
+        cookie: `${MANAGEMENT_COOKIE}=test-session`,
+        body: { requestId: query.get("request_id"), state, code, tab },
+      },
+    ]);
+    const saved = await page.evaluate(() => ({ ...sessionStorage }));
+    expect(saved).toEqual({ "waitron-cloud-sign-in-tab": tab });
+    await page.goBack();
+    expect(page.url()).toBe(cloud + "/login");
+  } finally {
+    await browser.close();
+    await listener.close();
+  }
+});
+
 it.each(["start", "complete", "revoke", "remote-access"] as const)(
   "requires confirmation before Cloud %s delegates or changes saved state",
   async (action) => {
