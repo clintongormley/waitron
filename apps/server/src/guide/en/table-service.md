@@ -174,7 +174,9 @@ A payment slip is optional; the receipt or invoice is not. If the payer wants a 
 **Print payment slip** before taking the payment, by cash, **Other card machine** or card reader.
 It is offered when your device has a payment slip printer, and starts off for each payer. The slip
 shows that payment and how it was paid, not what is still owed; for **Other card machine** it also
-shows the machine and operation number when you entered them.
+shows the machine and operation number when you entered them. If a card payment is not taken, the
+slip says **PAYMENT NOT TAKEN**. If the reader's answer is lost, the slip prints once the payment is
+settled, which can be later, at the device where the payment began.
 
 A slip prints once; the till cannot print it again. To replace a lost slip, use **Reprint** in
 [Print Queue](printers.md#print-queue). If the till says **Payment received, but the payment slip

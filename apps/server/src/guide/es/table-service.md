@@ -190,6 +190,9 @@ activa **Imprimir justificante de pago** antes de cobrar, en efectivo, con **Otr
 lector de tarjetas. Aparece cuando tu dispositivo tiene impresora de justificantes de pago y empieza
 desactivado para cada pago. El justificante muestra ese pago y cómo se pagó, no lo que queda por
 pagar; con **Otro datáfono** muestra también el datáfono y el número de operación si los indicaste.
+Si un pago con tarjeta no se realiza, el justificante dice **PAGO NO REALIZADO**. Si se pierde la
+respuesta del lector, el justificante se imprime cuando el pago se resuelve, que puede ser más tarde,
+en el dispositivo donde empezó el pago.
 
 Un justificante se imprime una sola vez; la caja no puede volver a imprimirlo. Para sustituir uno
 perdido, usa **Reimprimir** en la [Cola de impresión](printers.md#print-queue). Si la caja muestra

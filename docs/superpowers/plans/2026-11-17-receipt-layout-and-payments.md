@@ -347,6 +347,8 @@ still waiting at the reader prints its slip when it finishes. The owner's choice
 that an unclear reader answer may miss a slip, with "print a copy" as the recovery, and the code
 that files the money gets simpler._
 
+_20 November 2026: no longer holds; see "20 November 2026" under the 19 November rework._
+
 **Files:**
 - Modify: `apps/server/src/payment-slip-print.ts` and each settle path found in Step 1
 - Test: `apps/server/src/payment-slip-print.test.ts`, the settle paths' route tests
@@ -381,6 +383,8 @@ sale and lists the payments taken before it prints; a duplicate of it may be pri
 payment slip prints once, only when that payer asks, for any method, and is reprinted only from the
 print queue. No design may rely on a slip existing. Tasks 7 and 8 (payments and **Pendiente** on the
 receipt; no amount owed on the slip) stand. Task 9's automatic slip, and every slip copy, go.
+
+**20 November 2026: a card reader's slip request is stored.** The owner held #3752 because a slip asked for on a card payment whose reader answer was lost never printed. The owner's answers (lane L `questions.md`, "WATCHER 2026-11-20 10:21"): a reader declining while the till waits, with a slip asked for, prints "Payment not taken"; a lost answer settled later, by a manager's Resolve included, prints the slip once, at the device where the payment began. So the choice is kept on the payment (`bill_payments.slip_wanted`, fixed by `bill_payments_guard_update`) and the slip is queued in the same transaction that moves the payment out of waiting (`withSettledSlip`, `payment-slip-print.ts`). A charge refunded in full before it is released prints no slip; that default is the lane's, not the owner's.
 
 ### What the branch does today (head `ec647b65a5`)
 
