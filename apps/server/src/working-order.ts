@@ -4680,7 +4680,10 @@ async function readChoiceChangeableOrder(
     });
   }
   await refusePaymentInFlight(tx, [orderId]);
-  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, [orderId]);
+  if (order.status === "placed") {
+    await refusePendingPartPayment(tx, [orderId], "any");
+    await refusePlacedPaymentInFlight(db, tx, [orderId]);
+  }
   return order;
 }
 
@@ -7830,6 +7833,7 @@ async function cancelPlaced(
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
     }
+    await refusePendingPartPayment(tx, [id], "any");
     await refuseBillHoldingMoney(tx, [id]);
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.

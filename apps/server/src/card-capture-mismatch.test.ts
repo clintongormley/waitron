@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
+  billPayments,
   invoiceSeries,
   sales,
   ticketItems,
@@ -17,7 +18,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments, reconcilePayments } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
-import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
@@ -115,17 +116,26 @@ it.each([
           provider.collect({ ...params, readerRef: "rdr_test" }),
       }),
     );
-    const taken = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      zoneId: venue.zoneId,
-    });
+    const request = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: asked,
+      tip: "0.00",
+    };
+    const pay = () =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, request);
+    const taken = await pay();
     expect(taken.status).toBe(200);
     expect(taken.json).toMatchObject({
-      outcome: "partial",
-      balance: { received: actualMoney, outstanding: "1.00" },
-      captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
+      outcome: "received",
+      balance: {
+        received: actualMoney,
+        outstanding: "1.00",
+        captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
+      },
     });
     const [provided] = await suite.db
       .select()
@@ -176,17 +186,15 @@ it.each([
       outstanding: "1.00",
       captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
     });
-    const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      zoneId: venue.zoneId,
-    });
+    const replay = await pay();
     expect(replay.status).toBe(200);
     expect(replay.json).toMatchObject({
-      outcome: "partial",
-      balance: { received: actualMoney, outstanding: "1.00" },
-      captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
+      outcome: "received",
+      balance: {
+        received: actualMoney,
+        outstanding: "1.00",
+        captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
+      },
     });
     expect(create).toHaveBeenCalledOnce();
     const report = () =>
@@ -366,45 +374,51 @@ it("retains a short capture after a lost reader answer and warns the next operat
         provider.collect({ ...params, readerRef: "rdr_test" }),
     }),
   );
+  const request = {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    applied: "35.00",
+    tip: "0.00",
+  };
   const pay = () =>
-    send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      zoneId: venue.zoneId,
-    });
-  expect((await pay()).json).toEqual({ outcome: "timeout" });
+    send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, request);
+  expect((await pay()).json).toMatchObject({ outcome: "timeout" });
   confirmed = true;
   await provider.resolvePending(venue.clock.now().instant, await ownsEveryPayment(suite.db));
+  const [waiting] = await suite.db
+    .select({ id: billPayments.id, state: billPayments.state })
+    .from(billPayments)
+    .where(eq(billPayments.workingOrderId, id));
+  expect(waiting).toMatchObject({ state: "pending" });
   expect(
-    await recoverAutomaticCardPayments({ ...venue, admission: testTradingAdmission() }),
-  ).toEqual({ filed: 0, errors: [] });
+    await settlePendingBillPayments({ ...venue, admission: testTradingAdmission() }),
+  ).toMatchObject({
+    received: 1,
+    errors: [],
+  });
   expect(await statusOf(venue, id)).toBe("open");
   expect(fiscalRecordCount(venue, id)).toBe(0);
-  const [unattached] = await suite.db
-    .select({ billPaymentId: payments.billPaymentId })
-    .from(payments)
-    .where(eq(payments.workingOrderId, id));
-  expect(unattached).toEqual({ billPaymentId: null });
-  expect(await getBillBalance(venue, id)).toMatchObject({
-    captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
-  });
-  const [waiting] = await suite.db
-    .select({ mark: workingOrders.paymentAttemptAt })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, id));
-  expect(waiting!.mark).not.toBeNull();
 
   expect(
     await suite.db
-      .select({ amount: payments.amount, requested: payments.requestedAmount })
+      .select({
+        amount: payments.amount,
+        requested: payments.requestedAmount,
+        billPaymentId: payments.billPaymentId,
+      })
       .from(payments)
       .where(eq(payments.workingOrderId, id)),
-  ).toEqual([{ amount: 3400, requested: 3500 }]);
+  ).toEqual([{ amount: 3400, requested: 3500, billPaymentId: waiting!.id }]);
   expect((await pay()).json).toMatchObject({
-    outcome: "partial",
-    balance: { received: "34.00", outstanding: "1.00" },
-    captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+    outcome: "received",
+    balance: {
+      received: "34.00",
+      outstanding: "1.00",
+      captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+    },
   });
   expect(create).toHaveBeenCalledOnce();
 });

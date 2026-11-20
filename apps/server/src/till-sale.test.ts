@@ -86,7 +86,9 @@ import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
+import type { CounterPaymentBasket } from "./bill-payments.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // menu, sell, and read the filed record back.
@@ -318,6 +320,22 @@ function decodeNames<T extends StoredNames>(
   };
 }
 
+async function payCounterCash(
+  cfg: DeviceRequestConfig,
+  basket: CounterPaymentBasket,
+  tendered: string,
+  id = randomUUID(),
+) {
+  return payFreshCounterInCash(
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    cfg,
+    await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+    id,
+    basket,
+    tendered,
+  );
+}
+
 describe("recordTillSale", () => {
   it("manual tip changes settlement only and survives replay after tips are off", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
@@ -464,14 +482,13 @@ describe("recordTillSale", () => {
       await setMenuVariants(tx, waterOfferId, []);
       await republishMenus(tx);
     });
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
       {
         zoneId,
         lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
-        tender: { method: "cash", amount: "3.80" },
       },
+      "3.80",
     );
     expect(result.total).toBe("3.80");
   });
@@ -503,14 +520,13 @@ describe("recordTillSale", () => {
 
   it("prints the parent and variant customer names on the receipt line", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
       {
         zoneId,
         lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
-        tender: { method: "cash", amount: "4.10" },
       },
+      "4.10",
     );
 
     const paper = printedLines(
@@ -649,14 +665,13 @@ describe("recordTillSale", () => {
   it("files a walk-up from the selected zone's menu price and stores its attribution", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
       {
         zoneId,
         lines: [{ menuItemId: waterOfferId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
       },
+      "5.00",
     );
 
     expect(result.total).toBe("4.50");
@@ -689,14 +704,13 @@ describe("recordTillSale", () => {
       await republishMenus(tx);
     });
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       cfg,
       {
         zoneId,
         lines: [{ menuItemId: waterOfferId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
       },
+      "5.00",
     );
 
     expect(result.total).toBe("3.00");
@@ -1422,8 +1436,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       v.cfg,
       {
         zoneId: v.zoneId,
@@ -1437,9 +1450,9 @@ describe("ordering extras and options — parent + child lines", () => {
             ]),
           },
         ],
-        tender: { method: "cash", amount: "20.00" },
-        workingOrderId,
       },
+      "20.00",
+      workingOrderId,
     );
 
     // 9.00 dish + 0.50 bacon + 0.75 queso = 10.25 gross.
@@ -1657,8 +1670,7 @@ describe("ordering extras and options — parent + child lines", () => {
       };
     });
 
-    const result = await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    const result = await payCounterCash(
       v.cfg,
       {
         zoneId: v.zoneId,
@@ -1671,9 +1683,9 @@ describe("ordering extras and options — parent + child lines", () => {
             ],
           },
         ],
-        tender: { method: "cash", amount: "10.00" },
-        workingOrderId,
       },
+      "10.00",
+      workingOrderId,
     );
     const child = (await filedLinesOf(workingOrderId)).find((line) => line.parentLineId !== null)!;
     return { total: result.total, child };
@@ -1718,8 +1730,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    await recordTillSale(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    await payCounterCash(
       v.cfg,
       {
         zoneId: v.zoneId,
@@ -1730,9 +1741,9 @@ describe("ordering extras and options — parent + child lines", () => {
             options: [{ listId: v.sizeListId, labelId: v.largeSizeLabelId }],
           },
         ],
-        tender: { method: "cash", amount: "20.00" },
-        workingOrderId,
       },
+      "20.00",
+      workingOrderId,
     );
 
     // A walk-up files from the price `createOpenOrder` returns, not the stored lock, so the answers

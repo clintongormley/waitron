@@ -1218,7 +1218,7 @@ async function resultOf(
 
 /** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
  * the money scale, an absent added tip as none, so a resend that spells the same request another
- * way is the same request. `guestCount` is left out: a resend is matched on the payment alone. */
+ * way is the same request. A retry keeps the filed receipt's language and guest count. */
 export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   const scaled = (value: string | undefined) =>
     value === undefined ? undefined : money(decimal(value));
@@ -1226,6 +1226,7 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     ...req,
     expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
     guestCount: undefined,
+    receiptLanguage: undefined,
     printCardSlip: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),

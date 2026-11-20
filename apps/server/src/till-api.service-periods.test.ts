@@ -1,3 +1,4 @@
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { sql } from "drizzle-orm";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
@@ -446,14 +447,11 @@ describe("ordering uses period membership while browsing follows the timetable",
     });
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
 
-    const paid = await sendAsTill(v, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: held.id,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const paid = await payHeldCash(v, held.id, "2.50");
     expect(paid.status).toBe(200);
-    expect(paid.body).toMatchObject({ total: "2.50", tender: { method: "cash", change: "2.50" } });
+    expect(paid.body).toMatchObject({
+      invoice: { total: "2.50", tender: { method: "cash", change: "2.50" } },
+    });
     const [settled] = await suite.db
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -1048,12 +1046,17 @@ describe("service periods gate only added dishes and added stored quantities", (
     const v = await mealVenue();
     const id = randomUUID();
     expect(
-      await sendAsTill(v, "POST", "/api/sales", {
+      await sendAsTill(v, "POST", `/api/working-orders/${id}/payments`, {
         dining: "eat_in",
-        id,
-        zoneId: v.diningZone,
-        lines: [{ menuItemId: v.toast.breakfast, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "5.00",
+        basket: {
+          zoneId: v.diningZone,
+          lines: [{ menuItemId: v.toast.breakfast, quantity: "1" }],
+        },
       }),
     ).toEqual({
       status: 400,
@@ -1500,24 +1503,22 @@ describe("a dish whose period ended earlier today", () => {
       at(mondayAt("14:05"));
       return mealVenue([1], true);
     };
-    const toast = (v: Venue) => [{ menuItemId: v.toast.midday, quantity: "1" }];
-    const cashSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
-      sendAsTill(v, "POST", "/api/sales", {
+    const routes = [
+      ["cash", { method: "cash", tendered: "5.00" }],
+      ["reader", { method: "card", entry: "reader", simulationOutcome: "captured" }],
+    ] as const;
+    const pay = (v: Venue, id: string, tender: (typeof routes)[number][1], lateSend?: unknown) =>
+      sendAsTill(v, "POST", `/api/working-orders/${id}/payments`, {
         dining: "eat_in",
-        workingOrderId: id,
-        zoneId: v.diningZone,
-        lines: toast(v),
-        tender: { method: "cash", amount: "5.00" },
-        ...extra,
-      });
-    const cardSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
-      sendAsTill(v, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        zoneId: v.diningZone,
-        lines: toast(v),
-        simulationOutcome: "captured",
-        ...extra,
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        ...tender,
+        basket: {
+          zoneId: v.diningZone,
+          lines: [{ menuItemId: v.toast.midday, quantity: "1" }],
+          lateSend,
+        },
       });
     const filingRows = async () => (await suite.db.select().from(registrosFacturacion)).length;
 
@@ -1525,7 +1526,7 @@ describe("a dish whose period ended earlier today", () => {
       const v = await counterVenue();
       const id = randomUUID();
       const filed = await filingRows();
-      expect(await cashSale(v, id, {})).toMatchObject(
+      expect(await pay(v, id, routes[0][1])).toMatchObject(
         periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
       );
       expect(await orderRows(id)).toEqual([]);
@@ -1535,11 +1536,10 @@ describe("a dish whose period ended earlier today", () => {
     it("takes a confirmed cash sale at 14:05 at its published 4.00, marked by the signed-in person", async () => {
       const v = await counterVenue();
       const id = randomUUID();
-      const paid = await cashSale(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      const paid = await pay(v, id, routes[0][1], { menuIds: [v.menus["Midday menu"]] });
       expect(paid.status).toBe(200);
       expect(paid.body).toMatchObject({
-        total: "4.00",
-        tender: { method: "cash", change: "1.00" },
+        invoice: { total: "4.00", tender: { method: "cash", change: "1.00" } },
       });
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
@@ -1550,7 +1550,7 @@ describe("a dish whose period ended earlier today", () => {
       const v = await counterVenue();
       const id = randomUUID();
       const filed = await filingRows();
-      expect(await cardSale(v, id, {})).toMatchObject(
+      expect(await pay(v, id, routes[1][1])).toMatchObject(
         periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
       );
       expect(await orderRows(id)).toEqual([]);
@@ -1560,21 +1560,20 @@ describe("a dish whose period ended earlier today", () => {
     it("takes a confirmed simulator card pay at 14:05 at its published 4.00, marked by the signed-in person", async () => {
       const v = await counterVenue();
       const id = randomUUID();
-      const paid = await cardSale(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
+      const paid = await pay(v, id, routes[1][1], { menuIds: [v.menus["Midday menu"]] });
       expect(paid.status).toBe(200);
-      expect(paid.body).toMatchObject({ outcome: "captured", ticket: { total: "4.00" } });
+      expect(paid.body).toMatchObject({ outcome: "received", invoice: { total: "4.00" } });
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
       ]);
     });
 
-    it.each(["/api/sales", "/api/pay"])(
+    it.each(routes)(
       "refuses %s with a lateSend that is null and writes no order",
-      async (path) => {
+      async (_method, tender) => {
         const v = await counterVenue();
         const id = randomUUID();
-        const sent = path === "/api/sales" ? cashSale : cardSale;
-        expect(await sent(v, id, { lateSend: null })).toMatchObject({
+        expect(await pay(v, id, tender, null)).toMatchObject({
           status: 400,
           body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
         });
@@ -1593,10 +1592,6 @@ describe("a dish whose period ended earlier today", () => {
         .where(eq(persons.displayName, "Administrator"));
       return { v, manager: manager!.id };
     };
-    const routes = [
-      ["/api/sales", cashSale],
-      ["/api/pay", cardSale],
-    ] as const;
     const footprint = async () => ({
       orders: (await suite.db.select().from(workingOrders)).length,
       sales: (await suite.db.select().from(sales)).length,
@@ -1610,15 +1605,13 @@ describe("a dish whose period ended earlier today", () => {
 
     it.each(routes)(
       "refuses %s with a wrong manager PIN and writes nothing",
-      async (_path, sent) => {
+      async (_method, tender) => {
         const { v, manager } = await managerCounterVenue();
         const before = await footprint();
         expect(
-          await sent(v, randomUUID(), {
-            lateSend: {
-              menuIds: [v.menus["Midday menu"]],
-              override: { personId: manager, pin: "9999" },
-            },
+          await pay(v, randomUUID(), tender, {
+            menuIds: [v.menus["Midday menu"]],
+            override: { personId: manager, pin: "9999" },
           }),
         ).toMatchObject({ status: 401, body: { error: { code: "pin.invalid" } } });
         expect(await footprint()).toEqual(before);
@@ -1627,15 +1620,13 @@ describe("a dish whose period ended earlier today", () => {
 
     it.each(routes)(
       "refuses %s confirming another ended menu, even with the manager's PIN, and writes nothing",
-      async (_path, sent) => {
+      async (_method, tender) => {
         const { v, manager } = await managerCounterVenue();
         const before = await footprint();
         expect(
-          await sent(v, randomUUID(), {
-            lateSend: {
-              menuIds: [v.menus["Drinks menu"]],
-              override: { personId: manager, pin: "1234" },
-            },
+          await pay(v, randomUUID(), tender, {
+            menuIds: [v.menus["Drinks menu"]],
+            override: { personId: manager, pin: "1234" },
           }),
         ).toMatchObject({
           status: 409,
@@ -1652,21 +1643,19 @@ describe("a dish whose period ended earlier today", () => {
 
     it.each(routes)(
       "replays a confirmed %s sent again without lateSend, writing nothing more",
-      async (_path, sent) => {
+      async (_method, tender) => {
         const { v, manager } = await managerCounterVenue();
         const id = randomUUID();
         const before = await footprint();
-        const first = await sent(v, id, {
-          lateSend: {
-            menuIds: [v.menus["Midday menu"]],
-            override: { personId: manager, pin: "1234" },
-          },
+        const first = await pay(v, id, tender, {
+          menuIds: [v.menus["Midday menu"]],
+          override: { personId: manager, pin: "1234" },
         });
         expect(first.status).toBe(200);
         const taken = await footprint();
         expect(taken.sales).toBe(before.sales + 1);
         expect(taken.records).toBeGreaterThan(before.records);
-        expect(await sent(v, id, {})).toEqual(first);
+        expect(await pay(v, id, tender)).toEqual(first);
         expect(await footprint()).toEqual(taken);
       },
     );
@@ -2131,12 +2120,7 @@ describe("a dish whose period ended earlier today", () => {
     it("is sent when paid at 14:05 without asking, marked with no confirmer on the line, its ticket and its station's queue, never as agreed", async () => {
       const { v, printerId, stationId, id } = await parkedAtLunch();
       at(mondayAt("14:05"));
-      const paid = await sendAsTill(v, "POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      });
+      const paid = await payHeldCash(v, id, "4.00");
       expect(paid.status).toBe(200);
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: null },
@@ -2231,12 +2215,7 @@ describe("a dish whose period ended earlier today", () => {
       const { v, id } = await parkedAtLunch();
       at(mondayAt("14:05"));
       await replaceLunchMenu(v);
-      const paid = await sendAsTill(v, "POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      });
+      const paid = await payHeldCash(v, id, "4.00");
       expect(paid.status).toBe(200);
       expect(await marksOf(id)).toEqual([
         { unitPriceGross: 400, latePeriodName: "Midday menu", lateConfirmedBy: null },
@@ -3018,3 +2997,18 @@ const sendAsTill: typeof rawSendAsTill = async (till, method, path, body) =>
       await observedOrderWriteBody(suite.db, method, path, body),
     )) as object | undefined,
   );
+
+async function payHeldCash(v: Venue, id: string, applied: string) {
+  const path = `/api/working-orders/${id}/payments`;
+  const body = await observedPaymentBody(suite.db, path, {
+    dining: "eat_in",
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "5.00",
+    applied,
+    tip: "0.00",
+  });
+  return sendAsTill(v, "POST", path, body as object);
+}
