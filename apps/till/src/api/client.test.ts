@@ -1520,6 +1520,27 @@ describe("TillApi", () => {
     expect(resent).toEqual(first);
   });
 
+  it.each([
+    ["menu.reset_required", false],
+    ["server.internal", true],
+  ])("after a whole-bill payment refused %s at 500, resends it: %s", async (code, resent) => {
+    const fetchStub = wholeBillReplies("placed", "1.50", undefined, () =>
+      jsonResponse({ error: { code, params: {} } }, 500),
+    );
+    const api = new TillApi("", fetchStub);
+    const cash = { method: "cash", amount: "2.00" } as const;
+    await expect(api.collectOrder("wo1", cash, undefined, null, null)).rejects.toMatchObject({
+      code,
+      status: 500,
+    });
+    await api.collectOrder("wo1", cash, undefined, null, null);
+    expect(fetchStub.mock.calls.map(([, init]) => init.method)).toEqual(
+      resent ? ["GET", "POST", "POST"] : ["GET", "POST", "GET", "POST"],
+    );
+    const [first, next] = postedBodies(fetchStub);
+    expect(next.submissionId === first.submissionId).toBe(resent);
+  });
+
   it("reads again before paying when the slip choice changes after no answer", async () => {
     const fetchStub = wholeBillReplies("placed", "1.50", undefined, () => {
       throw new TypeError("Failed to fetch");
