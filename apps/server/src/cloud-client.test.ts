@@ -105,6 +105,11 @@ it("persists before sending, resumes a failed start after restart and never expo
     f.reject();
     await expect(client.start()).rejects.toMatchObject({ code: "cloud.unavailable" });
     const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
+    const unsent = await client.status();
+    expect(unsent.code).toMatch(/^\d{8}$/);
+    expect(unsent.openCloudUrl).toBe(
+      `${f.options.origin}/connect#request=${unsent.requestId}&code=${unsent.code}`,
+    );
     expect((await stat(join(f.stateDir, "cloud/connection.json"))).mode & 0o777).toBe(0o600);
     f.accept();
     const resumed = createCloudConnection(f.options);
@@ -114,8 +119,10 @@ it("persists before sending, resumes a failed start after restart and never expo
     expect(status.venueId).toBe(f.venueId);
     expect(status.environment).toBe("test");
     expect(JSON.stringify(status)).not.toContain(JSON.parse(before).privateKey);
-    expect(status.openCloudUrl).toContain("/connect#request=");
-    expect(status.openCloudUrl).not.toContain(status.code);
+    expect(status.code).toMatch(/^\d{8}$/);
+    expect(status.openCloudUrl).toBe(
+      `${f.options.origin}/connect#request=${status.requestId}&code=${status.code}`,
+    );
   } finally {
     await f.close();
   }
@@ -128,6 +135,7 @@ it("requires explicit bound local confirmation and checks authority again after 
     f.approve();
     const approved = await client.check();
     expect(approved.state).toBe("awaiting_local");
+    expect(approved.openCloudUrl).toBe(`${f.options.origin}/connect#request=${approved.requestId}`);
     const approvedPath = join(f.stateDir, "cloud/connection.json");
     const approvedFile = await readFile(approvedPath, "utf8");
     for (const patch of [{ organisationId: randomUUID() }, { legalBusinessId: randomUUID() }]) {
@@ -154,6 +162,7 @@ it("requires explicit bound local confirmation and checks authority again after 
     const complete = await client.complete(choice, async () => {});
     expect(complete.state).toBe("complete");
     expect(complete.code).toBe("");
+    expect(complete.openCloudUrl).toBe(`${f.options.origin}/connect#request=${complete.requestId}`);
     expect(complete.registration?.installationId).toBe(f.installationId);
     const restarted = createCloudConnection(f.options);
     expect((await restarted.check()).registration).toEqual(complete.registration);

@@ -307,7 +307,7 @@ it("offers explicit start, check and final confirmation; uses the offered busine
     legalBusinessId,
     organisationName: "Sun Cafe",
     legalBusinessName: "Sun SL",
-    openCloudUrl: `https://cloud.example/connect#request=${requestId}`,
+    openCloudUrl: `https://cloud.example/connect#request=${requestId}&code=12345678`,
     expiresAt: "2099-01-01T12:00:00Z",
   };
   const api = new DashboardApi("", async (url, init) => {
