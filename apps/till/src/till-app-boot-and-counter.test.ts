@@ -2458,19 +2458,31 @@ describe("till-app counter: the guests the receipt prints", () => {
       recipient: {
         taxId: "12345678Z",
         legalName: "Ana García",
-        address: "Calle Mayor 1, 2º B, 28013 Madrid, Madrid",
-        countryCode: "ES",
+        address: "2 Rue du Port, Bâtiment B, Paris",
+        countryCode: "FR",
       },
     };
     const form = (el: TillApp) => el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     const control = (el: TillApp, name: string) =>
       form(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!;
+    async function type(el: TillApp, name: string, value: string) {
+      const input = control(el, name);
+      await input.updateComplete;
+      await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+      await form(el).updateComplete;
+    }
 
     async function chosenAndReopened() {
       const opened = await counterWithCoffee();
       emit(opened.c, "choose-invoice");
       await flush(opened.el);
-      emit(form(opened.el), "invoice-recipient-confirm", invoice);
+      await form(opened.el).updateComplete;
+      emit(control(opened.el, "countryCode"), "wt-change", { value: "FR" });
+      await type(opened.el, "taxId", "12345678Z");
+      await type(opened.el, "legalName", "Ana García");
+      await type(opened.el, "address", "2 Rue du Port, Bâtiment B");
+      await type(opened.el, "locality", "Paris");
+      form(opened.el).shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
       await flush(opened.el);
       expect(form(opened.el)).toBeNull();
       emit(opened.c, "choose-invoice");
@@ -2479,7 +2491,7 @@ describe("till-app counter: the guests the receipt prints", () => {
       return opened;
     }
 
-    it("shows the recipient already chosen for the basket", async () => {
+    it("shows the recipient already chosen for the basket, as it was typed", async () => {
       const { el } = await chosenAndReopened();
       expect(
         Object.fromEntries(
@@ -2491,23 +2503,17 @@ describe("till-app counter: the guests the receipt prints", () => {
         identifierType: "tax-number",
         taxId: "12345678Z",
         legalName: "Ana García",
-        address: "Calle Mayor 1, 2º B",
-        postalCode: "28013",
-        locality: "Madrid",
-        province: "Madrid",
-        countryCode: "ES",
+        address: "2 Rue du Port, Bâtiment B",
+        postalCode: "",
+        locality: "Paris",
+        province: "",
+        countryCode: "FR",
       });
     });
 
     it("pays with the edit made in the reopened window", async () => {
       const { el, c } = await chosenAndReopened();
-      const input = control(el, "legalName");
-      await input.updateComplete;
-      await userEvent.fill(
-        page.elementLocator(input.shadowRoot!.querySelector("input")!),
-        "Ana García López",
-      );
-      await form(el).updateComplete;
+      await type(el, "legalName", "Ana García López");
       form(el).shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
       await flush(el);
       expect(form(el)).toBeNull();

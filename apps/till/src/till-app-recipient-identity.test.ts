@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { offer as menuOffer } from "../test/allergy-app-fixture.js";
 import { productUnit } from "./widgets/product-name.js";
@@ -316,4 +317,118 @@ it("opens a full-invoice bill's invoice window with its saved recipient filled i
     "Madrid",
     "ES",
   ]);
+});
+const typedFrench = {
+  taxId: "12345678Z",
+  legalName: "Port SARL",
+  address: "2 Rue du Port, Bâtiment B, Paris",
+  countryCode: "FR",
+};
+async function openBillInvoice(el: TillApp, order: Element) {
+  order
+    .shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]:not([data-table-menu] *)")!
+    .click();
+  await flush(el);
+  const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+  await form.updateComplete;
+  return form;
+}
+function fieldsOf(form: HTMLElementTagNameMap["till-invoice-recipient-dialog"]) {
+  return Object.fromEntries(
+    ["taxId", "legalName", "address", "postalCode", "locality", "province", "countryCode"].map(
+      (name) => [
+        name,
+        form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!.value,
+      ],
+    ),
+  );
+}
+async function type(
+  form: HTMLElementTagNameMap["till-invoice-recipient-dialog"],
+  name: string,
+  value: string,
+) {
+  const input = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `[name=${name}]`,
+  )!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), value);
+  await form.updateComplete;
+}
+it("reopens a bill's invoice window with the address fields as they were typed on this till", async () => {
+  const getPartyBills = vi.fn().mockResolvedValue([billOf()]);
+  const setOrderInvoiceChoice = vi.fn().mockImplementation(async () => {
+    getPartyBills.mockResolvedValue([
+      billOf({ revision: 1, invoiceType: "F1", recipient: typedFrench }),
+    ]);
+    return { revision: 1 };
+  });
+  const api = stubApi({
+    getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
+    getPartyBills,
+    setOrderInvoiceChoice,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  let form = await openBillInvoice(el, order);
+  emit(form.shadowRoot!.querySelector("[name=countryCode]")!, "wt-change", { value: "FR" });
+  await type(form, "taxId", "12345678Z");
+  await type(form, "legalName", "Port SARL");
+  await type(form, "address", "2 Rue du Port, Bâtiment B");
+  await type(form, "locality", "Paris");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+  await flush(el);
+  expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+    expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    revision: 0,
+    invoiceType: "F1",
+    recipient: typedFrench,
+  });
+  expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+
+  form = await openBillInvoice(el, order);
+  expect(fieldsOf(form)).toEqual({
+    taxId: "12345678Z",
+    legalName: "Port SARL",
+    address: "2 Rue du Port, Bâtiment B",
+    postalCode: "",
+    locality: "Paris",
+    province: "",
+    countryCode: "FR",
+  });
+});
+it("shows a bill's saved recipient again after an edit is cancelled, sending nothing", async () => {
+  const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 1 });
+  const api = stubApi({
+    getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
+    getPartyBills: vi.fn().mockResolvedValue([
+      billOf({
+        invoiceType: "F1",
+        recipient: { ...recipient, address: "1 Main Street, Paris" },
+      } as Partial<ReturnType<typeof billOf>>),
+    ]),
+    setOrderInvoiceChoice,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  const saved = {
+    taxId: "P123",
+    legalName: "Guest",
+    address: "1 Main Street",
+    postalCode: "",
+    locality: "Paris",
+    province: "",
+    countryCode: "ES",
+  };
+  let form = await openBillInvoice(el, order);
+  expect(fieldsOf(form)).toEqual(saved);
+  await type(form, "legalName", "Someone Else");
+  form.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull(),
+  );
+
+  form = await openBillInvoice(el, order);
+  expect(fieldsOf(form)).toEqual(saved);
+  expect(setOrderInvoiceChoice).not.toHaveBeenCalled();
 });

@@ -248,6 +248,7 @@ import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/prese
 import "./widgets/invoice-recipient-dialog.js";
 import type {
   InvoiceRecipientDetail,
+  RememberedAddress,
   TillInvoiceRecipientDialog,
 } from "./widgets/invoice-recipient-dialog.js";
 import "./widgets/make-now.js";
@@ -4548,6 +4549,9 @@ export class TillApp extends LitElement {
   @state() private invoiceRecipientOptions: InvoiceDeliveryOptions | null = null;
   @state() private invoiceRecipientSaved?: InvoiceDeliveryChoice;
   @state() private invoiceRecipientSavedRecipient?: InvoiceRecipientDetail["recipient"];
+  @state() private invoiceRecipientRememberedAddress?: RememberedAddress;
+  /** The address fields last confirmed on this till, and the order they were for. */
+  #rememberedAddress?: { orderId: string; address: RememberedAddress };
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
@@ -7622,7 +7626,7 @@ export class TillApp extends LitElement {
   }
 
   /** A failed or timed-out read reaches the dialog as null options, and the dialog then keeps
-   * `saved` unless the person changes Delivery. */
+   * `saved.delivery` unless the person changes Delivery. */
   async #openInvoiceRecipient(
     orderId: string,
     stillAsked: () => boolean,
@@ -7641,7 +7645,13 @@ export class TillApp extends LitElement {
     this.invoiceRecipientOptions = options;
     this.invoiceRecipientSaved = saved?.delivery;
     this.invoiceRecipientSavedRecipient = saved?.recipient ?? undefined;
+    this.invoiceRecipientRememberedAddress =
+      this.#rememberedAddress?.orderId === orderId ? this.#rememberedAddress.address : undefined;
     this.invoiceRecipientOpen = true;
+  }
+
+  #rememberAddress(orderId: string, address: RememberedAddress | undefined): void {
+    this.#rememberedAddress = address === undefined ? undefined : { orderId, address };
   }
 
   /**
@@ -21468,6 +21478,7 @@ export class TillApp extends LitElement {
   async #saveBillInvoiceChoice(
     choice: InvoiceRecipientDetail | { invoiceType: "F2"; recipient: null },
     complete: () => boolean,
+    address?: RememberedAddress,
   ): Promise<void> {
     const bill = this.invoiceRecipientBill;
     if (bill === undefined || this.invoiceRecipientSaving || bill.api !== this.api) return;
@@ -21490,6 +21501,7 @@ export class TillApp extends LitElement {
         expectedEdit: bill.expectedEdit,
       });
       if (!current()) return;
+      this.#rememberAddress(bill.orderId, address);
       const close = complete();
       bill.revision = saved.revision;
       bill.full = choice.invoiceType === "F1";
@@ -24714,6 +24726,7 @@ export class TillApp extends LitElement {
                         this.#counterStoredInvoice.invoiceType === "F1")))
                 }
                 .savedRecipient=${this.invoiceRecipientSavedRecipient}
+                .rememberedAddress=${this.invoiceRecipientRememberedAddress}
                 .refusal=${this.invoiceRecipientRefusal}
                 .refusalField=${this.invoiceRecipientRefusalField}
                 .offerSimplified=${this.invoiceRecipientBill?.full === true}
@@ -24731,13 +24744,18 @@ export class TillApp extends LitElement {
                   }
                 }}
                 @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => {
+                  const form = event.currentTarget as TillInvoiceRecipientDialog;
                   if (this.invoiceRecipientBill !== undefined) {
-                    const form = event.currentTarget as TillInvoiceRecipientDialog;
-                    void this.#saveBillInvoiceChoice(event.detail, form.writeCompletion());
+                    void this.#saveBillInvoiceChoice(
+                      event.detail,
+                      form.writeCompletion(),
+                      form.confirmedAddress,
+                    );
                     return;
                   }
                   if (this.invoiceRecipientOrderId === this.#store.id) {
                     this.invoiceChoice = { orderId: this.#store.id, invoice: event.detail };
+                    this.#rememberAddress(this.#store.id, form.confirmedAddress);
                     this.#store.allowFullInvoiceFor(this.#store.id);
                   }
                   this.invoiceRecipientOpen = false;

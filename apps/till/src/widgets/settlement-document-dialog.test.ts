@@ -873,6 +873,23 @@ describe("the choice a sale's document window starts on", () => {
     expect(asked).toEqual([]);
   });
 
+  it("follows a later result's invoice type until a tap", async () => {
+    const { el, asked } = await mount({ ...invoiceOf("30.00"), invoiceType: "F2" });
+    el.result = full;
+    await el.updateComplete;
+    expect(pressed(el, "invoice")).toBe("true");
+    expect(el.shadowRoot!.querySelector("[data-test=print-invoice]")).not.toBeNull();
+    expect(asked).toEqual(["invoice"]);
+  });
+
+  it("asks for the invoice printers once when a later result is a full invoice too", async () => {
+    const { el, asked } = await mount(full);
+    el.result = { ...full };
+    await el.updateComplete;
+    expect(pressed(el, "invoice")).toBe("true");
+    expect(asked).toEqual(["invoice"]);
+  });
+
   it("switches a full-invoice sale to Receipt on a tap, and a later result does not switch it back", async () => {
     const { el, asked } = await mount(full);
     el.shadowRoot!.querySelector<HTMLElement>("[data-settlement-choice=receipt]")!.click();

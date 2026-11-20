@@ -8,6 +8,7 @@ import "./invoice-recipient-dialog.js";
 import type { InvoiceDeliveryOptions } from "../api/client.js";
 import type {
   InvoiceRecipientDetail,
+  RememberedAddress,
   TillInvoiceRecipientDialog,
 } from "./invoice-recipient-dialog.js";
 
@@ -25,6 +26,8 @@ class SavedRecipientApp extends LitElement {
   readonly leave = new LeaveController(this);
   recipient?: InvoiceRecipientDetail["recipient"] | null = passport;
   saved?: InvoiceRecipientDetail["delivery"] = a4;
+  remembered?: RememberedAddress;
+  confirmed: (RememberedAddress | undefined)[] = [];
   options: InvoiceDeliveryOptions = {
     invoicePrinter: { id: "pp-office", name: "Office HP" },
     emailAvailable: false,
@@ -37,8 +40,12 @@ class SavedRecipientApp extends LitElement {
         .deliveryOptions=${this.options}
         .savedDelivery=${this.saved}
         .savedRecipient=${this.recipient}
+        .rememberedAddress=${this.remembered}
         @invoice-recipient-cancel=${() => this.closes++}
-        @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => this.submitted.push(event.detail)}
+        @invoice-recipient-confirm=${(event: CustomEvent<InvoiceRecipientDetail>) => {
+          this.submitted.push(event.detail);
+          this.confirmed.push((event.currentTarget as TillInvoiceRecipientDialog).confirmedAddress);
+        }}
       ></till-invoice-recipient-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -164,4 +171,103 @@ it("closes on Cancel without asking about unsaved changes when nothing changed",
 it("opens blank without a saved recipient", async () => {
   const { form } = await mount({ recipient: null, saved: undefined });
   expect(values(form)).toMatchObject({ taxId: "", legalName: "", address: "", countryCode: "ES" });
+});
+
+const french: InvoiceRecipientDetail["recipient"] = {
+  taxId: "FR40303265045",
+  identifierType: "vat-number",
+  identifierCountryCode: "FR",
+  legalName: "Port SARL",
+  address: "2 Rue du Port, Bâtiment B, Paris",
+  countryCode: "FR",
+};
+const frenchFields = {
+  streetAddress: "2 Rue du Port, Bâtiment B",
+  postalCode: "",
+  locality: "Paris",
+  province: "",
+};
+
+it("fills the address with the remembered fields that composed the saved address", async () => {
+  const { form } = await mount({
+    recipient: french,
+    remembered: { address: french.address, fields: frenchFields },
+  });
+  expect(values(form)).toMatchObject({
+    address: "2 Rue du Port, Bâtiment B",
+    postalCode: "",
+    locality: "Paris",
+    province: "",
+  });
+});
+
+it("splits the saved address when the remembered fields composed a different one", async () => {
+  const { form } = await mount({
+    recipient: french,
+    remembered: { address: "2 Rue du Port, Paris", fields: frenchFields },
+  });
+  expect(values(form)).toMatchObject({
+    address: "2 Rue du Port",
+    locality: "Bâtiment B",
+    province: "Paris",
+  });
+});
+
+it("reports the address fields it confirmed with the address they sent", async () => {
+  const { app, form } = await mount({ recipient: null, saved: undefined });
+  await fill(form, "taxId", "12345678Z");
+  await fill(form, "legalName", "Ana García");
+  await fill(form, "address", "Calle Mayor 1, 2º B");
+  await fill(form, "postalCode", "28013");
+  await fill(form, "locality", "Madrid");
+  await fill(form, "province", "Madrid");
+  saveButton(form).click();
+  await form.updateComplete;
+  expect(app.submitted[0]!.recipient.address).toBe("Calle Mayor 1, 2º B, 28013 Madrid, Madrid");
+  expect(app.confirmed).toEqual([
+    {
+      address: "Calle Mayor 1, 2º B, 28013 Madrid, Madrid",
+      fields: {
+        streetAddress: "Calle Mayor 1, 2º B",
+        postalCode: "28013",
+        locality: "Madrid",
+        province: "Madrid",
+      },
+    },
+  ]);
+});
+
+it("sends a saved address with a postcode of repeated spaces unchanged when only the name changes", async () => {
+  const recipient = {
+    ...passport,
+    address: "10 Downing Street, SW1A   2AA London",
+    countryCode: "GB",
+  };
+  const { app, form } = await mount({ recipient });
+  await fill(form, "legalName", "Ana García López");
+  saveButton(form).click();
+  await form.updateComplete;
+  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana García López" });
+});
+
+it("sends a saved Spanish address with a space before a comma in its street unchanged when only the name changes", async () => {
+  const recipient = { ...passport, address: "Calle Mayor 1 , 2º B, 28013 Madrid, Madrid" };
+  const { app, form } = await mount({ recipient });
+  await fill(form, "legalName", "Ana García López");
+  saveButton(form).click();
+  await form.updateComplete;
+  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana García López" });
+});
+
+it("composes the address again once an address field changes", async () => {
+  const recipient = {
+    ...passport,
+    address: "10 Downing Street, SW1A   2AA London",
+    countryCode: "GB",
+  };
+  const { app, form } = await mount({ recipient });
+  await fill(form, "address", "11 Downing Street");
+  saveButton(form).click();
+  await form.updateComplete;
+  expect(app.submitted[0]!.recipient.address).toBe("11 Downing Street, SW1A   2AA London");
 });

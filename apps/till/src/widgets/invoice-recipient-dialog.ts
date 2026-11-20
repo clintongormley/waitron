@@ -31,6 +31,7 @@ import {
   recipientAddressErrors,
   composeRecipientAddress,
   recipientAddressFields,
+  type RecipientAddressDraft,
   type RecipientIdentifier,
   type RecipientIdentifierType,
 } from "@waitron/country-packs";
@@ -49,6 +50,12 @@ export interface InvoiceRecipientDetail {
   recipient: RecipientIdentifier & { legalName: string; address: string; countryCode: string };
   /** Absent when there is neither a choice to offer nor a saved one to send back. */
   delivery?: InvoiceDeliveryChoice;
+}
+
+/** Address fields as typed, with the address line they sent. */
+export interface RememberedAddress {
+  address: string;
+  fields: Omit<RecipientAddressDraft, "countryCode">;
 }
 
 /** `saved` sends {@link TillInvoiceRecipientDialog.savedDelivery} back as it is. */
@@ -122,6 +129,11 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) staged = false;
   /** The recipient already staged for the order, shown on opening and kept unless changed. */
   @property({ attribute: false }) savedRecipient?: InvoiceRecipientDetail["recipient"] | null;
+  /** Fills the address fields in place of splitting {@link savedRecipient}'s address, when its
+   * line is that address. */
+  @property({ attribute: false }) rememberedAddress?: RememberedAddress;
+  /** What the latest Use full invoice sent, for the opener to pass back as `rememberedAddress`. */
+  confirmedAddress?: RememberedAddress;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
@@ -284,7 +296,13 @@ export class TillInvoiceRecipientDialog extends LitElement {
         this.taxId = saved.taxId;
         this.legalName = saved.legalName;
         this.countryCode = saved.countryCode;
-        Object.assign(this, recipientAddressFields(saved.address, saved.countryCode));
+        const remembered = this.rememberedAddress;
+        Object.assign(
+          this,
+          remembered?.address === saved.address
+            ? remembered.fields
+            : recipientAddressFields(saved.address, saved.countryCode),
+        );
       }
       this.#baseline = {
         ...this.#value(),
@@ -402,6 +420,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
     this.#submitted = this.#value();
     this.#cancelAddressSearch();
     const delivery = this.#delivery();
+    const address = composeRecipientAddress(this.#value());
+    const { streetAddress, postalCode, locality, province } = this;
+    this.confirmedAddress = { address, fields: { streetAddress, postalCode, locality, province } };
     this.dispatchEvent(
       new CustomEvent<InvoiceRecipientDetail>("invoice-recipient-confirm", {
         detail: {
@@ -409,7 +430,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           recipient: {
             ...taxId.value,
             legalName: this.legalName.trim(),
-            address: composeRecipientAddress(this.#value()),
+            address,
             countryCode: this.countryCode,
           },
           ...(delivery === undefined ? {} : { delivery }),

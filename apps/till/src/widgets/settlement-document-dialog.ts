@@ -67,24 +67,24 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     return html`<p data-settlement-closing=${state}>${text}</p>`;
   }
 
-  #choiceStarted = false;
-  #startedOnInvoice = false;
+  #tapped = false;
+  #followed = false;
 
-  /** A full-invoice sale starts on the document it got; later results never undo a tap. */
+  /** Until a choice is tapped, the choice follows the result's document. */
   override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
-    if (this.#choiceStarted || !changed.has("result") || this.result === undefined) return;
-    this.#choiceStarted = true;
-    if (this.result.invoiceType !== "F1") return;
-    this.choice = "invoice";
-    this.printDocument = "invoice";
-    this.#startedOnInvoice = true;
+    if (this.#tapped || !changed.has("result") || this.result === undefined) return;
+    const choice = this.result.invoiceType === "F1" ? "invoice" : "receipt";
+    if (choice === this.choice) return;
+    this.choice = choice;
+    this.printDocument = choice;
+    this.#followed = true;
   }
 
   override updated(changed: PropertyValues<this>): void {
     super.updated(changed);
-    if (!this.#startedOnInvoice) return;
-    this.#startedOnInvoice = false;
+    if (!this.#followed) return;
+    this.#followed = false;
     this.readInvoicePrinters();
   }
 
@@ -126,6 +126,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
         aria-pressed=${this.choice === "receipt"}
         variant=${this.choice === "receipt" ? "primary" : "secondary"}
         @click=${() => {
+          this.#tapped = true;
           this.choice = "receipt";
           this.printDocument = "receipt";
           this.readInvoicePrinters();
@@ -137,6 +138,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
         aria-pressed=${this.choice === "invoice"}
         variant=${this.choice === "invoice" ? "primary" : "secondary"}
         @click=${() => {
+          this.#tapped = true;
           this.choice = "invoice";
           this.printDocument = this.result.invoiceType === "F1" ? "invoice" : "receipt";
           this.readInvoicePrinters();

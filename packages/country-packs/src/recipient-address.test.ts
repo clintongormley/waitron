@@ -213,8 +213,39 @@ describe("recipientAddressFields", () => {
       },
     ],
     ["FR", "", { streetAddress: "", postalCode: "", locality: "", province: "" }],
+    // Composed from street "2 Rue du Port, Bâtiment B" and locality "Paris".
+    [
+      "FR",
+      "2 Rue du Port, Bâtiment B, Paris",
+      {
+        streetAddress: "2 Rue du Port",
+        postalCode: "",
+        locality: "Bâtiment B",
+        province: "Paris",
+      },
+    ],
+    [
+      "GB",
+      "10 Downing Street, SW1A   2AA London",
+      {
+        streetAddress: "10 Downing Street",
+        postalCode: "",
+        locality: "SW1A   2AA London",
+        province: "",
+      },
+    ],
+    [
+      "ES",
+      "Calle Mayor 1 , 2º B, 28013 Madrid",
+      {
+        streetAddress: "Calle Mayor 1 , 2º B, 28013 Madrid",
+        postalCode: "",
+        locality: "",
+        province: "",
+      },
+    ],
   ])(
-    "splits a %s address %j back into the fields it was composed from",
+    "splits a %s address %j into fields that compose back to the same text",
     (countryCode, address, fields) => {
       const split = addresses.recipientAddressFields(address, countryCode);
       expect(split).toEqual(fields);
@@ -222,7 +253,36 @@ describe("recipientAddressFields", () => {
     },
   );
 
-  it("round-trips a composed address for every shape of draft", () => {
+  it.each(["Calle Mayor 1 , 2º B", "Calle Mayor 1,  2º B"])(
+    "splits a valid Spanish draft whose street is %j back into its typed fields",
+    (streetAddress) => {
+      const draft = { ...spanish, streetAddress };
+      expect(addresses.recipientAddressErrors(draft)).toEqual({});
+      const line = addresses.composeRecipientAddress(draft);
+      expect(line).toBe(`${streetAddress}, 28013 Madrid, Madrid`);
+      expect(addresses.recipientAddressFields(line, "ES")).toEqual({
+        streetAddress,
+        postalCode: "28013",
+        locality: "Madrid",
+        province: "Madrid",
+      });
+    },
+  );
+
+  it.each([
+    " Calle Mayor 1, Madrid ",
+    "a, , b, c",
+    ", a, b",
+    "a,  b, c",
+    "a, b , c",
+    "a, 1\t b",
+    "a, 1 \tb",
+  ])("gives back %j, trimmed, when composed", (address) => {
+    const split = addresses.recipientAddressFields(address, "ES");
+    expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address.trim());
+  });
+
+  it("composes a Spanish, French, British and American draft back to the same text, keeping a Spanish street's commas in the street", () => {
     for (const draft of [
       { ...spanish, streetAddress: "Av. de la Paz, 4, portal 2" },
       spanish,
