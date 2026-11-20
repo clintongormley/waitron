@@ -1331,6 +1331,16 @@ export const en = {
     "The legal-name change was not confirmed. Check the legal name in Venue settings before trying again.",
   "venue_details.legal_name_changed":
     "The legal name changed in another session. Close and try again.",
+  "venue_details.taxpayer_domicile": "Registered business address",
+  "venue_details.change_taxpayer_domicile": "Change registered address",
+  "venue_details.taxpayer_domicile_hint": "Full street address, postcode, city and province",
+  "venue_details.taxpayer_domicile_note":
+    "Full invoices issued from now on print the new address. Invoices already issued keep theirs.",
+  "venue_details.taxpayer_domicile_unchanged": "This is already the registered address.",
+  "venue_details.taxpayer_domicile_not_saved":
+    "The registered-address change was not confirmed. Check the registered address in Venue settings before trying again.",
+  "venue_details.taxpayer_domicile_changed":
+    "The registered address changed in another session. Close and try again.",
   "venue_details.unset": "Not set",
   "venue_details.loading": "Loading venue details…",
   "venue_details.required": "Enter a value.",
@@ -5846,6 +5856,16 @@ export const es: Record<StringKey, string> = {
     "No se ha confirmado el cambio de razón social. Comprueba la razón social en Ajustes del local antes de volver a intentarlo.",
   "venue_details.legal_name_changed":
     "La razón social ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
+  "venue_details.taxpayer_domicile": "Domicilio fiscal del negocio",
+  "venue_details.change_taxpayer_domicile": "Cambiar domicilio fiscal",
+  "venue_details.taxpayer_domicile_hint": "Calle, número, código postal, localidad y provincia",
+  "venue_details.taxpayer_domicile_note":
+    "Las facturas completas que se emitan a partir de ahora llevarán la nueva dirección. Las ya emitidas conservan la suya.",
+  "venue_details.taxpayer_domicile_unchanged": "Ya es el domicilio fiscal.",
+  "venue_details.taxpayer_domicile_not_saved":
+    "No se ha confirmado el cambio de domicilio fiscal. Comprueba el domicilio fiscal en Ajustes del local antes de volver a intentarlo.",
+  "venue_details.taxpayer_domicile_changed":
+    "El domicilio fiscal ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
   "venue_details.unset": "Sin definir",
   "venue_details.loading": "Cargando los datos del local…",
   "venue_details.required": "Introduce un valor.",

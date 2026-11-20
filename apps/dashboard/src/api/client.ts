@@ -169,6 +169,7 @@ export interface VenueDetailsModel {
   businessDayClock: BusinessDayClockModel;
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
+  taxpayerDomicile: string | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
   hasDailyClose: boolean;
@@ -4028,6 +4029,13 @@ export class DashboardApi {
     expected: string;
   }): Promise<{ model: VenueDetailsModel }> {
     return this.#request("/management-api/venue-details/legal-name", "PUT", input);
+  }
+
+  changeTaxpayerDomicile(input: {
+    taxpayerDomicile: string;
+    expected: string;
+  }): Promise<{ model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/registered-address", "PUT", input);
   }
 
   previewBusinessDayStart(input: {

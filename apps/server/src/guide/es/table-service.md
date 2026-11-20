@@ -141,6 +141,11 @@ opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 
 impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
 del pedido lo muestra en el idioma de tu pantalla.
 
+Cada factura completa muestra el domicilio fiscal de tu negocio. Si es incorrecto o está
+incompleto, corrígelo en **Ajustes del local → Datos del local**: elige **Cambiar domicilio
+fiscal** en la tarjeta **Negocio**. Las facturas que se emitan después
+muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirse.
+
 ## Elegir un documento y una impresora {#invoice-printer}
 
 Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.

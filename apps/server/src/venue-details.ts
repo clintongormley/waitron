@@ -113,10 +113,16 @@ export async function readVenueDetails(
     taxId: taxpayer.taxId,
   };
   const pack = getCountryPack(issuer.country);
-  const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
+  const { rows } = await tx.execute<{
+    sales: number;
+    orders: number;
+    closes: number;
+    domicile: string | null;
+  }>(sql`
     select exists(select 1 from sales limit 1) as sales,
       exists(select 1 from working_orders limit 1) as orders,
-      exists(select 1 from daily_closes limit 1) as closes`);
+      exists(select 1 from daily_closes limit 1) as closes,
+      (select taxpayer_domicile from taxpayer where id = 1) as domicile`);
   const history = rows[0]!;
   const businessDayClock = clockModel ?? (await readBusinessDayClockModel(tx, at));
   const clockReason =
@@ -149,6 +155,7 @@ export async function readVenueDetails(
           : cutoverForBusinessDay(businessDayClock.clock, businessDayClock.currentBusinessDay),
     },
     issuer,
+    taxpayerDomicile: history.domicile,
     hasSales: Boolean(history.sales),
     hasOrderHistory: Boolean(history.orders),
     hasDailyClose: Boolean(history.closes),

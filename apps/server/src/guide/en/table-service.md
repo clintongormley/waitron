@@ -130,6 +130,11 @@ When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the ori
 once the invoice is issued. With **Receipt printer**, the invoice prints when you choose **Print
 the bill**; otherwise it prints when you close the window after payment.
 
+Every full invoice prints your business's registered address. If it is wrong or incomplete,
+correct it in **Venue settings → Venue details**: choose **Change registered address** on the
+**Business** card. Invoices issued afterwards print the new address; invoices
+already issued keep the one they were issued with.
+
 ## Choose a document and printer {#invoice-printer}
 
 Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. The receipt uses

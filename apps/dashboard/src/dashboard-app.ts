@@ -370,7 +370,11 @@ const UNLISTED_SCREENS: ScreenRule[] = [
 type CoreSettingsPanel = AccessRule & {
   key: string;
   tab: VenueSettingsTab;
-  render(api: DashboardApi, canConfigure: boolean, reportLateRefusal: () => void): TemplateResult;
+  render(
+    api: DashboardApi,
+    canConfigure: boolean,
+    lateRefusalReporter: (key: StringKey) => () => void,
+  ): TemplateResult;
 };
 
 const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
@@ -378,10 +382,11 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     key: "venue-details",
     tab: "venue-details",
     requiresPermission: "venue.view",
-    render: (api, canConfigure, reportLateRefusal) =>
+    render: (api, canConfigure, lateRefusalReporter) =>
       html`<dashboard-venue-details-panel
         .api=${api}
-        .reportLateRefusal=${reportLateRefusal}
+        .reportLateRefusal=${lateRefusalReporter("venue_details.legal_name_not_saved")}
+        .reportLateAddressRefusal=${lateRefusalReporter("venue_details.taxpayer_domicile_not_saved")}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
   },
@@ -2713,10 +2718,8 @@ export class DashboardApp extends LitElement {
       tab: panel.tab,
       order: 0,
       render: () =>
-        panel.render(
-          this.api,
-          this.#sessionPermissions.includes("venue.configure"),
-          this.#lateSaveReporter("venue_details.legal_name_not_saved"),
+        panel.render(this.api, this.#sessionPermissions.includes("venue.configure"), (key) =>
+          this.#lateSaveReporter(key),
         ),
     }));
     const modules = this.#activePanels

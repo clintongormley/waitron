@@ -12,7 +12,12 @@ import {
 import type { ReceiptLanguageRules } from "@waitron/country";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
-import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
+import {
+  changeTaxpayerDomicile,
+  readPrivacyContact,
+  renameTaxpayer,
+  savePrivacyContact,
+} from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -134,20 +139,24 @@ function venueDefaultsRequest(body: unknown): {
   return body as { receiptLanguage?: unknown; defaultProductVatClass?: unknown };
 }
 
-function legalNameRequest(body: unknown): { legalName: string; expected: string } {
-  const invalid = (field: string, reason: string) =>
-    new AppError("venue.detail_invalid", { field, reason });
+/** The new value of one taxpayer field and the value the page showed, both normalised. */
+function taxpayerFieldRequest(
+  body: unknown,
+  field: "legalName" | "taxpayerDomicile",
+): { value: string; expected: string } {
+  const invalid = (name: string, reason: string) =>
+    new AppError("venue.detail_invalid", { field: name, reason });
   if (typeof body !== "object" || body === null || Array.isArray(body))
     throw invalid("body", "type");
   for (const key of Object.keys(body))
-    if (key !== "legalName" && readOnlyVenueFields.has(key))
+    if (key !== field && readOnlyVenueFields.has(key))
       throw new AppError("venue.detail_read_only", { field: key });
-  if (Object.keys(body).some((key) => key !== "legalName" && key !== "expected"))
+  if (Object.keys(body).some((key) => key !== field && key !== "expected"))
     throw invalid("body", "unknown_field");
-  const { legalName, expected } = body as Record<string, unknown>;
-  if (typeof legalName !== "string") throw invalid("legalName", "type");
+  const { [field]: value, expected } = body as Record<string, unknown>;
+  if (typeof value !== "string") throw invalid(field, "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
-  return { legalName: normalizeVenueText(legalName), expected: normalizeVenueText(expected) };
+  return { value: normalizeVenueText(value), expected: normalizeVenueText(expected) };
 }
 
 function withTaxpayer<T>(contact: T | null): T {
@@ -262,7 +271,7 @@ export function mountVenueSettingsApi(
       const body = await readJsonBody<unknown>(c);
       const result = await gated(sessionId, async (tx, personId) => {
         await requireFreshManagementSignIn(tx, sessionId);
-        const { legalName, expected } = legalNameRequest(body);
+        const { value: legalName, expected } = taxpayerFieldRequest(body, "legalName");
         const refuse = (reason: string) =>
           new AppError("venue.detail_invalid", { field: "legalName", reason });
         if (legalName === "") throw refuse("required");
@@ -288,6 +297,32 @@ export function mountVenueSettingsApi(
           personId,
         });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
+        return { model: await readVenueDetails(tx, at, businessDayClock) };
+      });
+      return c.json(result);
+    }),
+  );
+  app.put("/management-api/venue-details/registered-address", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(sessionId, async (tx, personId) => {
+        await requireFreshManagementSignIn(tx, sessionId);
+        const { value, expected } = taxpayerFieldRequest(body, "taxpayerDomicile");
+        const refuse = (reason: string) =>
+          new AppError("venue.detail_invalid", { field: "taxpayerDomicile", reason });
+        if (value === "") throw refuse("required");
+        const at = (deps.now ?? (() => new Date()))();
+        const { taxpayerDomicile, businessDayClock } = await readVenueDetails(tx, at);
+        const stored = normalizeVenueText(taxpayerDomicile ?? "");
+        if (value === stored && expected === stored) throw refuse("unchanged");
+        // As for the legal name; a page showing no address sends "", standing for the stored null.
+        const { changed } = await changeTaxpayerDomicile(tx, {
+          expected: expected === stored ? taxpayerDomicile : expected,
+          taxpayerDomicile: value,
+          personId,
+        });
+        if (!changed) throw new AppError("venue.detail_changed", { field: "taxpayerDomicile" });
         return { model: await readVenueDetails(tx, at, businessDayClock) };
       });
       return c.json(result);

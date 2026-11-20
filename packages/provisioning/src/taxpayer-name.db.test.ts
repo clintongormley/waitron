@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { readActivityForSubject, taxpayer, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { renameTaxpayer } from "./index.js";
+import { changeTaxpayerDomicile, renameTaxpayer } from "./index.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -67,4 +67,77 @@ it("records the old and new legal name with the actor", async () => {
     renameTaxpayer(tx, { expected: "Old SL", legalName: "Other SL", personId: null }),
   );
   expect(await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" })).toEqual(entries);
+});
+
+describe("changeTaxpayerDomicile", () => {
+  async function seed(taxpayerDomicile: string | null) {
+    await suite.db.insert(taxpayer).values({
+      id: 1,
+      country: "ES",
+      taxId: "B12345678",
+      legalName: "Deli SL",
+      taxpayerDomicile,
+    });
+  }
+
+  it("changes the registered address and nothing else, and records the old and new address", async () => {
+    await seed("2º 1ª");
+    const before = await stored();
+    const result = await withTransaction(suite.db, (tx) =>
+      changeTaxpayerDomicile(tx, {
+        personId: null,
+        expected: "2º 1ª",
+        taxpayerDomicile: "Calle Mayor 1, 2º 1ª, 08010 Barcelona",
+      }),
+    );
+    expect(result).toEqual({ changed: true });
+    expect(await stored()).toEqual({
+      ...before,
+      taxpayerDomicile: "Calle Mayor 1, 2º 1ª, 08010 Barcelona",
+    });
+    const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "taxpayer.domicile_changed",
+      personId: null,
+      data: { from: "2º 1ª", to: "Calle Mayor 1, 2º 1ª, 08010 Barcelona" },
+    });
+  });
+
+  it("writes nothing and records nothing when the stored address is not the one expected", async () => {
+    await seed("2º 1ª");
+    const result = await withTransaction(suite.db, (tx) =>
+      changeTaxpayerDomicile(tx, {
+        personId: null,
+        expected: "Somewhere else",
+        taxpayerDomicile: "Calle Mayor 1, Madrid",
+      }),
+    );
+    expect(result).toEqual({ changed: false });
+    expect((await stored())?.taxpayerDomicile).toBe("2º 1ª");
+    expect(await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" })).toEqual([]);
+  });
+
+  it("fills an address that was never stored only when null is expected", async () => {
+    await seed(null);
+    const refused = await withTransaction(suite.db, (tx) =>
+      changeTaxpayerDomicile(tx, {
+        personId: null,
+        expected: "",
+        taxpayerDomicile: "Calle Mayor 1",
+      }),
+    );
+    expect(refused).toEqual({ changed: false });
+    const result = await withTransaction(suite.db, (tx) =>
+      changeTaxpayerDomicile(tx, {
+        personId: null,
+        expected: null,
+        taxpayerDomicile: "Calle Mayor 1",
+      }),
+    );
+    expect(result).toEqual({ changed: true });
+    expect((await stored())?.taxpayerDomicile).toBe("Calle Mayor 1");
+    const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
+    expect(entries[0]).toMatchObject({ data: { from: null, to: "Calle Mayor 1" } });
+  });
 });

@@ -2,8 +2,9 @@
  * Data holds no person's name, email, telephone, tax number or guest health detail: A980's design erases
  * people by anonymising persons, while these rows cannot change. Readers resolve names now.
  * People appear as the actor, a person subject, or an id in a declared personFields entry (dv17).
- * The taxpayer's legal name is the sole exception (vb2): it is already kept in fiscal records
- * and does not name a persons row that A980 anonymises.
+ * The taxpayer's legal name (vb2), kept in fiscal records, and its registered address, copied onto
+ * the sale row of each full invoice, are the sole exceptions: neither names a persons row that A980
+ * anonymises.
  *
  * Older rows must satisfy a kind's data shape: add an optional field or a new kind.
  * Ids inside data have no database key and may outlive their target; product logic never decides
@@ -35,6 +36,7 @@ export interface ActivityKindData {
   readonly "credentials.removed": { readonly keyVersion: number };
   /** The taxpayer-name exception in slice 2 registry rule 1. */
   readonly "taxpayer.legal_name_changed": { readonly from: string; readonly to: string };
+  readonly "taxpayer.domicile_changed": { readonly from: string | null; readonly to: string };
   readonly "person.email_changed": Record<string, never>;
   /** A count only; never a guest's label or allergens. */
   readonly "party.allergy_answered": {
@@ -137,6 +139,7 @@ export const ACTIVITY_KINDS = {
   "credentials.saved": { subject: "credential" },
   "credentials.removed": { subject: "credential" },
   "taxpayer.legal_name_changed": { subject: "taxpayer" },
+  "taxpayer.domicile_changed": { subject: "taxpayer" },
   "person.email_changed": { subject: "person" },
   "party.allergy_answered": { subject: "party" },
   "access_role.member_added": { subject: "person" },
