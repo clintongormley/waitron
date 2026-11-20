@@ -150,6 +150,10 @@ refresh_self() {
     return 0
   fi
   echo "waitron.sh: updated $self to ${ref}'s waitron.sh; running install again from it"
+  # The new copy takes the host lock again inside its cmd_install subshell; an fd 9 handed on would
+  # stay locked in that subshell's parent. Closed on its own line: macOS's bash 3.2 keeps a copy of
+  # fd 9, under another number, open across `exec … 9>&-`, and that copy still holds the lock.
+  exec 9>&-
   WAITRON_SH_REFRESHED=1 exec "$BASH" "$self" "${WAITRON_ARGV[@]}"
 }
 
@@ -1335,4 +1339,6 @@ main() {
   esac
 }
 
+# A copy from before refresh_self closed the host lock hands it on as fd 9 when it runs this one.
+[ -z "${WAITRON_SH_REFRESHED:-}" ] || exec 9>&-
 main "$@"
