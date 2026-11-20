@@ -2309,9 +2309,11 @@ waiting on a disabled printer, or on a USB or Bluetooth printer no print agent s
 its own printer when it is moved.
 
 **Source update, 2026-11-20:** for (d), a sale's receipt resent from the print queue is laid out
-again from the sale on its own printer too, not sent as the same bytes, and keeps its own marking.
-On either printer its words are in the language it was first printed in: the one staff chose at the
-till, or the sale's own when none was chosen (`print_jobs.page_language`; `laidOutAgain`,
+again from the sale on its own printer too, not sent as the same bytes. An original that already
+printed comes back marked as a duplicate copy, and the reprint is recorded
+(`enqueueCompletedReceiptCopy`); any other resend keeps its own marking. On either printer its
+words are in the language it was first printed in: the one staff chose at the till, or the sale's
+own when none was chosen (`print_jobs.page_language`; `laidOutAgain`,
 `apps/server/src/invoice-print.ts`; `reprintJobOn`, `apps/server/src/print-job-reprint.ts`).
 
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
