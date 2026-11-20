@@ -6544,7 +6544,7 @@ it("refuses format-2 menus through management status, preview and publish routes
       expect(await response.json(), route).toEqual({
         error: { code: "menu.reset_required", params: { menuId } },
       });
-      expect(response.status, route).toBe(400);
+      expect(response.status, route).toBe(500);
     }
     expect(
       (await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, menuId))).length,
@@ -6664,7 +6664,7 @@ describe("shared menu reads", () => {
       });
       expect(body.home).toMatchObject({ status: 200, body: { shortcuts: [] } });
       const refusal = {
-        status: 400,
+        status: 500,
         body: { error: { code: "menu.reset_required", params: { menuId: id } } },
       };
       expect(body.preview).toEqual(refusal);

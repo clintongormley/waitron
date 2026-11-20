@@ -181,6 +181,26 @@ it("requires a signed-in manager with menu permission", async () => {
   }
 });
 
+it("answers a live menu stored in an earlier document format as a server fault with the venue-reset code", async () => {
+  const f = await fixture();
+  const earlier = crypto.randomUUID();
+  await suite.db.run(sql`
+    insert into menu_versions (id, menu_id, number, document, content_hash, created_at, created_by)
+    select ${earlier}, menu_id, number + 1, json_set(document, '$.format', 2), 'earlier',
+      created_at, created_by
+    from menu_versions where menu_id = ${f.lunch}`);
+  await suite.db.run(
+    sql`update menu_releases set version_id = ${earlier} where menu_id = ${f.lunch} and state = 'live'`,
+  );
+  const res = await f.app.request(`/management-api/menus/${f.lunch}/guest-preview`, {
+    headers: { cookie: f.cookies.manager },
+  });
+  expect(await res.json()).toEqual({
+    error: { code: "menu.reset_required", params: { menuId: f.lunch } },
+  });
+  expect(res.status).toBe(500);
+});
+
 it("starts public sharing Off and limits its status to managers", async () => {
   const f = await fixture();
   for (const [cookie, status, code] of [

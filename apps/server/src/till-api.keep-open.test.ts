@@ -376,7 +376,7 @@ describe("the till keeps a zone open today", () => {
       sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
     );
     const answer = await call("PUT", writeZone(), { until: "01:30" });
-    expect(answer.status).toBe(409);
+    expect(answer.status).toBe(500);
     expect(answer.json).toMatchObject({ code: "time_zone.unreadable" });
     expect(await zoneRows()).toEqual([]);
   });

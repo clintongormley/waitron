@@ -320,9 +320,9 @@ describe("queuing, listing and cancelling menu editions through the routes", () 
     await setVenueZone("Mars/Olympus");
     try {
       const refusal = { error: { code: "time_zone.unreadable", params: {} } };
-      expect(await json(await queue(app, menuId, TOMORROW), 409)).toEqual(refusal);
+      expect(await json(await queue(app, menuId, TOMORROW), 500)).toEqual(refusal);
       const listed = await send(app, "GET", `/management-api/menus/${menuId}/publications`);
-      expect(await json(listed, 409)).toEqual(refusal);
+      expect(await json(listed, 500)).toEqual(refusal);
       expect(await publicationTables()).toEqual(tables);
     } finally {
       await setVenueZone("Europe/Madrid");

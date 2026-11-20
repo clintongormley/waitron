@@ -1282,7 +1282,7 @@ it("sells a product reached only through an included menu at that menu's price",
   expect(held.map((l) => l.gross)).toContain(350);
 });
 
-it("refuses format-2 menu reads through the till with the venue-reset code", async () => {
+it("refuses format-2 menu reads and a basket payment through the till as a server fault with the venue-reset code", async () => {
   const v = await setupLunch();
   await publish(v.menuId);
   const [row] = await suite.db.select().from(menuVersions).where(eq(menuVersions.menuId, v.menuId));
@@ -1309,6 +1309,13 @@ it("refuses format-2 menu reads through the till with the venue-reset code", asy
     expect(await response.json(), path).toEqual({
       error: { code: "menu.reset_required", params: { menuId: v.menuId } },
     });
-    expect(response.status, path).toBe(400);
+    expect(response.status, path).toBe(500);
   }
+  const before = await written();
+  const payment = await pay(v, [lemonadeLine(v)]);
+  expect(await payment.json()).toEqual({
+    error: { code: "menu.reset_required", params: { menuId: v.menuId } },
+  });
+  expect(payment.status).toBe(500);
+  expect(await written()).toEqual(before);
 });

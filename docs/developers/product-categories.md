@@ -269,7 +269,7 @@ On the two routes that take a time, the time refusals come before any of these: 
 clock skips `menu_publication.time_skipped` (400, `date`, `time`); a minute it shows twice, sent
 without `occurrence: "earlier" | "later"`, `menu_publication.time_repeated` (400, `date`, `time`,
 `occurrences: [{ at, offset }]`); a venue time zone that is not a named zone
-`time_zone.unreadable` (409), which the list answers too. Malformed ids answer
+`time_zone.unreadable` (500), which the list answers too. Malformed ids answer
 `shared.invalid_id` (400).
 
 The routes keep a menu's editions going live in number order. A new edition, queued or published now, overtakes every queued

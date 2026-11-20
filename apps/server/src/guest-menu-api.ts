@@ -38,6 +38,7 @@ const run = createErrorBoundary(
     "authorization.not_permitted": 403,
     "person.suspended": 403,
     "menu.not_found": 404,
+    "menu.reset_required": 500,
     "settings.invalid": 500,
     "settings.out_of_date": 409,
     "management.request_invalid": 400,
