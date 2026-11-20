@@ -922,7 +922,9 @@ prints it (21:00).
   1; the plan assumes it does. It adds the sale origin `business_day_close` to the list piece 4
   widens and rebuilds the same starting migrations; whichever lands second reruns the rebuilds.
   Conflict 3.
-- **ADVISER-SPLIT-AFTER-PRINT** (lane L queue, pending): splitting a bill after its invoice
+- **ADVISER-SPLIT-AFTER-PRINT** (landed as #3876; on 20 November this branch added the test that
+  Reopen to split refuses a bill holding an advance, `bill.payments_received`, in
+  `apps/server/src/split-after-print.test.ts`): splitting a bill after its invoice
   printed. Not the same as an advance (that comes before the invoice); it would reuse piece 1's
   share invoice if it splits by amount.
 - **#3398** (LATER-SALE-DATE, being reworked) changes `issue-moment.ts`, `record-sale.ts` and the
