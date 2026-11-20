@@ -197,6 +197,14 @@ async function mount(
     if (path.endsWith("/emergency/backup")) {
       expect(init!.body).toBeInstanceOf(FormData);
       expect((init!.body as FormData).get("artifact")).toBeInstanceOf(File);
+      if (typeof body.recoveryKey === "string" && body.recoveryKey.length < 12) {
+        return new Response(
+          JSON.stringify({
+            error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
+          }),
+          { status: 400 },
+        );
+      }
       if (options.backupRefusal || body.recoveryKey === undefined) {
         const code =
           options.backupRefusal ?? options.backupNeedsKeyCode ?? "handover.backup_key_missing";
@@ -590,6 +598,31 @@ it.each(
       source: "selected-backup",
       sourceId: "b".repeat(64),
     });
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "says a typed archive key is too short and keeps asking for it (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ backup: true });
+    await authenticate(el);
+    chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
+    await el.updateComplete;
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
+    await edit(el, "handover-backup-key", "short");
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() =>
+      expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+        format("handover.emergency.backup_key_too_short", { min: 12 }),
+      ),
+    );
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(
+      t("handover.emergency.backup_key_missing"),
+    );
+    expect(q(el, '[name="handover-backup-key"]')).not.toBeNull();
+    expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
 );
 

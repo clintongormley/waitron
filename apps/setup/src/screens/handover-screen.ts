@@ -465,7 +465,7 @@ export class SetupHandoverScreen extends LitElement {
   #emergencyError(cause: unknown): string {
     const error = cause as {
       code?: string;
-      params?: { operationId?: string; sourceServersUrl?: string; reason?: string };
+      params?: { operationId?: string; sourceServersUrl?: string; reason?: string; min?: number };
     } | null;
     const code = error?.code;
     this.refusalLink =
@@ -506,8 +506,9 @@ export class SetupHandoverScreen extends LitElement {
           ? "shell.restore.manifest_unsupported"
           : "shell.restore.manifest_invalid",
       );
-    if (code === "handover.backup_key_missing" || code === "backup.recovery_key_too_short")
-      return t("handover.emergency.backup_key_missing");
+    if (code === "handover.backup_key_missing") return t("handover.emergency.backup_key_missing");
+    if (code === "backup.new_recovery_key_too_short")
+      return format("handover.emergency.backup_key_too_short", { min: error?.params?.min ?? "" });
     if (
       ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
         code ?? "",

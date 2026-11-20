@@ -164,7 +164,7 @@ const STATUS = {
   "setup.request_invalid": 400,
   "handover.copy_predates_destination": 409,
   "handover.backup_key_missing": 409,
-  "backup.recovery_key_too_short": 400,
+  "backup.new_recovery_key_too_short": 400,
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
