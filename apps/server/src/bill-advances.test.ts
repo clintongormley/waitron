@@ -900,4 +900,14 @@ describe("an advance's record to AEAT", () => {
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
   });
+
+  it("at a table whose name holds a control character AEAT refuses, describes it by the bill's order number", async () => {
+    // Written straight to the table's row; the floor plan's save only trims a label.
+    const { billId } = await bill120(`7\u0007${randomUUID()}`);
+
+    const paid = await cash(billId, "30.00", { ownReceipt: true });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
+  });
 });

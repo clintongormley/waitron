@@ -52,13 +52,17 @@ function advanceLineText(language: string, table: string | null, orderNumber: nu
     : labels.paymentOnAccountAtTable.replace("{table}", table);
 }
 
-/** AEAT's cap on `DescripcionOperacion`, in code points. */
+/* What `@waitron/verifactu`'s `validate` refuses in `DescripcionOperacion`: more than 500 code
+ * points (`DESCRIPCION_LENGTH`) or a control character XML forbids (`CONTROL_CHAR`), as
+ * `descriptionProblem` in packages/fiscal-verifactu/src/put-right.ts copies it. */
 const OPERATION_DESCRIPTION_MAX = 500;
+// eslint-disable-next-line no-control-regex -- deliberately matching control characters
+const CONTROL_CHARACTER = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
 /**
  * The advance's operation description: its line's Spanish words, by the bill's order number where
- * the table's name would take them past AEAT's cap; empty where the regime takes none, which
- * `configured`, the table's invoice's own description, shows as empty.
+ * the table's name would make AEAT's record check refuse them; empty where the regime takes none,
+ * which `configured`, the table's invoice's own description, shows as empty.
  */
 function advanceOperationDescription(
   configured: string,
@@ -67,7 +71,7 @@ function advanceOperationDescription(
 ): string {
   if (configured === "") return "";
   const words = advanceLineText("es-ES", table, orderNumber);
-  return Array.from(words).length <= OPERATION_DESCRIPTION_MAX
+  return Array.from(words).length <= OPERATION_DESCRIPTION_MAX && !CONTROL_CHARACTER.test(words)
     ? words
     : advanceLineText("es-ES", null, orderNumber);
 }
