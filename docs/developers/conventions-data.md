@@ -3842,17 +3842,23 @@ and of the list, before `tls/` is first read: in `node-entry.ts` (the image's en
 does not run it. No box keeps a second authority beside its own.
 
 Both resets of a box holding `tls/joined.json` empty `tls/`, remove its certificate-repair flow
-and remove `secrets.env`, the marker
-last, so a reset cut short runs again: the staged reset (`apps/server/src/reset-request.ts`, which
-removes them before the operation record it re-runs from) and `waitron.sh reset`. `tls/` and `secrets.env` hold
+and remove `secrets.env`, the marker last, so a reset cut short runs again; each then removes the
+emptied folder, and any `tls/` folder it finds empty, unless `tls/` is a link, which keeps its link
+and is only emptied. The staged reset (`apps/server/src/reset-request.ts`) does this before
+removing the operation record it re-runs from, and the same start then goes on to setup. A link
+that `waitron.sh reset` has emptied sends the next start to connection repair. `tls/` and `secrets.env` hold
 the other venue's secrets: the authority every one of its tills trusts, and the key ring that opens
-its sealed credentials. A box with an empty `tls/` and no `secrets.env` mints a fresh set at its
-next setup start (`ensureBoxSecrets`). A box that never joined keeps its `tls/` under both resets. A spare
-later promoted keeps the marker, so a plain reset of it also empties `tls/`, and its devices must
-trust it again. While a staged reset that will empty `tls/` is pending (`stagedResetEmptiesTls`),
+its sealed credentials. A box with no `tls/` and no `secrets.env` mints a fresh set at its
+next setup start (`ensureBoxSecrets`); an empty `tls/` sends a start with no operator certificate to connection repair instead,
+unless the staged reset described below is pending (`needsConnectionBootstrap`, `apps/server/src/recovery-listener.ts`).
+A box that never joined keeps its certificate under both resets. A spare
+later promoted keeps the marker, so a plain reset of it also removes `tls/`, and its devices must
+trust it again. While a staged reset that will empty `tls/`, or one that finds `secrets.env` gone and `tls/` an
+empty folder (not a link), is pending (`stagedResetEmptiesTls`),
 the image's start (`runEntry`) skips its connection check, which would otherwise send a
 part-emptied `tls/` to connection repair before the reset re-runs; with no such reset pending, the
-same `tls/` still goes to repair.
+same `tls/` still goes to repair. A linked `tls/` emptied by a staged reset cut short after its
+joined record went still goes to repair.
 
 **Every start checks its leaf.** `ensureLeaf` (`apps/server/src/box-secrets.ts`) reissues the
 leaf when it lacks one of the box's names or a current address, does not verify under
@@ -5825,8 +5831,8 @@ reported `/tmp` 1581, 453, 232, 165, 253 ms and state 1241, 314, 183, 151, 168 m
 232 and 183 ms. Both ran under amd64 emulation on arm64; these are not native box timings.
 
 `packages/store/src/state-layout.ts` declares the box's top-level state names and each entry's
-plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset keeps the `tls/`
-folder but empties it (see "A box that joined another holds that venue's authority as its own"). The root guard reads definitions as text:
+plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset removes the `tls/`
+folder, as it does an empty one on any box (see "A box that joined another holds that venue's authority as its own"). The root guard reads definitions as text:
 a constant holding a complete distinctive name, or a `join` whose first argument ends in
 `stateDir`. It includes the Cloud folder and the layout module’s exported Cloud child paths. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
 report a spare-file declaration and a TLS join, while accepting comments and format-item literals.

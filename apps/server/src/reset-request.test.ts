@@ -1,7 +1,18 @@
 import { dirname, join } from "node:path";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -301,7 +312,7 @@ describe("runStagedReset", () => {
       expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
 
       expect(existsSync(join(stateDir, "flows/tls-repair"))).toBe(false);
-      expect(await readdir(tls)).toEqual([]);
+      expect(existsSync(tls)).toBe(false);
       expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
       expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
       // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
@@ -344,7 +355,7 @@ describe("runStagedReset", () => {
 
     expect(events.map(([, event]) => event)).toEqual(["setup.reset_done"]);
     expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
-    expect(await readdir(tls)).toEqual([]);
+    expect(existsSync(tls)).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
   });
 
@@ -369,6 +380,45 @@ describe("runStagedReset", () => {
       expect(at).toBeLessThan(joinedAt);
     }
     expect(removed.at(-1)).toBe(join(stateDir, "reset-request.json"));
+  });
+
+  it("a staged reset of a box that joined keeps a linked tls/ and empties its folder", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const target = await mkdtemp(join(tmpdir(), "waitron-reset-tls-"));
+    dirs.push(target);
+    const tls = join(stateDir, "tls");
+    for (const name of await readdir(tls)) {
+      await writeFile(join(target, name), await readFile(join(tls, name)));
+    }
+    await rm(tls, { recursive: true });
+    await symlink(target, tls);
+    await stageResetRequest(stateDir, operationId);
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    expect((await lstat(tls)).isSymbolicLink()).toBe(true);
+    expect(await readlink(tls)).toBe(target);
+    expect(await readdir(target)).toEqual([]);
+  });
+
+  it("a staged reset whose tls/ is already empty, with no joined record, removes the folder", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox();
+    const tls = join(stateDir, "tls");
+    await rm(join(tls, "ca.crt"));
+    await stageResetRequest(stateDir, operationId);
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    expect(existsSync(tls)).toBe(false);
+    expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("a staged reset on a box with no tls/ runs", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox();
+    await rm(join(stateDir, "tls"), { recursive: true });
+    await stageResetRequest(stateDir, operationId);
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
   });
 
   it("lets the real adopt run to completion where before the reset it was refused", async () => {
@@ -660,6 +710,14 @@ describe("a start after a reset of a box that joined was cut short in tls/", () 
     return { stateDir, venueDir };
   }
 
+  /** Where a stop between removing the joined record and removing the folder leaves it. */
+  async function emptyTls(box: { stateDir: string }): Promise<void> {
+    const tls = join(box.stateDir, "tls");
+    for (const name of await readdir(tls)) await rm(join(tls, name), { recursive: true });
+    await rm(join(box.stateDir, "secrets.env"), { force: true });
+    expect(await readdir(tls)).toEqual([]);
+  }
+
   async function start(box: { stateDir: string; venueDir: string }) {
     const served: Array<{ bootstrapOnly?: boolean }> = [];
     const reset = vi.fn(runStagedReset);
@@ -704,14 +762,60 @@ describe("a start after a reset of a box that joined was cut short in tls/", () 
 
     expect(served).toEqual([]);
     expect(await reset.mock.results[0]?.value).toBe(true);
-    expect(await readdir(join(box.stateDir, "tls"))).toEqual([]);
+    expect(existsSync(join(box.stateDir, "tls"))).toBe(false);
     expect(existsSync(join(box.stateDir, "secrets.env"))).toBe(false);
     expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("does not ask for connection repair at a start after the reset finished, before setup made a fresh set", async () => {
+    const box = await cutShortInTls();
+    await start(box);
+    expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
+
+    const { served, reset } = await start(box);
+
+    expect(served).toEqual([]);
+    expect(await reset.mock.results[0]?.value).toBe(false);
   });
 
   it("still asks for connection repair when no reset is staged", async () => {
     const box = await cutShortInTls();
     await rm(join(box.stateDir, "reset-request.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("finishes the reset at a start after one that stopped with tls/ emptied and the folder not yet removed", async () => {
+    const box = await cutShortInTls();
+    await emptyTls(box);
+
+    const { served, reset } = await start(box);
+
+    expect(served).toEqual([]);
+    expect(await reset.mock.results[0]?.value).toBe(true);
+    expect(existsSync(join(box.stateDir, "tls"))).toBe(false);
+    expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("still asks for connection repair at a start finding an empty tls/ when no reset is staged", async () => {
+    const box = await cutShortInTls();
+    await emptyTls(box);
+    await rm(join(box.stateDir, "reset-request.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+    expect(existsSync(join(box.stateDir, "tls"))).toBe(true);
+  });
+
+  it("still asks for connection repair at a start finding an empty tls/ beside secrets.env, though a reset is staged", async () => {
+    const box = await cutShortInTls();
+    await emptyTls(box);
+    await writeFile(join(box.stateDir, "secrets.env"), "S=1\n");
 
     const { served, reset } = await start(box);
 

@@ -3195,7 +3195,7 @@ describe("waitron.sh reset", () => {
     return state;
   }
 
-  it("the reset of a box that joined another empties tls/", () => {
+  it("the reset of a box that joined another removes tls/", () => {
     const state = resetStateWith([
       "ca.crt",
       "ca.key",
@@ -3204,18 +3204,74 @@ describe("waitron.sh reset", () => {
       "install.json",
       "joined.json",
     ]);
-    expect(readdirSync(state)).toEqual(["tls"]);
-    expect(readdirSync(join(state, "tls"))).toEqual([]);
+    expect(readdirSync(state)).toEqual([]);
   });
 
-  it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset empties tls/", () => {
+  it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset removes tls/", () => {
     const state = stateWith(["ca.crt", "ca.key", "server.pem", "joined.json"]);
     expect(cleanUp(state, "server.pem")).not.toBe(0);
     expect(readdirSync(join(state, "tls")).sort()).toEqual(["joined.json", "server.pem"]);
 
     expect(cleanUp(state)).toBe(0);
-    expect(readdirSync(join(state, "tls"))).toEqual([]);
+    expect(readdirSync(state)).toEqual([]);
   });
+
+  it("an empty tls/ with no joined record, as an earlier reset or one cut short leaves it, is removed by the next reset", () => {
+    const state = resetStateWith([]);
+    expect(readdirSync(state)).toEqual([]);
+  });
+
+  it("a reset of a box with no tls/ succeeds and makes none", () => {
+    const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+    dirs.push(state);
+    writeFileSync(join(state, "secrets.env"), "WAITRON_CREDENTIALS_KEY=x\n");
+    expect(cleanUp(state)).toBe(0);
+    expect(readdirSync(state)).toEqual([]);
+  });
+
+  /** A state folder whose tls/ is a link to a folder elsewhere holding `tlsFiles`. */
+  function linkedStateWith(tlsFiles) {
+    const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+    const target = mkdtempSync(join(tmpdir(), "waitron-sh-tls-"));
+    dirs.push(state, target);
+    for (const name of tlsFiles) writeFileSync(join(target, name), name);
+    symlinkSync(target, join(state, "tls"));
+    writeFileSync(join(state, "secrets.env"), "WAITRON_CREDENTIALS_KEY=x\n");
+    return { state, target };
+  }
+
+  it("a reset keeps a linked tls/ whose folder is empty", () => {
+    const { state, target } = linkedStateWith([]);
+    expect(cleanUp(state)).toBe(0);
+    expect(readdirSync(state)).toEqual(["tls"]);
+    expect(readlinkSync(join(state, "tls"))).toBe(target);
+    expect(readdirSync(target)).toEqual([]);
+  });
+
+  it("the reset of a box that joined another keeps a linked tls/ and empties its folder", () => {
+    const { state, target } = linkedStateWith(["ca.crt", "ca.key", "server.pem", "joined.json"]);
+    expect(cleanUp(state)).toBe(0);
+    expect(readdirSync(state)).toEqual(["tls"]);
+    expect(readlinkSync(join(state, "tls"))).toBe(target);
+    expect(readdirSync(target)).toEqual([]);
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "a tls/ folder the reset cannot remove fails the reset",
+    () => {
+      const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
+      dirs.push(state);
+      mkdirSync(join(state, "tls"));
+      writeFileSync(join(state, "tls", "joined.json"), "{}");
+      chmodSync(state, 0o500);
+      try {
+        expect(cleanUp(state)).not.toBe(0);
+      } finally {
+        chmodSync(state, 0o700);
+      }
+      expect(readdirSync(join(state, "tls"))).toEqual([]);
+    },
+  );
 
   it("the reset of a box that never joined keeps its authority and leaf", () => {
     const state = resetStateWith(["ca.crt", "ca.key", "server.pem"]);

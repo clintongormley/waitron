@@ -323,8 +323,9 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
  *    admission takes the venue lock before the count.
  * 8. The connection check stands aside while a staged reset of a box that joined another is
- *    pending: that reset empties `tls/`, so one cut short leaves a part-emptied set that only the
- *    reset, further on, can finish.
+ *    pending (`stagedResetEmptiesTls`), including one cut short after its joined record and
+ *    `secrets.env` went: that reset empties `tls/` and removes the folder, so one cut short leaves a
+ *    part-emptied set or an empty folder that only the reset, further on, can finish.
  * 9. The emergency-copy refusal (`refuseUnactivatedEmergencyCopy`) reads `node.db` alone, after
  *    the box env is loaded and before the ahead check, whose store open switches a `venue.db` not
  *    in WAL mode; Cloud's repeat placement of that copy would then refuse

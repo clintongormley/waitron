@@ -1292,10 +1292,11 @@ wipe_box() {
   else
     # A plain reset keeps tls/ and records/, except that a box that joined another (tls/joined.json)
     # holds that venue's authority in tls/, so it is emptied there too, the marker last; secrets.env
-    # goes either way.
+    # goes either way. An empty tls/ folder, not a link, is then removed: the server takes an
+    # existing tls/ for a lost certificate and serves its repair page instead of minting a new one.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && if [ -e "${WAITRON_STATE_DIR:?}/tls/joined.json" ]; then find "${WAITRON_STATE_DIR:?}/tls/" -mindepth 1 -maxdepth 1 -name joined.json -prune -o -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/joined.json"; fi'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && if [ -e "${WAITRON_STATE_DIR:?}/tls/joined.json" ]; then find "${WAITRON_STATE_DIR:?}/tls/" -mindepth 1 -maxdepth 1 -name joined.json -prune -o -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/joined.json"; fi && if [ -d "${WAITRON_STATE_DIR:?}/tls" ] && [ ! -L "${WAITRON_STATE_DIR:?}/tls" ] && [ -z "$(ls -A "${WAITRON_STATE_DIR:?}/tls")" ]; then rmdir "${WAITRON_STATE_DIR:?}/tls"; fi'
   fi
 }
 

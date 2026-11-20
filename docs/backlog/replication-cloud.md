@@ -923,7 +923,7 @@ the chart, and the till hides a line for its page's own box.
   served there until the next full start. A stop while a failed reissue is putting the old
   certificate back can leave a certificate and key that do not belong together; the next start
   reissues it, but the start's connection check may send the box to connection repair first. A
-  spare later promoted keeps `tls/joined.json`, so a plain reset of it also empties `tls/`, and its
+  spare later promoted keeps `tls/joined.json`, so a plain reset of it also removes `tls/`, and its
   devices must trust it again.
 
 ## A1273: the shared key ring has no rotation path to the spare
