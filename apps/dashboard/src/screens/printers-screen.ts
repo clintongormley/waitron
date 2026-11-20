@@ -300,6 +300,7 @@ type OfficeRow =
   | { kind: "repoint"; entry: PagePrinterEntry; agentGone: boolean }
   | { kind: "added" }
   | { kind: "refused"; reason: StringKey };
+type ListedOfficeRow = Exclude<OfficeRow, { kind: "added" }>;
 
 const OFFICE_REFUSAL: Record<
   Extract<OfficePrinterReport, { printable: false }>["reason"],
@@ -486,10 +487,9 @@ export class PrintersScreen extends LitElement {
         max-width: 28vw;
         font-size: var(--wt-font-size-sm);
       }
-      /* Capped like the name beside it, so a button's label or the added note wraps instead of
-         widening a phone's list past its screen in a wider font. */
-      wt-data-table::part(page-printer-action),
-      wt-data-table::part(page-printer-added) {
+      /* Capped like the name beside it, so a button's label wraps instead of widening a phone's
+         list past its screen in a wider font. */
+      wt-data-table::part(page-printer-action) {
         display: block;
         max-width: 40vw;
       }
@@ -1643,12 +1643,12 @@ export class PrintersScreen extends LitElement {
           device.port === target.port &&
           Date.parse(device.lastSeenAt) >= target.requestedAt,
       );
-      if (match)
-        this.probeStatus = this.#officeRow(match)
-          ? "page_printer"
-          : !this.#canAdd(match)
-            ? "registered"
-            : "found";
+      if (match) {
+        const office = this.#officeRow(match);
+        if (office?.kind === "added" || (!office && !this.#canAdd(match)))
+          this.probeStatus = "registered";
+        else this.probeStatus = office ? "page_printer" : "found";
+      }
     }
   }
 
@@ -5094,15 +5094,11 @@ export class PrintersScreen extends LitElement {
     </div>`;
   }
 
-  #officeAction(d: DiscoveredPrinter, row: OfficeRow): TemplateResult {
+  #officeAction(d: DiscoveredPrinter, row: ListedOfficeRow): TemplateResult {
     const key = this.#rowKey(d);
     if (row.kind === "refused")
       return html`<span part="page-printer-hint" data-test=${`page-printer-${this.#rowKey(d)}`}
         >${t(row.reason)}</span
-      >`;
-    if (row.kind === "added")
-      return html`<span part="page-printer-added" data-test=${`page-printer-added-${key}`}
-        >${t("printers.page_printer_added")}</span
       >`;
     const { entry } = row;
     if (row.kind === "add")
@@ -5163,15 +5159,15 @@ export class PrintersScreen extends LitElement {
     if (!this.addingPrinter) return nothing;
     const opening = this.#addPrinterOpening;
     const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
+    const officeRows = this.discovered.map((d) => [d, this.#officeRow(d)] as const);
+    // Left out like an added receipt printer: nothing to do on the agent it is added through.
+    const added = new Set(officeRows.flatMap(([d, row]) => (row?.kind === "added" ? [d] : [])));
     const office = new Map(
-      this.discovered.flatMap((d) => {
-        const row = this.#officeRow(d);
-        return row ? [[d, row] as const] : [];
-      }),
+      officeRows.flatMap(([d, row]) => (row && row.kind !== "added" ? [[d, row] as const] : [])),
     );
     const refused = (d: DiscoveredPrinter) => office.get(d)?.kind === "refused";
     const addable = this.discovered.filter(
-      (d) => office.has(d) || pairOnly.has(d) || this.#canAdd(d),
+      (d) => !added.has(d) && (office.has(d) || pairOnly.has(d) || this.#canAdd(d)),
     );
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
     const shown = (d: DiscoveredPrinter) =>

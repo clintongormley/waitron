@@ -609,7 +609,12 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
               },
             }),
           ]),
-          listPagePrinters: vi.fn().mockResolvedValue([row("10.0.0.62"), row("10.0.0.63")]),
+          listPagePrinters: vi
+            .fn()
+            .mockResolvedValue([
+              row("10.0.0.62", { agentId: null, agentName: null }),
+              row("10.0.0.63"),
+            ]),
           registerPagePrinter: vi.fn().mockRejectedValue({ code: "page_printer.not_found" }),
         }),
       },
@@ -619,7 +624,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openDiscovery(el);
     q(el, "[data-test='repoint-page-printer-a2:10.0.0.63:9100']")!.click();
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a1:10.0.0.62:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.62:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.63:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-a1:10.0.0.65:9100']")).not.toBeNull();

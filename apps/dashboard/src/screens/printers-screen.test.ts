@@ -12410,7 +12410,7 @@ describe("office printers in discovery", () => {
           },
         );
         expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
-        expect(q(el, "[data-test='page-printer-added-a1:10.0.0.57:9100']")).not.toBeNull();
+        expect(q(el, "[data-test='discovered-row-a1:10.0.0.57:9100']")).toBeNull();
         expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.58:9100']")).not.toBeNull();
         expect(q(el, "[data-test='add-page-printer-a1:10.0.0.59:9100']")).not.toBeNull();
         if (font === "Verdana") {
@@ -12588,10 +12588,7 @@ describe("office printers in discovery", () => {
       name: "Back office",
     });
     await flush(el);
-    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
     expect(text(el, "[data-test=printer-added]")).toBe(
       t("printers.added").replace("{name}", "Back office"),
     );
@@ -12631,12 +12628,8 @@ describe("office printers in discovery", () => {
       [office(), office({ agentId: "a2", agentName: "Bar agent" })],
       { listPagePrinters },
     );
-    // The recorded agent's own row is already added, with nothing to press.
-    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).toBeNull();
-    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    // The recorded agent's own row is already added, so the scan leaves it out.
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
     const repoint = q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!;
     expect(repoint.textContent!.trim()).toBe(t("printers.page_printer_use_agent"));
     listPagePrinters.mockResolvedValue([{ ...added, agentId: "a2", agentName: "Bar agent" }]);
@@ -12648,11 +12641,66 @@ describe("office printers in discovery", () => {
       port: 631,
       path: "/ipp/print",
     });
-    expect(text(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
     expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("answers that a checked office printer already added through the same agent is added, without pointing at a row", async () => {
+    const requestedAt = Date.now();
+    const device: DiscoveredPrinter = {
+      agentId: "a1",
+      agentName: "Kitchen agent",
+      transport: "network_tcp",
+      host: "10.0.0.56",
+      port: 9100,
+      name: "HP LaserJet",
+      pagePrinter: true,
+      office: printable,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: new Date(requestedAt).toISOString(),
+    };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({
+      probePrinterAddress,
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("leaves out an office printer already added through the agent that reports it, and keeps one to move from a gone agent", async () => {
+    const { el } = await mountWith(
+      [office(), office({ host: "10.0.0.57" }), office({ host: "10.0.0.58" })],
+      {
+        listPagePrinters: vi
+          .fn()
+          .mockResolvedValue([
+            added,
+            { ...added, id: "pp2", host: "10.0.0.57", agentId: null, agentName: null },
+          ]),
+      },
+    );
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.57:9100']")).not.toBeNull();
+    expect(text(el, "[data-test='discovered-row-a1:10.0.0.57:9100']")).toContain(
+      t("printers.page_printer_no_agent"),
+    );
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.58:9100']")).not.toBeNull();
   });
 
   it("keeps a live list delivered while a move's own re-read is still out", async () => {
@@ -12673,12 +12721,12 @@ describe("office printers in discovery", () => {
     liveData.invalidate([{ type: "printers", id: "pp1" }]);
     await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(3));
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
     // The re-read began before the live delivery, so its older answer must not replace it.
     answerReread([added]);
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
-    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
   });
 
   it("sends one move however often it is pressed while the first is out", async () => {
@@ -12954,7 +13002,6 @@ describe("one table for every printer", () => {
       "printers.invoice_printer_a4": ["A4", "A4"],
       "printers.invoice_printer_letter": ["Letter", "Carta"],
       "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
-      "printers.page_printer_added": ["Added as A4 printer", "Añadida como impresora A4"],
     } as const;
     for (const [key, [english, spanish]] of Object.entries(words)) {
       expect(en[key as StringKey], key).toBe(english);
@@ -12964,6 +13011,7 @@ describe("one table for every printer", () => {
       "printers.invoice_printers_title",
       "printers.invoice_printer_rename",
       "printers.invoice_printer_rename_heading",
+      "printers.page_printer_added",
     ])
       expect(gone in en, gone).toBe(false);
   });
