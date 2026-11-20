@@ -183,23 +183,24 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
-  "payment.provider_unknown": 404,
-  "payment.provider_credential_rejected": 422,
-  "payment.credential_environment_mismatch": 422,
+  "payment.provider_unknown": 409,
+  "payment.provider_credential_rejected": 409,
+  "payment.credential_environment_mismatch": 409,
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
   "payment.provider_disabled": 409,
   "module.disabled": 409,
   "settings.out_of_date": 409,
   "settings.invalid": 500,
-  "payment.pairing_refused": 422,
+  "payment.pairing_refused": 400,
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
-  "reader.not_listed": 422,
+  "reader.not_listed": 400,
   "reader.reference_unknown": 400,
   "reader.payment_in_progress": 409,
   "reader.unpair_failed": 502,
   "reader.unpair_in_progress": 409,
+  "payment.unpair_unsupported": 409,
   "device.not_found": 404,
   "device.binding_invalid": 400,
   "device.equipment_held": 409,
@@ -209,7 +210,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "stuck_payment.not_found": 404,
   "payment.hold_not_found": 404,
   "payment.hold_already_recorded": 409,
-  "payment.resolve_unsupported": 422,
+  "payment.resolve_unsupported": 409,
   "payment.outcome_unknown": 409,
   "bill.payment_not_found": 404,
   "tender.refund_not_found": 404,
@@ -223,7 +224,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.payment_not_stuck": 409,
   "bill.payment_outcome_unconfirmed": 409,
   "payment.not_refundable": 409,
-  "payment.refund_exceeds_capture": 422,
+  "payment.refund_exceeds_capture": 409,
   "sale.number_reused": 409,
   "clock.unconfirmed": 409,
   "clock.unusable": 409,
@@ -236,6 +237,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const DASHBOARD_PIN_SLOT = "management";
 
 const run = createErrorBoundary(STATUS, "payments.failed");
+// The provider routes name their provider in the address.
+const runPathProvider = createErrorBoundary(
+  { ...STATUS, "payment.provider_unknown": 404 },
+  "payments.failed",
+);
+// Connect names its provider in the address and refuses the credential the body carries.
+const runConnect = createErrorBoundary(
+  {
+    ...STATUS,
+    "payment.provider_unknown": 404,
+    "payment.provider_credential_rejected": 400,
+    "payment.credential_environment_mismatch": 400,
+  },
+  "payments.failed",
+);
 // Pairing and adoption name their provider only in the body's `providerId`.
 const runBodyProvider = createErrorBoundary(
   { ...STATUS, "payment.provider_unknown": 400 },
@@ -589,7 +605,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   };
 
   app.get("/management-api/payments/providers/:id/available-readers", (c) =>
-    run(c, log, async () => {
+    runPathProvider(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const seat = cardProviderById(deps.providers, c.req.param("id"));
       await gated(sessionId, (tx) => requireConnected(tx, seat));
@@ -915,7 +931,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   app.post("/management-api/payments/providers/:id/connect", (c) =>
-    run(c, log, async () => {
+    runConnect(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -953,7 +969,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   app.put("/management-api/payments/providers/:id/state", (c) =>
-    run(c, log, async () => {
+    runPathProvider(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       if (
@@ -995,7 +1011,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   app.post("/management-api/payments/providers/:id/disconnect", (c) =>
-    run(c, log, async () => {
+    runPathProvider(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       await gated(sessionId, async (tx, personId) => {
@@ -1155,7 +1171,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         });
         const seat = cardProviderById(deps.providers, reader.provider);
         if (!seat.readers.canUnpair)
-          throw new AppError("management.request_invalid", { field: "providerId" });
+          throw new AppError("payment.unpair_unsupported", { providerId: reader.provider });
         await gated(sessionId, (tx) => requireConnected(tx, seat));
         // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
         await removeAtProvider(seat, reader.providerRef);

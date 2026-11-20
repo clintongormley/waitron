@@ -404,7 +404,7 @@ describe("connect", () => {
       cookie: venue.managerCookie,
       body: { ...GOOD_KEY, secretKey: "sk_test_bad" },
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.provider_credential_rejected" },
     });
@@ -420,7 +420,7 @@ describe("connect", () => {
       cookie: venue.managerCookie,
       body: { ...GOOD_KEY, secretKey: "sk_live_ok" },
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.credential_environment_mismatch" },
     });
@@ -1292,7 +1292,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
       cookie: venue.managerCookie,
     });
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: { code: "payment.provider_credential_rejected", params: { providerId: "stripe" } },
     });
@@ -1731,7 +1731,7 @@ describe("reader adoption and local management", () => {
       cookie: venue.managerCookie,
       body: { ...adoption, providerRef: "forged" },
     });
-    expect(result.status).toBe(422);
+    expect(result.status).toBe(400);
     expect(await result.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
@@ -1802,7 +1802,7 @@ describe("reader adoption and local management", () => {
     const opts = { cookie: venue.managerCookie };
     expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
     const enabled = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
-    expect(enabled.status).toBe(422);
+    expect(enabled.status).toBe(400);
     expect(await enabled.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
@@ -1860,7 +1860,7 @@ describe("reader adoption and local management", () => {
     },
   );
 
-  it("rejects unpair when the provider does not support it", async () => {
+  it("refuses unpair with 409 payment.unpair_unsupported when the provider cannot unpair", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -1868,9 +1868,9 @@ describe("reader adoption and local management", () => {
     const response = await send(app, "POST", `${base}/readers/${id}/unpair`, {
       cookie: venue.managerCookie,
     });
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "providerId" } },
+      error: { code: "payment.unpair_unsupported", params: { providerId: "stripe" } },
     });
   });
 
@@ -2007,8 +2007,69 @@ describe("screens and unknown ids", () => {
     expect(connect.status).toBe(404);
     expect(await connect.json()).toEqual(unknown);
 
+    for (const [method, path, body] of [
+      ["GET", "/management-api/payments/providers/nope/available-readers", undefined],
+      ["PUT", "/management-api/payments/providers/nope/state", { enabled: true, revision: 0 }],
+      ["POST", "/management-api/payments/providers/nope/disconnect", undefined],
+    ] as const) {
+      const res = await send(app, method, path, { ...opts, ...(body ? { body } : {}) });
+      expect({ path, status: res.status, body: await res.json() }).toEqual({
+        path,
+        status: 404,
+        body: unknown,
+      });
+    }
+
     const readers = await send(app, "GET", "/management-api/payments/readers", opts);
     expect(await readers.json()).toEqual([]);
+  });
+
+  it("answers 409 payment.provider_unknown when a stored reader's provider is no longer served", async () => {
+    const venue = await seedVenueWithStaff();
+    const app = mountApp(venue);
+    await connectStripe(app, venue);
+    const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
+    const withoutStripe = mountApp(venue, []);
+    const gone = { error: { code: "payment.provider_unknown", params: { providerId: "stripe" } } };
+    for (const [method, suffix] of [
+      ["GET", "/status"],
+      ["POST", "/unpair"],
+    ] as const) {
+      const res = await send(
+        withoutStripe,
+        method,
+        `/management-api/payments/readers/${id}${suffix}`,
+        {
+          cookie: venue.managerCookie,
+        },
+      );
+      expect({ suffix, status: res.status, body: await res.json() }).toEqual({
+        suffix,
+        status: 409,
+        body: gone,
+      });
+    }
+  });
+
+  it("answers a pairing code the provider refuses with 400 payment.pairing_refused, writing no reader", async () => {
+    const venue = await seedVenueWithStaff();
+    const refusing: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async () => {
+          throw new AppError("payment.pairing_refused", { providerId: "stripe" });
+        },
+      },
+    };
+    const app = mountApp(venue, [refusing]);
+    await connectStripe(app, venue);
+    const res = await addReader(app, venue, nextRef());
+    expect({ status: res.status, body: await res.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "payment.pairing_refused", params: { providerId: "stripe" } } },
+    });
+    expect(await suite.db.select({ id: cardReaders.id }).from(cardReaders)).toEqual([]);
   });
 
   it.each([
@@ -2400,7 +2461,7 @@ describe("reader delete", () => {
 
     const res = await deleteOf(app, venue, id);
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(409);
     expect(await res.json()).toEqual({
       error: { code: "payment.provider_credential_rejected", params: { providerId: "stripe" } },
     });
@@ -2822,7 +2883,7 @@ describe("reader delete", () => {
       expect(dropped?.status).toBe(action === "a Delete" ? 200 : 204);
       expect(removed).toEqual([ref]);
       expect({ status: res.status, body: await res.json() }).toEqual({
-        status: 422,
+        status: 400,
         body: { error: { code: "reader.not_listed", params: { providerId: "stripe" } } },
       });
       expect(

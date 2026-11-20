@@ -689,6 +689,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card refund on this bill is still waiting for the card provider. Until it finishes, this bill cannot take payments or refunds, and what it charges cannot be changed",
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. Hasta que termine, esta cuenta no admite cobros ni devoluciones y no se puede cambiar su importe",
   },
+  "device.no_reader": {
+    en: "This device has no card reader it can use. A device's card readers are chosen in the dashboard, under Device profiles; new readers are added under Card payments",
+    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Los lectores de tarjetas de un dispositivo se eligen en el panel, en Perfiles de dispositivo; los lectores nuevos se añaden en Pagos con tarjeta",
+  },
   "reader.not_found": {
     en: "This device has no card reader it can use. A device's card readers are chosen in the dashboard, under Device profiles; new readers are added under Card payments",
     es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Los lectores de tarjetas de un dispositivo se eligen en el panel, en Perfiles de dispositivo; los lectores nuevos se añaden en Pagos con tarjeta",

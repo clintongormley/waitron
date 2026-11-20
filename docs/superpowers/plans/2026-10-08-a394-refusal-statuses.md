@@ -721,6 +721,29 @@ Status changes:
   409 → 400. No client compares these routes' statuses (grep of `apps/dashboard`, `apps/till`,
   `apps/setup` and `packages/*/src/dashboard`, 2026-11-20); the dashboard reads the codes. The rest
   of A394-20 stays with lane B.
+  **2026-11-20 (A394-20d, lane C):** the card payment rows are done, by questions 4, 9 and 14. In
+  `apps/server/src/payments-api.ts`, `payment.provider_unknown` answers 409 where the provider is
+  read from a stored reader or payment (reader status, unpair and delete, partial-refund retain and
+  release, the two resolve routes; tested on status and unpair, the rest traced through the shared
+  table): that provider's module is off or gone. It keeps 404 on the four
+  routes whose address names the provider (available readers, connect, On/Off, disconnect) and 400
+  on pair and adopt. A refused or wrong-environment key answers 400 on connect, which checks the
+  key the body carries, and 409 elsewhere, where the stored key is refused. `reader.not_listed`
+  and `payment.pairing_refused` answer 400 (each is about what the body sent);
+  `payment.resolve_unsupported` and `payment.refund_exceeds_capture` answer 409 (the second is raised
+  here only by the refund reconciliation, whose checks before it appear, by reading, to keep it from
+  firing; no test reaches it). Unpairing a reader
+  whose provider cannot unpair now answers a new code, `payment.unpair_unsupported`, 409, in place
+  of `management.request_invalid` naming a `providerId` field the request does not have; the
+  dashboard offers Unpair only for a provider that can (`apps/dashboard/src/screens/payments-screen.ts`).
+  In `apps/server/src/till-api.ts`, a card payment from a device with no reader chosen, no profile
+  default and none in the request answers a new code, `device.no_reader`, 409, on the till's pay
+  route (tested) and the bill's card payment route (traced: it uses the till's same table); a
+  reader the request names that is unknown or switched off still answers `reader.not_found` 404. Left: the till's own 422 for
+  `payment.refund_exceeds_capture`. The `enable`/`disable` reader routes the queue named no longer
+  exist (`git grep -nE 'readers/:id/(enable|disable)' -- apps packages` finds nothing). No client
+  compares these routes' statuses (same grep as A394-20c, 2026-11-20). The rest of A394-20 stays
+  with lane B.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`

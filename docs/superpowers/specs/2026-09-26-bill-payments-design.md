@@ -586,7 +586,7 @@ A pending bill payment is resolved from the provider's row, never from its age:
   be filed, or a newer attempt has replaced the mark: it answers `orderUnlocked: false` and the mark
   stays, as item 5 of §1.2 states (`clearPaymentAttemptMark`, `apps/server/src/till-sale.ts`). And
   a bill payment whose `payments` row is still `attempting`, at a connected provider that cannot
-  resolve an abandoned attempt, is refused `payment.resolve_unsupported` (HTTP 422) rather than
+  resolve an abandoned attempt, is refused `payment.resolve_unsupported` (HTTP 422; 409 since 2026-11-20, A394-20d) rather than
   `bill.payment_not_stuck` or `bill.payment_outcome_unconfirmed`, and stays `pending`. Pinned in
   `apps/server/src/payments-api.stuck.test.ts`, the first only for another payment still
   `attempting`: "reports the order still locked, and keeps its

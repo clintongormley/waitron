@@ -506,6 +506,7 @@ declare module "@waitron/shared" {
     "payment.not_stuck": { paymentId: string };
     "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
+    "payment.unpair_unsupported": { providerId: string };
     "payment.outcome_unknown": {
       paymentId: string;
       reason: "unreachable" | "ambiguous" | "refund_reference_missing";
@@ -1217,6 +1218,8 @@ declare module "@waitron/shared" {
     "device.forbidden_action": { action: string };
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
     "device.cash_not_allowed": Record<string, never>;
+    /** A card payment named no reader, and the device has neither a chosen reader nor a profile default. */
+    "device.no_reader": Record<string, never>;
     /**
      * A device's active profile cannot change while a card payment it started is still unresolved
      * (`payments.state` `attempting` or `initiated`): the payment finishes or is cancelled first.

@@ -1462,7 +1462,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
-  it("a device with no chosen reader, no profile default and no request readerId is reader.not_found", async () => {
+  it("a device with no chosen reader, no profile default and no request readerId is 409 device.no_reader", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -1478,8 +1478,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       each.menuItemId,
     );
 
-    expect(payRes.status).toBe(404);
-    expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
+    expect(payRes.status).toBe(409);
+    expect(await payRes.json()).toEqual({ error: { code: "device.no_reader", params: {} } });
   });
 
   it("a reader whose provider has NO sealed credential is reader.provider_disconnected (not a decline)", async () => {

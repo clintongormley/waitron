@@ -1761,7 +1761,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
 
     const res = await send(v, "POST", resolvePath(paymentId));
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
       code: "payment.resolve_unsupported",
       params: { providerId: "stripe" },
@@ -2133,7 +2133,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     const res = await send(v, "POST", billResolvePath(id));
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
       code: "payment.resolve_unsupported",
       params: { providerId: "stripe" },
