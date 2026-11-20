@@ -575,9 +575,7 @@ const waitingOriginal = and(
 
 /**
  * Lays out again each original receipt of the order's sale that no printer has taken or tried,
- * so it lists every payment taken before it prints. Called in the transaction that records a
- * payment. A print agent's claim is one write too, so a job is rewritten before its claim or left
- * with the bytes it was claimed with.
+ * so it lists every payment taken before it prints.
  */
 export async function refreshWaitingOriginals(
   backend: FiscalBackend,

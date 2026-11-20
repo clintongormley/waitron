@@ -25,7 +25,8 @@ to say what is still owed.
    (`Base imponible 10% … / IVA 10% …`).
 4. **Solid dividing lines.** On thermal paper, the section rules are drawn as a thin solid line
    instead of a row of `-` characters, in the same places they print today.
-5. **Payments as they stand when printed.** Every print of a receipt (simplified or full, original
+5. **Payments as they stand when printed.** _20 November 2026: see the dated note under
+   Constraints; a copy, and an original a printer has taken, keep their queued bytes._ Every print of a receipt (simplified or full, original
    or duplicado, thermal or A4/PDF) shows the payments recorded at the moment it is printed:
    - each card payment with its brand and last four digits (`Visa ****4034`), how it was presented
      (`Sin contacto`, `Chip`, `Banda`) and its authorisation code, when the payment row holds them;
@@ -83,6 +84,10 @@ to say what is still owed.
 - The receipt is rebuilt from the database each time it prints (`readSettledTicket`,
   `readTransactionReceipt`); only a retry of a failed original reuses stored bytes
   (`enqueueOriginalReceipt` in `receipt-print.ts`). Goal 5 relies on that.
+  _20 November 2026: wrong as written: a receipt's bytes are built when it is queued. An original
+  no printer has taken or tried is laid out again after each payment (`refreshWaitingOriginals`,
+  `receipt-print.ts`); a copy, and an original a printer has taken, tried or resent, keep the bytes
+  they were queued with._
 - After a ticket is issued, a payment must settle the whole amount due (`settle-sale.ts`). Part
   payments are bill payments, kept in `bill_payments` until the sale settles; only settlement
   writes `tenders`, which is all today's receipt reads (`readBillTenderLines`). So for an issued,

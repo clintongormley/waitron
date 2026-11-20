@@ -405,9 +405,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   #closed(event: Event): void {
     event.stopPropagation();
-    // A save that closed the window has told the page already. Its close report arrives later,
-    // when the page may have opened the window again, so it is not a cancel.
-    if (!this.active) return;
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
     this.active = false;
     this.#scope?.dispose();
     this.#scope = undefined;

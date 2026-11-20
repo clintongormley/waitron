@@ -2036,7 +2036,7 @@ They need no browser refresh or server restart. A language save enqueues nothing
 
 New reprints use current frame words, the current declared allergens of each dish and extra and the matching frozen allergy translation while keeping
 recorded names and instructions. Outbox resends to the job's own printer reuse the saved payload; on another printer a kitchen ticket keeps its words and is only centred. Unit-map selection keeps
-`cfg.locale`, the venue's display language (`readVenueLocale`); payment-slip words, dates and amounts use the sale's receipt language, or the order's before there is a sale. Boundary
+`cfg.locale`, the venue's display language (`readVenueLocale`); payment-slip words, dates and amounts use the sale's receipt language, or, before there is a sale, the order's, else the venue's receipt language. Boundary
 checks live in `kitchen-print.language.test.ts` and `kitchen-language.boundaries.test.ts`.
 
 ## What an open till keeps current
