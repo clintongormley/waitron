@@ -215,16 +215,13 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
     const rate = rates[vatClass];
     const base = baseFromGross(line.lineGross, rate);
     const g = groups.get(rate);
-    groups.set(
-      rate,
-      g === undefined
-        ? { base, gross: line.lineGross, indexes: [index] }
-        : {
-            base: addDecimal(g.base, base),
-            gross: addDecimal(g.gross, line.lineGross),
-            indexes: [...g.indexes, index],
-          },
-    );
+    if (g === undefined) {
+      groups.set(rate, { base, gross: line.lineGross, indexes: [index] });
+    } else {
+      g.base = addDecimal(g.base, base);
+      g.gross = addDecimal(g.gross, line.lineGross);
+      g.indexes.push(index);
+    }
     return {
       ...line,
       unitPrice: baseFromGross(grossUnitPrice, rate), // net, informational
