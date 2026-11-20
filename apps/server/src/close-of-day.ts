@@ -94,7 +94,7 @@ export async function issueBillAtClose(
   if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
     return { kind: "left_open", reason: "dish_not_made" };
 
-  // Dated by closeOfDayEnd, as every path that issues a bill the close would end is.
+  // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
   const invoice = await priceForIssuance(
     tx,
     pinnedAt(deps.clock, reading),
@@ -124,7 +124,7 @@ export async function issueBillAtClose(
   return { kind: "issued", saleId };
 }
 
-/** The bill when the close would end it once its business day is over: a table bill with lines,
+/** The bill the close considers once its business day is over: a table bill with lines,
  * opened by this node with a trusted opening time, that no restore left for staff (D6). */
 async function readCloseableBill(tx: Transaction, nodeId: string, billId: string) {
   const [bill] = await tx

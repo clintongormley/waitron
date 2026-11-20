@@ -648,7 +648,7 @@ switched-off-box test: a box switched off over the day's end and started two day
 ticket with the close's day as its sale date, and an on-time close-of-day ticket carries none.
 
 _2026-11-20 (review fix): row G no longer keeps one date. `issueOrderMoment` asks `closeOfDayEnd`
-(`close-of-day.ts`) for every order it dates: a bill the close would end, issued after the business
+(`close-of-day.ts`) for every order it dates: a bill the close counts as due (row G, and row H's held case), issued after the business
 day it was opened in ended, is dated by the earlier of the path's own moment and that day's end, so
 the close's day wins whichever path issues the bill first. The close itself passes no moment of its
 own and is dated by the same function._

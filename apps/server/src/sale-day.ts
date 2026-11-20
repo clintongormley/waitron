@@ -43,9 +43,8 @@ export function cardSaleMoment(card: CardTiming): string | null {
 /**
  * Prepare the issue clock and {@link issueMoment} order `orderId`'s invoice: every till path that
  * files an order's invoice issues it here. `mealEndedAt` is when the meal ended, for an invoice
- * issued after that. A bill the close of day
- * would end, issued after its business day ended, is dated no later than that day's end
- * ({@link closeOfDayEnd}).
+ * issued after that. A bill the close of day counts as due, issued after its business day ended,
+ * is dated no later than that day's end ({@link closeOfDayEnd}).
  */
 export async function issueOrderMoment(
   tx: Transaction,

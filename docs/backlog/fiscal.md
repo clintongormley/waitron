@@ -1169,7 +1169,7 @@ for), issued after the business day it was opened in ended, is dated no later th
 whichever path issues it: the owner's "whichever comes first" above (the owner's D2, "Yes, leave
 them to close of day", same record, chose to build nothing for these bills on this branch; the
 watcher has not yet cleared this). A bill paid in full before that day ended but held open past it is
-dated by the day's end too, not by its last payment. Every other invoice carries one date. A card
+dated by the day's end, not by its last payment as that rule would give: a stated limit. Every other invoice carries one date. A card
 found later carries roughly when the reader was asked (SumUp's time is the checkout's start), so a
 tap just after midnight still files the earlier day. The owner's answers relayed by the watcher on
 2026-11-15 at 12:12 and 20:59 (lane L `archive/questions-to-2026-11-18.md`): "sale day" for the
