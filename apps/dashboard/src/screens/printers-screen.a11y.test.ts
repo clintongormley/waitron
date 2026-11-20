@@ -932,11 +932,16 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
   it("renders Bluetooth devices, Show all and the Pair dialog accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
-      { api: bluetoothApi() },
+      {
+        api: bluetoothApi({
+          listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, bluetooth: "no_controller" }]),
+        }),
+      },
       theme,
     );
     await flush(el);
     await openDiscovery(el);
+    expect(q(el, "[data-test=bluetooth-unavailable-a1]")).not.toBeNull();
     expect(q(el, '[data-test="discovered-row-a1:66:77:88:99:AA:BB"]')).toBeNull();
     expect(q(el, "[data-test=bluetooth-note]")).not.toBeNull();
     await expectNoA11yViolations(host);

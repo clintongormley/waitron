@@ -8000,6 +8000,22 @@ describe("printers-screen Bluetooth pairing", () => {
       });
     }
 
+    it("gives a reason this dashboard does not know the service wording", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, bluetooth: "adapter_on_fire" as PrintAgentRow["bluetooth"] },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([
+        [
+          "bluetooth-unavailable-a1",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Kitchen agent",
+            reason: t("printers.bluetooth_unavailable.service"),
+          }),
+        ],
+      ]);
+    });
+
     it("says nothing for an agent that can use Bluetooth, one with no recent report, or an inactive one", async () => {
       const { el } = await mountWithAgents([
         { ...agents[0]!, id: "a1", bluetooth: "available" },

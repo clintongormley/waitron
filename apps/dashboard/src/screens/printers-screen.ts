@@ -5287,12 +5287,15 @@ export class PrintersScreen extends LitElement {
         >${t("printers.add_help")}</wt-help-tooltip
       >
       <p class="hint">${t("printers.discovery_hint")}</p>
-      ${this.agents.map(({ id, name, active, bluetooth }) =>
-        active && bluetooth !== null && bluetooth !== "available"
+      ${this.agents.map(({ id, name, active, bluetooth: state }) =>
+        active && state !== null && state !== "available"
           ? html`<p class="hint" data-test=${`bluetooth-unavailable-${id}`}>
               ${fill("printers.bluetooth_unavailable", {
                 agent: name,
-                reason: t(BLUETOOTH_UNAVAILABLE_TEXT[bluetooth]),
+                // A code added to the agent after this dashboard was built still reads as a sentence.
+                reason: t(
+                  BLUETOOTH_UNAVAILABLE_TEXT[state] ?? "printers.bluetooth_unavailable.service",
+                ),
               })}
             </p>`
           : nothing,
