@@ -1,52 +1,55 @@
 # Office printer holds, Print Queue and retired agents
 
-When an office printer holds an invoice, staff see the printer and what to fix on the till and in
-Print Queue. The same job finishes when the printer resumes. A4 failures stay visible, and a
-former primary's built-in agent stops raising a quiet-agent warning.
+Staff see what to fix when an office printer holds an invoice. That job finishes when the printer
+resumes. Managers can find waiting and failed A4 jobs. A former primary's unneeded agent falls
+quiet without a warning, and a printer that still needs that agent keeps its warning.
 
-## 1. Detect and explain the hold
+## 1. Find and explain the printer stop
 
-- In `apps/print-agent/src/ipp-print.test.ts`, first show a printer reporting `media-empty-error`
-  while its accepted job still says `processing` without `printer-stopped`. Require a paper-out
-  report before the late check near the deadline, then one completed Print-Job after paper returns.
-  The existing fixture that makes the job itself say it has stopped already passes.
-- In `ipp-print.ts`, check the printer on the first valid unfinished-job reply and periodically
-  on the existing held-poll cadence while the job is otherwise unremarkable. Keep immediate
-  checks for stopped or held jobs and the last check near the deadline. Keep the stopped-printer
-  check, reason codes, claim renewal and same-job polling. The live HP's reply sequence from
-  20 November is unverified. This test covers a gap in when Waitron asks for the printer's report.
-- In `apps/server/src/invoice-delivery-status.ts`, use the linked A4 job's printer for an optional
-  `printerName` on a held attempt. Extend the held case in `page-print-agent-e2e.test.ts` to
-  assert that name and keep its existing one-submission and completion assertions.
-- In `apps/till/src/api/client.ts`, `screens/till-ticket-view.ts` and `i18n/strings.ts`, show
-  “{printer} is out of paper. Add paper and it will print.” for an active paper hold. Reuse the
-  existing translated reasons for other stops and the office-printer fallback when no name is
-  available. Keep the separate uncertain-outcome wording after a lost job. Test the displayed
-  English and Spanish in `till-ticket-view.test.ts`. Keep the existing five-second reread.
+- Obtain a read-only receipt from the 20 November HP attempt through the watcher. Check its
+  delivery status and failure code, the linked job's hold, and any recorded printer and job
+  replies. On main the held-and-resumed test in `apps/server/src/page-print-agent-e2e.test.ts`
+  passes. `apps/print-agent/src/ipp-print.test.ts` also confirms that a job still reporting
+  `processing` can delay the first printer check until near the deadline. These facts do not
+  identify the live cause.
+- Make only the agent change supported by that receipt. Reproduce the reply sequence in
+  `apps/print-agent/src/ipp-print.test.ts` before changing `ipp-print.ts`. State both the job and
+  printer states in the fixture. If only the job still says `processing`, test an earlier,
+  bounded printer-state check. If the printer itself reports a different state with a stop
+  reason, verify the distinction between an error and a warning before changing detection.
+  Keep the claim, track the same printer job and assert one submission through recovery.
+- In `apps/server/src/invoice-delivery-status.ts`, join the linked A4 job's office printer and
+  return an optional `printerName` on a held attempt. Assert the assigned name in the existing
+  `page-print-agent-e2e.test.ts` case. In the till's `api/client.ts`, `screens/till-ticket-view.ts`
+  and `i18n/strings.ts`, name the printer for known holds, with the existing fallback. For an
+  active paper hold, say “{printer} is out of paper. Add paper and it will print.” Keep the
+  distinct wording when the box has lost track of the job. Test both languages in
+  `till-ticket-view.test.ts` and keep the existing status reread.
 
-## 2. Show office jobs in Print Queue
+## 2. Show A4 jobs in Print Queue
 
-- Extend the existing `/management-api/print-jobs` read in `apps/server/src/print-api.ts` to include
-  A4 jobs, using the existing status, printer name and hold from `print_jobs` and its printer join.
-  Keep the completion and exhausted history limits. Add an A4 case to `print-api.test.ts` for
-  queued, held and failed jobs. Update the existing history cases to admit A4 within those limits.
-- In `apps/dashboard/src/api/client.ts`, `screens/printers-screen.ts` and `i18n/strings.ts`, use
-  the queue's existing status cell and translated office-printer reasons. Make the reason
-  searchable. A failed job shows its failure, even when a previous hold is stored. Keep A4 rows
-  clear of the receipt preview and resend actions. Test a held and a failed row in
-  `printers-screen.test.ts`, and update the English and Spanish `printers.md` guides.
+- Use the existing read in `apps/server/src/print-api.ts` for receipt and office printers. Keep
+  its history limits. Read the linked invoice delivery for uncertain outcomes and the job for
+  active holds. A waiting A4 behind a held job on that same printer shows the hold, too.
+  Strip receipt preview, reprint targets and receipt visibility rules from the A4 row path.
+  Test queued, held, failed and uncertain A4 jobs in `print-api.test.ts`, including a queued
+  job behind a hold and A4 within the existing finished history limits.
+- In the dashboard's `api/client.ts`, `api/live-queries.ts` if the read needs a new dependency,
+  `screens/printers-screen.ts` and `i18n/strings.ts`, use the existing status cell and translated
+  office-printer reasons. Say “May have printed” for an uncertain outcome. Test hold, failure,
+  uncertainty and available actions in `printers-screen.test.ts`.
 
-## 3. Limit quiet-agent warnings to agents expected to print
+## 3. Stop the old agent warning after it is no longer needed
 
-- Pass the serving box's node id from `apps/server/src/boot.ts` into `printingAlertSource` in
-  `alert-sources.ts`. That source should count its own self-enrolled agent and agents enrolled
-  by staff (no node id). Keep the other box's enrollment and job history so it can serve again
-  after a role swap. In `alert-sources.test.ts`, show the warning while that box serves, its
-  disappearance after a swap and continued warnings for a quiet current or staff-enrolled agent.
+- Pass the serving box's node id from `apps/server/src/boot.ts` to `printingAlertSource` in
+  `alert-sources.ts`. Preserve the warning for a quiet active agent if it is enrolled locally,
+  enrolled without a box id, or still assigned to an active printer. Keep the other box's row
+  for history and future swaps. Test the warning clearing after a swap and after reassignment,
+  and the cases where it remains, in `alert-sources.test.ts`.
 
-Run each new case red then green and each changed test file before handoff. Check the till and
-queue in both languages, both themes and at desktop and phone widths. Update A552 in
-`docs/backlog/printers.md`, keeping the remaining paper and power-loss checks open.
-Estimate 140 production lines and 160 test lines. One PR. Scope excludes migrations, new print
-actions, fiscal changes and cross-box agent routing. Hardware qualification waits for the watcher
-to clear work on the owner's boxes.
+Run tests red then green, including focused till and dashboard views in both languages, both
+themes and at phone and desktop widths. Update both guides (`printers.md` and `table-service.md`)
+in English and Spanish, and narrow A552 in `docs/backlog/printers.md` to remaining real-paper
+checks. Estimate 200 production lines and 180 test lines. One PR. Keep issuance, migrations,
+print actions and cross-box agent routing outside this change. Work on the real boxes follows
+the watcher's go-ahead.
