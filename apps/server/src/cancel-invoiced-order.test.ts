@@ -1694,25 +1694,36 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(await creditsOf(original.id)).toEqual([]);
   });
 
-  it("refuses while a card captured for the invoice has not settled it, writing nothing", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
-    venue.card.crashNextCollect("captured");
-    const submissionId = randomUUID();
-    const lost = await payThreeEuroByReader(id, submissionId);
-    expect(lost.status).toBe(500);
+  it.each(["bill payment", "whole-order payment"] as const)(
+    "%s refuses cancellation while a captured card has not settled the invoice",
+    async (method) => {
+      const id = await placed([{ name: "Caña", quantity: "1" }]);
+      venue.card.crashNextCollect("captured");
+      const submissionId = randomUUID();
+      const pay = () =>
+        method === "bill payment"
+          ? payThreeEuroByReader(id, submissionId)
+          : send(venue.app, venue.cookie, "POST", "/api/pay", {
+              dining: "eat_in",
+              id,
+              lines: [],
+            });
+      const lost = await pay();
+      expect(lost.status).toBe(500);
 
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "order.payment_in_flight",
-    });
+      await expectRefusedUnwritten(id, cancel(id), {
+        status: 409,
+        code: "order.payment_in_flight",
+      });
 
-    // Pay again settles the invoice from the captured payment, charging nothing more.
-    const calls = venue.card.collectCalls.length;
-    const recovered = await payThreeEuroByReader(id, submissionId);
-    expect(recovered.status).toBe(200);
-    expect(venue.card.collectCalls.length).toBe(calls);
-    expect(await statusOf(venue, id)).toBe("settled");
-  });
+      // Pay again settles the invoice from the captured payment, charging nothing more.
+      const calls = venue.card.collectCalls.length;
+      const recovered = await pay();
+      expect(recovered.status).toBe(200);
+      expect(venue.card.collectCalls.length).toBe(calls);
+      expect(await statusOf(venue, id)).toBe("settled");
+    },
+  );
 
   it("refuses an operator without sale.rectify as not permitted while a captured card has not settled the invoice, writing nothing", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);

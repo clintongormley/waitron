@@ -6,8 +6,8 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { billPayments, stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
-import { seedDevice, seedNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
+import { seedDevice, seedNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import type { NodeStanding } from "@waitron/membership";
@@ -104,26 +104,10 @@ function observeStart(options: StartCase): () => Observed {
       await seedNode(suite.db),
     ];
     const { deviceId } = await seedDevice(suite.db);
+    const order = await seedWorkingOrder(suite.db, { source: "device", deviceId });
     const owners: Record<BoxName, NodeId> = { own: box, first, second, bystander };
     await withTransaction(suite.db, async (tx) => {
-      const personId = await seedPerson(tx);
       for (const [paymentRef, nodeId] of Object.entries(owners)) {
-        const order = await seedWorkingOrder(tx, { source: "device", deviceId });
-        const [bill] = await tx
-          .insert(billPayments)
-          .values({
-            workingOrderId: order.id,
-            submissionId: randomUUID(),
-            fingerprint: "handover card collection",
-            kind: "contribution",
-            method: "card",
-            applied: 1000,
-            state: "pending",
-            requestedBy: personId,
-            source: "device",
-            deviceId,
-          })
-          .returning({ id: billPayments.id });
         await insertAttempting(tx, {
           origin: deviceOrigin(deviceId),
           workingOrderId: order.id,
@@ -131,7 +115,6 @@ function observeStart(options: StartCase): () => Observed {
           provider: "stripe",
           paymentRef,
           amount: decimal("10.00"),
-          billPaymentId: bill!.id,
         });
       }
       for (const [source, destination] of options.activations) {

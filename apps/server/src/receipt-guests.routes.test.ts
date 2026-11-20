@@ -698,20 +698,6 @@ describe("a party above 999 guests still pays, its receipt printing no guests", 
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
   });
 
-  it("files a card captured before a lost response when no till request sends guests", async () => {
-    const v = await venue(suite.db);
-    const billId = await partyBill(v, 1000);
-    await lostCapture(v, billId);
-    const pass = await settlePendingBillPayments({
-      ...v,
-      clock,
-      admission: testTradingAdmission(),
-    });
-    expect(pass).toMatchObject({ received: 1, errors: [] });
-    expect(await salesOf(suite.db, billId)).toHaveLength(1);
-    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
-  });
-
   it("files a cash payment that sends no guests", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 1000);
@@ -720,6 +706,26 @@ describe("a party above 999 guests still pays, its receipt printing no guests", 
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
   });
 });
+
+it.each([
+  { partySize: 4, guests: 4 },
+  { partySize: 1000, guests: null },
+])(
+  "recovers a card capture with the receipt guest count for a party of $partySize",
+  async ({ partySize, guests }) => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, partySize);
+    await lostCapture(v, billId);
+    const pass = await settlePendingBillPayments({
+      ...v,
+      clock,
+      admission: testTradingAdmission(),
+    });
+    expect(pass).toMatchObject({ received: 1, errors: [] });
+    expect(await salesOf(suite.db, billId)).toHaveLength(1);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests }]);
+  },
+);
 
 describe("closing a placed bill with nothing to charge", () => {
   it("stores the chosen count", async () => {
