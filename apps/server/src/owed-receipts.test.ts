@@ -754,6 +754,26 @@ it("finds owed sales through the issued-time index, and scans neither print jobs
   );
 });
 
+it("reads one sale again by its id, and one given-up original by the job's id then its sale's", async () => {
+  const plans = await withTransaction(suite.db, async (tx) => {
+    const planOf = async (query: { getSQL(): ReturnType<typeof sql> }) =>
+      (await tx.execute<{ detail: string }>(sql`explain query plan ${query.getSQL()}`)).rows.map(
+        (row) => row.detail,
+      );
+    return {
+      sale: await planOf(owedSales(tx, NODE, new Date(AT), "sale")),
+      job: await planOf(givenUpOriginals(tx, NODE, new Date(AT), "job")),
+    };
+  });
+  expect(plans.sale[0]).toBe("SEARCH sales USING INDEX sqlite_autoindex_sales_1 (id=?)");
+  expect(plans.job[0]).toBe("SEARCH print_jobs USING INDEX sqlite_autoindex_print_jobs_1 (id=?)");
+  expect(plans.job).toContain("SEARCH sales USING INDEX sqlite_autoindex_sales_1 (id=?)");
+  expect([...plans.sale, ...plans.job].filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  expect([...plans.sale, ...plans.job].filter((step) => step.includes("sales_issued_idx"))).toEqual(
+    [],
+  );
+});
+
 describe("printOwedTickets", () => {
   let backend: FiscalBackend;
   let warnings: { message: string; params: unknown }[] = [];
@@ -949,6 +969,18 @@ describe("printOwedTickets", () => {
     expect(await jobsOf(walkout!.id)).toEqual([]);
   });
 
+  it("names only the sale it is asked about", async () => {
+    const { cfg, ring } = await till();
+    const sale = await ring();
+    const other = await ring();
+    const at = after(other, 11);
+    expect(await owedAt(cfg, at)).toEqual(expect.arrayContaining([sale.saleId, other.saleId]));
+    expect(
+      (await owedSales(suite.db, cfg.nodeId, at, sale.saleId)).map((row) => row.saleId),
+    ).toEqual([sale.saleId]);
+    expect(await owedSales(suite.db, cfg.nodeId, at, "no-such-sale")).toEqual([]);
+  });
+
   it("leaves a device whose profile may not print receipts", async () => {
     const { cfg, ring } = await till({
       capabilities: PRINTS.filter((flag) => flag !== "print-receipt"),
@@ -959,17 +991,16 @@ describe("printOwedTickets", () => {
     expect(await jobsOf(sale.saleId)).toEqual([]);
   });
 
-  it("Done between the pass's read and its write leaves one original", async () => {
-    const { cfg, printerId, ring, close } = await till();
-    const sale = await ring();
-    let done = false;
-    const doneFirst = new Proxy(suite.db, {
+  /** The database, running `change` once after the pass's candidate read and before its write. */
+  function changedBeforeWrite(change: () => Promise<unknown>) {
+    const state = { ran: false };
+    const db = new Proxy(suite.db, {
       get(target, key) {
         if (key === "withWriteLock")
           return async (fn: () => Promise<unknown>) => {
-            if (!done) {
-              done = true;
-              await close(sale.orderId);
+            if (!state.ran) {
+              state.ran = true;
+              await change();
             }
             return target.withWriteLock(fn);
           };
@@ -977,10 +1008,51 @@ describe("printOwedTickets", () => {
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    expect((await pass(cfg, after(sale, 11), { db: doneFirst })).queued).toEqual([]);
-    expect(done).toBe(true);
+    return { db, state };
+  }
+
+  it("Done between the pass's read and its write leaves one original", async () => {
+    const { cfg, printerId, ring, close } = await till();
+    const sale = await ring();
+    const { db, state } = changedBeforeWrite(() => close(sale.orderId));
+    expect((await pass(cfg, after(sale, 11), { db })).queued).toEqual([]);
+    expect(state.ran).toBe(true);
     expect(warnings).toEqual([]);
     expect(await shape(sale.saleId)).toEqual([{ printerId, receiptCopy: false, status: "queued" }]);
+  });
+
+  it("a profile that stops printing receipts between the pass's read and its write prints nothing", async () => {
+    const { cfg, deviceId, ring } = await till();
+    const sale = await ring();
+    const { db, state } = changedBeforeWrite(async () => {
+      const [device] = await suite.db
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, deviceId));
+      await suite.db
+        .update(deviceProfiles)
+        .set({ capabilities: PRINTS.filter((flag) => flag !== "print-receipt") })
+        .where(eq(deviceProfiles.id, device!.profileId!));
+    });
+    expect((await pass(cfg, after(sale, 11), { db })).queued).toEqual([]);
+    expect(state.ran).toBe(true);
+    expect(warnings).toEqual([]);
+    expect(await jobsOf(sale.saleId)).toEqual([]);
+  });
+
+  it("a series retired between the pass's read and its write prints nothing", async () => {
+    const { cfg, ring } = await till();
+    const sale = await ring();
+    const { db, state } = changedBeforeWrite(() =>
+      suite.db
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date(AT) })
+        .where(eq(invoiceSeries.id, sale.sale.seriesId)),
+    );
+    expect((await pass(cfg, after(sale, 11), { db })).queued).toEqual([]);
+    expect(state.ran).toBe(true);
+    expect(warnings).toEqual([]);
+    expect(await jobsOf(sale.saleId)).toEqual([]);
   });
 
   it("a full invoice whose A4 page failed prints on the receipt printer, enrolled with no person", async () => {

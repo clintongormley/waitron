@@ -83,6 +83,19 @@ export function printerLookup(
   return Object.assign(lookup, { whileSwitchedOff });
 }
 
+/** Whether the device's profile allows `print-receipt`; false for a device that is not found. */
+export async function deviceMayPrintReceipts(q: Transaction, deviceId: string): Promise<boolean> {
+  const [profile] = await q
+    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
+    .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(eq(devices.id, deviceId));
+  return (
+    profile !== undefined &&
+    profileAllows({ ...profile, capabilities: profile.capabilities as string[] }, "print-receipt")
+  );
+}
+
 /**
  * The device's drawer printer when it may open that drawer: its profile allows the drawer and the
  * printer has one. Otherwise `undefined`, and the automatic paths open nothing.

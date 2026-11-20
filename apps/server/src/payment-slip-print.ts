@@ -3,8 +3,6 @@ import { and, eq } from "drizzle-orm";
 import {
   billPayments,
   workingOrders,
-  devices,
-  deviceProfiles,
   readTaxpayer,
   sales,
   withTransaction,
@@ -21,13 +19,13 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
-import { profileAllows } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/menu";
 import { cardDetailsOf } from "./card-details.js";
 import { optionalDocument, reportOptionalDocumentFailure } from "./optional-document.js";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
+  deviceMayPrintReceipts,
   resolvePaymentSlipPrinter,
   type DevicePrinter,
   type PrinterLookup,
@@ -196,15 +194,7 @@ async function orderSlipLocale(tx: Transaction, workingOrderId: string): Promise
 
 async function deviceMayPrintSlips(tx: Transaction, cfg: OriginConfig): Promise<boolean> {
   if (cfg.origin.source !== "device") return false;
-  const [profile] = await tx
-    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
-    .from(devices)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(eq(devices.id, cfg.origin.deviceId));
-  return (
-    profile !== undefined &&
-    profileAllows({ ...profile, capabilities: profile.capabilities as string[] }, "print-receipt")
-  );
+  return deviceMayPrintReceipts(tx, cfg.origin.deviceId);
 }
 
 /**

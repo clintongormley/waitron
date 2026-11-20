@@ -10,8 +10,6 @@ import {
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
-  deviceProfiles,
-  devices,
   invoiceCorrections,
   invoiceSeries,
   readLiveSeriesIdTx,
@@ -21,7 +19,6 @@ import {
 } from "@waitron/db";
 import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
 import type { Authorization, AuthzInput } from "@waitron/identity";
-import { profileAllows } from "@waitron/layouts";
 import {
   AppError,
   centsToDecimal,
@@ -38,7 +35,6 @@ import {
   type SaleId,
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
-import { deviceProfileJoin } from "./device-session.js";
 import {
   readCorrectionLegs,
   readCorrectionLegsOf,
@@ -50,7 +46,7 @@ import {
 } from "./invoice-correction-legs.js";
 import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
-import { enqueueOriginalReceipt } from "./receipt-print.js";
+import { deviceMayPrintReceipts, enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
@@ -396,7 +392,7 @@ export async function fileCorrectionIn(
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
   if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
-      if (!(await printsReceipts(tx, cfg.origin.deviceId))) return;
+      if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;
       await enqueueOriginalReceipt(
         tx,
         cfg,
@@ -405,18 +401,6 @@ export async function fileCorrectionIn(
       );
     });
   return correctiveSaleId;
-}
-
-async function printsReceipts(tx: Transaction, deviceId: string): Promise<boolean> {
-  const [device] = await tx
-    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
-    .from(devices)
-    .innerJoin(deviceProfiles, deviceProfileJoin)
-    .where(eq(devices.id, deviceId));
-  return (
-    device !== undefined &&
-    profileAllows({ ...device, capabilities: device.capabilities as string[] }, "print-receipt")
-  );
 }
 
 /**

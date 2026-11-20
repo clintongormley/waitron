@@ -16,8 +16,6 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
-  deviceProfiles,
-  devices,
   invoiceDeliveries,
   invoiceSeries,
   isReceiptPrinter,
@@ -36,12 +34,11 @@ import {
   PRINTER_UNPAIRED,
 } from "@waitron/printing";
 import { codeOf } from "@waitron/server-kit";
-import { profileAllows } from "@waitron/layouts";
 import { deviceOrigin } from "@waitron/shared";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
-import { printerLookup } from "./receipt-print.js";
+import { deviceMayPrintReceipts, printerLookup } from "./receipt-print.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { queueOwedOriginal } from "./till-sale.js";
@@ -123,8 +120,9 @@ export function givenUpOriginals(q: Transaction, nodeId: string, now: Date, jobI
   return (
     q
       .select({ id: printJobs.id, claimedAt: printJobs.claimedAt })
-      // The box collects no planner statistics; unnamed, SQLite 3.54.1 took `sales_corrects_idx`.
-      .from(sql`${sales} indexed by sales_issued_idx`)
+      // A one-job read goes by the job's id. The box collects no planner statistics; unnamed, the
+      // day's read took `sales_corrects_idx` on SQLite 3.54.1.
+      .from(jobId === undefined ? sql`${sales} indexed by sales_issued_idx` : sales)
       .innerJoin(printJobs, eq(printJobs.saleId, sales.id))
       .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
       .where(
@@ -214,10 +212,10 @@ function hasOriginalJob(q: Transaction, saleId: SQLiteColumn): SQL {
 }
 
 /**
- * This installation's till sales issued in the last day that still owe their receipt and have no
- * original job: the close request never came, an email failed, or the device had no printer.
+ * This installation's sales made by a device, issued in the last day, that still owe their receipt
+ * and have no original job.
  */
-export function owedSales(q: Transaction, nodeId: string, now: Date) {
+export function owedSales(q: Transaction, nodeId: string, now: Date, saleId?: string) {
   return (
     q
       .select({
@@ -226,11 +224,12 @@ export function owedSales(q: Transaction, nodeId: string, now: Date) {
         workingOrderId: sql<string>`${sales.workingOrderId}`,
         issuedAt: sql<string>`${sales.issuedAt}`,
       })
-      // As in `givenUpOriginals`: without planner statistics SQLite may pick another index.
-      .from(sql`${sales} indexed by sales_issued_idx`)
+      // A one-sale read goes by its id; the day's read names its index as `givenUpOriginals` does.
+      .from(saleId === undefined ? sql`${sales} indexed by sales_issued_idx` : sales)
       .where(
         and(
           gte(sales.issuedAt, new Date(now.getTime() - OWED_FOR_MS).toISOString()),
+          saleId === undefined ? undefined : eq(sales.id, saleId),
           eq(sales.source, "device"),
           isNotNull(sales.workingOrderId),
           thisInstallation(nodeId),
@@ -243,16 +242,7 @@ export function owedSales(q: Transaction, nodeId: string, now: Date) {
 
 /** Whether the device may print receipts and has a receipt printer, switched off or not. */
 async function canPrintReceipts(q: Transaction, deviceId: string): Promise<boolean> {
-  const [profile] = await q
-    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
-    .from(devices)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(eq(devices.id, deviceId));
-  if (
-    profile === undefined ||
-    !profileAllows({ ...profile, capabilities: profile.capabilities as string[] }, "print-receipt")
-  )
-    return false;
+  if (!(await deviceMayPrintReceipts(q, deviceId))) return false;
   const printers = printerLookup(q, deviceOrigin(deviceId), { whileSwitchedOff: true });
   return (await printers("receipt")) !== undefined;
 }
@@ -284,10 +274,12 @@ export async function printOwedTickets(
       // owe every sale of the day.
       if (!printing.has(deviceId)) printing.set(deviceId, await canPrintReceipts(db, deviceId));
       if (printing.get(deviceId) !== true) continue;
-      // `queueOwedOriginal` checks again, under the write lock, what Done, an email or another pass
-      // may have settled while this pass waited for it.
+      // The candidate and the device's profile are read again under the write lock: either may have
+      // changed while this pass waited for it.
       const made = await withTransaction(db, async (tx) => {
         if (signal?.aborted) return false;
+        const [still] = await owedSales(tx, cfg.nodeId, now, saleId);
+        if (still === undefined || !(await deviceMayPrintReceipts(tx, deviceId))) return false;
         return queueOwedOriginal(
           tx,
           backend,
