@@ -1769,13 +1769,11 @@ describe("counter pay", () => {
             fullInvoices: true,
             simplifiedInvoiceLimit: "4.00",
           }),
-          getInvoiceDeliveryOptions: vi
-            .fn()
-            .mockResolvedValue({
-              invoicePrinter: null,
-              emailAvailable: false,
-              emailNeedsReceiptContact: false,
-            }),
+          getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+            invoicePrinter: null,
+            emailAvailable: false,
+            emailNeedsReceiptContact: false,
+          }),
         },
         { products: [] },
       );

@@ -1446,13 +1446,11 @@ describe("till-app: comping a stored counter order", () => {
   });
 
   it("names the counter order in the options read behind Full invoice", async () => {
-    const getInvoiceDeliveryOptions = vi
-      .fn()
-      .mockResolvedValue({
-        invoicePrinter: null,
-        emailAvailable: false,
-        emailNeedsReceiptContact: false,
-      });
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({
+      invoicePrinter: null,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    });
     const el = await placeCounter({
       getTill: vi
         .fn()
@@ -1481,13 +1479,11 @@ describe("till-app: comping a stored counter order", () => {
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
-      getInvoiceDeliveryOptions: vi
-        .fn()
-        .mockResolvedValue({
-          invoicePrinter: null,
-          emailAvailable: false,
-          emailNeedsReceiptContact: false,
-        }),
+      getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+        invoicePrinter: null,
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      }),
     });
     emit(counter(el), "choose-invoice");
     await flush(el);
@@ -1754,13 +1750,11 @@ describe("till-app: comping a stored counter order", () => {
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
-        getInvoiceDeliveryOptions: vi
-          .fn()
-          .mockResolvedValue({
-            invoicePrinter: null,
-            emailAvailable: true,
-            emailNeedsReceiptContact: false,
-          }),
+        getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+          invoicePrinter: null,
+          emailAvailable: true,
+          emailNeedsReceiptContact: false,
+        }),
       });
       async function confirm(changed = false) {
         emit(counter(el), "choose-invoice");

@@ -8714,13 +8714,11 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
   });
 
   it("puts a refused email address under the dialog's email field, and unavailable email at the bottom", async () => {
-    const getInvoiceDeliveryOptions = vi
-      .fn()
-      .mockResolvedValue({
-        invoicePrinter: null,
-        emailAvailable: true,
-        emailNeedsReceiptContact: false,
-      });
+    const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({
+      invoicePrinter: null,
+      emailAvailable: true,
+      emailNeedsReceiptContact: false,
+    });
     const setOrderInvoiceChoice = vi
       .fn()
       .mockRejectedValueOnce({ code: "management.request_invalid", field: "delivery.recipient" })
