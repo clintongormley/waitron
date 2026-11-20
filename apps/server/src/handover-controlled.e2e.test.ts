@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // A simulation of two boxes in one process, not physical qualification. It covers two boxes only:
@@ -1581,7 +1582,7 @@ async function inheritedWork(
   const linesAfterChange = lineCount();
 
   // Pay the inherited table in cash: the whole outstanding amount as one bill payment, and if
-  // that leaves it unsettled, the whole-bill path (place, then collect).
+  // that leaves it unsettled, place the bill and try the payment again.
   const balance = await attempt(m2, `/api/working-orders/${tabId}/payments`, {
     cookie: venue.cookie,
   });
@@ -1631,11 +1632,11 @@ async function inheritedWork(
       cookie: venue.cookie,
       body: { expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null) },
     });
-    collect = await attempt(m2, `/api/working-orders/${tabId}/collect`, {
+    collect = await attempt(m2, `/api/working-orders/${tabId}/payments`, {
       cookie: venue.cookie,
       body: {
         expectedEdit: guard("edit", () => editOf(m2.venueFile, tabId), null),
-        tender: { method: "cash", amount: outstanding },
+        ...billShare("cash", outstanding),
       },
     });
   }

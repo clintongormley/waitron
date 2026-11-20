@@ -92,7 +92,6 @@ import {
 import { createTable } from "./testing/live-table.js";
 import {
   printSaleReceipt,
-  collectOrderOrchestration as collectOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
 } from "./testing/whole-payment-fixture.js";
@@ -3602,20 +3601,6 @@ describe("a party's bill request goes when a card or collect settles its last ow
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
-  async function collectInCash(
-    cfg: DeviceRequestConfig,
-    tabId: string,
-    log?: Logger,
-  ): Promise<void> {
-    await collectOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, log },
-      cfg,
-      { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
-      OPERATOR,
-    );
-    expect((await orderState(tabId)).status).toBe("settled");
-  }
-
   /** A trigger refusing the clearing of any party's bill request; answers its removal. */
   function refuseClearing(): () => void {
     suite.db.run(
@@ -3694,7 +3679,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
-        await collectInCash(cfg, tabId, log);
+        await payInCash(cfg, tabId, log);
       },
     ],
   ];

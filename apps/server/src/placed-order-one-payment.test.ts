@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
@@ -88,7 +89,13 @@ function pay(id: string, cookie = venue.cookie) {
 }
 
 function collect(id: string, tender: { method: "cash" | "card"; amount: string }) {
-  return send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/collect`, { tender });
+  return send(
+    venue.app,
+    venue.cookie2,
+    "POST",
+    `/api/working-orders/${id}/payments`,
+    billShare(tender.method, "3.00", tender.method === "cash" ? { tendered: tender.amount } : {}),
+  );
 }
 
 function snapshot() {
@@ -905,7 +912,10 @@ describe("a second card payment of a placed order while the first is in flight",
       const id = await placed(kind);
       const collected = await collect(id, { method: "cash", amount: "5.00" });
       expect(collected.status).toBe(200);
-      expect(collected.json.tender).toEqual({ method: "cash", change: "2.00" });
+      expect((collected.json.invoice as { tender: unknown }).tender).toEqual({
+        method: "cash",
+        change: "2.00",
+      });
       const calls = venue.card.collectCalls.length;
 
       const paid = await pay(id);

@@ -153,7 +153,7 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     });
     expect(await state()).toEqual(before);
   });
-  it("keeps a held order's identity through placement while collection stays refused", async () => {
+  it("issues one full invoice using the held order's saved identity after placement and cash payment", async () => {
     const id = await parked(venue, "Caña");
     await choose(id, recipient);
     await saved(id, recipient);
@@ -178,14 +178,35 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/working-orders/${id}/collect`,
-      { tender: { method: "cash", amount: "5.00" } },
+      `/api/working-orders/${id}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "5.00",
+        applied: "3.00",
+        tip: "0.00",
+      },
     );
-    expect(answer).toEqual({
-      status: 409,
-      json: { code: "sale.full_invoice_unavailable", params: {} },
+    expect(answer.status).toBe(200);
+    expect(answer.json).toMatchObject({
+      balance: { status: "settled", outstanding: "0.00" },
+      invoice: { invoiceType: "F1", recipient },
     });
-    expect(await state()).toEqual(before);
+    await issued(id, recipient);
+    const after = await state();
+    const [counts] = before.rows as [
+      { sales: number; records: number; tenders: number; billPayments: number },
+    ];
+    expect(after.rows).toMatchObject([
+      {
+        sales: counts.sales + 1,
+        records: counts.records + 1,
+        tenders: counts.tenders + 1,
+        billPayments: counts.billPayments + 1,
+      },
+    ]);
   });
   it("keeps party bill reads and payment completion on the same identity", async () => {
     const party = await seatedWith(venue, "Caña");

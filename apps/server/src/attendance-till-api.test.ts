@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
@@ -174,37 +175,34 @@ describe("till attendance recorder admission", () => {
         await placeByHand(v, id);
       }
       vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
-      const paid = await api.request(
-        `/api/working-orders/${id}/${path === "counter" ? "payments" : "collect"}`,
-        {
-          method: "POST",
-          headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            ...(path === "counter"
-              ? {
-                  submissionId: id,
-                  kind: "share",
-                  shareOf: 1,
-                  method: "cash",
-                  tendered: "20.00",
-                  basket: {
-                    zoneId: v.counter.zoneId,
-                    lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-                  },
-                  dining: "eat_in",
-                }
-              : {
-                  expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)),
-                  tender: { method: "cash", amount: "20.00" },
-                }),
-            personId: "untrusted person",
-            at: "2026-10-15T20:00:00Z",
-          }),
-        },
-      );
+      const paid = await api.request(`/api/working-orders/${id}/payments`, {
+        method: "POST",
+        headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          ...(path === "counter"
+            ? {
+                submissionId: id,
+                kind: "share",
+                shareOf: 1,
+                method: "cash",
+                tendered: "20.00",
+                basket: {
+                  zoneId: v.counter.zoneId,
+                  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+                },
+                dining: "eat_in",
+              }
+            : {
+                expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, id)),
+                ...billShare("cash", "12.00", { tendered: "20.00" }),
+              }),
+          personId: "untrusted person",
+          at: "2026-10-15T20:00:00Z",
+        }),
+      });
       expect(paid.status).toBe(200);
       const result = await paid.json();
-      expect(path === "counter" ? result.invoice : result).toMatchObject({
+      expect(result.invoice).toMatchObject({
         total: "12.00",
         tender: { method: "cash", change: "8.00" },
       });

@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { partyRevision } from "./parties.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
@@ -147,9 +148,13 @@ async function prepare(action: Action) {
       v.adminId,
     );
     expect(
-      await send(v.app, v.cookie, "POST", `/api/working-orders/${party.tabId}/collect`, {
-        tender: { method: "cash", amount: "12.00" },
-      }),
+      await send(
+        v.app,
+        v.cookie,
+        "POST",
+        `/api/working-orders/${party.tabId}/payments`,
+        billShare("cash", "12.00"),
+      ),
     ).toMatchObject({ status: 200 });
   }
   const [current] = await suite.db.select().from(parties).where(eq(parties.id, party.partyId));

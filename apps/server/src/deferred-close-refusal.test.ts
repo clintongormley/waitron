@@ -30,7 +30,7 @@ import {
 } from "./testing/order-writer-fixture.js";
 import { inTx, seatedWith, send, tendersOfBill, type Answer } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { collectOrderOrchestration } from "./testing/whole-payment-fixture.js";
+import { cashPayment } from "./testing/bill-venue.js";
 import {
   RECIPIENT,
   refusal,
@@ -206,17 +206,9 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
   it("a bill already paid in full the ordinary way", async () => {
     const billId = await t.counterOrder("placed", true);
     const request = await counterRequest(billId);
-    await collectOrderOrchestration(
-      {
-        admission: testTradingAdmission(),
-        db: t.venue.db,
-        backend: t.venue.backend,
-        clock: t.venue.clock,
-      },
-      t.venue.cfg,
-      { id: billId, lines: [], tender: { method: "cash", amount: "20.00" } },
-      t.venue.operatorId,
-    );
+    expect(await cashPayment(t.venue, t.venue.cookie, billId, "20.00")).toMatchObject({
+      status: 200,
+    });
 
     const error = await refusedWithNothingWritten(() =>
       t.close({ ...request, expectedRevision: request.expectedRevision + 1 }),

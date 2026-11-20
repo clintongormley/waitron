@@ -63,7 +63,7 @@ import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { handOverOrder, listTablesWithState, parkOrder } from "./working-order.js";
 import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
-import { collectOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { WorkforceBackend } from "@waitron/workforce";
 import { recordDailyClose } from "@waitron/reporting";
 import { jobOrigin } from "@waitron/shared";
@@ -1022,7 +1022,7 @@ it.each(["zone", "department"] as const)(
       delivery,
       venue.operator.personId,
     );
-    await collectOrder(
+    await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
         db: venue.db,
@@ -1030,8 +1030,9 @@ it.each(["zone", "department"] as const)(
         clock: venue.clock,
       },
       venue.cfg,
-      { id: delivery, lines: [], tender: { method: "cash", amount: "2.00" } },
       venue.operator,
+      delivery,
+      "2.00",
     );
     const uncollected = await run(completeSnapshot);
     await expect(remove()).rejects.toMatchObject({ code: "table.delivery_in_progress" });

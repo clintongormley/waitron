@@ -488,14 +488,22 @@ describe("other ways a bill owing nothing is paid", () => {
         venue.app,
         venue.cookie,
         "POST",
-        `/api/working-orders/${id}/collect`,
+        `/api/working-orders/${id}/payments`,
         {
-          tender: { method, amount: "0.00" },
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "0.00",
+          applied: "0.00",
+          tip: "0.00",
+          method,
+          ...(method === "cash" ? { tendered: "0.00" } : { entry: "manual" }),
         },
       );
 
       expect(answer.status).toBe(200);
-      expect(answer.json).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
+      expect(answer.json).toMatchObject({
+        invoice: { total: "0.00", tender: { method: "unpaid" } },
+      });
       await expectClosedOwingNothing(id);
     },
   );
