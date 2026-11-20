@@ -1,6 +1,6 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { billAdvances, billPayments, tenders, type Transaction } from "@waitron/db";
+import { billPayments, tenders, type Transaction } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { centsToDecimal, compareDecimal, type Decimal, type SaleId } from "@waitron/shared";
 import { cashChange, money, ZERO } from "./bill-allocation.js";
@@ -8,6 +8,7 @@ import { completedRefundsOf, netOfRefunds, owedOf } from "./bill-payment-money.j
 import { cardOf, type StoredCard } from "./card-details.js";
 import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { readIssuedSales } from "./sale-due.js";
+import { paidNoAdvance } from "./bill-advances.js";
 
 /**
  * One payment of a bill paid in parts, as the ticket lists it. `change` is what
@@ -144,12 +145,11 @@ async function readUnsettledBill(
     .from(billPayments)
     .leftJoin(payments, MANUAL_CARD_JOIN)
     .leftJoin(capturedCards, CAPTURED_CARD_JOIN)
-    .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
         eq(billPayments.state, "received"),
-        isNull(billAdvances.id),
+        paidNoAdvance,
       ),
     )
     .orderBy(billPayments.receivedAt, sql`${billPayments}.rowid`);

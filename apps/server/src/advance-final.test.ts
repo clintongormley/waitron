@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
   parties,
+  readVenueClock,
   saleLines,
   sales,
   taxpayer,
@@ -570,7 +571,7 @@ describe("the rest's invoice takes the advances off", () => {
         .where(eq(workingOrders.id, bill.billId)),
     );
 
-    const outcome = await withTransaction(venue.db, (tx) =>
+    const outcome = await withTransaction(venue.db, async (tx) =>
       issueBillAtClose(
         tx,
         {
@@ -581,7 +582,7 @@ describe("the rest's invoice takes the advances off", () => {
         },
         closeOfDayConfig(venue.cfg),
         bill.billId,
-        { dayStartedAt: new Date(Date.now() + 60_000) },
+        { dayStartedAt: new Date(Date.now() + 60_000), venueClock: await readVenueClock(tx) },
       ),
     );
 

@@ -2,6 +2,7 @@ import "./errors.js";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   billAdvances,
+  billPayments,
   correctivesOf,
   invoiceSeries,
   orderTableLabels,
@@ -10,7 +11,6 @@ import {
   tenderRefunds,
   tenders,
   workingOrders,
-  type billPayments,
   type Transaction,
 } from "@waitron/db";
 import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
@@ -206,6 +206,13 @@ export async function issueAdvance(
   });
   return { saleId };
 }
+
+/**
+ * True for a `bill_payments` row of the query that paid no advance, whose money is on its bill
+ * rather than on an advance's own ticket. `${billPayments}.id` renders table-qualified, so the
+ * subquery's own table cannot capture a bare `"id"`.
+ */
+export const paidNoAdvance = sql`not exists (select 1 from ${billAdvances} where ${billAdvances.billPaymentId} = ${billPayments}.id)`;
 
 /** What the bill payment that paid an advance holds on its bill. */
 export interface AdvancePaymentMoney {

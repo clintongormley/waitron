@@ -94,7 +94,12 @@ import {
   reserveStagedInvoiceDelivery,
   type InvoiceChoiceDeliveryContext,
 } from "./invoice-choice-delivery.js";
-import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
+import {
+  checkedInvoiceRecipient,
+  readOrderInvoiceChoice,
+  selectOrderInvoice,
+  type OrderInvoiceChoice,
+} from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
 import {
@@ -194,7 +199,6 @@ import {
   appendOrderAmendment,
   billPartyTables,
   billPaymentRefunds,
-  billAdvances,
   billPayments,
   billSetMenuCopies,
   devices,
@@ -278,7 +282,8 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import type { IssueMoment } from "./issue-moment.js";
 import { issueOrderMoment } from "./sale-day.js";
-import { advancesToTakeOff, readBillAdvances } from "./bill-advances.js";
+import { advancesToTakeOff, paidNoAdvance, readBillAdvances } from "./bill-advances.js";
+import type { AdvanceCredit } from "./advance-deduction.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   readOrderDinings,
@@ -4736,12 +4741,11 @@ export async function setOrderInvoiceChoice(
       const [paid] = await tx
         .select({ id: billPayments.id })
         .from(billPayments)
-        .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
         .where(
           and(
             eq(billPayments.workingOrderId, orderId),
             eq(billPayments.state, "received"),
-            isNull(billAdvances.id),
+            paidNoAdvance,
           ),
         )
         .limit(1);
@@ -7682,6 +7686,54 @@ export interface PricedInvoice extends IssueMoment {
   identities: OrderLineIdentity[];
   /** The languages the invoice is filed in (`saleLanguageFor`). */
   language: { locale: string; invoiceLocales: string[] };
+  /** The order's invoice choice, read as the invoice was priced; absent for an unknown order. */
+  choice: OrderInvoiceChoice | undefined;
+}
+
+/**
+ * Price order `id`'s invoice from its stored lines `order` at one clock reading, in the languages
+ * its saved `receiptLocale` files it in, with its bill's advances `credits` taken off, dated by
+ * {@link issueOrderMoment} with `mealEndedAt`. Writes nothing but `log`'s lines.
+ */
+export async function priceOrderInvoice(
+  tx: Transaction,
+  clock: TrustedClock,
+  backend: FiscalBackend,
+  cfg: TradingContext,
+  id: string,
+  order: GrossOrder,
+  saved: { receiptLocale: string | null; credits: readonly AdvanceCredit[] | undefined },
+  log?: Logger,
+  mealEndedAt?: string,
+): Promise<Omit<PricedInvoice, "choice">> {
+  const language = await saleLanguageFor(tx, saved.receiptLocale ?? undefined, {
+    log,
+    workingOrderId: id,
+  });
+  return {
+    id,
+    identities: order.identities,
+    language,
+    ...(await issueOrderMoment(
+      tx,
+      cfg,
+      { clock, backend },
+      id,
+      await issuancePass(tx, id, order),
+      mealEndedAt,
+      advancesToTakeOff(saved.credits, language.invoiceLocales),
+    )),
+  };
+}
+
+/** The lines a {@link PricedInvoice} files: its priced lines, then one per advance it takes off. */
+export function filedLines(
+  invoice: Pick<PricedInvoice, "priced" | "identities" | "deductionLines">,
+) {
+  return [
+    ...withReceiptListPrices(invoice.priced.lines, invoice.identities),
+    ...invoice.deductionLines,
+  ];
 }
 
 /** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment}. Writes
@@ -7695,28 +7747,20 @@ export async function priceForIssuance(
   log?: Logger,
 ): Promise<PricedInvoice> {
   const order = await priceStoredOrderForIssuance(tx, id);
-  const [stored] = await tx
-    .select({ receiptLocale: workingOrders.receiptLocale })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, id));
-  const language = await saleLanguageFor(tx, stored?.receiptLocale ?? undefined, {
-    log,
-    workingOrderId: id,
-  });
+  const choice = await readOrderInvoiceChoice(tx, id);
   const { credits } = await readBillAdvances(tx, [id]);
   return {
-    id,
-    identities: order.identities,
-    language,
-    ...(await issueOrderMoment(
+    ...(await priceOrderInvoice(
       tx,
+      clock,
+      backend,
       cfg,
-      { clock, backend },
       id,
-      await issuancePass(tx, id, order),
-      undefined,
-      advancesToTakeOff(credits.get(id), language.invoiceLocales),
+      order,
+      { receiptLocale: choice?.receiptLocale ?? null, credits: credits.get(id) },
+      log,
     )),
+    choice,
   };
 }
 
@@ -7744,9 +7788,9 @@ export async function issueUnpaidInvoice(
   admission: TradingAdmission,
 ): Promise<IssuedInvoice> {
   await requireEconomicWrite(tx, cfg, admission);
-  const { id, priced, meal, deductionLines, clock, operationDate, language } = invoice;
+  const { id, priced, meal, clock, operationDate, language } = invoice;
   await backend.refuseNewIssuance(tx, cfg.nodeId);
-  const selected = await selectOrderInvoice(tx, backend, cfg, id, meal.total);
+  const selected = await selectOrderInvoice(tx, backend, cfg, id, meal.total, invoice.choice);
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "order",
     orderId: id,
@@ -7760,7 +7804,7 @@ export async function issueUnpaidInvoice(
     workingOrderId: brandWorkingOrderId(id),
     ...language,
     total: priced.total,
-    lines: [...withReceiptListPrices(priced.lines, invoice.identities), ...deductionLines],
+    lines: filedLines(invoice),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operationDate,
