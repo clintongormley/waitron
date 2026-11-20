@@ -62,13 +62,27 @@ describe("keptDeclarations", () => {
     expect(await text("1.0.0")).toBe("A");
   });
 
-  it.each(["1.0", "1.0.0-dev", "1..0", "a.b.c", "", "1.0.0.0", ".1.0", "1.0.", "01.0.0", "1.00.0"])(
-    "refuses %j, which is not a release version",
-    async (version) => {
-      const error = await captureError(() => keep(version, "A", T1));
-      expect(checkFailed(error, "declaraciones_responsables_version_ck")).toBe(true);
-    },
-  );
+  it.each([
+    "1.0",
+    "1.0.0-dev",
+    "1..0",
+    "a.b.c",
+    "",
+    "1.0.0.0",
+    ".1.0",
+    "1.0.",
+    "01.0.0",
+    "1.00.0",
+    "1.0.0-preview.1",
+    "1.0.0-rc.01",
+    "1.0.0-rc.",
+    "1.0.0-rc.1.2",
+    "1.0.0-rc.1\0",
+    `1.0.0-rc.${"9".repeat(42)}`,
+  ])("refuses %j, which is not a release version", async (version) => {
+    const error = await captureError(() => keep(version, "A", T1));
+    expect(checkFailed(error, "declaraciones_responsables_version_ck")).toBe(true);
+  });
 
   it("keeps release versions", async () => {
     await keep("1.0.0", "A", T1);
@@ -76,6 +90,11 @@ describe("keptDeclarations", () => {
     await keep("0.0.0", "C", T1);
     await keep("1.0.10", "D", T1);
     expect([...(await versions())].sort()).toEqual(["0.0.0", "1.0.0", "1.0.10", "10.20.30"]);
+  });
+
+  it.each(["1.0.0-alpha.0", "1.0.0-beta.2", "1.0.0-rc.10"])("keeps %s", async (version) => {
+    await keep(version, "A", T1);
+    expect(await text(version)).toBe("A");
   });
 
   it("keeps the text's bytes exactly", async () => {

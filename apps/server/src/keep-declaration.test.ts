@@ -58,6 +58,21 @@ describe("keepRunningDeclaration", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("keeps the running prerelease's exact declaration in the venue", async () => {
+    const version = "1.3.0-rc.1";
+    const root = join(base, "prerelease");
+    await writeDeclarationFolder(root, { version, releasedOn: "2026-10-22" }, undefined, version);
+    const seat = FISCAL_SLOT.declarations!;
+    const log = vi.fn();
+
+    await keepRunningDeclaration({ root, seat, db: suite.db, now: () => AT, log });
+
+    const reader = keptDeclarationsReader(suite.db, seat);
+    expect(await reader.text(version)).toBe(await readFile(join(root, "declaration.txt"), "utf8"));
+    expect(await reader.versions()).toEqual([version]);
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("keeps nothing from a test build or a damaged folder", async () => {
     const damaged = join(base, "damaged");
     await writeDeclarationFolder(damaged);
