@@ -9,9 +9,10 @@ Before saving or removing a mail server, confirm your sign-in in the shared wind
 
 ## Set up a mail server {#set-up}
 
-Open **System → Email**. With box administration (Admin by default), choose **Set up mail server** or
-**Change mail server**, enter your provider's settings and send a test before saving. Enter fresh
-login details when changing an authenticated server; Waitron never shows the saved password.
+Outside Demo, open **System → Email**. With box administration (Admin by default), choose
+**Set up mail server** or **Change mail server**, enter your provider's settings and send a test
+before saving. Enter fresh login details when changing an authenticated server; Waitron never
+shows the saved password.
 Managers can view the settings, but cannot save or remove them.
 
 Mail sent through your saved server and the test on this page use your venue name alongside
