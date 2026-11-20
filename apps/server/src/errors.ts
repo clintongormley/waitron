@@ -1052,8 +1052,8 @@ declare module "@waitron/shared" {
     "tab.not_open": { tabId: string };
     "tab.cancel_context_changed": { context: CancellationContext };
     /**
-     * No such line on the open bill: an adjustment names its line by id, every other caller by number.
-     * A party's cancellation address names the party, not a bill, so it answers `partyId`.
+     * No such line on the bill the request names: `lineNo` or `lineId` says how it was named. A
+     * party's cancellation address names the party, not a bill, so it answers `partyId`.
      */
     "tab.line_not_found":
       | { tabId: string; lineNo: number }

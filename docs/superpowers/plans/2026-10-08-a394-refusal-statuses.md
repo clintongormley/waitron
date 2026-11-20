@@ -243,7 +243,7 @@ pin today's number are in the part named.
   (body `ids`) → 400.
 - **One-off rows that wait on an owner answer (A394-20)** — `units-api` target unit (code split),
   `venue.detail_read_only`, `cloud.binding_conflict`, `promotion.not_a_local_secondary`,
-  `department.not_found` as a query value on receipt preview, `backup.stream_test_failed` 422,
+  `department.not_found` from the body on receipt preview, `backup.stream_test_failed` 422,
   `backup.recovery_key_too_short` against a stored key, the till's `reader.not_found` when the
   device has no reader (kept at 404 by A394-9; watcher, 2026-11-20 18:11).
 
@@ -278,7 +278,8 @@ pin today's number are in the part named.
   `party.not_open`, `working_order.not_open`; reported by a part 1 reader, not re-checked). Owner
   question 7.
 - `swap.not_permitted` 403 when the body's `toShiftId` belongs to someone other than its
-  `toPersonId` (`packages/workforce/src/shift-swaps.ts:40-43`): the body contradicts itself, 400.
+  `toPersonId` (`packages/workforce/src/shift-swaps.ts:40-43`): the body contradicts itself, 400
+  (done 2026-11-20 by A394-20: `swap.return_shift_not_owned` 400).
 
 ## Defects the audit found that are not status choices
 
@@ -1729,7 +1730,8 @@ not the request; I read it as a clash and count it as fitting.
 - `swap.not_permitted` 403 on `POST /api/schedule/swaps` when the body's `toShiftId` belongs to someone
   other than its `toPersonId` (`shift-swaps.ts:40-43`). The caller is allowed to ask; the body
   contradicts itself, so 400 looks closer than 403. (The other `swap.not_permitted`, a caller who does
-  not own `fromShiftId`, `:30-33`, is a fair 403.)
+  not own `fromShiftId`, `:30-33`, is a fair 403.) (Done 2026-11-20 by A394-20:
+  `swap.return_shift_not_owned` 400.)
 - A malformed PATH id answers `shared.invalid_id` 400 through `requireUuidParam` across this share
   (for example `print-api.ts:679`, `payments-api.ts:401`, `workforce-api.ts:177`), while `orders-api.ts:140,149`
   answers a malformed path id with `working_order.not_found` 404. The rule does not say which a
