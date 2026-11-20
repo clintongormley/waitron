@@ -356,8 +356,8 @@ stub(
 // `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
 // file beside the case's log, and prints WT_APT_STDOUT on standard output when a case sets it.
 // `timeout` and `gtimeout` drop the limit and run the rest. `dpkg-query` answers `installed`, so no
-// case reaches a real one on a Linux machine, and `not-installed` with status 1 when
-// WT_LIBATOMIC_MISSING=1.
+// case reaches a real one on a Linux machine, and `not-installed` with status 1 for libatomic1 when
+// WT_LIBATOMIC_MISSING=1 and for bluez when WT_BLUEZ_MISSING=1.
 stub(
   "apt-get",
   `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
@@ -367,7 +367,11 @@ exit 0`,
 );
 stub(
   "dpkg-query",
-  `[ "\${WT_LIBATOMIC_MISSING}" = 1 ] && { echo not-installed; exit 1; }\necho installed`,
+  `case "\${@: -1}" in
+  libatomic1) [ "\${WT_LIBATOMIC_MISSING}" = 1 ] && { echo not-installed; exit 1; } ;;
+  bluez) [ "\${WT_BLUEZ_MISSING}" = 1 ] && { echo not-installed; exit 1; } ;;
+esac
+echo installed`,
 );
 stub("timeout", `shift; exec "$@"`);
 stub("gtimeout", `shift; exec "$@"`);
@@ -2281,6 +2285,64 @@ describe("waitron.sh install and the print agent's AppArmor profile", () => {
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain(
       "WAITRON_PRINT_AGENT_APPARMOR",
     );
+  });
+});
+
+describe("waitron.sh install and a host without BlueZ", () => {
+  const apts = (sb) => loggedCalls(sb).filter((c) => c.startsWith("apt-get "));
+  const warning =
+    "waitron.sh: could not install BlueZ, the Linux Bluetooth service — Bluetooth printers will not be found until it is installed";
+
+  it("installs BlueZ and starts Bluetooth before switching off autopair", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"], { WT_BLUEZ_MISSING: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    const log = loggedCalls(sb);
+    const updated = log.findIndex((c) => /^apt-get .* update$/.test(c));
+    const installed = log.findIndex((c) =>
+      /^apt-get .* install -y --no-install-recommends bluez$/.test(c),
+    );
+    const enabled = log.indexOf("systemctl enable --now bluetooth");
+    const autopair = log.indexOf("systemctl show -p FragmentPath --value bluetooth.service");
+    expect(updated).toBeGreaterThanOrEqual(0);
+    expect(installed).toBeGreaterThan(updated);
+    expect(enabled).toBeGreaterThan(installed);
+    expect(autopair).toBeGreaterThan(enabled);
+    expect(r.stderr).not.toContain(warning);
+  });
+
+  it("installs BlueZ on an upgrade of an installed box", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const r = run(sb, ["install", "my-branch"], {
+      WT_BLUEZ_MISSING: "1",
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const log = loggedCalls(sb);
+    const installed = log.findIndex((c) =>
+      /^apt-get .* install -y --no-install-recommends bluez$/.test(c),
+    );
+    expect(installed).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("systemctl enable --now bluetooth")).toBeGreaterThan(installed);
+  });
+
+  it("leaves apt alone when BlueZ is already installed", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(apts(sb)).toEqual([]);
+    expect(loggedCalls(sb)).not.toContain("systemctl enable --now bluetooth");
+  });
+
+  it("warns once and carries on with the install when apt cannot install BlueZ", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"], { WT_BLUEZ_MISSING: "1", WT_APT_FAIL: "3" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stderr.split("\n").filter((l) => l.startsWith(warning))).toHaveLength(1);
+    expect(apts(sb).filter((c) => / install .*bluez$/.test(c))).toEqual([]);
+    expect(loggedCalls(sb)).not.toContain("systemctl enable --now bluetooth");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 });
 
