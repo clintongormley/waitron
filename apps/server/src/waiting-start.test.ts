@@ -383,7 +383,7 @@ describe("the waiting start", () => {
       });
       const stepped = await h.app().request("/step", { method: "POST" });
       expect(await stepped.json()).toEqual({ restarting: true, replayed: false });
-      const preflight = await h.app().request("/api/sales", {
+      const preflight = await h.app().request("/api/working-orders/bill-1/payments", {
         method: "OPTIONS",
         headers: {
           origin: "https://m2.test",
@@ -391,7 +391,7 @@ describe("the waiting start", () => {
           "access-control-request-headers": "content-type",
         },
       });
-      const refused = await h.app().request("/api/sales", {
+      const refused = await h.app().request("/api/working-orders/bill-1/payments", {
         method: "POST",
         headers: { origin: "https://m2.test", "content-type": "application/json" },
         body: "{}",

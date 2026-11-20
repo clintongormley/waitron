@@ -164,22 +164,24 @@ describe("till action device proof over HTTP", () => {
   );
 });
 
-type PaymentRoute = "sale" | "reader" | "collect" | "bill-cash" | "bill-manual" | "bill-reader";
+type PaymentRoute =
+  "bill-counter" | "reader" | "collect" | "bill-cash" | "bill-manual" | "bill-reader";
 
 async function paymentRequest(kind: PaymentRoute) {
   const id = randomUUID();
   const lines = [{ menuItemId: venue.counterItem("Burger"), quantity: "1" }];
-  if (kind === "sale")
+  if (kind === "bill-counter")
     return {
       id,
-      path: "/api/sales",
+      path: `/api/working-orders/${id}/payments`,
       body: {
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "12.00",
         dining: "eat_in",
-        workingOrderId: id,
-        expectedEdit: null,
-        zoneId: venue.counter.zoneId,
-        lines,
-        tender: { method: "cash", amount: "12.00" },
+        basket: { zoneId: venue.counter.zoneId, lines },
       },
     };
   if (kind === "reader")
@@ -236,7 +238,7 @@ async function paymentRequest(kind: PaymentRoute) {
 }
 
 const paymentRoutes: PaymentRoute[] = [
-  "sale",
+  "bill-counter",
   "reader",
   "collect",
   "bill-cash",
@@ -303,7 +305,7 @@ async function refundRequest(kind: RefundRoute) {
       },
     };
   }
-  const payment = await paymentRequest("sale");
+  const payment = await paymentRequest("bill-counter");
   const answer = await post(payment.path, `${sessionCookie}; ${deviceCookie}`, payment.body);
   expect(answer.status).toBe(200);
   await answer.arrayBuffer();
@@ -379,7 +381,7 @@ async function documentRequest(kind: DocumentRoute) {
     expect(answer.status).toBe(200);
     return { path: `/api/tender-refunds/${body.id}/reprint`, body: {} };
   }
-  const payment = await paymentRequest("sale");
+  const payment = await paymentRequest("bill-counter");
   const answer = await post(payment.path, `${sessionCookie}; ${deviceCookie}`, payment.body);
   expect(answer.status).toBe(200);
   await answer.arrayBuffer();

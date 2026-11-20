@@ -2466,72 +2466,6 @@ describe("zone-offer menu routes", () => {
   });
 });
 
-describe("POST /api/sales (session-guarded sale)", () => {
-  it.each([
-    [{}, "lines"],
-    [{ lines: null }, "lines"],
-    [{ lines: [] }, "tender"],
-    [{ lines: [], tender: null }, "tender"],
-    [{ lines: [], tender: [] }, "tender"],
-    [{ lines: [], tender: "cash" }, "tender"],
-  ])("refuses malformed sale fields in %j as %s", async (body, field) => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(body),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field } },
-    });
-  });
-
-  it("REJECTS (401 session.required) when no cookie is present — the sale never runs unauthenticated", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-
-    // The guard runs BEFORE the body is even read. The chained fiscal write and the idempotent replay
-    // are covered in `till-api.fiscal-sale-paths.test.ts`.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [],
-        tender: { method: "cash", amount: "0" },
-      }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("POST with a malformed workingOrderId is 400 shared.invalid_id", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-
-    // Only a malformed `workingOrderId` is an error (absent or well-formed-unknown are walk-ups); the
-    // screen refuses it 400 at the HTTP boundary, before any query runs.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-        workingOrderId: "not-a-uuid",
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
-    });
-  });
-});
-
 describe("the device checks read the session's device, not the device cookie", () => {
   /** A shift on a fresh till device whose profile allows only `capabilities`. */
   async function sessionOnDeviceWith(capabilities: string[]): Promise<string> {
@@ -2544,25 +2478,6 @@ describe("the device checks read the session's device, not the device cookie", (
     return `${SESSION_COOKIE}=${await openSession(suite.db, deviceId)}`;
   }
 
-  it("refuses a cash sale sent with no device cookie from a session on a device that does not take cash", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: await sessionOnDeviceWith(["open-cash-drawer"]),
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
-  });
-
   /** The cookie of a fresh till device whose profile allows `capabilities`. */
   async function deviceCookieWith(capabilities: string[]): Promise<string> {
     const profileId = await seedDeviceProfile(
@@ -2572,23 +2487,6 @@ describe("the device checks read the session's device, not the device cookie", (
     );
     return (await enrolTillDevice(suite.db, profileId)).cookie;
   }
-
-  it("refuses a cash sale from a session on a device that does not take cash, though the cookie names one that does", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${await sessionOnDeviceWith(["open-cash-drawer"])}; ${await deviceCookieWith(["take-cash"])}`;
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
-  });
 
   it("refuses a drawer open from a session on a device that may not open it, though the cookie names one that may", async () => {
     const app = new Hono();
@@ -2867,11 +2765,12 @@ describe("a device's profile decides who may sign in on it", () => {
 });
 
 describe("malformed zone ids and simulation outcomes on the sale routes", () => {
-  it("POST /api/sales with a malformed zoneId is 400 shared.invalid_id", async () => {
+  it("refuses a bill payment basket naming a malformed zone before writing it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const token = await openSession(suite.db);
-    const res = await app.request("/api/sales", {
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -2879,9 +2778,12 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
       },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-        zoneId: "not-a-zone",
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "10.00",
+        submissionId: id,
+        basket: { lines: [{ menuItemId: waterOfferId, quantity: "1" }], zoneId: "not-a-zone" },
       }),
     });
     expect(res.status).toBe(400);
@@ -4691,36 +4593,44 @@ describe("canonical modifier HTTP serialization", () => {
 });
 
 describe("canonical modifier checkout refusal", () => {
-  it.each(["/api/working-orders", "/api/sales"])(
-    "rejects a repeated negative extra pick at %s before any write",
-    async (path) => {
+  it.each(["park", "pay"])(
+    "rejects a repeated negative extra pick before %s writes an order",
+    async (step) => {
       const f = await modifierOfferFixture();
       const id = randomUUID();
-      const response = await f.app.request(path, {
-        method: "POST",
-        headers: f.headers,
-        body: JSON.stringify({
-          id,
-          workingOrderId: id,
-          lines: [
+      const lines = [
+        {
+          menuItemId: f.offer.id,
+          quantity: "1",
+          options: f.answers.options,
+          extras: [
             {
-              menuItemId: f.offer.id,
-              quantity: "1",
-              options: f.answers.options,
-              extras: [
-                {
-                  listId: f.extrasList.id,
-                  picks: [
-                    { productId: f.cheese.id, quantity: 2 },
-                    { productId: f.cheese.id, quantity: -1 },
-                  ],
-                },
+              listId: f.extrasList.id,
+              picks: [
+                { productId: f.cheese.id, quantity: 2 },
+                { productId: f.cheese.id, quantity: -1 },
               ],
             },
           ],
-          tender: { method: "cash", amount: "20.00" },
-          dining: "eat_in",
-        }),
+        },
+      ];
+      const path = step === "park" ? "/api/working-orders" : `/api/working-orders/${id}/payments`;
+      const body =
+        step === "park"
+          ? { dining: "eat_in", id, lines }
+          : {
+              dining: "eat_in",
+              submissionId: id,
+              kind: "share",
+              shareOf: 1,
+              method: "cash",
+              tendered: "20.00",
+              basket: { lines },
+            };
+      const response = await f.app.request(path, {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify(body),
       });
       expect(response.status, await response.clone().text()).toBe(400);
       expect(await response.json()).toMatchObject({

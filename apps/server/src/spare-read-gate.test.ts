@@ -102,7 +102,11 @@ it("preserves the read-only write refusals and the existing mirror POST exemptio
   ]) {
     expect((await app.request(path, { method: "POST" })).status).toBe(200);
   }
-  for (const path of ["/api/box/retire", "/api/sales", "/management-api/menus"]) {
+  for (const path of [
+    "/api/box/retire",
+    "/api/working-orders/bill-1/payments",
+    "/management-api/menus",
+  ]) {
     const response = await app.request(path, { method: "POST" });
     expect([response.status, await response.json()]).toEqual([
       403,
