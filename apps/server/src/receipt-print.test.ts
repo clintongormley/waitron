@@ -1886,7 +1886,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
   /** The count the printer's "jobs waiting" alert shows for `printerId`, or 0 when it raises none. */
   async function waitingAt(printerId: string): Promise<number> {
     const alerts = await withTransaction(suite.db, (tx) =>
-      printingAlertSource().read({ tx, now: new Date() }),
+      printingAlertSource("serving-box").read({ tx, now: new Date() }),
     );
     const alert = alerts.find((a) => a.key === `printer.jobs_waiting:${printerId}`);
     return alert === undefined ? 0 : Number(alert.params.count);

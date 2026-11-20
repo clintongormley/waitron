@@ -2948,6 +2948,9 @@ async function bootServer(
   const attendanceRecorder = workforceEnabled ? recordAttendanceFact : undefined;
   const invoiceEmailAvailable = async () =>
     (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured";
+  const testPages = createPageTestPages(undefined, () =>
+    publishState(liveEvents, "print_jobs", log),
+  );
   mountTillApi(
     app,
     {
@@ -2972,6 +2975,7 @@ async function bootServer(
       devMode: config.devMode,
       deviceChooserEnabled,
       invoiceEmailAvailable,
+      testPages,
       workforceEnabled,
       attendanceResponsesEnabled: isSingletonPrimary,
       cloudEmergency: () => readCloudEmergency(),
@@ -3090,8 +3094,6 @@ async function bootServer(
     },
     log,
   );
-  // Outside the block below so the alert sources have it on every node.
-  const testPages = createPageTestPages();
   if (workforceEnabled) {
     jobRunner.add(
       attendanceJob({
@@ -3197,7 +3199,7 @@ async function bootServer(
     const pairingMode = createPairingMode({
       changed: () => publishState(liveEvents, "pairing", log),
     });
-    const printerNotices = devicePrinterNoticeSources({ now });
+    const printerNotices = devicePrinterNoticeSources({ now, testPages });
     mountDeviceApi(
       app,
       {
@@ -3982,7 +3984,7 @@ async function bootServer(
       async () => (await spareFollow?.facts())?.clock ?? null,
     ),
     clockUnconfirmedAlertSource(startClockWaits),
-    printingAlertSource(),
+    printingAlertSource(tradingContext.nodeId),
     contentSuggestionsAlertSource(translationContext),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({

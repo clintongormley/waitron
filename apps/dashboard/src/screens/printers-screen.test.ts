@@ -9,7 +9,7 @@ import {
 } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   streamsOver,
   cleanupWidgets,
@@ -5601,6 +5601,49 @@ it.each([
   await flush(el);
   const dialog = q(el, `[data-test=new-${kind}-modal]`)!.shadowRoot!.querySelector("dialog")!;
   expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
+});
+
+it("shows office printer holds and uncertain pages without receipt actions", async () => {
+  const before = currentLocale();
+  onTestFinished(() => setLocale(before));
+  setLocale("en");
+  const office = {
+    ...jobs[0]!,
+    printerId: "office",
+    printerName: "Back office",
+    kind: "a4" as const,
+    pageDocument: "invoice" as const,
+    lastError: null,
+  };
+  const held = { ...office, id: "held-page", status: "printing", printerHold: "paper_out" };
+  const failed = { ...office, id: "failed-page", status: "failed", lastError: "printer_refused" };
+  const switched = { ...failed, id: "switched-page", lastError: "switched" };
+  const uncertain = { ...office, id: "uncertain-page", status: "unknown", printerHold: null };
+  const liveData = new LiveData();
+  const listRecentJobs = vi.fn().mockResolvedValue([held, failed, switched, uncertain]);
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ liveData, listRecentJobs }),
+  });
+  await flush(el);
+  expect(text(el, "[data-test=job-wait-held-page]")).toBe(
+    "Back office is out of paper. Add paper and it will print.",
+  );
+  expect(text(el, "[data-test=job-status-uncertain-page]")).toBe("May have printed");
+  expect(text(el, "[data-test=job-error-failed-page]")).toBe("the printer refused it");
+  expect(text(el, "[data-test=job-error-switched-page]")).toBe("Switched to a receipt printer");
+  expect(text(el, "[data-test=job-attempts-failed-page]")).toBe("—");
+  expect(q(el, "[data-test=view-job-held-page]")).toBeNull();
+  expect(q(el, "[data-test=resend-job-held-page]")).toBeNull();
+
+  listRecentJobs.mockResolvedValue([
+    { ...held, status: "done", printerHold: null },
+    failed,
+    switched,
+    uncertain,
+  ]);
+  liveData.invalidate([{ type: "print_jobs", id: "held-page" }]);
+  await vi.waitFor(() => expect(text(el, "[data-test=job-status-held-page]")).toBe("Done"));
+  expect(q(el, "[data-test=job-wait-held-page]")).toBeNull();
 });
 
 it("distinguishes job statuses with coloured dots while preserving the status text", async () => {
@@ -14229,6 +14272,7 @@ describe("searching and filtering the printer tables", () => {
       jobStatusName("printing"),
       jobStatusName("done"),
       jobStatusName("failed"),
+      jobStatusName("unknown"),
     ]);
     await chooseOptions(filter, ["failed"]);
     await flush(el);

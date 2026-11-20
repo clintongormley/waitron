@@ -1908,7 +1908,7 @@ describe("GET /api/device/equipment's notices", () => {
         ]);
       }
       const alerts = await inTx((tx) =>
-        printingAlertSource().read({ tx, now: READING.instant } as never),
+        printingAlertSource("serving-box").read({ tx, now: READING.instant } as never),
       );
       expect(alerts.map((alert) => alert.key)).toContain(`printer.jobs_waiting:${id}`);
 
@@ -1926,7 +1926,7 @@ describe("GET /api/device/equipment's notices", () => {
         await job(id, ago(MINUTE), { status: "done" });
         expect(await printerNotices(printerApp(), venue.cookie)).toEqual([]);
         const alerts = await inTx((tx) =>
-          printingAlertSource().read({ tx, now: READING.instant } as never),
+          printingAlertSource("serving-box").read({ tx, now: READING.instant } as never),
         );
         expect(alerts.map((alert) => alert.key)).toContain(`printer.jobs_waiting:${id}`);
       },

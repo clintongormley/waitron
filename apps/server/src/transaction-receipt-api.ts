@@ -77,6 +77,7 @@ export function mountTransactionReceiptApi(
   async function readState(tx: Transaction, session: { deviceId: string }, id: string) {
     const state = await readInvoiceDeliveryState(tx, id, {
       emailAvailable: false,
+      testPages: deps.testPages,
       printers: async () => {
         const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
         return printer === undefined ? [] : [printer];

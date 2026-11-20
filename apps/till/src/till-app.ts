@@ -3796,19 +3796,20 @@ export class TillApp extends LitElement {
     read: (signal) => this.api.getDeviceEquipment({ signal }),
     onEquipment: (read) => {
       this.pinClockNotice = waitingStartNotice(this.pinClockNotice, read);
-      this.pinStorageNotices = nextNotices(this.pinStorageNotices, read).filter(
+      this.pinNotices = nextNotices(this.pinNotices, read).filter(
         (notice) =>
-          notice.owner === "box" &&
-          (notice.code === "storage.disk_full" || notice.code === "storage.space_low"),
+          (notice.owner === "box" &&
+            (notice.code === "storage.disk_full" || notice.code === "storage.space_low")) ||
+          (notice.owner === "office-invoices" && notice.code === "invoice_delivery.office_print"),
       );
     },
     onRefused: () => {
       this.pinClockNotice = undefined;
-      this.pinStorageNotices = [];
+      this.pinNotices = [];
     },
   });
   @state() private pinClockNotice?: StaffNotice;
-  @state() private pinStorageNotices: StaffNotice[] = [];
+  @state() private pinNotices: StaffNotice[] = [];
 
   #startPinScreenPoll(): void {
     if (this.deviceId !== undefined && !this.deviceMode && !this.#equipmentPoll.running)
@@ -3818,7 +3819,7 @@ export class TillApp extends LitElement {
   #stopPinScreenPoll(): void {
     this.#pinScreenPoll.stop();
     this.pinClockNotice = undefined;
-    if (this.pinStorageNotices.length > 0) this.pinStorageNotices = [];
+    if (this.pinNotices.length > 0) this.pinNotices = [];
   }
   @state() private tableSelectedMenuId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
@@ -25013,7 +25014,7 @@ export class TillApp extends LitElement {
                           @start-in-cloud=${() => void this.#onStartInCloud()}
                           .loggedOutByOther=${this.#lockedForRefusedPerson}
                           .clockNotice=${this.pinClockNotice}
-                          .storageNotices=${this.pinStorageNotices}
+                          .notices=${this.pinNotices}
                           @check-again=${() => void this.router?.probeNow()}
                         ></till-lock-screen>`,
                       )

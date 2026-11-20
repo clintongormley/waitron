@@ -19,8 +19,10 @@ import {
   kitchenStations,
   type Database,
   withTransaction,
+  writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import {
   seedTaxpayer,
   seedDevice,
@@ -59,6 +61,7 @@ import {
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { deleteCardReader } from "./card-reader-delete.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
 import type { SealedStateStatus } from "./sealed-state.js";
@@ -914,6 +917,7 @@ async function seedAgent(t: {
   name: string;
   lastSeenAt: string | null;
   active?: boolean;
+  nodeId?: string;
 }): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
@@ -922,6 +926,7 @@ async function seedAgent(t: {
       tokenHash: "hash",
       active: t.active ?? true,
       lastSeenAt: t.lastSeenAt,
+      nodeId: t.nodeId,
     })
     .returning({ id: printAgents.id });
   return row!.id;
@@ -962,13 +967,56 @@ async function setStatus(
 
 const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
 
+const SERVING_NODE = randomUUID();
+
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
-    return printingAlertSource().read({ tx, now });
+    return printingAlertSource(SERVING_NODE).read({ tx, now });
   });
 }
 
 describe("printingAlertSource — agent.silent", () => {
+  it("drops a former primary warning after reassignment and keeps the serving spare warning", async () => {
+    await seedFixtureVenue();
+    const formerNode = randomUUID();
+    const former = await seedAgent({
+      name: "Former primary",
+      lastSeenAt: minsAgo(30),
+      nodeId: formerNode,
+    });
+    const current = await seedAgent({
+      name: "Serving box",
+      lastSeenAt: minsAgo(6),
+      nodeId: SERVING_NODE,
+    });
+    const spare = randomUUID();
+    await writeNodeMembership(
+      suite.db,
+      signedMembershipDoc(2, {
+        signerNodeId: SERVING_NODE,
+        nodes: [
+          { nodeId: SERVING_NODE, contactUrl: "https://main.example", standing: "serving-primary" },
+          { nodeId: formerNode, contactUrl: "https://former.example", standing: "sell-only" },
+          { nodeId: spare, contactUrl: "", standing: "serving-secondary" },
+        ],
+      }),
+    );
+    const standby = await seedAgent({
+      name: "Serving spare",
+      nodeId: spare,
+      lastSeenAt: minsAgo(6),
+    });
+    const office = await withTransaction(suite.db, (tx) =>
+      insertA4Printer(tx, { agentId: former }),
+    );
+    const silent = async () => (await readAlerts()).map((alert) => alert.key).sort();
+    const warnings = (...ids: string[]) => ids.map((id) => `agent.silent:${id}`).sort();
+    expect(await silent()).toEqual(warnings(former, current, standby));
+
+    await suite.db.update(printers).set({ agentId: current }).where(eq(printers.id, office));
+    expect(await silent()).toEqual(warnings(current, standby));
+  });
+
   it("stays quiet for an agent seen 4 minutes ago", async () => {
     await seedFixtureVenue();
     await seedAgent({ name: "Kitchen agent", lastSeenAt: minsAgo(4) });

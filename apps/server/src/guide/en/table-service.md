@@ -150,6 +150,10 @@ For an older full invoice with no bill, open it from **Transactions** and choose
 Use **Receipt** for a compact copy once an original has completed. If printing fails, check the
 destination named by **Retry original** or choose the named receipt printer instead.
 
+If the till says the office printer is out of paper, add paper and wait for the invoice. The notice
+can stay on the sign-in screen if the till locks. If the invoice may have printed, check the printer
+before sending it again.
+
 ## Print from dashboard Orders {#dashboard-documents}
 
 To find an older bill, choose **Any date** or set the date range. Search covers every matching bill,

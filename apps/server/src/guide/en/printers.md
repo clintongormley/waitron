@@ -69,6 +69,10 @@ Open **Print Queue** to see why a job is waiting. To add or remove a computer th
 printer, check the printer connection and its print agent. A connection message can appear
 alongside the last reported printing error.
 
+If an A4 job says the printer is out of paper, add paper and let the job finish. If the queue says
+**May have printed**, check the printer before sending the invoice again. Open **Orders** to
+request another A4 print.
+
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.

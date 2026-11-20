@@ -17,6 +17,8 @@ import { enabledStaffNoticeSources } from "./modules.js";
 import { printersInTrouble, type PrinterInTrouble } from "./print-job-trouble.js";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { readUndeliveredInvoices } from "./alert-sources.js";
+import type { PageTestPages } from "./page-test-pages.js";
 
 /** Owner name of the notices the box itself gives; no module is named this. */
 export const BOX_NOTICE_OWNER = "box";
@@ -234,6 +236,7 @@ export function printerStaffNoticeSource(deps: {
 
 export function devicePrinterNoticeSources(deps: {
   now: () => Date;
+  testPages?: Pick<PageTestPages, "holdOn">;
   cacheMs?: number;
   trouble?: (tx: Transaction, now: Date) => Promise<readonly PrinterInTrouble[]>;
   documentPrinters?: (tx: Transaction, deviceId: string) => Promise<ReadonlySet<string>>;
@@ -243,6 +246,12 @@ export function devicePrinterNoticeSources(deps: {
     ttlMs: deps.cacheMs ?? PRINTER_NOTICE_CACHE_MS,
     now: deps.now,
   });
+  const invoices = createTtlCache<Awaited<ReturnType<typeof readUndeliveredInvoices>>>({
+    ttlMs: deps.cacheMs ?? PRINTER_NOTICE_CACHE_MS,
+    now: deps.now,
+  });
+  const { testPages } = deps;
+  const documentPrinters = deps.documentPrinters ?? documentPrintersOf;
   return (deviceId) => [
     {
       owner: PRINTER_NOTICE_OWNER,
@@ -252,6 +261,39 @@ export function devicePrinterNoticeSources(deps: {
         documentPrinters: deps.documentPrinters,
       }),
     },
+    ...(testPages === undefined
+      ? []
+      : [
+          {
+            owner: "office-invoices",
+            source: {
+              async read({ tx, reading }: StaffNoticeReadContext) {
+                const rows = await invoices.get("all", () =>
+                  readUndeliveredInvoices(tx, reading.instant, testPages),
+                );
+                if (!rows.some(({ officePrinter }) => officePrinter !== undefined)) return [];
+                const mine = await documentPrinters(tx, deviceId);
+                const notices = new Map<string, StaffNotice>();
+                for (const { officePrinter, found } of rows) {
+                  if (officePrinter === undefined || !mine.has(officePrinter.id)) continue;
+                  const hold = "hold" in found ? found.hold : undefined;
+                  const key = `${officePrinter.id}:${hold ?? found.kind}`;
+                  notices.set(key, {
+                    key,
+                    code: "invoice_delivery.office_print",
+                    severity: "warning",
+                    params: {
+                      printer: officePrinter.name,
+                      reason: found.kind,
+                      ...(hold === undefined ? {} : { hold }),
+                    },
+                  });
+                }
+                return [...notices.values()];
+              },
+            },
+          },
+        ]),
     {
       owner: "drawers",
       source: {

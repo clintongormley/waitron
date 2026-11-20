@@ -50,6 +50,7 @@ import {
 } from "./invoice-delivery-status.js";
 import { claimInvoiceReceipt, endInvoicePrintDeliveries } from "./invoice-print.js";
 import { renewInvoicePagePrint } from "./invoice-page-print.js";
+import { devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { readOriginalReceiptPrint } from "./receipt-print.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 
@@ -370,6 +371,7 @@ describe("readInvoiceDeliveries", () => {
       at: statusTime[status],
       personId: "staff-one",
       printerHold: null,
+      ...(medium === "a4" ? { printerName: "Back office" } : {}),
       lateSuccess: false,
     };
     const printers = [a4(office)];
@@ -1195,3 +1197,36 @@ describe("readInvoiceDeliveries", () => {
     expect(batch.get(fresh)!.actions.print).toBeNull();
   });
 });
+
+it.each([
+  ["failed", "failed"],
+  ["unknown", "uncertain"],
+] as const)(
+  "shows a %s office invoice on the assigned till until delivery",
+  async (status, reason) => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId);
+    const printer = await pagePrinter();
+    await attempt(v, saleId, "a4", status, printer);
+    const notices = devicePrinterNoticeSources({
+      now: () => EXPIRED,
+      cacheMs: 0,
+      testPages: { holdOn: () => null },
+      documentPrinters: async (_tx, deviceId) => new Set(deviceId === "assigned" ? [printer] : []),
+    });
+    const read = (deviceId: string) =>
+      withTransaction(suite.db, async (tx) => {
+        const office = notices(deviceId).find((entry) => entry.owner === "office-invoices");
+        return (
+          (await office?.source.read({ tx, reading: { instant: EXPIRED, offsetMinutes: 0 } })) ?? []
+        );
+      });
+    expect(await read("assigned")).toMatchObject([
+      { code: "invoice_delivery.office_print", params: { printer: "Back office", reason } },
+    ]);
+    expect(await read("other")).toEqual([]);
+
+    await attempt(v, saleId, "a4", "sent", printer);
+    expect(await read("assigned")).toEqual([]);
+  },
+);

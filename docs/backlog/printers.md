@@ -365,7 +365,8 @@ Hardware and inbox checks to complete in the owner session.
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
 - **A552. Invoices on the owner's office printer are unchecked with the committed code.** Check
   the HP Color LaserJet MFP M181fw with a long PDF invoice, measuring and scanning its QR, and
-  check what Waitron reports with an empty tray and when power is lost mid-job. Left open by A231q.
+  check what Waitron reports when power is lost mid-job. Verify the new paper-out wording and Print
+  Queue on the HP when the build with those changes reaches the box.
   [Detail](printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
 - **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
   `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
@@ -684,9 +685,10 @@ construct a friendly computer name from a printer label. See the
 Owed on
 the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
 with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
-from the Printers tab; and what Waitron reports with the tray empty and when the printer is
-switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
-A231q changed how a job the printer is holding is reported. Left open by A231q.
+from the Printers tab; and what Waitron reports when the printer is switched off mid-job. On
+2026-11-20 the Lenovo saved a paper-out hold, then recorded one successful attempt after paper
+returned. The till wording and the A4 rows in Print Queue still need checking on that printer with
+the updated build.
 
 How long the box takes to draw a page (A553, measured 2026-11-20 on the Lenovo M710q, i7-7700T):
 the server's `renderInvoicePage` from main `58508d7fe8`, bundled as the server is and run on the

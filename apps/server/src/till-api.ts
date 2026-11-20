@@ -345,6 +345,7 @@ export interface TillApiDeps {
   /** "Check the time": mounts the till's clock check when the seat can confirm a stop. */
   boxClock?: TillBoxClockDeps;
   invoiceEmailAvailable?: () => Promise<boolean>;
+  testPages?: Pick<import("./page-test-pages.js").PageTestPages, "holdOn">;
   workforceEnabled?: boolean;
   attendanceResponsesEnabled?: boolean;
 }
@@ -2610,6 +2611,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
           printers: () => tillInvoicePrinters(tx, session),
+          testPages: deps.testPages,
         });
       };
       const current = await deps.db.withWriteLock(async () => {

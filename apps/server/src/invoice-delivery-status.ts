@@ -2,8 +2,10 @@ import "./errors.js";
 import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
+  isA4Printer,
   outgoingMail,
   printJobs,
+  printers,
   sales,
   type A4HoldCode,
   type Transaction,
@@ -13,6 +15,7 @@ import { AppError } from "@waitron/shared";
 import type { InvoiceDelivery } from "./invoice-delivery.js";
 import { type OriginalReceiptPrint, readOriginalReceiptPrints } from "./receipt-print.js";
 import { deliversAsFullInvoice } from "./invoice-selection.js";
+import type { PageTestPages } from "./page-test-pages.js";
 
 export const invoiceDeliveryAttemptColumns = {
   ...getTableColumns(invoiceDeliveries),
@@ -32,6 +35,7 @@ type InvoiceDeliveryAttemptRow = InvoiceDelivery & {
   mailDueAt?: string | null;
   queueClaimedAt?: string | null;
   queuePrinterHold?: A4HoldCode | null;
+  pagePrinterName?: string | null;
 };
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
@@ -57,6 +61,7 @@ export interface InvoiceDeliveryAttempt {
    * an unknown ended it; null otherwise. A held A4 may still print by itself.
    */
   printerHold: A4HoldCode | null;
+  printerName?: string;
   /**
    * The agent reported success but the attempt kept its status: a newer attempt had started, or
    * its receipt printer had been deleted.
@@ -110,7 +115,24 @@ export type PrinterOffer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter
 export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
   printers?: PrinterOffer;
+  testPages?: Pick<PageTestPages, "holdOn">;
 };
+
+export function readSendingPagePrinters(tx: Transaction) {
+  return tx
+    .select({ printerId: printJobs.printerId, hold: printJobs.printerHold })
+    .from(printers)
+    .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+    .where(and(isA4Printer(), eq(printJobs.kind, "a4"), eq(printJobs.status, "printing")));
+}
+
+export function pagePrinterHold(
+  printerId: string,
+  sendingHolds: ReadonlyMap<string, A4HoldCode | null>,
+  testPages?: Pick<PageTestPages, "holdOn">,
+): A4HoldCode | null {
+  return sendingHolds.get(printerId) ?? testPages?.holdOn(printerId) ?? null;
+}
 
 /** The status, with what the reader read on the way that an action deciding on it needs again. */
 export interface InvoiceDeliveryState {
@@ -139,7 +161,9 @@ export async function readInvoiceDeliveryState(
   saleId: string,
   options: InvoiceDeliverySaleReadOptions,
 ): Promise<InvoiceDeliveryState | null> {
-  const state = (await readStates(tx, [saleId], options)).get(saleId);
+  const state = (await readStates(tx, [saleId], { ...options, includePageHolds: true })).get(
+    saleId,
+  );
   if (state === undefined) throw new AppError("invoice_delivery.not_found", {});
   return state;
 }
@@ -162,7 +186,9 @@ export async function readReceiptEmailDeliveries(
   saleId: string,
   options: InvoiceDeliveryReadOptions,
 ): Promise<InvoiceDeliveryStatus> {
-  const state = (await readStates(tx, [saleId], options, true)).get(saleId);
+  const state = (await readStates(tx, [saleId], { ...options, includeSimplifiedEmail: true })).get(
+    saleId,
+  );
   if (state == null) throw new AppError("invoice_delivery.not_found", {});
   return {
     ...state.status,
@@ -173,10 +199,17 @@ export async function readReceiptEmailDeliveries(
 async function readStates(
   tx: Transaction,
   saleIds: readonly string[],
-  options: InvoiceDeliverySaleReadOptions,
-  includeSimplifiedEmail = false,
+  options: InvoiceDeliverySaleReadOptions & {
+    includeSimplifiedEmail?: boolean;
+    includePageHolds?: boolean;
+  },
 ): Promise<Map<string, InvoiceDeliveryState | null>> {
-  const { emailAvailable, printers: offer = async () => [] } = options;
+  const {
+    emailAvailable,
+    printers: offer = async () => [],
+    includeSimplifiedEmail,
+    includePageHolds,
+  } = options;
   const ids = [...saleIds];
   const found = await tx
     .select({
@@ -187,9 +220,10 @@ async function readStates(
     .from(sales)
     .where(inArray(sales.id, ids));
   const rows = await tx
-    .select(invoiceDeliveryAttemptColumns)
+    .select({ ...invoiceDeliveryAttemptColumns, pagePrinterName: printers.name })
     .from(invoiceDeliveries)
     .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
+    .leftJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
     .leftJoin(outgoingMail, invoiceDeliveryMailJoin)
     .where(inArray(invoiceDeliveries.saleId, ids))
     .orderBy(desc(invoiceDeliveries.generation));
@@ -215,6 +249,10 @@ async function readStates(
   const receipts = await readOriginalReceiptPrints(tx, ids);
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
+  const sendingHolds =
+    includePageHolds && rows.some((row) => row.medium === "a4" && row.status === "queued")
+      ? new Map((await readSendingPagePrinters(tx)).map((row) => [row.printerId, row.hold]))
+      : new Map<string, A4HoldCode | null>();
   const states = new Map<string, InvoiceDeliveryState | null>();
   for (const sale of found) {
     const full = deliversAsFullInvoice(sale);
@@ -230,8 +268,17 @@ async function readStates(
     const saleRows = rowsOf.get(sale.id) ?? [];
     const saleJobs = jobsOf.get(sale.id) ?? [];
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);
+    const status = deliveryStatus(saleRows, saleJobs, receipt, withdrawn, printers, emailable);
+    const latest = saleRows[0];
+    if (latest?.medium === "a4" && latest.status === "queued" && latest.printerId !== null) {
+      status.current!.printerHold = pagePrinterHold(
+        latest.printerId,
+        sendingHolds,
+        options.testPages,
+      );
+    }
     states.set(sale.id, {
-      status: deliveryStatus(saleRows, saleJobs, receipt, withdrawn, printers, emailable),
+      status,
       printers,
       receipt,
       receiptPrinterWithdrawn: withdrawn,
@@ -396,6 +443,7 @@ export function rowAttempt(row: InvoiceDeliveryAttemptRow): InvoiceDeliveryAttem
         ? (row.queuePrinterHold ?? null)
         : null,
     lateSuccess: row.reportedOutcome === "sent" && row.status !== "sent",
+    ...(row.pagePrinterName == null ? {} : { printerName: row.pagePrinterName }),
   };
 }
 

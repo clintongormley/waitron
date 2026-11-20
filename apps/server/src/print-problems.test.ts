@@ -280,7 +280,9 @@ async function createdAtOf(jobId: string): Promise<string> {
 
 /** The count the printer's "jobs waiting" alert shows for `printerId`, or 0 when it raises none. */
 async function waitingAt(printerId: string): Promise<number> {
-  const alerts = await inTx((tx) => printingAlertSource().read({ tx, now: new Date() }));
+  const alerts = await inTx((tx) =>
+    printingAlertSource("serving-box").read({ tx, now: new Date() }),
+  );
   const alert = alerts.find((a) => a.key === `printer.jobs_waiting:${printerId}`);
   return alert === undefined ? 0 : Number(alert.params.count);
 }
@@ -475,7 +477,9 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     // A resend is a byte-for-byte copy, so once one printed the kitchen has every dish the ticket carried.
     expect(await problemsOf(table4.partyId)).toEqual([]);
     expect("printProblem" in (await stationCard(v.kitchenStationId, table4.tabId))).toBe(false);
-    const alerts = await inTx((tx) => printingAlertSource().read({ tx, now: new Date() }));
+    const alerts = await inTx((tx) =>
+      printingAlertSource("serving-box").read({ tx, now: new Date() }),
+    );
     expect(alerts.filter((a) => a.code === "printer.jobs_waiting")).toMatchObject([
       { params: { count: 1 } },
     ]);

@@ -681,7 +681,7 @@ function mount(db: Database, cfg: TradingContext, log: Logger): Hono {
     {
       db,
       now: () => new Date(),
-      registry: createAlertRegistry({ claims: [], sources: [printingAlertSource()] }),
+      registry: createAlertRegistry({ claims: [], sources: [printingAlertSource(cfg.nodeId)] }),
     },
     log,
   );

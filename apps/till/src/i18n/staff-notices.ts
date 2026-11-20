@@ -1,4 +1,4 @@
-import type { StaffNotice } from "../api/client.js";
+import { a4HoldCodes, type A4HoldCode, type StaffNotice } from "../api/client.js";
 import { clockTime, countText, t } from "./t.js";
 
 const TELL_MANAGER = "staff_notice.tell_manager";
@@ -23,6 +23,16 @@ function unknownText(): { main: string; hint: string } {
   return { main: t(UNKNOWN.main), hint: t(UNKNOWN.hint) };
 }
 
+export function officePrinterHoldText(printer: string, hold: string): string {
+  if (hold === "paper_out")
+    return t("invoice.office_paper_out").replace("{printer}", () => printer);
+  if (!(a4HoldCodes as readonly string[]).includes(hold))
+    return t("invoice.delivery_held_no_reason");
+  return t("invoice.office_hold")
+    .replace("{reason}", () => t(`invoice.delivery_hold_${hold as A4HoldCode}`))
+    .replace("{printer}", () => printer);
+}
+
 /** The clock stops a person at a till can lift with "Check the time" while the box offers it. */
 const CHECKABLE: ReadonlySet<string> = new Set(["clock.unusable", "clock.unconfirmed"]);
 
@@ -42,6 +52,22 @@ export function staffNoticeText(
 } {
   if (notice.code === "print_job.drawer_expired") {
     return { main: t("staff_notice.print_job.drawer_expired"), hint: "" };
+  }
+  if (notice.code === "invoice_delivery.office_print") {
+    const { printer, reason, hold } = notice.params;
+    if (typeof printer !== "string" || printer === "") return unknownText();
+    const named = (key: Parameters<typeof t>[0]) => t(key).replace("{printer}", () => printer);
+    if (reason === "failed")
+      return { main: named("staff_notice.invoice_delivery.office_failed"), hint: "" };
+    if (reason === "uncertain" || reason === "uncertain_held")
+      return { main: named("staff_notice.invoice_delivery.office_uncertain"), hint: "" };
+    return {
+      main:
+        typeof hold === "string"
+          ? t("staff_notice.invoice_delivery.office_held")
+          : named("staff_notice.invoice_delivery.office_print"),
+      hint: typeof hold === "string" ? officePrinterHoldText(printer, hold) : "",
+    };
   }
   if (notice.code === "clock.device_wrong") {
     return {

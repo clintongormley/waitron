@@ -896,7 +896,7 @@ describe("till-lock-screen", () => {
   });
 
   const toned = (code: string, severity: StaffNotice["severity"]): StaffNotice => ({
-    owner: code.startsWith("clock.") ? "box-clock" : "core",
+    owner: code.startsWith("clock.") ? "box-clock" : "box",
     key: code,
     code,
     severity,
@@ -918,7 +918,7 @@ describe("till-lock-screen", () => {
       const { el, host } = await mountWidget<TillLockScreen>(
         "till-lock-screen",
         kind === "storage"
-          ? { api: stubApi(), storageNotices: [shown] }
+          ? { api: stubApi(), notices: [shown] }
           : { api: stubApi(), clockNotice: shown },
       );
       await flush(el);

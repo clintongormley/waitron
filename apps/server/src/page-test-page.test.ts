@@ -888,7 +888,13 @@ describe("a test page the printer is holding", () => {
 
   it("answers a printer's held test page's hold, and null for any other printer or state", () => {
     const state = { now: at(0) };
-    const pages = createPageTestPages(() => state.now.getTime());
+    const holds: (string | null)[] = [];
+    const pages = createPageTestPages(
+      () => state.now.getTime(),
+      () => {
+        holds.push(pages.holdOn("x"));
+      },
+    );
     const printers = ["x", "y"].map((id) => ({
       id,
       active: true,
@@ -912,6 +918,7 @@ describe("a test page the printer is holding", () => {
 
     state.now = at(20_000);
     expect(pages.renew(claimOf(onX), "paper_out")).toBe(true);
+    expect(pages.renew(claimOf(onX), "paper_out")).toBe(true);
     expect(pages.renew(claimOf(onY), null)).toBe(true);
     expect(pages.holdOn("x")).toBe("paper_out");
     expect(pages.holdOn("y")).toBeNull();
@@ -923,6 +930,7 @@ describe("a test page the printer is holding", () => {
     state.now = at(80_000);
     expect(pages.holdOn("x")).toBeNull();
     expect(pages.read("x")).toMatchObject({ status: "unknown", failureCode: "timeout" });
+    expect(holds).toEqual(["paper_out", null]);
   });
 });
 
