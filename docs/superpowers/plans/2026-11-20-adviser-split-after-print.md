@@ -14,8 +14,8 @@ same party. Splitting them between guests then uses today's Move dishes and Prin
 
 **Tech Stack:** Hono routes in `apps/server`, Drizzle on SQLite, Lit till in `apps/till`.
 
-**Spec:** the queue item's ask and the adviser's answer, "Either a cancellation or correction is
-acceptable here" (`docs/compliance/2026-11-19-adviser-meeting.md:114`); the survey that chose the
+**Spec:** the queue item's ask and the owner's answer recorded on the adviser sheet, "Either a
+cancellation or correction is acceptable here" (`docs/compliance/2026-11-19-adviser-meeting.md:110-114`); the survey that chose the
 corrective, with receipts: `~/waitron-campaign-l/receipts/adviser-split-after-print/finding.md`.
 
 ## Why a corrective and not a cancellation
@@ -26,14 +26,40 @@ unpaid ticket, with its permission, approver PIN and till dialog. A cancellation
 be the first cancellation a real venue sends AEAT, and the adviser's answer 1.7 keeps cancellations
 for sales that never happened. The corrective needs about half the new code.
 
+## ⚠ Decision needed before building (fresh read, 2026-11-20, finding C1)
+
+A fresh read ran it (`receipts/adviser-split-after-print/fresh-read-31d17f0473.md`): **a printed
+bill's dishes cannot leave it.** `moveOrderLines` refuses a bill that is not open
+(`working-order.ts:4228-4229`, `tab.not_open`); underneath, the database rule
+`working_order_lines_require_open_parent_update` (`packages/db/triggers/core.sql:393-401`) refuses
+any line write on a bill that is not open, and `working_orders_enforce_transition`
+(`core.sql:710-718`) lets a printed bill become only paid or cancelled. Task 1 below is written for
+option (a); it is not built until one is chosen.
+
+- **(a) Recommended: let dishes leave a bill whose ticket is wholly credited.** Narrow both checks so
+  a line may move from a `placed` or `abandoned` bill to an open bill when that bill's ticket has a
+  whole credit note against it (its corrective's total is minus the ticket's), and nowhere else. The
+  dishes keep their ids (A1308: the order line is the dish), and the move reuses the merge of two
+  bills (`mergeCheckedBills`, `bill-actions.ts:155-192`), which already carries set-menu copies and
+  kitchen print links. Cost: a change to a database protection on issued bills, so the core starting
+  migration is rebuilt (`migration-baseline rebuild --set core`) and test venues reset. Before
+  building, check that nothing reads a ticket's content back from the bill's dishes rather than from
+  the sale's own lines (`orders-reprint.ts`, the receipt layout).
+- **(b) Copy the dishes instead.** Leave the originals on the cancelled bill, as Cancel and credit
+  does, and copy each onto the new bill under a new id with its kitchen item, allergy ticks, print
+  links and set-menu copies. No database rule changes, but the dishes get new ids (against A1308's
+  rule) and every piece of per-dish state needs its own copy code; larger and easier to get wrong.
+
 ## Global Constraints
 
 - Nothing new is sent to AEAT: the same R5 whole credit `creditWholeInvoice`
   (`apps/server/src/cancel-credit.ts:46-79`) files today. `recordCorrection`, the chain, numbering,
   `computeHuella` and `registros_facturacion`'s triggers are not touched. The golden huella test and
   `inmutabilidad` pass unedited.
-- No schema change: the order history entry reuses kind `order_cancelled`
-  (`packages/db/src/schema/order-amendments.ts:14`), reason `Bill split after printing`.
+- No new table or column. Option (a) changes two database rules in `packages/db/triggers/core.sql`
+  and rebuilds the core starting migration. The order history entry reuses kind `order_cancelled`
+  (`packages/db/src/schema/order-amendments.ts:14`), reason `Bill split after printing`; orders lists
+  show the old bill as Cancelled (`orders-list.ts:121-132`), which the guide says.
 - Same eligibility as Cancel and credit: a `placed` bill with an issued ticket, no payment, no card
   payment in flight, no customer-named invoice. Same permission: `sale.rectify`, with an approver's
   PIN when the operator lacks it.
@@ -81,14 +107,17 @@ for sales that never happened. The corrective needs about half the new code.
     (`packages/reporting/src/vat-summary.ts`) and category sales (`category-sales.ts`) for the day
     count each dish once.
 - [ ] **Step 2: Run, watch them fail:** `pnpm --filter @waitron/server exec vitest run src/split-after-print.test.ts`
-- [ ] **Step 3: Implement.** In `cancelPlaced`, with `keepDishes`: insert a new party bill
-  (`insertPartyBill`, `apps/server/src/parties.ts`), move every line with `carveOffLines`
-  (`working-order.ts:4826`) before the status change, tell the kitchen as `moveDishes` does
-  (`readSentWork` before, `enqueueMovedSlips` after, `bill-actions.ts:362-367`), skip the VOID
-  slips and `ensureFamilyBill`, run `assertBillInvariant` on both bills, bump the party revision.
-  Everything stays in the one `withIssuanceTransaction`. If `carveOffLines` refuses a `placed`
-  source, say so in the ledger and move the lines before the bill is checked, not by loosening the
-  refusal for other callers. Add the route beside the cancel route.
+- [ ] **Step 3: Implement (option a).** Narrow the two checks named above, with a case in
+  `scripts/behavioural-triggers.test.ts`'s style proving a line still cannot leave a printed bill
+  with no whole credit, then rebuild the core starting migration. The route's outer step (beside
+  `cancelPlacedOrder`, `working-order.ts:7780-7804`) asks for `sale.rectify` with the PIN override
+  and passes the fixed reason; inside the one `withIssuanceTransaction`, with the bill locked,
+  `cancelPlaced` with `keepDishes` refuses `bill.not_issued` when there is no ticket, credits it,
+  creates the new bill keeping the old bill's way of dining and service context
+  (`createOpenOrder(…, copyServiceContextFrom)`, as Move dishes does, `bill-actions.ts:325-330`),
+  moves the whole bill as `mergeCheckedBills` does (`moveOrderLines(…, undefined)`,
+  `moveKitchenPrintLinks`), skips the VOID slips and `ensureFamilyBill`, still withdraws pending
+  department transfers, sets the old bill `abandoned`, and bumps the party revision.
 - [ ] **Step 4: Run the file and `cancel-invoiced-order.test.ts`; both pass.** Then the golden
   huella test and `inmutabilidad` (RUNNER cheatsheet), unedited.
 - [ ] **Step 5: Commit** (`git commit -s`).
@@ -124,12 +153,17 @@ for sales that never happened. The corrective needs about half the new code.
 - **D1 Permission:** a split files a credit note, so it needs `sale.rectify` and a manager's PIN for
   staff without it, like Cancel and credit. Splits after print will be common. [Keep it.]
 - **D2 Paper:** Cancel and credit prints no credit note; the new tickets print as usual. [Same.]
+- **D0 Option (a) or (b)** above. [(a).]
 - **D3 A printed bill already part paid:** refused today, and its payment cannot be refunded once the
   ticket exists. [Keep refused; the refusal tells staff the other guests pay the rest on this ticket.]
 - **Splitting by amount** needs ADVISER-ADVANCES piece 1's "own receipt" part payment: after
   Reopen to split, it gives a guest their own ticket for an amount. Until it lands, split by dishes.
-- **A bill holding an advance** (ADVISER-ADVANCES, not on main): whichever of the two lands second
-  refuses Reopen to split on such a bill, with a test, until carrying the advance over is decided.
+- **A bill holding an advance** (ADVISER-ADVANCES, not on main): that branch already counts an
+  advance as money on the bill, so Reopen to split refuses it `bill.payments_received`; whichever
+  lands second adds a test. Both change `reversedLines` in `cancel-credit.ts`: expect a rebase conflict.
+- **A dish asked for after printing** keeps going on **+ New bill** (meal-end plan, line 310); Reopen
+  to split could serve it too, but this plan does not offer it for that.
 - **Full invoices naming a customer** wait for ADVISER-ADVANCES piece 3 (their correctives).
 
-**Size:** about 200–250 product lines, 400–500 test lines, one pull request. Pre-live, no migration.
+**Size (option a):** about 250–300 product lines, 450–550 test lines, plus the rebuilt core starting
+migration's generated files; one pull request; test venues reset.
