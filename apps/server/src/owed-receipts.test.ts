@@ -753,7 +753,11 @@ it("finds candidates through the issued-time index, and checks unpaid departures
   });
   const joined = plan.indexOf("SEARCH print_jobs USING INDEX print_jobs_sale_id_idx (sale_id=?)");
   expect(plan[0]).toBe("SEARCH sales USING INDEX sales_issued_idx (issued_at>?)");
-  expect(joined).toBe(1);
+  expect(plan[1]).toBe(
+    "SEARCH invoice_series EXISTS USING INDEX sqlite_autoindex_invoice_series_1 (id=?)",
+  );
+  expect(joined).toBe(2);
+  expect(plan.filter((step) => step.startsWith("SCAN print_jobs"))).toEqual([]);
   expect(plan.indexOf("SCAN unpaid_departures")).toBeGreaterThan(joined);
 });
 
