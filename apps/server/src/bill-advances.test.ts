@@ -874,6 +874,17 @@ describe("an advance's record to AEAT", () => {
     );
   });
 
+  it("names a table whose name holds a dollar sign as it is written", async () => {
+    const tableLabel = `Terraza $& 2 ${randomUUID().slice(0, 8)}`;
+    const { billId } = await bill120(tableLabel);
+
+    const paid = await cash(billId, "30.00", { ownReceipt: true });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [before, after] = spanish.paymentOnAccountAtTable.split("{table}");
+    expect(await filedDescription(billId)).toBe(`${before}${tableLabel}${after}`);
+  });
+
   it("on a bill with no table, describes it by the bill's order number", async () => {
     const billId = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {

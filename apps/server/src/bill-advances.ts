@@ -48,8 +48,8 @@ type PaymentRow = typeof billPayments.$inferSelect;
 function advanceLineText(language: string, table: string | null, orderNumber: number): string {
   const labels = receiptLabelsFor(language);
   return table === null || table === ""
-    ? labels.paymentOnAccountForOrder.replace("{number}", String(orderNumber))
-    : labels.paymentOnAccountAtTable.replace("{table}", table);
+    ? labels.paymentOnAccountForOrder.replace("{number}", () => String(orderNumber))
+    : labels.paymentOnAccountAtTable.replace("{table}", () => table);
 }
 
 /* What `@waitron/verifactu`'s `validate` refuses in `DescripcionOperacion`: more than 500 code
