@@ -4163,6 +4163,7 @@ async function bootServer(
       delivery: () =>
         guestMenuDelivery?.status() ??
         Promise.resolve({ state: "not_connected", receivedAt: null }),
+      wake: () => jobRunner.wake("cloud.connection"),
     },
     log,
   );

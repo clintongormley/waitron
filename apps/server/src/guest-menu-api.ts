@@ -80,6 +80,7 @@ export function mountGuestMenuApi(
     venueLocale?: string;
     serving: () => boolean;
     delivery?: () => Promise<GuestMenuDeliveryStatus>;
+    wake: () => void;
   },
   log: Logger,
 ): void {
@@ -113,7 +114,7 @@ export function mountGuestMenuApi(
         throw new AppError("management.request_invalid", { field: "enabled" });
       if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0)
         throw new AppError("management.request_invalid", { field: "expectedRevision" });
-      const answer = await withTransaction(deps.db, async (tx) => {
+      const { answer, sharingChanged } = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "menu.manage",
@@ -130,8 +131,12 @@ export function mountGuestMenuApi(
           expectedRevision: body.expectedRevision as number,
           personId: authorizedBy,
         });
-        return sharingStatus(tx, deps.serving);
+        return {
+          answer: await sharingStatus(tx, deps.serving),
+          sharingChanged: current.doc.enabled !== body.enabled,
+        };
       });
+      if (sharingChanged) deps.wake();
       return c.json({ ...answer, ...(await deliveryStatus()) });
     }),
   );

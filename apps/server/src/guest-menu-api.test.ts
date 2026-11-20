@@ -45,16 +45,18 @@ async function fixture(delivery?: Parameters<typeof mountGuestMenuApi>[1]["deliv
   });
   const app = new Hono();
   let serving = true;
+  const wake = vi.fn();
   mountPublicGuestMenu(app, { db: suite.db, serving: () => serving }, () => {});
   mountGuestMenuApi(
     app,
-    { db: suite.db, venueLocale: "en", serving: () => serving, delivery },
+    { db: suite.db, venueLocale: "en", serving: () => serving, delivery, wake },
     () => {},
   );
   return {
     ...f,
     app,
     cookies,
+    wake,
     serve: (value: boolean) => {
       serving = value;
     },
@@ -206,6 +208,7 @@ it("lets a manager change sharing with its current revision and keeps refusals f
   const enabled = await save({ enabled: true, expectedRevision: 0 });
   expect(enabled.status).toBe(200);
   expect(await enabled.json()).toEqual({ enabled: true, revision: 1, available: true });
+  expect(f.wake).toHaveBeenCalledOnce();
   for (const [body, cookie, status, code] of [
     [{ enabled: false, expectedRevision: 1 }, f.cookies.staff, 403, "authorization.not_permitted"],
     [{ enabled: false, expectedRevision: 0 }, f.cookies.manager, 409, "settings.out_of_date"],
@@ -219,6 +222,7 @@ it("lets a manager change sharing with its current revision and keeps refusals f
     const refused = await save(body, cookie);
     expect(refused.status).toBe(status);
     expect(await refused.json()).toMatchObject({ error: { code } });
+    expect(f.wake).toHaveBeenCalledOnce();
     const current = await f.app.request("/management-api/guest-menu", {
       headers: { cookie: f.cookies.manager },
     });
@@ -227,6 +231,7 @@ it("lets a manager change sharing with its current revision and keeps refusals f
   const disabled = await save({ enabled: false, expectedRevision: 1 });
   expect(disabled.status).toBe(200);
   expect(await disabled.json()).toEqual({ enabled: false, revision: 2, available: false });
+  expect(f.wake).toHaveBeenCalledTimes(2);
 });
 
 it("serves only the opted-in publication without sign-in and closes it when serving stops", async () => {
@@ -376,10 +381,22 @@ it("saves paper appearance without sharing and preserves it when sharing changes
   const saved = await save({ enabled: false, paper, expectedRevision: 0 });
   expect(saved.status).toBe(200);
   expect(await saved.json()).toEqual({ enabled: false, paper, revision: 1, available: false });
+  expect(f.wake).not.toHaveBeenCalled();
   const shared = await save({ enabled: true, expectedRevision: 1 });
   expect(shared.status).toBe(200);
   expect(await shared.json()).toEqual({ enabled: true, paper, revision: 2, available: false });
-  const invalid = await save({ enabled: true, paper: null, expectedRevision: 2 });
+  expect(f.wake).toHaveBeenCalledOnce();
+  const repainted = { ...paper, font: "sans" };
+  const restyled = await save({ enabled: true, paper: repainted, expectedRevision: 2 });
+  expect(restyled.status).toBe(200);
+  expect(await restyled.json()).toEqual({
+    enabled: true,
+    paper: repainted,
+    revision: 3,
+    available: false,
+  });
+  expect(f.wake).toHaveBeenCalledOnce();
+  const invalid = await save({ enabled: true, paper: null, expectedRevision: 3 });
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field: "paper" } },

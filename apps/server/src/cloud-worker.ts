@@ -15,7 +15,7 @@ export function cloudConnectionJob(options: {
   return {
     name: "cloud.connection",
     applies: () => true,
-    minSleepMs: 60_000,
+    minSleepMs: 2_000,
     maxSleepMs: 60_000,
     backoff: { firstMs: 60_000, maxMs: 60_000 },
     async pass({ signal }) {

@@ -27,6 +27,7 @@ import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
+import { mountGuestMenuApi } from "./guest-menu-api.js";
 import { withCapturedStdout, waitForEvent } from "./testing/boot-harness.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
@@ -121,6 +122,10 @@ vi.mock("./content-suggestion-runner.js", async (original) => {
 vi.mock("./content-suggestions-api.js", async (original) => {
   const actual = await original<typeof import("./content-suggestions-api.js")>();
   return { ...actual, mountContentSuggestionsApi: vi.fn(actual.mountContentSuggestionsApi) };
+});
+vi.mock("./guest-menu-api.js", async (original) => {
+  const actual = await original<typeof import("./guest-menu-api.js")>();
+  return { ...actual, mountGuestMenuApi: vi.fn(actual.mountGuestMenuApi) };
 });
 
 const drain = vi.hoisted(() => ({ calls: [] as FiscalDutyDeps[], slots: [] as unknown[] }));
@@ -455,6 +460,9 @@ describe("boot's authority clock wiring", () => {
       expect(wake).not.toHaveBeenCalled();
       deps.wake();
       expect(wake).toHaveBeenCalledExactlyOnceWith("cloud.suggestions");
+      wake.mockClear();
+      vi.mocked(mountGuestMenuApi).mock.calls[0]![1].wake();
+      expect(wake).toHaveBeenCalledExactlyOnceWith("cloud.connection");
       const logged = await withCapturedStdout(async (lines) => {
         onError!(new AppError("cloud.unavailable", {}));
         return waitForEvent(lines, "content.suggestion_runner_failed");
@@ -479,6 +487,7 @@ describe("boot's authority clock wiring", () => {
       vi.mocked(recordStartDeletions).mockClear();
       vi.mocked(createContentSuggestionRunner).mockClear();
       vi.mocked(mountContentSuggestionsApi).mockClear();
+      vi.mocked(mountGuestMenuApi).mockClear();
       loop.ended = false;
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
