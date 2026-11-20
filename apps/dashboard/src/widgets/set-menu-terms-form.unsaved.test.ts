@@ -79,3 +79,34 @@ it("keeps the new set menu's draft when Escape is followed by Keep editing", asy
   await page.getByRole("button", { name: "Keep editing" }).click();
   await expect.element(name).toHaveValue("Daily menu");
 });
+
+it.each([
+  ["price", "dashboard-set-menu-terms-form", '[name="setPrice"]', "15.50", "14.00"],
+  ["line count", "dashboard-set-menu-lines-form", '[name="count"]', "2", "1"],
+] as const)(
+  "puts back the saved %s when leaving discards the edit",
+  async (_name, tag, selector, value, saved) => {
+    const { el } = await mountWidget<SetMenuLeaveHost>("set-menu-leave-test-host", {});
+    const form = el.shadowRoot!.querySelector(tag)!;
+    const field = form.shadowRoot!.querySelector<
+      HTMLElementTagNameMap["wt-price-input"] | HTMLElementTagNameMap["wt-input"]
+    >(selector)!;
+    await field.updateComplete;
+    await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+    const outcome = el.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
+    await expect.element(page.getByRole("dialog", { name: "Unsaved changes" })).toBeVisible();
+    await page.getByRole("button", { name: "Discard" }).click();
+    expect(await outcome).toBe("proceeded");
+    await expect
+      .element(page.elementLocator(field.shadowRoot!.querySelector("input")!))
+      .toHaveValue(tag === "dashboard-set-menu-lines-form" ? Number(saved) : saved);
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+        .disabled,
+    ).toBe(true);
+  },
+);
