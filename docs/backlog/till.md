@@ -295,9 +295,6 @@ Left open:
   price-version update of the basket's lines (`adoptLines`) and the order's label
   (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). What is lost is the basket's
   own copy of the new prices. **Next action:** decide whether the two should wait for the lock.
-- **Nothing on screen shows the lock.** A tap on `+` or on the menu does nothing until the
-  order and its lines have been read. How long it lasts on a real network is not measured.
-  **Next action:** dim the basket, or show a one-line note, while `editsLocked` is set.
 - **Override PIN limits (C89, #951), for the owner:** the two PIN prompts say "wait a moment"
   rather than counting down the seconds the server sends, as the sign-in screen does, and the
   approver prompt hides the message as soon as someone types; the limit is an optional

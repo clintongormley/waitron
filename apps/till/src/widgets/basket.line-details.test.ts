@@ -35,6 +35,32 @@ async function opening() {
 const pickerOf = (el: TillBasket) =>
   el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
 
+it("keeps the details open on a line of a store the basket was handed when that store changes", async () => {
+  const { el } = await opening();
+  const handed = new WorkingOrderStore();
+  handed.addProduct(dish, "1");
+  el.store = handed;
+  await el.updateComplete;
+  el.openLineDetails(handed.lines[0]!);
+  await el.updateComplete;
+  expect(pickerOf(el)).not.toBeNull();
+  handed.sending = false;
+  await el.updateComplete;
+  expect(pickerOf(el)).not.toBeNull();
+});
+
+it("closes the details when the basket is handed another store, and does not reopen them on the way back", async () => {
+  const { el, store, line } = await opening();
+  el.openLineDetails(line);
+  await el.updateComplete;
+  expect(pickerOf(el)).not.toBeNull();
+  el.store = new WorkingOrderStore();
+  await el.updateComplete;
+  el.store = store;
+  await el.updateComplete;
+  expect(pickerOf(el)).toBeNull();
+});
+
 it("A738 extra and note removal stage the same window without changing the line", async () => {
   const store = new WorkingOrderStore();
   store.addProduct(
