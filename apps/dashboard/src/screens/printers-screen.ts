@@ -1636,24 +1636,34 @@ export class PrintersScreen extends LitElement {
     this.#absorbCommands(devices);
     this.#noteUnpaired(devices, started);
     this.#findPairAgain();
+    if (this.probeStatus === "pending") this.probeStatus = this.#probeOutcome() ?? "pending";
+  }
+
+  /** What the address check found, judged against the current scan and registrations. */
+  #probeOutcome(): "found" | "registered" | "page_printer" | undefined {
     const target = this.#probeTarget;
-    if (target && this.probeStatus === "pending") {
-      const matches = this.discovered.filter(
-        (device) =>
-          device.transport === "network_tcp" &&
-          device.host === target.host &&
-          device.port === target.port &&
-          Date.parse(device.lastSeenAt) >= target.requestedAt,
-      );
-      // Another agent's report at the address may still show a row to point at.
-      const match = matches.find((d) => this.#officeRow(d)?.kind !== "added") ?? matches[0];
-      if (match) {
-        const office = this.#officeRow(match);
-        if (office?.kind === "added" || (!office && !this.#canAdd(match)))
-          this.probeStatus = "registered";
-        else this.probeStatus = office ? "page_printer" : "found";
-      }
-    }
+    if (!target) return undefined;
+    const matches = this.discovered.filter(
+      (device) =>
+        device.transport === "network_tcp" &&
+        device.host === target.host &&
+        device.port === target.port &&
+        Date.parse(device.lastSeenAt) >= target.requestedAt,
+    );
+    // Another agent's report at the address may still show a row to point at.
+    const match = matches.find((d) => this.#officeRow(d)?.kind !== "added") ?? matches[0];
+    if (!match) return undefined;
+    const office = this.#officeRow(match);
+    if (office?.kind === "added" || (!office && !this.#canAdd(match))) return "registered";
+    return office ? "page_printer" : "found";
+  }
+
+  /** A found printer can be added after the check answered, which hides the row it pointed at. */
+  #probeShown(): typeof this.probeStatus {
+    const status = this.probeStatus;
+    return status === "found" || status === "page_printer"
+      ? (this.#probeOutcome() ?? status)
+      : status;
   }
 
   #probeValidate(): Partial<Record<"host" | "port", string>> {
@@ -5167,6 +5177,7 @@ export class PrintersScreen extends LitElement {
     if (!this.addingPrinter) return nothing;
     const opening = this.#addPrinterOpening;
     const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
+    const probe = this.#probeShown();
     const officeRows = this.discovered.map((d) => [d, this.#officeRow(d)] as const);
     // Left out like an added receipt printer: nothing to do on the agent it is added through.
     const added = new Set(officeRows.flatMap(([d, row]) => (row?.kind === "added" ? [d] : [])));
@@ -5291,7 +5302,7 @@ export class PrintersScreen extends LitElement {
         >${t("printers.add_help")}</wt-help-tooltip
       >
       <p class="hint">${t("printers.discovery_hint")}</p>
-      ${this.agents.map(({ id, name, active, bluetooth: state }) =>
+      ${this.agents.map(({ id, name, active, bluetooth: state = null }) =>
         active && state !== null && state !== "available"
           ? html`<p class="hint" data-test=${`bluetooth-unavailable-${id}`}>
               ${fill("printers.bluetooth_unavailable", {
@@ -5370,7 +5381,7 @@ export class PrintersScreen extends LitElement {
         </div>
         <p role="status" data-test="probe-status">
           ${
-            this.probeStatus === "idle"
+            probe === "idle"
               ? nothing
               : t(
                   (
@@ -5381,7 +5392,7 @@ export class PrintersScreen extends LitElement {
                       registered: "printers.probe_registered",
                       page_printer: "printers.probe_page_printer",
                     } as const
-                  )[this.probeStatus],
+                  )[probe],
                 )
           }
         </p>

@@ -527,9 +527,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           paired: entry.transport === "bluetooth" && isListed(entry.pairedAt, Date.now()),
         };
   const discovered = new Map<string, DiscoveredEntry>();
-  const agentBluetooth = new Map<string, { value: AgentBluetooth; at: number }>();
+  const agentBluetooth = new Map<
+    string,
+    { value: AgentBluetooth; at: number; expiry: ReturnType<typeof setTimeout> }
+  >();
   // Longer than the scan list's: an agent printing a batch does not pull again until it has finished.
   const AGENT_BLUETOOTH_TTL_MS = 60_000;
+  const forgetAgentBluetooth = (agentId: string): void => {
+    clearTimeout(agentBluetooth.get(agentId)?.expiry);
+    agentBluetooth.delete(agentId);
+  };
+  // An open dashboard learns of a report going stale only from this event.
+  const rememberAgentBluetooth = (agentId: string, value: AgentBluetooth, at: number): void => {
+    forgetAgentBluetooth(agentId);
+    const expiry = setTimeout(() => {
+      agentBluetooth.delete(agentId);
+      if (deps.bus) publishState(deps.bus, "print_agents", log);
+    }, AGENT_BLUETOOTH_TTL_MS + 1);
+    expiry.unref();
+    agentBluetooth.set(agentId, { value, at, expiry });
+  };
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages();
   const bluetoothCommands = createPrinterBluetoothCommands();
@@ -947,7 +964,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const bluetooth = screenBluetooth(body.bluetooth);
       if (bluetooth !== undefined) {
         const prior = agentBluetooth.get(agentId);
-        agentBluetooth.set(agentId, { value: bluetooth, at: now });
+        rememberAgentBluetooth(agentId, bluetooth, now);
         if (
           deps.bus &&
           (prior?.value !== bluetooth || !withinTtl(prior.at, now, AGENT_BLUETOOTH_TTL_MS))
@@ -1153,6 +1170,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .returning({ id: printAgents.id }),
       );
       if (updated.length === 0) throw new AppError("agent.not_found", { id });
+      forgetAgentBluetooth(id);
       return c.body(null, 204);
     }),
   );

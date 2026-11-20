@@ -8026,6 +8026,14 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(unavailableLines(el)).toEqual([]);
     });
 
+    it("says nothing for an active agent whose row has no Bluetooth field at all", async () => {
+      const withoutField: Partial<PrintAgentRow> = { ...agents[0]! };
+      delete withoutField.bluetooth;
+      const { el } = await mountWithAgents([withoutField as PrintAgentRow]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([]);
+    });
+
     it("gives each active agent its own line", async () => {
       const { el } = await mountWithAgents([
         { ...agents[0]!, bluetooth: "dbus_unreachable" },
@@ -12681,6 +12689,37 @@ describe("office printers in discovery", () => {
     await flush(el);
     expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
     expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("stops pointing a checked office printer at its row once a live update shows it added through that agent", async () => {
+    const requestedAt = Date.now();
+    const device = office({ lastSeenAt: new Date(requestedAt).toISOString() });
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const liveData = new LiveData();
+    const listPagePrinters = vi.fn().mockResolvedValue([]);
+    const api = Object.assign(stubApi({ probePrinterAddress, listPagePrinters }), { liveData });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_page_printer"));
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).not.toBeNull();
+    listPagePrinters.mockResolvedValue([added]);
+    liveData.invalidate([{ type: "printers", id: "pp1" }]);
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
   });
 
   it("answers a checked address with the move row an agent still shows, not the hidden added one", async () => {

@@ -1514,6 +1514,63 @@ describe("mountPrintApi — management: agents", () => {
       expect(changes).toHaveLength(2);
       expect(await listedBluetooth(app, agentId)).toBe("available");
     });
+
+    it("tells the dashboard once when a report expires with no newer one", async () => {
+      const bus = new LiveEvents();
+      const changes: unknown[] = [];
+      bus.subscribe((event) => {
+        changes.push(event);
+      });
+      const app = mountApp({ bus });
+      const { agentId, token } = await joinAndAccept(app);
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      await pull(app, token, { bluetooth: { available: false, reason: "no_controller" } });
+      expect(changes).toHaveLength(1);
+      vi.advanceTimersByTime(60_000);
+      expect(changes).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+      expect(changes).toHaveLength(2);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+      vi.advanceTimersByTime(10 * 60_000);
+      expect(changes).toHaveLength(2);
+    });
+
+    it("sends no expiry while newer reports keep arriving", async () => {
+      const bus = new LiveEvents();
+      const changes: unknown[] = [];
+      bus.subscribe((event) => {
+        changes.push(event);
+      });
+      const app = mountApp({ bus });
+      const { agentId, token } = await joinAndAccept(app);
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      await pull(app, token, { bluetooth: { available: true } });
+      vi.advanceTimersByTime(50_000);
+      await pull(app, token, { bluetooth: { available: true } });
+      vi.advanceTimersByTime(50_000);
+      expect(changes).toHaveLength(1);
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+      vi.advanceTimersByTime(10_001);
+      expect(changes).toHaveLength(2);
+    });
+
+    it("forgets a revoked agent's report, so allowing it again lists null until a new report", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      await pull(app, token, { bluetooth: { available: false, reason: "no_controller" } });
+      const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
+        cookie: managerCookie,
+      });
+      expect(revoke.status).toBe(204);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+      const allow = await send(app, "POST", `/management-api/print-agents/${agentId}/allow`, {
+        cookie: managerCookie,
+      });
+      expect(allow.status).toBe(204);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+      await pull(app, token, { bluetooth: { available: true } });
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+    });
   });
 
   it("uses this node's advertised LAN address only for its own agent and actual listener port", async () => {
