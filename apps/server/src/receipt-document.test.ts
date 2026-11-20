@@ -400,32 +400,36 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
     const fixture = FULL_INVOICE_DOCUMENT_FIXTURE;
     let inputs = 0;
     for (const simulated of [false, true])
-      for (const footerMessage of [undefined, "Hasta pronto"])
-        for (const qr of ["", fixture.result.qr])
-          for (const tender of [{ method: "unpaid" as const }, fixture.result.tender])
-            for (const lines of [[], fixture.result.lines])
-              for (const vatBreakdown of [[], fixture.result.vatBreakdown]) {
-                const kinds = drawn({
-                  ...fixture,
-                  simulated,
-                  receipt: { ...fixture.receipt, footerMessage },
-                  result: { ...fixture.result, qr, tender, lines, vatBreakdown },
-                });
-                const input = JSON.stringify({
-                  simulated,
-                  footerMessage,
-                  qr: qr !== "",
-                  tender: tender.method,
-                  lines: lines.length,
-                  vat: vatBreakdown.length,
-                });
-                expect(kinds[0], input).not.toBe("rule");
-                expect(kinds.at(-1), input).not.toBe("rule");
-                for (const [at, kind] of kinds.entries())
-                  if (kind === "rule") expect(kinds[at + 1], `${input} at ${at}`).not.toBe("rule");
-                inputs++;
-              }
-    expect(inputs).toBe(64);
+      for (const testPage of [undefined, { printer: "Front Epson · 58mm · 203dpi" }])
+        for (const footerMessage of [undefined, "Hasta pronto"])
+          for (const qr of ["", fixture.result.qr])
+            for (const tender of [{ method: "unpaid" as const }, fixture.result.tender])
+              for (const lines of [[], fixture.result.lines])
+                for (const vatBreakdown of [[], fixture.result.vatBreakdown]) {
+                  const kinds = drawn({
+                    ...fixture,
+                    simulated,
+                    testPage,
+                    receipt: { ...fixture.receipt, footerMessage },
+                    result: { ...fixture.result, qr, tender, lines, vatBreakdown },
+                  });
+                  const input = JSON.stringify({
+                    simulated,
+                    testPage: testPage !== undefined,
+                    footerMessage,
+                    qr: qr !== "",
+                    tender: tender.method,
+                    lines: lines.length,
+                    vat: vatBreakdown.length,
+                  });
+                  expect(kinds[0], input).not.toBe("rule");
+                  expect(kinds.at(-1), input).not.toBe("rule");
+                  for (const [at, kind] of kinds.entries())
+                    if (kind === "rule")
+                      expect(kinds[at + 1], `${input} at ${at}`).not.toBe("rule");
+                  inputs++;
+                }
+    expect(inputs).toBe(128);
   });
 
   it("draws one rule, not two, above a practice receipt's closing mark when there is no footer", () => {
@@ -437,6 +441,37 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
     });
     expect(kinds.slice(-4)).toEqual(["amount", "amount", "rule", "DOCUMENTO DE PRUEBA"]);
   });
+
+  it.each([
+    [false, undefined],
+    [true, undefined],
+    [false, "Hasta pronto"],
+    [true, "Hasta pronto"],
+  ])(
+    "draws one rule after a test page's top marks and one before its closing marks, practice=%s, footer=%s",
+    (simulated, footerMessage) => {
+      const kinds = drawn({
+        ...FULL_INVOICE_DOCUMENT_FIXTURE,
+        simulated,
+        testPage: { printer: "Front Epson · 58mm · 203dpi" },
+        receipt: { ...FULL_INVOICE_DOCUMENT_FIXTURE.receipt, footerMessage },
+        result: { ...FULL_INVOICE_DOCUMENT_FIXTURE.result, qr: "" },
+      });
+      const marks = simulated
+        ? ["DOCUMENTO DE PRUEBA", "Este documento no es una factura"]
+        : ["Este documento no es una factura"];
+      const top = kinds.indexOf(marks[0]!);
+      expect(kinds[top - 1]).not.toBe("rule");
+      expect(kinds.slice(top, top + marks.length + 1)).toEqual([...marks, "rule"]);
+      expect(kinds[top + marks.length + 1]).not.toBe("rule");
+      expect(kinds.slice(-(marks.length + 3))).toEqual([
+        footerMessage ?? "amount",
+        "rule",
+        ...marks,
+        "Front Epson · 58mm · 203dpi",
+      ]);
+    },
+  );
 
   const withAddresses = (venueAddress: string[], domicile: string) =>
     buildReceiptDocument({

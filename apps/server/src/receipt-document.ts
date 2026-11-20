@@ -79,6 +79,11 @@ export interface ReceiptDocumentInput {
   simulatedCardPayment?: boolean;
   duplicate?: boolean;
   guests?: number;
+  /**
+   * A printer's test page: the no-invoice notice prints at the top and bottom, after the practice
+   * mark where there is one, and the printer's own line ends the page.
+   */
+  testPage?: { printer: string };
 }
 
 export type { ReceiptElement, ReceiptIndent, ReceiptStyle } from "@waitron/shared";
@@ -160,6 +165,7 @@ export function buildReceiptDocument({
   simulatedCardPayment = false,
   duplicate = false,
   guests,
+  testPage,
 }: ReceiptDocumentInput): ReceiptDocument {
   const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
@@ -221,8 +227,9 @@ export function buildReceiptDocument({
   if (simulated) {
     text(label.practice);
     if (simulatedCardPayment) text(label.noRealCharge);
-    rule();
   }
+  if (testPage) text(label.paymentNotice);
+  if (simulated || testPage) rule();
 
   if (result.qr !== "") {
     align("center");
@@ -565,10 +572,14 @@ export function buildReceiptDocument({
     part("footerMessage", () => text(footerMessage));
     align("left");
   }
+  if (simulated || testPage) rule();
   if (simulated) {
-    rule();
     text(label.practice);
     if (simulatedCardPayment) text(label.noRealCharge);
+  }
+  if (testPage) {
+    text(label.paymentNotice);
+    text(testPage.printer);
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 

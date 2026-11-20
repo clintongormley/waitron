@@ -7,6 +7,7 @@ import {
   attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { readReceiptLanguage } from "@waitron/menu";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -25,6 +26,8 @@ import {
   printAgents,
   printJobs,
   printers,
+  departments,
+  taxpayer,
   withTransaction,
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
@@ -58,6 +61,7 @@ import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js"
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
+import { readPrintedVenue } from "./receipt-print.js";
 import { opensDrawer, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -2558,7 +2562,7 @@ describe("mountPrintApi — management: print-test-page", () => {
         "\n",
       );
     };
-    expect(await print()).toContain("1 Oct 2026, 15:05");
+    expect(await print()).toContain("1 oct 2026, 15:05");
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
@@ -2566,7 +2570,7 @@ describe("mountPrintApi — management: print-test-page", () => {
       }),
     );
     try {
-      expect(await print()).toContain("1 Oct 2026, 14:05");
+      expect(await print()).toContain("1 oct 2026, 14:05");
       await expect(
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, {
@@ -2585,7 +2589,7 @@ describe("mountPrintApi — management: print-test-page", () => {
         }),
       );
       expect(noOp.changed).toBe(false);
-      expect(await print()).toContain("1 Oct 2026, 14:05");
+      expect(await print()).toContain("1 oct 2026, 14:05");
     } finally {
       const latest = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       await withTransaction(suite.db, (tx) =>
@@ -2598,20 +2602,20 @@ describe("mountPrintApi — management: print-test-page", () => {
   });
 
   it.each([
-    { acceptLanguage: "en-GB,en;q=0.9", locale: "en-GB", dateTime: "1 Oct 2026, 14:05" },
-    { acceptLanguage: "es-ES,es;q=0.9", locale: "es-ES", dateTime: "1 oct 2026, 14:05" },
+    { locale: "es-ES", marks: ["DOCUMENTO DE PRUEBA", "Este documento no es una", "factura"] },
+    { locale: "ca-ES", marks: ["PROVA", "Aquest document no és una", "factura"] },
   ] as const)(
-    "enqueues one document job drawn at the printer's saved setting ($locale)",
-    async ({ acceptLanguage, locale, dateTime }) => {
-      const app = mountApp({ now: () => NOW });
-      const printerId = await savedPrinter(app, "10.0.0.120", `Front printer ${locale}`, {
-        paperWidth: "58mm",
-        resolution: "203dpi",
-      });
+    "enqueues one document job drawn at the printer's saved setting, in the $locale receipt language",
+    async ({ locale, marks }) => {
+      await seedVenueSettings(suite.db, { invoiceLocales: [locale] });
+      const words = { caption: "QR tributario:", legend: "VERI*FACTU" };
+      const app = mountApp({ now: () => NOW, receiptQrText: words });
+      const printer = { paperWidth: "58mm", resolution: "203dpi" } as const;
+      const printerId = await savedPrinter(app, "10.0.0.120", `Front ${locale}`, printer);
       const res = await withVenueTimeZone("Atlantic/Canary", async () =>
         app.request(`/management-api/printers/${printerId}/print-test-page`, {
           method: "POST",
-          headers: { cookie: managerCookie, "accept-language": acceptLanguage },
+          headers: { cookie: managerCookie, "accept-language": "en-GB,en;q=0.9" },
         }),
       );
       expect(res.status).toBe(202);
@@ -2621,21 +2625,124 @@ describe("mountPrintApi — management: print-test-page", () => {
       expect(jobs.map(({ id, kind }) => ({ id, kind }))).toEqual([
         { id: body.jobId, kind: "document" },
       ]);
+      const venue = await withTransaction(suite.db, (tx) =>
+        readPrintedVenue(tx, {}, null, printer, locale),
+      );
       expect([...jobs[0]!.payload]).toEqual([
         ...formatPrinterTestPage({
-          locale,
-          printer: { paperWidth: "58mm", resolution: "203dpi" },
-          printerName: `Front printer ${locale}`,
+          ...venue!,
+          printer,
+          printerName: `Front ${locale}`,
           now: NOW,
           timeZone: "Atlantic/Canary",
+          receiptLocale: locale,
+          qrText: words,
         }),
       ]);
-      const text = printedLines(jobs[0]!.payload).join("\n");
-      expect(text).toContain(`Front printer ${locale}`);
-      expect(text).toContain("58mm · 203dpi");
-      expect(text).toContain(dateTime);
+      const text = printedLines(jobs[0]!.payload)
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+      expect(text.slice(0, 3)).toEqual(marks);
+      expect(text.slice(-4, -1)).toEqual(marks);
+      for (const mark of marks.slice(0, 2))
+        expect(text.filter((line) => line === mark)).toHaveLength(2);
+      expect(text.at(-1)).toBe(`Front ${locale} · 58mm · 203dpi`);
+      expect(text.some((line) => line.endsWith("01/10/2026 14:05"))).toBe(true);
+      expect(text).toContain("VERI*FACTU");
     },
   );
+
+  it("prints the sample issuer and tax number, not the taxpayer's, under the default department's trading name", async () => {
+    await suite.db.run(
+      sql`update taxpayer set legal_name = 'Santet Deli S.L.', tax_id = 'B76543210' where id = 1`,
+    );
+    await suite.db.insert(departments).values([
+      { name: "Bar", tradingName: "Bar Santet", isDefault: false },
+      { name: "Deli", tradingName: "Deli", isDefault: true },
+    ]);
+    const app = mountApp({ now: () => NOW });
+    const printerId = await savedPrinter(app, "10.0.0.126", "Deli printer", {
+      paperWidth: "58mm",
+      resolution: "180dpi",
+    });
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(202);
+    const [job] = await jobsFor(printerId);
+    const text = printedLines(job!.payload).map((line) => line.trim());
+    expect(text).toContain("Deli");
+    expect(text).not.toContain("Bar Santet");
+    expect(text.some((line) => line.includes("Santet Deli S.L."))).toBe(false);
+    expect(text.some((line) => line.includes("B76543210"))).toBe(false);
+    const { locale } = await withTransaction(suite.db, (tx) => readReceiptLanguage(tx));
+    const issuerName = receiptLabelsFor(locale).sampleIssuerName;
+    expect(text).toContain("NIF: B00000000");
+    expect(text.indexOf("Deli")).toBeLessThan(text.indexOf(issuerName));
+  });
+
+  it.each([false, true])(
+    "marks the page once above the QR and once above the printer's line, practice mode %s",
+    async (practiceMode) => {
+      await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
+      const words = { caption: "QR tributario:", legend: "VERI*FACTU" };
+      const app = mountApp({ now: () => NOW, receiptQrText: words, practiceMode });
+      const printerId = await savedPrinter(app, "10.0.0.130", "Marked", {
+        paperWidth: "80mm",
+        resolution: "203dpi",
+      });
+      const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+        cookie: managerCookie,
+      });
+      expect(res.status).toBe(202);
+      const [job] = await jobsFor(printerId);
+      const text = printedLines(job!.payload)
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !/^-+$/.test(line));
+      const marks = ["DOCUMENTO DE PRUEBA", "Este documento no es una factura"];
+      expect(text.filter((line) => marks.includes(line))).toEqual([...marks, ...marks]);
+      expect(text.slice(0, 3)).toEqual([...marks, "QR tributario:"]);
+      expect(text.slice(-3)).toEqual([...marks, "Marked · 80mm · 203dpi"]);
+    },
+  );
+
+  it("prints no trading name when the venue has no active default department", async () => {
+    await suite.db.insert(departments).values([
+      { name: "Bar", tradingName: "Bar Santet", isDefault: false },
+      { name: "Deli", tradingName: "Deli Santet", isDefault: true, active: false },
+    ]);
+    const app = mountApp({ now: () => NOW });
+    const printerId = await savedPrinter(app, "10.0.0.127", "Headerless", {
+      paperWidth: "80mm",
+      resolution: "203dpi",
+    });
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(202);
+    const [job] = await jobsFor(printerId);
+    const text = printedLines(job!.payload)
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+    expect(text).not.toContain("Bar Santet");
+    expect(text).not.toContain("Deli Santet");
+    expect(text.at(-1)).toBe("Headerless · 80mm · 203dpi");
+  });
+
+  it("refuses with 409 venue.not_found, queueing nothing, when the venue has no taxpayer", async () => {
+    const app = mountApp({ now: () => NOW });
+    const printerId = await savedPrinter(app, "10.0.0.128", "No taxpayer", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+    });
+    await suite.db.delete(taxpayer);
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
+    expect(await jobsFor(printerId)).toEqual([]);
+  });
 
   it("follows the printer's saved paper width: a 58mm and an 80mm printer differ", async () => {
     const app = mountApp({ now: () => NOW });
