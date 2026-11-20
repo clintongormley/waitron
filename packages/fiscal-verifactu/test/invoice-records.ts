@@ -82,6 +82,8 @@ export interface FiledInvoice {
   total: string;
   /** `CuotaTotal`. */
   vatTotal: string;
+  /** `DescripcionOperacion`. */
+  description: string;
   /** `Desglose`, each line as `[rate, base, tax]`. */
   breakdown: [string, string, string][];
   /** The errors AEAT's own checks (`validate`, as of `now`) find in the record. */
@@ -99,6 +101,7 @@ export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledI
         kind: record.TipoFactura,
         total: record.ImporteTotal,
         vatTotal: record.CuotaTotal,
+        description: record.DescripcionOperacion,
         breakdown: record.Desglose.map((line) => [
           String(line.TipoImpositivo),
           String(line.BaseImponibleOimporteNoSujeto),

@@ -19,6 +19,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import {
+  filedInvoicesOf,
   filedKindsBySale,
   invoiceRecords,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
@@ -839,4 +840,62 @@ describe("an advance's clock", () => {
       );
     },
   );
+});
+
+describe("an advance's record to AEAT", () => {
+  async function filedDescription(billId: string): Promise<string> {
+    const { advanceSaleId } = await onlyAdvance(billId);
+    const records = filedInvoicesOf(venue.db, advanceSaleId, new Date());
+    expect(records).toHaveLength(1);
+    expect(records[0]!.errors).toEqual([]);
+    return records[0]!.description;
+  }
+
+  async function orderNumberOf(billId: string): Promise<number> {
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ orderNumber: workingOrders.orderNumber })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    return order!.orderNumber;
+  }
+
+  it("describes the operation in its line's Spanish words", async () => {
+    const { billId, tableLabel } = await bill120();
+
+    const paid = await cash(billId, "30.00", { ownReceipt: true });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(await filedDescription(billId)).toBe(
+      spanish.paymentOnAccountAtTable.replace("{table}", tableLabel),
+    );
+  });
+
+  it("on a bill with no table, describes it by the bill's order number", async () => {
+    const billId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: billId,
+      lines: MEAL.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+      zoneId: venue.zoneId,
+      operatorId: venue.operatorId,
+    });
+
+    const paid = await cash(billId, "30.00", {
+      ownReceipt: true,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+    });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
+  });
+
+  it("at a table whose name would take the description past AEAT's 500 characters, describes it by the bill's order number", async () => {
+    const { billId } = await bill120(`7${"x".repeat(480)}${randomUUID()}`);
+
+    const paid = await cash(billId, "30.00", { ownReceipt: true });
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
+  });
 });

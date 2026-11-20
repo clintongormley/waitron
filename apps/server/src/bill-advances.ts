@@ -50,6 +50,26 @@ function advanceLineText(language: string, table: string | null, orderNumber: nu
     : labels.paymentOnAccountAtTable.replace("{table}", table);
 }
 
+/** AEAT's cap on `DescripcionOperacion`, in code points. */
+const OPERATION_DESCRIPTION_MAX = 500;
+
+/**
+ * The advance's operation description: its line's Spanish words, by the bill's order number where
+ * the table's name would take them past AEAT's cap; empty where the regime takes none, which
+ * `configured`, the table's invoice's own description, shows as empty.
+ */
+function advanceOperationDescription(
+  configured: string,
+  table: string | null,
+  orderNumber: number,
+): string {
+  if (configured === "") return "";
+  const words = advanceLineText("es-ES", table, orderNumber);
+  return Array.from(words).length <= OPERATION_DESCRIPTION_MAX
+    ? words
+    : advanceLineText("es-ES", null, orderNumber);
+}
+
 /**
  * The advance invoice of a received bill payment whose payer wants their own receipt: one line of
  * its applied money at {@link ADVANCE_VAT_CLASS} on the payment's local day, settled by one tender
@@ -139,10 +159,12 @@ export async function issueAdvance(
     seriesId: seriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "standard")),
     counterparty: null,
     recipientAddress: null,
-    operationDescription: await readSaleOperationDescription(tx, cfg, {
-      kind: "order",
-      orderId: workingOrderId,
-    }),
+    // Read for its refusals too: an advance is refused where the table's invoice would be.
+    operationDescription: advanceOperationDescription(
+      await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId }),
+      table,
+      order!.orderNumber,
+    ),
     ...language,
     total: priced.total,
     lines: priced.lines,
