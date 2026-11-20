@@ -690,6 +690,18 @@ Status changes:
   line in its address that does not exist (`apps/server/src/line-cancel-context.ts`; left by A394-10,
   and no question holds it up). Statuses per questions 4, 5, 8, 9, 10, 11, 13, 14. Tests listed per row
   in the parts. Size M; split by file if it grows. Depends on: those questions.
+  **2026-11-20 (A394-20c, lane C):** the menu and print rows are done, by questions 4, 8 and 9.
+  In `apps/server/src/menu-api.ts` (was `catalogue-api.ts`): `menu.shortcut_unreachable` and
+  `extras.product_has_variants` answer 400 (each is raised only about what the body names);
+  `menu_section.wrong_role` answers 400 on the routes where only the body can name the wrong kind
+  of list (`runBodySection`: section-members remove, sections delete, shortcut add; `runBodyRole`:
+  shortcut replace) and keeps 409 where the address or a stored member can raise it (section create,
+  edit and delete by address, the members routes, the include-folder route), the choice A394-11
+  made; `GET /management-api/folders/summary` answers `category.not_found` 400 for its query ids.
+  In `apps/server/src/print-api.ts`: `printer.invalid_config` 422 → 400 and both Bluetooth codes
+  409 → 400. No client compares these routes' statuses (grep of `apps/dashboard`, `apps/till`,
+  `apps/setup` and `packages/*/src/dashboard`, 2026-11-20); the dashboard reads the codes. The rest
+  of A394-20 stays with lane B.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`
