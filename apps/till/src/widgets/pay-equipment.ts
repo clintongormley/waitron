@@ -514,7 +514,7 @@ declare global {
   }
 }
 
-export function cardSlipChoice(
+export function paymentSlipChoice(
   available: boolean,
   checked: boolean,
   disabled: boolean,

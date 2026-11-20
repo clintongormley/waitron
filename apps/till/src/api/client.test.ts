@@ -1404,30 +1404,63 @@ describe("TillApi", () => {
   );
 
   it.each([
-    ["cash", { method: "cash", amount: "5.00" }],
-    ["Other card machine", { method: "card", amount: "3.00", externalProvider: "other" }],
+    ["cash", { method: "cash", amount: "5.00" }, { method: "cash", tendered: "5.00" }],
+    [
+      "Other card machine",
+      { method: "card", amount: "3.00", externalProvider: "other" },
+      { method: "card", entry: "manual", externalProvider: "other" },
+    ],
   ] as const)(
-    "sends a walk-up %s sale's slip request beside its tender, not in it",
-    async (_, tender) => {
-      const fetchStub = vi
-        .fn()
-        .mockResolvedValue(jsonResponse({ invoiceNumber: "A/1", slipPrintFailed: true }));
-      const result = await new TillApi("", fetchStub).recordSale(
-        [{ menuItemId: "mi-p", quantity: "1" }],
-        { ...tender, printCardSlip: true },
-        "wo1",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        null,
-        "eat_in",
-      );
-      const body = JSON.parse(fetchStub.mock.calls[0]![1].body as string);
-      expect(body.printCardSlip).toBe(true);
-      expect(body.tender).toEqual(tender);
-      expect(result.slipPrintFailed).toBe(true);
+    "sends a walk-up %s sale's slip request beside its basket and returns its failure",
+    async (_, tender, wire) => {
+      const ticket = { invoiceNumber: "A/1", tender: { method: "cash", change: "0.00" } };
+      const lines = [{ menuItemId: "mi-p", quantity: "1" }];
+      const sell = (printCardSlip?: boolean) => {
+        const fetchStub = vi.fn().mockResolvedValue(
+          jsonResponse({
+            outcome: "received",
+            invoice: ticket,
+            ...(printCardSlip === true ? { slipPrintFailed: true } : {}),
+          }),
+        );
+        const sale = new TillApi("", fetchStub).recordSale(
+          lines,
+          printCardSlip === undefined ? tender : { ...tender, printCardSlip },
+          "wo1",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          null,
+          "eat_in",
+        );
+        return { fetchStub, sale };
+      };
+
+      const asked = sell(true);
+      const result = await asked.sale;
+      expect(asked.fetchStub.mock.calls.map(([url]) => url)).toEqual([
+        "/api/working-orders/wo1/payments",
+      ]);
+      expect(postedBodies(asked.fetchStub)).toEqual([
+        {
+          kind: "share",
+          shareOf: 1,
+          submissionId: expect.any(String),
+          expectedEdit: null,
+          dining: "eat_in",
+          ...wire,
+          printCardSlip: true,
+          basket: { lines },
+        },
+      ]);
+      expect(result).toEqual({ ...ticket, slipPrintFailed: true });
+
+      const unasked = sell();
+      expect(await unasked.sale).toEqual(ticket);
+      expect(postedBodies(unasked.fetchStub)[0]).not.toHaveProperty("printCardSlip");
+      expect(postedBodies(unasked.fetchStub)[0].basket).toEqual({ lines });
     },
   );
 

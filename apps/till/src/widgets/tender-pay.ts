@@ -6,7 +6,7 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/client.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import { cardSlipChoice } from "./pay-equipment.js";
+import { paymentSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -1210,7 +1210,7 @@ export class TillTenderPay extends LitElement {
 
   /** One switch serves every method; a reader that prints its own slip is simply not sent it. */
   #renderCardExtras() {
-    const slip = cardSlipChoice(
+    const slip = paymentSlipChoice(
       this.slipPrinterAvailable,
       this.printCardSlip,
       this.busy,

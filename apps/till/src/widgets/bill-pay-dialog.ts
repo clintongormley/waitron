@@ -40,7 +40,7 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
-  cardSlipChoice,
+  paymentSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -2178,7 +2178,7 @@ export class TillBillPayDialog extends LitElement {
         }
       </dl>
       ${this.#equipmentRow(onReader)}
-      ${cardSlipChoice(
+      ${paymentSlipChoice(
         this.#slipAvailable(onReader),
         this.printCardSlip,
         this.busy || this.confirmationLocked,

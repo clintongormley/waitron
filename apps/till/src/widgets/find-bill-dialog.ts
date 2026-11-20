@@ -23,7 +23,7 @@ import { clockUnusableText, currentLocale, overLimitText, t } from "../i18n/t.js
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
-import { cardSlipChoice } from "./pay-equipment.js";
+import { paymentSlipChoice } from "./pay-equipment.js";
 
 export interface FindBillPayDetail {
   workingOrderId: string;
@@ -402,7 +402,7 @@ export class TillFindBillDialog extends LitElement {
                 this.busy || this.unconfirmed,
               )}`
       }
-      ${cardSlipChoice(
+      ${paymentSlipChoice(
         this.slipPrinterAvailable,
         this.printCardSlip,
         this.busy || this.unconfirmed,
