@@ -528,6 +528,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         };
   const discovered = new Map<string, DiscoveredEntry>();
   const agentBluetooth = new Map<string, { value: AgentBluetooth; at: number }>();
+  // Longer than the scan list's: an agent printing a batch does not pull again until it has finished.
+  const AGENT_BLUETOOTH_TTL_MS = 60_000;
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages();
   const bluetoothCommands = createPrinterBluetoothCommands();
@@ -541,7 +543,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     withinTtl(at, now, DISCOVERED_TTL_MS);
   const listedBluetooth = (agentId: string, now: number): AgentBluetooth | null => {
     const report = agentBluetooth.get(agentId);
-    return report !== undefined && isFresh(report.at, now) ? report.value : null;
+    return report !== undefined && withinTtl(report.at, now, AGENT_BLUETOOTH_TTL_MS)
+      ? report.value
+      : null;
   };
   const visibleNow = (now = Date.now()): Set<string> =>
     new Set(
@@ -944,7 +948,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (bluetooth !== undefined) {
         const prior = agentBluetooth.get(agentId);
         agentBluetooth.set(agentId, { value: bluetooth, at: now });
-        if (deps.bus && (prior?.value !== bluetooth || !isFresh(prior.at, now)))
+        if (
+          deps.bus &&
+          (prior?.value !== bluetooth || !withinTtl(prior.at, now, AGENT_BLUETOOTH_TTL_MS))
+        )
           publishState(deps.bus, "print_agents", log);
       }
 

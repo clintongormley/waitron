@@ -54,7 +54,6 @@ import type { Logger } from "./logger.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
-import { DISCOVERED_TTL_MS } from "./discovery-listing.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
@@ -1466,12 +1465,12 @@ describe("mountPrintApi — management: agents", () => {
       expect(await listedBluetooth(app, agentId)).toBe("available");
     });
 
-    it("lists null once the last report is older than the discovered list's freshness", async () => {
+    it("lists null once the last report is more than a minute old", async () => {
       const app = mountApp();
       const { agentId, token } = await joinAndAccept(app);
       vi.useFakeTimers({ toFake: ["Date"] });
       await pull(app, token, { bluetooth: { available: true } });
-      vi.setSystemTime(Date.now() + DISCOVERED_TTL_MS);
+      vi.setSystemTime(Date.now() + 60_000);
       expect(await listedBluetooth(app, agentId)).toBe("available");
       vi.setSystemTime(Date.now() + 1);
       expect(await listedBluetooth(app, agentId)).toBeNull();
@@ -1506,7 +1505,10 @@ describe("mountPrintApi — management: agents", () => {
       const { agentId, token } = await joinAndAccept(app);
       vi.useFakeTimers({ toFake: ["Date"] });
       await pull(app, token, { bluetooth: { available: true } });
-      vi.setSystemTime(Date.now() + DISCOVERED_TTL_MS + 1);
+      vi.setSystemTime(Date.now() + 60_000);
+      await pull(app, token, { bluetooth: { available: true } });
+      expect(changes).toHaveLength(1);
+      vi.setSystemTime(Date.now() + 60_001);
       expect(await listedBluetooth(app, agentId)).toBeNull();
       await pull(app, token, { bluetooth: { available: true } });
       expect(changes).toHaveLength(2);
