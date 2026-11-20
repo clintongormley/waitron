@@ -3890,6 +3890,12 @@ export class TillApp extends LitElement {
   get #sessionPersonId(): string {
     return this.#tabPerson?.personId ?? "";
   }
+
+  /** The server's `opensDrawer` already includes the profile's `open-cash-drawer`. */
+  get #mayOpenDrawer(): boolean {
+    return this.deviceEquipment?.opensDrawer === true;
+  }
+
   /** The person every request names, one object per sign-in: a refusal hands back the object its
    * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
    * sign-out keeps it, so the sign-out itself names who is leaving. */
@@ -23994,7 +24000,7 @@ export class TillApp extends LitElement {
           .emailOpen=${this.invoiceEmailOpen}
           .emailRefusal=${this.invoiceEmailRefusal}
           .canPrintReceipt=${this.#mayPrintReceipt}
-          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+          .canOpenDrawer=${this.#mayOpenDrawer}
         ></till-ticket-view>`;
       case "hours":
         return html`<till-hours-screen
@@ -24126,7 +24132,7 @@ export class TillApp extends LitElement {
         slot="notices"
         .notices=${notices}
         .checkTimeOffered=${this.checkTimeOffered}
-        .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+        .canOpenDrawer=${this.#mayOpenDrawer}
         .drawerBusy=${this.drawerOpening}
         @till-open-drawer=${() => void this.#onOpenDrawer()}
         @till-check-time=${() => (this.boxTimeOpen = true)}
@@ -24623,7 +24629,7 @@ export class TillApp extends LitElement {
                 .simulatedCardPayment=${this.result?.simulatedCardPayment === true}
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
-                .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
+                .canOpenDrawer=${this.#mayOpenDrawer}
                 .invoiceLocale=${this.invoiceLocale}
                 .originalReceiptAvailable=${this.originalReceiptAvailable}
                 .originalReceiptPrint=${this.originalReceiptPrint}

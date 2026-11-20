@@ -27,7 +27,7 @@ import type { ProfilePrinterRole } from "@waitron/layouts";
 import { readKitchenLanguage } from "./kitchen-language.js";
 import { formatOrderNumberSlip } from "./order-number-slip.js";
 import { readReceiptLanguage } from "@waitron/menu";
-import { resolveReceiptTrim } from "@waitron/shared";
+import { deviceOrigin, resolveReceiptTrim } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -91,6 +91,11 @@ async function drawerPrinter(printers: PrinterLookup): Promise<DevicePrinter | u
   const printer = await printers("cash_drawer");
   if (printer === undefined || !printer.opensDrawer || !printer.hasCashDrawer) return undefined;
   return printer;
+}
+
+/** The device has a drawer it may open, by the same resolution the drawer paths use. */
+export async function deviceOpensDrawer(tx: Transaction, deviceId: string): Promise<boolean> {
+  return (await drawerPrinter(printerLookup(tx, deviceOrigin(deviceId)))) !== undefined;
 }
 
 /**

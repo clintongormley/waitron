@@ -15,6 +15,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
+  deviceProfiles,
   devices,
   drawerOpens,
   kitchenStations,
@@ -391,6 +392,53 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
       chosen: { id: fp, available: false },
     });
     expect((await columns(a)).receipt).toBe(fp);
+  });
+});
+
+describe("whether the device opens a drawer", () => {
+  async function opensDrawerOf(cookie: string): Promise<unknown> {
+    const res = await send(deviceApp, cookie, "GET", "/api/device/equipment");
+    expect(res.status).toBe(200);
+    return (res.json as { opensDrawer?: unknown }).opensDrawer;
+  }
+
+  it("a switched-on drawer printer with a drawer, on a profile that allows it, opens it; PUT answers it too", async () => {
+    const res = await choose(venue.cookie, "cash_drawer", { id: dr }, "list");
+
+    expect(res.status).toBe(200);
+    expect((res.json as { opensDrawer?: unknown }).opensDrawer).toBe(true);
+    expect(await opensDrawerOf(venue.cookie)).toBe(true);
+  });
+
+  it("a profile that allows the drawer but lists no drawer printer opens none", async () => {
+    await printerLists({ cashDrawerPrinterIds: [] });
+
+    expect(await opensDrawerOf(venue.cookie)).toBe(false);
+  });
+
+  it("a drawer printer whose drawer was later turned off opens none", async () => {
+    expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+    await suite.db.update(printers).set({ hasCashDrawer: false }).where(eq(printers.id, dr));
+
+    expect(await opensDrawerOf(venue.cookie)).toBe(false);
+  });
+
+  it("a profile without open-cash-drawer opens none, even with a drawer printer", async () => {
+    expect((await choose(venue.cookie, "cash_drawer", { id: dr }, "list")).status).toBe(200);
+    const [profile] = await suite.db
+      .select({ capabilities: deviceProfiles.capabilities })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, profileId));
+    await suite.db
+      .update(deviceProfiles)
+      .set({
+        capabilities: (profile!.capabilities as string[]).filter(
+          (flag) => flag !== "open-cash-drawer",
+        ),
+      })
+      .where(eq(deviceProfiles.id, profileId));
+
+    expect(await opensDrawerOf(venue.cookie)).toBe(false);
   });
 });
 
