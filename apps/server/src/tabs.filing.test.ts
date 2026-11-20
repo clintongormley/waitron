@@ -1,4 +1,3 @@
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -272,7 +271,7 @@ describe("bill payment closes the tab", () => {
     expect(Number(rows[0]!.n)).toBe(0);
   });
 
-  it("paying an EMPTY tab is refused sale.empty_basket (a domain 4xx), files nothing — not an opaque 500", async () => {
+  it("refuses payment on an empty saved tab and leaves the tab open", async () => {
     const { cfg } = await setupVenue();
     const tableId = await seedTable(cfg, "Empty-pay");
     const deps = { db: suite.db, backend, clock };
@@ -282,12 +281,17 @@ describe("bill payment closes the tab", () => {
     });
 
     await expect(
-      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-        id: tabId,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.empty_basket" });
+      paySavedBillInCash(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+        tabId,
+        "5.00",
+      ),
+    ).rejects.toMatchObject({
+      code: "bill.nothing_outstanding",
+      params: { workingOrderId: tabId },
+    });
 
     // A refused pay files no sale and no record, and the tab stays open.
     expect(await orderState(tabId)).toEqual({ status: "open", settledAtSet: false });

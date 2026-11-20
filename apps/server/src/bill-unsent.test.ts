@@ -1,3 +1,4 @@
+import { openTillSession } from "./testing/session-device.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -13,7 +14,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import { previewBillPayment, type BillPaymentAsk } from "./testing/bill-payment-fixture.js";
+import {
+  paySavedBillInCash,
+  previewBillPayment,
+  type BillPaymentAsk,
+} from "./testing/bill-payment-fixture.js";
 import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration,
@@ -484,14 +489,17 @@ describe("unsent dishes block new payments on their own bill", () => {
         await venue.db.delete(orderDraftLines).where(eq(orderDraftLines.draftId, draft.id));
       if (state === "submitted" || state === "discarded")
         await venue.db.update(orderDrafts).set({ state }).where(eq(orderDrafts.id, draft.id));
-      const result = await payWorkingOrder(
+      const personId = venue.operatorId;
+      const sessionId = await openTillSession(venue.db, {
+        deviceId: venue.cfg.origin.deviceId,
+        personId,
+      });
+      const result = await paySavedBillInCash(
         { ...deps(), admission: testTradingAdmission() },
         venue.cfg,
-        {
-          id: billId,
-          lines: [],
-          tender: { method: "cash", amount: "18.00" },
-        },
+        { personId, sessionId },
+        billId,
+        "18.00",
       );
       expect(result.total).toBe("18.00");
       expect(await statusOf(venue, billId)).toBe("settled");

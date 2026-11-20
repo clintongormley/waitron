@@ -61,11 +61,11 @@ describe("readOnlyGate", () => {
     const app = new Hono();
     app.use("*", gate);
     app.post("/management-api/promote", (c) => c.body(null, 200));
-    app.post("/api/sales", (c) => c.body(null, 200));
+    app.post("/api/working-orders/bill-1/payments", (c) => c.body(null, 200));
     // Exempt: the promote trigger is allowed through the fence (its own auth gates it).
     expect((await app.request("/management-api/promote", { method: "POST" })).status).toBe(200);
     // Non-exempt: an ordinary client write is still refused.
-    const refused = await app.request("/api/sales", { method: "POST" });
+    const refused = await app.request("/api/working-orders/bill-1/payments", { method: "POST" });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("node.read_only");
   });

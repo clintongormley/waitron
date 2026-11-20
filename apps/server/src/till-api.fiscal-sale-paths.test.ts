@@ -78,8 +78,9 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 
-// `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
+// `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
 // and file no second record. Route logic that needs no real fiscal write lives in the
 // hermetic `till-api.test.ts`, whose fiscal seat is an empty object.
@@ -362,13 +363,12 @@ function deviceIdOf(cookie: string): string {
   return cookie.split("=")[1]!.split(".")[0]!;
 }
 
-/** The stamped `payments.reader_id` for a working order (NULL when none). */
-function payFreshBasketOnReader(
+function payFreshBasket(
   app: Hono,
   cookie: string,
   billId: string,
-  menuItemId: string,
-  options: { readerId?: string; simulationOutcome?: "captured" } = {},
+  lines: unknown[],
+  tender: Record<string, unknown>,
 ) {
   return app.request(`/api/working-orders/${billId}/payments`, {
     method: "POST",
@@ -378,11 +378,23 @@ function payFreshBasketOnReader(
       submissionId: billId,
       kind: "share",
       shareOf: 1,
-      method: "card",
-      entry: "reader",
-      basket: { lines: [{ menuItemId, quantity: "1" }] },
-      ...options,
+      basket: { lines },
+      ...tender,
     }),
+  });
+}
+
+function payFreshBasketOnReader(
+  app: Hono,
+  cookie: string,
+  billId: string,
+  menuItemId: string,
+  options: { readerId?: string; simulationOutcome?: "captured" } = {},
+) {
+  return payFreshBasket(app, cookie, billId, [{ menuItemId, quantity: "1" }], {
+    method: "card",
+    entry: "reader",
+    ...options,
   });
 }
 
@@ -485,7 +497,58 @@ describe("POST /api/session (PIN login body handling)", () => {
   });
 });
 
-describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
+describe("the fiscal sale path over HTTP", () => {
+  it.each(["voucher", "deferred", "other"])(
+    "refuses the unsupported %s payment method before saving a basket",
+    async (method) => {
+      const { cfg, available, operatorId } = await setupVenue();
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      const each = available.find((item) => item.pricingUnit === "each")!;
+      const id = randomUUID();
+      const response = await payFreshBasket(
+        app,
+        cookie,
+        id,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        { method },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "method" } },
+      });
+      expect(await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual(
+        [],
+      );
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    },
+  );
+
+  it("refuses a non-UUID bill address before saving a basket", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const each = available.find((item) => item.pricingUnit === "each")!;
+    const id = "not-a-uuid";
+    const response = await payFreshBasket(
+      app,
+      cookie,
+      id,
+      [{ menuItemId: each.menuItemId, quantity: "1" }],
+      { method: "cash", tendered: "5.00" },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "working_order.not_found", params: { workingOrderId: id } },
+    });
+    expect(await suite.db.select().from(workingOrders)).toEqual([]);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+  });
+
   it("answers 400 course.not_found for a course only the body names", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((product) => product.pricingUnit === "each")!;
@@ -495,13 +558,18 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const courseId = randomUUID();
 
-    const res = await app.request("/api/sales", {
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
-        tender: { method: "cash", amount: "1.50" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "1.50",
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }] },
       }),
     });
 
@@ -511,7 +579,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
   });
-  it.each(["sale", "collect"])(
+  it.each(["payments", "collect"])(
     "manual tip validates at the HTTP boundary for %s",
     async (route) => {
       const { cfg, operatorId } = await setupVenue();
@@ -522,16 +590,29 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
         await seedProfileFF("till", ["hand-keyed-card-payment"]),
       );
       const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-      const url = route === "sale" ? "/api/sales" : `/api/working-orders/${randomUUID()}/collect`;
+      const id = randomUUID();
+      const url = `/api/working-orders/${id}/${route}`;
       for (const addedTip of [null, -1, "-0.30", "bad", "0.001", ["0.30"]]) {
         const answer = await app.request(url, {
           method: "POST",
           headers: { cookie: `${cookie}; ${deviceCookie}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            expectedEdit: null,
-            lines: [],
-            tender: { method: "card", amount: "1.50", addedTip },
-          }),
+          body: JSON.stringify(
+            route === "payments"
+              ? {
+                  submissionId: id,
+                  kind: "share",
+                  shareOf: 1,
+                  method: "card",
+                  entry: "manual",
+                  addedTip,
+                  basket: { lines: [] },
+                }
+              : {
+                  expectedEdit: null,
+                  lines: [],
+                  tender: { method: "card", amount: "1.50", addedTip },
+                },
+          ),
         });
         expect(answer.status).toBe(400);
         expect(await answer.json()).toMatchObject({
@@ -550,19 +631,22 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const id = randomUUID();
     const pay = (workingOrderId: string) =>
-      app.request("/api/sales", {
+      app.request(`/api/working-orders/${workingOrderId}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           dining: "eat_in",
-          workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          tender: { method: "cash", amount: "1.50" },
+          submissionId: workingOrderId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "1.50",
+          basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
         }),
       });
     const original = await pay(id);
     expect(original.status).toBe(200);
-    const ticket = await original.json();
+    const { invoice: ticket } = await original.json();
     const [record] = await suite.db.select().from(registrosFacturacion);
     await withTransaction(suite.db, (tx) =>
       openFilingCase(tx, {
@@ -582,7 +666,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     const replay = await pay(id);
     expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual(ticket);
+    expect((await replay.json()).invoice).toEqual(ticket);
     expect(await suite.db.select().from(registrosFacturacion)).toEqual([record]);
   });
 
@@ -792,7 +876,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 });
 
 describe("sale-time device from the authenticated session", () => {
-  it("refuses POST /api/sales from a session whose device has been revoked — 401 device.unauthorized, filing nothing", async () => {
+  it("refuses payment from a session whose device has been revoked — 401 device.unauthorized, filing nothing", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -804,15 +888,13 @@ describe("sale-time device from the authenticated session", () => {
       sql`update devices set active = 0 where id = ${deviceIdOf(deviceCookie)}`,
     );
 
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
+    const res = await payFreshBasket(
+      app,
+      cookie,
+      randomUUID(),
+      [{ menuItemId: each.menuItemId, quantity: "2" }],
+      { method: "cash", tendered: "5.00" },
+    );
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
@@ -994,7 +1076,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
   });
 });
 
-describe("paying a parked pay-first order over POST /api/sales sends its dishes to the kitchen", () => {
+describe("paying a parked pay-first order sends its dishes to the kitchen", () => {
   it.each(["cash", "card"] as const)(
     "a %s payment sends its dish once, and a replay sends nothing more",
     async (method) => {
@@ -1051,16 +1133,23 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       expect(park.status).toBe(200);
       expect(await kitchenItems(workingOrderId)).toEqual({ items: 0, fired: 0 });
 
-      const pay = () =>
-        app.request("/api/sales", {
+      const path = `/api/working-orders/${workingOrderId}/payments`;
+      const pay = async () =>
+        app.request(path, {
           method: "POST",
           headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-          body: JSON.stringify({
-            dining: "eat_in",
-            workingOrderId,
-            lines: [],
-            tender: { method, amount: "5.00" },
-          }),
+          body: JSON.stringify(
+            await observedPaymentBody(suite.db, path, {
+              submissionId: workingOrderId,
+              dining: "eat_in",
+              kind: "share",
+              shareOf: 1,
+              method,
+              applied: "3.00",
+              tip: "0.00",
+              ...(method === "cash" ? { tendered: "5.00" } : { entry: "manual" }),
+            }),
+          ),
         });
       expect((await pay()).status).toBe(200);
       expect(await kitchenItems(workingOrderId)).toEqual({ items: 2, fired: 2 });
@@ -2036,19 +2125,16 @@ describe("Mode P sends preparation with payment", () => {
 
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
-    // A genuine Mode-P walk-up: `POST /api/sales` settles it immediately (open → settled) — no
+    // A Mode-P walk-up settles immediately (open → settled) — no
     // `place` step at all, since Mode P never places.
     const workingOrderId = randomUUID();
-    const sale = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
+    const sale = await payFreshBasket(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      [{ menuItemId: each.menuItemId, quantity: "1" }],
+      { method: "cash", tendered: "5.00" },
+    );
     expect(sale.status).toBe(200);
 
     // It appears on that station's kitchen queue, queued.
@@ -2084,16 +2170,13 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
 
     // Walk-up settle and preparation fire happen in one transaction.
     const workingOrderId = randomUUID();
-    await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
+    await payFreshBasket(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      [{ menuItemId: each.menuItemId, quantity: "1" }],
+      { method: "cash", tendered: "5.00" },
+    );
     const stations = (await (
       await app.request("/api/stations", { headers: { cookie } })
     ).json()) as { id: string; isDefault: boolean }[];
@@ -2219,19 +2302,13 @@ describe("handheld sales and device capability gates", () => {
       const blockedSession = await loginOperator(app, cfg, operatorId, blockedDevice);
       const allowedSession = await loginOperator(app, cfg, operatorId, allowedDevice);
       const workingOrderId = randomUUID();
-      const sale = await app.request("/api/sales", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          cookie: `${blockedSession}; ${blockedDevice}`,
-        },
-        body: JSON.stringify({
-          dining: "eat_in",
-          workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-          tender: { method: "cash", amount: "5.00" },
-        }),
-      });
+      const sale = await payFreshBasket(
+        app,
+        blockedSession,
+        workingOrderId,
+        [{ menuItemId: each.menuItemId, quantity: "2" }],
+        { method: "cash", tendered: "5.00" },
+      );
       expect(sale.status).toBe(200);
       const route = `/api/sales/${workingOrderId}/${action}`;
       const refused = await app.request(route, {
@@ -2280,20 +2357,18 @@ describe("handheld sales and device capability gates", () => {
 
     // A handheld may settle a cash sale: the fiscal chain is keyed by the submitting node (`nodeId`),
     // not the device, so a handheld files under its node's SIF exactly like a till.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
+    const res = await payFreshBasket(
+      app,
+      `${sessionPair}; ${deviceCookie}`,
+      randomUUID(),
+      [{ menuItemId: each.menuItemId, quantity: "2" }],
+      { method: "cash", tendered: "5.00" },
+    );
     expect(res.status).toBe(200);
     const opens = await suite.db.execute(sql`select id from drawer_opens `);
     expect(opens.rows).toHaveLength(0);
 
-    const ticket = await res.json();
+    const { invoice: ticket } = await res.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
     // Exactly one chained record, the same chain-opening shape a counter cash sale files, under
@@ -2320,19 +2395,17 @@ describe("handheld sales and device capability gates", () => {
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
 
-    // The `card` tender on `POST /api/sales` is charged on a separate bank terminal the POS never
+    // A hand-keyed card is charged on a separate bank terminal the POS never
     // talks to, so it files the same chained record as cash plus one captured `payments` row.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "card", amount: "3.00" },
-      }),
-    });
+    const res = await payFreshBasket(
+      app,
+      `${sessionPair}; ${deviceCookie}`,
+      randomUUID(),
+      [{ menuItemId: each.menuItemId, quantity: "2" }],
+      { method: "card", entry: "manual" },
+    );
     expect(res.status).toBe(200);
-    const ticket = await res.json();
+    const { invoice: ticket } = await res.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // NumSerieFactura-shaped, e.g. "A/1"
 
     // Exactly one chained record, the same chain-opening shape as the handheld cash case above.
@@ -2372,15 +2445,13 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolTillCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
+    const res = await payFreshBasket(
+      app,
+      `${sessionPair}; ${deviceCookie}`,
+      randomUUID(),
+      [{ menuItemId: each.menuItemId, quantity: "2" }],
+      { method: "cash", tendered: "5.00" },
+    );
     expect(res.status).toBe(200);
   });
 
@@ -2617,16 +2688,14 @@ describe("handheld sales and device capability gates", () => {
       return Number(rows.rows[0]!.n);
     }
 
-    async function postSale(app: Hono, cookie: string, menuItemId: string, method: string) {
-      return app.request("/api/sales", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({
-          dining: "eat_in",
-          lines: [{ menuItemId, quantity: "2" }],
-          tender: { method, amount: "5.00" },
-        }),
-      });
+    function postSale(app: Hono, cookie: string, menuItemId: string, method: "cash" | "card") {
+      return payFreshBasket(
+        app,
+        cookie,
+        randomUUID(),
+        [{ menuItemId, quantity: "2" }],
+        method === "cash" ? { method, tendered: "5.00" } : { method, entry: "manual" },
+      );
     }
 
     it("refuses a cash sale from a device whose profile lacks take-cash, filing nothing, and takes its card sale", async () => {
@@ -2824,19 +2893,17 @@ it("files an extras pick and an options answer through cash checkout and reprint
     return printer.id;
   });
   const workingOrderId = randomUUID();
-  const request = {
-    workingOrderId,
-    lines: [{ menuItemId: product.menuItemId, quantity: "2", extras, options }],
-    tender: { method: "cash", amount: "10.00" },
-    dining: "eat_in",
-  };
-  const response = await app.request("/api/sales", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(request),
-  });
+  const pay = () =>
+    payFreshBasket(
+      app,
+      headers.cookie,
+      workingOrderId,
+      [{ menuItemId: product.menuItemId, quantity: "2", extras, options }],
+      { method: "cash", tendered: "10.00" },
+    );
+  const response = await pay();
   expect(response.status, await response.clone().text()).toBe(200);
-  const ticket = (await response.json()) as TillSaleResult;
+  const { invoice: ticket } = (await response.json()) as { invoice: TillSaleResult };
   expect(ticket.total).toBe("4.40");
   expect(ticket.tender).toEqual({ method: "cash", change: "5.60" });
   // The dish's line carries the answer it froze; the extras pick is a child line of its own and
@@ -3004,13 +3071,9 @@ it("files an extras pick and an options answer through cash checkout and reprint
     [product.id]: "Agua mineral",
     [cheeseId]: "Manchego",
   });
-  const replay = await app.request("/api/sales", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(request),
-  });
+  const replay = await pay();
   expect(replay.status).toBe(200);
-  const replayTicket = (await replay.json()) as TillSaleResult;
+  const { invoice: replayTicket } = (await replay.json()) as { invoice: TillSaleResult };
   expect(replayTicket.lines).toEqual(ticket.lines);
   expect(replayTicket.total).toBe("4.40");
   expect(replayTicket.invoiceNumber).toBe(ticket.invoiceNumber);
@@ -3274,19 +3337,16 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       outside?: { externalProvider: "connected_account"; externalMachine: string };
     },
   ): Promise<Response> {
-    return await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId: body.workingOrderId,
-        lines: [{ menuItemId: body.menuItemId, quantity: "2" }],
-        tender: { method: "card", amount: "3.00", ...body.outside },
-      }),
-    });
+    return await payFreshBasket(
+      app,
+      cookie,
+      body.workingOrderId,
+      [{ menuItemId: body.menuItemId, quantity: "2" }],
+      { method: "card", entry: "manual", ...body.outside },
+    );
   }
 
-  it("a card sale at the device with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
+  it("a card sale at the device with the drawer opens it once, audited as a card slip naming the payment, and a replay opens nothing more", async () => {
     const { cfg, each, app, on, operatorId } = await venueWithTill();
     const deviceCookie = await enrolTillCookie(
       cfg,
@@ -3297,13 +3357,15 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const workingOrderId = randomUUID();
 
     const cookie = await on(deviceCookie);
-    const first = await cardSale(app, cookie, {
+    const body = {
       workingOrderId,
       menuItemId: each.menuItemId,
       outside: { externalProvider: "connected_account", externalMachine: "Spare Solo" },
-    });
+    } as const;
+    const first = await cardSale(app, cookie, body);
     expect(first.status).toBe(200);
-    expect((await first.json()).tender).toMatchObject({
+    const { payment } = await first.json();
+    expect(payment).toMatchObject({
       externalProvider: "connected_account",
       externalMachine: "Spare Solo",
     });
@@ -3316,15 +3378,14 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       ).status,
     ).toBe(200);
 
-    const saleId = await saleIdOf(workingOrderId);
     expect(await drawerOpenRows()).toEqual([
       {
         reason: "card_slip",
         deviceId,
         printerId,
         personId: operatorId,
-        saleId,
-        billPaymentId: null,
+        saleId: null,
+        billPaymentId: payment.id,
       },
     ]);
     const printed = await jobs();
@@ -3333,12 +3394,16 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
     expect(opensDrawer(new Uint8Array(printed.documents[0]!))).toBe(false);
 
-    const replay = await cardSale(app, await on(deviceCookie), {
-      workingOrderId,
-      menuItemId: each.menuItemId,
+    const changed = await cardSale(app, cookie, { workingOrderId, menuItemId: each.menuItemId });
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({
+      error: { code: "submission.id_reused", params: { submissionId: workingOrderId } },
     });
-    expect(replay.status).toBe(200);
-    expect((await replay.json()).tender).toMatchObject({
+
+    const replay = await cardSale(app, await on(deviceCookie), body);
+    expect(replay.status, await replay.clone().text()).toBe(200);
+    expect((await replay.json()).payment).toMatchObject({
+      id: payment.id,
       externalProvider: "connected_account",
       externalMachine: "Spare Solo",
     });
@@ -3392,16 +3457,13 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const cookie = `${session}; ${handheldCookie}`;
 
       const workingOrderId = randomUUID();
-      const res = await app.request("/api/sales", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({
-          dining: "eat_in",
-          workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-          tender: { method, amount: "5.00" },
-        }),
-      });
+      const res = await payFreshBasket(
+        app,
+        cookie,
+        workingOrderId,
+        [{ menuItemId: each.menuItemId, quantity: "2" }],
+        method === "cash" ? { method, tendered: "5.00" } : { method, entry: "manual" },
+      );
       const manual = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
 
       expect(res.status).toBe(200);
@@ -3415,7 +3477,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       ).toBe(200);
       expect(manual.status).toBe(200);
       expect((await drawerOpenRows()).map((row) => [row.reason, row.printerId])).toEqual([
-        [method === "cash" ? "cash_sale" : "card_slip", printerId],
+        [method === "cash" ? "bill_payment" : "card_slip", printerId],
         ["manual", printerId],
       ]);
       const printed = await jobs();
@@ -3492,7 +3554,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(printed.documents).toHaveLength(1);
   });
 
-  it.each(["sales", "collect"] as const)(
+  it.each(["bill payments", "collect"] as const)(
     "normalizes outside-card details on the %s route",
     async (route) => {
       const { each, app, cookie } = await venueWithTill("ticket_then_pay");
@@ -3518,20 +3580,26 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         ).toBe(200);
       }
       const request = (tender: Record<string, unknown>) =>
-        app.request(route === "sales" ? "/api/sales" : `/api/working-orders/${id}/collect`, {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie },
-          body: JSON.stringify(
-            route === "sales"
-              ? {
-                  workingOrderId: id,
-                  lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-                  tender,
-                  dining: "eat_in",
-                }
-              : { tender },
-          ),
-        });
+        route === "bill payments"
+          ? payFreshBasket(
+              app,
+              cookie,
+              id,
+              [{ menuItemId: each.menuItemId, quantity: "2" }],
+              tender.method === "cash"
+                ? { method: "cash", tendered: "3.00", externalProvider: tender.externalProvider }
+                : {
+                    method: "card",
+                    entry: "manual",
+                    externalProvider: tender.externalProvider,
+                    externalMachine: tender.externalMachine,
+                  },
+            )
+          : app.request(`/api/working-orders/${id}/collect`, {
+              method: "POST",
+              headers: { "content-type": "application/json", cookie },
+              body: JSON.stringify({ tender }),
+            });
       const refused = await request({ method: "cash", amount: "3.00", externalProvider: "other" });
       expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
@@ -3544,7 +3612,10 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         externalMachine: "   ",
       });
       expect(paid.status).toBe(200);
-      expect((await paid.json()).tender).not.toHaveProperty("externalMachine");
+      const body = await paid.json();
+      expect(route === "bill payments" ? body.payment : body.tender).not.toHaveProperty(
+        "externalMachine",
+      );
       expect(
         await suite.db
           .select({ source: payments.externalProvider, machine: payments.externalMachine })
@@ -3678,30 +3749,6 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       expect((await jobs()).drawer).toEqual([]);
     },
   );
-
-  it("a cash sale at the device with the drawer still opens it as a cash sale", async () => {
-    const { cfg, each, app, on } = await venueWithTill();
-    const deviceCookie = await enrolDrawerTill(cfg);
-    await deviceReceiptPrinter(deviceCookie, true);
-    const workingOrderId = randomUUID();
-
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: await on(deviceCookie) },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    expect((await drawerOpenRows()).map((row) => [row.reason, row.saleId])).toEqual([
-      ["cash_sale", await saleIdOf(workingOrderId)],
-    ]);
-    expect((await jobs()).drawer).toHaveLength(1);
-  });
 });
 
 describe("a sale cannot hand over settled extras or options", () => {
@@ -3715,8 +3762,8 @@ describe("a sale cannot hand over settled extras or options", () => {
   }
 
   it.each([
-    ["/api/sales", "frozenExtras"],
-    ["/api/sales", "frozenOptions"],
+    ["bill payments", "frozenExtras"],
+    ["bill payments", "frozenOptions"],
     ["/api/pay", "frozenExtras"],
     ["/api/pay", "frozenOptions"],
   ] as const)("%s refuses a line carrying %s and files nothing", async (path, key) => {
@@ -3800,25 +3847,22 @@ describe("a sale cannot hand over settled extras or options", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const before = await recorded();
     const id = randomUUID();
-    const response = await app.request(path, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        id,
-        workingOrderId: id,
-        lines: [
-          {
-            menuItemId: product.menuItemId,
-            quantity: "1",
-            options: [{ listId: lists.options.id, labelId: lists.options.labels[0]!.id }],
-            [key]: settled[key],
-          },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-        simulationOutcome: "captured",
-        dining: "eat_in",
-      }),
-    });
+    const lines = [
+      {
+        menuItemId: product.menuItemId,
+        quantity: "1",
+        options: [{ listId: lists.options.id, labelId: lists.options.labels[0]!.id }],
+        [key]: settled[key],
+      },
+    ];
+    const response =
+      path === "bill payments"
+        ? await payFreshBasket(app, cookie, id, lines, { method: "cash", tendered: "10.00" })
+        : await app.request(path, {
+            method: "POST",
+            headers: { "content-type": "application/json", cookie },
+            body: JSON.stringify({ id, lines, simulationOutcome: "captured", dining: "eat_in" }),
+          });
     expect(response.status, await response.clone().text()).toBe(400);
     expect(await response.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "lines" } },

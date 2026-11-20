@@ -1,3 +1,9 @@
+import {
+  closeZeroBill,
+  payCounterBasket,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+} from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 import { takeReaderBillPayment } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -87,7 +93,6 @@ import { createTable } from "./testing/live-table.js";
 import {
   printSaleReceipt,
   collectOrderOrchestration as collectOrder,
-  payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
 } from "./testing/whole-payment-fixture.js";
@@ -109,6 +114,7 @@ import {
   seedDepartmentReceipt,
 } from "@waitron/db/testing/seed.js";
 import {
+  counterFixtureOperator,
   seedSessionDevice,
   openTillSession,
   deviceRequestCfg,
@@ -132,6 +138,14 @@ function linesOf(menuItemId: string, quantity: string): { menuItemId: string; qu
 const LOCALE = "es-ES";
 
 // The operator a placing amendment is attributed to.
+async function paymentOperator(cfg: DeviceRequestConfig, personId?: string) {
+  if (personId === undefined) return counterFixtureOperator(suite.db, cfg.origin.deviceId);
+  return {
+    personId,
+    sessionId: await openTillSession(suite.db, { deviceId: cfg.origin.deviceId, personId }),
+  };
+}
+
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useVenueDb({
@@ -639,15 +653,13 @@ describe("active fiscal conflict stops new money", () => {
   }
 
   async function originalSale(cfg: DeviceRequestConfig, coffee: OfferedProduct) {
-    return payWorkingOrder(
+    return payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: randomUUID(),
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      randomUUID(),
+      { zoneId: coffee.zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "1.50",
     );
   }
 
@@ -666,15 +678,13 @@ describe("active fiscal conflict stops new money", () => {
         const lines = [{ menuItemId: coffee.menuItemId, quantity: "1" }];
         const pay =
           method === "cash"
-            ? payWorkingOrder(
+            ? payFreshCounterInCash(
                 { admission: testTradingAdmission(), db: suite.db, backend, clock },
                 cfg,
-                {
-                  id,
-                  lines,
-                  zoneId: coffee.zoneId,
-                  tender: { method: "cash", amount: "1.50" },
-                },
+                await paymentOperator(cfg),
+                id,
+                { zoneId: coffee.zoneId, lines: lines },
+                "1.50",
               )
             : payWorkingOrderIntegrated(
                 { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
@@ -804,19 +814,20 @@ describe("active fiscal conflict stops new money", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "1.50" },
     };
-    const ticket = await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      req,
-    );
-    await seedConflict(cfg, "fiscal.duplicado_anulado");
-    await expect(
-      payWorkingOrder(
+    const operator = await paymentOperator(cfg);
+    const pay = () =>
+      payCounterBasket(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
-        req,
-      ),
-    ).resolves.toEqual(ticket);
+        operator,
+        id,
+        { zoneId: req.zoneId, lines: req.lines },
+        { method: "cash", tendered: req.tender.amount },
+        id,
+      );
+    const ticket = await pay();
+    await seedConflict(cfg, "fiscal.duplicado_anulado");
+    await expect(pay()).resolves.toEqual(ticket);
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
   });
@@ -871,12 +882,14 @@ describe("a box the held chart does not name primary takes no new money", () => 
     const id = randomUUID();
 
     await expect(
-      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
+      payFreshCounterInCash(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        await paymentOperator(cfg),
         id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      }),
+        { zoneId: coffee.zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+        "1.50",
+      ),
     ).rejects.toMatchObject({ code: "fiscal.chain_handed_over", params: { nodeId: cfg.nodeId } });
     expect(await paymentCount(id)).toBe(0);
     expect(await saleCount(id)).toBe(0);
@@ -3084,11 +3097,13 @@ describe("an order being paid by card cannot be changed from another device (pla
     await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
 
     await expect(
-      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, t.cfg, {
-        id: t.tabId,
-        lines: [],
-        tender: { method: "cash", amount: "10.00" },
-      }),
+      paySavedBillInCash(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        t.cfg,
+        await paymentOperator(t.cfg),
+        t.tabId,
+        "10.00",
+      ),
     ).rejects.toMatchObject({
       code: "order.payment_in_flight",
       params: { workingOrderId: t.tabId },
@@ -3433,11 +3448,22 @@ describe("an order being paid by card cannot be changed from another device (pla
     const { deps, client } = integratedDeps(suite.db);
 
     await expect(
-      payWorkingOrder(deps, cfg, {
+      closeZeroBill(
+        deps,
+        cfg,
         id,
-        lines: [],
-        tender: { method: "cash", amount: "0.00" },
-      }),
+        {
+          expectedEdit: null,
+          submissionId: id,
+          kind: "contribution",
+          amount: "0.00",
+          method: "cash",
+          tendered: "0.00",
+          applied: "0.00",
+          tip: "0.00",
+        },
+        await paymentOperator(cfg),
+      ),
     ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
     expect(await markOf(id)).toBe("2020-01-01T00:00:00.000Z");
 
@@ -3566,11 +3592,12 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   async function payInCash(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock, log },
       cfg,
-      { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      tabId,
+      "1.50",
     );
     expect((await orderState(tabId)).status).toBe("settled");
   }

@@ -131,16 +131,22 @@ describe.each(cases)("recipient flow: $name", ({ recipient }) => {
     );
     expect(selected.recipient).toEqual(recipient);
     const before = await state();
-    const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      expectedEdit: null,
-      zoneId: walkupZone,
-      invoiceType: "F1",
-      recipient,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        dining: "eat_in",
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "5.00",
+        expectedEdit: null,
+        basket: { zoneId: walkupZone, invoiceType: "F1", recipient, lines: [] },
+      },
+    );
     expect(answer).toEqual({
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },

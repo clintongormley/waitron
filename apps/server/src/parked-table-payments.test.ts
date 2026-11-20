@@ -62,20 +62,24 @@ describe("parked bills paid with their retrieved edit observation", () => {
         draftId: null,
         draftRevision: null,
       });
-    const response = await app.request("/api/sales", {
+    const response = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId: id,
-        lines: retrieved.lines,
-        tender: { method, amount: "35.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method,
+        applied: "35.00",
+        tip: "0.00",
+        ...(method === "cash" ? { tendered: "35.00" } : { entry: "manual" }),
         expectedEdit: retrieved.expectedEdit,
       }),
     });
     expect(response.status, await response.clone().text()).toBe(200);
     const outcome = await response.json();
-    expect(outcome).toMatchObject({ total: "35.00" });
+    expect(outcome).toMatchObject({ invoice: { total: "35.00" } });
   });
 });
 
@@ -93,14 +97,18 @@ it.each(["missing", "stale"] as const)(
         .update(workingOrders)
         .set({ editorVersion: retrieved.expectedEdit!.editorVersion + 1 })
         .where(eq(workingOrders.id, id));
-    const response = await venue.app.request("/api/sales", {
+    const response = await venue.app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId: id,
-        lines: retrieved.lines,
-        tender: { method: "cash", amount: "35.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "35.00",
+        applied: "35.00",
+        tip: "0.00",
         expectedEdit: kind === "missing" ? null : retrieved.expectedEdit,
       }),
     });

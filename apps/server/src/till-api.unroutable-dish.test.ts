@@ -213,14 +213,19 @@ async function payCash(
   workingOrderId: string,
   walkUpLines: Dish[] = [],
 ): Promise<Response> {
-  return app.request("/api/sales", {
+  return app.request(`/api/working-orders/${workingOrderId}/payments`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie}` },
     body: JSON.stringify({
       dining: "eat_in",
-      workingOrderId,
-      lines: walkUpLines.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
-      tender: { method: "cash", amount: "50.00" },
+      submissionId: workingOrderId,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "50.00",
+      basket: {
+        lines: walkUpLines.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
+      },
     }),
   });
 }
@@ -1363,15 +1368,20 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const closed = await station("Cash bar");
     await switchOff(closed);
     const id = randomUUID();
-    const response = await app.request("/api/sales", {
+    const response = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${session}; ${await enrolTill()}` },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId: id,
-        zoneId: v.counter.zoneId,
-        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
-        tender: { method: "cash", amount: "50.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "50.00",
+        basket: {
+          zoneId: v.counter.zoneId,
+          lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
+        },
       }),
     });
     expect(response.status).toBe(200);
@@ -1392,7 +1402,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       setStationToday(tx, chosen, "closed", new Date(), await seedActivityActor(tx)),
     );
     const id = randomUUID();
-    const paid = await app.request("/api/sales", {
+    const paid = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -1400,9 +1410,14 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       },
       body: JSON.stringify({
         dining: "eat_in",
-        workingOrderId: id,
-        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
-        tender: { method: "cash", amount: "50.00" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "50.00",
+        basket: {
+          lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: chosen }],
+        },
       }),
     });
     expect(paid.status, await paid.clone().text()).toBe(200);

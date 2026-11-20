@@ -1,3 +1,5 @@
+import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { departments } from "@waitron/db";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -16,10 +18,7 @@ import { decimal } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { loginWithPin } from "@waitron/identity";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payIntegrated,
-  payWorkingOrder,
-} from "./testing/whole-payment-fixture.js";
+import { payWorkingOrderIntegratedOrchestration as payIntegrated } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -71,6 +70,13 @@ function facts() {
   };
 }
 const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
+async function paymentOperator() {
+  const personId = venue.operatorId;
+  return {
+    personId,
+    sessionId: await openTillSession(venue.db, { deviceId: venue.cfg.origin.deviceId, personId }),
+  };
+}
 const request = (id = randomUUID()) => ({
   id,
   zoneId: venue.zoneId,
@@ -429,10 +435,14 @@ it.each(["cash", "integrated"] as const)(
     const cfg = { ...venue.cfg, operationDescriptionRequired: false };
     const input = request();
     if (method === "cash") {
-      await payWorkingOrder({ admission: testTradingAdmission(), ...deps(), backend }, cfg, {
-        ...input,
-        tender: { method: "cash", amount: "3.00" },
-      });
+      await payFreshCounterInCash(
+        { admission: testTradingAdmission(), ...deps(), backend },
+        cfg,
+        await paymentOperator(),
+        input.id,
+        { lines: input.lines },
+        "3.00",
+      );
     } else {
       await payIntegrated(
         {
@@ -488,11 +498,13 @@ it.each(["cash", "integrated"] as const)(
     const before = facts();
     const pay =
       method === "cash"
-        ? payWorkingOrder({ admission: testTradingAdmission(), ...deps(), backend }, cfg, {
+        ? paySavedBillInCash(
+            { admission: testTradingAdmission(), ...deps(), backend },
+            cfg,
+            await paymentOperator(),
             id,
-            lines: [],
-            tender: { method: "cash", amount: "3.00" },
-          })
+            "3.00",
+          )
         : payIntegrated({ admission: testTradingAdmission(), ...deps(), backend, provider }, cfg, {
             id,
             lines: [],

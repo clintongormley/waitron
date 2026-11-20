@@ -45,7 +45,6 @@ import {
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
 import {
-  payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   settleIssuedOwingNothing,
 } from "./testing/whole-payment-fixture.js";
@@ -1598,7 +1597,7 @@ describe("department transfer tab lifecycle", () => {
     },
   );
 
-  it.each(["immediate", "bill", "issued"] as const)(
+  it.each(["bill", "issued"] as const)(
     "%s settlement withdraws the pending request without creating another invoice on retry",
     async (kind) => {
       const f = await ready();
@@ -1614,28 +1613,21 @@ describe("department transfer tab lifecycle", () => {
         await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
       const id = await pending(f);
       const pay = () =>
-        kind !== "immediate"
-          ? takeBillPayment(
-              { ...deps, admission: testTradingAdmission() },
-              v.cfg,
-              f.tab,
-              {
-                submissionId: id,
-                kind: "contribution",
-                amount: "2.00",
-                method: "cash",
-                tendered: "2.00",
-                applied: "2.00",
-                tip: "0.00",
-              },
-              operator,
-            )
-          : payWorkingOrder(
-              { ...deps, admission: testTradingAdmission() },
-              v.cfg,
-              { id: f.tab, lines: [], tender: { method: "cash", amount: "2.00" } },
-              personId,
-            );
+        takeBillPayment(
+          { ...deps, admission: testTradingAdmission() },
+          v.cfg,
+          f.tab,
+          {
+            submissionId: id,
+            kind: "contribution",
+            amount: "2.00",
+            method: "cash",
+            tendered: "2.00",
+            applied: "2.00",
+            tip: "0.00",
+          },
+          operator,
+        );
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
       await pay();
       expect((await state(f.tab)).tab!.status).toBe("settled");

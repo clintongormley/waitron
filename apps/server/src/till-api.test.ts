@@ -2493,8 +2493,7 @@ describe("POST /api/sales (session-guarded sale)", () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The guard runs BEFORE the body is even read. The chained fiscal write and the idempotent replay
-    // are covered in `till-api.fiscal-sale-paths.test.ts`.
+    // The guard runs before it reads the body.
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -2882,6 +2881,33 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
         lines: [{ menuItemId: waterOfferId, quantity: "1" }],
         tender: { method: "cash", amount: "10.00" },
         zoneId: "not-a-zone",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
+    });
+  });
+
+  it("refuses a bill payment basket naming a malformed zone before writing it", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
+      },
+      body: JSON.stringify({
+        dining: "eat_in",
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "10.00",
+        submissionId: id,
+        basket: { lines: [{ menuItemId: waterOfferId, quantity: "1" }], zoneId: "not-a-zone" },
       }),
     });
     expect(res.status).toBe(400);
@@ -4691,36 +4717,44 @@ describe("canonical modifier HTTP serialization", () => {
 });
 
 describe("canonical modifier checkout refusal", () => {
-  it.each(["/api/working-orders", "/api/sales"])(
-    "rejects a repeated negative extra pick at %s before any write",
-    async (path) => {
+  it.each(["park", "pay"])(
+    "rejects a repeated negative extra pick before %s writes an order",
+    async (step) => {
       const f = await modifierOfferFixture();
       const id = randomUUID();
-      const response = await f.app.request(path, {
-        method: "POST",
-        headers: f.headers,
-        body: JSON.stringify({
-          id,
-          workingOrderId: id,
-          lines: [
+      const lines = [
+        {
+          menuItemId: f.offer.id,
+          quantity: "1",
+          options: f.answers.options,
+          extras: [
             {
-              menuItemId: f.offer.id,
-              quantity: "1",
-              options: f.answers.options,
-              extras: [
-                {
-                  listId: f.extrasList.id,
-                  picks: [
-                    { productId: f.cheese.id, quantity: 2 },
-                    { productId: f.cheese.id, quantity: -1 },
-                  ],
-                },
+              listId: f.extrasList.id,
+              picks: [
+                { productId: f.cheese.id, quantity: 2 },
+                { productId: f.cheese.id, quantity: -1 },
               ],
             },
           ],
-          tender: { method: "cash", amount: "20.00" },
-          dining: "eat_in",
-        }),
+        },
+      ];
+      const path = step === "park" ? "/api/working-orders" : `/api/working-orders/${id}/payments`;
+      const body =
+        step === "park"
+          ? { dining: "eat_in", id, lines }
+          : {
+              dining: "eat_in",
+              submissionId: id,
+              kind: "share",
+              shareOf: 1,
+              method: "cash",
+              tendered: "20.00",
+              basket: { lines },
+            };
+      const response = await f.app.request(path, {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify(body),
       });
       expect(response.status, await response.clone().text()).toBe(400);
       expect(await response.json()).toMatchObject({

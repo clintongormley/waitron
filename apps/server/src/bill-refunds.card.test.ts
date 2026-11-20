@@ -1845,19 +1845,27 @@ describe("how often the loop looks a pending refund up", () => {
 });
 
 describe("the single-payment routes on a bill whose only card payment was refunded in full (design §7)", () => {
-  it("refuses a cash sale of the whole bill, and the bill's own invoice links the refunded card", async () => {
+  it("refuses a fresh basket payment and links the refunded card when payment completes the bill", async () => {
     const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const back = await refund(billId, card.id, { applied: "20.00" });
     expect(back.answer.json).toMatchObject({ refund: { state: "completed" } });
 
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "30.00" },
-      workingOrderId: billId,
-    });
-
+    const sold = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        dining: "eat_in",
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "30.00",
+        basket: { lines: [] },
+      },
+    );
     expect(sold.status).toBe(409);
     expect(sold.json).toMatchObject({
       code: "bill.payments_received",

@@ -36,7 +36,7 @@ import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab, fireAll, splitPartyBill } from "./testing/serve-line.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recordTillSale } from "./till-sale.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 
 let venue: BillVenue;
@@ -388,14 +388,19 @@ it("returns an authenticated settled replay without reading a current issue cloc
   const { id } = await held();
   const actor = await operator();
   const request = {
-    workingOrderId: id,
+    submissionId: id,
+    kind: "share" as const,
+    shareOf: 1,
+    method: "cash" as const,
+    tendered: "24.20",
+    applied: "24.20",
+    tip: "0.00",
     expectedEdit: null,
-    lines: [],
-    tender: { method: "cash" as const, amount: "24.20" },
   };
-  const original = await recordTillSale(
+  const original = await takeBillPayment(
     fiscal(ready),
     { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+    id,
     request,
     actor,
   );
@@ -410,15 +415,16 @@ it("returns an authenticated settled replay without reading a current issue cloc
     },
   };
   expect(
-    await recordTillSale(
+    await takeBillPayment(
       deps,
       { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+      id,
       request,
       actor,
     ),
   ).toEqual(original);
   await expect(
-    recordTillSale(deps, { ...venue.cfg, origin: deviceOrigin(venue.deviceId) }, request, {
+    takeBillPayment(deps, { ...venue.cfg, origin: deviceOrigin(venue.deviceId) }, id, request, {
       ...actor,
       sessionId: randomUUID(),
     }),

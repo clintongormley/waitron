@@ -50,13 +50,22 @@ useVenueDb({
       await assignMenuToVenue(tx, menu.id);
       counter = await offerProducts(tx, venue.cfg, { productIds: [dishId] });
     });
-    const first = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: randomUUID(),
-      zoneId: counter.zoneId,
-      lines: dish(),
-      tender: { method: "cash", amount: "10.00" },
-    });
+    const id = randomUUID();
+    const first = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        dining: "eat_in",
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "10.00",
+        basket: { zoneId: counter.zoneId, lines: dish() },
+      },
+    );
     if (first.status !== 200) throw new Error(`setup sale answered ${first.status}`);
   },
 });

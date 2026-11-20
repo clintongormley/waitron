@@ -82,12 +82,14 @@ function payStored(app: BillVenue["app"], id: string) {
 }
 
 function cashSale(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/sales", {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    workingOrderId: id,
-    zoneId: counter.zoneId,
-    lines: dish(),
-    tender: { method: "cash", amount: "10.00" },
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "10.00",
+    basket: { zoneId: counter.zoneId, lines: dish() },
   });
 }
 

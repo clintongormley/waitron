@@ -1,3 +1,9 @@
+import { takeBillPayment } from "./bill-payments.js";
+import {
+  payCounterBasket,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+} from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ensureOperator } from "./testing/cancel-line.js";
@@ -75,13 +81,16 @@ import { offerProducts } from "./testing/zone-offers.js";
 import {
   collectOrderOrchestration as collectOrder,
   fireDishesAtPayment,
-  payWorkingOrder,
 } from "./testing/whole-payment-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 
 describe("counter handover timing", () => {
@@ -119,6 +128,14 @@ const EACH_UNIT_SNAPSHOT = {
 // is a plain uuid with NO FK (the sale_voids.voided_by shape), so a fixed fixture uuid stands in for
 // the session's `personId` the till supplies in production — the value is only ever compared, never
 // joined.
+async function paymentOperator(cfg: DeviceRequestConfig, personId?: string) {
+  if (personId === undefined) return counterFixtureOperator(suite.db, cfg.origin.deviceId);
+  return {
+    personId,
+    sessionId: await openTillSession(suite.db, { deviceId: cfg.origin.deviceId, personId }),
+  };
+}
+
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const suite = useVenueDb({
@@ -562,20 +579,18 @@ beforeAll(() => {
   });
 });
 
-describe("payWorkingOrder", () => {
+describe("cash bill payments", () => {
   it("walk-up: creates an open working order, files, and settles it in one tx", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const id = randomUUID();
 
-    const res = await payWorkingOrder(
+    const res = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
 
     // First sale of a fresh venue's series → A/1. Change is 5.00 tendered − 1.50.
@@ -626,14 +641,12 @@ describe("payWorkingOrder", () => {
     const parkedTotal = (await draftAggregate(id)).total;
     expect(parkedTotal).toBe("3.50"); // 1.50 café + 2.00 agua, locked
 
-    const res = await payWorkingOrder(
+    const res = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "5.00",
     );
 
     // The LOCKED composition, filed from the stored lines: 1.50 + 2.00 = 3.50. Round-trip invariant —
@@ -695,14 +708,12 @@ describe("payWorkingOrder", () => {
     expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
 
     // Pay the retrieved order (no client basket — files from the stored lock, which is now the edit).
-    const res = await payWorkingOrder(
+    const res = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "5.00",
     );
 
     // The EDIT is what was charged AND filed: 3.00 (café×2), never the pre-edit 1.50. Its receipt line
@@ -746,14 +757,12 @@ describe("payWorkingOrder", () => {
     });
 
     // Pay — files at the LOCKED 1.50, never the new 9.99.
-    const res = await payWorkingOrder(
+    const res = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "5.00",
     );
 
     expect(res.total).toBe("1.50"); // the lock, not 9.99
@@ -780,8 +789,19 @@ describe("payWorkingOrder", () => {
       tender: { method: "cash" as const, amount: "10.00" },
     };
     const deps = { db: suite.db, backend, clock };
+    const operator = await paymentOperator(cfg);
+    const pay = () =>
+      payCounterBasket(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        operator,
+        id,
+        { zoneId, lines: req.lines },
+        { method: "cash", tendered: req.tender.amount },
+        id,
+      );
 
-    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
+    const first = await pay();
     // The filed breakdown is the difference-method figure (0.95).
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
@@ -812,7 +832,7 @@ describe("payWorkingOrder", () => {
     ]);
 
     // The retry — same id, same body. Files NOTHING; returns the first ticket.
-    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
+    const second = await pay();
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
@@ -849,21 +869,22 @@ describe("payWorkingOrder", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "5.00" },
     };
+    const operator = await paymentOperator(cfg);
+    const pay = () =>
+      payCounterBasket(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        operator,
+        id,
+        { zoneId, lines: req.lines },
+        { method: "cash", tendered: req.tender.amount },
+        id,
+      );
+
     // Two overlapping pays of ONE order id, both started before either has finished. The write queue
     // admits the second only once the first has committed, so the second reads `settled` and REPLAYS
     // — which is the branch this case exists to pin. Neither errors.
-    const [resA, resB] = await Promise.all([
-      payWorkingOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-      ),
-      payWorkingOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-      ),
-    ]);
+    const [resA, resB] = await Promise.all([pay(), pay()]);
 
     // Same ticket from both; exactly ONE sale and ONE fiscal record — the loser replayed, did not file.
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
@@ -875,8 +896,7 @@ describe("payWorkingOrder", () => {
   it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale and both calls return its invoice number", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     // The write queue admits the second call only once the first has committed, so it finds the row
-    // already `settled` and replays, as the PARKED case above does. `payWorkingOrder`'s duplicate-key
-    // catch for a walk-up is not reached here.
+    // the first payment and replays it, as the parked case above does.
     const id = randomUUID();
 
     const req = {
@@ -885,18 +905,19 @@ describe("payWorkingOrder", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "5.00" },
     };
-    const [resA, resB] = await Promise.all([
-      payWorkingOrder(
+    const operator = await paymentOperator(cfg);
+    const pay = () =>
+      payCounterBasket(
         { admission: testTradingAdmission(), db: suite.db, backend, clock },
         cfg,
-        req,
-      ),
-      payWorkingOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-      ),
-    ]);
+        operator,
+        id,
+        { zoneId, lines: req.lines },
+        { method: "cash", tendered: req.tender.amount },
+        id,
+      );
+
+    const [resA, resB] = await Promise.all([pay(), pay()]);
 
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -917,12 +938,14 @@ describe("payWorkingOrder", () => {
     });
 
     await expect(
-      payWorkingOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
+      payFreshCounterInCash(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        await paymentOperator(cfg),
         id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
+        { zoneId: zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+        "5.00",
+      ),
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
 
     expect(await saleCount(id)).toBe(0);
@@ -943,14 +966,13 @@ describe("payWorkingOrder", () => {
     // line-add snapshot), so this garbage basket — an unknown offer — is not looked at and the pay
     // SUCCEEDS on the stored café×1. The guard against anyone re-reading `req.lines` for a retrieved
     // order.
-    const res = await payWorkingOrder(
+    const res = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }] },
+      "5.00",
     );
 
     // Filed the stored lock (1.50), not the garbage basket — settled exactly once.
@@ -962,39 +984,27 @@ describe("payWorkingOrder", () => {
     expect(await fiscalRecordCount(id)).toBe(1);
   });
 
-  it("refuses an empty basket and any tender that is neither cash nor card (voucher/deferred/other)", async () => {
-    const { cfg, coffee, zoneId } = await setupVenue();
+  it("refuses an empty walk-up basket", async () => {
+    const { cfg } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
 
     await expect(
-      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-        id: randomUUID(),
-        lines: [],
-        tender: { method: "cash", amount: "0" },
-      }),
+      payFreshCounterInCash(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        await paymentOperator(cfg),
+        randomUUID(),
+        { lines: [] },
+        "0",
+      ),
     ).rejects.toMatchObject({ code: "sale.empty_basket" });
-
-    // cash and card are the supported tenders; every other
-    // `tender_method` enum value is still refused with `sale.unsupported_tender`. The `as unknown` cast
-    // is how an untrusted till can send one past the widened `"cash" | "card"` type at runtime.
-    for (const method of ["voucher", "deferred", "other"] as const) {
-      await expect(
-        payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-          id: randomUUID(),
-          zoneId,
-          lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-          tender: { method: method as unknown as "cash", amount: "1.50" },
-        }),
-      ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
-    }
   });
 });
 
 describe("parkOrder concurrent replay", () => {
   it("concurrent double-park of the same id parks ONE order with one line, and both calls return the same result", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
-    // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
-    // `payWorkingOrder`, `parkOrder` reads no existing row first, so the second call's insert
+    // With a fresh id, both park calls try an insert. The second
     // collides on `working_orders`' primary key and `parkOrder`'s duplicate-key catch returns the
     // winner's committed `{ id, orderNumber }`. The catch re-throws anything `isUniqueViolation` fails
     // to classify, so an unrecognised refusal would surface here as a rejection.
@@ -1030,15 +1040,14 @@ describe("card tender (manual / datáfono)", () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const id = randomUUID();
 
-    const res = await payWorkingOrder(
+    const res = await payCounterBasket(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }], // café → 1.50 gross
-        tender: { method: "card", amount: "1.50", externalRef: "OP-12345" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { zoneId: zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      { method: "card", entry: "manual", externalRef: "OP-12345" },
+      id,
     );
 
     // A card charges the exact amount on the terminal — nothing is handed back.
@@ -1071,19 +1080,31 @@ describe("card tender (manual / datáfono)", () => {
     // exact total on the separate terminal, so both the filed tender and the payment carry 3.50, not
     // 5.00 — there is no over-tender/change path for card. Same state, divergent inputs (CLAUDE.md §1):
     // 5.00 ≠ 3.50, so a would-be pass-through of `req.tender.amount` would show here.
-    const res = await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      {
+    const res = await (
+      await takeBillPayment(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
         id,
-        zoneId,
-        lines: [
-          { menuItemId: coffee.menuItemId, quantity: "1" },
-          { menuItemId: water.menuItemId, quantity: "1" },
-        ],
-        tender: { method: "card", amount: "5.00" },
-      },
-    );
+        {
+          expectedEdit: null,
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "manual",
+          applied: "5.00",
+          tip: "0.00",
+        },
+        await paymentOperator(cfg),
+        {
+          zoneId: zoneId,
+          lines: [
+            { menuItemId: coffee.menuItemId, quantity: "1" },
+            { menuItemId: water.menuItemId, quantity: "1" },
+          ],
+        },
+      )
+    ).invoice!;
 
     expect(res.total).toBe("3.50");
     expect(res.tender.method).toBe("card");
@@ -1103,12 +1124,21 @@ describe("card tender (manual / datáfono)", () => {
       tender: { method: "card" as const, amount: "1.50" },
     };
     const deps = { db: suite.db, backend, clock };
+    const operator = await paymentOperator(cfg);
+    const pay = () =>
+      payCounterBasket(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        operator,
+        id,
+        { zoneId, lines: req.lines },
+        { method: "card", entry: "manual" },
+        id,
+      );
 
-    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
-    // The retry — same id, same body (a lost first response). The `sales_working_order_id_key`
-    // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second fiscal record,
-    // and — the card-specific part — no second captured payment.
-    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
+    const first = await pay();
+    // Reuse the same submission to recover its ticket without another filing or card payment.
+    const second = await pay();
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
@@ -1139,12 +1169,14 @@ describe("cross-till end-to-end", () => {
     // Sale 1 (A/1): a walk-up cash sale on till A, so the node's huella chain already has one link
     // before the cross-till sale — `checkIntegrity` at the end verifies a chain of TWO that spans two
     // DIFFERENT devices, the concrete proof the chain is per-node, not per-device.
-    const walkUp = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, tillA, {
-      id: randomUUID(),
-      zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    const walkUp = await payFreshCounterInCash(
+      { ...deps, admission: testTradingAdmission() },
+      tillA,
+      await paymentOperator(tillA),
+      randomUUID(),
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
+    );
     expect(walkUp.invoiceNumber).toBe("A/1");
 
     // Park an order on till A: café + agua (one VAT group at 21%), labelled for the counter.
@@ -1183,13 +1215,14 @@ describe("cross-till end-to-end", () => {
     // PAY on till B (Sale 2, A/2): file the retrieved order from its STORED locked lines (design §2 —
     // `req.lines` is ignored; `retrieved.lines` is passed only to mirror the real till round-trip). The
     // series is per-node, so till B's sale continues till A's chain — A/1 then A/2.
-    const paid = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, tillB, {
-      id: orderId,
-      // A retrieved order IGNORES req.lines (design §2); these are passed only to mirror the till
-      // round-trip, which sends each retrieved line's offer.
-      lines: retrieved.lines.map((l) => ({ menuItemId: l.menuItemId!, quantity: l.quantity })),
-      tender: { method: "cash", amount: "10.00" },
-    });
+    const paid = await payFreshCounterInCash(
+      { ...deps, admission: testTradingAdmission() },
+      tillB,
+      await paymentOperator(tillB),
+      orderId,
+      { lines: retrieved.lines.map((l) => ({ menuItemId: l.menuItemId!, quantity: l.quantity })) },
+      "10.00",
+    );
     expect(paid.invoiceNumber).toBe("A/2");
     expect(paid.total).toBe("3.50"); // 1.50 café + 2.00 agua, gross (the ticket total, not the net-base list sum)
     expect(paid.qr).not.toBe(""); // a FRESH file (not a replay) carries its verification URL
@@ -1306,10 +1339,12 @@ describe("an order another box opened", () => {
       revision: before.revision + 1,
     });
 
-    const res = await payWorkingOrder(
+    const res = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       here,
-      { id: orderId, lines: [], tender: { method: "cash", amount: "2.00" } },
+      await paymentOperator(here),
+      orderId,
+      "2.00",
     );
     expect(res.total).toBe("1.50");
     expect(res.tender).toEqual({ method: "cash", change: "0.50" });
@@ -1602,15 +1637,13 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     // A SETTLED (walk-up) order — also not placed.
     const settledId = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: settledId,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      settledId,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     await expect(
       cancelPlacedOrder(
@@ -1647,15 +1680,13 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     // A walk-up settles open → settled in one transaction (till-sale.ts), never passing through
     // `placed`, so placing's log never opens. Prepay fires preparation in that same sale transaction.
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -1681,15 +1712,13 @@ describe("prepare & collect — zone payment timing", () => {
       where id = ${collectZone.zoneId}`);
 
     const prepayId = randomUUID();
-    const prepay = await payWorkingOrder(
+    const prepay = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: prepayId,
-        zoneId: prepayZoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      prepayId,
+      { zoneId: prepayZoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "1.50",
     );
     expect(prepay.invoiceNumber).toBe("A/1");
     expect(await orderState(prepayId)).toEqual({ status: "settled", settledAtSet: true });
@@ -1730,21 +1759,19 @@ describe("prepare & collect — zone payment timing", () => {
   });
 
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
-  // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
+  // walk-up and saved bill payments, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.
   it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
-    const res = await payWorkingOrder(
+    const res = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
 
     expect(res.invoiceNumber).toBe("A/1");
@@ -1766,15 +1793,13 @@ describe("prepare & collect — zone payment timing", () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
 
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "1.50",
     );
 
     const abbreviation = { es: "ud" };
@@ -1863,14 +1888,12 @@ describe("prepare & collect — zone payment timing", () => {
       zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "1.50",
     );
     const [sale] = await suite.db
       .select({ id: sales.id })
@@ -1895,14 +1918,12 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
 
-    const paid = await payWorkingOrder(
+    const paid = await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "1.50",
     );
     expect(paid.qr).not.toBe("");
     expect(paid.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
@@ -2344,22 +2365,19 @@ describe("prepare & collect — zone payment timing", () => {
 
 // The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
 
-// `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
+// `ticket_items`. Bill payment (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     expect(await ticketStateOf(id)).toBe("queued");
     const [item] = await ticketItemIdsFor(id);
@@ -2396,16 +2414,13 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem refuses to put a Ready item back to preparing once its order is collected", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const collected = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id: collected,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      collected,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     const [collectedItem] = await ticketItemIdsFor(collected);
     await asVenue((tx) => advanceTicketItem(tx, collectedItem!, "preparing"));
@@ -2439,16 +2454,13 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
       return deviceId;
     });
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       { ...cfg, sendingDeviceId: deviceId },
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator({ ...cfg, sendingDeviceId: deviceId }, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     const [item] = await ticketItemIdsFor(id);
     const { rows } = await suite.db.execute<{ made_here: number }>(sql`
@@ -2715,16 +2727,13 @@ describe("paying a counter order never sent, in a zone that sends before payment
     const printerId = await kitchenPrinter();
     const id = randomUUID();
 
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
 
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -2742,16 +2751,13 @@ describe("paying a counter order never sent, in a zone that sends before payment
     const printerId = await kitchenPrinter();
     const id = randomUUID();
 
-    const ticket = await payWorkingOrder(
+    const ticket = await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "1.50" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "1.50",
     );
 
     expect(ticket.tender).toEqual({ method: "cash", change: "0.00" });
@@ -2775,14 +2781,12 @@ describe("paying a counter order never sent, in a zone that sends before payment
     });
     expect(await ticketItemIdsFor(id)).toEqual([]);
 
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "3.50" },
-      },
+      await paymentOperator(cfg),
+      id,
+      "3.50",
     );
 
     expect(await ticketItemIdsFor(id)).toHaveLength(2);
@@ -2799,21 +2803,22 @@ describe("paying a counter order never sent, in a zone that sends before payment
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
       tender: { method: "cash" as const, amount: "5.00" },
     };
+    const operator = await paymentOperator(cfg, OPERATOR);
+    const pay = () =>
+      payCounterBasket(
+        { admission: testTradingAdmission(), db: suite.db, backend, clock },
+        cfg,
+        operator,
+        id,
+        { zoneId, lines: req.lines },
+        { method: "cash", tendered: req.tender.amount },
+        id,
+      );
 
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      req,
-      OPERATOR,
-    );
+    await pay();
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(1);
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      req,
-      OPERATOR,
-    );
+    await pay();
 
     expect(await ticketItemIdsFor(id)).toEqual(items);
     expect(await kitchenJobCount(printerId)).toBe(1);
@@ -2842,12 +2847,19 @@ describe("paying a counter order never sent, in a zone that sends before payment
         ],
       });
       const req = { id, lines: [], tender: { method: "cash" as const, amount: "5.00" } };
+      const operator = await paymentOperator(cfg);
+      const pay = () =>
+        payCounterBasket(
+          { admission: testTradingAdmission(), db: suite.db, backend, clock },
+          cfg,
+          operator,
+          id,
+          { lines: req.lines },
+          { method: "cash", tendered: req.tender.amount },
+          id,
+        );
 
-      const first = await payWorkingOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-      );
+      const first = await pay();
 
       const sent = [
         { lineNo: 1, lineCourse: starters, itemCourse: starters, fired: true, state: "queued" },
@@ -2863,11 +2875,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
       expect(await linesSent(id)).toEqual([true, true]);
       expect(await kitchenJobCount(printerId)).toBe(1);
 
-      const again = await payWorkingOrder(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        cfg,
-        req,
-      );
+      const again = await pay();
 
       expect(again.invoiceNumber).toBe(first.invoiceNumber);
       expect(await tabSnapshot(id)).toEqual(sent);
@@ -2889,16 +2897,13 @@ describe("markCollected (the counter handover)", () => {
     const id = randomUUID();
 
     // Pay and fire at order (open → settled in one transaction — the Mode-P walk-up).
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
@@ -2959,16 +2964,13 @@ describe("markCollected (the counter handover)", () => {
         { kind: "no_preparation" },
       ),
     );
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     await expect(markCollected({ db: suite.db }, cfg, id)).rejects.toMatchObject({
       code: "ticket.not_fired",
@@ -2980,16 +2982,13 @@ describe("markCollected (the counter handover)", () => {
   it("refuses a re-collect of an already-handed-over order (working_order.already_collected)", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
-    await payWorkingOrder(
+    await payFreshCounterInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }] },
+      "5.00",
     );
     await markCollected({ db: suite.db }, cfg, id); // first handover — allowed
     expect(await collectedAtSet(id)).toBe(true);

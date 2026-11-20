@@ -11,10 +11,8 @@ import { setProfileServiceScope, replaceZoneClosedWeek } from "@waitron/venue-se
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import {
-  payWorkingOrder,
-  payWorkingOrderIntegratedOrchestration,
-} from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
+import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -51,10 +49,14 @@ it.each(["cash", "integrated"] as const)(
     if (method === "cash") {
       expect(
         (
-          await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, {
-            ...request,
-            tender: { method: "cash", amount: "2.00" },
-          })
+          await payFreshCounterInCash(
+            { ...deps, admission: testTradingAdmission() },
+            venue.cfg,
+            venue.operator,
+            id,
+            { lines: request.lines },
+            "2.00",
+          )
         ).total,
       ).toBe("2.00");
     } else {
