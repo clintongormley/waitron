@@ -498,6 +498,116 @@ describe("an advance once the rest's invoice has taken it off", () => {
       ),
     ).toEqual([]);
   });
+
+  /** Opens Correct invoice for the whole of `advanceId` while the table's bill is still open, then
+   * pays the bill's €90 rest; the correction's id and the refusal giving its money back meets. */
+  async function openedBeforeTheRest(billId: string, advanceId: string) {
+    const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+    const refusal = {
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: advanceId,
+        finalSaleId,
+        invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+      },
+    };
+    return { correctionId, refusal };
+  }
+
+  async function nothingGivenBack(advanceId: string, correctionId: string) {
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select().from(sales).where(eq(sales.correctsSaleId, advanceId)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
+      ),
+    ).toEqual([]);
+    const closed = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      { override: supervisor() },
+    );
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    expect(closed.json).toMatchObject({ state: "discarded" });
+  }
+
+  it("refuses the cash of a correction opened on the advance before the rest's invoice took it off, gives nothing back, and the correction can be closed", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const { correctionId, refusal } = await openedBeforeTheRest(billId, advanceId);
+
+    const refused = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "30.00", override: supervisor() },
+    );
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual(refusal);
+    await nothingGivenBack(advanceId, correctionId);
+  });
+
+  it("refuses a card leg of a correction opened on the advance before the rest's invoice took it off, gives nothing back, and the correction can be closed", async () => {
+    const billId = await seated("Tasting menu");
+    const paid = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "30.00",
+        method: "card",
+        entry: "manual",
+        externalRef: `OP-${randomUUID().slice(0, 8)}`,
+        applied: "30.00",
+        tip: "0.00",
+        ownReceipt: true,
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [row] = await inTx(venue(), (tx) =>
+      tx
+        .select({ advanceId: billAdvances.advanceSaleId, tenderId: tenders.id })
+        .from(billAdvances)
+        .innerJoin(tenders, eq(tenders.saleId, billAdvances.advanceSaleId))
+        .where(eq(billAdvances.workingOrderId, billId)),
+    );
+    const { correctionId, refusal } = await openedBeforeTheRest(billId, row!.advanceId);
+
+    const refused = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/transactions/${row!.advanceId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: row!.tenderId,
+        appliedAmount: "30.00",
+        tipAmount: "0.00",
+        reason: "Sent back",
+        manualConfirmed: true,
+        invoiceCorrectionId: correctionId,
+        override: supervisor(),
+      },
+    );
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual(refusal);
+    await nothingGivenBack(row!.advanceId, correctionId);
+  });
 });
 
 describe("what is left of an advance, on the bill's payments", () => {

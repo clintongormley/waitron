@@ -220,7 +220,10 @@ export async function reserveTenderRefund(
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
+  // A correction opened on an advance before the table's invoice took it off can outlive that
+  // invoice; its legs meet the same refusal as opening one would now.
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
+  else await refuseTakenOffAdvance(tx, saleId);
   if (correctionLink === undefined && appliedAmount > 0)
     await refuseAdvanceRefund(tx, saleId, tenderId);
 
