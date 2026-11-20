@@ -263,7 +263,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     },
     kind: "folder",
     reset: "kept",
-    why: "The box certificate survives a plain reset; on a box that joined another, the reset empties it.",
+    why: "The box certificate survives a plain reset; on a box that joined another, the staged reset empties it and a plain reset removes it.",
   },
   {
     name: VENUE_DIR_NAME,
