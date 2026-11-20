@@ -398,6 +398,8 @@ const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   "provisioning.database_ahead": 409,
   "restore.stream_source_live": 409,
   "restore.stream_source_unchecked": 409,
+  // The 503 cloud-api.ts and cloud-locked-start.ts already give this code, not this file's 502.
+  "cloud.unavailable": 503,
 };
 
 /** A kit is short text; this refuses a mistaken paste of something else before it is parsed. */

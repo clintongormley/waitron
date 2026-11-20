@@ -19,6 +19,16 @@ import * as v2 from "./cloud-recovery-v2.js";
 
 const origin = "https://cloud.example.test";
 const unavailable = "Cloud recovery is unavailable. Try again.";
+const cloudUnavailable = { name: "AppError", code: "cloud.unavailable" };
+async function refusedLocally(promise: Promise<unknown>) {
+  const error = await promise.then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toBe(unavailable);
+  expect(error).not.toHaveProperty("code");
+}
 function target(revision = "e".repeat(40)): BackupVerificationTarget {
   const value = {
     runtime: { release: "2026.10.20", revision, fingerprint: "f".repeat(64) },
@@ -294,7 +304,9 @@ describe("target-bound snapshot recovery v2", () => {
     async (version) => {
       const f = await fixture();
       f.rewrite = (_action, result) => ({ ...result, version });
-      await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
+      await expect(createCloudRecoveryClient(f.options).start()).rejects.toMatchObject(
+        cloudUnavailable,
+      );
       expect(f.calls).toHaveLength(1);
       expect((await f.saved()).version).toBe(2);
     },
@@ -316,11 +328,11 @@ describe("target-bound snapshot recovery v2", () => {
         await client.restore(async () => {}, point.id);
         const s = await f.saved();
         await client.markRestored({ requestId: String(s.requestId), pointId: point.id });
-        await expect(client.reportRestored()).rejects.toThrow(unavailable);
+        await expect(client.reportRestored()).rejects.toMatchObject(cloudUnavailable);
         expect((await f.saved()).phase).toBe("restored");
       } else {
         const stage = vi.fn(async () => {});
-        await expect(client.restore(stage, point.id)).rejects.toThrow(unavailable);
+        await expect(client.restore(stage, point.id)).rejects.toMatchObject(cloudUnavailable);
         expect(stage).not.toHaveBeenCalled();
       }
     },
@@ -361,7 +373,9 @@ describe("target-bound snapshot recovery v2", () => {
       }
       return result;
     };
-    await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(unavailable);
+    await expect(createCloudRecoveryClient(f.options).status()).rejects.toMatchObject(
+      cloudUnavailable,
+    );
     expect((await f.saved()).pointId).toBeUndefined();
     expect(f.options.download).not.toHaveBeenCalled();
   });
@@ -379,7 +393,7 @@ describe("target-bound snapshot recovery v2", () => {
         return result;
       };
       const stage = vi.fn(async () => {});
-      await expect(client.restore(stage, point.id)).rejects.toThrow(unavailable);
+      await expect(client.restore(stage, point.id)).rejects.toMatchObject(cloudUnavailable);
       expect(stage).not.toHaveBeenCalled();
     },
   );
@@ -401,7 +415,7 @@ describe("target-bound snapshot recovery v2", () => {
           await writeFile(path, "archive");
         });
       const stage = vi.fn(async () => {});
-      await expect(client.restore(stage, point.id)).rejects.toThrow(unavailable);
+      await refusedLocally(client.restore(stage, point.id));
       expect(stage).not.toHaveBeenCalled();
       expect((await f.saved()).target).toEqual(target());
     },
@@ -415,7 +429,7 @@ describe("target-bound snapshot recovery v2", () => {
       action === "info"
         ? { ...result, verification: { ...verification(), requestDigest: "2".repeat(64) } }
         : result;
-    await expect(client.status()).rejects.toThrow(unavailable);
+    await expect(client.status()).rejects.toMatchObject(cloudUnavailable);
     expect((await f.saved()).snapshotVerification).toEqual(verification());
   });
   it("does not qualify old v1 state or silently send v1 proofs for a saved v2 request", async () => {
@@ -432,19 +446,19 @@ describe("target-bound snapshot recovery v2", () => {
     }).start();
     f.calls.length = 0;
     expect(await v2.readSavedSnapshotRecoveryTarget(f.stateDir)).toBeNull();
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
+    await refusedLocally(createCloudRecoveryClient(f.options).start());
     expect(f.calls).toEqual([]);
     await rm(join(f.stateDir, "cloud/recovery.json"));
     f.rewrite = (_action, result) => result;
     await createCloudRecoveryClient(f.options).start();
     f.calls.length = 0;
-    await expect(
+    await refusedLocally(
       createCloudRecoveryClient({
         ...f.options,
         snapshotProtocol: undefined,
         target: undefined,
       }).status(),
-    ).rejects.toThrow(unavailable);
+    );
     expect(f.calls).toEqual([]);
   });
   it.each(["extra", "protocol", "digest", "key", "phase", "point", "permissions", "size"])(
@@ -476,9 +490,9 @@ describe("target-bound snapshot recovery v2", () => {
       { ...f.options, snapshotProtocol: undefined },
       { ...f.options, target: () => ({ ...target(), digest: "0".repeat(64) }) },
     ])
-      await expect(
+      await refusedLocally(
         Promise.resolve().then(() => createCloudRecoveryClient(options).start()),
-      ).rejects.toThrow(unavailable);
+      );
     expect(f.calls).toEqual([]);
     await expect(readFile(join(f.stateDir, "cloud/recovery.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -507,7 +521,9 @@ describe("target-bound snapshot recovery v2", () => {
           ',"state":"awaiting_owner","operationId":null,"expiresAt":"2099-01-01T00:00:00.000Z"}',
       );
     }) as typeof fetch;
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
+    await expect(createCloudRecoveryClient(f.options).start()).rejects.toMatchObject(
+      cloudUnavailable,
+    );
   });
   it.each(["duplicate", "downgrade"])("refuses %s saved protocol keys", async (fault) => {
     const f = await fixture();
@@ -570,7 +586,9 @@ describe("target-bound snapshot recovery v2", () => {
     const f = await fixture();
     await createCloudRecoveryClient(f.options).start();
     f.rewrite = (_action, result) => ({ ...result, padding: "x".repeat(65536) });
-    await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(unavailable);
+    await expect(createCloudRecoveryClient(f.options).status()).rejects.toMatchObject(
+      cloudUnavailable,
+    );
   });
   it("preserves v1 request and completion proof bytes without target fields", async () => {
     const f = await fixture();
@@ -657,7 +675,9 @@ describe("target-bound snapshot recovery v2", () => {
           verification: v,
         };
       };
-      await expect(createCloudRecoveryClient(f.options).status()).rejects.toThrow(unavailable);
+      await expect(createCloudRecoveryClient(f.options).status()).rejects.toMatchObject(
+        cloudUnavailable,
+      );
     },
   );
   it.each([
@@ -713,7 +733,7 @@ describe("target-bound snapshot recovery v2", () => {
     await client.start();
     f.calls.length = 0;
     f.changeTarget();
-    await expect(client.status()).rejects.toThrow(unavailable);
+    await refusedLocally(client.status());
     expect(f.calls).toEqual([]);
   });
   it("refuses a target that cannot fit its saved approval before creating a request", async () => {
@@ -730,7 +750,7 @@ describe("target-bound snapshot recovery v2", () => {
     }));
     Object.assign(t, backupVerificationTargetDigests(t));
     f.options.target = () => t;
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
+    await refusedLocally(createCloudRecoveryClient(f.options).start());
     expect(f.calls).toEqual([]);
     await expect(readFile(join(f.stateDir, "cloud/recovery.json"))).rejects.toMatchObject({
       code: "ENOENT",
@@ -739,7 +759,7 @@ describe("target-bound snapshot recovery v2", () => {
   it("keeps private state bounded when a permitted-size response would overflow it", async () => {
     const f = await fixture();
     f.rewrite = (_action, result) => ({ ...result, expiresAt: "2099-01-01" + " ".repeat(65000) });
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
+    await refusedLocally(createCloudRecoveryClient(f.options).start());
     const saved = await f.saved();
     expect(saved.expiresAt).toBeUndefined();
     expect((await stat(join(f.stateDir, "cloud/recovery.json"))).size).toBeLessThanOrEqual(65536);
@@ -847,7 +867,7 @@ it.each([
     const result = createCloudRecoveryClient(f.options).start();
     if (accepted) expect((await result).state).toBe("awaiting_owner");
     else {
-      await expect(result).rejects.toThrow("Cloud recovery is unavailable. Try again.");
+      await expect(result).rejects.toMatchObject(cloudUnavailable);
       expect(cancelled, "the HTTP cap must cancel before the strict JSON parser runs").toBe(true);
     }
   },
