@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -8,6 +8,7 @@ import {
   billPaymentRefunds,
   invoiceSeries,
   parties,
+  saleLines,
   sales,
   tenderRefunds,
   tenders,
@@ -621,7 +622,38 @@ describe("a card for the rest while the advance has a correction open", () => {
     expect(lines.map((line) => line.name).sort()).toEqual(["Side dish", "Tasting menu"]);
   });
 
-  it("captured before the correction was opened, is kept on recovery and the rest's invoice waits", async () => {
+  /** Sends `path` on the correction `correctionId` with a supervisor's PIN; the route's answer. */
+  async function endCorrection(
+    correctionId: string,
+    path: "close" | "file" | "cash",
+    body: Record<string, unknown> = {},
+  ): Promise<Answer> {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/${path}`,
+      { ...body, override: supervisor() },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    return answer;
+  }
+
+  /** The bill is settled, and its rest's invoice takes `cents` off for the advance `advanceId`. */
+  async function takesOff(billId: string, advanceId: string, cents: number): Promise<void> {
+    const rest = await restOf(billId);
+    expect(rest).toBeDefined();
+    const deductions = await inTx(venue, (tx) =>
+      tx
+        .select({ deductsSaleId: saleLines.deductsSaleId, lineGross: saleLines.lineGross })
+        .from(saleLines)
+        .where(and(eq(saleLines.saleId, rest!.id), eq(saleLines.advanceRole, "deduction"))),
+    );
+    expect(deductions).toEqual([{ deductsSaleId: advanceId, lineGross: cents }]);
+    expect(await statusOf(billId)).toBe("settled");
+  }
+
+  it("captured before the correction was opened, is kept on recovery, and Discard then issues the rest's invoice taking the whole €30 off", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advanceOf(
       bill.billId,
@@ -629,7 +661,7 @@ describe("a card for the rest while the advance has a correction open", () => {
     );
     venue.card.crashNextCollect("captured");
     expect((await readerCard(bill.billId, "90.00")).status).toBe(500);
-    await openWhole(advanceId);
+    const correctionId = await openWhole(advanceId);
 
     await settle();
 
@@ -639,5 +671,63 @@ describe("a card for the rest while the advance has a correction open", () => {
     ]);
     expect(await restOf(bill.billId)).toBeUndefined();
     expect(await statusOf(bill.billId)).toBe("open");
+
+    expect((await endCorrection(correctionId, "close")).json).toMatchObject({
+      state: "discarded",
+    });
+
+    await takesOff(bill.billId, advanceId, -3000);
+  });
+
+  it("started before the correction was opened, is taken with no invoice, which Discard then issues taking the whole €30 off", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const paying = readerCard(bill.billId, "90.00");
+    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+    const correctionId = await openWhole(advanceId);
+    release();
+
+    expect((await paying).status).toBe(200);
+    expect(await restOf(bill.billId)).toBeUndefined();
+
+    expect((await endCorrection(correctionId, "close")).json).toMatchObject({
+      state: "discarded",
+    });
+
+    await takesOff(bill.billId, advanceId, -3000);
+  });
+
+  it("started before the correction was opened, and €10 of the advance filed back: the rest's invoice takes off only €20 once the €10 owed is paid", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advanceOf(
+      bill.billId,
+      await cash(bill.billId, "30.00", { ownReceipt: true }),
+    );
+    const release = venue.card.holdNextCollect();
+    const calls = venue.card.collectCalls.length;
+    const paying = readerCard(bill.billId, "90.00");
+    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+    const correctionId = await openWhole(advanceId);
+    release();
+    expect((await paying).status).toBe(200);
+    const gaveBack = await endCorrection(correctionId, "cash", {
+      submissionId: randomUUID(),
+      amount: "10.00",
+    });
+    expect(gaveBack.status, JSON.stringify(gaveBack.json)).toBe(200);
+
+    const filed = await endCorrection(correctionId, "file", {
+      expectedSplit: [{ rate: "10.00", base: "9.09", tax: "0.91" }],
+    });
+
+    expect(filed.json).toMatchObject({ state: "filed" });
+    expect(await restOf(bill.billId)).toBeUndefined();
+    expect((await cash(bill.billId, "10.00")).status).toBe(200);
+    await takesOff(bill.billId, advanceId, -2000);
   });
 });

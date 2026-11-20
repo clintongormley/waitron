@@ -176,8 +176,10 @@ async function payFor(id: string, parts: readonly (string | { card: string })[],
 }
 
 const deps = (clock: TrustedClock = venue.clock) => ({
+  db: venue.db,
   backend: venue.backend,
   clock,
+  admission: testTradingAdmission(),
   attendance: recordAttendanceFact,
 });
 const actor = () => ({

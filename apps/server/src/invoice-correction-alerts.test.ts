@@ -31,6 +31,7 @@ import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
 import { refundSettledTender } from "./tender-refunds.js";
 import { inTx } from "./testing/bill-venue.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
@@ -65,7 +66,13 @@ function at(minutes: number) {
   v.set(new Date(start + minutes * 60_000).toISOString());
 }
 
-const deps = () => ({ backend: v.backend, clock: v.deps.clock, attendance: recordAttendanceFact });
+const deps = () => ({
+  db: v.db,
+  backend: v.backend,
+  clock: v.deps.clock,
+  admission: testTradingAdmission(),
+  attendance: recordAttendanceFact,
+});
 
 /** A €24.20 ticket paid in cash, its €20.00 correction opened and €15.00 of it given back in cash
  * now. */

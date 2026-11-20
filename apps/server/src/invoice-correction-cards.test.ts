@@ -24,6 +24,7 @@ import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
 import { refundSettledTender } from "./tender-refunds.js";
 import { inTx } from "./testing/bill-venue.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
@@ -48,7 +49,13 @@ afterEach(async () => {
   await stopTenderRefundResolvers(v.db);
 });
 
-const deps = () => ({ backend: v.backend, clock: v.deps.clock, attendance: recordAttendanceFact });
+const deps = () => ({
+  db: v.db,
+  backend: v.backend,
+  clock: v.deps.clock,
+  admission: testTradingAdmission(),
+  attendance: recordAttendanceFact,
+});
 const rectify = { authorizedBy: "", permission: "sale.rectify", viaOverride: false };
 
 /** A €24.20 ticket paid €14.20 in cash, then €10.00 on the reader; its sale and card payment. */

@@ -418,7 +418,10 @@ stops and reports to you rather than editing the test.
    carries therefore has no way back through the till.
    A correction of an advance still open holds the table's invoice back
    (`advance.correction_open`, `refuseWhileAdvanceCorrectionOpen` in `bill-advances.ts`), so it
-   cannot file a credit note after that invoice took the advance off.
+   cannot file a credit note after that invoice took the advance off. A reader payment started
+   before the correction keeps its money with no invoice; when the correction is filed, closed or
+   discarded, the table's invoice is issued if the bill is then paid off (`issueAdvanceBill` in
+   `invoice-corrections.ts`; tested with Discard).
 
 Your 21:00 answers settled the last three earlier questions: the rest's invoice lists the dishes
 and takes the advance off by its number and amount (example 1); the till's "own receipt" for an

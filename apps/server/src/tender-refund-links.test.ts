@@ -747,7 +747,13 @@ describe("a correction's leg", () => {
     const { correction } = await inTx(venue, (tx) =>
       openInvoiceCorrection(
         tx,
-        { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact },
+        {
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          admission: testTradingAdmission(),
+          attendance: recordAttendanceFact,
+        },
         venue.cfg,
         saleId,
         parseInvoiceCorrection({

@@ -103,9 +103,12 @@ equals the meal, has no way back through the till. So that a correction opened b
 invoice cannot file a credit note after it, the table's invoice is held back while a correction of
 one of its advances is open: the payment that pays the bill off (refused before any card reader is
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
-it paid are refused with `advance.correction_open`; a card payment captured before the correction
-was opened keeps its money and the invoice is not issued; the close of the business day answers the
-bill as it answers a payment still moving (`money_moving`) and issues nothing.
+it paid are refused with `advance.correction_open`; a reader payment started before the correction
+was opened keeps its money and issues no invoice; when the correction is filed, closed or
+discarded, the table's invoice is issued if the bill is then paid off (tested with Discard, which
+takes the whole advance off);
+the close of the business day answers the bill as it answers a payment still moving (`money_moving`)
+and issues nothing.
 
 To build: an advance as a full invoice (the advances plan's piece 1b), and an advance paid before the
 day, such as a company's €1,000 for its staff dinner, where staff record the transfer against the

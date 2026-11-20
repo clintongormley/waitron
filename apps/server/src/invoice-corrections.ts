@@ -10,6 +10,7 @@ import {
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
+  billAdvances,
   invoiceCorrections,
   invoiceSeries,
   readLiveSeriesIdTx,
@@ -57,6 +58,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { saleScopeInZones } from "./find-bill-transactions.js";
 import { refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { issueIfFullyPaid } from "./bill-payments.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -99,7 +101,10 @@ export interface InvoiceCorrectionView {
     | null;
 }
 
-export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
+export type InvoiceCorrectionDeps = Pick<
+  TenderRefundDeps,
+  "db" | "backend" | "clock" | "admission" | "attendance" | "log"
+>;
 
 const ZERO = decimal("0.00");
 
@@ -399,6 +404,7 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  await issueAdvanceBill(tx, deps, cfg, saleId, endedBy);
   if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
       if (!(await deviceMayPrintReceipts(tx, cfg.origin.deviceId))) return;
@@ -474,7 +480,30 @@ export async function closeInvoiceCorrection(
     .returning({ id: invoiceCorrections.id });
   if (ended.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  await issueAdvanceBill(tx, deps, cfg, correction.originalSaleId, actor.personId);
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/**
+ * When `saleId` is an advance, issues its bill's invoice if the bill is paid off: a payment taken
+ * while the advance's correction was open issued none (`advance.correction_open`), and its money
+ * has already moved.
+ */
+async function issueAdvanceBill(
+  tx: Transaction,
+  deps: InvoiceCorrectionDeps,
+  cfg: DeviceRequestConfig,
+  saleId: string,
+  operatorId: string | null,
+): Promise<void> {
+  const [advance] = await tx
+    .select({ workingOrderId: billAdvances.workingOrderId })
+    .from(billAdvances)
+    .where(eq(billAdvances.advanceSaleId, saleId));
+  if (advance === undefined) return;
+  await issueIfFullyPaid(tx, deps, cfg, advance.workingOrderId, operatorId ?? undefined, {
+    moneyMoved: true,
+  });
 }
 
 /** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`
