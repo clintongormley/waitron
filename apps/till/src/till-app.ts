@@ -459,7 +459,7 @@ import { EquipmentPoll } from "./state/equipment-poll.js";
 import {
   checkTimeOffered,
   nextNotices,
-  waitingStartIn,
+  pausingNotice,
   waitingStartNotice,
 } from "./state/staff-notices.js";
 import "./widgets/box-time-dialog.js";
@@ -4237,9 +4237,9 @@ export class TillApp extends LitElement {
   @state() private drawerOpening = false;
   @state() private boxTimeOpen = false;
   @state() private paymentsPausedOpen = false;
-  /** Only while the latest read carried the waiting notice: a notice kept for display while its
-   * source is unavailable may be out of date, and the server still refuses a payment that must
-   * wait (`apps/server/src/clock-unconfirmed-gate.test.ts`). */
+  /** Only while the latest read carried a notice that pauses payments: a notice kept for display
+   * while its source is unavailable may be out of date, and the server refuses such a payment
+   * itself. */
   #paymentsWait = false;
   /** Numbers each equipment read when sent, so a slower earlier read cannot replace the notices a
    * later one brought. */
@@ -8174,7 +8174,7 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** True, after opening the dialog that says why, while payments wait for the box's time. */
+  /** True, after opening the dialog that says why, while a notice pauses payments. */
   #paymentsPaused(): boolean {
     if (!this.#paymentsWait) return false;
     this.paymentsPausedOpen = true;
@@ -11740,8 +11740,8 @@ export class TillApp extends LitElement {
       this.#noticeReadApplied = sent;
       this.staffNotices = nextNotices(this.staffNotices, read);
       this.checkTimeOffered = checkTimeOffered(read, this.checkTimeOffered);
-      this.#paymentsWait = waitingStartNotice(undefined, read) !== undefined;
-      if (waitingStartIn(this.staffNotices) === undefined) this.paymentsPausedOpen = false;
+      this.#paymentsWait = pausingNotice(nextNotices([], read)) !== undefined;
+      if (pausingNotice(this.staffNotices) === undefined) this.paymentsPausedOpen = false;
     }
     return read;
   }
@@ -22130,8 +22130,8 @@ export class TillApp extends LitElement {
   }
 
   /** The bill payment dialog on the bill on screen, unless one is open already; the balance last
-   * read shows at once and is read again. While payments wait for the box's time it opens only to
-   * show a payment already sent, or for a refund. */
+   * read shows at once and is read again. While payments are paused it opens only to show a
+   * payment already sent, or for a refund. */
   async #openBillPaying(
     way: PayWay,
     lines: PayLine[],
@@ -24072,7 +24072,7 @@ export class TillApp extends LitElement {
   }
 
   #renderPaymentsPaused() {
-    const notice = waitingStartIn(this.staffNotices);
+    const notice = pausingNotice(this.staffNotices);
     if (!this.paymentsPausedOpen || notice === undefined) return nothing;
     return html`<till-payments-paused-dialog
       .notice=${notice}

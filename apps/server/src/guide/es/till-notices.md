@@ -62,9 +62,10 @@ así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
 que alguien compruebe la hora. · Comprobar la hora** es rojo. Que los dispositivos coincidan con el
 servidor no vuelve a activar los cobros: usa **Comprobar la hora**.
 
-Mientras los cobros esperan, un botón que empieza un cobro abre **Los cobros están en pausa** en su
-lugar, que explica el motivo; el pedido sigue abierto. Usa ahí **Comprobar la hora** cuando
-aparezca, o pulsa **Cerrar** y cobra cuando desaparezca la línea roja.
+Mientras los cobros esperan, o mientras la hora del servidor es incorrecta o su disco está lleno,
+un botón que empieza un cobro abre **Los cobros están en pausa** en su lugar, que explica el
+motivo; el pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
+y cobra cuando desaparezca la línea roja.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Consulta Estado del servidor en el panel**,
 significa que la hora del servidor está en duda y el servidor no ha podido confirmarla por sí

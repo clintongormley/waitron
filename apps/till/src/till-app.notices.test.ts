@@ -39,6 +39,7 @@ import {
 import { en, es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { staffNoticeText } from "./i18n/staff-notices.js";
 
 const notice = (key: string): StaffNotice => ({
   owner: "box",
@@ -729,7 +730,7 @@ const lunch = {
   allergens: null,
 };
 
-describe("a payment started while payments wait for the time", () => {
+describe("a payment started while a notice pauses payments", () => {
   beforeEach(resetBillPayDrafts);
   afterEach(() => {
     vi.useRealTimers();
@@ -898,27 +899,85 @@ describe("a payment started while payments wait for the time", () => {
     expect(pausedDialog(el)!.shadowRoot!.querySelector("[data-close]")).not.toBeNull();
   });
 
-  it("closes once a later read no longer carries the waiting notice", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const { el, getDeviceEquipment, pay } = await atCounter([UNCONFIRMED]);
-    await pay();
-    expect(pausedDialog(el)).not.toBeNull();
-    getDeviceEquipment.mockResolvedValue(withNotices([]));
-    await poll(el);
-    expect(pausedDialog(el)).toBeNull();
-  });
+  it.each([UNCONFIRMED, CLOCK, DISK])(
+    "closes once a later read no longer carries %j",
+    async (notice) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const { el, getDeviceEquipment, pay } = await atCounter([notice]);
+      await pay();
+      expect(pausedDialog(el)).not.toBeNull();
+      getDeviceEquipment.mockResolvedValue(withNotices([]));
+      await poll(el);
+      expect(pausedDialog(el)).toBeNull();
+    },
+  );
 
-  it("lets Pay go ahead once a read names the box's clock unavailable, still showing the waiting line", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const { el, api, getDeviceEquipment, pay } = await atCounter([UNCONFIRMED]);
-    getDeviceEquipment.mockResolvedValue({
-      ...withNotices([]),
-      noticesUnavailable: ["box-clock"],
-    });
-    await poll(el);
-    expect(seen(el).staffNotices).toContainEqual(UNCONFIRMED);
-    await pay();
-    expect(api.parkOrder).toHaveBeenCalledOnce();
+  it.each([UNCONFIRMED, CLOCK, DISK])(
+    "lets Pay go ahead once a read names the source of %j unavailable, still showing its line",
+    async (notice) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const { el, api, getDeviceEquipment, pay } = await atCounter([notice]);
+      getDeviceEquipment.mockResolvedValue({
+        ...withNotices([]),
+        noticesUnavailable: [notice.owner],
+      });
+      await poll(el);
+      expect(seen(el).staffNotices).toContainEqual(notice);
+      await pay();
+      expect(api.parkOrder).toHaveBeenCalledOnce();
+      expect(pausedDialog(el)).toBeNull();
+    },
+  );
+
+  const CHECK_TIME_MARKER: StaffNotice = {
+    owner: "box-clock",
+    key: "clock.check_time",
+    code: "clock.check_time",
+    severity: "error",
+    params: {},
+  };
+
+  it.each([
+    [[CLOCK], CLOCK, false, false],
+    [[CHECK_TIME_MARKER, CLOCK], CLOCK, true, false],
+    [[CLOCK, UNCONFIRMED], CLOCK, true, false],
+    [[DISK], DISK, false, true],
+    [[DISK, UNCONFIRMED], DISK, false, true],
+  ] as const)(
+    "a collecting counter's Cash button (notices %j) opens the paused dialog with the first one's sentence",
+    async (notices, shown, checkTime, hint) => {
+      const { el, api, tender } = await atCounter([...notices], "collect");
+      tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flushApp(el);
+      await tender.updateComplete;
+      expect(tender.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+      expect(billPayDialog(el)).toBeNull();
+      expect(pausedWords(el)).toContain(en["payments_paused.title"]);
+      expect(pausedWords(el)).toContain(staffNoticeText(shown).main);
+      expect(pausedWords(el)).toContain(en["payments_paused.order_open"]);
+      const lines = [...pausedDialog(el)!.shadowRoot!.querySelectorAll("p")].map((p) =>
+        p.textContent!.trim(),
+      );
+      expect(lines).toEqual([
+        staffNoticeText(shown).main,
+        ...(hint ? [en["staff_notice.tell_manager"]] : []),
+        en["payments_paused.order_open"],
+      ]);
+      expect(pausedDialog(el)!.shadowRoot!.querySelector("[data-check-time]") !== null).toBe(
+        checkTime,
+      );
+      for (const send of [api.pay, api.collectOrder, api.recordSale, api.takeBillPayment])
+        expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  // The commit that added this case says why the marker alone is left out.
+  it("a collecting counter's Cash button with the check-the-time marker alone still opens amount entry", async () => {
+    const { el, tender } = await atCounter([CHECK_TIME_MARKER], "collect");
+    tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    await flushApp(el);
+    await tender.updateComplete;
+    expect(tender.shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
     expect(pausedDialog(el)).toBeNull();
   });
 

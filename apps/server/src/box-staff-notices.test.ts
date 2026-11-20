@@ -12,6 +12,9 @@ import {
   devicePrinterNoticeSources,
   printerStaffNoticeSource,
 } from "./box-staff-notices.js";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { createDiskFullState } from "./disk-full-state.js";
+import type { Statfs } from "./free-bytes.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
 import type { PrinterInTrouble } from "./print-job-trouble.js";
 import { ALL_MODULES } from "./modules.js";
@@ -37,11 +40,14 @@ const SPACE_LOW = {
   params: {},
 };
 
-function read(since: Date | null, reading: FreeSpaceReading) {
-  return boxStaffNoticeSource({
-    disk: { since: () => since },
+/** `full` stands in for the payment paths' fresh look at the disk; by default the disk is still
+ * full while the stop is noted. */
+async function read(since: Date | null, reading: FreeSpaceReading, full = since !== null) {
+  const source = await boxStaffNoticeSource({
+    disk: { since: () => since, full: () => Promise.resolve(full) },
     space: { current: () => reading },
-  }).read(CTX);
+  });
+  return source.read(CTX);
 }
 
 const OFF: FreeSpaceReading = { freeBytes: 10 * 1024 ** 3, readAt: AT, lowSince: null };
@@ -70,6 +76,72 @@ describe("boxStaffNoticeSource", () => {
 
   it("answers nothing before the first reading", async () => {
     expect(await read(null, { freeBytes: null, readAt: null, lowSince: null })).toEqual([]);
+  });
+
+  it("answers no full-disk notice while the stop is noted but the payment paths' look finds space back", async () => {
+    expect(await read(AT, OFF, false)).toEqual([]);
+    expect(await read(AT, ON, false)).toEqual([SPACE_LOW]);
+  });
+
+  it("does not look at the disk while no stop is noted", async () => {
+    const full = vi.fn(() => Promise.resolve(true));
+    const source = await boxStaffNoticeSource({
+      disk: { since: () => null, full },
+      space: { current: () => OFF },
+    });
+    expect(await source.read(CTX)).toEqual([]);
+    expect(full).not.toHaveBeenCalled();
+  });
+
+  it("fails its read, not its making, when the look at the disk fails", async () => {
+    const source = boxStaffNoticeSource({
+      disk: { since: () => AT, full: () => Promise.reject(new Error("EIO")) },
+      space: { current: () => ON },
+    });
+    await expect((await source).read(CTX)).rejects.toThrow("EIO");
+  });
+
+  it("looks at the disk when made, and answers what it found then", async () => {
+    let full = true;
+    const look = vi.fn(() => Promise.resolve(full));
+    const source = await boxStaffNoticeSource({
+      disk: { since: () => AT, full: look },
+      space: { current: () => OFF },
+    });
+    expect(look).toHaveBeenCalledOnce();
+    full = false;
+    expect(await source.read(CTX)).toEqual([DISK_FULL]);
+    expect(look).toHaveBeenCalledOnce();
+  });
+
+  describe("with the real stop", () => {
+    function noted(statfs: Statfs) {
+      const disk = createDiskFullState({ dir: "/venue", now: () => AT, log: () => {}, statfs });
+      disk.noteRefused();
+      return disk;
+    }
+    const readOn = async (disk: ReturnType<typeof noted>) =>
+      (await boxStaffNoticeSource({ disk, space: { current: () => OFF } })).read(CTX);
+
+    it("answers the full-disk notice while the disk is still full", async () => {
+      const disk = noted(async () => ({ bavail: FULL_DISK_BYTES - 1, frsize: 1 }));
+      expect(await readOn(disk)).toEqual([DISK_FULL]);
+      expect(disk.since()).toEqual(AT);
+    });
+
+    it("answers the full-disk notice while the disk cannot be read", async () => {
+      const disk = noted(async () => {
+        throw new Error("EIO");
+      });
+      expect(await readOn(disk)).toEqual([DISK_FULL]);
+      expect(disk.since()).toEqual(AT);
+    });
+
+    it("answers nothing, and clears the stop, once space is back", async () => {
+      const disk = noted(async () => ({ bavail: FULL_DISK_BYTES, frsize: 1 }));
+      expect(await readOn(disk)).toEqual([]);
+      expect(disk.since()).toBeNull();
+    });
   });
 });
 
@@ -130,14 +202,14 @@ describe("the till's clock check", () => {
   it("is given the waiting count and why the box waits by the device sources", async () => {
     const sources = deviceNoticeSources(
       {
-        disk: { since: () => null },
+        disk: { since: () => null, full: () => Promise.resolve(false) },
         space: { current: () => OFF },
         clockCheck: async () => true,
         startClockWaits: () => ({ agreed: 0, cause: "clock_jumped" }),
       },
       [],
     );
-    const read = await readStaffNotices(SAVEPOINTS, sources, {
+    const read = await readStaffNotices(SAVEPOINTS, await sources(), {
       reading: CTX.reading,
       log: () => {},
     });
@@ -156,18 +228,23 @@ describe("the till's clock check", () => {
     expect(await clockCheckNoticeSource(async () => false).read(CTX)).toEqual([]);
   });
 
-  it("is a device source only when a check is given, after the box's own", () => {
-    const box = { disk: { since: () => null }, space: { current: () => OFF } };
-    expect(deviceNoticeSources(box, []).map((entry) => entry.owner)).toEqual([BOX_NOTICE_OWNER]);
-    expect(
-      deviceNoticeSources({ ...box, clockCheck: async () => true }, []).map((entry) => entry.owner),
-    ).toEqual([BOX_NOTICE_OWNER, BOX_CLOCK_NOTICE_OWNER]);
+  it("is a device source only when a check is given, after the box's own", async () => {
+    const box = {
+      disk: { since: () => null, full: () => Promise.resolve(false) },
+      space: { current: () => OFF },
+    };
+    const owners = async (sources: ReturnType<typeof deviceNoticeSources>) =>
+      (await sources()).map((entry) => entry.owner);
+    expect(await owners(deviceNoticeSources(box, []))).toEqual([BOX_NOTICE_OWNER]);
+    expect(await owners(deviceNoticeSources({ ...box, clockCheck: async () => true }, []))).toEqual(
+      [BOX_NOTICE_OWNER, BOX_CLOCK_NOTICE_OWNER],
+    );
   });
 
   it("keeps the storage notices when the check's read fails", async () => {
     const sources = deviceNoticeSources(
       {
-        disk: { since: () => AT },
+        disk: { since: () => AT, full: () => Promise.resolve(true) },
         space: { current: () => OFF },
         clockCheck: async () => {
           throw new Error("database is locked");
@@ -175,7 +252,7 @@ describe("the till's clock check", () => {
       },
       [],
     );
-    const read = await readStaffNotices(SAVEPOINTS, sources, {
+    const read = await readStaffNotices(SAVEPOINTS, await sources(), {
       reading: CTX.reading,
       log: () => {},
     });
@@ -185,10 +262,14 @@ describe("the till's clock check", () => {
 
   it("is read beside the storage notices", async () => {
     const sources = deviceNoticeSources(
-      { disk: { since: () => null }, space: { current: () => ON }, clockCheck: async () => true },
+      {
+        disk: { since: () => null, full: () => Promise.resolve(false) },
+        space: { current: () => ON },
+        clockCheck: async () => true,
+      },
       [],
     );
-    const read = await readStaffNotices(SAVEPOINTS, sources, {
+    const read = await readStaffNotices(SAVEPOINTS, await sources(), {
       reading: CTX.reading,
       log: () => {},
     });

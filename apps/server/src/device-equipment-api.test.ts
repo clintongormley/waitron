@@ -1477,7 +1477,7 @@ describe("GET /api/device/equipment's notices", () => {
   });
 
   function noticeApp(
-    sources: readonly OwnedStaffNoticeSource[],
+    sources: readonly OwnedStaffNoticeSource[] | (() => Promise<readonly OwnedStaffNoticeSource[]>),
     over: Partial<NonNullable<DeviceApiDeps["notices"]>> = {},
     log: Logger = quiet,
   ): Hono {
@@ -1490,7 +1490,7 @@ describe("GET /api/device/equipment's notices", () => {
         secureCookies: false,
         pairingMode: createPairingMode(),
         notices: {
-          sources,
+          sources: typeof sources === "function" ? sources : () => sources,
           clock: { now: () => ({ ...READING, confident: true }) as never },
           filing: () => ({ enabled: false }),
           ...over,
@@ -1516,6 +1516,7 @@ describe("GET /api/device/equipment's notices", () => {
       dir: mkdtempSync(join(tmpdir(), "equipment-notices-")),
       now: () => new Date(),
       log: quiet,
+      statfs: async () => ({ bavail: 0, frsize: 4096 }),
     });
     disk.noteRefused();
     return disk;
@@ -1597,7 +1598,7 @@ describe("GET /api/device/equipment's notices", () => {
   });
 
   it("the box's real source: red while the stop is noted", async () => {
-    const box = boxStaffNoticeSource({
+    const box = await boxStaffNoticeSource({
       disk: diskFull(),
       space: createFreeSpaceState({ log: quiet }),
     });
@@ -1938,6 +1939,39 @@ describe("GET /api/device/equipment's notices", () => {
     await expectWriteRunsWhileHostHeld(suite.db, held, clockServiceAnswer(true));
     expect((await body).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
       { key: "clock.device_wrong", owner: DEVICE_CLOCK_NOTICE_OWNER },
+    ]);
+  });
+
+  it("a noted full-disk stop reads the disk without holding the write lock", async () => {
+    let markAsked!: () => void;
+    const asked = new Promise<void>((resolve) => (markAsked = resolve));
+    let answer!: (full: boolean) => void;
+    const answered = new Promise<boolean>((resolve) => (answer = resolve));
+    const disk = {
+      since: () => READING.instant,
+      full: () => {
+        markAsked();
+        return answered;
+      },
+    };
+    const app = noticeApp(
+      deviceNoticeSources({ disk, space: createFreeSpaceState({ log: quiet }) }, []),
+    );
+    const body = read(app);
+    const events: string[] = [];
+    await asked;
+    const write = suite.db.withWriteLock(() => {
+      events.push("wrote");
+      return Promise.resolve();
+    });
+    // A free lock runs the write in this turn's microtasks; one held by the read cannot.
+    await new Promise((resolve) => setImmediate(resolve));
+    events.push("disk answered");
+    answer(true);
+    await write;
+    expect(events).toEqual(["wrote", "disk answered"]);
+    expect((await body).notices.map(({ key, owner }) => ({ key, owner }))).toEqual([
+      { key: "storage.disk_full", owner: "box" },
     ]);
   });
 

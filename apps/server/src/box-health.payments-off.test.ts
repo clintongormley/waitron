@@ -20,7 +20,7 @@ function stubReaders(paymentsEnabled: boolean): BoxHealthReaders {
   return {
     now: () => NOW,
     notices: {
-      sources: [],
+      sources: () => [],
       clock: {
         now: () => ({
           instant: NOW,

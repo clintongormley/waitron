@@ -5,13 +5,13 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { StaffNotice } from "../api/client.js";
-import { staffNoticeText } from "../i18n/staff-notices.js";
+import { checksTime, staffNoticeText } from "../i18n/staff-notices.js";
 import { t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
 
-/** Shown in place of a payment while payments wait for the box's time: why, in the waiting
- * notice's own words, and "Check the time" while the box offers it. Sends `payments-paused-close`
- * and `payments-paused-check-time`. */
+/** Shown in place of a payment while a notice pauses payments: why, in that notice's own words,
+ * a full disk's hint under them, and "Check the time" for a clock notice while the box offers it.
+ * Sends `payments-paused-close` and `payments-paused-check-time`. */
 @customElement("till-payments-paused-dialog")
 export class TillPaymentsPausedDialog extends LitElement {
   static override styles = [
@@ -43,6 +43,8 @@ export class TillPaymentsPausedDialog extends LitElement {
       }}
     >
       <p>${words.main}</p>
+      <!-- The full-disk strip's own "Tell a manager": the owner's exception, stated in staffNoticeText. -->
+      ${this.notice.code === "storage.disk_full" ? html`<p>${words.hint}</p>` : nothing}
       <p>${t("payments_paused.order_open")}</p>
       <wt-form-actions>
         <wt-button
@@ -54,7 +56,7 @@ export class TillPaymentsPausedDialog extends LitElement {
           >${t("payments_paused.close")}</wt-button
         >
         ${
-          this.checkTimeOffered
+          checksTime(this.notice, this.checkTimeOffered)
             ? html`<wt-button
                 variant="primary"
                 data-check-time

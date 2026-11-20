@@ -3004,7 +3004,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   the in-flight cases in `placed-order-one-payment.test.ts` and `bill-payments.in-flight.test.ts`).
   A free-space deletion on the Box status page (`createSpaceFreer`,
   `apps/server/src/free-space-now.ts`) also reads it straight after deleting, so the stop can lift
-  at once (A798-B slice 7).
+  at once (A798-B slice 7). The staff notices that a till's equipment read and the Box status page ask for
+  (`boxStaffNoticeSource`, `apps/server/src/box-staff-notices.ts`) read it too while the stop is on,
+  so either can lift the stop.
 - The free-space watch (`apps/server/src/free-space-watch.ts`, started by boot in trading mode)
   reads the venue folder's free space at start, then a minute after each reading finishes. While the
   stop is on, each reading also awaits `full()`, so the stop lifts within about a minute of 16 MiB

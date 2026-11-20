@@ -35,19 +35,29 @@ const SPACE_LOW: StaffNotice = {
   params: {},
 };
 
-/** `storage.disk_full` while the full-disk stop is noted, otherwise `storage.space_low` while the
- * low-space warning is on. Reads no disk. */
-export function boxStaffNoticeSource(deps: {
-  disk: Pick<DiskFullState, "since">;
+/** `storage.disk_full` while the full-disk stop is noted and `full()`, the test a payment gets,
+ * answers true; otherwise `storage.space_low` while the low-space warning is on. Found here, before
+ * the read's write-lock turns, asking `full()`, which reads the disk, only while the stop is noted;
+ * the source answers what was found then. A failed look fails the source's read, never this call. */
+export async function boxStaffNoticeSource(deps: {
+  disk: Pick<DiskFullState, "since" | "full">;
   space: Pick<FreeSpaceState, "current">;
-}): StaffNoticeSource {
-  return {
-    read: () => {
-      if (deps.disk.since() !== null) return Promise.resolve([DISK_FULL]);
-      if (deps.space.current().lowSince !== null) return Promise.resolve([SPACE_LOW]);
-      return Promise.resolve([]);
-    },
-  };
+}): Promise<StaffNoticeSource> {
+  let notices: StaffNotice[];
+  try {
+    notices = await boxNotices(deps);
+  } catch (error) {
+    return { read: () => Promise.reject(error as Error) };
+  }
+  return { read: () => Promise.resolve(notices) };
+}
+
+async function boxNotices(
+  deps: Parameters<typeof boxStaffNoticeSource>[0],
+): Promise<StaffNotice[]> {
+  if (deps.disk.since() !== null && (await deps.disk.full())) return [DISK_FULL];
+  if (deps.space.current().lowSince !== null) return [SPACE_LOW];
+  return [];
 }
 
 /** Owner name of the clock check's marker: apart from the box's, so a failing read of the clock
@@ -88,17 +98,17 @@ export function clockCheckNoticeSource(
   };
 }
 
-/** The box's source, the clock check's when given, then the modules', so the box's notices come
- * first among equal severities. Give it the enabled modules. */
+/** Call the returned function once per read, before the read's write-lock turns. It answers the
+ * box's source, the clock check's when given, then the modules', so the box's notices come first
+ * among equal severities. Give it the enabled modules. */
 export function deviceNoticeSources(
   box: Parameters<typeof boxStaffNoticeSource>[0] & {
     clockCheck?: ClockCheck;
     startClockWaits?: StartClockWaits;
   },
   modules: readonly WaitronModule[],
-): readonly OwnedStaffNoticeSource[] {
-  return [
-    { owner: BOX_NOTICE_OWNER, source: boxStaffNoticeSource(box) },
+): () => Promise<readonly OwnedStaffNoticeSource[]> {
+  const rest: readonly OwnedStaffNoticeSource[] = [
     ...(box.clockCheck === undefined
       ? []
       : [
@@ -108,6 +118,10 @@ export function deviceNoticeSources(
           },
         ]),
     ...enabledStaffNoticeSources(modules),
+  ];
+  return async () => [
+    { owner: BOX_NOTICE_OWNER, source: await boxStaffNoticeSource(box) },
+    ...rest,
   ];
 }
 

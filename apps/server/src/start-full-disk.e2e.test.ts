@@ -2198,8 +2198,11 @@ describe("a start on a real full disk", () => {
           secureCookies: false,
           pairingMode: createPairingMode(),
           notices: {
-            sources: [
-              ...deviceNoticeSources({ disk, space: createFreeSpaceState({ log: () => {} }) }, []),
+            sources: async () => [
+              ...(await deviceNoticeSources(
+                { disk, space: createFreeSpaceState({ log: () => {} }) },
+                [],
+              )()),
               writer,
             ],
             clock: {

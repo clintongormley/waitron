@@ -249,18 +249,24 @@ describe("boot's full-disk stop wiring", () => {
         server = await startServer({ ...env, ...extra }, { ...env, ...extra });
         const state = seen.created[0]!.state as DiskFullState;
         const notices = (seen.deviceDeps[0] as DeviceApiDeps).notices!;
-        expect(notices.sources.map(({ owner }) => owner)).toEqual([
+        expect((await notices.sources()).map(({ owner }) => owner)).toEqual([
           "box",
           "box-clock",
           "fiscal-verifactu",
         ]);
         expect(notices.filing()).toEqual({ enabled: filing });
         const reading = notices.clock.now();
-        const box = notices.sources[0]!.source;
-        const ask = () => box.read({ tx: suite.db, reading });
+        const ask = async () =>
+          (await notices.sources())[0]!.source.read({ tx: suite.db, reading });
         expect(await ask()).toEqual([]);
         state.noteRefused();
+        // The temporary folder has far more than 16 MiB free: only the marker keeps the stop.
+        const marker = join(scratch, SPARE_SPACE_RELEASED_FILE);
+        await writeFile(marker, "");
         expect((await ask()).map(({ key }) => key)).toEqual(["storage.disk_full"]);
+        await rm(marker);
+        expect(await ask()).toEqual([]);
+        expect(state.since()).toBeNull();
       } finally {
         await server?.close();
         await rm(scratch, { recursive: true, force: true });

@@ -7,6 +7,10 @@ const CHECK_TIME = "clock.check_time";
 const BOX_CLOCK_OWNER = "box-clock";
 /** The box's notice while its start waits for its time: it is sent in place of the marker. */
 const WAITING_START = "clock.unconfirmed";
+const BOX_OWNER = "box";
+/** Matched from any owner: the module that sends it is not named here. */
+const CLOCK_UNUSABLE = "clock.unusable";
+const DISK_FULL = "storage.disk_full";
 
 function wellFormed(entry: unknown): StaffNotice | null {
   if (typeof entry !== "object" || entry === null) return null;
@@ -59,10 +63,22 @@ export function checkTimeOffered(read: DeviceEquipmentRead, previous: boolean): 
   );
 }
 
-/** The box's waiting-start notice among `notices`: while it is there, payments wait. */
-export function waitingStartIn(notices: readonly StaffNotice[]): StaffNotice | undefined {
+function waitingStartIn(notices: readonly StaffNotice[]): StaffNotice | undefined {
   return notices.find(
     (notice) => notice.code === WAITING_START && notice.owner === BOX_CLOCK_OWNER,
+  );
+}
+
+/** The first notice in `notices` that pauses payments: the box's waiting start, `clock.unusable`
+ * (`refuseBeforeFirstIssueDate`, packages/fiscal-verifactu/src/first-issue-date.ts, the same test
+ * the notice is served on), or the box's full disk (served on a payment's own test,
+ * `boxStaffNoticeSource`, apps/server/src/box-staff-notices.ts). */
+export function pausingNotice(notices: readonly StaffNotice[]): StaffNotice | undefined {
+  return notices.find(
+    (notice) =>
+      (notice.code === WAITING_START && notice.owner === BOX_CLOCK_OWNER) ||
+      notice.code === CLOCK_UNUSABLE ||
+      (notice.code === DISK_FULL && notice.owner === BOX_OWNER),
   );
 }
 
