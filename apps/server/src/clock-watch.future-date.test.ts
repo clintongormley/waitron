@@ -45,6 +45,7 @@ function harness(options: { host: () => ClockServiceStatus; state?: StartClockSt
       state,
       clockStatus: reading.read,
       clearClockStatus: reading.clear,
+      filesRecords: () => true,
       heads: async () => ({ [NODE]: head }),
       futureDateRefusal: { nodeId: NODE, latest },
     },

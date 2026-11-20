@@ -87,5 +87,8 @@ export function keepTimeServiceOn(
       return status;
     },
     setClock: (input) => host.setClock(input),
+    ...(host.retryTimeService === undefined
+      ? {}
+      : { retryTimeService: () => host.retryTimeService!() }),
   };
 }

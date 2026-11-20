@@ -167,6 +167,51 @@ clock_sync_on() {
   answer '{"ok":true}'
 }
 
+# Restarts the running time service, which then asks its servers at once rather than after its
+# own growing wait. Never past a clock saved ahead of now: by its man page, a starting timesyncd
+# advances a clock that is before its saved file's time, which would undo a correction to an
+# earlier time.
+clock_retry() {
+  local units unit saved ntp="" synced="" key value
+  mkdir -p -m 0700 "$STATE_DIR"
+  exec 9> "$STATE_DIR/set.lock"
+  if ! flock -n 9; then
+    refuse busy
+    return
+  fi
+  # A unit named in two lists is listed twice.
+  units="$(active_units | sort -u)"
+  # One read, after the listing, so a service that synchronised meanwhile is not restarted.
+  while IFS='=' read -r key value; do
+    case "$key" in
+      NTP) ntp="$value" ;;
+      NTPSynchronized) synced="$value" ;;
+    esac
+  done < <(timedatectl show -p NTP -p NTPSynchronized 2> /dev/null)
+  if [ "$synced" = yes ]; then
+    refuse synchronised
+    return
+  fi
+  if [ "$ntp" != yes ] || [ "$synced" != no ] || [ -z "$units" ]; then
+    refuse not_running
+    return
+  fi
+  if [ -e "$TIMESYNC_CLOCK" ]; then
+    saved="$(date -r "$TIMESYNC_CLOCK" +%s%3N 2> /dev/null)"
+    if ! [[ $saved =~ ^[0-9]+$ ]] || [ "$saved" -gt "$(date +%s%3N)" ]; then
+      refuse saved_time_ahead
+      return
+    fi
+  fi
+  while IFS= read -r unit; do
+    if ! systemctl restart "$unit" > /dev/null 2>&1; then
+      refuse restart_failed
+      return
+    fi
+  done <<< "$units"
+  answer '{"ok":true}'
+}
+
 network_monitor() {
   # Setting the box's date must not move the observer's grace or retry waits.
   local monitor_pid waiter_pid="" dirty=1 due retry=1 state rc line was_running=0
@@ -261,6 +306,7 @@ main() {
   case "$line" in
     clock.status) clock_status ;;
     clock.sync-on) clock_sync_on ;;
+    clock.retry) clock_retry ;;
     "clock.set "*)
       rest="${line#clock.set }"
       target="${rest%% *}"

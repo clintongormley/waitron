@@ -1894,7 +1894,8 @@ A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`
 The host handler moves the time of timesyncd's clock file (`/var/lib/systemd/timesync/clock`) back
 with a backward set (slice 9b plan, M8′). The measurement runner runs chrony, not timesyncd, so the file was made for the measurement (slice 9b
 plan, M8 and M8′); what timesyncd does with it at the next boot has not been watched. Measure it on a
-real box. Left open by A798-B slice 9b, Task 1.
+real box. The host's `clock.retry` (A1420) restarts timesyncd while a start waits on a box that files records, and relies on the
+man page's account of the file at start, refusing `saved_time_ahead`, rather than on a measurement. Left open by A798-B slice 9b, Task 1.
 
 ## The box's certificate issued under a wrong clock.
 

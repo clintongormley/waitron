@@ -38,12 +38,15 @@ afterEach(() => {
 // Built once for the file; each case's knobs travel as WB_* environment variables the stubs read.
 // Every call is one line of WB_LOG: the command's name, then each argument after a tab, so a test
 // can tell one argument holding a space from two arguments.
-// timedatectl: `show` answers NTP=$WB_NTP and NTPSynchronized=$WB_SYNC; `set-time @<s>.<ms>` fails
+// timedatectl: `show` answers NTP=$WB_NTP and NTPSynchronized=$WB_SYNC (`yes` once
+// WB_SYNC_ON_LIST has seen an `is-active`); `set-time @<s>.<ms>` fails
 // when WB_SETTIME_FAIL=1, otherwise records the new time for `date`, and when WB_SETTIME_REACHED
 // names a file it creates it and sleeps WB_SETTIME_SLEEP seconds first, so a case can kill the
 // handler mid-set; with WB_MARKER_SEEN set it copies the state folder's markers beside the log.
-// systemctl: `is-active` succeeds for the units listed in WB_ACTIVE; `stop`
-// rewrites the uptime file to WB_UPTIME_AFTER_STOP when set; `start` fails when WB_START_FAIL=1. date: `+%s%3N` answers the time
+// systemctl: `is-active` succeeds for the units listed in WB_ACTIVE, and with WB_SYNC_ON_LIST=1
+// makes `show` answer synchronised from then on; `stop`
+// rewrites the uptime file to WB_UPTIME_AFTER_STOP when set; `start` fails when WB_START_FAIL=1;
+// `restart <unit>` fails when WB_RESTART_FAIL names the unit. date: `+%s%3N` answers the time
 // `set-time` recorded, or WB_NOW_MS before any set; `-r <file>` answers WB_MTIME_MS. flock exits
 // WB_FLOCK_RC. touch with `-d` is only logged; without, it runs the real touch.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-box-bin-"));
@@ -65,7 +68,9 @@ stub(
   "timedatectl",
   `
 case "$1" in
-  show) printf 'NTP=%s\\nNTPSynchronized=%s\\n' "\${WB_NTP:-yes}" "\${WB_SYNC:-no}" ;;
+  show)
+    sync="\${WB_SYNC-no}"; [ -e "\${WB_LOG}.synced" ] && sync=yes
+    printf 'NTP=%s\\nNTPSynchronized=%s\\n' "\${WB_NTP:-yes}" "$sync" ;;
   set-time)
     if [ -n "\${WB_SETTIME_REACHED}" ]; then : > "\${WB_SETTIME_REACHED}"; sleep "\${WB_SETTIME_SLEEP:-1}"; fi
     [ "\${WB_SETTIME_FAIL}" = 1 ] && { echo "Failed to set time" >&2; exit 1; }
@@ -82,6 +87,7 @@ stub(
 case "$1" in
   show) cat "$WB_MONITOR_DIR/state"; exit 0 ;;
   is-active)
+    [ "\${WB_SYNC_ON_LIST}" = 1 ] && : > "\${WB_LOG}.synced"
     u="\${!#}"
     for a in \${WB_ACTIVE}; do [ "$a" = "$u" ] && exit 0; done
     exit 3 ;;
@@ -95,6 +101,7 @@ case "$1" in
       exit "$(cat "$WB_MONITOR_DIR/finish.$count")"
     fi
     [ "\${WB_START_FAIL}" = 1 ] && exit 1 ;;
+  restart) [ "\${WB_RESTART_FAIL}" = "\${2}" ] && exit 1 ;;
   stop) [ -n "\${WB_UPTIME_AFTER_STOP}" ] && printf '%s 1.00\\n' "\${WB_UPTIME_AFTER_STOP}" > "\${WAITRON_TEST_HOST_ROOT}/proc/uptime" ;;
 esac
 exit 0
@@ -480,6 +487,71 @@ describe("waitron-box.sh clock.sync-on", () => {
   it("answers sync_on_failed when timedatectl cannot switch automatic time on", () => {
     const sb = sandbox({ WB_NTP: "no", WB_SETNTP_FAIL: "1" });
     expect(answer(sb, "clock.sync-on")).toEqual({ ok: false, reason: "sync_on_failed" });
+  });
+});
+
+describe("waitron-box.sh clock.retry", () => {
+  const restarts = (sb) =>
+    sb.calls().filter(([cmd, sub]) => cmd === "systemctl" && sub === "restart");
+
+  it("restarts every running listed time service, answering ok and writing no journal line of its own", () => {
+    const sb = sandbox({ WB_ACTIVE: "chrony.service systemd-timesyncd.service" });
+    writeFileSync(
+      join(sb.paths.ntpUnits, "80-timesyncd.list"),
+      "systemd-timesyncd.service\nntpd.service\n",
+    );
+    expect(answer(sb, "clock.retry")).toEqual({ ok: true });
+    expect(restarts(sb)).toEqual([
+      ["systemctl", "restart", "chrony.service"],
+      ["systemctl", "restart", "systemd-timesyncd.service"],
+    ]);
+    expect(sb.calls().filter(([cmd]) => cmd === "logger")).toEqual([]);
+  });
+
+  it.each([
+    ["synchronised", { WB_SYNC: "yes" }],
+    ["not_running", { WB_NTP: "no" }],
+    ["not_running", { WB_ACTIVE: "" }],
+    ["not_running", { WB_SYNC: "" }],
+    ["synchronised", { WB_SYNC_ON_LIST: "1" }],
+    ["saved_time_ahead", { WB_MTIME_MS: "1793425411089" }],
+    ["saved_time_ahead", { WB_MTIME_MS: "" }],
+    ["busy", { WB_FLOCK_RC: "1" }],
+  ])("answers %s, restarting nothing, for %o", (reason, env) => {
+    const sb = sandbox(env);
+    expect(answer(sb, "clock.retry")).toEqual({ ok: false, reason });
+    expect(restarts(sb)).toEqual([]);
+    expect(touchesClock(sb.calls())).toEqual([]);
+  });
+
+  it("restarts when timesyncd's saved clock file is absent, whatever a file's time would read", () => {
+    const sb = sandbox({ WB_MTIME_MS: "1893425411088" });
+    rmSync(sb.paths.clock);
+    expect(answer(sb, "clock.retry")).toEqual({ ok: true });
+    expect(restarts(sb)).toEqual([["systemctl", "restart", "chrony.service"]]);
+  });
+
+  it("reads automatic time and synchronisation in one read after listing the running services, just before restarting", () => {
+    const sb = sandbox();
+    expect(answer(sb, "clock.retry")).toEqual({ ok: true });
+    const calls = sb.calls().map(([cmd, sub]) => `${cmd} ${sub}`);
+    expect(calls.filter((call) => call.startsWith("timedatectl"))).toEqual(["timedatectl show"]);
+    expect(calls.indexOf("timedatectl show")).toBeGreaterThan(calls.indexOf("systemctl is-active"));
+    expect(calls.indexOf("timedatectl show")).toBeLessThan(calls.indexOf("systemctl restart"));
+  });
+
+  it("restarts a service named in two lists once", () => {
+    const sb = sandbox();
+    const usrLib = join(sb.dir, "usr/lib/systemd/ntp-units.d");
+    mkdirSync(usrLib, { recursive: true });
+    writeFileSync(join(usrLib, "50-chrony.list"), "chrony.service\n");
+    expect(answer(sb, "clock.retry")).toEqual({ ok: true });
+    expect(restarts(sb)).toEqual([["systemctl", "restart", "chrony.service"]]);
+  });
+
+  it("answers restart_failed when a restart fails", () => {
+    const sb = sandbox({ WB_RESTART_FAIL: "chrony.service" });
+    expect(answer(sb, "clock.retry")).toEqual({ ok: false, reason: "restart_failed" });
   });
 });
 

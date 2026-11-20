@@ -13,6 +13,7 @@ import {
   type BoxHostRequests,
 } from "./box-host-client.js";
 import { keepTimeServiceOn } from "./time-service-kept-on.js";
+import { timeServiceRetry } from "./time-service-retry.js";
 import { boxNameTagJob } from "./box-name-tag.js";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -3901,7 +3902,15 @@ async function bootServer(
         clockService.clear();
         timeHealthCache.clear();
       },
+      filesRecords,
       heads: recordHeads,
+      retryTimeService: timeServiceRetry({
+        host: boxHost,
+        state: startClock,
+        steps: correction.steps,
+        monotonic: boxBoot.elapsed,
+        log,
+      }),
       futureDateRefusal: {
         nodeId: chainNodeId,
         latest: async (tx, abovePosition) =>

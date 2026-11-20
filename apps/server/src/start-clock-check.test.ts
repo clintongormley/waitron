@@ -176,6 +176,21 @@ describe("counting the waits that begin", () => {
   });
 });
 
+describe("remembering a person's confirmation", () => {
+  it("remembers it for the process, through a return to waiting, and never for devices or the internet", () => {
+    const state = startClockState();
+    expect(state.confirmedByPerson).toBe(false);
+    state.confirm("by_devices", { "node-a": 1 });
+    state.backToWaiting("clock_jumped");
+    expect(state.confirmedByPerson).toBe(false);
+    state.confirm("by_person", { "node-a": 2 });
+    state.backToWaiting("clock_jumped");
+    state.confirm("by_devices", { "node-a": 3 });
+    state.backToWaiting("future_date_refused");
+    expect(state.confirmedByPerson).toBe(true);
+  });
+});
+
 describe("waiting because AEAT refused a sale as dated in the future", () => {
   it("keeps that cause and the refused sale's date when sent back to waiting for a jump, and clears the date on confirmation", () => {
     const state = startClockState();

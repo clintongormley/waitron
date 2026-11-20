@@ -19,7 +19,12 @@ export const HOST_VERBS = Object.freeze([
   "tag.write",
 ]);
 /** Answered by the shell handler; this module refuses them as unknown. */
-export const SHELL_VERBS = Object.freeze(["clock.status", "clock.set", "clock.sync-on"]);
+export const SHELL_VERBS = Object.freeze([
+  "clock.status",
+  "clock.set",
+  "clock.sync-on",
+  "clock.retry",
+]);
 export const HOST_LINE_MAX = 4096;
 /** Bytes, with the newline: the client reads no more. */
 export const HOST_REPLY_MAX = 4096;
