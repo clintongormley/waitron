@@ -15,8 +15,9 @@ own permissions for viewing and saving the relay.
 
 1. In `apps/dashboard/src/dashboard-app.test.ts`, make the existing “lists Email under
    System” matrix expect Email for permitted roles when the session response omits the
-   intent, as on the switched primary. Keep its Prepare, Live, Demo and direct-link
-   permission assertions. Run
+   intent, as on the switched primary. Omit the field from both the locales and session
+   fixtures in that row. Keep Prepare and Live visible to permitted roles, Demo absent
+   from System, and the direct-link permission assertions. Run
    `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t 'lists Email under System'`.
    The switched-primary row should fail on the missing sidebar entry.
 2. In `apps/dashboard/src/dashboard-app.ts`, make the Email sidebar exception apply only
@@ -26,8 +27,8 @@ own permissions for viewing and saving the relay.
 3. Run the changed dashboard test file. Open System in a disposable dashboard with the
    switched-primary response and open Email from there. Inspect English and Spanish in
    both themes at phone and desktop widths.
-4. In `apps/server/src/guide/{en,es}/email.md`, give the System → Email instruction without
-   limiting it to the original setup mode. Keep the separate Demo instructions. Correct
+4. In `apps/server/src/guide/{en,es}/email.md`, update the System → Email instruction on
+   line 12 without limiting it to the original setup mode. Keep the separate Demo instructions. Correct
    the matching availability sentence in `docs/backlog/box.md` and keep A987 open. Run
    `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`.
 
