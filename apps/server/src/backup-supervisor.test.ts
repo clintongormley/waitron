@@ -35,6 +35,7 @@ import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js"
 import { gunzipSync } from "node:zlib";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
+import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig } from "./backup-config.js";
 import type { LatestClockStep } from "./backup-sweep.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
@@ -2211,6 +2212,7 @@ describe("scheduled backup passes", () => {
         await archive(...args);
       });
       now = new Date("2026-11-17T12:50:00Z");
+      await Promise.all(published);
       published.length = 0;
       manual = sup.runNow();
       await copy.reached;
@@ -2230,6 +2232,7 @@ describe("scheduled backup passes", () => {
     } finally {
       copy.release();
       await manual;
+      await Promise.all(published);
       await sup.stop();
     }
   });
@@ -2242,13 +2245,21 @@ describe("scheduled backup passes", () => {
       await copy.released;
       await archive(source, target, signal);
     });
-    const close = vi.spyOn(LocalFsBackend.prototype, "close");
+    const backends: StorageBackend[] = [];
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
-    const { sup, refs, dest } = await prepared({ outcomes });
+    const { sup, refs, dest } = await prepared({
+      outcomes,
+      buildBackend: (destination) => {
+        const backend = buildBackupBackend(destination);
+        backends.push(backend);
+        return backend;
+      },
+    });
     let manual: Promise<void> | undefined;
     let reloading: Promise<void> | undefined;
     try {
       await sup.reload();
+      const close = vi.spyOn(backends[0]!, "close");
       manual = sup.runNow();
       const signal = await copy.reached;
       refs.config = localFsConfig([dest], STRONG_KEY_2);
