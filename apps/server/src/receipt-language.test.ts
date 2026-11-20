@@ -250,23 +250,39 @@ async function venueWith(
   };
 }
 
+function payForReceipt(
+  v: Venue,
+  id: string,
+  lines: { menuItemId: string; quantity: string; options?: unknown }[],
+  tender: { method: "cash" | "card"; amount: string },
+  extra: Record<string, unknown> = {},
+) {
+  return v.app.request(`/api/working-orders/${id}/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: v.till },
+    body: JSON.stringify({
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      ...(tender.method === "cash"
+        ? { method: "cash", tendered: tender.amount }
+        : { method: "card", entry: "manual" }),
+      dining: "eat_in",
+      basket: { lines },
+      ...extra,
+    }),
+  });
+}
+
 async function sell(
   v: Venue,
   tender: { method: "cash" | "card"; amount: string },
 ): Promise<{ id: string; status: number; body: { locale?: string } }> {
   const id = randomUUID();
-  const res = await v.app.request("/api/sales", {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie: v.till },
-    body: JSON.stringify({
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
-      tender,
-    }),
-  });
+  const res = await payForReceipt(v, id, [{ menuItemId: v.menuItemId, quantity: "1" }], tender);
   if (res.status === 200) await printOriginal(v, id);
-  return { id, status: res.status, body: (await res.json()) as { locale?: string } };
+  const { invoice } = (await res.json()) as { invoice?: { locale?: string } };
+  return { id, status: res.status, body: invoice ?? {} };
 }
 
 async function printOriginal(v: Venue, id: string): Promise<void> {
@@ -925,27 +941,18 @@ describe("a sale prints its goods in the default content language its lines stor
     extra: Record<string, unknown> = {},
     id: string = randomUUID(),
   ) {
-    const res = await v.app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: v.till },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId: id,
-        lines: [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
-        tender: { method: "cash", amount: "5.00" },
-        ...extra,
-      }),
-    });
-    if (res.status === 200) await printOriginal(v, id);
-    return {
+    const res = await payForReceipt(
+      v,
       id,
-      status: res.status,
-      body: (await res.json()) as {
-        locale?: string;
-        namesLocale?: string;
-        lines?: { descriptions: unknown; unitName?: unknown; optionSnapshots?: unknown }[];
-      },
+      [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
+      { method: "cash", amount: "5.00" },
+      extra,
+    );
+    if (res.status === 200) await printOriginal(v, id);
+    const { invoice } = (await res.json()) as {
+      invoice?: { locale?: string; namesLocale?: string };
     };
+    return { id, status: res.status, body: invoice ?? {} };
   }
 
   const sellChosen = (v: Venue, goods: Goods, id?: string) =>
@@ -997,17 +1004,13 @@ describe("a sale prints its goods in the default content language its lines stor
     const v = await venueWith(suite.db, ["ca-ES", "es-ES"], BARCELONA);
     const id = randomUUID();
 
-    const res = await v.app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: v.till },
-      body: JSON.stringify({
-        dining: "eat_in",
-        workingOrderId: id,
-        lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-        receiptLanguage: "es-ES",
-      }),
-    });
+    const res = await payForReceipt(
+      v,
+      id,
+      [{ menuItemId: v.menuItemId, quantity: "1" }],
+      { method: "cash", amount: "5.00" },
+      { receiptLanguage: "es-ES" },
+    );
 
     expect(res.status).toBe(200);
     expect(await saleRow(suite.db, id)).toEqual({

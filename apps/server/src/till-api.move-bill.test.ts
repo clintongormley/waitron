@@ -3,6 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { getBillBalance } from "./bill-payments.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -213,12 +214,10 @@ async function counterOrder(...names: string[]): Promise<string> {
 async function wholeBillAtReader(billId: string) {
   const calls = venue.card.collectCalls.length;
   const release = venue.card.holdNextCollect();
-  const paying = post("/api/pay", { dining: "eat_in", id: billId, lines: [] });
+  const { outstanding } = await getBillBalance(venue, billId);
+  const paying = cardContribution(billId, outstanding);
   await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
-  const [row] = venue.db.all<{ payment_attempt_at: string | null }>(
-    sql`select payment_attempt_at from working_orders where id = ${billId}`,
-  );
-  expect(row!.payment_attempt_at).not.toBeNull();
+  expect(await paymentRows(venue, billId)).toMatchObject([{ state: "pending" }]);
   return { release, paying };
 }
 
@@ -272,7 +271,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
     expect(moved.status).toBe(200);
     expect(paid.status).toBe(200);
-    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
     expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
@@ -327,13 +326,10 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     ).toEqual([]);
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
 
-    const collected = await post(`/api/working-orders/${firstParty.tabId}/collect`, {
-      tender: { method: "cash", amount: "20.00" },
-    });
+    const collected = await cashContribution(firstParty.tabId, "20.00");
     expect(collected.status).toBe(200);
     expect(collected.json).toMatchObject({
-      total: "20.00",
-      invoiceNumber: expect.stringMatching(/^A\/\d+$/),
+      invoice: { total: "20.00", invoiceNumber: expect.stringMatching(/^A\/\d+$/) },
     });
     expect(await statusOf(venue, firstParty.tabId)).toBe("settled");
     expect(fiscalRecordCount(venue, firstParty.tabId)).toBe(1);
@@ -351,7 +347,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
     expect(moved.status).toBe(200);
     expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
-    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(fiscalRecordCount(venue, orderId)).toBe(1);
     expect(kitchenItems(orderId)).toEqual({ items: 1, fired: 1 });
@@ -546,9 +542,7 @@ describe("money on a moved bill", () => {
     expect(issued).toHaveLength(1);
 
     const moved = await moveTo(id, firstParty.tableId);
-    const collected = await post(`/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "18.00" },
-    });
+    const collected = await cashContribution(id, "18.00");
 
     expect(moved.json).toEqual({ partyId: firstParty.partyId, billId: id });
     expect(collected.status).toBe(200);
@@ -736,7 +730,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
 
     expect(moved.status).toBe(200);
     expect(moved.json).toEqual({ partyId: secondParty.partyId, billId });
-    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     expect(await statusOf(venue, secondParty.tabId)).toBe("settled");
     expect(fiscalRecordCount(venue, secondParty.tabId)).toBe(1);
     expect(linesNamed(secondParty.tabId)).toEqual(["Caña"]);
@@ -756,7 +750,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
 
     expect(moved.status).toBe(200);
     expect(moved.json).toEqual({ partyId: seatedParty.partyId, billId: orderId });
-    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(fiscalRecordCount(venue, orderId)).toBe(1);
     expect(partyOfBill(orderId)).toBe(seatedParty.partyId);

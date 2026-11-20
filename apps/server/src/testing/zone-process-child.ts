@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { openVenueDatabase, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
-import { recordTillSale } from "../till-sale.js";
+import { takeBillPayment } from "../bill-payments.js";
 import { zonePaymentVenue } from "./zone-payment-venue.js";
 import { offerProducts } from "./zone-offers.js";
 
@@ -48,17 +48,25 @@ async function calendar(directory: string) {
         now: () => ({ ...v.clock.now(), instant, offsetMinutes: -instant.getTimezoneOffset() }),
       };
       const id = randomUUID();
-      await recordTillSale(
+      await takeBillPayment(
         { ...v.deps, clock, log: () => {} },
         v.cfg,
+        id,
         {
-          workingOrderId: id,
+          submissionId: randomUUID(),
           expectedEdit: null,
-          zoneId: offers.zoneId,
-          lines: [{ menuItemId: offers.offerFor(product.id), quantity: "1" }],
-          tender: { method: "cash", amount: "12.10" },
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "12.10",
+          applied: "0.00",
+          tip: "0.00",
         },
         v.operator,
+        {
+          zoneId: offers.zoneId,
+          lines: [{ menuItemId: offers.offerFor(product.id), quantity: "1" }],
+        },
       );
       const [row] = store.venue.all<{ issued_at: string; issued_offset_minutes: number }>(
         sql`select issued_at, issued_offset_minutes from sales where working_order_id = ${id}`,

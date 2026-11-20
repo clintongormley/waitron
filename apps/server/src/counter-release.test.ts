@@ -8,9 +8,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCourse } from "./kitchen.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { inTx, OPERATOR, seatWithNoAllergies, setupPartyVenue } from "./testing/party-venue.js";
+import {
+  inTx,
+  OPERATOR,
+  pay,
+  seatWithNoAllergies,
+  setupPartyVenue,
+} from "./testing/party-venue.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { fireableLineColumns, fireLines, parkOrder } from "./working-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -100,12 +105,7 @@ describe("A773 counter release", () => {
 
   it("releases every course on payment and refuses duplicate kitchen sends", async () => {
     const { v, id, lines } = await counterWithCourses();
-    await payWorkingOrder(
-      { ...v, admission: testTradingAdmission() },
-      v.cfg,
-      { id, tender: { method: "cash", amount: "72.00" }, lines: [] },
-      OPERATOR,
-    );
+    await pay(v, id, "72.00");
     const before = await inTx(v, (tx) =>
       ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
     );

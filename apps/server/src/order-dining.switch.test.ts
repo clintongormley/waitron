@@ -28,6 +28,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { seatTable } from "./parties.js";
 import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
 import {
+  cashPayment,
   inTx,
   partyRevisionOf,
   provisionBillVenue,
@@ -313,14 +314,23 @@ describe("switching an order's way of selling", () => {
     const id = await parked(menu.cola);
     const shown = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${id}`);
     expect(shown.json).toMatchObject({ dining: "eat_in", diningChoice: "open" });
+    const beforeSwitch = await editOf(id);
     const switched = await switchTo(id, "takeaway", { cookie: venue.cookie2 });
     expect(switched.status).toBe(200);
 
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      id,
-      lines: [],
-      dining: "eat_in",
-    });
+    const payment = (expectedEdit: Awaited<ReturnType<typeof editOf>>, dining: Dining) =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+        submissionId: randomUUID(),
+        expectedEdit,
+        dining,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        applied: "1.80",
+        tip: "0.00",
+      });
+    const paid = await payment(beforeSwitch, "eat_in");
 
     expect(paid.status).toBe(409);
     expect(paid.json).toEqual({
@@ -329,11 +339,7 @@ describe("switching an order's way of selling", () => {
     });
     expect(salesOf(id)).toBe(0);
 
-    const repaid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      id,
-      lines: [],
-      dining: "takeaway",
-    });
+    const repaid = await payment(await editOf(id), "takeaway");
 
     expect(repaid.status).toBe(200);
     expect(salesOf(id)).toBe(1);
@@ -637,12 +643,7 @@ describe("the part of a line cut off within its order", () => {
   }
 
   async function payWhole(id: string): Promise<void> {
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "takeaway",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "10.00" },
-    });
+    const sold = await cashPayment(venue, venue.cookie, id, "10.00");
     expect(sold.status).toBe(200);
   }
 

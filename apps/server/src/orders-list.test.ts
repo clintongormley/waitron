@@ -103,13 +103,26 @@ describe("facts this list relies on", () => {
     expect(lines).toHaveLength(1);
   });
 
-  it("a till sale rung with no bill id is filed against a bill the sale made", async () => {
-    const answer = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-      tender: { method: "cash", amount: "3.00" },
-      zoneId: venue.zoneId,
-    });
+  it("a fresh counter payment files against the bill made by that request", async () => {
+    const billId = randomUUID();
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
+        dining: "eat_in",
+        basket: {
+          zoneId: venue.zoneId,
+          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        },
+      },
+    );
     expect(answer.status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>
       tx
@@ -118,7 +131,7 @@ describe("facts this list relies on", () => {
         .orderBy(sql`${sales}.rowid desc`)
         .limit(1),
     );
-    expect(sale!.bill).not.toBeNull();
+    expect(sale!.bill).toBe(billId);
   });
 });
 
@@ -282,11 +295,11 @@ describe("credit notes and what is still owed", () => {
       creditNotes: [expect.stringMatching(/^R\/\d+$/)],
     });
 
-    // 400: `sale.tender_shortfall` in the till's STATUS map (`apps/server/src/till-api.ts:292`).
-    expect(await collect(venue, id, "27.57")).toMatchObject({
+    expect(await collect(venue, id, "27.57")).toEqual({
       status: 400,
-      json: { code: "sale.tender_shortfall" },
+      json: { code: "management.request_invalid", params: { field: "tendered" } },
     });
+    expect(await rowOf(id)).toMatchObject({ stillOwed: "27.58" });
     expect((await collect(venue, id, row.stillOwed as string)).status).toBe(200);
     const [tender] = await inTx(venue, (tx) =>
       tx

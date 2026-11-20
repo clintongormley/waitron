@@ -477,40 +477,52 @@ async function settlingCancelItem(billId: string, approver = false): Promise<Mon
 
 // Each row builds its own order, bill or sale, so rows never share one.
 const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
-  "POST /api/pay, a counter card sale with no saved order": async () => {
+  "a fresh counter basket paid by reader": async () => {
     const id = randomUUID();
+    const body = {
+      submissionId: randomUUID(),
+      method: "card",
+      entry: "reader",
+      kind: "share",
+      shareOf: 1,
+      dining: "eat_in",
+      basket: { lines: tarta(), zoneId: counter.zoneId },
+    };
     return {
-      send: (app) =>
-        as(app, "POST", "/api/pay", {
-          dining: "eat_in",
-          id,
-          lines: tarta(),
-          zoneId: counter.zoneId,
-        }),
-      grows: ["collects", "payments", "sales", "records"],
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/payments`, body),
+      grows: ["collects", "payments", "billPayments", "sales", "records"],
     };
   },
-  "POST /api/pay, a card payment of a stored open order": async () => {
+  "a parked counter basket paid by reader": async () => {
     const id = await counterOrder(false);
+    const body = {
+      submissionId: randomUUID(),
+      method: "card",
+      entry: "reader",
+      kind: "share",
+      shareOf: 1,
+      dining: "eat_in",
+      basket: { lines: [], zoneId: counter.zoneId },
+    };
     return {
-      send: (app) =>
-        as(app, "POST", "/api/pay", { dining: "eat_in", id, lines: [], zoneId: counter.zoneId }),
-      grows: ["collects", "payments", "sales", "records"],
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/payments`, body),
+      grows: ["collects", "payments", "billPayments", "sales", "records"],
     };
   },
-  "POST /api/pay, a card payment of an order whose invoice was filed": async () => {
+  "an issued bill paid by reader": async () => {
     const id = await counterOrder(true);
+    const body = readerPart("18.00");
     return {
-      send: (app) =>
-        as(app, "POST", "/api/pay", { dining: "eat_in", id, lines: [], zoneId: counter.zoneId }),
-      grows: ["collects", "payments", "tenders"],
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/payments`, body),
+      grows: ["collects", "payments", "billPayments", "tenders"],
     };
   },
-  "POST /api/pay, a bill that owes nothing": async () => {
+  "an open bill that owes nothing": async () => {
     const { tabId } = await seatedWith(venue, threeEuroDish());
     await seedGivenAwayLine(venue, tabId, 1);
+    const body = readerPart("0.00");
     return {
-      send: (app) => as(app, "POST", "/api/pay", { dining: "eat_in", id: tabId, lines: [] }),
+      send: (app) => as(app, "POST", `/api/working-orders/${tabId}/payments`, body),
       grows: ["sales", "records"],
     };
   },
@@ -543,27 +555,27 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       grows: ["settlements"],
     };
   },
-  "POST /api/sales, a cash sale": async () => {
+  "a fresh cash counter sale": async () => {
     const id = randomUUID();
+    const body = {
+      submissionId: randomUUID(),
+      method: "cash",
+      kind: "share",
+      shareOf: 1,
+      tendered: "18.00",
+      dining: "eat_in",
+      basket: { lines: tarta(), zoneId: counter.zoneId },
+    };
     return {
-      send: (app) =>
-        as(app, "POST", "/api/sales", {
-          dining: "eat_in",
-          workingOrderId: id,
-          zoneId: counter.zoneId,
-          lines: tarta(),
-          tender: { method: "cash", amount: "18.00" },
-        }),
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/payments`, body),
       grows: ["sales", "tenders", "records", "drawerJobs"],
     };
   },
-  "POST /api/working-orders/:id/collect, cash for a filed order": async () => {
+  "an issued bill paid in cash": async () => {
     const id = await counterOrder(true);
+    const body = cashPart("18.00");
     return {
-      send: (app) =>
-        as(app, "POST", `/api/working-orders/${id}/collect`, {
-          tender: { method: "cash", amount: "18.00" },
-        }),
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/payments`, body),
       grows: ["tenders", "drawerJobs"],
     };
   },
@@ -998,11 +1010,14 @@ const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
   },
   "a held payment's outcome": async () => {
     const id = randomUUID();
-    const paid = await as(venue.app, "POST", "/api/pay", {
+    const paid = await as(venue.app, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
       dining: "eat_in",
-      id,
-      lines: tarta(),
-      zoneId: counter.zoneId,
+      basket: { lines: tarta(), zoneId: counter.zoneId },
     });
     expect(paid.status).toBe(200);
     const [payment] = venue.db.all<{ id: string }>(
@@ -1286,12 +1301,17 @@ describe("money already moved while the start waits", () => {
         sql`select state, sale_id is not null as filed from payments where working_order_id = ${id}`,
       );
 
-    const charged = await as(app, "POST", "/api/pay", {
+    const path = `/api/working-orders/${id}/payments`;
+    const body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
       dining: "eat_in",
-      id,
-      lines: tarta(),
-      zoneId: counter.zoneId,
-    });
+      basket: { lines: tarta(), zoneId: counter.zoneId },
+    };
+    const charged = await as(app, "POST", path, body);
 
     expect(charged.status).toBe(507);
     expect(charged.json).toEqual({
@@ -1302,15 +1322,10 @@ describe("money already moved while the start waits", () => {
     expect(moneyState()).toMatchObject({ collects: before.collects + 1, records: before.records });
 
     state.confirm("by_person", {});
-    const paid = await as(app, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      zoneId: counter.zoneId,
-    });
+    const paid = await as(app, "POST", path, body);
 
     expect(paid.status).toBe(200);
-    expect(paid.json.outcome).toBe("captured");
+    expect(paid.json).toMatchObject({ payment: { state: "received" } });
     expect(payments()).toEqual([{ state: "captured", filed: 1 }]);
     expect(moneyState()).toMatchObject({
       collects: before.collects + 1,

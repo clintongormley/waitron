@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { seedVenueSettings, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
@@ -16,13 +17,13 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { getCountryPack } from "@waitron/country-packs";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
-// The full manifest, because the first case files a real fiscal record through `recordTillSale`.
+// The full manifest, because the first case files a real fiscal record through a counter cash payment.
 // `resetPerTest: false`: the venue set up once in `beforeAll` is read by every case, and each case
 // that writes the description restores it in a `finally`.
 const suite = useVenueDb({
@@ -112,14 +113,16 @@ async function sell() {
     deploymentEnvironment: "preproduction",
   });
   const saleCfg = await deviceRequestCfg(suite.db, venue.cfg);
-  return recordTillSale(
+  return payFreshCounterInCash(
     { admission: testTradingAdmission(), db: suite.db, backend, clock },
     saleCfg,
+    await counterFixtureOperator(suite.db, saleCfg.origin.deviceId),
+    randomUUID(),
     {
       zoneId: offers.zoneId,
       lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
-      tender: { method: "cash", amount: "1.50" },
     },
+    "1.50",
   );
 }
 

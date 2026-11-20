@@ -1,3 +1,5 @@
+import { openTillSession } from "./testing/session-device.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -70,7 +72,6 @@ import { addPortionRound } from "./testing/portion-bill.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   bumpRevision,
   fireableLineColumns,
@@ -278,10 +279,18 @@ async function outcomeOf(billId: string) {
   expect(more).toEqual([]);
   const rows = await rowsOf(venue, billId);
   const due = toScale(sumDecimals(rows.map((row) => decimal(row.lineTotal))), 2);
-  const result = await payWorkingOrder(
+  const result = await paySavedBillInCash(
     { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
     venue.cfg,
-    { id: billId, tender: { method: "cash", amount: due }, lines: [] },
+    {
+      personId: venue.staffId,
+      sessionId: await openTillSession(venue.db, {
+        deviceId: venue.cfg.origin.deviceId,
+        personId: venue.staffId,
+      }),
+    },
+    billId,
+    due,
   );
   const [sale] = await inTx(venue, (tx) =>
     tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
@@ -2678,7 +2687,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
   async function paid(bill: Bill) {
     const rows = await rowsOf(venue, bill.billId);
     const due = toScale(sumDecimals(rows.map((row) => decimal(row.lineTotal))), 2);
-    await payWorkingOrder(
+    await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
         db: venue.db,
@@ -2687,10 +2696,14 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       },
       venue.cfg,
       {
-        id: bill.billId,
-        tender: { method: "cash", amount: due },
-        lines: [],
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
       },
+      bill.billId,
+      due,
     );
     const [sale] = await inTx(venue, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, bill.billId)),

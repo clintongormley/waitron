@@ -96,17 +96,36 @@ function statusOfOrder(id: string): string | undefined {
   return row?.status;
 }
 
-function sale(app: Hono, id: string, tender: Record<string, unknown>) {
-  return send(app, venue.cookie, "POST", "/api/sales", {
+function sale(app: Hono, id: string, method: "cash" | "card" = "cash") {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: id,
     dining: "eat_in",
-    workingOrderId: id,
-    zoneId: venue.zoneId,
-    lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-    tender,
+    kind: "share",
+    shareOf: 1,
+    method,
+    ...(method === "cash" ? { tendered: "3.00" } : { entry: "manual" }),
+    basket: {
+      zoneId: venue.zoneId,
+      lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+    },
   });
 }
 
-const cash = { method: "cash", amount: "3.00" };
+function collect(app: Hono, id: string) {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "12.00",
+    applied: "12.00",
+    tip: "0.00",
+  });
+}
+
+function invoiceNumber(answer: Awaited<ReturnType<typeof send>>) {
+  return (answer.json.invoice as { invoiceNumber: string }).invoiceNumber;
+}
 
 async function placedOrder(...names: string[]): Promise<string> {
   const id = randomUUID();
@@ -181,14 +200,14 @@ describe("the sale routes while the full-disk stop holds", () => {
     const sales = count("sales");
     const numbers = nextNumbers();
 
-    const refused = await sale(venue.appWith({ disk: notedState() }), id, cash);
+    const refused = await sale(venue.appWith({ disk: notedState() }), id);
 
     expect(refusal(refused)).toEqual(REFUSED);
     expect(statusOfOrder(id)).toBeUndefined();
     expect(count("sales")).toBe(sales);
     expect(nextNumbers()).toBe(numbers);
 
-    const sold = await sale(venue.appWith({ disk: diskState() }), randomUUID(), cash);
+    const sold = await sale(venue.appWith({ disk: diskState() }), randomUUID());
     expect(sold.status).toBe(200);
     expect(count("sales")).toBe(sales + 1);
     expect(nextNumbers()).toBe(numbers + 1);
@@ -197,7 +216,7 @@ describe("the sale routes while the full-disk stop holds", () => {
   it("refuses a manual card sale", async () => {
     const id = randomUUID();
 
-    const refused = await sale(venue.appWith({ disk: notedState() }), id, { method: "card" });
+    const refused = await sale(venue.appWith({ disk: notedState() }), id, "card");
 
     expect(refusal(refused)).toEqual(REFUSED);
     expect(statusOfOrder(id)).toBeUndefined();
@@ -206,22 +225,18 @@ describe("the sale routes while the full-disk stop holds", () => {
 
   it("answers a resend of a cash sale already recorded", async () => {
     const id = randomUUID();
-    const first = await sale(venue.appWith({ disk: diskState() }), id, cash);
+    const first = await sale(venue.appWith({ disk: diskState() }), id);
     expect(first.status).toBe(200);
     const sales = count("sales");
 
-    const resent = await sale(venue.appWith({ disk: notedState() }), id, cash);
+    const resent = await sale(venue.appWith({ disk: notedState() }), id);
 
     expect(resent.status).toBe(200);
-    expect(resent.json.invoiceNumber).toBe(first.json.invoiceNumber);
+    expect(invoiceNumber(resent)).toBe(invoiceNumber(first));
     expect(count("sales")).toBe(sales);
   });
 
   it("refuses to collect a placed order, and answers a collect already made", async () => {
-    const collect = (app: Hono, id: string) =>
-      send(app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
-        tender: { method: "cash", amount: "12.00" },
-      });
     const id = await placedOrder("House salad");
 
     const refused = await collect(venue.appWith({ disk: notedState() }), id);
@@ -234,7 +249,7 @@ describe("the sale routes while the full-disk stop holds", () => {
 
     const resent = await collect(venue.appWith({ disk: notedState() }), id);
     expect(resent.status).toBe(200);
-    expect(resent.json.invoiceNumber).toBe(collected.json.invoiceNumber);
+    expect(invoiceNumber(resent)).toBe(invoiceNumber(collected));
     expect(count("sales")).toBe(sales);
   });
 
@@ -262,35 +277,26 @@ describe("the sale routes while the full-disk stop holds", () => {
     const id = randomUUID();
     const before = venue.card.collectCalls.length;
 
-    const refused = await send(
-      venue.appWith({ disk: notedState() }),
-      venue.cookie,
-      "POST",
-      "/api/pay",
-      {
+    const payByReader = (app: Hono, billId: string) =>
+      send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+        submissionId: billId,
         dining: "eat_in",
-        id,
-        zoneId: free.zoneId,
-        lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }],
-      },
-    );
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: {
+          zoneId: free.zoneId,
+          lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }],
+        },
+      });
+    const refused = await payByReader(venue.appWith({ disk: notedState() }), id);
 
     expect(refusal(refused)).toEqual(REFUSED);
     expect(venue.card.collectCalls.length).toBe(before);
     expect(statusOfOrder(id)).toBeUndefined();
 
-    const control = await send(
-      venue.appWith({ disk: diskState() }),
-      venue.cookie,
-      "POST",
-      "/api/pay",
-      {
-        dining: "eat_in",
-        id: randomUUID(),
-        zoneId: free.zoneId,
-        lines: [{ menuItemId: free.offerFor(freeId), quantity: "1" }],
-      },
-    );
+    const control = await payByReader(venue.appWith({ disk: diskState() }), randomUUID());
     expect(control.status).toBe(200);
     expect(venue.card.collectCalls.length).toBe(before);
   });
@@ -310,12 +316,21 @@ describe("the sale routes while the full-disk stop holds", () => {
         venue.operatorId,
       );
       await creditWholeInvoice(id);
-      const answer = await send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        zoneId: venue.zoneId,
-        lines: [],
-      });
+      const answer = await send(
+        venue.appWith({ disk }),
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payments`,
+        {
+          submissionId: id,
+          kind: "contribution",
+          amount: "0.00",
+          method: "card",
+          entry: "reader",
+          applied: "0.00",
+          tip: "0.00",
+        },
+      );
       return { id, answer };
     };
 
@@ -357,7 +372,7 @@ describe("the sale routes while the full-disk stop holds", () => {
       const { disk, queuedBody } = queuingState((state) => state.noteRefused());
       const id = randomUUID();
 
-      const answer = await sale(venue.appWith({ disk }), id, cash);
+      const answer = await sale(venue.appWith({ disk }), id);
       await queuedBody();
 
       expect(refusal(answer)).toEqual(REFUSED);
@@ -367,7 +382,7 @@ describe("the sale routes while the full-disk stop holds", () => {
     it("sells when the queued write notes nothing", async () => {
       const { disk, queuedBody } = queuingState(() => {});
 
-      const answer = await sale(venue.appWith({ disk }), randomUUID(), cash);
+      const answer = await sale(venue.appWith({ disk }), randomUUID());
       await queuedBody();
 
       expect(answer.status).toBe(200);
@@ -377,7 +392,7 @@ describe("the sale routes while the full-disk stop holds", () => {
   it("sells again once the folder has 16 MiB free", async () => {
     const disk = notedState({ bytes: FULL_DISK_BYTES });
 
-    const answer = await sale(venue.appWith({ disk }), randomUUID(), cash);
+    const answer = await sale(venue.appWith({ disk }), randomUUID());
 
     expect(answer.status).toBe(200);
     expect(disk.noted()).toBe(false);
@@ -397,11 +412,11 @@ describe("the sale routes while the full-disk stop holds", () => {
     await noteFullAtStart(disk, { dir: "/unused", log: quiet, statfs, spareReleased });
     const id = randomUUID();
 
-    expect(refusal(await sale(venue.appWith({ disk }), id, cash))).toEqual(REFUSED);
+    expect(refusal(await sale(venue.appWith({ disk }), id))).toEqual(REFUSED);
     expect(statusOfOrder(id)).toBeUndefined();
 
     marker.present = false;
-    expect((await sale(venue.appWith({ disk }), id, cash)).status).toBe(200);
+    expect((await sale(venue.appWith({ disk }), id)).status).toBe(200);
     expect(statusOfOrder(id)).toBeDefined();
   });
 
@@ -409,13 +424,7 @@ describe("the sale routes while the full-disk stop holds", () => {
     const disk = notedState({ bytes: FULL_DISK_BYTES });
     const id = await placedOrder("House salad");
 
-    const answer = await send(
-      venue.appWith({ disk }),
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${id}/collect`,
-      { tender: { method: "cash", amount: "12.00" } },
-    );
+    const answer = await collect(venue.appWith({ disk }), id);
 
     expect(answer.status).toBe(200);
     expect(disk.noted()).toBe(false);

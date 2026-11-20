@@ -1,3 +1,4 @@
+import { cashPayment } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import crypto, { randomUUID } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
@@ -18,7 +19,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { seatTable } from "./parties.js";
 import { markServed } from "./working-order.js";
 import { combineParties } from "./testing/table-action-fixture.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+
 import { createTable } from "./testing/live-table.js";
 import { createZone } from "./testing/service-zone.js";
 import {
@@ -72,15 +73,8 @@ async function pay(billId: string) {
   const total = (await rowsOf(venue, billId))
     .reduce((sum, line) => sum + Number(line.lineTotal), 0)
     .toFixed(2);
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    {
-      id: billId,
-      tender: { method: "cash", amount: total },
-      lines: [],
-    },
-  );
+  const paid = await cashPayment(venue, venue.cookie.staff, billId, total);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
 }
 
 async function finish(partyId: string, billIds: string[]) {

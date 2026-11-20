@@ -4,7 +4,7 @@ import { writePartyAllergy } from "@waitron/venue-service";
 import { addGroupedTabRound } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
-import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
+import { cashPayment } from "./testing/bill-venue.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
@@ -59,7 +59,7 @@ import {
 
 // Merging a check that Move dishes made back into its tab, through the merge route: the kitchen
 // tickets, kitchen notices and print jobs it leaves, and the refusals that leave the check as it was.
-// One case finds such a check in Held orders and pays it through the sale route.
+// One case finds such a check in Held orders and pays it.
 let cfg: OriginConfig;
 let staffMember: { id: string };
 // One product so a tab can open with a real line to move — `openTab` prices it
@@ -559,20 +559,9 @@ describe("a split-off check after the till that made it has forgotten it", () =>
       label: "Table 5",
     });
 
-    const pay = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(
-        observedWholePaymentBody(venueSuite.db, "/api/sales", {
-          dining: "eat_in",
-          lines: [],
-          tender: { method: "cash", amount: "5.00" },
-          workingOrderId: checkId,
-        }),
-      ),
-    });
+    const pay = await cashPayment({ db: venueSuite.db, app }, cookie, checkId, "5.00");
     expect(pay.status).toBe(200);
-    expect(await pay.json()).toMatchObject({ total: "1.50", orderLabel: "Table 5" });
+    expect(pay.json).toMatchObject({ invoice: { total: "1.50", orderLabel: "Table 5" } });
     expect((await heldOrders(app, cookie)).map((order) => order.id)).not.toContain(checkId);
   });
 });

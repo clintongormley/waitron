@@ -55,6 +55,8 @@ import {
   type PartyBill,
 } from "./testing/party-close-fixture.js";
 import {
+  cashPayment,
+  paymentRows,
   placedCounterBillMovedTo,
   provisionBillVenue,
   fiscalRecordCount,
@@ -1332,19 +1334,11 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       json: { code: "party.bill_outstanding", params: { partyId: t.partyId } },
     });
 
-    const collected = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/collect`,
-      { tender: { method: "cash", amount: "20.00" } },
-    );
-
+    const collected = await cashPayment(venue, venue.cookie, billId, "20.00");
     expect(collected.status).toBe(200);
     expect(collected.json).toMatchObject({
-      invoiceNumber: listed.invoiceNumber,
-      total: "18.00",
-      tender: { method: "cash", change: "2.00" },
+      invoice: { invoiceNumber: listed.invoiceNumber, total: "18.00" },
+      payment: { method: "cash", change: "2.00" },
     });
     // The invoice filed at placing is the one settled: no second record, for this bill or any other.
     expect(fiscalRecordCount(venue, billId)).toBe(1);
@@ -1359,13 +1353,14 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     expect(settled).toEqual([{ id: filed[0]!.id, settledAt: expect.any(String) }]);
     // The collecting device is not the one that placed the bill, so the two cannot be confused below.
     expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
-    // Stored in whole cents; the sale keeps the device it was invoiced on.
+    const [payment] = await paymentRows(venue, billId);
+    expect(payment).toMatchObject({ deviceId: venue.deviceId, applied: 1800 });
     expect(await tendersOfBill(venue, billId)).toEqual([
       {
         method: "cash",
         amount: 1800,
         tip: 0,
-        billPaymentId: null,
+        billPaymentId: payment!.id,
         saleDeviceId: venue.cfg.origin.deviceId,
       },
     ]);

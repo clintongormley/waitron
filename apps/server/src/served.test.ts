@@ -41,7 +41,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,
@@ -58,7 +58,7 @@ import "./errors.js";
 import { cutParts, splitBill } from "./testing/bill-action-fixture.js";
 import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -404,14 +404,12 @@ async function expectRefusedWithNothingWritten(
 }
 
 async function pay(v: Venue, billId: string, amount: string): Promise<void> {
-  await payWorkingOrder(
+  await paySavedBillInCash(
     { admission: testTradingAdmission(), db: suite.db, backend, clock },
     v.cfg,
-    {
-      id: billId,
-      lines: [],
-      tender: { method: "cash", amount },
-    },
+    await counterFixtureOperator(suite.db, v.cfg.origin.deviceId),
+    billId,
+    amount,
   );
 }
 

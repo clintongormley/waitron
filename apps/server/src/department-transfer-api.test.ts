@@ -47,10 +47,9 @@ import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order
 import {
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  collectOrderOrchestration as collectOrder,
   settleIssuedOwingNothing,
 } from "./testing/whole-payment-fixture.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./testing/party-close-fixture.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";
@@ -1560,20 +1559,39 @@ describe("department transfer tab lifecycle", () => {
           }),
         );
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
+      const recovery = kind.endsWith("recovery");
       const pay = () =>
-        payWorkingOrderIntegrated(
-          { ...deps, admission: testTradingAdmission() },
-          v.cfg,
-          { id: f.tab, lines: [], simulationOutcome: "captured" },
-          personId,
-        );
-      expect((await pay()).outcome).toBe("captured");
+        recovery
+          ? payWorkingOrderIntegrated(
+              { ...deps, admission: testTradingAdmission() },
+              v.cfg,
+              { id: f.tab, lines: [], simulationOutcome: "captured" },
+              personId,
+            )
+          : takeReaderBillPayment(
+              { ...deps, admission: testTradingAdmission() },
+              v.cfg,
+              f.tab,
+              {
+                submissionId: id,
+                kind: "contribution",
+                amount: "2.00",
+                method: "card",
+                entry: "reader",
+                applied: "2.00",
+                tip: "0.00",
+                simulationOutcome: "captured",
+              },
+              operator,
+            );
+      const expectedOutcome = recovery ? "captured" : "received";
+      expect((await pay()).outcome).toBe(expectedOutcome);
       expect((await state(f.tab)).tab!.status).toBe("settled");
       await withdrawn(f, id);
       const issued = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
       expect(issued).toHaveLength(1);
       if (kind.startsWith("issued")) expect(issued).toEqual(before);
-      expect((await pay()).outcome).toBe("captured");
+      expect((await pay()).outcome).toBe(expectedOutcome);
       expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
         issued,
       );
@@ -1596,7 +1614,7 @@ describe("department transfer tab lifecycle", () => {
         await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
       const id = await pending(f);
       const pay = () =>
-        kind === "bill"
+        kind !== "immediate"
           ? takeBillPayment(
               { ...deps, admission: testTradingAdmission() },
               v.cfg,
@@ -1612,7 +1630,7 @@ describe("department transfer tab lifecycle", () => {
               },
               operator,
             )
-          : (kind === "issued" ? collectOrder : payWorkingOrder)(
+          : payWorkingOrder(
               { ...deps, admission: testTradingAdmission() },
               v.cfg,
               { id: f.tab, lines: [], tender: { method: "cash", amount: "2.00" } },

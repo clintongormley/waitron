@@ -1,3 +1,4 @@
+import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -30,18 +31,24 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { listStationQueue } from "./working-order.js";
+import { createOpenOrder, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
-import {
-  payWorkingOrder,
-  recordTillSaleOrchestration as recordTillSale,
-} from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
+import {
+  getBillBalance,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
 
 /**
@@ -226,8 +233,8 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
-  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + fiscal record, table reads free", async () => {
+describe("bill payment closes the tab", () => {
+  it("settles a tab with a round, files one sale and one fiscal record, and frees the table", async () => {
     const { cfg, coffee, water, tables } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };
@@ -244,12 +251,14 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
       ]);
     });
 
-    // Paying by id files the stored lines; `lines` is ignored.
-    const res = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    // Paying by id files the stored lines.
+    const res = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      tabId,
+      "5.00",
+    );
     expect(res.total).toBe("3.50");
     expect(res.invoiceNumber).toBe("A/1");
     expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
@@ -346,12 +355,17 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgA, coffee: coffeeA, counter: counterA } = await setupVenue();
     const nifA = await nifOf();
     const walkUpId = randomUUID();
-    await payWorkingOrder({ ...depsA, admission: testTradingAdmission() }, cfgA, {
-      id: walkUpId,
-      zoneId: counterA.zoneId,
-      lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await payFreshCounterInCash(
+      { ...depsA, admission: testTradingAdmission() },
+      cfgA,
+      await counterFixtureOperator(depsA.db, cfgA.origin.deviceId),
+      walkUpId,
+      {
+        zoneId: counterA.zoneId,
+        lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
+      },
+      "5.00",
+    );
 
     const { cfg: cfgB, coffee: coffeeB, tables: tablesB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
@@ -361,11 +375,13 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
         lines: [{ menuItemId: tablesB.offerFor(coffeeB.id), quantity: "1" }],
       });
     });
-    await payWorkingOrder({ ...depsB, admission: testTradingAdmission() }, cfgB, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await paySavedBillInCash(
+      { ...depsB, admission: testTradingAdmission() },
+      cfgB,
+      await counterFixtureOperator(depsB.db, cfgB.origin.deviceId),
+      tabId,
+      "5.00",
+    );
 
     // Without this, a tab that stopped belonging to the party seated at its table would make the
     // equality below vacuous.
@@ -384,6 +400,48 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
   });
 });
 
+async function deliveryOrder(
+  db: Database,
+  cfg: DeviceRequestConfig,
+  id: string,
+  zoneId: string,
+  menuItemId: string,
+  deliveryTableId?: string,
+) {
+  await withTransaction(db, (tx) =>
+    createOpenOrder(tx, cfg, id, [{ menuItemId, quantity: "1" }], null, {
+      zoneId,
+      deliveryTableId,
+    }),
+  );
+}
+
+async function payDelivery(
+  deps: { db: Database; backend: FiscalBackend; clock: TrustedClock },
+  cfg: DeviceRequestConfig,
+  id: string,
+) {
+  const personId = "cccccccc-0000-4000-8000-0000000000f1";
+  await withTransaction(deps.db, (tx) => ensureOperator(tx, personId));
+  const sessionId = await openTillSession(deps.db, { deviceId: cfg.origin.deviceId, personId });
+  const { outstanding } = await getBillBalance(deps, id);
+  return takeBillPayment(
+    { ...deps, admission: testTradingAdmission() },
+    cfg,
+    id,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "5.00",
+      applied: outstanding,
+      tip: "0.00",
+    },
+    { personId, sessionId },
+  );
+}
+
 async function deliveryTableOf(
   workingOrderId: string,
   db: Database = suite.db,
@@ -394,21 +452,16 @@ async function deliveryTableOf(
   return rows[0]!.d;
 }
 
-describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
+describe("counter delivery order creation and payment", () => {
   it("records delivery_table_id on the walk-up order and files one sale (it is NOT a tab)", async () => {
     const { cfg, coffee, counter } = await setupVenue();
     const tableId = await seedTable(cfg, "Del-1");
     const deps = { db: suite.db, backend, clock };
 
     const id = randomUUID();
-    const res = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-      workingOrderId: id,
-      zoneId: counter.zoneId,
-      lines: [{ menuItemId: counter.offerFor(coffee.id), quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-      deliveryTableId: tableId,
-    });
-    expect(res.invoiceNumber).toBe("A/1");
+    await deliveryOrder(deps.db, cfg, id, counter.zoneId, counter.offerFor(coffee.id), tableId);
+    const res = await payDelivery(deps, cfg, id);
+    expect(res.invoice?.invoiceNumber).toBe("A/1");
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await deliveryTableOf(id)).toBe(tableId);
     const { rows } = await suite.db.execute<{ n: string }>(
@@ -420,19 +473,19 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
 
   it("a deliveryTableId naming no table is refused table.not_found (a domain 4xx, not a raw 500)", async () => {
     const { cfg, coffee, counter } = await setupVenue();
-    const deps = { db: suite.db, backend, clock };
     const orderId = randomUUID();
     const missingTableId = randomUUID();
 
     // The column's foreign key would also refuse; this asserts the domain code checked before it.
     await expect(
-      recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-        workingOrderId: orderId,
-        zoneId: counter.zoneId,
-        lines: [{ menuItemId: counter.offerFor(coffee.id), quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-        deliveryTableId: missingTableId,
-      }),
+      deliveryOrder(
+        suite.db,
+        cfg,
+        orderId,
+        counter.zoneId,
+        counter.offerFor(coffee.id),
+        missingTableId,
+      ),
     ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: missingTableId } });
 
     expect(await saleCount(orderId)).toBe(0);
@@ -454,22 +507,20 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
-    await recordTillSale({ ...depsA, admission: testTradingAdmission() }, cfgA, {
-      workingOrderId: deliveredId,
-      zoneId: counterA.zoneId,
-      lines: [{ menuItemId: counterA.offerFor(coffeeA.id), quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-      deliveryTableId: tableA,
-    });
+    await deliveryOrder(
+      depsA.db,
+      cfgA,
+      deliveredId,
+      counterA.zoneId,
+      counterA.offerFor(coffeeA.id),
+      tableA,
+    );
+    await payDelivery(depsA, cfgA, deliveredId);
 
     const { cfg: cfgB, coffee: coffeeB, counter: counterB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
-    await recordTillSale({ ...depsB, admission: testTradingAdmission() }, cfgB, {
-      workingOrderId: walkUpId,
-      zoneId: counterB.zoneId,
-      lines: [{ menuItemId: counterB.offerFor(coffeeB.id), quantity: "1" }],
-      tender: { method: "cash", amount: "5.00" },
-    });
+    await deliveryOrder(depsB.db, cfgB, walkUpId, counterB.zoneId, counterB.offerFor(coffeeB.id));
+    await payDelivery(depsB, cfgB, walkUpId);
 
     // Without this, a sale that stopped writing the column would make the equality below vacuous.
     expect(await deliveryTableOf(deliveredId, suite.db)).toBe(tableA);
@@ -535,20 +586,24 @@ describe("a sent line is payable after archival; an archived unsent one is not",
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
-    const check = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: checkId,
-      lines: [],
-      tender: { method: "cash", amount: "12.00" },
-    });
+    const check = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      checkId,
+      "12.00",
+    );
     expect(check.total).toBe("12.00");
 
     // The tab still holds the unsent Burger, which blocks it and files nothing.
     await expect(
-      payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-        id: tabId,
-        lines: [],
-        tender: { method: "cash", amount: "50.00" },
-      }),
+      paySavedBillInCash(
+        { ...deps, admission: testTradingAdmission() },
+        cfg,
+        await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+        tabId,
+        "50.00",
+      ),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: burgerId } });
     expect(await saleCount(tabId)).toBe(0);
 
@@ -576,11 +631,13 @@ describe("a sent line is payable after archival; an archived unsent one is not",
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
     await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 4));
-    const tab = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: tabId,
-      lines: [],
-      tender: { method: "cash", amount: "15.00" },
-    });
+    const tab = await paySavedBillInCash(
+      { ...deps, admission: testTradingAdmission() },
+      cfg,
+      await counterFixtureOperator(deps.db, cfg.origin.deviceId),
+      tabId,
+      "15.00",
+    );
     expect(tab.total).toBe("15.00");
     expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
   });

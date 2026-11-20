@@ -190,12 +190,17 @@ function post(path: string, body: unknown) {
 
 async function sell() {
   const workingOrderId = randomUUID();
-  const answer = await post("/api/sales", {
+  const answer = await post(`/api/working-orders/${workingOrderId}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "20.00",
     dining: "eat_in",
-    lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
-    tender: { method: "cash", amount: "20.00" },
-    workingOrderId,
-    zoneId: counter.zoneId,
+    basket: {
+      zoneId: counter.zoneId,
+      lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
+    },
   });
   return { status: answer.status, body: await answer.text(), workingOrderId };
 }

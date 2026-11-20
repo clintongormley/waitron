@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { devices, withTransaction, type Database } from "@waitron/db";
+import { devices, persons, withTransaction, type Database } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, loginWithPin, tillSessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
@@ -53,6 +53,15 @@ export async function openTillSession(
     .values({ ...opts, tokenHash: hashSessionToken(randomUUID()) })
     .returning({ id: tillSessions.id });
   return row!.id;
+}
+
+/** The operator for a counter fixture that has no signed-in staff. */
+export async function counterFixtureOperator(db: Database, deviceId: string) {
+  const [{ id: personId }] = await db
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
+  return { personId, sessionId: await openTillSession(db, { deviceId, personId }) };
 }
 
 /**

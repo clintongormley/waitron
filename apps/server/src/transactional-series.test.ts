@@ -10,7 +10,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
@@ -58,14 +60,31 @@ function deps(v: BillVenue, backend = v.backend) {
 }
 
 async function issue(v: BillVenue, path: string, id: string, backend = v.backend) {
-  const lines = [{ menuItemId: v.offerFor("Caña"), quantity: "1" }];
+  const fiscal = { ...deps(v, backend), admission: testTradingAdmission() };
+  const personId = v.operatorId;
+  const operator = {
+    personId,
+    sessionId: await openTillSession(v.db, { personId, deviceId: v.cfg.origin.deviceId }),
+  };
   if (path === "walk-up") {
-    return payWorkingOrder({ ...deps(v, backend), admission: testTradingAdmission() }, v.cfg, {
+    const { invoice } = await takeBillPayment(
+      fiscal,
+      v.cfg,
       id,
-      zoneId: v.zoneId,
-      lines,
-      tender: { method: "cash", amount: "3.00" },
-    });
+      {
+        expectedEdit: null,
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
+        applied: "0.00",
+        tip: "0.00",
+      },
+      operator,
+      { lines: [{ menuItemId: v.offerFor("Caña"), quantity: "1" }], zoneId: v.zoneId },
+    );
+    return invoice;
   }
   if (path === "bill payment") {
     const result = await send(
@@ -95,11 +114,7 @@ async function issue(v: BillVenue, path: string, id: string, backend = v.backend
     );
     return;
   }
-  return payWorkingOrder({ ...deps(v, backend), admission: testTradingAdmission() }, v.cfg, {
-    id,
-    lines: [],
-    tender: { method: "cash", amount: "3.00" },
-  });
+  return paySavedBillInCash(fiscal, v.cfg, operator, id, "3.00");
 }
 
 async function prepare(v: BillVenue, path: string) {

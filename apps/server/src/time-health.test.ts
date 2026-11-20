@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -132,18 +133,24 @@ describe("authority clock alerts and sales", () => {
       },
     ]);
     const headers = { cookie: venue.cookie };
-    const sale = await venue.app.request("/api/sales", {
+    const sale = await venue.app.request(`/api/working-orders/${randomUUID()}/payments`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
         dining: "eat_in",
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        tender: { method: "cash", amount: "3.00" },
+        basket: {
+          zoneId: venue.zoneId,
+          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        },
       }),
     });
     expect(sale.status, await sale.clone().text()).toBe(200);
-    expect(await sale.json()).toMatchObject({ total: "3.00" });
+    expect(await sale.json()).toMatchObject({ invoice: { total: "3.00" } });
   });
 });
 

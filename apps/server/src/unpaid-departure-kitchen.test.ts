@@ -55,7 +55,7 @@ import {
   billOwes,
 } from "./testing/party-close-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { cashPayment } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -126,12 +126,8 @@ async function jobs() {
 }
 
 async function pay(billId: string, amount: string) {
-  await payWorkingOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
-    venue.cfg,
-    { id: billId, tender: { method: "cash", amount }, lines: [] },
-    venue.staffId,
-  );
+  const paid = await cashPayment(venue, venue.cookie.staff, billId, amount);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
 }
 
 async function joinOwing(partyId: string) {
@@ -1042,17 +1038,7 @@ describe("unpaid departure stops kitchen work", () => {
       stationId: extraStation,
       firedAt: expect.any(String),
     });
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: mixed.billId, tender: { method: "cash", amount: "36.00" }, lines: [] },
-      venue.staffId,
-    );
+    await pay(mixed.billId, "36.00");
     const owing = await billWith(venue, [{ name: "Burger" }]);
     await inTx(venue, (tx) =>
       combineParties(tx, venue.cfg, {

@@ -1,3 +1,5 @@
+import { openTillSession } from "./testing/session-device.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
@@ -45,11 +47,7 @@ import { receiptLines } from "./receipt-adjustments.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { addPortionRound, portionBill } from "./testing/portion-bill.js";
-import {
-  payWorkingOrder,
-  payWorkingOrderIntegratedOrchestration,
-  type IntegratedPayDeps,
-} from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration, type IntegratedPayDeps } from "./till-sale.js";
 import { createTable } from "./testing/live-table.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -381,16 +379,18 @@ describe("A803 portions: filing a bill of portions", () => {
   it("A803 portions: paying the whole bill at once links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("2"));
 
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { ...venue, admission: testTradingAdmission() },
       venue.cfg,
       {
-        id: billId,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        lines: [],
-        tender: { method: "cash", amount: "0.10" },
+        personId: venue.operatorId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.operatorId,
+        }),
       },
-      venue.operatorId,
+      billId,
+      "0.10",
     );
 
     expect(await filedRows(billId)).toEqual(twoSweetsFiled(portions));

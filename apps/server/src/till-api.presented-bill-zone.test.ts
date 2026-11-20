@@ -207,11 +207,18 @@ function moveBill(billId: string, tableId: string) {
   });
 }
 
-/** A presented bill is paid by collecting it. */
 function payInCash(billId: string, amount: string, cookie = venue.cookie) {
   return post(
-    `/api/working-orders/${billId}/collect`,
-    { tender: { method: "cash", amount } },
+    `/api/working-orders/${billId}/payments`,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    },
     cookie,
   );
 }

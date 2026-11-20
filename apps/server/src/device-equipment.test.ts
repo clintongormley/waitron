@@ -41,10 +41,9 @@ import { acceptDeviceJoinRequest, createJoinRequest } from "./join-requests.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
-import {
-  printSaleReceipt,
-  recordTillSaleOrchestration as recordTillSale,
-} from "./testing/whole-payment-fixture.js";
+import { printSaleReceipt } from "./till-sale.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -192,16 +191,19 @@ async function cashSale(venue: Venue, deviceId: string): Promise<string> {
     await ensureOperator(tx, OPERATOR);
     return offerProducts(tx, cfg);
   });
-  await recordTillSale(
+  await payFreshCounterInCash(
     { admission: testTradingAdmission(), db: suite.db, backend, clock },
     cfg,
     {
-      workingOrderId: id,
+      personId: OPERATOR,
+      sessionId: await openTillSession(suite.db, { deviceId, personId: OPERATOR }),
+    },
+    id,
+    {
       zoneId: offers.zoneId,
       lines: offers.toOfferLines([{ productId: venue.waterId, quantity: "1" }]),
-      tender: { method: "cash", amount: "2.00" },
     },
-    OPERATOR,
+    "2.00",
   );
   return id;
 }

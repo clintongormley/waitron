@@ -8,7 +8,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
-import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -322,19 +322,22 @@ async function send(v: Lunch, method: string, path: string, body?: object): Prom
             await observedGroupSubmitBody(
               suite.db,
               path,
-              observedWholePaymentBody(suite.db, path, body),
+              await observedPaymentBody(suite.db, path, body),
             ),
           ),
         }),
   });
 }
 
-const pay = (v: Lunch, lines: object[]) =>
-  send(v, "POST", "/api/sales", {
+const pay = (v: Lunch, lines: object[], { id = randomUUID(), tendered = "50.00" } = {}) =>
+  send(v, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
     dining: "eat_in",
-    zoneId: v.zoneId,
-    lines,
-    tender: { method: "cash", amount: "50.00" },
+    method: "cash",
+    kind: "share",
+    shareOf: 1,
+    tendered,
+    basket: { zoneId: v.zoneId, lines },
   });
 
 const lemonadeLine = (v: Lunch, menuVersionId?: string) => ({
@@ -374,7 +377,9 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
 
     const fresh = await pay(v, [lemonadeLine(v, v2), lemonadeLine(v, v2)]);
     expect(fresh.status).toBe(200);
-    const sale = (await fresh.json()) as { total: string; lines: { lineTotal: string }[] };
+    const { invoice: sale } = (await fresh.json()) as {
+      invoice: { total: string; lines: { lineTotal: string }[] };
+    };
     expect(sale.total).toBe("5.00");
     const filed = await suite.db
       .select({ menuVersionId: saleLines.menuVersionId, unitPrice: saleLines.unitPrice })
@@ -419,10 +424,12 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     );
     // Unpublished, so still 3.00.
     const unpublished = await pay(v, [lemonadeLine(v)]);
-    expect(((await unpublished.json()) as { total: string }).total).toBe("3.00");
+    expect(((await unpublished.json()) as { invoice: { total: string } }).invoice.total).toBe(
+      "3.00",
+    );
     const v2 = await publish(v.menuId);
     const live = await pay(v, [lemonadeLine(v)]);
-    expect(((await live.json()) as { total: string }).total).toBe("2.50");
+    expect(((await live.json()) as { invoice: { total: string } }).invoice.total).toBe("2.50");
     const [latest] = await suite.db
       .select({ menuVersionId: saleLines.menuVersionId })
       .from(saleLines)
@@ -506,7 +513,7 @@ describe("a basket that spans a scheduled activation", () => {
 
     const early = await pay(v, [lemonadeLine(v, v1)]);
     expect(early.status).toBe(200);
-    expect(((await early.json()) as { total: string }).total).toBe("3.00");
+    expect(((await early.json()) as { invoice: { total: string } }).invoice.total).toBe("3.00");
     await withTransaction(suite.db, (tx) =>
       updateMenuItem(tx, v.menuId, v.lemonade.offerId, { grossPrice: "3.50" }),
     );
@@ -546,7 +553,7 @@ describe("a basket that spans a scheduled activation", () => {
 
     const fresh = await pay(v, [lemonadeLine(v)]);
     expect(fresh.status).toBe(200);
-    expect(((await fresh.json()) as { total: string }).total).toBe("3.50");
+    expect(((await fresh.json()) as { invoice: { total: string } }).invoice.total).toBe("3.50");
     const [freshSale] = await suite.db
       .select({ workingOrderId: sales.workingOrderId })
       .from(sales)
@@ -637,7 +644,7 @@ describe("the extras a line picks are priced from the published version", () => 
     const response = await pay(v, [withLemon(v)]);
     expect(response.status).toBe(200);
     // 3.00 + the published 0.50, not the list's new 0.90.
-    expect(((await response.json()) as { total: string }).total).toBe("3.50");
+    expect(((await response.json()) as { invoice: { total: string } }).invoice.total).toBe("3.50");
   });
 
   it("refuses an extra made unavailable after publishing", async () => {
@@ -684,12 +691,11 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
       return offers.find((offer) => offer.id === v.lemonade.offerId)!.unit;
     };
     const sell = () =>
-      send(v, "POST", "/api/sales", {
-        dining: "eat_in",
-        zoneId: v.zoneId,
+      pay(
+        v,
         // 250 ml as three lines: a unit without the Measure switch sells whole portions, at most
         // 99 of one dish in one line.
-        lines: ["99", "99", "52"].map((quantity) => ({
+        ["99", "99", "52"].map((quantity) => ({
           menuItemId: v.lemonade.offerId,
           quantity,
           extras: [
@@ -699,8 +705,8 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
             },
           ],
         })),
-        tender: { method: "cash", amount: "1000.00" },
-      });
+        { tendered: "1000.00" },
+      );
 
     const unpublished = await lemonadeUnit();
     expect(unpublished.id).toBe(unit.id);
@@ -708,7 +714,9 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
     const accepted = await sell();
     expect(accepted.status).toBe(200);
     // 250 × 3.00 + 250 × 0.50.
-    expect(((await accepted.json()) as { total: string }).total).toBe("875.00");
+    expect(((await accepted.json()) as { invoice: { total: string } }).invoice.total).toBe(
+      "875.00",
+    );
 
     await publish(v.menuId);
     expect((await lemonadeUnit()).measure).toBe(true);
@@ -828,9 +836,11 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     expect(await servedOrdering(v, bacon.offerId)).toBe("staff_only");
     const response = await pay(v, [baconLine(bacon)]);
     expect(response.status).toBe(200);
-    const ticket = (await response.json()) as {
-      total: string;
-      lines: { descriptions: Record<string, string> }[];
+    const { invoice: ticket } = (await response.json()) as {
+      invoice: {
+        total: string;
+        lines: { descriptions: Record<string, string> }[];
+      };
     };
     expect(ticket.total).toBe("2.00");
     expect(ticket.lines.map((line) => line.descriptions[LOCALE])).toEqual(["Beicon crujiente"]);
@@ -860,7 +870,7 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     const bacon = await withBacon(v, "not_sold_separately");
     const response = await pay(v, [burgerWithBacon(v, bacon)]);
     expect(response.status).toBe(200);
-    expect(((await response.json()) as { total: string }).total).toBe("10.00");
+    expect(((await response.json()) as { invoice: { total: string } }).invoice.total).toBe("10.00");
   });
 
   // The published version carries the setting, as it carries the price: the till's menu and the
@@ -903,15 +913,9 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
 
-    const paid = await send(v, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      zoneId: v.zoneId,
-      lines: [{ workingOrderLineId: stored!.id, ...baconLine(bacon) }],
-      tender: { method: "cash", amount: "50.00" },
-    });
+    const paid = await pay(v, [{ workingOrderLineId: stored!.id, ...baconLine(bacon) }], { id });
     expect(paid.status).toBe(200);
-    expect(((await paid.json()) as { total: string }).total).toBe("2.00");
+    expect(((await paid.json()) as { invoice: { total: string } }).invoice.total).toBe("2.00");
     const tickets = await suite.db
       .select({ lineId: ticketItems.workingOrderLineId })
       .from(ticketItems)
@@ -983,15 +987,17 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       { submissionId: randomUUID(), expectedPartyRevision: submitted.revision },
     );
     expect(fired.status).toBe(200);
-    const paid = await send(v, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "cash", amount: "50.00" },
-      workingOrderId: party.tabId,
-      zoneId: tables.zoneId,
+    const paid = await send(v, "POST", `/api/working-orders/${party.tabId}/payments`, {
+      submissionId: randomUUID(),
+      method: "cash",
+      kind: "share",
+      shareOf: 1,
+      tendered: "50.00",
+      applied: "2.00",
+      tip: "0.00",
     });
     expect(paid.status).toBe(200);
-    expect(((await paid.json()) as { total: string }).total).toBe("2.00");
+    expect(((await paid.json()) as { invoice: { total: string } }).invoice.total).toBe("2.00");
     expect(await ticketed()).toEqual([{ productId: bacon.productId, firedAt: expect.any(String) }]);
   });
 });
@@ -1267,7 +1273,7 @@ it("sells a product reached only through an included menu at that menu's price",
     { menuItemId: offers.rows[0]!.id, menuVersionId: version, quantity: "1" },
   ]);
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ total: "3.50" });
+  expect(await response.json()).toMatchObject({ invoice: { total: "3.50" } });
   const lines = await suite.db.select({ price: saleLines.unitPrice }).from(saleLines);
   expect(lines.map((l) => l.price)).toContain(318);
   const held = await suite.db

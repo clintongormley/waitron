@@ -9,21 +9,26 @@ it("returns stored invoice evidence on a cash sale and on its replay and receipt
   const v = await provisionBillVenue(suite.db);
   const workingOrderId = randomUUID();
   const request = {
-    workingOrderId,
-    zoneId: v.zoneId,
-    lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
-    tender: { method: "cash", amount: "35.00" },
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "35.00",
     dining: "eat_in",
+    basket: {
+      zoneId: v.zoneId,
+      lines: [{ menuItemId: v.offerFor("Paella"), quantity: "1" }],
+    },
   };
   const pay = () =>
-    v.app.request("/api/sales", {
+    v.app.request(`/api/working-orders/${workingOrderId}/payments`, {
       method: "POST",
       headers: { cookie: v.cookie, "content-type": "application/json" },
       body: JSON.stringify(request),
     });
   const first = await pay();
   expect(first.status).toBe(200);
-  const original = await first.json();
+  const { invoice: original } = await first.json();
   expect(original.invoiceEvidence).toEqual({
     taxpayerId: "61000002T",
     environment: "preproduction",
@@ -34,7 +39,7 @@ it("returns stored invoice evidence on a cash sale and on its replay and receipt
   });
   const replay = await pay();
   expect(replay.status).toBe(200);
-  expect((await replay.json()).invoiceEvidence).toEqual(original.invoiceEvidence);
+  expect((await replay.json()).invoice.invoiceEvidence).toEqual(original.invoiceEvidence);
   const read = await v.app.request(`/api/sales/${workingOrderId}`, {
     headers: { cookie: v.cookie },
   });

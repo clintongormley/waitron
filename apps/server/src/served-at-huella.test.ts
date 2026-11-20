@@ -39,13 +39,13 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
@@ -257,11 +257,13 @@ async function openServeAndPay(
     });
   }
 
-  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
-    id: tabId,
-    lines: [],
-    tender: { method: "cash", amount: "10.00" },
-  });
+  await paySavedBillInCash(
+    { admission: testTradingAdmission(), db, backend, clock },
+    cfg,
+    await counterFixtureOperator(db, cfg.origin.deviceId),
+    tabId,
+    "10.00",
+  );
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx
@@ -365,11 +367,13 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .where(eq(workingOrders.id, tabId));
   });
 
-  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
-    id: tabId,
-    lines: [],
-    tender: { method: "cash", amount: "10.00" },
-  });
+  await paySavedBillInCash(
+    { admission: testTradingAdmission(), db, backend, clock },
+    cfg,
+    await counterFixtureOperator(db, cfg.origin.deviceId),
+    tabId,
+    "10.00",
+  );
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx
@@ -512,11 +516,13 @@ async function openWithExtraAndPay(
     ]);
   });
 
-  await payWorkingOrder({ admission: testTradingAdmission(), db, backend, clock }, cfg, {
-    id: tabId,
-    lines: [],
-    tender: { method: "cash", amount: "10.00" },
-  });
+  await paySavedBillInCash(
+    { admission: testTradingAdmission(), db, backend, clock },
+    cfg,
+    await counterFixtureOperator(db, cfg.origin.deviceId),
+    tabId,
+    "10.00",
+  );
 
   const huella = await withTransaction(db, async (tx) => {
     const rows = await tx

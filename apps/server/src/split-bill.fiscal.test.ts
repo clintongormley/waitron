@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -18,13 +19,13 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
@@ -166,7 +167,7 @@ interface ThreeChecks {
 
 async function splitIntoThreeChecks(
   seeded: Seeded,
-  deps: Parameters<typeof payWorkingOrder>[0],
+  deps: Parameters<typeof paySavedBillInCash>[0],
 ): Promise<ThreeChecks> {
   const { cfg, waterId, hamId, tableId, offers } = seeded;
   const water = { productId: waterId, quantity: "3" };
@@ -182,22 +183,10 @@ async function splitIntoThreeChecks(
   const { billId: b } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
   const { billId: c } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
 
-  // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
-  const rA = await payWorkingOrder(deps, cfg, {
-    id: a,
-    tender: { method: "cash", amount: "10.00" },
-    lines: [],
-  });
-  const rB = await payWorkingOrder(deps, cfg, {
-    id: b,
-    tender: { method: "cash", amount: "2.00" },
-    lines: [],
-  });
-  const rC = await payWorkingOrder(deps, cfg, {
-    id: c,
-    tender: { method: "cash", amount: "2.00" },
-    lines: [],
-  });
+  const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+  const rA = await paySavedBillInCash(deps, cfg, operator, a, "10.00");
+  const rB = await paySavedBillInCash(deps, cfg, operator, b, "2.00");
+  const rC = await paySavedBillInCash(deps, cfg, operator, c, "2.00");
   return { tabId, a, b, c, rA, rB, rC };
 }
 
@@ -288,16 +277,9 @@ describe("split-bill: pay each check files its own registro", () => {
     });
     const { billId: a } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
     const { billId: b } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
-    const rA = await payWorkingOrder(deps, cfg, {
-      id: a,
-      tender: { method: "cash", amount: "10.00" },
-      lines: [],
-    });
-    const rB = await payWorkingOrder(deps, cfg, {
-      id: b,
-      tender: { method: "cash", amount: "5.00" },
-      lines: [],
-    });
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+    const rA = await paySavedBillInCash(deps, cfg, operator, a, "10.00");
+    const rB = await paySavedBillInCash(deps, cfg, operator, b, "5.00");
 
     const { records, originLines, filed } = await asApp(async (tx) => ({
       records: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
@@ -400,23 +382,25 @@ describe("split-bill: pay each check files its own registro", () => {
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    // Pay the SAME check twice, sequentially (a lost-response retry): the second pay sees `settled`
-    // and replays the existing ticket rather than filing again — a check gets the same replay as any
-    // tab.
-    const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: checkId,
-      tender: { method: "cash", amount: "2.00" },
-      lines: [],
-    });
-    const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: checkId,
-      tender: { method: "cash", amount: "2.00" },
-      lines: [],
-    });
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
+    const request = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "1.50",
+      method: "cash",
+      tendered: "2.00",
+      applied: "1.50",
+      tip: "0.00",
+    } as const;
+    const paymentDeps = { ...deps, admission: testTradingAdmission() };
+    const first = await takeBillPayment(paymentDeps, cfg, checkId, request, operator);
+    const second = await takeBillPayment(paymentDeps, cfg, checkId, request, operator);
 
-    // The retry returns the SAME invoice number + total — the original ticket re-derived, not a new file.
-    expect(second.invoiceNumber).toBe(first.invoiceNumber);
-    expect(second.total).toBe(first.total);
+    expect(first.invoice).toMatchObject({ total: "1.50", invoiceNumber: expect.any(String) });
+    expect(second.invoice).toMatchObject({
+      total: first.invoice?.total,
+      invoiceNumber: first.invoice?.invoiceNumber,
+    });
 
     const forCheck = await asApp((tx) =>
       tx

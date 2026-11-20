@@ -987,11 +987,12 @@ describe("screens and actions are separate", () => {
     expect(advance.body.error).toEqual(forbidden("prepare-orders").error);
     const collect = await send(cookie, "POST", `/api/orders/${id}/collect`, {});
     expect(collect.body.error).toEqual(forbidden("hand-over-orders").error);
-    const pay = await send(cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: cash,
-    });
+    const pay = await send(
+      cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      billPayment("cash"),
+    );
     expect(pay.body.error?.code).toBe("device.cash_not_allowed");
   });
 
@@ -1049,10 +1050,17 @@ describe("the order of a sale's refusals", () => {
       });
     });
     const { cookie } = await signInOn(restaurantOnly);
-    const sale = await send(cookie, "POST", "/api/sales", {
+    const sale = await send(cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "3.00",
       dining: "eat_in",
-      lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
-      zoneId: deli.id,
+      basket: {
+        lines: [{ menuItemId: v.counterItem("Caña"), quantity: "1" }],
+        zoneId: deli.id,
+      },
     });
     expect({ status: sale.status, error: sale.body.error }).toEqual(forbidden("take-orders"));
   });
@@ -1122,11 +1130,10 @@ describe("a shared kitchen display", () => {
     });
     expect(park.body.error?.code).toBe("sale.empty_basket");
     const order = await counterOrder(v, "Caña");
-    const collect = await send(cookie, "POST", `/api/working-orders/${order}/collect`, {
-      tender: cash,
-    });
+    const paymentPath = `/api/working-orders/${order}/payments`;
+    const collect = await send(cookie, "POST", paymentPath, billPayment("cash"));
     expect(collect.body.error?.code).toBe("device.cash_not_allowed");
-    const pay = await send(cookie, "POST", "/api/pay", { dining: "eat_in" });
+    const pay = await send(cookie, "POST", paymentPath, billPayment("card", "reader"));
     expect(pay.body.error).toEqual(forbidden("pay").error);
     const open = await send(cookie, "POST", "/api/drawer/open", {});
     expect(open.body.error).toEqual(forbidden("drawer_open").error);

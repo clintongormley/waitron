@@ -35,7 +35,6 @@ import { AppError } from "@waitron/shared";
 
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { createStation } from "./kitchen.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -54,7 +53,7 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
-import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
+import { cashPayment, fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import { createZone } from "./testing/service-zone.js";
 import {
   watchDerivationsAndLock,
@@ -67,6 +66,11 @@ vi.mock("node:crypto", async (importOriginal) =>
 );
 
 let venue: AdjustmentVenue;
+
+async function payCash(billId: string, amount: string) {
+  const paid = await cashPayment(venue, venue.cookie.staff, billId, amount);
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+}
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -346,16 +350,7 @@ describe("the public cancellation read and command", () => {
     "refuses HTTP cancellation beyond the unserved paid remainder (served %s, refund %s)",
     async (quantity, refundHandoff) => {
       const p = await fixture("fire");
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
-      );
+      await payCash(p.billId, "26.00");
       await inTx(venue, async (tx) => {
         const [party] = await tx.select().from(parties).where(eq(parties.id, p.partyId));
         await markServed(tx, venue.cfg, p.partyId, [{ lineId: p.parent.id, quantity }], {
@@ -378,20 +373,7 @@ describe("the public cancellation read and command", () => {
 
   it("refuses the paid refund handoff without refund permission before cancelling food", async () => {
     const p = await fixture();
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      {
-        id: p.billId,
-        tender: { method: "cash", amount: "26.00" },
-        lines: [],
-      },
-    );
+    await payCash(p.billId, "26.00");
     const body = await bodyFor(p, { outcome: "keep_charge", refundHandoff: true });
     const before = await frozen();
     const answer = await post(p, body);
@@ -402,20 +384,7 @@ describe("the public cancellation read and command", () => {
 
   async function paidFixture() {
     const p = await fixture();
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      {
-        id: p.billId,
-        tender: { method: "cash", amount: "26.00" },
-        lines: [],
-      },
-    );
+    await payCash(p.billId, "26.00");
     return p;
   }
   async function cancelRows(p: Fixture) {
@@ -494,20 +463,7 @@ describe("the public cancellation read and command", () => {
     "checks paid refund handoff permission (%s) without changing filed money",
     async (who) => {
       const p = await fixture();
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        {
-          id: p.billId,
-          tender: { method: "cash", amount: "26.00" },
-          lines: [],
-        },
-      );
+      await payCash(p.billId, "26.00");
       const body = await bodyFor(p, {
         outcome: "keep_charge",
         refundHandoff: true,
@@ -792,17 +748,7 @@ describe("the public cancellation read and command", () => {
   it("identifies the cancelled dish's own filed sale among paid party bills without writing", async () => {
     const first = await fixture();
     const second = await fixture("fire");
-    for (const p of [first, second])
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: p.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
-      );
+    for (const p of [first, second]) await payCash(p.billId, "26.00");
     const before = await frozen();
     const firstSale = before.sales.find((sale) => sale.workingOrderId === first.billId)!;
     const secondSale = before.sales.find((sale) => sale.workingOrderId === second.billId)!;
@@ -826,20 +772,7 @@ describe("the public cancellation read and command", () => {
         .set({ lineNo: sql`${workingOrderLines.lineNo} + 10` })
         .where(eq(workingOrderLines.workingOrderId, p.billId)),
     );
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      {
-        id: p.billId,
-        tender: { method: "cash", amount: "26.00" },
-        lines: [],
-      },
-    );
+    await payCash(p.billId, "26.00");
     const before = await frozen();
     const result = await send(venue.app, venue.cookie.staff, "GET", path(p, true));
     expect(result.status).toBe(200);
@@ -857,16 +790,7 @@ describe("the public cancellation read and command", () => {
           ? [{ name: "Water" }]
           : [{ name: "Pizza", olives: 2 }, { name: "Water" }],
       );
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: other.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
-      );
+      await payCash(other.billId, "26.00");
       const [sale] = await venue.db
         .select()
         .from(sales)
@@ -920,20 +844,7 @@ describe("the public cancellation read and command", () => {
     "reads and keeps the payment of a genuinely paid %s dish",
     async (release) => {
       const p = await fixture(release);
-      await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        {
-          id: p.billId,
-          tender: { method: "cash", amount: "26.00" },
-          lines: [],
-        },
-      );
+      await payCash(p.billId, "26.00");
       const before = await frozen();
       const ordinary = await send(
         venue.app,

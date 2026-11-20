@@ -69,15 +69,28 @@ const EXPECTED: Record<Dining, { vatRate: number; base: string }> = {
   eat_in: { vatRate: 1000, base: "1.64" },
 };
 
+function counterPayment(
+  id: string,
+  lines: ReturnType<typeof colaLine>,
+  dining: Dining,
+  payment: { method: "cash"; tendered: string } | { method: "card"; entry: "reader" },
+) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    ...payment,
+    dining,
+    basket: { lines, zoneId: counter.zoneId },
+  });
+}
+
 describe("a walk-up cola filed in one request", () => {
   it.each(["takeaway", "eat_in"] as const)("files a cash sale %s at its class", async (dining) => {
     const workingOrderId = randomUUID();
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      workingOrderId,
-      lines: colaLine(),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "1.80" },
-      dining,
+    const sold = await counterPayment(workingOrderId, colaLine(), dining, {
+      method: "cash",
+      tendered: "1.80",
     });
     expect(sold.status).toBe(200);
     expect(filedLine(workingOrderId)).toEqual([EXPECTED[dining]]);
@@ -85,11 +98,9 @@ describe("a walk-up cola filed in one request", () => {
 
   it.each(["takeaway", "eat_in"] as const)("files a card sale %s at its class", async (dining) => {
     const id = randomUUID();
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      id,
-      lines: colaLine(),
-      zoneId: counter.zoneId,
-      dining,
+    const paid = await counterPayment(id, colaLine(), dining, {
+      method: "card",
+      entry: "reader",
     });
     expect(paid.status).toBe(200);
     expect(filedLine(id)).toEqual([EXPECTED[dining]]);
@@ -109,12 +120,9 @@ describe("a walk-up cola filed in one request", () => {
     "files a cash sale's extra %s at the extra's own class",
     async (dining) => {
       const workingOrderId = randomUUID();
-      const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-        workingOrderId,
-        lines: burgerWithSoda(),
-        zoneId: counter.zoneId,
-        tender: { method: "cash", amount: "12.00" },
-        dining,
+      const sold = await counterPayment(workingOrderId, burgerWithSoda(), dining, {
+        method: "cash",
+        tendered: "12.00",
       });
       expect(sold.status).toBe(200);
       expect(filedRates(workingOrderId)).toEqual(EXTRA_RATES[dining]);
@@ -125,11 +133,9 @@ describe("a walk-up cola filed in one request", () => {
     "files a card sale's extra %s at the extra's own class",
     async (dining) => {
       const id = randomUUID();
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-        id,
-        lines: burgerWithSoda(),
-        zoneId: counter.zoneId,
-        dining,
+      const paid = await counterPayment(id, burgerWithSoda(), dining, {
+        method: "card",
+        entry: "reader",
       });
       expect(paid.status).toBe(200);
       expect(filedRates(id)).toEqual(EXTRA_RATES[dining]);

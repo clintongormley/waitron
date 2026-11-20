@@ -294,16 +294,24 @@ describe("the cash-up counts money on the day and device it moves (bill payments
   });
 
   it("counts a walk-up cash sale's tender exactly once, as before (test 26)", async () => {
-    const res = await venue.appAt(noonOn("2026-03-14")).request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: venue.cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
-        tender: { method: "cash", amount: "6.00" },
-        zoneId: venue.zoneId,
-      }),
-    });
+    const res = await venue
+      .appAt(noonOn("2026-03-14"))
+      .request(`/api/working-orders/${randomUUID()}/payments`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: venue.cookie },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "6.00",
+          dining: "eat_in",
+          basket: {
+            zoneId: venue.zoneId,
+            lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
+          },
+        }),
+      });
     expect(res.status).toBe(200);
 
     expect((await dailyClose("2026-03-14")).cash).toEqual({

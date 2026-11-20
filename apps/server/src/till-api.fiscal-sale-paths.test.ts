@@ -363,6 +363,29 @@ function deviceIdOf(cookie: string): string {
 }
 
 /** The stamped `payments.reader_id` for a working order (NULL when none). */
+function payFreshBasketOnReader(
+  app: Hono,
+  cookie: string,
+  billId: string,
+  menuItemId: string,
+  options: { readerId?: string; simulationOutcome?: "captured" } = {},
+) {
+  return app.request(`/api/working-orders/${billId}/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie },
+    body: JSON.stringify({
+      dining: "eat_in",
+      submissionId: billId,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      basket: { lines: [{ menuItemId, quantity: "1" }] },
+      ...options,
+    }),
+  });
+}
+
 async function readerIdOnPayment(workingOrderId: string): Promise<string | null> {
   const rows = await suite.db.execute<{ reader_id: string | null }>(sql`
     select reader_id from payments where working_order_id = ${workingOrderId}`);
@@ -671,15 +694,22 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const ham = products.find((p) => p.unit.hardwareUnit === "kg")!;
     const water = products.find((p) => p.unit.hardwareUnit === null)!;
 
-    const invalidQuantity = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: ham.menuItemId, quantity: "0.2001" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    function pay(lines: { menuItemId: string; quantity: string }[]) {
+      return app.request(`/api/working-orders/${randomUUID()}/payments`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "10.00",
+          dining: "eat_in",
+          basket: { lines },
+        }),
+      });
+    }
+    const invalidQuantity = await pay([{ menuItemId: ham.menuItemId, quantity: "0.2001" }]);
     expect(invalidQuantity.status).toBe(400);
     expect(await invalidQuantity.json()).toMatchObject({
       error: { code: "quantity.invalid", params: { reason: "precision" } },
@@ -688,22 +718,15 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 3. Ring a MIXED basket: 0.200 kg ham (4.98 gross @10%) + 2 × water (3.00 gross @21%) = 7.98,
     // tendered 10.00 → 2.02 change. Two rate groups, so the vatBreakdown must carry a per-rate base
     // for each (findings §14: the base imponible split per rate is mandatory once rates mix).
-    const saleRes = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [
-          { menuItemId: ham.menuItemId, quantity: "0.200" },
-          { menuItemId: water.menuItemId, quantity: "2" },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    const lines = [
+      { menuItemId: ham.menuItemId, quantity: "0.200" },
+      { menuItemId: water.menuItemId, quantity: "2" },
+    ];
+    const saleRes = await pay(lines);
     expect(saleRes.status).toBe(200);
 
     // 4. Every legally-required ticket field (findings §14).
-    const ticket = await saleRes.json();
+    const { invoice: ticket } = await saleRes.json();
     expect(ticket.invoiceNumber).toMatch(/^A\/\d+$/); // número + serie
     expect(ticket.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // fecha de expedición, ISO-8601…
     expect(Number.isNaN(Date.parse(ticket.issuedAt))).toBe(false); // …and a real instant
@@ -741,18 +764,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 5. Ring a SECOND identical mixed sale so the chain has a predecessor to link to. Same cookie,
     // same app — invoice A/2.
-    const secondRes = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [
-          { menuItemId: ham.menuItemId, quantity: "0.200" },
-          { menuItemId: water.menuItemId, quantity: "2" },
-        ],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
+    const secondRes = await pay(lines);
     expect(secondRes.status).toBe(200);
 
     // 6. Two chained fiscal records: the first opens the chain (`primerRegistro`, no predecessor
@@ -1210,20 +1222,17 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+    );
 
     expect(payRes.status).toBe(200);
-    const outcome = (await payRes.json()) as { outcome: string; ticket?: { total: string } };
-    expect(outcome.outcome).toBe("captured");
-    expect(outcome.ticket?.total).toBe("1.50");
+    const outcome = (await payRes.json()) as { outcome: string; invoice?: { total: string } };
+    expect(outcome.outcome).toBe("received");
+    expect(outcome.invoice?.total).toBe("1.50");
     // The payment records the reader it settled on — the chosen one.
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
@@ -1240,15 +1249,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+    );
 
     expect(payRes.status).toBe(200);
     const expected = [{ source: "device", device_id: deviceIdOf(deviceCookie) }];
@@ -1275,19 +1281,16 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await holdReader(deviceIdOf(deviceCookie), other.id);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        readerId: other.id,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+      { readerId: other.id },
+    );
 
     expect(payRes.status).toBe(200);
-    expect((await payRes.json()).outcome).toBe("captured");
+    expect((await payRes.json()).outcome).toBe("received");
     // The OVERRIDE reader was charged and stamped, not the chosen one.
     expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
   });
@@ -1311,18 +1314,15 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await holdReader(deviceIdOf(deviceCookie), readerB.id);
 
     const pay = async (readerId: string): Promise<void> => {
-      const res = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          dining: "eat_in",
-          id: randomUUID(),
-          readerId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
+      const res = await payFreshBasketOnReader(
+        app,
+        `${cookie}; ${deviceCookie}`,
+        randomUUID(),
+        each.menuItemId,
+        { readerId },
+      );
       expect(res.status).toBe(200);
-      expect((await res.json()).outcome).toBe("captured");
+      expect((await res.json()).outcome).toBe("received");
     };
 
     await pay(readerA.id);
@@ -1352,18 +1352,15 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await swept.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+    );
 
     expect(payRes.status).toBe(200); // not a 500
-    expect((await payRes.json()).outcome).toBe("captured");
+    expect((await payRes.json()).outcome).toBe("received");
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 
@@ -1376,15 +1373,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     // No chosen reader and no `readerId` in the body → nothing resolves.
 
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      randomUUID(),
+      each.menuItemId,
+    );
 
     expect(payRes.status).toBe(404);
     expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
@@ -1401,15 +1395,12 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const reader = await seedReader(); // active reader, but provider not connected
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      randomUUID(),
+      each.menuItemId,
+    );
 
     expect(payRes.status).toBe(409);
     expect(await payRes.json()).toMatchObject({
@@ -1634,19 +1625,16 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        simulationOutcome: "captured",
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+      { simulationOutcome: "captured" },
+    );
 
     expect(payRes.status).toBe(200);
-    expect((await payRes.json()).outcome).toBe("captured");
+    expect((await payRes.json()).outcome).toBe("received");
     // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
     expect(await readerIdOnPayment(workingOrderId)).toBeNull();
   });
@@ -3099,7 +3087,7 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     expect(body.activeReaders).toEqual([]);
   });
 
-  it("POST /api/pay naming a reader id that matches no active reader is reader.not_found", async () => {
+  it("a reader payment naming a reader id that matches no active reader is reader.not_found", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -3109,23 +3097,20 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     await connectStripe();
     const readerId = randomUUID();
 
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        readerId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      randomUUID(),
+      each.menuItemId,
+      { readerId },
+    );
     expect(payRes.status).toBe(404);
     expect(await payRes.json()).toMatchObject({
       error: { code: "reader.not_found", params: { id: readerId } },
     });
   });
 
-  it("POST /api/pay without the provider seat list skips the sealed-credential pre-check", async () => {
+  it("a reader payment without the provider seat list skips the sealed-credential pre-check", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -3141,17 +3126,14 @@ describe("card readers the till cannot drive, and readers named by id", () => {
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+    );
     expect(payRes.status).toBe(200);
-    expect((await payRes.json()).outcome).toBe("captured");
+    expect((await payRes.json()).outcome).toBe("received");
     expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
   });
 });

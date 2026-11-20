@@ -875,10 +875,7 @@ type HeardBatch = (typeof outside.submits)[number];
 /** A cash sale on a box, by its record. */
 async function sale(boxes: Boxes, box: Box = boxes.m1): Promise<string> {
   const before = new Set(recordIds(box.venueFile));
-  const answer = await ask(box, "/api/sales", {
-    cookie: boxes.venue.cookie,
-    body: saleBody(boxes),
-  });
+  const answer = await askSale(boxes, box);
   const text = await answer.text();
   expect(answer.status, text).toBe(200);
   const added = recordIds(box.venueFile).filter((id) => !before.has(id));
@@ -886,13 +883,22 @@ async function sale(boxes: Boxes, box: Box = boxes.m1): Promise<string> {
   return added[0]!;
 }
 
-function saleBody(boxes: Boxes) {
-  return {
-    zoneId: boxes.venue.zoneId,
-    lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
-    tender: { method: "cash", amount: "3.00" },
-    dining: "eat_in",
-  };
+function askSale(boxes: Boxes, box: Box) {
+  return ask(box, `/api/working-orders/${randomUUID()}/payments`, {
+    cookie: boxes.venue.cookie,
+    body: {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "3.00",
+      dining: "eat_in",
+      basket: {
+        zoneId: boxes.venue.zoneId,
+        lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+      },
+    },
+  });
 }
 
 function recordIds(file: string): string[] {
@@ -1000,10 +1006,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
 
   await start(m1);
   const m1Restricted = await nodeProbe(m1);
-  const refused = await ask(m1, "/api/sales", {
-    cookie: boxes.venue.cookie,
-    body: saleBody(boxes),
-  });
+  const refused = await askSale(boxes, m1);
   const m1RefusedSale = { status: refused.status, text: await refused.text() };
   const refusedBill = await ask(m1, `/api/working-orders/${randomUUID()}/payments`, {
     cookie: boxes.venue.cookie,
@@ -1260,10 +1263,7 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
     })
     .catch(() => {});
   await startAgain(m1);
-  const m1Sale = await ask(m1, "/api/sales", {
-    cookie: boxes.venue.cookie,
-    body: saleBody(boxes),
-  });
+  const m1Sale = await askSale(boxes, m1);
   const restartAfterActivating = {
     m1Selling: (await nodeProbe(m1)).acceptingSales,
     m1Sale: m1Sale.status,

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { SETUP_RECEIVE_LIMITS } from "./request-receive-limits.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
@@ -1115,14 +1116,19 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         expect(login.status, await login.clone().text()).toBe(200);
         const cookies = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
-        const sale = await fetch(`${base}/api/sales`, {
+        const billId = randomUUID();
+        const sale = await fetch(`${base}/api/working-orders/${billId}/payments`, {
           ...via,
           method: "POST",
           headers: { "content-type": "application/json", cookie: cookies },
           body: JSON.stringify({
             dining: "eat_in",
-            lines: [{ menuItemId: offer, quantity: "1" }],
-            tender: { method: "cash", amount: "2.00" },
+            submissionId: billId,
+            kind: "share",
+            shareOf: 1,
+            method: "cash",
+            tendered: "2.00",
+            basket: { lines: [{ menuItemId: offer, quantity: "1" }] },
           }),
         });
         expect(sale.status, await sale.clone().text()).toBe(200);

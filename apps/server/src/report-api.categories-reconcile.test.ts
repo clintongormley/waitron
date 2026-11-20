@@ -30,13 +30,11 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountReportApi } from "./report-api.js";
 import type {} from "./till-config.js";
-import {
-  payWorkingOrder,
-  recordTillSaleOrchestration as recordTillSale,
-} from "./testing/whole-payment-fixture.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
 // Review Focus 3: on the till's sale paths a category report's gross is the sum of the issued sales'
 // totals, Uncategorised included, and its net is the VAT summary's bases, in both modes. Sales are
@@ -173,19 +171,43 @@ describe("the category report reconciles with the till's sales", () => {
       environment: deploymentEnvironment(process.env),
       deploymentEnvironment: deploymentEnvironment(process.env),
     });
-    const deps = { db: suite.db, backend, clock };
+    const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
+    const operator = await counterFixtureOperator(suite.db, cfg.origin.deviceId);
 
     // Two walk-up sales, and an order parked and then paid.
-    await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-      zoneId: offers.zoneId,
-      lines: [line(products.cola, "3"), line(products.water, "1"), line(products.bread, "2")],
-      tender: { method: "cash", amount: "50.00" },
-    });
-    await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, {
-      zoneId: offers.zoneId,
-      lines: [line(products.olives, "1"), line(products.water, "2")],
-      tender: { method: "card", amount: "0" },
-    });
+    await payFreshCounterInCash(
+      deps,
+      cfg,
+      operator,
+      randomUUID(),
+      {
+        zoneId: offers.zoneId,
+        lines: [line(products.cola, "3"), line(products.water, "1"), line(products.bread, "2")],
+      },
+      "50.00",
+    );
+    const cardId = randomUUID();
+    const { invoice } = await takeBillPayment(
+      deps,
+      cfg,
+      cardId,
+      {
+        expectedEdit: null,
+        submissionId: cardId,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "manual",
+        applied: "0.00",
+        tip: "0.00",
+      },
+      operator,
+      {
+        zoneId: offers.zoneId,
+        lines: [line(products.olives, "1"), line(products.water, "2")],
+      },
+    );
+    expect(invoice).toMatchObject({ tender: { method: "card" } });
     const parked = randomUUID();
     await withTransaction(suite.db, (tx) =>
       createOpenOrder(
@@ -199,11 +221,7 @@ describe("the category report reconciles with the till's sales", () => {
         },
       ),
     );
-    await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
-      id: parked,
-      lines: [],
-      tender: { method: "cash", amount: "50.00" },
-    });
+    await paySavedBillInCash(deps, cfg, operator, parked, "50.00");
 
     // Every sale this venue filed, whichever business day the wall clock put it in.
     const today = currentBusinessDay({

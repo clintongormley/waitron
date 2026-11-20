@@ -1278,6 +1278,10 @@ describe("a contribution (design §8 test 2)", () => {
       code: "bill.nothing_outstanding",
       params: { workingOrderId: billId },
     });
+    expect(await statusOf(billId)).toBe("open");
+    expect(await paymentRows(billId)).toEqual([]);
+    expect(fiscalRecordCount(billId)).toBe(0);
+    expect(suite.db.all(sql`select id from sales where working_order_id = ${billId}`)).toEqual([]);
   });
 
   it("previews without writing anything", async () => {

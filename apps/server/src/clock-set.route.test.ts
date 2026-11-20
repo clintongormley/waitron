@@ -92,13 +92,24 @@ function clockAt(ms: number): TrustedClock {
 async function cashSale(): Promise<void> {
   const [any] = venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`);
   const at = any!.n === 0 ? Date.now() : latest().at.getTime() + 1000;
-  const sale = await send(venue.appAt(clockAt(at)), venue.cookie, "POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId: randomUUID(),
-    zoneId: counter.zoneId,
-    lines: [{ menuItemId: counter.offerFor(dishId), quantity: "1" }],
-    tender: { method: "cash", amount: "10.00" },
-  });
+  const sale = await send(
+    venue.appAt(clockAt(at)),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${randomUUID()}/payments`,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "10.00",
+      dining: "eat_in",
+      basket: {
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(dishId), quantity: "1" }],
+      },
+    },
+  );
   if (sale.status !== 200) throw new Error(`sale answered ${sale.status}`);
 }
 

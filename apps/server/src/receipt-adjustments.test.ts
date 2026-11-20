@@ -35,11 +35,13 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
-import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
+import { readSettledTicket } from "./till-sale.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { readStoredOrder } from "./working-order.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { ReceiptAdjustment } from "./till-sale.js";
-import { completeBillPayment } from "./bill-payments.js";
+import { closeZeroBill, completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 
 // What a receipt prints beneath a comped or discounted dish, and after the goods for a discount on
@@ -83,6 +85,39 @@ async function adjust(billId: string, ask: Ask): Promise<void> {
       venue.venueLocale,
     );
   });
+}
+
+async function payCash(billId: string, amount: string) {
+  const personId = venue.staffId;
+  const deps = {
+    admission: testTradingAdmission(),
+    db: venue.db,
+    backend: venue.backend,
+    clock: venue.clock,
+  };
+  const operator = {
+    personId,
+    sessionId: await openTillSession(venue.db, { personId, deviceId: venue.cfg.origin.deviceId }),
+  };
+  if (amount !== "0.00") return paySavedBillInCash(deps, venue.cfg, operator, billId, amount);
+
+  const { invoice } = await closeZeroBill(
+    deps,
+    venue.cfg,
+    billId,
+    {
+      expectedEdit: await readBillEditState(venue.db, billId),
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    },
+    operator,
+  );
+  return invoice;
 }
 
 const bill = async (lines: RoundLine[]) => (await billWith(venue, lines)).billId;
@@ -613,16 +648,7 @@ describe("receiptLines", () => {
       percentBp: 2000,
     });
     await adjust(billId, { action: "discount_percent", percentBp: 1000 });
-    const result = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "23.85" }, lines: [] },
-    );
+    const result = await payCash(billId, "23.85");
 
     const printed = printedLines(
       formatReceipt({
@@ -658,16 +684,7 @@ describe("receiptLines", () => {
 
     /** Pays the bill in cash and returns the result and its printed goods, up to the first rule. */
     async function payAndPrint(billId: string, amount: string) {
-      const result = await payWorkingOrder(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-        },
-        venue.cfg,
-        { id: billId, tender: { method: "cash", amount }, lines: [] },
-      );
+      const result = await payCash(billId, amount);
       const printed = printedLines(
         formatReceipt({
           result,
@@ -807,20 +824,7 @@ describe("receiptLines", () => {
       action: "discount_percent",
       percentBp: 1000,
     });
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      {
-        id: billId,
-        tender: { method: "cash", amount: "13.30" },
-        lines: [],
-      },
-    );
+    await payCash(billId, "13.30");
 
     const saved = await inTx(venue, async (tx) => {
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
@@ -846,16 +850,7 @@ describe("receiptLines", () => {
       action: "discount_amount",
       amount: "1.00",
     });
-    const result = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "11.49" }, lines: [] },
-    );
+    const result = await payCash(billId, "11.49");
 
     const printed = printedLines(
       formatReceipt({
@@ -962,16 +957,7 @@ describe("receiptLines", () => {
       action: "discount_percent",
       percentBp: 1000,
     });
-    const result = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "9.00" }, lines: [] },
-    );
+    const result = await payCash(billId, "9.00");
 
     expect(result.lines).toHaveLength(2);
     for (const line of result.lines) expect(line).not.toHaveProperty("dishFamily");
@@ -1041,16 +1027,7 @@ describe("a receipt rebuilt from a sale's rows", () => {
       { name: "Ham", quantity: "0.250" },
       { name: "Croquettes", quantity: "3" },
     ]);
-    const original = await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "20.00" }, lines: [] },
-    );
+    const original = await payCash(billId, "20.00");
     expect(original.lines.map((line) => line.unitPriceGross)).toEqual(["24.00", "3.33"]);
 
     await inTx(venue, async (tx) => {
@@ -1077,16 +1054,7 @@ describe("a receipt rebuilt from a sale's rows", () => {
 
   it("prints no price each for a row whose order line now has another quantity or price quantity", async () => {
     const billId = await bill([{ name: "Croquettes", quantity: "3" }]);
-    await payWorkingOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, tender: { method: "cash", amount: "20.00" }, lines: [] },
-    );
+    await payCash(billId, "20.00");
     await inTx(venue, async (tx) => {
       const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
       const stored = await readStoredOrder(tx, billId);

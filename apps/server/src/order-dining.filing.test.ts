@@ -8,7 +8,13 @@ import { createProduct, updateProduct } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Dining } from "@waitron/shared";
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
-import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import {
+  cashPayment,
+  inTx,
+  provisionBillVenue,
+  send,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { createTable } from "./testing/live-table.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -132,24 +138,14 @@ const EXPECTED_RATES: Record<Dining, number[]> = { takeaway: [2100, 400], eat_in
 describe("a parked order paid whole", () => {
   it.each(["takeaway", "eat_in"] as const)("files each line %s at its class", async (dining) => {
     const id = await parked(dining, [menu.cola, menu.cheeseBoard]);
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining,
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "5.80" },
-    });
+    const sold = await cashPayment(venue, venue.cookie, id, "5.80");
     expect(sold.status).toBe(200);
     expect(filedRates(id)).toEqual(EXPECTED_RATES[dining]);
   });
 
   it("files the backend's VAT breakdown in the takeaway bands", async () => {
     const id = await parked("takeaway", [menu.cola, menu.cheeseBoard]);
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "takeaway",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "5.80" },
-    });
+    const sold = await cashPayment(venue, venue.cookie, id, "5.80");
     expect(sold.status).toBe(200);
     expect(byRate(await filedBreakdown(id))).toEqual(TAKEAWAY_BANDS);
   });
@@ -231,12 +227,7 @@ describe("the menu republished between adding a line and switching the order", (
       return offers;
     });
 
-    const sold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "takeaway",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "1.80" },
-    });
+    const sold = await cashPayment(venue, venue.cookie, id, "1.80");
     expect(sold.status).toBe(200);
     expect(filedRates(id)).toEqual([2100]);
 
@@ -249,12 +240,7 @@ describe("the menu republished between adding a line and switching the order", (
       operatorId: venue.operatorId,
       dining: "takeaway",
     });
-    const freshSold = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "takeaway",
-      workingOrderId: fresh,
-      lines: [],
-      tender: { method: "cash", amount: "1.80" },
-    });
+    const freshSold = await cashPayment(venue, venue.cookie, fresh, "1.80");
     expect(freshSold.status).toBe(200);
     expect(filedRates(fresh)).toEqual([0]);
   });

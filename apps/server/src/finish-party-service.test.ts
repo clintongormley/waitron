@@ -1,3 +1,5 @@
+import { openTillSession } from "./testing/session-device.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -46,7 +48,6 @@ afterEach(async () => {
   await watchedOrder();
   vi.restoreAllMocks();
 });
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   billWith,
   inTx,
@@ -77,7 +78,7 @@ async function fixture(paid = true, release: "hold" | "fire" = "hold", extras = 
     { release, shape: "grouped" },
   );
   if (paid)
-    await payWorkingOrder(
+    await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
         db: venue.db,
@@ -86,10 +87,14 @@ async function fixture(paid = true, release: "hold" | "fire" = "hold", extras = 
       },
       venue.cfg,
       {
-        id: p.billId,
-        tender: { method: "cash", amount: "26.00" },
-        lines: [],
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
       },
+      p.billId,
+      "26.00",
     );
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
   return {
@@ -561,7 +566,7 @@ describe("A773 requested lifecycle", () => {
       .where(eq(ticketItems.workingOrderLineId, lines[3]!.id));
     await inTx(venue, (tx) => advanceTicketItem(tx, bread!.id, "preparing"));
     await inTx(venue, (tx) => advanceTicketItem(tx, bread!.id, "ready"));
-    await payWorkingOrder(
+    await paySavedBillInCash(
       {
         admission: testTradingAdmission(),
         db: venue.db,
@@ -569,7 +574,15 @@ describe("A773 requested lifecycle", () => {
         clock: venue.clock,
       },
       venue.cfg,
-      { id: order.billId, tender: { method: "cash", amount: "49.50" }, lines: [] },
+      {
+        personId: venue.staffId,
+        sessionId: await openTillSession(venue.db, {
+          deviceId: venue.cfg.origin.deviceId,
+          personId: venue.staffId,
+        }),
+      },
+      order.billId,
+      "49.50",
     );
     const [party] = await venue.db.select().from(parties).where(eq(parties.id, order.partyId));
     const p: Fixture = {

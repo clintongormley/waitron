@@ -219,16 +219,21 @@ function productIdOf(name: string): string {
 }
 
 async function cashSale(base: string, via: RequestInit, workingOrderId: string): Promise<Response> {
-  return fetch(`${base}/api/sales`, {
+  return fetch(`${base}/api/working-orders/${workingOrderId}/payments`, {
     ...via,
     method: "POST",
     headers: { "content-type": "application/json", cookie: venue.cookie },
     body: JSON.stringify({
       dining: "eat_in",
-      lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId,
-      zoneId: counter.zoneId,
+      submissionId: workingOrderId,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "20.00",
+      basket: {
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
+      },
     }),
   });
 }

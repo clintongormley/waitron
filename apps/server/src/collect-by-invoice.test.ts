@@ -8,6 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   allocateInvoiceNumber,
+  billPayments,
   drawerOpens,
   invoiceSeries,
   saleSettlements,
@@ -22,8 +23,16 @@ import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/share
 import { VENUE_SERVICE } from "./modules.js";
 import { parkOrder } from "./working-order.js";
 import { collectOrderOrchestration as collectOrder } from "./testing/whole-payment-fixture.js";
+import {
+  closeZeroBill,
+  takeBillPayment,
+  type BillPaymentRequest,
+} from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
+import { readBillEditState } from "./bill-editing.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
+  cashPayment,
   inTx,
   provisionBillVenue,
   fiscalRecordCount,
@@ -92,37 +101,64 @@ async function retarget(billId: string, zoneId: string): Promise<void> {
   expect(context?.zoneId).toBe(zoneId);
 }
 
-function collectCash(billId: string) {
-  return collectOrder(
-    { admission: testTradingAdmission(), db: venue.db, backend: venue.backend, clock: venue.clock },
+const paymentDeps = () => ({
+  admission: testTradingAdmission(),
+  db: venue.db,
+  backend: venue.backend,
+  clock: venue.clock,
+});
+
+async function operator() {
+  const personId = venue.operatorId;
+  return {
+    personId,
+    sessionId: await openTillSession(venue.db, { personId, deviceId: venue.cfg.origin.deviceId }),
+  };
+}
+
+async function collectCash(billId: string) {
+  const paid = await cashPayment(venue, venue.cookie, billId, "20.00");
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  return paid.json;
+}
+
+async function closeWithoutPayment(billId: string, method: "cash" | "card") {
+  return closeZeroBill(
+    paymentDeps(),
     venue.cfg,
-    { id: billId, lines: [], tender: { method: "cash", amount: "20.00" } },
-    venue.operatorId,
+    billId,
+    {
+      expectedEdit: await readBillEditState(venue.db, billId),
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "0.00",
+      method,
+      ...(method === "cash" ? { tendered: "20.00" } : { entry: "manual" }),
+      applied: "0.00",
+      tip: "0.00",
+    },
+    await operator(),
   );
 }
 
 describe("collecting a presented bill follows its invoice, not its zone (spec §9)", () => {
   it("keeps outside-card details when settling an already-issued bill and replaying it", async () => {
     const id = await placedCake(ticketThenPayZone, true);
-    const deps = {
-      admission: testTradingAdmission(),
-      db: venue.db,
-      backend: venue.backend,
-      clock: venue.clock,
+    const request: BillPaymentRequest = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "18.00",
+      method: "card",
+      entry: "manual",
+      applied: "18.00",
+      tip: "0.00",
+      externalProvider: "connected_account",
+      externalMachine: "Spare Solo",
+      externalRef: "OP-73",
     };
-    const request = {
-      id,
-      lines: [],
-      tender: {
-        method: "card" as const,
-        amount: "18.00",
-        externalProvider: "connected_account" as const,
-        externalMachine: "Spare Solo",
-        externalRef: "OP-73",
-      },
-    };
-    const paid = await collectOrder(deps, venue.cfg, request, venue.operatorId);
-    expect(paid.tender).toMatchObject({
+    const staff = await operator();
+    const paid = await takeBillPayment(paymentDeps(), venue.cfg, id, request, staff);
+    expect(paid.invoice?.tender).toMatchObject({
       externalProvider: "connected_account",
       externalMachine: "Spare Solo",
       reference: "OP-73",
@@ -135,8 +171,8 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
           .where(eq(payments.workingOrderId, id)),
       ),
     ).toEqual([{ source: "connected_account", machine: "Spare Solo" }]);
-    const replay = await collectOrder(deps, venue.cfg, request, venue.operatorId);
-    expect(replay.tender).toEqual(paid.tender);
+    const replay = await takeBillPayment(paymentDeps(), venue.cfg, id, request, staff);
+    expect(replay.invoice?.tender).toEqual(paid.invoice?.tender);
   });
 
   it("settles an already-issued invoice, even once the bill's zone says to issue at payment", async () => {
@@ -238,27 +274,30 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
   it("manual tip settles a corrected issued bill without changing its invoice, including replay", async () => {
     const { billId, saleId } = await correctedCake();
-    const deps = {
-      db: venue.db,
-      backend: venue.backend,
-      clock: venue.clock,
-      admission: testTradingAdmission(),
+    const request: BillPaymentRequest = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "15.58",
+      method: "card",
+      entry: "manual",
+      applied: "15.58",
+      addedTip: "0.30",
+      tip: "0.30",
     };
-    const request = {
-      id: billId,
-      lines: [],
-      tender: { method: "card" as const, amount: "18.00", addedTip: "0.30" },
-    };
+    const staff = await operator();
     const before = fiscalRecordCount(venue, billId);
-    const paid = await collectOrder(
-      deps,
+    const paid = await takeBillPayment(
+      paymentDeps(),
       { ...venue.cfg, tipsEnabled: true },
+      billId,
       request,
-      venue.operatorId,
+      staff,
     );
-    expect(paid.total).toBe("18.00");
+    expect(paid.invoice).toMatchObject({
+      total: "18.00",
+      tender: { charged: "15.88", tip: "0.30" },
+    });
     expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1588, cash: null }]);
-    expect(paid.tender).toMatchObject({ charged: "15.88", tip: "0.30" });
     expect(
       await inTx(venue, (tx) =>
         tx
@@ -267,13 +306,14 @@ describe("collecting an invoice that carries a corrective invoice", () => {
           .where(eq(payments.workingOrderId, billId)),
       ),
     ).toEqual([{ amount: 1588 }]);
-    const replay = await collectOrder(
-      deps,
+    const replay = await takeBillPayment(
+      paymentDeps(),
       { ...venue.cfg, tipsEnabled: false },
+      billId,
       request,
-      venue.operatorId,
+      staff,
     );
-    expect(replay.tender).toEqual(paid.tender);
+    expect(replay.invoice?.tender).toEqual(paid.invoice?.tender);
     expect(fiscalRecordCount(venue, billId)).toBe(before);
   });
 
@@ -322,7 +362,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     const ticket = await collectCash(billId);
 
     expect(await tendersOf(saleId)).toEqual([{ method: "cash", amount: 1558, cash: 2000 }]);
-    expect(ticket.tender).toEqual({ method: "cash", change: "4.42" });
+    expect(ticket.payment).toMatchObject({ method: "cash", change: "4.42" });
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
@@ -330,16 +370,20 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   it("settles a manual card collection, and its payment row, at the corrected amount", async () => {
     const { billId, saleId } = await correctedCake();
 
-    await collectOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
+    await takeBillPayment(
+      paymentDeps(),
       venue.cfg,
-      { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
-      venue.operatorId,
+      billId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "15.58",
+        method: "card",
+        entry: "manual",
+        applied: "15.58",
+        tip: "0.00",
+      },
+      await operator(),
     );
 
     expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1558, cash: null }]);
@@ -354,13 +398,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
-  function drawerOpensOf(saleId: string) {
-    return inTx(venue, (tx) =>
-      tx
-        .select({ saleId: drawerOpens.saleId, reason: drawerOpens.reason })
-        .from(drawerOpens)
-        .where(eq(drawerOpens.saleId, saleId)),
-    );
+  function drawerAudit() {
+    return venue.db.select().from(drawerOpens);
   }
 
   async function collectedAtOf(billId: string): Promise<string | null> {
@@ -377,23 +416,28 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   const wholeInvoice = { base: "14.88", total: "-18.00" };
 
   it("opens the cash drawer when a corrected bill is collected in cash", async () => {
-    const { billId, saleId } = await correctedCake();
-
+    const { billId } = await correctedCake();
     await collectCash(billId);
-
-    expect(await drawerOpensOf(saleId)).toEqual([{ saleId, reason: "cash_sale" }]);
+    const [payment] = await venue.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, billId));
+    expect(
+      await venue.db.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, payment!.id)),
+    ).toMatchObject([{ reason: "bill_payment", saleId: null }]);
   });
 
   it("closes a cash collection of a bill that owes nothing, with no tender and no drawer", async () => {
     const { billId, saleId } = await correctedCake(wholeInvoice);
 
-    const ticket = await collectCash(billId);
+    const before = await drawerAudit();
+    const { invoice } = await closeWithoutPayment(billId, "cash");
 
     expect(await tendersOf(saleId)).toEqual([]);
     expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
     expect(await collectedAtOf(billId)).toBeNull();
-    expect(await drawerOpensOf(saleId)).toEqual([]);
-    expect(ticket.tender).toEqual({ method: "unpaid" });
+    expect(await drawerAudit()).toEqual(before);
+    expect(invoice.tender).toEqual({ method: "unpaid" });
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
@@ -401,17 +445,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   it("closes a card collection of a bill that owes nothing, with no tender and no payment row", async () => {
     const { billId, saleId } = await correctedCake(wholeInvoice);
 
-    await collectOrder(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
-      venue.operatorId,
-    );
+    const before = await drawerAudit();
+    await closeWithoutPayment(billId, "card");
 
     expect(await tendersOf(saleId)).toEqual([]);
     expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
@@ -423,7 +458,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         .where(eq(payments.workingOrderId, billId)),
     );
     expect(paid).toEqual([]);
-    expect(await drawerOpensOf(saleId)).toEqual([]);
+    expect(await drawerAudit()).toEqual(before);
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
@@ -503,7 +538,14 @@ describe("collecting an invoice that carries a corrective invoice", () => {
       });
     });
 
-    await expect(collectCash(billId)).rejects.toMatchObject({
+    await expect(
+      collectOrder(
+        paymentDeps(),
+        venue.cfg,
+        { id: billId, lines: [], tender: { method: "cash", amount: "20.00" } },
+        venue.operatorId,
+      ),
+    ).rejects.toMatchObject({
       code: "sale.tender_shortfall",
       params: { due: "-2.00", charged: "0" },
     });

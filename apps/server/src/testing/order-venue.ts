@@ -16,6 +16,7 @@ import { mountOrdersApi } from "../orders-api.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { parkOrder } from "../working-order.js";
 import {
+  cashPayment,
   inTx,
   provisionBillVenue,
   seatedWith,
@@ -176,10 +177,8 @@ export async function departed(venue: OrderVenue, ...names: string[]) {
   return party;
 }
 
-export function collect(venue: OrderVenue, billId: string, amount: string): Promise<Answer> {
-  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/collect`, {
-    tender: { method: "cash", amount },
-  });
+export function collect(venue: OrderVenue, billId: string, tendered: string): Promise<Answer> {
+  return cashPayment(venue, venue.cookie, billId, tendered);
 }
 
 async function invoiceOf(venue: BillVenue, billId: string): Promise<string> {

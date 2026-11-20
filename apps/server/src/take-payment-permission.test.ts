@@ -100,16 +100,6 @@ function providerPaymentsOf(id: string) {
   );
 }
 
-async function paymentAttemptOf(id: string): Promise<string | null> {
-  const [row] = await inTx(venue, (tx) =>
-    tx
-      .select({ attemptAt: workingOrders.paymentAttemptAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id)),
-  );
-  return row!.attemptAt;
-}
-
 /** A counter order of one Tarta (18.00), presented without an invoice. */
 async function presentedCake(): Promise<string> {
   const id = randomUUID();
@@ -149,22 +139,19 @@ function expectAsked(): void {
   expect(gate.calls).toContainEqual({ sessionId, permission: "payment.take" });
 }
 
-describe("POST /api/sales needs payment.take", () => {
+describe("counter save and pay needs payment.take", () => {
   function counterSale(id: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/sales", {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "20.00",
       dining: "eat_in",
-      lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
-      tender: { method: "cash", amount: "20.00" },
-      workingOrderId: id,
-      zoneId: counter.zoneId,
-    });
-  }
-  function payTabByCard(tabId: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      lines: [],
-      tender: { method: "card", amount: "18.00", externalRef: "OP-1" },
-      workingOrderId: tabId,
+      basket: {
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
+      },
     });
   }
 
@@ -190,73 +177,18 @@ describe("POST /api/sales needs payment.take", () => {
     expect(await statusOf(venue, id)).toBe("settled");
     expect(fiscalRecordCount(venue, id)).toBe(1);
   });
-
-  it("refuses a hand-keyed card payment of a tab and leaves the tab open and unpaid", async () => {
-    const tabId = await tabWith(venue, "Tarta");
-    gate.deny = true;
-
-    expectRefused(await payTabByCard(tabId));
-
-    expectAsked();
-    expect(await statusOf(venue, tabId)).toBe("open");
-    expect(salesCount(tabId)).toBe(0);
-    expect(fiscalRecordCount(venue, tabId)).toBe(0);
-    expect(await tendersOfBill(venue, tabId)).toEqual([]);
-  });
-
-  it("takes the same hand-keyed card payment when the permission is held", async () => {
-    const tabId = await tabWith(venue, "Tarta");
-
-    const answer = await payTabByCard(tabId);
-
-    expect(answer.status).toBe(200);
-    expectAsked();
-    expect(await statusOf(venue, tabId)).toBe("settled");
-    expect(await tendersOfBill(venue, tabId)).toMatchObject([{ method: "card", amount: 1800 }]);
-  });
 });
 
-describe("POST /api/pay needs payment.take", () => {
-  function payOnReader(tabId: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: tabId,
-      lines: [],
-    });
-  }
-
-  it("refuses before the reader is asked and leaves the tab open with no payment", async () => {
-    const tabId = await tabWith(venue, "Tarta");
-    const readerCalls = venue.card.collectCalls.length;
-    gate.deny = true;
-
-    expectRefused(await payOnReader(tabId));
-
-    expectAsked();
-    expect(venue.card.collectCalls.length).toBe(readerCalls);
-    expect(await statusOf(venue, tabId)).toBe("open");
-    expect(await paymentAttemptOf(tabId)).toBeNull();
-    expect(await providerPaymentsOf(tabId)).toEqual([]);
-    expect(fiscalRecordCount(venue, tabId)).toBe(0);
-  });
-
-  it("charges the reader when the permission is held", async () => {
-    const tabId = await tabWith(venue, "Tarta");
-    const readerCalls = venue.card.collectCalls.length;
-
-    const answer = await payOnReader(tabId);
-
-    expect(answer).toMatchObject({ status: 200, json: { outcome: "captured" } });
-    expectAsked();
-    expect(venue.card.collectCalls.length).toBe(readerCalls + 1);
-    expect(await statusOf(venue, tabId)).toBe("settled");
-  });
-});
-
-describe("POST /api/working-orders/:id/collect needs payment.take", () => {
+describe("settling a presented order needs payment.take", () => {
   function collectCash(id: string) {
-    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
-      tender: { method: "cash", amount: "20.00" },
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "20.00",
+      applied: "18.00",
+      tip: "0.00",
     });
   }
 

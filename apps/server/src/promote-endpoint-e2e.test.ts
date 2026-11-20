@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -516,17 +517,22 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       ).json()) as { offers: { id: string; pricingUnit: string }[] };
       expect(menu.offers.find((offer) => offer.pricingUnit === "each")).toBeDefined();
 
-      const saleRes = await fetch(`${primaryBase}/api/sales`, {
+      const billId = randomUUID();
+      const saleRes = await fetch(`${primaryBase}/api/working-orders/${billId}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: bothCookies },
         body: JSON.stringify({
           dining: "eat_in",
-          lines: [{ menuItemId: waterOffer, quantity: "2" }],
-          tender: { method: "cash", amount: "5.00" },
+          submissionId: billId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "5.00",
+          basket: { lines: [{ menuItemId: waterOffer, quantity: "2" }] },
         }),
       });
       expect(saleRes.status).toBe(200);
-      const ticket = await saleRes.json();
+      const { invoice: ticket } = await saleRes.json();
       expect(ticket.total).toBe("3.00");
       expect(typeof ticket.qr).toBe("string");
       expect(ticket.qr.length).toBeGreaterThan(0);

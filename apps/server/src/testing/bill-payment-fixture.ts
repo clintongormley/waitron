@@ -1,14 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { withTransaction, type Database } from "@waitron/db";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
+  getBillBalance,
   previewBillPayment as preview,
   takeBillPayment as take,
   takeReaderBillPayment as reader,
   type BillPaymentAsk as Ask,
   type BillPaymentRequest as Request,
+  type CounterPaymentBasket,
+  type BillPaymentDeps,
 } from "../bill-payments.js";
 import type { BillEditExpected } from "../order-drafts.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
 export * from "../bill-payments.js";
 export type BillPaymentAsk = Omit<Ask, "expectedEdit"> & { expectedEdit?: BillEditExpected | null };
 export type BillPaymentRequest = Omit<Request, "expectedEdit"> & {
@@ -95,4 +100,62 @@ export function observedPaymentSender(
 ) {
   return async (...[app, cookie, method, path, body]: Parameters<typeof sender>) =>
     sender(app, cookie, method, path, await observedPaymentBody(database(), path, body));
+}
+
+export async function payFreshCounterInCash(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  operator: Parameters<typeof take>[4],
+  id: string,
+  basket: CounterPaymentBasket,
+  tendered: string,
+) {
+  const result = await take(
+    deps,
+    cfg,
+    id,
+    {
+      expectedEdit: null,
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      applied: "0.00",
+      tip: "0.00",
+      tendered,
+    },
+    operator,
+    basket,
+  );
+  if (result.invoice === undefined) throw new Error(`pay: bill ${id} has no invoice`);
+  return result.invoice;
+}
+
+export async function paySavedBillInCash(
+  deps: BillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  operator: Parameters<typeof take>[4],
+  id: string,
+  tendered: string,
+  guestCount?: number | null,
+) {
+  const { outstanding } = await getBillBalance(deps, id);
+  const result = await takeBillPayment(
+    deps,
+    cfg,
+    id,
+    {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered,
+      applied: outstanding,
+      tip: "0.00",
+      ...(guestCount === undefined ? {} : { guestCount }),
+    },
+    operator,
+  );
+  if (result.invoice == null) throw new Error(`pay: bill ${id} has no invoice`);
+  return result.invoice;
 }

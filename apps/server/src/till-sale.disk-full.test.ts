@@ -64,12 +64,15 @@ function lines(n: number) {
 }
 
 function cashSale(n: number) {
-  return send(venue.app, venue.cookie, "POST", "/api/sales", {
+  const id = randomUUID();
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
     dining: "eat_in",
-    workingOrderId: randomUUID(),
-    lines: lines(n),
-    zoneId: counter.zoneId,
-    tender: { method: "cash", amount: `${10 * n}.00` },
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: `${10 * n}.00`,
+    basket: { lines: lines(n), zoneId: counter.zoneId },
   });
 }
 

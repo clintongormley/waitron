@@ -286,15 +286,18 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
     return { zoneId: offered.zoneId, menuItemId: offered.offerFor(product.id) };
   });
   const id = randomUUID();
-  const paid = await send(v.app, v.cookie, "POST", "/api/pay", {
+  const paid = await send(v.app, v.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    id,
-    zoneId: offers.zoneId,
-    lines: [{ menuItemId: offers.menuItemId, quantity: "1" }],
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    basket: { zoneId: offers.zoneId, lines: [{ menuItemId: offers.menuItemId, quantity: "1" }] },
     receiptLanguage: "es-ES",
   });
   expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  expect(paid.json.outcome).toBe("captured");
+  expect(paid.json.outcome).toBe("received");
   const [payment] = await v.db.select().from(payments).where(eq(payments.workingOrderId, id));
   expect(payment!.settledAt).not.toBeNull();
   const before = await v.db.select().from(printJobs);

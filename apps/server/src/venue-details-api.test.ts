@@ -17,9 +17,9 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { readVenueDetails } from "./venue-details.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { counterFixtureOperator, deviceRequestCfg } from "./testing/session-device.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: Venue;
@@ -280,11 +280,17 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
     deploymentEnvironment: "preproduction",
   });
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
-  await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-    zoneId: offers.zoneId,
-    lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
-    tender: { method: "cash", amount: "1.50" },
-  });
+  await payFreshCounterInCash(
+    { admission: testTradingAdmission(), db: suite.db, backend, clock },
+    cfg,
+    await counterFixtureOperator(suite.db, cfg.origin.deviceId),
+    randomUUID(),
+    {
+      zoneId: offers.zoneId,
+      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
+    },
+    "1.50",
+  );
   const before = suite.db.all(sql`select * from settings order by module`);
   const refused = await request("PATCH", venue.managerCookie, {
     expected: model.details,

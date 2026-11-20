@@ -21,9 +21,10 @@ import { planVenue } from "@waitron/provisioning";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import type {} from "./till-config.js";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 
 // A663 Part 2c: a sale line's unit price before any discount (`list_unit_price_gross`) is
 // presentation data that no fiscal record reads. The same sale is filed in two fresh databases provisioned
@@ -47,6 +48,7 @@ const LOCALE = "es-ES";
 const NIF = "76900001F";
 const ISSUED_AT = new Date("2026-09-25T11:30:00.000Z");
 const WORKING_ORDER_ID = randomUUID();
+const OPERATOR = randomUUID();
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const withoutPrice = useVenueDb({ migrations, timeoutMs: 60_000 });
@@ -176,20 +178,30 @@ async function fileOneSale(db: Database) {
     deploymentEnvironment: "preproduction",
   });
 
-  await recordTillSale({ admission: testTradingAdmission(), db, backend, clock: fixedClock }, cfg, {
-    workingOrderId: WORKING_ORDER_ID,
-    zoneId: offers.zoneId,
-    lines: [
-      {
-        menuItemId: offers.offerFor(seeded.negroni),
-        quantity: "2",
-        extras: [
-          { listId: seeded.extrasListId, picks: [{ productId: seeded.hielo, quantity: 1 }] },
-        ],
-      },
-    ],
-    tender: { method: "cash", amount: "20.00" },
+  await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));
+  const sessionId = await openTillSession(db, {
+    deviceId: cfg.origin.deviceId,
+    personId: OPERATOR,
   });
+  await payFreshCounterInCash(
+    { admission: testTradingAdmission(), db, backend, clock: fixedClock },
+    cfg,
+    { personId: OPERATOR, sessionId },
+    WORKING_ORDER_ID,
+    {
+      zoneId: offers.zoneId,
+      lines: [
+        {
+          menuItemId: offers.offerFor(seeded.negroni),
+          quantity: "2",
+          extras: [
+            { listId: seeded.extrasListId, picks: [{ productId: seeded.hielo, quantity: 1 }] },
+          ],
+        },
+      ],
+    },
+    "20.00",
+  );
 
   const zone = db.get<{ departmentId: string }>(
     sql`select department_id as departmentId from floor_zones where id = ${offers.zoneId}`,

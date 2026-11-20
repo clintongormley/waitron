@@ -132,11 +132,14 @@ it("a counter sale sent without a zone records the selected zone and files that 
     sql`select product_id as id from menu_items where id = ${venue.offerFor("Caña")}`,
   )[0]!;
   const id = randomUUID();
-  const result = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+  const result = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    workingOrderId: id,
-    lines: [{ menuItemId: counter.offerFor(product.id), quantity: "1" }],
-    tender: { method: "cash", amount: "3.00" },
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "3.00",
+    basket: { lines: [{ menuItemId: counter.offerFor(product.id), quantity: "1" }] },
   });
   expect(result.status).toBe(200);
   expect(
@@ -151,15 +154,22 @@ it.each(["cash", "card"] as const)(
   "an immediate %s sale files the department value rather than the venue value",
   async (method) => {
     const input = request();
-    const result = await payWorkingOrder(
-      { ...deps(), admission: testTradingAdmission() },
-      venue.cfg,
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${input.id}/payments`,
       {
-        ...input,
-        tender: { method, amount: "3.00" },
+        submissionId: input.id,
+        kind: "share",
+        shareOf: 1,
+        method,
+        ...(method === "cash" ? { tendered: "3.00" } : { entry: "manual" }),
+        dining: "eat_in",
+        basket: { zoneId: input.zoneId, lines: input.lines },
       },
     );
-    expect(result.total).toBe("3.00");
+    expect(paid).toMatchObject({ status: 200, json: { invoice: { total: "3.00" } } });
     expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
   },
 );

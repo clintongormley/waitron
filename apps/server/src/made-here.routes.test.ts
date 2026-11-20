@@ -1293,12 +1293,21 @@ describe("made-here route wiring", () => {
 
   it("does not add a made-here key or replay row when the sending device makes nothing here", async () => {
     const id = randomUUID();
-    const answer = await send(venue.app, venue.cookie2, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: [{ menuItemId: counterOffer, quantity: "1" }],
-      tender: { method: "cash", amount: "3.00" },
-    });
+    const answer = await send(
+      venue.app,
+      venue.cookie2,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        dining: "eat_in",
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
+        basket: { lines: [{ menuItemId: counterOffer, quantity: "1" }] },
+      },
+    );
     expect(answer.status).toBe(200);
     expect(answer.json).not.toHaveProperty("madeHere");
     const rows = await inTx(venue, (tx) =>
@@ -1379,14 +1388,24 @@ describe("made-here route wiring", () => {
     },
   );
 
-  it("/api/pay carries the device to a reader-captured pay-first send", async () => {
+  it("carries the device to a reader-captured pay-first send", async () => {
     const id = randomUUID();
     const check = await assertMadeHere(id);
-    const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [{ menuItemId: counterOffer, quantity: "1" }],
-    });
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        dining: "eat_in",
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: { lines: [{ menuItemId: counterOffer, quantity: "1" }] },
+      },
+    );
     expect(answer.status).toBe(200);
     expect(answer.json.madeHere).toEqual([
       expect.objectContaining({ name: "Caña", quantity: "1.000" }),

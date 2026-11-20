@@ -73,7 +73,7 @@ import {
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";
@@ -81,7 +81,11 @@ import "./errors.js";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import {
+  counterFixtureOperator,
+  deviceRequestCfg,
+  openTillSession,
+} from "./testing/session-device.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { createCourse } from "./kitchen.js";
 import { deleteCourse } from "./course-delete.js";
@@ -1423,14 +1427,12 @@ describe("readCurrentOrders (spec §4)", () => {
       }),
     );
     await serve(v, s.partyId, [{ lineId: croqLine!.id, quantity: "1" }]);
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       v.cfg,
-      {
-        id: s.tabId,
-        lines: [],
-        tender: { method: "cash", amount: "18.00" },
-      },
+      await counterFixtureOperator(suite.db, v.cfg.origin.deviceId),
+      s.tabId,
+      "18.00",
     );
     const laterBill = await inTx((tx) => insertPartyBill(tx, v.cfg, s.partyId));
     const mains = await group(
@@ -1706,14 +1708,12 @@ describe("a party another was merged into", () => {
     const starters = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
     const b = await seated(v);
     const dessert = await group(v, b.partyId, "fire", [line(v, "flan")]);
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       v.cfg,
-      {
-        id: b.tabId,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      },
+      await counterFixtureOperator(suite.db, v.cfg.origin.deviceId),
+      b.tabId,
+      "5.00",
     );
     const drinks = await group(v, b.partyId, "fire", [line(v, "water")]);
     const bNext = (await linesByName(b.partyId)).find((l) => l.name === "water")!.workingOrderId;
@@ -1797,14 +1797,12 @@ describe("a party that has left", () => {
       groupId: desserts.id,
       dueAt: T(10),
     });
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       v.cfg,
-      {
-        id: s.tabId,
-        lines: [],
-        tender: { method: "cash", amount: "13.00" },
-      },
+      await counterFixtureOperator(suite.db, v.cfg.origin.deviceId),
+      s.tabId,
+      "13.00",
     );
     const expectedPartyRevision = await revisionOf(s.partyId);
     await inTx((tx) =>
@@ -2248,14 +2246,18 @@ describe("a paid held dish fired on its own", () => {
         v.cfg.locale,
       );
     });
-    await payWorkingOrder(
+    await paySavedBillInCash(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       v.cfg,
       {
-        id: s.tabId,
-        lines: [],
-        tender: { method: "cash", amount: "100.00" },
+        personId: ALEX,
+        sessionId: await openTillSession(suite.db, {
+          personId: ALEX,
+          deviceId: v.cfg.origin.deviceId,
+        }),
       },
+      s.tabId,
+      "100.00",
     );
     const before = await suite.db
       .select()
