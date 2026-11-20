@@ -454,6 +454,24 @@ describe("createClient — pullJobs", () => {
     expect(JSON.parse(fetchImpl.mock.calls[1]![1]!.body as string).pairedBluetooth).toEqual([]);
   });
 
+  it("sends the agent's Bluetooth state in the pull body only when it has one", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: [] }));
+    const client = createClient({ fetch: fetchImpl });
+    const inventory = { visible: [], scanned: [], bluetoothOutcomes: [] };
+    await client.pullJobs(URL_A, "a1.secret", inventory);
+    await client.pullJobs(URL_A, "a1.secret", { ...inventory, bluetooth: { available: true } });
+    await client.pullJobs(URL_A, "a1.secret", {
+      ...inventory,
+      bluetooth: { available: false, reason: "no_controller" },
+    });
+    const bodies = fetchImpl.mock.calls.map(([, init]) => JSON.parse(init!.body as string));
+    expect(bodies[0]).not.toHaveProperty("bluetooth");
+    expect(bodies[1].bluetooth).toStrictEqual({ available: true });
+    expect(bodies[2].bluetooth).toStrictEqual({ available: false, reason: "no_controller" });
+  });
+
   it("skips a server entry without a string url and keeps a url-only entry without a nodeId", async () => {
     const client = createClient({
       fetch: vi.fn().mockResolvedValue(

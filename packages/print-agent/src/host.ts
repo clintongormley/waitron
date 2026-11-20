@@ -1,5 +1,6 @@
 import type {
   BluetoothFailureReason,
+  BluetoothState,
   PageFormat,
   PageHold,
   PageMedia,
@@ -196,6 +197,8 @@ export interface Host {
   pair(mac: string, pin?: string): Promise<PairResult>;
   /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. */
   pairedBluetooth(): Promise<PairedBluetoothDevice[]>;
+  /** Whether the host can use Bluetooth at all; undefined until it has looked. */
+  bluetoothAvailability?(): BluetoothState | undefined;
   /** Removes the bond; an address BlueZ no longer knows counts as removed. */
   forgetBluetooth(mac: string): Promise<BluetoothCommandResult>;
   /** Sends one A4 document to an office printer, as one copy on `media`, and follows it to an

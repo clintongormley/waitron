@@ -9,6 +9,7 @@ import type {
   AgentClient,
   AgentInventory,
   BluetoothCommand,
+  BluetoothState,
   Failure,
   JoinStatus,
   NodeProbe,
@@ -20,7 +21,7 @@ import type {
   WireJob,
 } from "./client.js";
 import type { DiscoveredDevice, Host, PagePrintOutcome } from "./host.js";
-import { createClient } from "./client.js";
+import { BLUETOOTH_UNAVAILABLE_REASONS, createClient } from "./client.js";
 import { fakeHost } from "./testing/fake-host.js";
 import { FakeSink, type PrinterTarget } from "./transport.js";
 
@@ -2557,6 +2558,45 @@ describe("createAgent — Bluetooth commands", () => {
       "pairedBluetooth",
       "visibleDevices",
     ]);
+  });
+
+  it.each<BluetoothState>([
+    { available: true },
+    ...BLUETOOTH_UNAVAILABLE_REASONS.map((reason) => ({ available: false as const, reason })),
+  ])("sends whether this agent can use Bluetooth (%j) on every pull", async (state) => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s", bluetoothAvailability: () => state });
+    const c = client();
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    for (const pull of [0, 1]) expect(sentOn(c, pull).bluetooth).toStrictEqual(state);
+  });
+
+  it("sends no Bluetooth state while the host does not know it yet", async () => {
+    const c = client();
+    await createAgent({
+      host: fakeHost({ config: CONFIG, token: "a1.s", bluetoothAvailability: () => undefined }),
+      client: c,
+    }).runOnce();
+    await createAgent({ host: fakeHost({ config: CONFIG, token: "a1.s" }), client: c }).runOnce();
+    for (const pull of [0, 1]) expect(sentOn(c, pull)).not.toHaveProperty("bluetooth");
+  });
+
+  it("leaves the host's own failure text out of the Bluetooth state it sends", async () => {
+    const withDetail = {
+      available: false,
+      reason: "dbus_unreachable",
+      detail: "bluetoothctl: dbus_connection_ref: Assertion `connection != NULL' failed",
+    } as const;
+    const c = client();
+    await createAgent({
+      host: fakeHost({ config: CONFIG, token: "a1.s", bluetoothAvailability: () => withDetail }),
+      client: c,
+    }).runOnce();
+    expect(sentOn(c, 0).bluetooth).toStrictEqual({
+      available: false,
+      reason: "dbus_unreachable",
+    });
   });
 
   it.each([

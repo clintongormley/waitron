@@ -8,6 +8,7 @@ import {
   type BluetoothCommand,
   type BluetoothCommandOutcome,
   type BluetoothFailureReason,
+  type BluetoothState,
   type Failure,
   type JobOutcome,
   type PageHold,
@@ -766,6 +767,7 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
+    const bluetooth = bluetoothState(host.bluetoothAvailability?.());
     const inventory = {
       visible,
       scanned,
@@ -774,6 +776,7 @@ export function createAgent(opts: AgentOptions): Agent {
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
+      ...(bluetooth === undefined ? {} : { bluetooth }),
     };
     const pulled = activePull
       ? await client.pullJobs(current, token, inventory, activePull.signal)
@@ -920,4 +923,10 @@ export function createAgent(opts: AgentOptions): Agent {
       };
     },
   };
+}
+
+/** Rebuilt rather than passed on, so a host's own failure text never reaches the server. */
+function bluetoothState(state: BluetoothState | undefined): BluetoothState | undefined {
+  if (state === undefined) return undefined;
+  return state.available ? { available: true } : { available: false, reason: state.reason };
 }

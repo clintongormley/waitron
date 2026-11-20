@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvConfig } from "./config.js";
 import { createContainerHost } from "./host.js";
 import type { CapabilitiesQuery } from "./ipp-probe.js";
+import type { LinuxDevices } from "./linux-devices.js";
 import { printOverIpp } from "./ipp-print.js";
 import { FileState } from "./state.js";
 
@@ -21,6 +22,18 @@ const baseEnv: EnvConfig = {
   name: undefined,
   stateDir: "/unused",
   setupPort: 9110,
+};
+
+const noDevices: LinuxDevices = {
+  visibleDevices: async () => [],
+  scan: async () => [],
+  pair: async () => ({ ok: false, error: "unused" }),
+  pairedBluetooth: async () => [],
+  forgetBluetooth: async () => ({ ok: false, error: "unused" }),
+  resolve: async () => {
+    throw new Error("unused");
+  },
+  bluetoothAvailability: () => undefined,
 };
 
 beforeEach(async () => {
@@ -228,6 +241,7 @@ describe("createContainerHost — the rest of the seam", () => {
       pair: vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" })),
       pairedBluetooth: vi.fn(async () => [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Star" }]),
       forgetBluetooth: vi.fn(async () => ({ ok: true })),
+      bluetoothAvailability: () => undefined,
       resolve: vi.fn(async () => ({
         id: "p1",
         transport: "usb" as const,
@@ -276,6 +290,21 @@ describe("createContainerHost — the rest of the seam", () => {
       devicePath: "/dev/usb/lp0",
     });
     expect(devices.resolve).toHaveBeenCalledWith(job);
+  });
+
+  it("reports the device seam's Bluetooth availability, unknown until it has looked", () => {
+    let availability: ReturnType<LinuxDevices["bluetoothAvailability"]>;
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+      devices: { ...noDevices, bluetoothAvailability: () => availability },
+    });
+    expect(host.bluetoothAvailability?.()).toBeUndefined();
+    availability = { available: false, reason: "no_controller", detail: "No default controller" };
+    expect(host.bluetoothAvailability?.()).toStrictEqual(availability);
+    availability = { available: true };
+    expect(host.bluetoothAvailability?.()).toStrictEqual({ available: true });
   });
 
   const hpOffice = {

@@ -20,6 +20,7 @@ export interface AgentInventory {
   scanned: DiscoveredDevice[];
   pairedBluetooth?: PairedBluetoothDevice[];
   bluetoothOutcomes: BluetoothCommandOutcome[];
+  bluetooth?: BluetoothState;
 }
 
 export type BluetoothCommandKind = "pair" | "forget";
@@ -47,6 +48,19 @@ export const BLUETOOTH_FAILURE_REASONS = [
   "bluetooth_unavailable",
 ] as const;
 export type BluetoothFailureReason = (typeof BLUETOOTH_FAILURE_REASONS)[number];
+
+/** Why the agent cannot use Bluetooth at all: the system bus refused it, BlueZ did not answer on
+ * it, the host has no adapter, or the listing failed some other way. */
+export const BLUETOOTH_UNAVAILABLE_REASONS = [
+  "dbus_unreachable",
+  "bluez_not_answering",
+  "no_controller",
+  "failed",
+] as const;
+export type BluetoothUnavailableReason = (typeof BLUETOOTH_UNAVAILABLE_REASONS)[number];
+
+export type BluetoothState =
+  { available: true } | { available: false; reason: BluetoothUnavailableReason };
 
 export interface BluetoothCommandOutcome {
   id: string;
