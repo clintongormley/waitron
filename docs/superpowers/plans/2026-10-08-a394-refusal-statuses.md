@@ -801,6 +801,16 @@ Status changes:
   rows. Statuses per question 12. Tests: `catalogue-api.test.ts:5836`,
   `catalogue-api.menu-schedule.test.ts:321-323` and the rest found when the rows move. Size M; split
   in two if it passes one area. Depends on: question 12.
+  Done 2026-11-20 (lane B): the configuration export answers a box's own broken data as
+  `configuration_export.source_invalid` 500 (a scheduled day-start change keeps 400);
+  `server.credential_unusable` on the email settings read 500; the email test with no email on
+  the caller's own account `email.test_recipient_missing` 409; `backup.effective_mismatch` 500;
+  rotate or disable with no backup settings `backup.not_configured` 409; the mirror bundle's
+  `mirror.not_provisioned` 409 and `module.config_invalid` 500; `menu.reset_required` 500 on the
+  menu, till, guest menu and venue-service boundaries; `time_zone.unreadable` 500 on the menu and
+  till boundaries. The location settings row and `mirror.no_relay` no longer exist.
+  venue-service's `time_zone.unreadable` row keeps 409: none of its routes reaches the code.
+  A394-21 is done.
 - **A394-22 — Malformed path ids, one answer everywhere.** Files:
   `packages/server-kit/src/request-screens.ts` and every table that maps `shared.invalid_id`, plus the
   three till 409s (re-check them first). Statuses per question 7. Size: split by package or

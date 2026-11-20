@@ -126,7 +126,7 @@ The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pa
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
 
-## A394-21 to A394-22 — refusal statuses by one rule
+## A394-22 — refusal statuses by one rule
 
 OPEN,
 queued in lane B (2026-11-20). A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455. The audit (read, not run) found 96 status rows off the rule across
