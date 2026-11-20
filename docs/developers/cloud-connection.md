@@ -58,7 +58,9 @@ separately from an unreadable saved Cloud connection.
 
 ## Refresh or stop Cloud access
 
-After you connect, the primary server checks Cloud once a minute. It obtains a signed
+After you connect, the primary server checks Cloud once a minute. Turning guest-menu sharing on
+or off can bring the next check forward, to as soon as two seconds after the previous check
+finished. The server obtains a signed
 one-hour access lease and renews it with ten minutes left. Every request also uses
 the installation private key; copying a lease does not grant access. Background work
 never extends your management login. Choose **Refresh status** to check immediately.
