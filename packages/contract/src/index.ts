@@ -1,11 +1,15 @@
 export {
   pairingPayload,
+  pairingV4Payload,
   pairingVenueName,
   PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
+  verifyPairingV4Proof,
   PairingError,
   type PairingClaims,
   type PairingAction,
+  type PairingV4Action,
+  type PairingV4Claims,
 } from "./signing/pairing-proof.js";
 export {
   encodeMachine,

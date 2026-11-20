@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import {
   pairingPayload,
+  pairingV4Payload,
   pairingVenueName,
   PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
+  verifyPairingV4Proof,
   encodeMachine,
   verifyMachine,
   createLeaseIssuer,
   verifyLease,
+  type PairingV4Action,
+  type PairingV4Claims,
 } from "@waitron/contract";
 const keys = generateKeyPairSync("ed25519");
 const publicKey = keys.publicKey.export({ type: "spki", format: "der" }).toString("base64url");
@@ -56,6 +60,30 @@ assert.deepEqual(
     now,
   ),
   pair,
+);
+const status: PairingV4Action = "status";
+const pairV4: PairingV4Claims = {
+  origin,
+  requestId: id(1),
+  publicKey,
+  issuedAt: now,
+  action: status,
+  args: [],
+};
+const bytesV4 = pairingV4Payload(pairV4);
+assert.equal(
+  bytesV4.toString(),
+  JSON.stringify(["waitron-cloud-pair-v4", origin, status, id(1), publicKey, "test", now, []]),
+);
+assert.deepEqual(
+  verifyPairingV4Proof(
+    bytesV4.toString("base64url"),
+    sign(null, bytesV4, keys.privateKey).toString("base64url"),
+    origin,
+    status,
+    now,
+  ),
+  pairV4,
 );
 const claims = {
   origin,

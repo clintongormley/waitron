@@ -1,16 +1,29 @@
 # Shared Cloud signing formats
 
 Use `@waitron/contract` inside Waitron when you need the bytes that a box and Cloud
-sign and verify. The package exports the `waitron-cloud-pair-v3`,
+sign and verify. The package exports the `waitron-cloud-pair-v3`, `waitron-cloud-pair-v4`,
 `waitron-cloud-machine-v1` and `waitron-cloud-access-v1` formats for Node.js.
 It has no runtime dependencies on other Waitron packages.
 
-Use `pairingPayload` and `verifyPairingProof` for pairing requests. Pass an empty
+Use `pairingPayload` and `verifyPairingProof` for v3 pairing requests. Pass an empty
 `venueId` to request a new Cloud venue, or its existing Cloud UUID to pair again.
 Put the venue's display name in `venueName` on `start` through `pairingVenueName`,
 which trims it and keeps at most 120 Unicode code points; send it empty on `status` and `complete`,
-or when the venue has no name. The verifier accepts v3 only. For an installed
-box, use `encodeMachine` and `verifyMachine`. `readMachineClaims` parses an envelope
+or when the venue has no name.
+
+Use `pairingV4Payload` and `verifyPairingV4Proof` for the test-only Cloud sign-in
+round trip. Give the encoder the tuple for the action you are signing. Supply
+trimmed, well-formed Unicode for the venue fields, with no control characters
+or line or paragraph separators. Use empty strings for missing address fields
+or tax number. The venue name allows 120 Unicode code points. Each address line
+and the city allow 200, the postcode 20 and the province 100. The tax number
+allows 32 UTF-16 code units and the legal name allows 200. The encoder serializes
+the tuple as supplied. The verifier checks its shape, field limits, signature
+and 8,192-character encoded payload limit.
+The receiving app checks the configured callback and box key, accepts the
+one-use code and decides whether the account may register the venue.
+
+For an installed box, use `encodeMachine` and `verifyMachine`. `readMachineClaims` parses an envelope
 without verifying its signature; authenticate its claims with the stored installation key through `verifyMachine`
 before using them. Use `createLeaseIssuer` to sign access leases and give
 `verifyLease` your trusted issuer keys. Keep the venue, installation, environment
