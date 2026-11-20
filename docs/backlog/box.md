@@ -365,9 +365,10 @@ The [account-delivery amendment](https://github.com/clintongormley/waitron/blob/
 covers the account result messages and recovery actions.
 
 Prepare requires a usable route before setup completes outside development. Live asks again;
-configuration export carries no mail settings or secrets. System → Email serves Prepare and
-Live; saved-relay changes and captured messages remain admin-only. The sender display uses the
-venue's name. Keep current invoice documents, outbox outcomes and public reset privacy.
+configuration export carries no mail settings or secrets. On a configured box, open System →
+Email. Demo uses the top bar's Email inbox. Saved-relay changes and captured messages are
+admin-only. The sender display uses the venue's name. Keep current invoice documents, outbox
+outcomes and public reset privacy.
 
 Cut A supplies the structured failure classifier, bounded account sends and reminder adapters;
 its diagnostics preserve rejected versus unknown outcomes. Cut B shows those diagnostics beside

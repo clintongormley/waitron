@@ -176,17 +176,35 @@ function venueViewer(permissions: string[], role = "manager") {
   return { ...meResponse, roleIds: [role], permissions: ["venue.view", ...permissions] };
 }
 
-it.each(["prepare", "live", "demo", undefined] as const)(
-  "lists Email under System only for eligible roles in %s",
-  async (intent) => {
+const localesResponse = {
+  locales: [
+    { code: "es-ES", label: "Español" },
+    { code: "en-GB", label: "English" },
+  ],
+  venueDefault: "es-ES",
+  loginDefault: "es-ES",
+  venueName: "Deli Test SL",
+};
+
+const { onboardingIntent: prepareIntent, ...configuredSession } = meResponse;
+
+it.each([
+  [prepareIntent, true],
+  ["live", true],
+  ["demo", false],
+  [undefined, true],
+] as const)(
+  "lists Email under System only for eligible roles with setup mode %s",
+  async (intent, listed) => {
+    const setupMode = intent === undefined ? {} : { onboardingIntent: intent };
     for (const role of ["admin", "manager", "supervisor", "staff"] as const) {
       history.replaceState(null, "", "/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
+            ...configuredSession,
+            ...setupMode,
             roleIds: [role],
-            onboardingIntent: intent,
             permissions:
               role === "admin"
                 ? ["person.manage", "person.admin"]
@@ -194,13 +212,16 @@ it.each(["prepare", "live", "demo", undefined] as const)(
                   ? ["person.manage"]
                   : [],
           }),
+          getLocales: vi.fn().mockResolvedValue({
+            ...localesResponse,
+            ...setupMode,
+          }),
           getEmailInbox: vi.fn(() => new Promise(() => undefined)),
           getEmailSettings: vi.fn(() => new Promise(() => undefined)),
         }),
       });
       await flush(el);
-      const visible =
-        (intent === "prepare" || intent === "live") && (role === "admin" || role === "manager");
+      const visible = listed && (role === "admin" || role === "manager");
       expect(navItem(el, "email") !== null).toBe(visible);
       const screen = el.shadowRoot!.querySelector("dashboard-email-screen");
       if (role === "admin" || role === "manager") {
@@ -217,16 +238,7 @@ it.each(["prepare", "live", "demo", undefined] as const)(
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return withStaffPages({
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
-    getLocales: vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: "es-ES",
-      loginDefault: "es-ES",
-      venueName: "Deli Test SL",
-      onboardingIntent: "prepare",
-    }),
+    getLocales: vi.fn().mockResolvedValue({ ...localesResponse, onboardingIntent: "prepare" }),
     forgetLocales: vi.fn(),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     putLocale: vi.fn().mockResolvedValue(undefined),

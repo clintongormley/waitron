@@ -2900,12 +2900,7 @@ export class DashboardApp extends LitElement {
       ];
     const shown = (items: NavItem[] = []): NavPage[] =>
       items
-        .filter(
-          (item) =>
-            item.screen !== "email" ||
-            this.onboardingIntent === "prepare" ||
-            this.onboardingIntent === "live",
-        )
+        .filter((item) => item.screen !== "email" || this.onboardingIntent !== "demo")
         .filter((item) =>
           item.screen === "orders" ? !this.#confinedToInvoices() : this.#mayOpen(item),
         )
