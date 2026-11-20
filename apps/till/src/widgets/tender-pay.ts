@@ -6,7 +6,6 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/client.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import { paymentSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -358,8 +357,8 @@ export class TillTenderPay extends LitElement {
   @state() private guestsEntry?: string;
   readonly #guestsFeedback = new FormFeedback(this);
   #guestsOrderId?: string;
-  @property({ type: Boolean }) slipPrinterAvailable = false;
-  @state() private printCardSlip = false;
+  @property({ type: Boolean }) sumUpConnected = false;
+
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   /** Replayed by `#retryCard`: the idle screen's tip field is gone by the time
    * Retry is tapped. */
@@ -447,7 +446,8 @@ export class TillTenderPay extends LitElement {
             : view === "card"
               ? this.#sameNumber(a.tip, b.tip) &&
                 a.ref.trim() === b.ref.trim() &&
-                a.outside.externalProvider === b.outside.externalProvider &&
+                outsideCardValues(a.outside, this.sumUpConnected).externalProvider ===
+                  outsideCardValues(b.outside, this.sumUpConnected).externalProvider &&
                 (a.outside.externalMachine ?? "").trim() ===
                   (b.outside.externalMachine ?? "").trim()
               : this.#sameNumber(a.entry, b.entry),
@@ -557,7 +557,6 @@ export class TillTenderPay extends LitElement {
     }
     if (this.#guestsOrderId !== this.store.id) {
       this.#resetTip();
-      this.printCardSlip = false;
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
     }
@@ -700,7 +699,6 @@ export class TillTenderPay extends LitElement {
           : {}),
         ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
         ...this.#guestsDetail(),
-        ...(this.#readerSlipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
       });
     });
   }
@@ -841,7 +839,6 @@ export class TillTenderPay extends LitElement {
       method: "cash",
       amount: this.#enteredDecimal(),
       ...this.#guestsDetail(),
-      ...this.#slipDetail(),
     };
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
@@ -876,9 +873,8 @@ export class TillTenderPay extends LitElement {
         ? { addedTip: typedAmount(this.tipEntry)! }
         : {}),
       ...(ref === "" ? {} : { externalRef: ref }),
-      ...outsideCardValues(this.outside),
+      ...outsideCardValues(this.outside, this.sumUpConnected),
       ...this.#guestsDetail(),
-      ...this.#slipDetail(),
     };
     this.#resetTip();
     this.view = "idle";
@@ -1200,29 +1196,11 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  #readerSlipAvailable(): boolean {
-    return this.slipPrinterAvailable && this.#displayedReader?.printsOwnSlipAutomatically !== true;
-  }
-
-  #slipDetail(): { printCardSlip?: boolean } {
-    return this.slipPrinterAvailable ? { printCardSlip: this.printCardSlip } : {};
-  }
-
-  /** One switch serves every method; a reader that prints its own slip is simply not sent it. */
   #renderCardExtras() {
-    const slip = paymentSlipChoice(
-      this.slipPrinterAvailable,
-      this.printCardSlip,
-      this.busy,
-      (value) => {
-        this.printCardSlip = value;
-      },
-    );
-    if (this.cardProvider === "none")
-      return this.slipPrinterAvailable ? html`<div class="card-extras">${slip}</div>` : nothing;
+    if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
-        ${this.#renderReaderControl()} ${slip}
+        ${this.#renderReaderControl()}
         ${
           this.cardProvider === "simulator" && this.chosenReaderId === undefined
             ? html`<div
@@ -1502,6 +1480,7 @@ export class TillTenderPay extends LitElement {
           this.outside = value;
           this.#entryScope?.changed();
         },
+        this.sumUpConnected,
         this.busy,
       )}
       ${this.#renderFormMessage()}

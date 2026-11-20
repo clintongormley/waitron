@@ -215,6 +215,8 @@ export interface TillInfo {
   defaultReaderId?: string;
   /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
   activeReaders: TillActiveReader[];
+  /** Whether the venue has saved a SumUp connection, including without a reader. */
+  sumUpConnected?: boolean;
   tipsEnabled: boolean;
   formFactor: FormFactor;
   /** The CALLING device's capability set from its profile; `[]` for a no-profile or cookieless request. */
@@ -1060,6 +1062,7 @@ export type TenderBlock =
 
 /** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
+  slipPaymentId?: string;
   slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment?: boolean;
@@ -2157,7 +2160,7 @@ export interface PassReleaseResult {
  */
 export type PayOutcome = (
   | { outcome: "captured"; ticket: TillSaleResult }
-  | { outcome: "partial"; balance: BillBalance }
+  | { outcome: "partial"; balance: BillBalance; slipPaymentId?: string }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" }
@@ -3252,10 +3255,12 @@ export class TillApi {
       if (result.outcome === "settled")
         return { ...facts, outcome: "captured", ticket: result.invoice };
       const print = result.slipPrintFailed === true ? { slipPrintFailed: true as const } : {};
+      const slipPaymentId = result.payment?.state === "received" ? result.payment.id : undefined;
+      const slip = slipPaymentId === undefined ? {} : { slipPaymentId };
       if (result.invoice !== undefined)
-        return { ...facts, ...print, outcome: "captured", ticket: result.invoice };
+        return { ...facts, ...print, outcome: "captured", ticket: { ...result.invoice, ...slip } };
       if (result.outcome === "received")
-        return { ...facts, ...print, outcome: "partial", balance: result.balance };
+        return { ...facts, ...print, ...slip, outcome: "partial", balance: result.balance };
       if (result.outcome === "pending" || result.outcome === "timeout")
         return { ...facts, outcome: "timeout" };
       if (result.outcome === "network_unavailable")
@@ -3266,6 +3271,10 @@ export class TillApi {
         ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
       };
     });
+  }
+
+  async printPaymentSlip(orderId: string, paymentId: string): Promise<void> {
+    await this.#request(`/api/working-orders/${orderId}/payment-slip`, "POST", { paymentId });
   }
 
   /**
@@ -3697,9 +3706,12 @@ export class TillApi {
       basket,
     );
     if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
-    return result.outcome !== "settled" && result.slipPrintFailed === true
-      ? { ...result.invoice, slipPrintFailed: true }
-      : result.invoice;
+    if (result.outcome === "settled") return result.invoice;
+    return {
+      ...result.invoice,
+      ...(result.slipPrintFailed === true ? { slipPrintFailed: true } : {}),
+      ...(result.payment?.state === "received" ? { slipPaymentId: result.payment.id } : {}),
+    };
   }
 
   async #payWholeBill(

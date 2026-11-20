@@ -26,7 +26,6 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
-  paymentSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -170,8 +169,8 @@ export class TillPresentedPayDialog extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
-  @property({ type: Boolean }) slipPrinterAvailable = false;
-  @state() private printCardSlip = false;
+  @property({ type: Boolean }) sumUpConnected = false;
+
   /** The box offers this till "Check the time": a clock refusal points at it. */
   @property({ attribute: false }) checkTimeOffered = false;
   /** The bill's whole amount. */
@@ -248,7 +247,6 @@ export class TillPresentedPayDialog extends LitElement {
 
   #syncDraft(): void {
     if (!this.open) {
-      this.printCardSlip = false;
       this.#dropDraft();
       return;
     }
@@ -265,7 +263,8 @@ export class TillPresentedPayDialog extends LitElement {
       equal: (a, b) =>
         cashKey(a.tendered) === cashKey(b.tendered) &&
         a.externalRef.trim() === b.externalRef.trim() &&
-        a.outside.externalProvider === b.outside.externalProvider &&
+        outsideCardValues(a.outside, this.sumUpConnected).externalProvider ===
+          outsideCardValues(b.outside, this.sumUpConnected).externalProvider &&
         (a.outside.externalMachine ?? "").trim() === (b.outside.externalMachine ?? "").trim(),
       restore: (value) => {
         this.tendered = value.tendered;
@@ -305,16 +304,6 @@ export class TillPresentedPayDialog extends LitElement {
   /** The app has put a refusal under one of the row's fields: the row opens so it shows. */
   openEquipmentRow(): void {
     this.rowOpen = true;
-  }
-
-  #slipAvailable(): boolean {
-    return (
-      this.slipPrinterAvailable &&
-      (this.method !== "card" ||
-        (this.fixedReader !== null && this.fixedReader.id === undefined) ||
-        this.equipment?.roles.find((role) => role.role === "card_terminal")?.resolved
-          ?.printsOwnSlipAutomatically !== true)
-    );
   }
 
   #methods(): Method[] {
@@ -424,22 +413,19 @@ export class TillPresentedPayDialog extends LitElement {
     const reader =
       this.method === "card" ? readyPayReader(this.equipment, this.fixedReader)! : null;
     this.#sent = reader === null ? null : sentCard(reader, this.amount);
-    const slip = this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {};
     const detail: PresentedPayDetail =
       reader !== null
         ? {
             method: "card",
             ...(reader.id === undefined ? {} : { readerId: reader.id }),
-            ...slip,
             ...guests,
           }
         : this.method === "cash"
-          ? { method: "cash", tendered: typedAmount(this.tendered)!, ...slip, ...guests }
+          ? { method: "cash", tendered: typedAmount(this.tendered)!, ...guests }
           : {
               method: "manual",
               ...(ref === "" ? {} : { externalRef: ref }),
-              ...outsideCardValues(this.outside),
-              ...slip,
+              ...outsideCardValues(this.outside, this.sumUpConnected),
               ...guests,
             };
     this.#emit("presented-pay", detail);
@@ -673,19 +659,12 @@ export class TillPresentedPayDialog extends LitElement {
                         this.outside = value;
                         this.#entry?.changed();
                       },
+                      this.sumUpConnected,
                       this.busy,
                     )}`
                   : nothing
             }
-            ${this.#equipmentRow()}
-            ${paymentSlipChoice(
-              this.#slipAvailable(),
-              this.printCardSlip,
-              this.busy || this.equipmentBusy,
-              (value) => {
-                this.printCardSlip = value;
-              },
-            )}`
+            ${this.#equipmentRow()}`
       }`;
   }
 

@@ -1,3 +1,4 @@
+import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -174,6 +175,33 @@ async function menuStateRevision(till: Pick<Till, "app" | "cookie">): Promise<un
   expect(answer.status).toBe(200);
   return answer.body.setupRevision;
 }
+
+it("refreshes whether the venue is connected to SumUp without a reader", async () => {
+  const till = await setupTill();
+  const before = await sendAsTill(till, "GET", "/api/till");
+  expect(before.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, ring, {
+      personId: null,
+      purpose: "payments.sumup",
+      value: { apiKey: "test-key", merchantCode: "test-merchant" },
+    }),
+  );
+  const connected = await sendAsTill(till, "GET", "/api/till");
+  expect(connected.body).toMatchObject({ sumUpConnected: true, activeReaders: [] });
+  expect(connected.body.setupRevision).not.toBe(before.body.setupRevision);
+  expect(await menuStateRevision(till)).toBe(connected.body.setupRevision);
+  await withTransaction(suite.db, (tx) =>
+    deleteCredential(tx, { personId: null, purpose: "payments.sumup" }),
+  );
+  const disconnected = await sendAsTill(till, "GET", "/api/till");
+  expect(disconnected.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  expect(await menuStateRevision(till)).toBe(before.body.setupRevision);
+});
 
 describe("the till's setup revision", () => {
   it("the start read and menu-state name the same setup revision for one till", async () => {

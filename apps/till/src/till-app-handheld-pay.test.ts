@@ -465,6 +465,55 @@ describe("a presented bill on a handheld", () => {
     },
   );
 
+  it.each([false, true])(
+    "offers a slip after a confirmed reader payment only if the reader leaves printing to Waitron (own slip: %s)",
+    async (printsOwnSlipAutomatically) => {
+      const printer = roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER]);
+      const reader = roleOf("card_terminal", SECOND_READER, [SECOND_READER]);
+      reader.resolved = { ...reader.resolved!, printsOwnSlipAutomatically };
+      const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+      const { el } = await openPresented({
+        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [printer, reader] }),
+        pay: vi.fn().mockResolvedValue({
+          outcome: "captured",
+          ticket: { ...saleOf("120.00"), slipPaymentId: "reader-payment" },
+        }),
+        printPaymentSlip,
+      });
+      await payFromSheet(el, { method: "card", readerId: "r2" });
+      expect(printPaymentSlip).not.toHaveBeenCalled();
+      const button = documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>(
+        "[data-print-payment-slip]",
+      );
+      expect(button === null).toBe(printsOwnSlipAutomatically);
+      if (button === null) return;
+      button.click();
+      await flush(el);
+      expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "reader-payment");
+    },
+  );
+
+  it("offers the confirmed reader payer a slip before taking the rest", async () => {
+    const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
+    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+    const { el } = await openPresented({
+      getDeviceEquipment: vi.fn().mockResolvedValue({
+        roles: [
+          roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER]),
+          roleOf("card_terminal", SECOND_READER, [SECOND_READER]),
+        ],
+      }),
+      getBillBalance: vi.fn().mockResolvedValue(balance),
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPaymentId: "part" }),
+      printPaymentSlip,
+    });
+    await payFromSheet(el, { method: "card", readerId: "r2" });
+    expect(printPaymentSlip).not.toHaveBeenCalled();
+    expect(inDialog(el, "[data-pay-taken]")).not.toBeNull();
+    await press(el, "[data-print-payment-slip]");
+    expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "part");
+  });
+
   it("says in the Pay window when a short presented capture's slip could not print", async () => {
     const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
     const { el } = await openPresented({

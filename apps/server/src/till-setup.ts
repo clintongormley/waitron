@@ -1,3 +1,4 @@
+import { venueCredentials } from "@waitron/credentials";
 import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
@@ -107,6 +108,10 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
   }
   /* v8 ignore stop */
   const simulator = deps.cardProvider?.provider === "simulator";
+  const [sumUpCredential] = await tx
+    .select({ purpose: venueCredentials.purpose })
+    .from(venueCredentials)
+    .where(eq(venueCredentials.purpose, "payments.sumup"));
   return {
     locale: deps.venueLocale,
     clockingAvailable: deps.workforceEnabled === true,
@@ -124,6 +129,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     // A venue can have several active readers on one provider, so the till needs the row id.
     defaultReaderId: simulator ? undefined : defaultReaderId,
     activeReaders: simulator ? [] : activeReaders,
+    sumUpConnected: sumUpCredential !== undefined,
     tipsEnabled: deps.cfg.tipsEnabled,
     formFactor: device?.formFactor ?? "till",
     capabilities,

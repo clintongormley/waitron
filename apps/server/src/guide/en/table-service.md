@@ -34,10 +34,11 @@ Correct the payment amount and try again, or park the order to save the edits wi
 
 ## Use another card machine {#outside-card}
 
-Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**
-and record its operation number and machine. You can choose **This SumUp account** when the
-machine uses the connected account, or **Paid outside Waitron** for another provider. These
-fields are optional; the bill keeps the details you enter.
+Take the card payment on the separate machine first. In **Pay**, choose **Other card machine**.
+If your venue has connected SumUp, **This SumUp account** starts selected. Choose **Paid outside
+Waitron** if the machine uses another account or provider. Without a SumUp connection, Waitron
+records the payment as **Paid outside Waitron**. You can also enter the operation number and
+machine name to help match the payment later.
 
 If the venue takes tips, enter the tip taken on that machine in **Tip**. A tip you entered
 before choosing **Other card machine** stays there; check that the total matches the machine.
@@ -179,11 +180,13 @@ Use **Refresh printers** when none are listed, or **Cancel** to leave without pr
 
 ## Payment slips {#reader-slips}
 
-A payment slip is optional; the receipt or invoice is not. If the payer wants a slip, turn on
-**Print payment slip** before taking the payment, by cash, **Other card machine** or card reader.
-It is offered when your device has a payment slip printer, and starts off for each payer. The slip
-shows that payment and how it was paid, not what is still owed; for **Other card machine** it also
-shows the machine and operation number when you entered them. If a card payment is not taken, the
+If the payer wants a slip, choose **Print payment slip** after you take their payment by cash,
+**Other card machine** or card reader. For a part payment, print it from the confirmation before
+taking the next payment. After the final payment, use **Customer document**. The button appears
+when your device has a payment slip printer. A slip shows the payment and how it was made. For
+**Other card machine**, it includes the machine and operation number you entered.
+
+If a card payment is not taken, the
 slip says **PAYMENT NOT TAKEN**. If the reader's answer is lost, the slip prints once the payment is
 settled, which can be later, at the device where the payment began.
 

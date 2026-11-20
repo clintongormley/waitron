@@ -1,3 +1,4 @@
+import { printReceivedPaymentSlip } from "./payment-slip-print.js";
 import { readOutsideCardDetails } from "./outside-card.js";
 import { setOptionLabelAvailability, updateProduct } from "@waitron/menu";
 import type { ModuleTimeRecordExport } from "@waitron/module";
@@ -2555,6 +2556,25 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return confirmReceiptHandover(tx, sale.id, session.personId);
       });
       return c.json(status);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/payment-slip", (c) =>
+    runBodyIds("bill.payment_not_found")(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(deps, c, "print-receipt", "payment_slip", session.device);
+      await assertRequestDevice(deps, c, session);
+      const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const body = await readJsonBody<{ paymentId?: unknown }>(c);
+      const paymentId =
+        body.paymentId === undefined
+          ? undefined
+          : requireBodyUuid(body.paymentId, "paymentId").toLowerCase();
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, session, [{ orderId }]);
+        await printReceivedPaymentSlip(tx, requestCfg(deps.cfg, session), orderId, paymentId);
+      });
+      return c.json({});
     }),
   );
 

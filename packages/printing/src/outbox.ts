@@ -20,12 +20,14 @@ export async function enqueuePrintJob(
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
   {
+    id,
     saleId = null,
     receiptCopy = null,
     tenderRefundId = null,
     pageLanguage = null,
     whileSwitchedOff = false,
   }: {
+    id?: string;
     saleId?: string | null;
     receiptCopy?: boolean | null;
     tenderRefundId?: string | null;
@@ -34,6 +36,7 @@ export async function enqueuePrintJob(
   } = {},
 ): Promise<{ jobId: string }> {
   return insertPrintJob(tx, printerId, payload, kind, {
+    id,
     resendOf: null,
     saleId,
     receiptCopy,
@@ -65,6 +68,7 @@ async function insertPrintJob(
   payload: Uint8Array | null,
   kind: typeof printJobs.$inferSelect.kind,
   {
+    id,
     resendOf,
     saleId,
     receiptCopy,
@@ -74,6 +78,7 @@ async function insertPrintJob(
     createdAt,
     whileSwitchedOff = false,
   }: {
+    id?: string;
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
@@ -102,6 +107,7 @@ async function insertPrintJob(
   const [job] = await tx
     .insert(printJobs)
     .values({
+      id,
       printerId,
       payload,
       kind,

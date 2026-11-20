@@ -15,9 +15,16 @@ export const outsideCardStyles = css`
   }
 `;
 
-export function outsideCardValues(value: OutsideCardDetails): OutsideCardDetails {
+export function outsideCardValues(
+  value: OutsideCardDetails,
+  sumUpConnected?: boolean,
+): OutsideCardDetails {
+  const provider =
+    sumUpConnected === false
+      ? "other"
+      : (value.externalProvider ?? (sumUpConnected ? "connected_account" : undefined));
   return {
-    ...(value.externalProvider === undefined ? {} : { externalProvider: value.externalProvider }),
+    ...(provider === undefined ? {} : { externalProvider: provider }),
     ...(value.externalMachine?.trim() ? { externalMachine: value.externalMachine.trim() } : {}),
   };
 }
@@ -25,31 +32,36 @@ export function outsideCardValues(value: OutsideCardDetails): OutsideCardDetails
 export function outsideCardFields(
   value: OutsideCardDetails,
   change: (value: OutsideCardDetails) => void,
+  sumUpConnected: boolean,
   disabled = false,
 ) {
   return html`<div class="outside-card">
-    <div role="radiogroup" aria-label=${t("tender.outside_source")}>
-      <p>${t("tender.outside_source")}</p>
-      <div class="outside-card-options">
-        ${(["", "connected_account", "other"] as const).map(
-          (source) =>
-            html`<label>
-              <input
-                type="radio"
-                name="external-provider"
-                value=${source}
-                .checked=${(value.externalProvider ?? "") === source}
-                .disabled=${disabled}
-                @change=${(event: Event) => {
-                  event.stopPropagation();
-                  change({ ...value, externalProvider: source || undefined });
-                }}
-              />
-              ${t(source === "" ? "tender.outside_unspecified" : source === "connected_account" ? "tender.outside_sumup" : "tender.outside_other")}
-            </label>`,
-        )}
-      </div>
-    </div>
+    ${
+      sumUpConnected
+        ? html`<div role="radiogroup" aria-label=${t("tender.outside_source")}>
+            <p>${t("tender.outside_source")}</p>
+            <div class="outside-card-options">
+              ${(["connected_account", "other"] as const).map(
+                (source) =>
+                  html`<label>
+                    <input
+                      type="radio"
+                      name="external-provider"
+                      value=${source}
+                      .checked=${outsideCardValues(value, sumUpConnected).externalProvider === source}
+                      .disabled=${disabled}
+                      @change=${(event: Event) => {
+                        event.stopPropagation();
+                        change({ ...value, externalProvider: source });
+                      }}
+                    />
+                    ${t(source === "connected_account" ? "tender.outside_sumup" : "tender.outside_other")}
+                  </label>`,
+              )}
+            </div>
+          </div>`
+        : nothing
+    }
     <wt-input
       name="externalMachine"
       .label=${t("tender.outside_machine")}

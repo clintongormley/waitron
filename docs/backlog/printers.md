@@ -338,8 +338,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 Hardware and inbox checks to complete in the owner session.
 
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
-  check slips requested for cash and another card machine, receipt email delivery, and the new
-  local time and marked receipt copy from Print Queue. The owner's 20 November session confirmed
+  check the post-payment slip button for each method, including a part payment. Check receipt
+  email delivery, the slip's local time and the marked receipt copy from Print Queue. The owner's 20 November session confirmed
   thermal original output from the till, a copy from Orders, a Solo slip and its reprint from Print Queue.
   One Solo payment recorded no printable card details, so its receipt and slip could not show them.
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held

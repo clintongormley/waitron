@@ -1,7 +1,7 @@
-import { afterEach, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { afterEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { invoiceOf } from "../../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 import { TillSettlementDocumentDialog } from "./settlement-document-dialog.js";
@@ -20,11 +20,13 @@ for (const language of ["en-GB", "es-ES"])
         try {
           await page.viewport(width, 900);
           setLocale(language);
+          const print = vi.fn();
           const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
           const { el, host } = await mountWidget<TillSettlementDocumentDialog>(
             "till-settlement-document-dialog",
             {
               cashChange: "30.00",
+              paymentSlip: { print },
               result: {
                 ...invoiceOf("120.00"),
                 invoiceType: "F2",
@@ -41,6 +43,15 @@ for (const language of ["en-GB", "es-ES"])
           await dialog.updateComplete;
           await document.fonts.ready;
           await expectNoA11yViolations(host);
+          const slip = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            "[data-print-payment-slip]",
+          )!;
+          await slip.updateComplete;
+          const printButton = slip.shadowRoot!.querySelector("button")!;
+          expect(slip.textContent?.trim()).toBe(t("payment_slip.request"));
+          printButton.focus();
+          await userEvent.keyboard(" ");
+          expect(print).toHaveBeenCalledOnce();
           const done =
             el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
               "[data-settlement-done]",

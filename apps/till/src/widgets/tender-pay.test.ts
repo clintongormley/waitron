@@ -543,7 +543,7 @@ describe("till-tender-pay", () => {
 
     expect(spy.mock.calls).toEqual([
       [{ method: "cash", amount: "0" }],
-      [{ method: "card", amount: "0.00" }],
+      [{ method: "card", amount: "0.00", externalProvider: "other" }],
     ]);
   });
 
@@ -836,7 +836,7 @@ describe("till-tender-pay", () => {
     click(el, ".pay-card");
     await el.updateComplete;
     click(el, ".confirm");
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", externalProvider: "other" });
   });
 
   it("rides an entered externalRef along with the card tender", async () => {
@@ -849,7 +849,12 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     await typeRef(el, "OP-12345");
     click(el, ".confirm");
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", externalRef: "OP-12345" });
+    expect(spy).toHaveBeenCalledWith({
+      method: "card",
+      amount: "1.50",
+      externalProvider: "other",
+      externalRef: "OP-12345",
+    });
   });
 
   it("returns to idle after a confirmed card payment", async () => {
@@ -1000,7 +1005,11 @@ describe("till-tender-pay", () => {
         click(el, ".pay-card");
         await el.updateComplete;
         click(el, ".confirm");
-        expect(confirmSpy).toHaveBeenCalledWith({ method: "card", amount: "3.00" });
+        expect(confirmSpy).toHaveBeenCalledWith({
+          method: "card",
+          amount: "3.00",
+          externalProvider: "other",
+        });
         expect(collectSpy).not.toHaveBeenCalled();
       });
 
@@ -1186,6 +1195,7 @@ describe("till-tender-pay", () => {
     expect(collectSpy).toHaveBeenCalledWith({
       method: "card",
       amount: "1.50",
+      externalProvider: "other",
       externalRef: "OP-999",
     });
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -1286,7 +1296,11 @@ describe("till-tender-pay", () => {
       expect(query(el, ".collecting")).toBeNull();
       expect(query(el, ".ref-input")).not.toBeNull();
       click(el, ".confirm");
-      expect(confirmSpy).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+      expect(confirmSpy).toHaveBeenCalledWith({
+        method: "card",
+        amount: "1.50",
+        externalProvider: "other",
+      });
       expect(collectSpy).not.toHaveBeenCalled();
     });
 
@@ -2277,7 +2291,12 @@ describe("the receipt's guests field", () => {
     await el.updateComplete;
     click(el, ".confirm");
     await el.updateComplete;
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guestCount: 5 });
+    expect(spy).toHaveBeenCalledWith({
+      method: "card",
+      amount: "1.50",
+      guestCount: 5,
+      externalProvider: "other",
+    });
     expect(guests(el)!.value).toBe("5");
   });
 
@@ -2368,7 +2387,12 @@ describe("the receipt's guests field", () => {
     click(el, ".pay-card");
     await el.updateComplete;
     click(el, ".confirm");
-    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guestCount: 4 });
+    expect(spy).toHaveBeenCalledWith({
+      method: "card",
+      amount: "1.50",
+      guestCount: 4,
+      externalProvider: "other",
+    });
   });
 
   it("carries the count on a reader's collect, and again on a retry after a decline", async () => {
@@ -2451,7 +2475,7 @@ describe("the receipt's guests field", () => {
       ".pay-card",
       {},
       "confirm-payment",
-      { method: "card", amount: "1.50", guestCount: 3 },
+      { method: "card", amount: "1.50", guestCount: 3, externalProvider: "other" },
     ],
     [
       "Cash at the collect stage",
@@ -2683,147 +2707,13 @@ it("waits for the Counter routing check before opening its payment window", asyn
   expect(opened).toHaveBeenCalledOnce();
 });
 
-it("offers an unticked whole-card slip and clears it when the order changes", async () => {
-  const store = new WorkingOrderStore();
-  store.addProduct(coffee, "1");
-  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-    store,
-    cardProvider: "simulator",
-    slipPrinterAvailable: true,
-  });
-  const box = () =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-  expect(box()).not.toBeNull();
-  expect(box()!.checked).toBe(false);
-  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
-  await el.updateComplete;
-  const collect = vi.fn();
-  el.addEventListener("collect-card", (event) => collect((event as CustomEvent).detail));
-  el.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
-  await el.updateComplete;
-  expect(collect).toHaveBeenCalledWith(expect.objectContaining({ printCardSlip: true }));
-  store.clear();
-  store.addProduct(coffee, "1");
-  el.cardAttemptsOver++;
-  el.requestUpdate();
-  await el.updateComplete;
-  expect(box()!.checked).toBe(false);
-});
-
-describe("a payment slip for cash and another card machine", () => {
-  const slip = (el: TillTenderPay) =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-  async function tick(el: TillTenderPay): Promise<void> {
-    slip(el)!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
-    );
-    await el.updateComplete;
-  }
-  async function pay(el: TillTenderPay, method: "cash" | "card"): Promise<void> {
-    click(el, method === "cash" ? ".pay" : ".pay-card");
-    await el.updateComplete;
-    if (method === "cash") await type(el, "5");
-    click(el, ".confirm");
-    await el.updateComplete;
-  }
-
-  it.each(["cash", "card"] as const)(
-    "offers a slip unticked with no card provider, sends it with %s, and clears it for the next order",
-    async (method) => {
-      const store = new WorkingOrderStore();
-      store.addProduct(coffee, "1");
-      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-        store,
-        slipPrinterAvailable: true,
-      });
-      expect(slip(el)!.checked).toBe(false);
-      await tick(el);
-      const sent: unknown[] = [];
-      el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
-      await pay(el, method);
-      expect(sent).toEqual([expect.objectContaining({ method, printCardSlip: true })]);
-      store.clear();
-      store.addProduct(coffee, "1");
-      el.requestUpdate();
-      await el.updateComplete;
-      expect(slip(el)!.checked).toBe(false);
-      el.slipPrinterAvailable = false;
-      await el.updateComplete;
-      expect(slip(el)).toBeNull();
-    },
-  );
-
-  it.each(["cash", "card"] as const)(
-    "sends the slip choice with %s when collecting a placed order",
-    async (method) => {
-      const store = new WorkingOrderStore();
-      store.addProduct(coffee, "2");
-      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-        store,
-        mode: "ticket_then_pay",
-        stage: "collect",
-        slipPrinterAvailable: true,
-      });
-      await tick(el);
-      const sent: unknown[] = [];
-      el.addEventListener("collect-order", (e) => sent.push((e as CustomEvent).detail));
-      await pay(el, method);
-      expect(sent).toEqual([expect.objectContaining({ method, printCardSlip: true })]);
-    },
-  );
-
-  it("sends the slip choice with another card machine beside a connected reader", async () => {
-    const store = new WorkingOrderStore();
-    store.addProduct(coffee, "1");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
-      cardProvider: "sumup_cloud",
-      takesManualCard: true,
-      slipPrinterAvailable: true,
-    });
-    await tick(el);
-    const sent: unknown[] = [];
-    el.addEventListener("confirm-payment", (e) => sent.push((e as CustomEvent).detail));
-    click(el, ".pay-manual-card");
-    await el.updateComplete;
-    click(el, ".confirm");
-    expect(sent).toEqual([expect.objectContaining({ method: "card", printCardSlip: true })]);
-  });
-
-  it("offers cash a slip beside a reader that prints its own, but sends none with that reader's card", async () => {
-    const store = new WorkingOrderStore();
-    store.addProduct(coffee, "1");
-    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
-      store,
-      cardProvider: "stripe_terminal",
-      defaultReaderId: "reader-own",
-      activeReaders: [
-        {
-          printsOwnSlipAutomatically: true,
-          id: "reader-own",
-          name: "Front counter",
-          provider: "stripe_terminal",
-        },
-      ],
-      slipPrinterAvailable: true,
-    });
-    expect(slip(el)).not.toBeNull();
-    await tick(el);
-    const collected: Record<string, unknown>[] = [];
-    el.addEventListener("collect-card", (e) => collected.push((e as CustomEvent).detail));
-    click(el, ".pay-card");
-    await el.updateComplete;
-    expect(collected).toHaveLength(1);
-    expect(collected[0]).not.toHaveProperty("printCardSlip");
-  });
-});
-
 it("records a separate-machine card with its details while an integrated reader is configured", async () => {
   const store = new WorkingOrderStore();
   store.addProduct(coffee, "1");
   const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
     store,
     cardProvider: "sumup_cloud",
+    sumUpConnected: true,
     takesManualCard: true,
   });
   const sent: unknown[] = [];
@@ -2917,7 +2807,13 @@ it.each(["sumup_cloud", "none"] as const)(
     click(el, ".confirm");
     click(el, ".confirm");
     expect(sent).toEqual([
-      { method: "card", amount: "1.50", addedTip: "0.30", externalRef: "OP-TIP" },
+      {
+        method: "card",
+        amount: "1.50",
+        addedTip: "0.30",
+        externalProvider: "other",
+        externalRef: "OP-TIP",
+      },
     ]);
     await el.updateComplete;
     el.confirmation = {
@@ -2957,5 +2853,5 @@ it.each(["cash", "new order"])("does not carry a card tip after %s", async (chan
   const sent = vi.fn();
   el.addEventListener("confirm-payment", (event) => sent((event as CustomEvent).detail));
   click(el, ".confirm");
-  expect(sent).toHaveBeenCalledWith({ method: "card", amount: "1.50" });
+  expect(sent).toHaveBeenCalledWith({ method: "card", amount: "1.50", externalProvider: "other" });
 });

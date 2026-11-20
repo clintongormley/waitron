@@ -230,7 +230,7 @@ it("explicit cash/manual-card/hold/weight actions consume only their input and p
   await click(form, ".add");
   expect(app.payments).toEqual([
     { method: "cash", amount: "5" },
-    { method: "card", amount: "3.00", externalRef: "TX-007" },
+    { method: "card", amount: "3.00", externalProvider: "other", externalRef: "TX-007" },
   ]);
   expect(app.parks).toEqual([{ label: "Guest 07" }]);
   expect(protectedAtSubmit).toEqual([false, false, false]);
@@ -326,7 +326,9 @@ it("successful explicit submission invalidates an older navigation answer", asyn
   expect(q.open).toBe(true);
   await click(form, ".confirm");
   await expect.poll(() => q.open).toBe(false);
-  expect(app.payments).toEqual([{ method: "card", amount: "3.00", externalRef: "TX-007" }]);
+  expect(app.payments).toEqual([
+    { method: "card", amount: "3.00", externalProvider: "other", externalRef: "TX-007" },
+  ]);
   expect(unload()).toBe(false);
   expect(await leaving).toBe("stale");
 });
@@ -362,8 +364,8 @@ it("departed controls cannot overwrite a later tender attempt", async () => {
   expect(unload()).toBe(false);
   await click(form, ".confirm");
   expect(app.payments).toEqual([
-    { method: "card", amount: "3.00", externalRef: "TX-007" },
-    { method: "card", amount: "3.00" },
+    { method: "card", amount: "3.00", externalProvider: "other", externalRef: "TX-007" },
+    { method: "card", amount: "3.00", externalProvider: "other" },
   ]);
 });
 it("reverted extras are exempt, and page Discard restores extras without charging", async () => {
@@ -395,14 +397,16 @@ it("reverted extras are exempt, and page Discard restores extras without chargin
 
 it("tracks the separate machine and source as a draft, ignoring blank machine text", async () => {
   const { form } = await mount();
+  form.sumUpConnected = true;
+  await form.updateComplete;
   await click(form, ".pay-card");
   await fill(form, 'wt-input[name="externalMachine"]', " Spare Solo ");
   expect(unload()).toBe(true);
   await fill(form, 'wt-input[name="externalMachine"]', "   ");
   expect(unload()).toBe(false);
-  await click(form, 'input[name="external-provider"][value="connected_account"]');
+  await click(form, 'input[name="external-provider"][value="other"]');
   expect(unload()).toBe(true);
-  await click(form, 'input[name="external-provider"][value=""]');
+  await click(form, 'input[name="external-provider"][value="connected_account"]');
   expect(unload()).toBe(false);
 });
 
@@ -423,7 +427,9 @@ it("manual tip protects leave without a reader and confirmation consumes it once
   expect(await leaving).toBe("kept");
   expect(form.shadowRoot!.querySelector<WtInput>(".tip-input")!.value).toBe("0.30");
   await click(form, ".confirm");
-  expect(app.payments).toEqual([{ method: "card", amount: "3.00", addedTip: "0.30" }]);
+  expect(app.payments).toEqual([
+    { method: "card", amount: "3.00", addedTip: "0.30", externalProvider: "other" },
+  ]);
   expect(unload()).toBe(false);
 });
 

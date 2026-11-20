@@ -85,6 +85,8 @@ describe("Find a bill", () => {
 
   it("refuses cash below the debt and sends a card reference with the exact debt", async () => {
     const el = await mount();
+    el.sumUpConnected = true;
+    await el.updateComplete;
     const paid: unknown[] = [];
     el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
     await type(el, "cash-received", "20.00");
@@ -302,7 +304,7 @@ describe("only the methods the device takes", () => {
     expect(paid).toEqual([
       {
         workingOrderId: "wo-1",
-        tender: { method: "card", amount: "30.00", externalRef: "777" },
+        tender: { method: "card", amount: "30.00", externalProvider: "other", externalRef: "777" },
         invoiced: true,
       },
     ]);
@@ -334,47 +336,4 @@ describe("only the methods the device takes", () => {
       );
     },
   );
-});
-
-describe("Find a bill: a payment slip", () => {
-  const slip = (el: TillFindBillDialog) =>
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-
-  it.each(["cash", "card"] as const)(
-    "offers a slip unticked for %s, sends the choice, and clears it for the next bill",
-    async (method) => {
-      const { el } = await mountWidget<TillFindBillDialog>("till-find-bill-dialog", {
-        bill: debt,
-        ...takesBoth,
-        slipPrinterAvailable: true,
-      });
-      await click(el, method === "cash" ? "[data-cash]" : "[data-card]");
-      expect(slip(el)!.checked).toBe(false);
-      slip(el)!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
-      );
-      await el.updateComplete;
-      const paid: unknown[] = [];
-      el.addEventListener("find-bill-pay", (event) => paid.push((event as CustomEvent).detail));
-      await click(el, "[data-collect]");
-      expect(paid).toEqual([
-        expect.objectContaining({
-          tender: expect.objectContaining({ method }),
-          printCardSlip: true,
-        }),
-      ]);
-      el.bill = { ...debt, workingOrderId: "wo-2" };
-      await el.updateComplete;
-      await el.updateComplete;
-      expect(slip(el)!.checked).toBe(false);
-      el.slipPrinterAvailable = false;
-      await el.updateComplete;
-      expect(slip(el)).toBeNull();
-    },
-  );
-
-  it("offers no slip without a slip printer", async () => {
-    const el = await mount();
-    expect(slip(el)).toBeNull();
-  });
 });

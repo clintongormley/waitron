@@ -23,7 +23,6 @@ import { clockUnusableText, currentLocale, overLimitText, t } from "../i18n/t.js
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
-import { paymentSlipChoice } from "./pay-equipment.js";
 
 export interface FindBillPayDetail {
   workingOrderId: string;
@@ -74,7 +73,8 @@ export class TillFindBillDialog extends LitElement {
   @property({ type: Boolean }) unconfirmed = false;
   @property({ type: Boolean }) takesCash = false;
   @property({ type: Boolean }) takesManualCard = false;
-  @property({ type: Boolean }) slipPrinterAvailable = false;
+  @property({ type: Boolean }) sumUpConnected = false;
+
   @property({ attribute: false }) confirmationTender?: Tender;
   @property({ attribute: false }) error?:
     | StringKey
@@ -88,7 +88,6 @@ export class TillFindBillDialog extends LitElement {
   @state() private cashError = false;
   @state() private externalRef = "";
   @state() private outside: OutsideCardDetails = {};
-  @state() private printCardSlip = false;
   @state() private active = true;
   #generation = 0;
   #scope?: DraftScope<CollectionDraft>;
@@ -176,7 +175,7 @@ export class TillFindBillDialog extends LitElement {
       return JSON.stringify({
         method: "card",
         externalRef: value.externalRef.trim(),
-        ...outsideCardValues(value.outside),
+        ...outsideCardValues(value.outside, this.sumUpConnected),
       });
     let amount: string | { invalid: string };
     try {
@@ -237,7 +236,6 @@ export class TillFindBillDialog extends LitElement {
       this.selected = row;
       this.cash = row.stillOwed;
       this.cashError = false;
-      this.printCardSlip = false;
       this.method = this.#methods()[0] ?? "cash";
       this.#emit("find-bill-selection");
     };
@@ -270,10 +268,12 @@ export class TillFindBillDialog extends LitElement {
               method: "card",
               amount: bill.stillOwed,
               ...(this.externalRef.trim() ? { externalRef: this.externalRef.trim() } : {}),
-              ...outsideCardValues(this.outside),
+              ...outsideCardValues(
+                this.outside,
+                this.unconfirmed ? undefined : this.sumUpConnected,
+              ),
             },
       invoiced: bill.invoiceNumber !== null,
-      ...(this.slipPrinterAvailable ? { printCardSlip: this.printCardSlip } : {}),
     } satisfies FindBillPayDetail);
   }
 
@@ -399,17 +399,10 @@ export class TillFindBillDialog extends LitElement {
                   this.outside = value;
                   this.#scope?.changed();
                 },
+                this.sumUpConnected,
                 this.busy || this.unconfirmed,
               )}`
-      }
-      ${paymentSlipChoice(
-        this.slipPrinterAvailable,
-        this.printCardSlip,
-        this.busy || this.unconfirmed,
-        (value) => {
-          this.printCardSlip = value;
-        },
-      )} `;
+      } `;
   }
 
   #errorText(bill: BillLookupRow): string {

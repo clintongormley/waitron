@@ -13571,13 +13571,22 @@ describe("till-app", () => {
       roles: [roleOf("payment_slip", equipmentItem("s1", "Slips"), [])],
       notices: [],
     };
-    it("Find a bill offers the slip switch when the device has a payment slip printer", async () => {
+    it("Find a bill offers to print the slip after collection", async () => {
+      const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({
         getFindBill: vi.fn().mockResolvedValue(debtSelection()),
         getDeviceEquipment: vi.fn().mockResolvedValue(slipPrinter),
+        collectOrder: vi.fn().mockResolvedValue({ ...saleResult, slipPaymentId: "collection-1" }),
+        printPaymentSlip,
       });
       const form = await openCollection(el);
-      expect(form.slipPrinterAvailable).toBe(true);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+      await flush(el);
+      expect(printPaymentSlip).not.toHaveBeenCalled();
+      const documents = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+      documents.shadowRoot!.querySelector<HTMLElement>("[data-print-payment-slip]")!.click();
+      await flush(el);
+      expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-debt", "collection-1");
     });
     it.each([
       ["cash", { method: "cash", amount: "30.00" }],

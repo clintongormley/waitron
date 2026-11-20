@@ -8,7 +8,6 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "./equipment-scanner.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
 import type { DeviceEquipment, EquipmentItem } from "../api/client.js";
@@ -514,22 +513,26 @@ declare global {
   }
 }
 
-export function paymentSlipChoice(
-  available: boolean,
-  checked: boolean,
-  disabled: boolean,
-  change: (checked: boolean) => void,
-): TemplateResult | typeof nothing {
-  return available
-    ? html`<wt-switch
-        name="printSlip"
-        .label=${t("payment_slip.request")}
-        .checked=${checked}
-        .disabled=${disabled}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          change(event.detail.checked);
-        }}
-      ></wt-switch>`
-    : nothing;
+export interface PaymentSlipAction {
+  state?: "sending" | "queued" | "failed";
+  print: () => void;
+}
+
+export function paymentSlipButton(action: PaymentSlipAction | undefined) {
+  if (action === undefined) return nothing;
+  return html`<wt-button
+      data-print-payment-slip
+      variant="secondary"
+      .loading=${action.state === "sending"}
+      ?disabled=${action.state === "sending" || action.state === "queued"}
+      @click=${action.print}
+      >${t("payment_slip.request")}</wt-button
+    >
+    ${
+      action.state === "failed"
+        ? html`<p role="alert">${t("payment_slip.capture_failed")}</p>`
+        : action.state === "queued"
+          ? html`<p role="status">${t("payment_slip.queued")}</p>`
+          : nothing
+    }`;
 }

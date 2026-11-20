@@ -1,3 +1,4 @@
+import { paymentSlipButton, type PaymentSlipAction } from "./pay-equipment.js";
 import {
   outsideCardFields,
   outsideCardValues,
@@ -40,7 +41,6 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
-  paymentSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -121,6 +121,7 @@ export type BillPayConfirmDetail = ReceiptGuestsDetail & {
  * since been received, which the run of shares has already counted. */
 export interface PayTaken {
   change: string | null;
+  slipPaymentId?: string;
   pending?: string;
   settled?: true;
   reader?: string;
@@ -515,8 +516,8 @@ export class TillBillPayDialog extends LitElement {
   /** Set after each refund made from the bill's payments list. */
   @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
-  @property({ type: Boolean }) slipPrinterAvailable = false;
-  @state() private printCardSlip = false;
+  @property({ type: Boolean }) sumUpConnected = false;
+  @property({ attribute: false }) paymentSlip?: PaymentSlipAction;
   /** The bill has no invoice and is set for a simplified one, so a part payment may have its own. */
   @property({ type: Boolean }) ownReceiptOffered = false;
   /** The answer to the own-receipt question; null while unanswered. */
@@ -668,7 +669,10 @@ export class TillBillPayDialog extends LitElement {
         : {
             tip: this.tipsEnabled ? amountKey(value.cardTip) : null,
             card: this.#keyed(value.method)
-              ? { reference: value.externalRef.trim(), ...outsideCardValues(value.outside) }
+              ? {
+                  reference: value.externalRef.trim(),
+                  ...outsideCardValues(value.outside, this.sumUpConnected),
+                }
               : {
                   readerId: value.readerId,
                   simulation:
@@ -827,7 +831,6 @@ export class TillBillPayDialog extends LitElement {
   }
 
   paymentAccepted(): void {
-    this.printCardSlip = false;
     this.ownReceipt = null;
     this.#accept(null);
   }
@@ -1009,7 +1012,7 @@ export class TillBillPayDialog extends LitElement {
       card: {
         entry: "manual",
         ...(ref === "" ? {} : { externalRef: ref }),
-        ...outsideCardValues(this.outside),
+        ...outsideCardValues(this.outside, this.sumUpConnected),
       },
     };
   }
@@ -1032,20 +1035,6 @@ export class TillBillPayDialog extends LitElement {
   #canAsk(): boolean {
     if (this.chosenWay === "whole" && !this.#owing()) return false;
     return !this.handheld || this.#methods().length > 0;
-  }
-
-  #slipAvailable(onReader: boolean): boolean {
-    if (!this.slipPrinterAvailable) return false;
-    if (!onReader) return true;
-    const reader =
-      this.handheld && this.fixedReader?.id === undefined && this.fixedReader !== null
-        ? undefined
-        : this.handheld
-          ? this.equipment?.roles.find((role) => role.role === "card_terminal")?.resolved
-          : this.readers.find(
-              (reader) => reader.id === (this.chosenReaderId ?? this.defaultReaderId),
-            );
-    return reader?.printsOwnSlipAutomatically !== true;
   }
 
   #readyReader(): FixedReader | null {
@@ -1279,7 +1268,8 @@ export class TillBillPayDialog extends LitElement {
     if (taken === null) return nothing;
     if (this.handheld && taken.pending !== undefined) return this.#uncertain(taken.pending);
     const line = html`<p class="taken" role="status" data-pay-taken>${this.#takenText(taken)}</p>`;
-    if (!this.handheld) return line;
+    const slip = this.showsTaken ? paymentSlipButton(this.paymentSlip) : nothing;
+    if (!this.handheld) return html`${line} ${slip}`;
     return html`<div class="taken-block">
       ${line}
       ${
@@ -1291,6 +1281,7 @@ export class TillBillPayDialog extends LitElement {
                 .replace("{reader}", () => taken.reader!)}
             </p>`
       }
+      ${slip}
     </div>`;
   }
 
@@ -1953,6 +1944,7 @@ export class TillBillPayDialog extends LitElement {
         this.outside = value;
         this.#changedDraft();
       },
+      this.sumUpConnected,
       this.busy || this.confirmationLocked,
     )}`;
   }
@@ -2085,7 +2077,6 @@ export class TillBillPayDialog extends LitElement {
     this.#sharePaying = asked.choice.kind === "share" ? asked.choice.shareOf : null;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
-      ...(this.#slipAvailable(onReader) ? { printCardSlip: this.printCardSlip } : {}),
       ...(reader?.id === undefined ? {} : { readerId: reader.id }),
       ...(this.#ownReceiptAsked(preview) && this.ownReceipt === true
         ? { ownReceipt: true as const }
@@ -2223,14 +2214,6 @@ export class TillBillPayDialog extends LitElement {
         }
       </dl>
       ${this.#equipmentRow(onReader)}
-      ${paymentSlipChoice(
-        this.#slipAvailable(onReader),
-        this.printCardSlip,
-        this.busy || this.confirmationLocked,
-        (value) => {
-          this.printCardSlip = value;
-        },
-      )}
       ${
         this.tipsEnabled &&
         cash !== null &&

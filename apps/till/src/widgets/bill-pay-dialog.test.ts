@@ -410,7 +410,7 @@ describe("till-bill-pay-dialog: contributing and splitting equally", () => {
       {
         choice: { kind: "contribution", amount: "25.50" },
         pay: { method: "card" },
-        card: { entry: "manual" },
+        card: { entry: "manual", externalProvider: "other" },
       },
     ]);
   });
@@ -445,7 +445,7 @@ describe("till-bill-pay-dialog: contributing and splitting equally", () => {
     expect(asked[0]).toEqual({
       choice: { kind: "contribution", amount: "40" },
       pay: { method: "card", addedTip: "10" },
-      card: { entry: "manual", externalRef: "000123" },
+      card: { entry: "manual", externalProvider: "other", externalRef: "000123" },
     });
   });
 });
@@ -466,7 +466,7 @@ describe("till-bill-pay-dialog: on a device that does not take cash", () => {
       {
         choice: { kind: "contribution", amount: "20" },
         pay: { method: "card" },
-        card: { entry: "manual" },
+        card: { entry: "manual", externalProvider: "other" },
       },
     ]);
   });
@@ -2004,7 +2004,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
   });
 
   it("takes another card machine with its operation number, as a hand-keyed card", async () => {
-    const el = await handheld();
+    const el = await handheld({ sumUpConnected: true });
     const asked = capture<PayRequest>(el, "bill-pay-preview");
     expect(field(el, "externalRef")).toBeNull();
     await pick(el, "method", "manual");
@@ -2014,8 +2014,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       'input[name="external-provider"][value="connected_account"]',
     );
     expect(source).not.toBeNull();
-    source!.click();
-    await el.updateComplete;
+    expect(source!.checked).toBe(true);
     await type(el, "externalMachine", " Spare Solo ");
     await click(el, "[data-pay-continue]");
 
@@ -2048,7 +2047,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       {
         choice: { kind: "whole" },
         pay: { method: "card" },
-        card: { entry: "manual" },
+        card: { entry: "manual", externalProvider: "other" },
       },
     ]);
   });
@@ -3366,130 +3365,6 @@ it.each(
   },
 );
 
-it("starts the reader slip unticked, forwards the choice, and resets for the next payer", async () => {
-  const el = await mount({
-    way: "contribution",
-    takesCash: false,
-    cardReader: "simulator",
-    slipPrinterAvailable: true,
-    asked: {
-      choice: { kind: "contribution", amount: "10.00" },
-      pay: { method: "card" },
-      card: { entry: "reader" },
-    },
-    preview: {
-      kind: "allocated",
-      choice: null,
-      applied: "10.00",
-      tip: "0.00",
-      change: null,
-      charged: "10.00",
-    },
-  });
-  const box = () =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-  expect(box()).not.toBeNull();
-  expect(box()!.checked).toBe(false);
-  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
-  await el.updateComplete;
-  const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
-  await click(el, "[data-pay-confirm]");
-  expect(seen.at(-1)).toMatchObject({ printCardSlip: true });
-  el.paymentAccepted();
-  await el.updateComplete;
-  expect(box()!.checked).toBe(false);
-  el.slipPrinterAvailable = false;
-  await el.updateComplete;
-  expect(box()).toBeNull();
-});
-
-describe("till-bill-pay-dialog: a payment slip for cash and another card machine", () => {
-  const ownSlipReader = {
-    printsOwnSlipAutomatically: true,
-    id: "r-own",
-    name: "Bar reader",
-    provider: "stripe_terminal" as const,
-  };
-  const cashAsked: PayRequest = {
-    choice: { kind: "contribution", amount: "10.00" },
-    pay: { method: "cash", tendered: "10.00" },
-  };
-  const cashPreview = {
-    kind: "allocated" as const,
-    choice: null,
-    applied: "10.00",
-    tip: "0.00",
-    change: "0.00",
-    charged: null,
-  };
-  const machineAsked: PayRequest = {
-    choice: { kind: "contribution", amount: "10.00" },
-    pay: { method: "card" },
-    card: { entry: "manual" },
-  };
-  const machinePreview = { ...cashPreview, change: null, charged: "10.00" };
-  const slip = (el: TillBillPayDialog) =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-
-  it.each([
-    ["cash", cashAsked, cashPreview],
-    ["another card machine", machineAsked, machinePreview],
-  ] as const)(
-    "offers %s a slip unticked, sends the choice, and resets it for the next payer",
-    async (_method, asked, preview) => {
-      const el = await mount({ way: "contribution", slipPrinterAvailable: true, asked, preview });
-      expect(slip(el)).not.toBeNull();
-      expect(slip(el)!.checked).toBe(false);
-      slip(el)!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
-      );
-      await el.updateComplete;
-      const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
-      await click(el, "[data-pay-confirm]");
-      expect(seen.at(-1)).toMatchObject({ printCardSlip: true });
-      el.paymentAccepted();
-      await el.updateComplete;
-      expect(slip(el)!.checked).toBe(false);
-      el.slipPrinterAvailable = false;
-      await el.updateComplete;
-      expect(slip(el)).toBeNull();
-    },
-  );
-
-  it("sends an unticked slip choice as false with cash", async () => {
-    const el = await mount({
-      way: "contribution",
-      slipPrinterAvailable: true,
-      asked: cashAsked,
-      preview: cashPreview,
-    });
-    const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
-    await click(el, "[data-pay-confirm]");
-    expect(seen.at(-1)).toMatchObject({ printCardSlip: false });
-  });
-
-  it("offers cash a slip beside a reader that prints its own, but not that reader's card", async () => {
-    const el = await mount({
-      way: "contribution",
-      slipPrinterAvailable: true,
-      cardReader: "stripe_terminal",
-      readers: [ownSlipReader],
-      defaultReaderId: "r-own",
-      asked: cashAsked,
-      preview: cashPreview,
-    });
-    expect(slip(el)).not.toBeNull();
-    el.asked = {
-      choice: { kind: "contribution", amount: "10.00" },
-      pay: { method: "card" },
-      card: { entry: "reader", readerId: "r-own" },
-    };
-    el.preview = machinePreview;
-    await el.updateComplete;
-    expect(slip(el)).toBeNull();
-  });
-});
-
 describe("till-bill-pay-dialog: Close as deferred payment", () => {
   const deferred = (el: TillBillPayDialog) =>
     root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-pay-deferred]");
@@ -3577,7 +3452,7 @@ it("offers a separate card machine at a counter with a configured reader", async
     {
       choice: { kind: "contribution", amount: "12" },
       pay: { method: "card" },
-      card: { entry: "manual" },
+      card: { entry: "manual", externalProvider: "other" },
     },
   ]);
 });

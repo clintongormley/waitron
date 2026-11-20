@@ -1354,9 +1354,30 @@ describe("TillApi", () => {
       qr: "x",
     };
     const path = "/api/working-orders/wo1/payments";
-    const fetchStub = wholeBillReplies("placed", "1.50", { outcome: "received", invoice: ticket });
+    const fetchStub = wholeBillReplies("placed", "1.50", {
+      outcome: "received",
+      invoice: ticket,
+      payment: {
+        id: "cash-payment",
+        submissionId: "submission",
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        entry: null,
+        applied: "1.50",
+        tip: "0.00",
+        tendered: "2.00",
+        change: "0.50",
+        state: "received",
+        createdAt: "2026-08-06T10:00:00.000Z",
+        receivedAt: "2026-08-06T10:00:00.000Z",
+        lines: [],
+        refunds: [],
+      },
+    });
 
-    const r = await new TillApi("", fetchStub).collectOrder(
+    const api = new TillApi("", fetchStub);
+    const r = await api.collectOrder(
       "wo1",
       {
         method: "cash",
@@ -1383,7 +1404,11 @@ describe("TillApi", () => {
       tip: "0.00",
       submissionId: expect.any(String),
     });
-    expect(r).toEqual(ticket);
+    expect(r).toEqual({ ...ticket, slipPaymentId: "cash-payment" });
+    fetchStub.mockResolvedValueOnce(jsonResponse({}));
+    await api.printPaymentSlip("wo1", r.slipPaymentId!);
+    expect(fetchStub.mock.calls.at(-1)![0]).toBe("/api/working-orders/wo1/payment-slip");
+    expect(postedBodies(fetchStub).at(-1)).toEqual({ paymentId: "cash-payment" });
   });
 
   it.each(["lost", "unreadable"])(

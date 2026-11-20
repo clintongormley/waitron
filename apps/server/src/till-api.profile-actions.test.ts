@@ -287,6 +287,13 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/orders/${id}/reprint`),
   preparing("POST", `/api/ticket-items/${id}/advance`),
   preparing("POST", `/api/kitchen-notices/${id}/acknowledge`),
+  [
+    "POST",
+    `/api/working-orders/${id}/payment-slip`,
+    "print-receipt",
+    forbidden("payment_slip"),
+    {},
+  ],
   ["POST", `/api/sales/${id}/receipt/retry`, "print-receipt", forbidden("receipt_retry"), {}],
   ["POST", `/api/sales/${id}/deliveries`, "print-receipt", forbidden("invoice_delivery"), {}],
   [

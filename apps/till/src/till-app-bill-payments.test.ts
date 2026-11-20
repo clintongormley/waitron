@@ -42,6 +42,7 @@ import {
   resetBillPayDrafts,
   equipmentItem,
   equipmentWith,
+  roleOf,
 } from "../test/bill-pay-app.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -1315,6 +1316,37 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(text(paid)).toBe(t("table.pick_payment_stays"));
   });
 
+  it("prints the confirmed part payer's slip before the next payment", async () => {
+    const printer = equipmentItem("slips", "Slips");
+    const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { id: "cash-part", applied: "40.00", change: "10.00" },
+            { received: "40.00", outstanding: "80.00" },
+          ),
+        ),
+      getDeviceEquipment: vi.fn().mockResolvedValue({
+        roles: [roleOf("payment_slip", printer, [printer])],
+      }),
+      printPaymentSlip,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    expect(inDialog(el, "[data-print-payment-slip]")).toBeNull();
+    await press(el, "[data-pay-confirm]");
+    expect(printPaymentSlip).not.toHaveBeenCalled();
+    await press(el, "[data-print-payment-slip]");
+    expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "cash-part");
+    await type(el, "amount", "20");
+    expect(inDialog(el, "[data-print-payment-slip]")).toBeNull();
+  });
+
   it("leaves all the change as a tip when the guest says so, and takes it", async () => {
     const previewBillPayment = vi
       .fn()
@@ -1400,6 +1432,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       applied: "40.00",
       tip: "10.00",
       entry: "manual",
+      externalProvider: "other",
       submissionId: expect.any(String),
     });
   });
@@ -6091,6 +6124,7 @@ describe("till-app: the steak's two choices", () => {
         applied: "15.00",
         tip: "10.00",
         entry: "manual",
+        externalProvider: "other",
         guestCount: 4,
         submissionId: expect.any(String),
       },
