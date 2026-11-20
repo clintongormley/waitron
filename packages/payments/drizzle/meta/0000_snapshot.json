@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "84f01e7c-7fd5-4cdc-a5f1-24aa52a2b96e",
+  "id": "cc158b4a-127d-427f-b23f-04692472ea0f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_readers": {
@@ -350,6 +350,13 @@
         },
         "settled_at": {
           "name": "settled_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_checkout_started_at": {
+          "name": "provider_checkout_started_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
