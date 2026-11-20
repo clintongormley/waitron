@@ -1,6 +1,11 @@
 import { claimA4ForTest } from "./testing/a4-print-job.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
-import { payments, recordVoid, SimulatorPaymentProvider, type PaymentResult } from "@waitron/payments";
+import {
+  payments,
+  recordVoid,
+  SimulatorPaymentProvider,
+  type PaymentResult,
+} from "@waitron/payments";
 import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
