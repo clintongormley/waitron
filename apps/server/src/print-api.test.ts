@@ -1334,14 +1334,14 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     });
   });
 
-  it("create requires localKey for usb (422) and ignores agentId/usbPath", async () => {
+  it("create requires localKey for usb (400) and ignores agentId/usbPath", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
     const missing = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "Bad usb", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
     });
-    expect(missing.status).toBe(422);
+    expect(missing.status).toBe(400);
     expect((await missing.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "printer.invalid_config" },
     });
@@ -1871,14 +1871,14 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(emptyCreate.status).toBe(400);
   });
 
-  it("create with a transport short of its required fields → 422 printer.invalid_config", async () => {
+  it("create with a transport short of its required fields → 400 printer.invalid_config", async () => {
     const app = mountApp();
     await joinAndAccept(app);
     const res = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "Bad usb", transport: "usb" },
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "printer.invalid_config" },
     });
@@ -3780,7 +3780,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     });
 
     const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: "printer.bluetooth_not_discovered", params: { address: mac } },
     });
@@ -3795,7 +3795,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     await pull(app, scanner.token, { scanned: [scannedMac(mac)] });
 
     const res = await command(app, other.agentId, "pair", { address: mac, pin: PIN });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "printer.bluetooth_not_discovered", params: { address: mac } },
     });
@@ -3809,7 +3809,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     await pull(app, token, { scanned: [{ transport: "usb", localKey: mac }] });
 
     const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "printer.bluetooth_not_discovered" } });
   });
 
@@ -3872,7 +3872,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       rows.find((r) => r.agentId === holder.agentId && r.localKey === second),
     ).not.toHaveProperty("paired");
     const refusal = await command(app, holder.agentId, "forget", { address: second });
-    expect(refusal.status).toBe(409);
+    expect(refusal.status).toBe(400);
     expect(await refusal.json()).toMatchObject({ error: { code: "printer.bluetooth_not_paired" } });
   });
 
@@ -3883,7 +3883,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     await pull(app, token, { scanned: [scannedMac(mac)], pairedBluetooth: [] });
 
     const res = await command(app, agentId, "forget", { address: mac });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
     });
@@ -3897,7 +3897,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     await pull(app, holder.token, { pairedBluetooth: [{ localKey: mac }] });
 
     const res = await command(app, other.agentId, "forget", { address: mac });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
     });
@@ -3918,7 +3918,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
 
     const pair = await command(app, agentId, "pair", { address: mac, pin: PIN });
-    expect(pair.status).toBe(409);
+    expect(pair.status).toBe(400);
     expect(await pair.json()).toMatchObject({
       error: { code: "printer.bluetooth_not_discovered" },
     });
@@ -4723,7 +4723,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(row).toBeDefined();
       expect(row).not.toHaveProperty("paired");
       const res = await command(app, agentId, "forget", { address: mac });
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
       });

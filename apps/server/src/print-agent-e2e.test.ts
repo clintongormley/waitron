@@ -264,7 +264,7 @@ describe("print-agent end to end", () => {
       now += 15_001;
       expect(await listed()).toEqual([]);
       const refused = await pair();
-      expect(refused.status).toBe(409);
+      expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
         error: { code: "printer.bluetooth_not_discovered" },
       });
