@@ -231,10 +231,6 @@ export class SetMenuLinesForm extends LitElement {
     );
     return html`<form
       novalidate
-      @submit=${(event: Event) => {
-        event.preventDefault();
-        void this.#save();
-      }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector('[data-test="save"]'))}
     >
       ${repeat(

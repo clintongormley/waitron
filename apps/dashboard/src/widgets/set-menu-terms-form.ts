@@ -93,6 +93,7 @@ export class SetMenuTermsForm extends LitElement {
   readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
   #baseline?: Draft;
+  #closedBySave = false;
 
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
     if (this.saving) return false;
@@ -172,10 +173,10 @@ export class SetMenuTermsForm extends LitElement {
 
   async #save(event: Event): Promise<void> {
     event.preventDefault();
-    const menuId = this.value?.id;
+    const menuId = this.creating ? null : this.value?.id;
     const baseline = this.#baseline;
     if (
-      (!menuId && !this.creating) ||
+      (menuId !== null && !menuId) ||
       !baseline ||
       this.saving ||
       saveActionState(this.#scope).unchanged
@@ -191,10 +192,10 @@ export class SetMenuTermsForm extends LitElement {
     this.refusal = {};
     try {
       let created: MenuSummary | undefined;
-      if (this.creating) {
+      if (menuId === null) {
         const { name, ...terms } = submitted;
         created = await this.api.createMenu(name, { kind: "set_menu", ...terms });
-      } else if (menuId) {
+      } else {
         const { name: internalName, ...terms } = Object.fromEntries(
           (Object.keys(submitted) as (keyof Draft)[])
             .filter((key) => !sameValue(baseline[key], submitted[key]))
@@ -209,6 +210,7 @@ export class SetMenuTermsForm extends LitElement {
       this.#scope?.commit(submitted);
       if (created) {
         const dialog = this.renderRoot.querySelector("wt-modal")!;
+        this.#closedBySave = true;
         dialog.closeAfter("saved");
         await dialog.updateComplete;
       }
@@ -342,7 +344,7 @@ export class SetMenuTermsForm extends LitElement {
           heading=${t("menus.add_set_menu")}
           @wt-close=${(event: Event) => {
             event.stopPropagation();
-            if (!this.saving)
+            if (!this.#closedBySave)
               this.dispatchEvent(
                 new CustomEvent("set-menu-terms-cancelled", { bubbles: true, composed: true }),
               );

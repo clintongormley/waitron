@@ -169,18 +169,28 @@ it("saves a customer-facing name typed for one language", async () => {
   );
 });
 
-it("closes the new set menu dialog on Cancel and creates nothing", async () => {
-  const createMenu = vi.fn();
-  const { el } = await mountWidget("dashboard-set-menu-terms-form", {
-    api: { createMenu } as unknown as DashboardApi,
-    creating: true,
-    languages,
-  } as Partial<HTMLElement>);
-  const cancelled = vi.fn();
-  el.addEventListener("set-menu-terms-cancelled", cancelled);
-  await expect.element(page.getByRole("dialog", { name: "Add set menu" })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
-  await expect.element(page.getByRole("dialog", { name: "Add set menu" })).not.toBeInTheDocument();
-  await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
-  expect(createMenu).not.toHaveBeenCalled();
-});
+it.each(["Cancel", "Escape"])(
+  "closes the new set menu dialog on %s, reports it cancelled and creates nothing",
+  async (how) => {
+    const createMenu = vi.fn();
+    const { el } = await mountWidget("dashboard-set-menu-terms-form", {
+      api: { createMenu } as unknown as DashboardApi,
+      creating: true,
+      languages,
+    } as Partial<HTMLElement>);
+    const cancelled = vi.fn();
+    el.addEventListener("set-menu-terms-cancelled", cancelled);
+    await expect.element(page.getByRole("dialog", { name: "Add set menu" })).toBeVisible();
+    const reported = new Promise((resolve) =>
+      el.addEventListener("set-menu-terms-cancelled", resolve, { once: true }),
+    );
+    if (how === "Cancel") await page.getByRole("button", { name: "Cancel" }).click();
+    else await userEvent.keyboard("{Escape}");
+    await reported;
+    expect(cancelled).toHaveBeenCalledOnce();
+    await expect
+      .element(page.getByRole("dialog", { name: "Add set menu" }))
+      .not.toBeInTheDocument();
+    expect(createMenu).not.toHaveBeenCalled();
+  },
+);
