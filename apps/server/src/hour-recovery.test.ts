@@ -319,7 +319,7 @@ it("derives managed Cloud selection only after the exact approved point is downl
   expect(preview.sourceId).toBe(point.digest);
   await expect(
     client.preview((request) => previewRecoveryArchive({ ...previewDeps(), ...request }), LOCATION),
-  ).rejects.toThrow("Cloud recovery is unavailable");
+  ).rejects.toMatchObject({ code: "setup.operation_conflict" });
 });
 
 const hourEvidenceName = "secrets/module-evidence/fiscal-verifactu/hour-history.json";

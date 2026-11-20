@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { mountSetup as mountSetupBase } from "./setup-api.js";
-import type { CloudRecoveryView } from "./cloud-recovery.js";
+import { createCloudRecoveryClient, type CloudRecoveryView } from "./cloud-recovery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
 function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {
@@ -55,6 +56,90 @@ function setup() {
   );
   return { app, cloudRecovery, stageRestore, requestRestart };
 }
+const cloudPointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+const cloudPoint = {
+  id: cloudPointId,
+  venueId: "374cac38-cc58-46d5-8d3b-8443fc4343a4",
+  kind: "snapshot",
+  objectKey: `snapshots/${cloudPointId}`,
+  digest: createHash("sha256").update("archive").digest("hex"),
+  size: 7,
+  capturedAt: "2026-09-24T10:00:00.000Z",
+  modules: { core: 1 },
+  verification: "verified",
+  deleting: false,
+  deletedAt: null,
+};
+/** A real client over a fake Cloud that has approved `cloudPoint`; `answer` overrides a reply. */
+async function approvedCloudRecovery() {
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-setup-conflict-"));
+  const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
+  const later = () => new Date(Date.now() + 60 * 60_000).toISOString();
+  let infos = 0;
+  const cloud = {
+    awaitingOwner: false,
+    answer: undefined as undefined | ((action: string, info: number) => Response | undefined),
+  };
+  const cloudFetch = vi.fn(async (url: string, init?: RequestInit) => {
+    const action = new URL(url).pathname.split("/").at(-1)!;
+    if (action === "info") infos++;
+    const replaced = cloud.answer?.(action, infos);
+    if (replaced) return replaced;
+    const payload = String((JSON.parse(String(init?.body)) as { payload: unknown }).payload);
+    const id = (JSON.parse(Buffer.from(payload, "base64url").toString()) as string[])[2];
+    if (action === "start")
+      return Response.json({
+        requestId: id,
+        state: "awaiting_owner",
+        expiresAt,
+        operationId: null,
+      });
+    if (action === "status")
+      return cloud.awaitingOwner
+        ? Response.json({ requestId: id, state: "awaiting_owner", expiresAt, operationId: null })
+        : Response.json({ requestId: id, state: "approved", expiresAt, operationId: id });
+    if (action === "info") return Response.json({ point: cloudPoint, operationExpiresAt: later() });
+    if (action === "read")
+      return Response.json({
+        point: cloudPoint,
+        location: { endpoint: "https://store.example.test", bucket: "backup", region: "local" },
+        credentials: { accessKeyId: "access", secretAccessKey: "secret", sessionToken: "session" },
+        recoveryKey: "archive-key",
+        expiresAt,
+        operationExpiresAt: later(),
+      });
+    throw new Error(action);
+  });
+  const download = vi.fn(async (_grant: unknown, path: string) => writeFile(path, "archive"));
+  const client = createCloudRecoveryClient({
+    stateDir,
+    origin: "https://cloud.example.test",
+    environment: "preproduction",
+    fetch: cloudFetch as typeof fetch,
+    download,
+  });
+  await client.start();
+  expect((await client.status()).state).toBe("approved");
+  infos = 0;
+  const review = vi.fn(async () => ({}));
+  const stageRestore = vi.fn(async () => {});
+  const app = new Hono();
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      cloudRecovery: client,
+      previewCloudRestore: (pointId) => client.preview(review as never, pointId),
+      stageRestore,
+      requestRestart: vi.fn(),
+    },
+    vi.fn(),
+  );
+  const close = () => rm(stateDir, { recursive: true, force: true });
+  return { app, cloud, download, review, stageRestore, close };
+}
+const operationConflict = { error: { code: "setup.operation_conflict", params: {} } };
+
 describe("setup Cloud recovery", () => {
   it("starts and refreshes through a browser-safe view", async () => {
     const { app, cloudRecovery } = setup();
@@ -66,6 +151,110 @@ describe("setup Cloud recovery", () => {
     expect(cloudRecovery.start).toHaveBeenCalledOnce();
     expect(cloudRecovery.status).toHaveBeenCalledOnce();
   });
+  it("answers cloud.unavailable 503 when Cloud refuses the start request", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cloud-setup-unavailable-"));
+    try {
+      const cloudFetch = vi.fn(async () => new Response("bad gateway", { status: 502 }));
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          cloudRecovery: createCloudRecoveryClient({
+            stateDir: dir,
+            origin: "https://cloud.example.test",
+            environment: "preproduction",
+            fetch: cloudFetch as typeof fetch,
+          }),
+        },
+        vi.fn(),
+      );
+      const answer = await app.request("/setup-api/cloud-recovery/start", { method: "POST" });
+      expect(cloudFetch).toHaveBeenCalledOnce();
+      expect(answer.status).toBe(503);
+      expect(await answer.json()).toEqual({ error: { code: "cloud.unavailable", params: {} } });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    { change: "is waiting for the owner again", awaitingOwner: true, answer: () => undefined },
+    {
+      change: "has expired",
+      answer: (action: string) =>
+        action === "status" ? new Response(null, { status: 410 }) : undefined,
+    },
+    {
+      change: "has an operation Cloud says expired",
+      answer: (action: string) =>
+        action === "info" ? new Response(null, { status: 410 }) : undefined,
+    },
+    {
+      change: "expires before the archive is read",
+      answer: (action: string, info: number) =>
+        action === "info" && info === 2 ? new Response(null, { status: 410 }) : undefined,
+    },
+    {
+      change: "expires after the archive is downloaded",
+      downloaded: true,
+      answer: (action: string, info: number) =>
+        action === "info" && info === 3 ? new Response(null, { status: 410 }) : undefined,
+    },
+  ])(
+    "answers 409 to preview and restore when Cloud's request $change",
+    async ({ answer, awaitingOwner, downloaded }) => {
+      for (const route of ["preview", "restore"]) {
+        const f = await approvedCloudRecovery();
+        try {
+          f.cloud.answer = answer;
+          f.cloud.awaitingOwner = awaitingOwner === true;
+          const response = await f.app.request(`/setup-api/cloud-recovery/${route}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pointId: cloudPointId }),
+          });
+          expect([route, response.status]).toEqual([route, 409]);
+          expect(await response.json()).toEqual(operationConflict);
+          expect(f.review).not.toHaveBeenCalled();
+          expect(f.download).toHaveBeenCalledTimes(downloaded ? 1 : 0);
+          expect(f.stageRestore).not.toHaveBeenCalled();
+        } finally {
+          await f.close();
+        }
+      }
+    },
+  );
+  it("answers 409 to a preview of a snapshot other than the approved one", async () => {
+    const f = await approvedCloudRecovery();
+    try {
+      const response = await f.app.request("/setup-api/cloud-recovery/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointId }),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual(operationConflict);
+      expect(f.review).not.toHaveBeenCalled();
+    } finally {
+      await f.close();
+    }
+  });
+  it.each(["awaiting_owner", "approved"])(
+    "answers 409 to start-again while the request is %s",
+    async (state) => {
+      const f = await approvedCloudRecovery();
+      try {
+        f.cloud.awaitingOwner = state === "awaiting_owner";
+        const response = await f.app.request("/setup-api/cloud-recovery/start-again", {
+          method: "POST",
+        });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual(operationConflict);
+      } finally {
+        await f.close();
+      }
+    },
+  );
   it("requires the displayed snapshot binding before local restore", async () => {
     const { app, cloudRecovery, stageRestore, requestRestart } = setup();
     const invalid = await app.request("/setup-api/cloud-recovery/restore", {
