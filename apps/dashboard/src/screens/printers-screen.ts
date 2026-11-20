@@ -282,8 +282,10 @@ function jobErrorMessage(job: PrintJobRow): string | undefined {
   return job.kind === "a4" ? pageFailureReason(job.lastError) : jobReason(job.lastError);
 }
 
-const refusedField = (error: unknown): unknown =>
-  (error as { params?: { field?: unknown } } | null)?.params?.field;
+const refusalParams = (error: unknown) =>
+  (error as { params?: { field?: unknown; kind?: unknown; seconds?: unknown } } | null)?.params;
+
+const refusedField = (error: unknown): unknown => refusalParams(error)?.field;
 
 /** The agent's own PIN rule (`isBluetoothPin`, packages/print-agent/src/client.ts), repeated here
  * because the dashboard does not depend on that package. */
@@ -1204,7 +1206,10 @@ export class PrintersScreen extends LitElement {
   @state() private commands: Record<string, TrackedCommand> = {};
   /** Command key to answerBy for each pairing that succeeded while Add a printer or Pair again is open. */
   @state() private pairedDevices: Record<string, number> = {};
-  @state() private bluetoothDeleteWarnings: { name: string; agentName: string | null }[] = [];
+  @state() private bluetoothDeleteWarnings: Record<
+    string,
+    { name: string; agentName: string | null }[]
+  > = {};
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
   /** Rebuilt in `willUpdate`, so a row's cells look these up instead of scanning per row. */
@@ -1976,7 +1981,10 @@ export class PrintersScreen extends LitElement {
       this.#calibrationOpenedByAdd = true;
       await this.#load();
     } catch (error) {
-      if (active()) this.errorKey = codeOf(error);
+      if (active()) {
+        this.#bluetoothBusyParams = refusalParams(error);
+        this.errorKey = codeOf(error);
+      }
     } finally {
       this.submitting = false;
     }
@@ -2207,9 +2215,7 @@ export class PrintersScreen extends LitElement {
         this.pairRefused = true;
         this.#focusFirstInvalid("[data-test=pair-printer-modal]");
       } else {
-        this.#bluetoothBusyParams = (
-          error as { params?: { kind?: unknown; seconds?: unknown } } | null
-        )?.params;
+        this.#bluetoothBusyParams = refusalParams(error);
         this.pairErrorKey = codeOf(error);
       }
     } finally {
@@ -2217,9 +2223,6 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** For a switched-off Bluetooth printer no agent reports paired, such as one a succeeded Unpair
-   * switched off. Paired reports come only from the last discovery read, so a printer still
-   * switched on never offers it. */
   #pairAgainAction(p: Printer): TemplateResult | typeof nothing {
     if (p.transport !== "bluetooth" || p.active || this.#pairedReport(p) !== undefined)
       return nothing;
@@ -5342,17 +5345,20 @@ export class PrintersScreen extends LitElement {
     const lastAgent = this.agents.find((agent) => agent.id === printer?.lastPrintAgentId);
     const { target, bluetoothUnpair } = await this.api.deletePrinter(id);
     if (!bluetoothUnpair) return;
-    this.bluetoothDeleteWarnings = bluetoothUnpair.warnings.map(({ agentName }) => ({
-      name: target.name,
-      agentName: agentName ?? lastAgent?.name ?? null,
-    }));
+    this.bluetoothDeleteWarnings = {
+      ...this.bluetoothDeleteWarnings,
+      [id]: bluetoothUnpair.warnings.map(({ agentName }) => ({
+        name: target.name,
+        agentName: agentName ?? lastAgent?.name ?? null,
+      })),
+    };
     for (const { agentId, agentName, command } of bluetoothUnpair.commands)
       this.#trackCommand(agentId, command, { deletedPrinter: { name: target.name, agentName } });
   }
 
   #renderBluetoothDeleteWarnings(): TemplateResult {
     const warnings = [
-      ...this.bluetoothDeleteWarnings,
+      ...Object.values(this.bluetoothDeleteWarnings).flat(),
       ...Object.values(this.commands).flatMap((command) =>
         command.deletedPrinter && isProblem(command) ? [command.deletedPrinter] : [],
       ),

@@ -501,7 +501,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     lastSeenAt: number;
     /** Only a scan sets this, and only it authorizes Pair. */
     scannedAt?: number;
-    /** Only a paired report sets this, and only it authorizes Forget. */
+    /** Only a paired report sets this and qualifies the box for unpairing on Delete. */
     pairedAt?: number;
     /** Only a visible report sets this: the agent can print to the device. */
     visibleAt?: number;

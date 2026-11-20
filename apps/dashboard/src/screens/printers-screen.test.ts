@@ -10568,6 +10568,33 @@ describe("Deleting a printer", () => {
     expect(q(el, "[data-test=printer-row-p1]")).toBeNull();
   });
 
+  it("keeps the first Bluetooth deletion warning after another printer is deleted", async () => {
+    const bluetooth: Printer[] = printers.slice(0, 2).map((printer, index) => ({
+      ...printer,
+      transport: "bluetooth",
+      localKey: `00:11:22:33:44:0${index}`,
+    }));
+    const { api, el } = await mounted({
+      listPrinters: vi.fn(async () => bluetooth),
+      deletePrinter: vi.fn(async (id: string) => ({
+        ...impactOf(id, bluetooth.find((printer) => printer.id === id)!.name),
+        bluetoothUnpair: {
+          commands: [],
+          warnings: [{ agentName: id === "p1" ? "Bar box" : "Kitchen box" }],
+        },
+      })),
+    });
+    for (const [index, printer] of bluetooth.entries()) {
+      await openDelete(el, printer.id);
+      vi.mocked(api.listPrinters).mockResolvedValue(bluetooth.slice(index + 1));
+      confirmOf(el).click();
+      await flush(el);
+      expect(text(el, "[data-test=bluetooth-delete-warning]") ?? "", printer.id).toContain(
+        "Bar box",
+      );
+    }
+  });
+
   it.each(["failed", "unanswered"] as const)(
     "warns about a %s unpair after removing the row and closing Add",
     async (outcome) => {
@@ -10591,7 +10618,7 @@ describe("Deleting a printer", () => {
       };
       const discover = vi.fn(async (): Promise<DiscoveredPrinter[]> => [reported]);
       const { api, el } = await mounted({
-        listPrinters: vi.fn(async () => [
+        listPrinters: vi.fn(async (): Promise<Printer[]> => [
           { ...printers[0]!, transport: "bluetooth", localKey: address },
         ]),
         listDiscoveredPrinters: discover,
@@ -10610,13 +10637,10 @@ describe("Deleting a printer", () => {
         confirmOf(el).click();
         await flush(el);
         discover.mockResolvedValue([{ ...reported, alreadyRegistered: false, printerId: null }]);
-        const add = q(el, "[data-test=open-add-printer]")!;
-        add.click();
+        q(el, "[data-test=open-add-printer]")!.click();
         await flush(el);
         expect(q(el, '[data-test="forget-device-a1:00:11:22:33:44:55"]')).toBeNull();
-        const modal = q(el, "[data-test=new-printer-modal]") as import("@waitron/ui").WtModal;
-        modal.closeAfter("cancelled");
-        await flush(el);
+        await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
 
         discover.mockResolvedValue([
           {

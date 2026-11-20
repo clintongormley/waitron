@@ -175,7 +175,7 @@ export async function claimPrintJobs(
   });
 }
 
-/** A stored reason from before Bluetooth unpairing moved into printer deletion. */
+/** A persisted job reason for a Bluetooth printer whose waiting job ended at unpairing. */
 export const PRINTER_UNPAIRED = "printer.unpaired";
 
 /** Invoice receipts report through their token-checking adapter. */

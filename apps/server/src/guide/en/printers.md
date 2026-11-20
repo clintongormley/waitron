@@ -20,7 +20,7 @@ do not need to name or calibrate it again. Assign its devices and prep stations 
 
 **Delete** also asks each box that reports the Bluetooth printer paired to unpair it. Put the
 printer in pairing mode and choose **Pair and add** to bring it back. If Waitron says a box
-may still be paired, switch on that box, add the printer and choose **Delete** again.
+may still be paired, make sure the box is on and wait for any Bluetooth request to finish. Then add the printer and choose **Delete** again.
 
 To print station tickets, choose the printer on each station in **Prep stations**. A printer
 chosen on every station prints the whole send, for the pass. To add a printer to all stations at

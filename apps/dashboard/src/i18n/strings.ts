@@ -2210,9 +2210,9 @@ export const en = {
     "The printer refused to pair. It may still remember another box. Switch it off and on, put it in pairing mode and try again.",
   "printers.delete_bluetooth": "Waitron will also unpair the printer from its paired boxes.",
   "printers.delete_bluetooth_warning_named":
-    "{printer} was deleted from Waitron but may still be paired to {agent}. Switch that box on, add the printer and delete it again to clear the pairing.",
+    "{printer} was deleted from Waitron but may still be paired to {agent}. Make sure that box is on and wait for any Bluetooth request to finish. Then add the printer and delete it again to clear the pairing.",
   "printers.delete_bluetooth_warning":
-    "{printer} was deleted from Waitron but may still be paired to a box. Switch on the box that used the printer, add the printer and delete it again to clear the pairing.",
+    "{printer} was deleted from Waitron but may still be paired to a box. Make sure the box that used the printer is on and wait for any Bluetooth request to finish. Then add the printer and delete it again to clear the pairing.",
   "printers.bluetooth_reason.wrong_pin": "the PIN is not correct",
   "printers.bluetooth_reason.pin_needed": "this printer needs a PIN. Enter it and try again",
   "printers.bluetooth_reason.pin_too_slow":
@@ -6818,9 +6818,9 @@ export const es: Record<StringKey, string> = {
   "printers.delete_bluetooth":
     "Waitron también desvinculará la impresora de las cajas emparejadas.",
   "printers.delete_bluetooth_warning_named":
-    "{printer} se eliminó de Waitron, pero puede seguir vinculada a {agent}. Enciende esa caja, vuelve a añadir la impresora y elimínala de nuevo para desvincularla.",
+    "{printer} se eliminó de Waitron, pero puede seguir vinculada a {agent}. Comprueba que esa caja esté encendida y espera a que termine cualquier solicitud Bluetooth. Después, vuelve a añadir la impresora y elimínala de nuevo para desvincularla.",
   "printers.delete_bluetooth_warning":
-    "{printer} se eliminó de Waitron, pero puede seguir vinculada a una caja. Enciende la caja que usaba la impresora, vuelve a añadirla y elimínala de nuevo para desvincularla.",
+    "{printer} se eliminó de Waitron, pero puede seguir vinculada a una caja. Comprueba que la caja que usaba la impresora esté encendida y espera a que termine cualquier solicitud Bluetooth. Después, vuelve a añadir la impresora y elimínala de nuevo para desvincularla.",
   "printers.bluetooth_reason.wrong_pin": "el PIN no es correcto",
   "printers.bluetooth_reason.pin_needed":
     "esta impresora necesita un PIN. Introdúcelo y vuelve a intentarlo",

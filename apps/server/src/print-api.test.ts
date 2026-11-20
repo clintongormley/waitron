@@ -5129,7 +5129,9 @@ describe("a deleted printer in discovery", () => {
     const waiting = await enqueue(original, esc(WIDE).line("waiting").cut().bytes());
 
     const at = holdClocks();
-    onTestFinished(() => vi.restoreAllMocks());
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+    });
     at(0);
     const removal = await deleteBluetooth(app, original);
     const { command } = removal.bluetoothUnpair.commands[0]!;
