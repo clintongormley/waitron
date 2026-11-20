@@ -3693,7 +3693,7 @@ describe("till-bill-pay-dialog: the payer's own receipt", () => {
       },
     });
     const slip = () =>
-      root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]')!;
+      root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]')!;
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
 
     await pick(el, "ownReceipt", "yes");

@@ -78,7 +78,7 @@ the adviser is still to confirm the details:
 
 Built: on a part payment that leaves something owed on a bill with no invoice yet, set for a
 ticket, the till asks "Does this payer want their own receipt for this amount?"
-(`apps/till/src/widgets/bill-pay-dialog.ts:2120`). **Yes** issues the payer a ticket of one line,
+(`apps/till/src/widgets/bill-pay-dialog.ts:2108`). **Yes** issues the payer a ticket of one line,
 «Pago a cuenta — consumo en mesa 7», at Waitron's shipped reduced rate, 10% today
 (`apps/server/src/bill-advances.ts:59`, `ADVANCE_VAT_CLASS` in
 `packages/shared/src/menu-document/vat-rates.ts:9`). The bill's own invoice, however it is issued,

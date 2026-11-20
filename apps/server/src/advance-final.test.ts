@@ -23,8 +23,10 @@ import {
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "./bill-editing.js";
 import type { BillPaymentRequest } from "./bill-payments.js";
+import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { endMeal } from "./meal-end.js";
 import { owesOriginal } from "./owed-receipts.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { readOrderRevision } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
@@ -338,6 +340,40 @@ describe("the rest's invoice takes the advances off", () => {
     expect(order!.status).toBe("settled");
   });
 
+  it("example 1 by Print the bill: the rest's ticket owes the €90 and lists no payment, the advance's €30 being on its own ticket", async () => {
+    const bill = await seated("Tasting menu");
+    await advance(bill.billId, "30.00");
+
+    const printed = await printTheBill(bill);
+    const rest = await restOf(bill.billId);
+    const ticket = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, rest!.id),
+    );
+
+    expect(printed).toMatchObject({ total: "90.00", owed: "90.00" });
+    expect(ticket).toMatchObject({ total: "90.00", owed: "90.00" });
+    expect(ticket).not.toHaveProperty("payments");
+  });
+
+  it("a €10 advance and a plain €5, then Print the bill: the ticket takes the advance off, lists the €5 and owes €105", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "10.00");
+    const plain = await cash(bill.billId, "5.00");
+    expect(plain.status, JSON.stringify(plain.json)).toBe(200);
+
+    await printTheBill(bill);
+    const rest = await restOf(bill.billId);
+    const ticket = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, rest!.id),
+    );
+
+    expect(await deductionLinesOf(rest!.id)).toEqual([
+      expect.objectContaining({ deductsSaleId: advanceId, lineGross: -1000 }),
+    ]);
+    expect(ticket).toMatchObject({ total: "110.00", owed: "105.00" });
+    expect(ticket.payments).toEqual([expect.objectContaining({ method: "cash", amount: "5.00" })]);
+  });
+
   it("example 8 by the last payment: seven €1.05 dishes less a €3.00 advance file 3.92 and 0.43, and the two records' bases add up to the meal's 6.65", async () => {
     const bill = await seated(...Array<string>(7).fill("Bread roll"));
     const advanceId = await advance(bill.billId, "3.00");
@@ -522,5 +558,47 @@ describe("the rest's invoice takes the advances off", () => {
     expect(await tendersOf(rest!.id)).toEqual([
       { method: "deferred", amount: 9000, billPaymentId: null },
     ]);
+  });
+
+  it("the close of the business day takes off a till advance: the rest files 81.82 and 8.18, and its ticket owes the €90", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ trustedOpenedAt: new Date(Date.now() - 60_000).toISOString() })
+        .where(eq(workingOrders.id, bill.billId)),
+    );
+
+    const outcome = await withTransaction(venue.db, (tx) =>
+      issueBillAtClose(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        closeOfDayConfig(venue.cfg),
+        bill.billId,
+        { dayStartedAt: new Date(Date.now() + 60_000) },
+      ),
+    );
+
+    expect(outcome).toMatchObject({ kind: "issued" });
+    const rest = await restOf(bill.billId);
+    expect(rest).toMatchObject({
+      total: 9000,
+      vatBreakdown: [{ rate: "10.00", base: "81.82", tax: "8.18" }],
+    });
+    expect(filedRecord(rest!.id).breakdown).toEqual([["10.00", "81.82", "8.18"]]);
+    expect(await deductionLinesOf(rest!.id)).toEqual([
+      { deductsSaleId: advanceId, lineTotal: -2727, lineGross: -3000, vatRate: 1000 },
+    ]);
+    const ticket = await inTx(venue, (tx) =>
+      readTransactionReceipt(venue.backend, tx, venue.cfg, rest!.id),
+    );
+    expect(ticket).toMatchObject({ total: "90.00", owed: "90.00" });
+    expect(ticket).not.toHaveProperty("payments");
   });
 });

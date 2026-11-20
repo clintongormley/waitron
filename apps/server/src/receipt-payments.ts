@@ -1,6 +1,6 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { billPayments, tenders, type Transaction } from "@waitron/db";
+import { billAdvances, billPayments, tenders, type Transaction } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { centsToDecimal, compareDecimal, type Decimal, type SaleId } from "@waitron/shared";
 import { cashChange, money, ZERO } from "./bill-allocation.js";
@@ -133,7 +133,8 @@ export async function readBillTenderLines(
 }
 
 /** The bill's received payments, oldest first, net of completed refunds (one given back whole is
- * left off), and what each received payment has kept of its applied money. */
+ * left off), and what each received payment has kept of its applied money. A payment that paid an
+ * advance is left out: its money is on its own ticket, and the amount due has it taken off. */
 async function readUnsettledBill(
   tx: Transaction,
   workingOrderId: string,
@@ -143,7 +144,14 @@ async function readUnsettledBill(
     .from(billPayments)
     .leftJoin(payments, MANUAL_CARD_JOIN)
     .leftJoin(capturedCards, CAPTURED_CARD_JOIN)
-    .where(and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")))
+    .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        eq(billPayments.state, "received"),
+        isNull(billAdvances.id),
+      ),
+    )
     .orderBy(billPayments.receivedAt, sql`${billPayments}.rowid`);
   const refunds = await completedRefundsOf(
     tx,

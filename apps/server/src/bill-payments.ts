@@ -1688,7 +1688,7 @@ async function beginBillPayment(
   basket?: CounterPayment,
 ): Promise<
   | { replay: PaymentRow }
-  | { payment: PaymentRow; total: Decimal; read: IssuedAndTotal; reading: TrustedReading }
+  | { payment: PaymentRow; total: Decimal; sale: IssuedAndTotal; reading: TrustedReading }
   | { settled: SettledBill }
 > {
   // Before the replay lookup: a retry the route would now refuse is refused too.
@@ -1761,8 +1761,8 @@ async function beginBillPayment(
   if (req.ownReceipt === true && !payable.invoiced)
     await refuseFullInvoiceAdvance(tx, workingOrderId);
   const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
-  const read = await issuedAndTotal(tx, workingOrderId);
-  const total = await mealOf(tx, workingOrderId, read);
+  const sale = await issuedAndTotal(tx, workingOrderId);
+  const total = await mealOf(tx, workingOrderId, sale);
   if (basket !== undefined && held.some(({ row }) => HOLDING_STATES.includes(row.state))) {
     if (
       basket.revision !== undefined &&
@@ -1865,7 +1865,7 @@ async function beginBillPayment(
   await captureBillPaymentAttendance(tx, payment!, attendance, {
     at: reading.instant.toISOString(),
   });
-  return { payment: payment!, total, read, reading };
+  return { payment: payment!, total, sale, reading };
 }
 
 async function captureBillPaymentAttendance(
@@ -1962,7 +1962,7 @@ export async function takeBillPayment(
         operator.personId,
         {
           total: begun.total,
-          alreadyRead: begun.read,
+          alreadyRead: begun.sale,
           printers,
           guestCount: req.guestCount,
         },

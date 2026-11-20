@@ -101,6 +101,7 @@ export async function issueBillAtClose(
     deps.backend,
     cfg,
     billId,
+    deps.log,
   );
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
@@ -115,7 +116,6 @@ export async function issueBillAtClose(
     invoice,
     bill.openedBy,
     deps.admission,
-    deps.log,
   );
   if (bill.status === "open") await markOrderPlaced(tx, deps.clock, cfg, billId, bill.openedBy);
   if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, billId, saleId);
