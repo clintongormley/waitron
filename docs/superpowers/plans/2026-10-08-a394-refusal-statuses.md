@@ -232,7 +232,7 @@ pin today's number are in the part named.
   `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; done 2026-11-20 by A394-20c).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
   (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10;
-  question 4 settled 2026-11-20; still open in A394-20); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
+  question 4 settled 2026-11-20; done 2026-11-20 by A394-20d); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
   2026-11-10 by a new code, `stuck_payment.not_found`).
 - **Setup (A394-16)** — part 1: `provisioning.foreign_tenant` (provision, adopt),
   `provisioning.second_venue` (adopt), `mirror.environment_mismatch` (adopt) default 400 → 409.
@@ -245,7 +245,7 @@ pin today's number are in the part named.
   `venue.detail_read_only`, `cloud.binding_conflict`, `promotion.not_a_local_secondary`,
   `department.not_found` as a query value on receipt preview, `backup.stream_test_failed` 422,
   `backup.recovery_key_too_short` against a stored key, the till's `reader.not_found` when the
-  device has no reader.
+  device has no reader (done 2026-11-20 by A394-20d).
 
 ## Statuses outside the rule that look wrong
 
