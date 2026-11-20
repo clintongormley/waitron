@@ -248,7 +248,7 @@ export async function reassignProductsToUnit(
       .select({ id: units.id })
       .from(units)
       .where(eq(units.id, targetUnitId));
-    if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
+    if (target === undefined) throw new AppError("unit.target_not_found", { unitId: targetUnitId });
   }
   await tx.update(products).set({ unitId: targetUnitId }).where(scope);
 }

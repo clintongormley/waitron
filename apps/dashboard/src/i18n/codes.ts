@@ -481,6 +481,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That unit could not be found.",
     es: "No se ha encontrado esa unidad.",
   },
+  "unit.target_not_found": {
+    en: "The unit you chose no longer exists. Choose another unit.",
+    es: "La unidad que elegiste ya no existe. Elige otra unidad.",
+  },
   "unit.in_use": {
     en: "That unit can't be deleted because products are still using it.",
     es: "Esa unidad no se puede eliminar porque todavía la usan algunos productos.",
