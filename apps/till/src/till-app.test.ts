@@ -18,7 +18,7 @@ import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } f
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { formatMoney, HOME_DISPLAY_DEFAULTS, UNDECLARED_DIET } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
@@ -8781,7 +8781,7 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
 
-  it("retrieve → edit → Hold re-syncs the edit via updateWorkingOrder instead of re-parking (P6)", async () => {
+  it("retrieve → edit → Hold re-syncs the edit via updateWorkingOrder instead of re-parking", async () => {
     // The server's park is IDEMPOTENT (a re-sent park with the same id REPLAYS the existing OPEN order
     // and inserts nothing — the re-sent basket is DISCARDED), so re-parking a RETRIEVED, EDITED order
     // would SILENTLY DISCARD the edit yet show success. So Hold must mirror the pay/place paths: route a
@@ -8950,7 +8950,7 @@ describe("till-app", () => {
     expect(c.store.lines).toHaveLength(0);
   });
 
-  it("retrieve → (no edit) → Hold does not re-park an unedited retrieved order (P6)", async () => {
+  it("retrieve → (no edit) → Hold does not re-park an unedited retrieved order", async () => {
     // A retrieved order tapped straight to Hold has nothing to save — and must STILL not re-park,
     // because an idempotent re-park is a needless round trip that only replays the already-stored order.
     // `#syncIfDirty` no-ops on a clean basket (`persisted && !dirty`), so neither `updateWorkingOrder`
@@ -8975,7 +8975,7 @@ describe("till-app", () => {
     expect(counter(el)).not.toBeNull();
   });
 
-  it("retrieve → edit → Hold with a BLANK label keeps the retrieved order's name, does not wipe it (P6)", async () => {
+  it("retrieve → edit → Hold with a BLANK label keeps the retrieved order's name, does not wipe it", async () => {
     // The Hold field opens BLANK, so `park-order` carries `label: undefined`. `updateWorkingOrder` writes
     // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Table 4" → NULL)
     // — anonymising it in the cross-till held list. The persisted branch falls back to the STORED label,
@@ -9010,7 +9010,7 @@ describe("till-app", () => {
     expect(parkOrder).not.toHaveBeenCalled();
   });
 
-  it("retrieve → edit → Hold surfaces held.park_error and keeps the basket when the update fails (P6)", async () => {
+  it("retrieve → edit → Hold surfaces held.park_error and keeps the basket when the update fails", async () => {
     // A REAL `updateWorkingOrder` failure (not the `working_order.not_open` that `#syncIfDirty`
     // swallows) must surface the same non-fatal `held.park_error` banner and leave the basket intact, as
     // the fresh-walk-up park does (see "a failed parkOrder keeps the counter and the basket").
@@ -10090,7 +10090,7 @@ describe("till-app", () => {
     expect(store.lines[0]!.product).toBe(coffee);
   });
 
-  describe("live floor (FP-1)", () => {
+  describe("live floor", () => {
     it("selecting the floor tab loads the zones + occupancy read-model and shows the floor (basket preserved)", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
@@ -10129,7 +10129,7 @@ describe("till-app", () => {
       expect(floor(el)!.tables).toEqual([]);
     });
 
-    it("gives a floor-plan card's floor screen the app's api and no editing (FP-2)", async () => {
+    it("gives a floor-plan card's floor screen the app's api and no editing", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -10160,7 +10160,7 @@ describe("till-app", () => {
       expect(floor(el)!.zones[0]!.closesAt).toBe("22:30");
     });
 
-    it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write (FP-2)", async () => {
+    it("floor-refresh re-reads the tables but NOT the zones after an on-till placement write", async () => {
       const { el } = await mountApp({
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -10597,7 +10597,7 @@ describe("till-app", () => {
       expect(tableOrder(el)!.orderId).toBeUndefined();
     });
 
-    describe("table-order screen (FP-1)", () => {
+    describe("table-order screen", () => {
       const tabLine: TabLine = {
         changesAfterSending: "held-or-waiting",
         stationId: null,
@@ -16613,7 +16613,8 @@ describe("remembered dietary filters", () => {
     menuItemId: "menu-item-salad",
     name: "Ensalada",
     customerName: { es: "Ensalada para el cliente" },
-    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    diet: UNDECLARED_DIET,
+    dietaryDeclarations: ["vegan"],
   };
   const mixed: TillProduct = {
     ...coffee,
@@ -16621,7 +16622,8 @@ describe("remembered dietary filters", () => {
     menuItemId: "menu-item-mixed",
     name: "Mixto",
     customerName: { es: "Mixto para el cliente" },
-    diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] },
+    diet: UNDECLARED_DIET,
+    dietaryDeclarations: [],
   };
   const listDefaultZoneOffers = () =>
     vi.fn().mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [salad, mixed] }));

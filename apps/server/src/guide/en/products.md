@@ -264,6 +264,9 @@ While someone at the till uses **Filter** to hide an allergen, unreviewed dishes
 hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
 then save. You do not need to publish the menu.
 
+With a diet chosen in the till's **Filter**, only dishes with that tick under **Dietary** are shown,
+so tick **No meat** or **No fish** on the dishes that qualify.
+
 Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
 

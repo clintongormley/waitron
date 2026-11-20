@@ -8,7 +8,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
 import { trimQuantity } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
-import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
+import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import "@waitron/ui/src/components/wt-button.js";
 
 @customElement("till-last-added")

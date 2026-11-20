@@ -16,11 +16,8 @@ import { allergenLabel } from "../i18n/allergen-names.js";
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
-import {
-  nutritionIcons,
-  nutritionIconStyles,
-  nutritionDietLabels,
-} from "../widgets/nutrition-icons.js";
+import { nutritionIcons, nutritionIconStyles } from "../widgets/nutrition-icons.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import type { BillEditExpected, DiningChoice, LineNutrition, ZoneDining } from "../api/client.js";
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";

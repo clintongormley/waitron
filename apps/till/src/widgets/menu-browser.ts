@@ -23,7 +23,7 @@ import {
   Gestures,
 } from "@waitron/ui";
 import "./product-info.js";
-import { nutritionDietLabels } from "./nutrition-icons.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import {
   centsToDecimal,
   copiesListing,

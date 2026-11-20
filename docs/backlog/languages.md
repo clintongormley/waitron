@@ -39,12 +39,6 @@ staff report anything that reads wrong (owner, 2026-10-21). A terminology review
 future work, alongside the parked full-interface translations above. This is no longer a
 condition for go-live.
 
-## The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way
-
-The amounts and date read `20,00 €`, `5 ago 2026`, while its words are Galician or Basque.
-The screen falls back to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot
-format. The printed receipt is formatted on the server and keeps the language's own pattern.
-
 ## Bundle: Native speaker review
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -59,13 +53,10 @@ format. The printed receipt is formatted on the server and keeps the language's 
 
 ## Bundle: Regional languages
 
-3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
   four (C125) — off hold (owner, 2026-11-08); Valencian is a variant of Catalan.**
   [Detail](languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02-off-hold-2026-11-08)
-- The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way,
-  while its words are Galician or Basque.
-  [Detail](languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)
 - The printed Basque date is the formatter's own pattern, «2026(e)ko urt. 15(a)», and on 58 mm
   paper it drops to its own line wherever it prints in words.

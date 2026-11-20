@@ -18,7 +18,14 @@ import {
   sentPanelFor,
 } from "./till-table-order-screen.sent.test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { decimal, divideDecimal, multiplyDecimal, formatMoney, grossOf } from "@waitron/shared";
+import {
+  decimal,
+  divideDecimal,
+  multiplyDecimal,
+  formatMoney,
+  grossOf,
+  UNDECLARED_DIET,
+} from "@waitron/shared";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -453,7 +460,8 @@ describe("till-table-order-screen", () => {
       menuItemId: "menu-item-vegan",
       name: "Ensalada",
       customerName: { es: "Ensalada para el cliente" },
-      diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+      diet: UNDECLARED_DIET,
+      dietaryDeclarations: ["vegan"],
     };
     const meatDish: TillProduct = {
       ...coffee,
@@ -461,7 +469,8 @@ describe("till-table-order-screen", () => {
       menuItemId: "menu-item-meat",
       name: "Chuleta",
       customerName: { es: "Chuleta para el cliente" },
-      diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+      diet: UNDECLARED_DIET,
+      dietaryDeclarations: ["no_fish"],
     };
     const { el } = await mount({ products: [veganDish, meatDish] });
     const filter = el.shadowRoot!.querySelector("till-diet-filter")!;
@@ -5306,11 +5315,13 @@ describe("till-table-order-screen", () => {
     it("A461 table-order forwards unfiltered served offers through both menu diet results", async () => {
       const veganFood: TillProduct = {
         ...sandwich,
-        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["vegan"],
       };
       const meatDrink: TillProduct = {
         ...beerProduct,
-        diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["no_fish"],
       };
       const { el } = await mount({
         ...bothMenus,
@@ -5352,14 +5363,16 @@ describe("till-table-order-screen", () => {
     it("hands the browser the selected menu's products before the diet lens as well as after", async () => {
       const veganBeer: TillProduct = {
         ...beerProduct,
-        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["vegan"],
       };
       const croquetteProduct: TillProduct = {
         ...beerProduct,
         id: "croqueta",
         menuItemId: "menu-item-croqueta",
         name: "Croqueta",
-        diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["no_fish"],
       };
       const { el } = await mount({
         menus: [
@@ -5428,14 +5441,16 @@ describe("till-table-order-screen", () => {
       it("leaves a product the diet lens rejects out of another menu's group", async () => {
         const veganBeer: TillProduct = {
           ...beerProduct,
-          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+          diet: UNDECLARED_DIET,
+          dietaryDeclarations: ["vegan"],
         };
         const croquetteProduct: TillProduct = {
           ...beerProduct,
           id: "croqueta",
           menuItemId: "menu-item-croqueta",
           name: "Croqueta",
-          diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+          diet: UNDECLARED_DIET,
+          dietaryDeclarations: ["no_fish"],
         };
         const { el } = await mount({
           menus: [

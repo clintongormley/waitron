@@ -10,8 +10,8 @@ import {
   shownMenu,
   visibleProducts,
 } from "./menu-filter.js";
-import { ALLERGEN_CODES } from "@waitron/shared";
-import type { DietProfile, TillProduct } from "./api/client.js";
+import { ALLERGEN_CODES, UNDECLARED_DIET } from "@waitron/shared";
+import type { TillProduct } from "./api/client.js";
 
 function product(id: string, menuId?: string): TillProduct {
   return {
@@ -47,72 +47,32 @@ describe("filterProductsByMenu", () => {
   });
 });
 
-function dietProduct(id: string, diet: DietProfile | null | undefined): TillProduct {
-  return { ...product(id), ...(diet === undefined ? {} : { diet }) };
+function dietProduct(id: string, dietaryDeclarations: string[]): TillProduct {
+  return { ...product(id), diet: UNDECLARED_DIET, dietaryDeclarations };
 }
 
-describe("filterProductsByDiet", () => {
-  const veganProduct = dietProduct("ensalada", {
-    vegan: "yes",
-    vegetarian: "yes",
-    contains: [],
-  });
-  const vegetarianProduct = dietProduct("tortilla", {
-    vegan: "no",
-    vegetarian: "yes",
-    contains: [],
-  });
-  const meatProduct = dietProduct("chuleta", {
-    vegan: "no",
-    vegetarian: "no",
-    contains: ["meat"],
-  });
-  const fishProduct = dietProduct("boquerones", {
-    vegan: "no",
-    vegetarian: "no",
-    contains: ["fish"],
-  });
-  const unknownProduct = dietProduct("misterio", {
-    vegan: "unknown",
-    vegetarian: "unknown",
-    contains: [],
-  });
-  const noDietProduct = dietProduct("legacy", null);
+describe("filterProductsByDiet reads the dashboard's dietary declarations", () => {
+  const vegetarian = dietProduct("tortilla", ["vegetarian"]);
+  const vegan = dietProduct("ensalada", ["vegan"]);
+  const unchecked = dietProduct("chuleton", []);
+  const fish = dietProduct("merluza", ["no_meat"]);
+  const meat = dietProduct("pollo", ["no_fish"]);
+  const dishes = [vegetarian, vegan, unchecked, fish, meat];
 
-  it("filterProductsByDiet('vegan') keeps only vegan-yes products", () => {
-    const out = filterProductsByDiet([veganProduct, meatProduct], "vegan");
-    expect(out).toEqual([veganProduct]);
-  });
-
-  it("filterProductsByDiet('vegetarian') keeps vegetarian-yes (vegan and lacto/ovo) products", () => {
+  it.each([
+    ["vegetarian", ["tortilla", "ensalada"]],
+    ["vegan", ["ensalada"]],
+    ["no-meat", ["tortilla", "ensalada", "merluza"]],
+    ["no-fish", ["tortilla", "ensalada", "pollo"]],
+  ] as const)("the %s filter keeps %j and hides a dish nobody checked", (predicate, ids) => {
+    expect(filterProductsByDiet(dishes, predicate).map((p) => p.id)).toEqual(ids);
     expect(
-      filterProductsByDiet([veganProduct, vegetarianProduct, meatProduct], "vegetarian"),
-    ).toEqual([veganProduct, vegetarianProduct]);
-  });
-
-  it("filterProductsByDiet('no-meat') drops contains-meat products", () => {
-    expect(filterProductsByDiet([veganProduct, meatProduct], "no-meat")).toEqual([veganProduct]);
-  });
-
-  it("filterProductsByDiet('no-meat') keeps a contains-fish product (fish is not meat)", () => {
-    expect(filterProductsByDiet([fishProduct, meatProduct], "no-meat")).toEqual([fishProduct]);
-  });
-
-  it("filterProductsByDiet('no-fish') drops contains-fish products", () => {
-    expect(filterProductsByDiet([meatProduct, fishProduct], "no-fish")).toEqual([meatProduct]);
-  });
-
-  it("excludes an unknown diet from the cautious vegan/vegetarian filters", () => {
-    expect(filterProductsByDiet([unknownProduct], "vegan")).toEqual([]);
-    expect(filterProductsByDiet([unknownProduct], "vegetarian")).toEqual([]);
-  });
-
-  it("keeps an unknown diet under no-meat/no-fish (contains has not recorded the tag)", () => {
-    expect(filterProductsByDiet([unknownProduct], "no-meat")).toEqual([unknownProduct]);
-    expect(filterProductsByDiet([unknownProduct], "no-fish")).toEqual([unknownProduct]);
+      visibleProducts(dishes, "", { diets: [predicate], exclude: {} }).map((p) => p.id),
+    ).toEqual(ids);
   });
 
   it("drops a null/absent diet from EVERY filter (nothing to assert)", () => {
+    const noDietProduct: TillProduct = { ...product("legacy"), diet: null };
     for (const p of ["vegan", "vegetarian", "no-meat", "no-fish"] as const) {
       expect(filterProductsByDiet([noDietProduct], p)).toEqual([]);
     }
@@ -167,35 +127,42 @@ describe("defaultMenu and shownMenu", () => {
 
 describe("A738 menu filters", () => {
   it("A738 intersects included diets and excludes selected allergen kinds", () => {
-    const vegan = { vegan: "yes", vegetarian: "yes", contains: [] } as const;
+    const vegan = { diet: UNDECLARED_DIET, dietaryDeclarations: ["vegan"] };
     const dishes: TillProduct[] = [
       {
         ...product("almond"),
-        diet: { ...vegan, contains: [] },
+        ...vegan,
         allergens: { nuts: { kinds: ["almonds"] } },
       },
       {
         ...product("walnut"),
-        diet: { ...vegan, contains: [] },
+        ...vegan,
         allergens: { nuts: { kinds: ["walnuts"] } },
       },
-      { ...product("unspecified"), diet: { ...vegan, contains: [] }, allergens: { nuts: {} } },
+      { ...product("unspecified"), ...vegan, allergens: { nuts: {} } },
       {
         ...product("empty-kinds"),
-        diet: { ...vegan, contains: [] },
+        ...vegan,
         allergens: { nuts: { kinds: [] } },
       },
-      { ...product("fish"), diet: { ...vegan, contains: ["fish"] }, allergens: {} },
       {
-        ...product("unknown"),
-        diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+        ...product("fish"),
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["no_meat"],
         allergens: {},
       },
-      { ...product("unreviewed-allergens"), diet: { ...vegan, contains: [] }, allergens: null },
+      {
+        ...product("meat"),
+        diet: UNDECLARED_DIET,
+        dietaryDeclarations: ["no_fish"],
+        allergens: {},
+      },
+      { ...product("unknown"), diet: UNDECLARED_DIET, dietaryDeclarations: [], allergens: {} },
+      { ...product("unreviewed-allergens"), ...vegan, allergens: null },
     ];
     expect(
       visibleProducts(dishes, "", {
-        diets: ["vegan", "no-fish"],
+        diets: ["no-meat", "no-fish"],
         exclude: { nuts: ["walnuts"] },
       }).map((p) => p.id),
     ).toEqual(["almond"]);
@@ -421,11 +388,9 @@ it("A738 counts selected allergen groups once and ignores an empty kinds list", 
 it.each(["vegan", "vegetarian", "no-meat", "no-fish"] as const)(
   "uses refreshed declarations for the %s filter",
   (filter) => {
-    const old = dietProduct("dish", { vegan: "yes", vegetarian: "yes", contains: [] });
+    const old = dietProduct("dish", ["vegan"]);
     expect(filterProductsByDiet([old], filter)).toHaveLength(1);
-    const updated = refreshProductDeclarations(old, [
-      { ...old, diet: { vegan: "no", vegetarian: "no", contains: ["meat", "fish"] } },
-    ]);
+    const updated = refreshProductDeclarations(old, [{ ...old, dietaryDeclarations: [] }]);
     expect(filterProductsByDiet([updated], filter)).toEqual([]);
   },
 );

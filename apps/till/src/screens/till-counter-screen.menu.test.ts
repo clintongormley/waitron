@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { UNDECLARED_DIET } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import {
-  sellingValuesOf,
-  type DietProfile,
-  type TillProduct,
-  type TillZoneMenu,
-} from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 afterEach(cleanupWidgets);
 
 function dish(key: string, name: string, menuId: string, extra: Partial<TillProduct> = {}) {
@@ -29,13 +25,13 @@ function dish(key: string, name: string, menuId: string, extra: Partial<TillProd
   } satisfies TillProduct;
 }
 
-const vegan: DietProfile = { vegan: "yes", vegetarian: "yes", contains: [] };
-const meaty: DietProfile = { vegan: "no", vegetarian: "no", contains: ["meat"] };
+const vegan = { diet: UNDECLARED_DIET, dietaryDeclarations: ["vegan"] };
+const meaty = { diet: UNDECLARED_DIET, dietaryDeclarations: ["no_fish"] };
 
-const salad = dish("salad", "Salad", "lunch", { diet: vegan });
-const steak = dish("steak", "Steak", "lunch", { diet: meaty });
-const wine = dish("wine", "Wine", "drinks", { diet: vegan });
-const beer = dish("beer", "Beer", "drinks", { diet: vegan });
+const salad = dish("salad", "Salad", "lunch", vegan);
+const steak = dish("steak", "Steak", "lunch", meaty);
+const wine = dish("wine", "Wine", "drinks", vegan);
+const beer = dish("beer", "Beer", "drinks", vegan);
 
 /** With `chosen`, the menu's shortcuts are both its dishes; without, it has none. */
 function served(id: string, products: TillProduct[], chosen: boolean, isDefault = false) {
@@ -245,7 +241,7 @@ describe("fixed Counter menu browser", () => {
 });
 
 it("A461 Counter forwards unfiltered served offers through both menu diet results", async () => {
-  const meatyBeer = { ...beer, diet: meaty };
+  const meatyBeer = { ...beer, ...meaty };
   const { browser } = await mountBrowser({
     selectedFilters: { diets: ["vegan"], exclude: {} },
     products: [salad, steak, wine, meatyBeer],
