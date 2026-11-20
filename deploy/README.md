@@ -514,7 +514,8 @@ as shown above. Use the retained installer for numbered releases after the upgra
 Before installing a prerelease, refresh both the retained installer and its verifier to a
 version that reads prerelease suffixes. On a test box you can do this with the checked upgrade
 to a published main image that includes suffix support, as shown above. Then run the retained
-installer with the full tag.
+installer with the full tag. An older installer can treat it as a source reference and
+build the software locally.
 
 ```bash
 sudo bash /opt/waitron-host/waitron.sh install v1.3.0-rc.1
