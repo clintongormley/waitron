@@ -785,8 +785,11 @@ Status changes:
   By question 10: `backup.recovery_key_too_short` now means the key the box holds, and answers 409
   on `GET /api/backup/recovery-key`, `POST /api/backup/apply` (no key sent) and
   `PUT /api/backup/stream`. A too-short key the request sends to apply or rotate answers a new code,
-  `backup.new_recovery_key_too_short`, 400; the dashboard checks a pasted key's length before
-  sending it. `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
+  `backup.new_recovery_key_too_short`, 400, and so does a too-short key typed on the setup page's
+  handover from a backup (`POST /api/node/handover/emergency/backup`, was
+  `backup.recovery_key_too_short` 400; the setup page now says the key is too short); the
+  dashboard checks a pasted key's length before sending it and shows the new code's sentence.
+  `POST /management-api/cloud/complete` answers a new code, `cloud.request_not_found`, 400
   when the box has no saved connection request at all (`cloud-client.ts`, `complete`); a different
   saved request still answers `cloud.binding_conflict` 409. `promotion.not_a_local_secondary` was
   not changed: no route reaches it, because `POST /management-api/promote` never calls
@@ -1237,7 +1240,9 @@ Clients DO branch on the code strings (listed per row) — a status-only change 
 state clashes (`backup.managed_by_environment` `:213`, `backup.not_primary` `:214`,
 `backup.reload_in_progress` `backup-supervisor.ts:100`, `backup.recovery_key_exists` `:277`) are 409.
 Borderline, left as match: `backup.recovery_key_too_short` 400 at `:268`, thrown when the body names
-no key and the STORED key is too short — arguably a clash with stored data (409).
+no key and the STORED key is too short — arguably a clash with stored data (409). (Done 2026-11-20
+by A394-20: 409 for a held key; a key the request sends answers
+`backup.new_recovery_key_too_short` 400.)
 
 ### box-retire.ts — boundary `box-retire.ts:44` (STATUS `:26-35`)
 
@@ -1682,7 +1687,8 @@ Routes: `GET/PUT/DELETE /api/backup/stream`, `POST /api/backup/stream/test`, `GE
 Codes checked 11 / match 10 / unclear 1. The 400s (`backup.request_invalid`,
 `backup.stream_config_unsafe`, `backup.recovery_key_too_short`) and the 409s (`managed_by_environment`,
 `not_primary`, `reload_in_progress`, `stream_not_configured`, `stream_signer_missing`,
-`recovery_key_missing`) fit.
+`recovery_key_missing`) fit. (Done 2026-11-20 by A394-20: `backup.recovery_key_too_short` now
+answers 409 here.)
 
 | Route | Code | Current | Rule | Why | Clients | Tests pinning it |
 | --- | --- | --- | --- | --- | --- | --- |
