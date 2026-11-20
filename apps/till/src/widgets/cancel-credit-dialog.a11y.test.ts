@@ -49,3 +49,33 @@ describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s th
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  "till-cancel-credit-dialog split a11y (%s theme)",
+  (theme) => {
+    it.each([
+      ["split", null],
+      [
+        "split refused for unserved dishes",
+        [
+          { lineId: "l-1", dishName: "Steak", quantity: "1", released: true },
+          { lineId: "l-2", dishName: "Tarta", quantity: "2", released: false },
+        ],
+      ],
+    ] as const)("%s has no violations", async (_, unserved) => {
+      const { host } = await mountWidget<TillCancelCreditDialog>(
+        "till-cancel-credit-dialog",
+        {
+          mode: "split",
+          invoiceNumber: "A/12",
+          amount: "24.50",
+          refusal: unserved === null ? null : { code: "bill.unserved_dishes" },
+          unserved: unserved === null ? null : [...unserved],
+          canMarkServed: true,
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    });
+  },
+);

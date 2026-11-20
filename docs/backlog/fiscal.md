@@ -40,7 +40,10 @@ this entry is the 4 November decision, which this one sets aside.
 **Owner, 2026-11-18** (the adviser is still to confirm the details; question 2 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)): "No pre-bill is fine, and saves us
 the hassle of having another system to track. If the bill changes after it is issued then we just
-issue a correction or cancellation." Guests who split a bill after it was printed take either.
+issue a correction or cancellation." Guests who split a bill after it was printed take the correction:
+**Reopen to split** on the printed bill's **⋮** credits its ticket in full and puts copies of its
+dishes on a new open bill, which staff then split with Move dishes
+([plan](../superpowers/plans/2026-11-20-adviser-split-after-print.md)).
 
 **Owner, 2026-11-04: build it now to the strict reading, without waiting for S2.** Today a table
 cannot get a printed bill before paying: "bill requested" only marks the floor plan. If S2 says a

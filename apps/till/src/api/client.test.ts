@@ -2508,6 +2508,30 @@ describe("TillApi", () => {
     );
   });
 
+  it("splitAfterPrint POSTs to the bill's split-after-print route, with a PIN only when one is given, and answers the new bill", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ billId: "wo2", creditNoteNumber: "R/3" }));
+    const { signal } = new AbortController();
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.splitAfterPrint("wo1")).resolves.toEqual({
+      billId: "wo2",
+      creditNoteNumber: "R/3",
+    });
+    await api.splitAfterPrint("wo1", { personId: "sup-1", pin: "1234" }, { signal });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+      ["/api/working-orders/wo1/split-after-print", "POST", "{}"],
+      [
+        "/api/working-orders/wo1/split-after-print",
+        "POST",
+        JSON.stringify({ override: { personId: "sup-1", pin: "1234" } }),
+      ],
+    ]);
+    expect(fetchStub.mock.calls[1]![1].signal).toBe(signal);
+  });
+
   it("cancelOrder hands the caller's signal to the request, still sending the reason alone", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const { signal } = new AbortController();

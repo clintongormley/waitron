@@ -289,7 +289,11 @@ import "./widgets/cancel-credit-dialog.js";
 import "./widgets/dead-ends-section.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
-import type { CancelCreditDone, TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
+import type {
+  CancelCreditDone,
+  CancelCreditMode,
+  TillCancelCreditDialog,
+} from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
   isLatestSend,
@@ -1687,6 +1691,7 @@ interface Departing {
 
 interface CancelCrediting {
   id: number;
+  mode: CancelCreditMode;
   partyId: string;
   workingOrderId: string;
   invoiceNumber: string | null;
@@ -1694,6 +1699,8 @@ interface CancelCrediting {
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
   refusal: DialogRefusal | null;
+  /** The dishes a split's `bill.unserved_dishes` refusal listed. */
+  unserved: MealEndUnservedDish[] | null;
   busy: boolean;
   done: CancelCreditDone | null;
 }
@@ -20907,20 +20914,23 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, offered on an invoiced bill nothing is paid on: its dialog opens. */
-  #onCancelCreditBill(event: Event): void {
+  /** Cancel and credit, or Reopen to split, offered on an invoiced bill nothing is paid on: its
+   * dialog opens. */
+  #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
     const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
     if (party === null || bill === undefined || this.cancelCrediting !== null) return;
     this.cancelCrediting = {
       id: ++this.#cancelCreditings,
+      mode,
       partyId: party.id,
       workingOrderId,
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
       reason: "",
       refusal: null,
+      unserved: null,
       busy: false,
       done: null,
     };
@@ -20968,14 +20978,20 @@ export class TillApp extends LitElement {
       this.#closeCancelCrediting();
       return;
     }
-    const sending: CancelCrediting = { ...open, refusal: null, busy: true };
+    const sending: CancelCrediting = { ...open, refusal: null, unserved: null, busy: true };
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    let split: { billId: string; creditNoteNumber: string } | undefined;
     try {
-      await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
-        signal: limit.signal,
-      });
+      if (open.mode === "split")
+        split = await this.api.splitAfterPrint(open.workingOrderId, override, {
+          signal: limit.signal,
+        });
+      else
+        await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
+          signal: limit.signal,
+        });
     } catch (error) {
       await this.#onCancelCreditRefused(sending, error, override === undefined, sent);
       return;
@@ -20984,7 +21000,53 @@ export class TillApp extends LitElement {
     }
     if (this.#cancelCreditingNow(open.id) === null) return;
     this.#closeCancelCreditApprovers();
-    await this.#onCancelCredited(open.id, sent);
+    if (split === undefined) await this.#onCancelCredited(open.id, sent);
+    else await this.#onSplitAfterPrint(open.id, sent, split);
+  }
+
+  /** The split's answer names the credit note and the new bill, which the screen then shows. */
+  async #onSplitAfterPrint(
+    id: number,
+    sent: Sent,
+    answer: { billId: string; creditNoteNumber: string },
+  ): Promise<void> {
+    const open = this.#cancelCreditingNow(id);
+    if (open === null) return;
+    const done = { creditNote: answer.creditNoteNumber };
+    this.shadowRoot
+      ?.querySelector<TillCancelCreditDialog>("till-cancel-credit-dialog")
+      ?.showResult(done);
+    this.cancelCrediting = { ...open, refusal: null, unserved: null, busy: false, done };
+    if (this.#hasLeftParty(open.partyId, sent)) return;
+    const shown =
+      this.activeTabId === open.workingOrderId && (await this.#switchToBill(answer.billId));
+    await this.#loadPartyBills();
+    if (shown && !this.#hasLeftParty(open.partyId, sent))
+      await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
+  }
+
+  /** Mark served in a split's not-served list: the dishes are served, then the split is sent
+   * again in the operator's own name. */
+  async #onSplitMarkServed(event: Event): Promise<void> {
+    const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
+    const open = this.cancelCrediting;
+    const party = this.orderParty;
+    if (open === null || open.busy || party === null || party.id !== open.partyId) return;
+    this.cancelCrediting = { ...open, busy: true };
+    const sent = this.#sentNow();
+    try {
+      await this.#partyRequest(party, party.revision, (command) =>
+        this.api.markServed(party.id, items, command),
+      );
+    } catch (error) {
+      const now = this.#cancelCreditingNow(open.id);
+      if (now !== null)
+        this.cancelCrediting = { ...now, refusal: refusalOf(error), unserved: null, busy: false };
+      return;
+    }
+    const now = this.#cancelCreditingNow(open.id);
+    if (now === null || this.#hasLeftParty(open.partyId, sent)) return;
+    await this.#sendCancelCredit({ ...now, busy: false });
   }
 
   /** The credit note number is read from the bills after the result is shown. A read without a
@@ -21054,7 +21116,16 @@ export class TillApp extends LitElement {
       return;
     }
     this.#closeCancelCreditApprovers();
-    this.cancelCrediting = { ...open, refusal, busy: false };
+    const dishes = (error as { dishes?: unknown } | null)?.dishes;
+    this.cancelCrediting = {
+      ...open,
+      refusal,
+      unserved:
+        refusal.code === "bill.unserved_dishes" && Array.isArray(dishes)
+          ? (dishes as MealEndUnservedDish[])
+          : null,
+      busy: false,
+    };
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
@@ -21071,6 +21142,9 @@ export class TillApp extends LitElement {
     const open = this.cancelCrediting;
     if (open === null) return nothing;
     return html`<till-cancel-credit-dialog
+        .mode=${open.mode}
+        .unserved=${open.unserved}
+        .canMarkServed=${this.capabilities.includes("hand-over-orders")}
         .invoiceNumber=${open.invoiceNumber}
         .amount=${open.amount}
         .refusal=${open.refusal}
@@ -21078,6 +21152,7 @@ export class TillApp extends LitElement {
         .done=${open.done}
         @cancel-credit-continue=${(event: Event) => void this.#onCancelCreditContinue(event)}
         @cancel-credit-close=${() => this.#closeCancelCrediting()}
+        @split-mark-served=${(event: Event) => void this.#onSplitMarkServed(event)}
       ></till-cancel-credit-dialog>
       ${
         this.cancelCreditApprovers === undefined
@@ -24275,7 +24350,8 @@ export class TillApp extends LitElement {
         @record-unpaid-departure=${(event: Event) => this.#onRecordUnpaidDeparture(event)}
         @end-meal=${(event: Event) => void this.#onEndMeal(event)}
         @meal-end-declined=${() => this.#onMealEndDeclined()}
-        @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event)}
+        @cancel-credit-bill=${(event: Event) => this.#onCancelCreditBill(event, "cancel")}
+        @split-after-print-bill=${(event: Event) => this.#onCancelCreditBill(event, "split")}
         @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onSwitchBill(event)}
         @switch-bill=${(event: Event) => void this.#onSwitchBill(event)}

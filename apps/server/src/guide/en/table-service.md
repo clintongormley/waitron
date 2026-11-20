@@ -624,6 +624,9 @@ a customer, so on one of those take off any dish that may not come before you pr
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
+If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The ticket is
+credited and its dishes return on a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+
 Take payment with **Pay** as usual, in one go or in parts.
 
 ## A card-payment check failed {#card-check-failed}

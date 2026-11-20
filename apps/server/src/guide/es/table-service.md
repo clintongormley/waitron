@@ -671,6 +671,9 @@ un cliente, así que en esas cuentas quita antes de imprimir los platos que pued
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.
 
+Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir para dividir**. El
+ticket se abona y sus platos vuelven en una cuenta nueva, listos para [**Mover platos…**](table-service.md#move-dishes).
+
 Cobra con **Cobrar** como siempre, de una vez o por partes.
 
 ## Falló la comprobación de un cobro con tarjeta {#card-check-failed}

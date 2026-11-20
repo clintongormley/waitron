@@ -1992,6 +1992,20 @@ export const en = {
   "cancel_credit.done": "Credit note {number} issued. The bill is cancelled.",
   "cancel_credit.done_unnumbered": "A credit note was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
+  // Reopen to split: a printed ticket is credited in full and its dishes go on a new open bill
+  "split.action": "Reopen to split",
+  "split.title": "Reopen to split",
+  "split.scope":
+    "Ticket {invoice} ({amount}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.",
+  "split.scope_unnumbered":
+    "This bill's ticket ({amount}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.",
+  "split.confirm": "Reopen to split",
+  "split.unserved_held":
+    "These dishes are not marked served, so the bill cannot be reopened yet. Send each held course to the kitchen first, then mark its dishes served and choose Reopen to split again.",
+  "split.done":
+    "Credit note {number} issued. Move each guest's dishes to their own bill, then print each one.",
+  "split.done_unnumbered":
+    "A credit note was issued. Move each guest's dishes to their own bill, then print each one.",
   "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -4151,6 +4165,19 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.done_unnumbered":
     "Se emitió la factura rectificativa y la cuenta queda cancelada.",
   "cancel_credit.done_action": "Hecho",
+  "split.action": "Reabrir para dividir",
+  "split.title": "Reabrir para dividir",
+  "split.scope":
+    "El ticket {invoice} ({amount}) se abona por completo con una factura rectificativa y sus platos vuelven a una cuenta nueva abierta, para que cada cliente tenga su propio ticket.",
+  "split.scope_unnumbered":
+    "El ticket de esta cuenta ({amount}) se abona por completo con una factura rectificativa y sus platos vuelven a una cuenta nueva abierta, para que cada cliente tenga su propio ticket.",
+  "split.confirm": "Reabrir para dividir",
+  "split.unserved_held":
+    "Estos platos no están marcados como servidos, así que la cuenta aún no se puede reabrir. Envía antes a cocina cada plato en espera, márcalos como servidos y vuelve a elegir Reabrir para dividir.",
+  "split.done":
+    "Factura rectificativa {number} emitida. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
+  "split.done_unnumbered":
+    "Se emitió la factura rectificativa. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

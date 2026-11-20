@@ -7012,6 +7012,11 @@ export class TillTableOrderScreen extends LitElement {
     printBill: TemplateResult | typeof nothing,
   ): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
+    const credits =
+      bill.status === "placed" &&
+      bill.receiptAvailable &&
+      !bill.hasPayments &&
+      !namesCustomer(bill);
     return [
       this.fullInvoices &&
       owing(bill) &&
@@ -7034,12 +7039,20 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.bill_receipt")}
           </wt-button>`
         : nothing,
-      bill.status === "placed" && bill.receiptAvailable && !bill.hasPayments && !namesCustomer(bill)
+      credits
         ? html`<wt-button
             data-cancel-credit
             @click=${() => this.#dispatch("cancel-credit-bill", target)}
           >
             ${t("cancel_credit.action")}
+          </wt-button>`
+        : nothing,
+      credits && bill.leftUnpaid !== true
+        ? html`<wt-button
+            data-split-after-print
+            @click=${() => this.#dispatch("split-after-print-bill", target)}
+          >
+            ${t("split.action")}
           </wt-button>`
         : nothing,
     ];
