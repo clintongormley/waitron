@@ -296,6 +296,13 @@ it("has English and Spanish copy for a failed archive bucket test and a key chan
   }
 });
 
+it("has English and Spanish copy for a new recovery key that is too short", () => {
+  const code = "backup.new_recovery_key_too_short";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+});
+
 it("has English and Spanish copy for each way one backup destination's call can fail", () => {
   for (const code of [
     "backup.destination_timed_out",

@@ -1582,6 +1582,8 @@ declare module "@waitron/shared" {
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
+    /** A recovery key a backup Save or key change sends is shorter than `min` characters. */
+    "backup.new_recovery_key_too_short": { min: number };
     "backup.destinations_invalid": { reason: string };
     /** A box's backup settings this box would not take: a message over 64 KiB (`size`), one that
      * is malformed or of another kind (`envelope`), a body that is not exactly

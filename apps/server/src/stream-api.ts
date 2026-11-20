@@ -94,7 +94,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "backup.request_invalid": 400,
   "backup.stream_config_unsafe": 400,
-  "backup.recovery_key_too_short": 400,
+  "backup.recovery_key_too_short": 409,
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
   "backup.stream_held_by_another_box": 409,

@@ -981,7 +981,9 @@ describe("backup admin routes", () => {
       body: JSON.stringify({ recoveryKey: "short" }),
     });
     expect(rot.status).toBe(400);
-    expect(await rot.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
+    expect(await rot.json()).toMatchObject({
+      error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
+    });
     expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual({
       WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
     });
@@ -1156,7 +1158,7 @@ describe("backup admin routes", () => {
         retention: RETENTION,
       }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(
       "WAITRON_BACKUP_RECOVERY_KEY=short\n",
@@ -1313,7 +1315,7 @@ describe("backup admin routes", () => {
     await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
   }, 60_000);
 
-  it("apply rejects a config the boot loader would reject (too-short key) before writing", async () => {
+  it("apply refuses a too-short key it is sent, before writing", async () => {
     const stateDir = await makeStateDir();
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const app = buildApp(makeSupervisor(sc), stateDir);
@@ -1329,8 +1331,10 @@ describe("backup admin routes", () => {
       }),
     });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
-    // The dry-validate ran BEFORE any write — no backup.env was created.
+    expect(await res.json()).toMatchObject({
+      error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
+    });
+    // No backup.env was created.
     await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   });
 

@@ -1298,6 +1298,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The recovery key is too short",
     es: "La clave de recuperación es demasiado corta",
   },
+  "backup.new_recovery_key_too_short": {
+    en: "That recovery key is too short",
+    es: "Esa clave de recuperación es demasiado corta",
+  },
   "backup.recovery_key_missing": {
     en: "This box holds no recovery key.",
     es: "Este servidor no tiene clave de recuperación.",

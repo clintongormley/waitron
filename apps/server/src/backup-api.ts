@@ -36,7 +36,6 @@ import {
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
   loadKeyRotatedAt,
-  loadRecoveryKey,
   mintRecoveryKey,
   readHeldKey,
   resolveBackupConfig,
@@ -100,7 +99,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.reload_in_progress": 409,
   "backup.recovery_key_exists": 409,
   "backup.recovery_key_unstorable": 400,
-  "backup.recovery_key_too_short": 400,
+  "backup.recovery_key_too_short": 409,
+  "backup.new_recovery_key_too_short": 400,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,
   "backup.cloud_needs_daily": 400,
@@ -208,6 +208,13 @@ async function readBucketCopySettings(db: Database, ring: KeyRing): Promise<Stre
   }
 }
 
+/** For a key the request sends. One the box already holds is `backup.recovery_key_too_short`. */
+function assertLongEnough(recoveryKey: string): void {
+  if (recoveryKey.length < MIN_RECOVERY_KEY_LENGTH) {
+    throw new AppError("backup.new_recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
+  }
+}
+
 /** A refusal names the offending field, never its value — it could be the key or a secret. An
  * unknown field is answered as `body`: its name is the caller's text, and could be a secret too. */
 async function readApplyBody(c: Context): Promise<ApplyBody> {
@@ -295,11 +302,6 @@ async function probeArchive(
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
-  // On apply and rotate a too-short key can be the body's; on this route it is always the stored one.
-  const runStoredKey = createErrorBoundary(
-    { ...STATUS, "backup.recovery_key_too_short": 409 },
-    "backup.failed",
-  );
   const buildBackend = deps.buildBackend ?? buildBackupBackend;
 
   const authorize = async (c: Context): Promise<string> => {
@@ -467,6 +469,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const recoveryKey = held.key ?? body.recoveryKey;
         if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
         assertStorableKey(recoveryKey);
+        assertLongEnough(recoveryKey);
 
         // Only a bucket choice reads the bucket copy's settings, and an unreadable one refuses the
         // whole Save, a folder listed beside it included: one Save is one decision.
@@ -561,7 +564,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // it. The body is never logged: the error boundary logs codes and params, never response bodies,
   // and this route logs nothing.
   app.get("/api/backup/recovery-key", (c) =>
-    runStoredKey(c, log, async () => {
+    run(c, log, async () => {
       await authorize(c);
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       let key: string | undefined;
@@ -585,10 +588,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const { recoveryKey } = await readRotateBody(c);
       assertStorableKey(recoveryKey);
+      assertLongEnough(recoveryKey);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
-        loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: recoveryKey });
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
