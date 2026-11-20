@@ -759,6 +759,27 @@ Status changes:
   reader routes the queue named no longer exist (`git grep -nE 'readers/:id/(enable|disable)' --
   apps packages` finds nothing). No client compares these routes' statuses (same grep as A394-20c,
   2026-11-20). The rest of A394-20 stays with lane B.
+  **2026-11-20 (A394-20, lane B):** units, venue details, receipt preview, shift swaps and
+  cancel-item are done. Moving a unit's products to a target unit (the body's `unitId`) that no row
+  holds answers a new code, `unit.target_not_found`, 400 (`packages/menu/src/units.ts`); a missing
+  unit in the address keeps `unit.not_found` 404 on the same route. A second code was needed
+  because both are raised on one route; the dashboard's product-save reading of `unit.not_found`
+  is untouched. `venue.detail_read_only` answers 400 (was 409) on the details PATCH and the
+  legal-name rename, by question 11. `department.not_found` answers 400 on
+  `POST /management-api/receipt-preview`, whose department is in the body; neither route in that
+  file names a department in its address. A swap request whose return shift (`toShiftId`) is not
+  the named colleague's answers a new code, `swap.return_shift_not_owned`, 400, by question 13;
+  offering a shift that is not the requester's keeps `swap.not_permitted` 403, on the same routes,
+  hence the second code; the till and the dashboard word it in English and Spanish, though neither
+  sends a return shift today. The cancel-item and cancellation routes answer `tab.line_not_found`
+  404 (was `management.request_invalid {field:"lineId"}` 400) when the line in the address does not
+  exist, is an extra rather than a dish, or is on another bill than the counter bill the address
+  names (`apps/server/src/line-cancel-context.ts`); a party's refusal carries `partyId`, a counter
+  bill's `tabId`. A malformed line id keeps the 400. A line of another party's bill on a party
+  address still answers `bill.other_party` 409. `fireHeldLine`'s request_invalid for a fully
+  cancelled held line (`order-groups.ts`) is a state clash on the fire-line route, not these
+  routes, and was left alone. No client compares these routes' statuses (grep of `apps/dashboard`,
+  `apps/till`, `apps/setup` and `packages/*/src/dashboard` for `status === 4xx`, 2026-11-20).
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`
