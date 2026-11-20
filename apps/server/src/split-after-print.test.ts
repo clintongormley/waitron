@@ -656,42 +656,6 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(bill).toEqual({ receiptLocale: "es-ES" });
   });
 
-  it("copies an extra stored after a later dish straight after its own dish", async () => {
-    const party = await seat(
-      {
-        name: "Steak",
-        extras: [{ listId: extraListId, picks: [{ productId: canaId, quantity: 1 }] }],
-      },
-      "Tarta",
-    );
-    const [, cana] = await dishesOf(party.tabId);
-    venue.db.run(sql`update working_order_lines set line_no = 4 where id = ${cana!.id}`);
-    expect((await dishesOf(party.tabId)).map((line) => line.name)).toEqual([
-      "Steak",
-      "Tarta",
-      "Caña",
-    ]);
-    expect((await serve(party, party.tabId)).status).toBe(200);
-    expect((await printBill(party, party.tabId)).status).toBe(200);
-
-    const answer = await split(party.tabId);
-
-    expect(answer.status).toBe(200);
-    const newBill = answer.json.billId as string;
-    const copies = await dishesOf(newBill);
-    expect(copies.map((line) => [line.name, line.lineNo])).toEqual([
-      ["Steak", 1],
-      ["Caña", 2],
-      ["Tarta", 3],
-    ]);
-    expect(copies[1]!.parentLineId).toBe(copies[0]!.id);
-    expect((await printBill(party, newBill)).status).toBe(200);
-    const ticket = await send(venue.app, venue.cookie, "GET", `/api/sales/${newBill}`);
-    expect((ticket.json.lines as { gross: string }[]).map((line) => line.gross)).toEqual(
-      copies.map((line) => (line.unitPriceGross / 100).toFixed(2)),
-    );
-  });
-
   it("copies a dish taken off service but charged, so the new bill prints without Print anyway", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     const cancelled = await cancelItemHttp(

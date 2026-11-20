@@ -107,8 +107,7 @@ export async function openSplitBill(
 }
 
 /**
- * Copy every line of `fromBillId` onto `toBillId` under new ids, each extra straight after its
- * dish, with the comps and discounts, service cancellations and allergy ticks the line holds.
+ * Copy every line of `fromBillId` onto `toBillId` under new ids, in stored line order, with the comps and discounts, service cancellations and allergy ticks the line holds.
  * Kitchen state, print links and sale links stay with the originals. Answers original id → copy id.
  */
 export async function copyBillDishes(
@@ -139,13 +138,10 @@ export async function copyBillDishes(
     if (copy === undefined) cohorts.set(cohortId, (copy = randomUUID()));
     return copy;
   };
-  const ordered = rows
-    .filter((row) => row.parentLineId === null)
-    .flatMap((dish) => [dish, ...rows.filter((row) => row.parentLineId === dish.id)]);
   await insertInChunks(
     tx,
     workingOrderLines,
-    ordered.map((row, index) => ({
+    rows.map((row, index) => ({
       ...row,
       id: copyOf.get(row.id)!,
       workingOrderId: toBillId,
@@ -154,7 +150,7 @@ export async function copyBillDishes(
       cohortId: row.cohortId === null ? null : cohortFor(row.cohortId),
     })),
   );
-  const pairs = ordered.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
+  const pairs = rows.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
   await carryLineReductions(tx, pairs);
   const cancellations = await tx
     .select({ cancellation: lineServiceCancellations })
@@ -171,7 +167,7 @@ export async function copyBillDishes(
   );
   await copyAllergyWorkingTicks(
     tx,
-    ordered
+    rows
       .filter((row) => row.parentLineId === null)
       .map((row) => ({
         from: row.id,
