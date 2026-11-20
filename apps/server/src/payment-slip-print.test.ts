@@ -1063,16 +1063,164 @@ describe("a payment after the ticket was issued", () => {
 
   it("an original still waiting to print lists a payment taken before its printer takes it", async () => {
     const bill = await billPrintedByPrintTheBill();
-    expect(decodeTicket((await originalOf(bill.saleId)).payload)).toMatch(owedLine("30,00"));
+    const queued = await originalOf(bill.saleId);
+    expect(decodeTicket(queued.payload)).toMatch(owedLine("30,00"));
 
     expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
     const claimed = await claimOriginal(bill.saleId);
 
+    expect(claimed.id).toBe(queued.id);
     const text = decodeTicket(claimed.payload);
     expect(text).toMatch(/Efectivo\s+5,00/u);
     expect(text).toMatch(owedLine("25,00"));
     expect(text).not.toMatch(owedLine("30,00"));
     expect(text).not.toContain(labels.duplicate);
+  });
+
+  /** Claims every job the sale's original printer has waiting, as its print agent would. */
+  async function claimEverythingOn(printerId: string) {
+    const [printer] = await venue.db.select().from(printers).where(eq(printers.id, printerId));
+    const [agent] = await withTransaction(venue.db, async (tx) => {
+      await tx
+        .update(printers)
+        .set({ transport: "network_tcp", host: `${randomUUID()}.printer.test`, pollId: null })
+        .where(eq(printers.id, printerId));
+      return tx
+        .insert(printAgents)
+        .values({ name: `Agent ${randomUUID()}`, tokenHash: "scrypt$fixture" })
+        .returning({ id: printAgents.id });
+    });
+    const claimed: Uint8Array[] = [];
+    try {
+      for (;;) {
+        const [job] = await withTransaction(venue.db, (tx) =>
+          claimPrintJobs(tx, agent!.id, { visibleKeys: [], printerId }),
+        );
+        if (job === undefined) return claimed;
+        claimed.push(job.payload);
+        await withTransaction(venue.db, (tx) =>
+          reportPrintJob(tx, { agentId: agent!.id, jobId: job.id, outcome: { status: "done" } }),
+        );
+      }
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        tx
+          .update(printers)
+          .set({ transport: printer!.transport, host: printer!.host, pollId: printer!.pollId })
+          .where(eq(printers.id, printerId)),
+      );
+    }
+  }
+
+  async function expectNextOriginalListsTheCash(bill: { id: string; saleId: string }) {
+    const asked = await send(venue.app, venue.cookie, "POST", `/api/sales/${bill.id}/receipt`, {});
+    expect(asked.status, JSON.stringify(asked.json)).toBe(200);
+    const text = decodeTicket((await claimOriginal(bill.saleId)).payload);
+    expect(text).toMatch(/Efectivo\s+5,00/u);
+    expect(text).toMatch(owedLine("25,00"));
+    expect(text).not.toContain(labels.duplicate);
+  }
+
+  it("an original that cannot be laid out again never prints without a payment taken before it", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const stale = await originalOf(bill.saleId);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const filed = vi.spyOn(venue.backend, "filedReceiptFor").mockImplementation(() => {
+      throw new Error("layout failed");
+    });
+    let paid: Awaited<ReturnType<typeof billPayment>>;
+    try {
+      paid = await billPayment(bill.id, cash("5.00"));
+    } finally {
+      filed.mockRestore();
+    }
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(warn).toHaveBeenCalledWith(
+      "receipt.optional_document_failed",
+      expect.objectContaining({ operation: "refreshWaitingOriginal", saleId: bill.saleId }),
+    );
+    const received = await venue.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, bill.id));
+    expect(received.map((row) => row.state)).toEqual(["received"]);
+    const handedOut = await claimEverythingOn(stale.printerId);
+    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
+    await expectNextOriginalListsTheCash(bill);
+  });
+
+  it("an invoice print that cannot be laid out again goes with its waiting delivery", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const stale = await originalOf(bill.saleId);
+    await withTransaction(venue.db, (tx) =>
+      tx.insert(invoiceDeliveries).values({
+        saleId: bill.saleId,
+        printJobId: stale.id,
+        requestKey: randomUUID(),
+        medium: "receipt",
+        designation: "original",
+        status: "queued",
+        generation: 1,
+        personId: venue.operatorId,
+      }),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const filed = vi.spyOn(venue.backend, "filedReceiptFor").mockImplementation(() => {
+      throw new Error("layout failed");
+    });
+    let paid: Awaited<ReturnType<typeof billPayment>>;
+    try {
+      paid = await billPayment(bill.id, cash("5.00"));
+    } finally {
+      filed.mockRestore();
+    }
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(
+      await venue.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.saleId, bill.saleId)),
+    ).toEqual([]);
+    const handedOut = await claimEverythingOn(stale.printerId);
+    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
+  });
+
+  it("an original whose new layout the database refuses for space never prints without the payment", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const stale = await originalOf(bill.saleId);
+    venue.db.run(sql`create table refresh_pad (bytes blob)`);
+    venue.db.run(sql`create temp trigger refresh_fill before update of payload on print_jobs
+      begin insert into refresh_pad values (zeroblob(8388608)); end`);
+    const [{ page_count: pages }] = venue.db.all<{ page_count: number }>(sql`pragma page_count`);
+    venue.db.run(sql.raw(`pragma max_page_count = ${pages + 32}`));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    let paid: Awaited<ReturnType<typeof billPayment>>;
+    try {
+      paid = await billPayment(bill.id, cash("5.00"));
+    } finally {
+      venue.db.run(sql`pragma max_page_count = 4294967294`);
+      venue.db.run(sql`drop trigger refresh_fill`);
+      venue.db.run(sql`drop table refresh_pad`);
+    }
+
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(warn).toHaveBeenCalledWith(
+      "receipt.optional_document_failed",
+      expect.objectContaining({ operation: "refreshWaitingOriginal", code: "storage.disk_full" }),
+    );
+    const received = await venue.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, bill.id));
+    expect(received.map((row) => row.state)).toEqual(["received"]);
+    const handedOut = await claimEverythingOn(stale.printerId);
+    expect(handedOut.some((payload) => Buffer.from(payload).equals(stale.payload!))).toBe(false);
+    await expectNextOriginalListsTheCash(bill);
   });
 
   it.each(["taken by its printer", "tried and failed", "resent from the print queue"] as const)(

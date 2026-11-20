@@ -110,8 +110,7 @@ export function givenUpOriginals(q: Transaction, now: Date, jobId?: string) {
           isNotNull(printJobs.claimedAt),
           // `printers_deleted_ck` makes a deleted printer inactive too.
           eq(printers.active, true),
-          // Newest by insert order: print jobs are never deleted, and `created_at` follows the clock,
-          // which can step back.
+          // Newest by insert order, since `created_at` follows the clock, which can step back.
           notExists(
             q
               .select({ one: sql`1` })
