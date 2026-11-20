@@ -686,7 +686,7 @@ export async function refundBillPayment(
         if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
         const { payment, advanceSaleId } = found;
         if (advanceSaleId !== null)
-          await refuseAdvanceRefund(tx, advanceSaleId, "bill.payment_has_ticket", { paymentId });
+          await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
         const provided =
           payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
         const print = refundFingerprint(

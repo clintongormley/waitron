@@ -528,7 +528,7 @@ describe("a part payment whose payer wants their own receipt", () => {
     expect(await advancesOf(billId)).toHaveLength(1);
   });
 
-  it("a flagged payment on a bill set for a full invoice is refused with advance.full_invoice_not_built", async () => {
+  it("a flagged payment on a bill set for a full invoice is refused with advance.full_invoice_unsupported", async () => {
     const { billId } = await bill120();
     const [order] = await inTx(venue, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
@@ -556,7 +556,7 @@ describe("a part payment whose payer wants their own receipt", () => {
 
     expect(refused).toMatchObject({
       status: 409,
-      json: { code: "advance.full_invoice_not_built", params: { workingOrderId: billId } },
+      json: { code: "advance.full_invoice_unsupported", params: { workingOrderId: billId } },
     });
     expect(await paymentRows(venue, billId)).toEqual([]);
     expect(await advancesOf(billId)).toEqual([]);

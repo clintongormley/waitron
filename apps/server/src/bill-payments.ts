@@ -927,7 +927,7 @@ async function refuseFullInvoiceAdvance(tx: Transaction, workingOrderId: string)
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.invoiceType === "F1")
-    throw new AppError("advance.full_invoice_not_built", { workingOrderId });
+    throw new AppError("advance.full_invoice_unsupported", { workingOrderId });
 }
 
 /**

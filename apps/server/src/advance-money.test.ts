@@ -473,7 +473,7 @@ describe("money and cards around an advance", () => {
 
     expect(refused.status, JSON.stringify(refused.json)).toBe(409);
     expect(refused.json).toEqual({
-      code: "bill.payment_has_ticket",
+      code: "bill.refund_of_advance",
       params: {
         paymentId: advancePayment!.id,
         saleId: advanceId,

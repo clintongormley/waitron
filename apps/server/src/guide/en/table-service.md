@@ -888,8 +888,8 @@ and its invoice has yet to be issued, choose **Pay in parts** to see the same ch
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.
 
-**A receipt of their own.** When a guest pays part of a bill that has no invoice yet, the
-confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
+**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
+for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
 of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation

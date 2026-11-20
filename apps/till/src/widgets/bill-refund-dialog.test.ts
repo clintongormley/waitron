@@ -436,11 +436,11 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
 
   it("names the ticket a payment on account is given back on", async () => {
     const el = await mount();
-    el.refusal = { code: "bill.payment_has_ticket", invoiceNumber: "A/12" };
+    el.refusal = { code: "bill.refund_of_advance", invoiceNumber: "A/12" };
     await el.updateComplete;
 
     expect(actions(el).error).toBe(
-      codeMessage("bill.payment_has_ticket", undefined, { invoiceNumber: "A/12" }),
+      codeMessage("bill.refund_of_advance", undefined, { invoiceNumber: "A/12" }),
     );
     expect(actions(el).error).toContain("A/12");
   });

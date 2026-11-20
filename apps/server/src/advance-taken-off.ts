@@ -26,7 +26,7 @@ export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Pr
   });
 }
 
-type AdvanceRefundCode = "tender.refund_of_advance" | "bill.payment_has_ticket";
+type AdvanceRefundCode = "tender.refund_of_advance" | "bill.refund_of_advance";
 
 /**
  * Refuses a refund of the advance `saleId`'s money: {@link refuseTakenOffAdvance}'s refusal once an

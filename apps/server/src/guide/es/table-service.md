@@ -955,8 +955,8 @@ para ver las mismas opciones.
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
 
-**Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura, la
-confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
+**Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
+va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
 propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
 
 **Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La

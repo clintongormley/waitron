@@ -510,10 +510,10 @@ describe("refusalOf", () => {
 
   it("keeps the ticket number a payment on account's refusal names, as text only", () => {
     expect(
-      refusalOf({ code: "bill.payment_has_ticket", status: 409, invoiceNumber: "A/12" }),
-    ).toEqual({ code: "bill.payment_has_ticket", invoiceNumber: "A/12" });
-    expect(refusalOf({ code: "bill.payment_has_ticket", invoiceNumber: 12 })).toEqual({
-      code: "bill.payment_has_ticket",
+      refusalOf({ code: "bill.refund_of_advance", status: 409, invoiceNumber: "A/12" }),
+    ).toEqual({ code: "bill.refund_of_advance", invoiceNumber: "A/12" });
+    expect(refusalOf({ code: "bill.refund_of_advance", invoiceNumber: 12 })).toEqual({
+      code: "bill.refund_of_advance",
     });
   });
 

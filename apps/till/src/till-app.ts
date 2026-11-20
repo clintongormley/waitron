@@ -12419,7 +12419,7 @@ export class TillApp extends LitElement {
   }
 
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
-   * simplified one: the server builds no advance for a full invoice (`advance.full_invoice_not_built`). */
+   * simplified one: the server builds no advance for a full invoice (`advance.full_invoice_unsupported`). */
   #ownReceiptOffered(open: BillPaying): boolean {
     if (open.printed === true) return false;
     if (open.surface === "table")
@@ -23041,8 +23041,8 @@ export class TillApp extends LitElement {
     this.#openBillRefunding(open, payment, suggested);
   }
 
-  /** Refund on a payment that paid an advance opens Correct invoice on the advance's own ticket,
-   * closing the Pay window. */
+  /** Before the bill has an invoice, Refund on a payment that paid an advance opens Correct
+   * invoice on the advance's own ticket, closing the Pay window. */
   async #correctAdvance(open: BillPaying, saleId: string): Promise<void> {
     if (this.#billPayingNow(open.id) === null) return;
     const origin = this.drill;

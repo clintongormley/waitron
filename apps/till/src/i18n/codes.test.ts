@@ -1038,13 +1038,13 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
   expect(codeMessage("tender.refund_of_advance", "es", ticket)).toBe(
     "Este ticket A/12 es un pago a cuenta, así que su dinero no se devuelve aquí. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y se quita de la cuenta.",
   );
-  expect(codeMessage("bill.payment_has_ticket", "en", ticket)).toBe(
+  expect(codeMessage("bill.refund_of_advance", "en", ticket)).toBe(
     "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
   );
-  expect(codeMessage("bill.payment_has_ticket", "es", ticket)).toBe(
+  expect(codeMessage("bill.refund_of_advance", "es", ticket)).toBe(
     "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   );
-  expect(codeMessage("bill.payment_has_ticket", "en")).toMatch(
+  expect(codeMessage("bill.refund_of_advance", "en")).toMatch(
     /^This payment was taken on account and has its own ticket, so /,
   );
   expect(codeMessage("tender.refund_of_advance", "en")).toMatch(
@@ -1250,10 +1250,10 @@ it("words the table refusals Print the bill shows in their own words, in both la
 });
 
 it("says a bill set for a full invoice gives no part payment a receipt of its own, and what to do", () => {
-  expect(codeMessage("advance.full_invoice_not_built", "en")).toBe(
+  expect(codeMessage("advance.full_invoice_unsupported", "en")).toBe(
     "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",
   );
-  expect(codeMessage("advance.full_invoice_not_built", "es")).toBe(
+  expect(codeMessage("advance.full_invoice_unsupported", "es")).toBe(
     "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
   );
 });

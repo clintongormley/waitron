@@ -876,7 +876,7 @@ declare module "@waitron/shared" {
     "advance.exceeds_bill": { mealTotal: string; advances: string };
     /** A payer asked for their own receipt for part of a bill set for a full invoice, which the
      * till cannot issue as an advance yet. */
-    "advance.full_invoice_not_built": { workingOrderId: string };
+    "advance.full_invoice_unsupported": { workingOrderId: string };
     /** A refund or correction of the advance `saleId` after the invoice `finalSaleId`, numbered
      * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice. */
     "advance.taken_off_final_invoice": {
@@ -986,7 +986,7 @@ declare module "@waitron/shared" {
     /** A bill refund of a payment that paid for its own ticket, an advance (`saleId`, numbered
      * `invoiceNumber`): a payment on account is not refunded this way. Once an invoice took
      * it off, `advance.taken_off_final_invoice` instead. */
-    "bill.payment_has_ticket": { paymentId: string; saleId: string; invoiceNumber: string };
+    "bill.refund_of_advance": { paymentId: string; saleId: string; invoiceNumber: string };
     /**
      * A standalone-terminal refund lacks explicit confirmation, or the connected provider offers
      * no refund route Waitron can record before asking.

@@ -649,7 +649,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This refund is more than the cancelled dishes' value",
     es: "Esta devolución supera el valor de los platos cancelados",
   },
-  "advance.full_invoice_not_built": {
+  "advance.full_invoice_unsupported": {
     en: "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",
     es: "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
   },
@@ -657,7 +657,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This ticket{invoiceNumber} is a payment on account, so its money is not refunded here. While the table's bill is still open, give it back with Correct invoice on this ticket: that gives the money back and takes it off the bill.",
     es: "Este ticket{invoiceNumber} es un pago a cuenta, así que su dinero no se devuelve aquí. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y se quita de la cuenta.",
   },
-  "bill.payment_has_ticket": {
+  "bill.refund_of_advance": {
     en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
     es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   },
@@ -1127,7 +1127,7 @@ export function codeMessage(
   const message = pickLocale(entry, locale);
   if (
     code === "tender.refund_of_advance" ||
-    code === "bill.payment_has_ticket" ||
+    code === "bill.refund_of_advance" ||
     code === "advance.taken_off_final_invoice"
   )
     return message.replace(
