@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "63affe7a-d235-403a-8ac2-483b6c514cc6",
+  "id": "a3f78cd8-ac12-4bd3-a8ac-826b3e105910",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1220,6 +1220,21 @@
           "notNull": true,
           "autoincrement": false
         },
+        "trusted_opened_at": {
+          "name": "trusted_opened_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_restore": {
+          "name": "before_restore",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "settled_at": {
           "name": "settled_at",
           "type": "text",
@@ -1565,7 +1580,7 @@
         },
         "working_orders_source_ck": {
           "name": "working_orders_source_ck",
-          "value": "\"working_orders\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"working_orders\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "working_orders_source_device_ck": {
           "name": "working_orders_source_device_ck",
@@ -1842,7 +1857,7 @@
         },
         "order_amendments_captured_by_source_ck": {
           "name": "order_amendments_captured_by_source_ck",
-          "value": "\"order_amendments\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"order_amendments\".\"captured_by_source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "order_amendments_captured_by_source_device_ck": {
           "name": "order_amendments_captured_by_source_device_ck",
@@ -6579,7 +6594,7 @@
       "checkConstraints": {
         "invoice_corrections_source_ck": {
           "name": "invoice_corrections_source_ck",
-          "value": "\"invoice_corrections\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"invoice_corrections\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "invoice_corrections_source_device_ck": {
           "name": "invoice_corrections_source_device_ck",
@@ -8511,7 +8526,7 @@
         },
         "bill_payment_refunds_source_ck": {
           "name": "bill_payment_refunds_source_ck",
-          "value": "\"bill_payment_refunds\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"bill_payment_refunds\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "bill_payment_refunds_source_device_ck": {
           "name": "bill_payment_refunds_source_device_ck",
@@ -8757,7 +8772,7 @@
         },
         "bill_payments_source_ck": {
           "name": "bill_payments_source_ck",
-          "value": "\"bill_payments\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"bill_payments\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "bill_payments_source_device_ck": {
           "name": "bill_payments_source_device_ck",
@@ -9631,7 +9646,7 @@
         },
         "sales_source_ck": {
           "name": "sales_source_ck",
-          "value": "\"sales\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"sales\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "sales_source_device_ck": {
           "name": "sales_source_device_ck",
@@ -10032,7 +10047,7 @@
         },
         "unpaid_departures_source_ck": {
           "name": "unpaid_departures_source_ck",
-          "value": "\"unpaid_departures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"unpaid_departures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "unpaid_departures_source_device_ck": {
           "name": "unpaid_departures_source_device_ck",
@@ -10223,7 +10238,7 @@
         },
         "deferred_closures_source_ck": {
           "name": "deferred_closures_source_ck",
-          "value": "\"deferred_closures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"deferred_closures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "deferred_closures_source_device_ck": {
           "name": "deferred_closures_source_device_ck",
@@ -10555,7 +10570,7 @@
         },
         "incidents_source_ck": {
           "name": "incidents_source_ck",
-          "value": "\"incidents\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'backup')"
+          "value": "\"incidents\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close', 'backup')"
         },
         "incidents_source_device_ck": {
           "name": "incidents_source_device_ck",
@@ -11342,7 +11357,7 @@
       "checkConstraints": {
         "tender_refunds_source_ck": {
           "name": "tender_refunds_source_ck",
-          "value": "\"tender_refunds\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"tender_refunds\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "tender_refunds_source_device_ck": {
           "name": "tender_refunds_source_device_ck",

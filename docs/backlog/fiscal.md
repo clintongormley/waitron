@@ -54,7 +54,7 @@ marks a line sent (Q21).
 AEAT's FAQ calls a system without that link «susceptible de sanción»,
 and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
 
-## A447. Money paid before a meal's ticket is an advance; an open bill is issued when the trading day ends
+## A447. Money paid before a meal's ticket is an advance
 
 Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (LIVA 75.Dos, RD
 1619/2012 art. 2.1). The owner's answers of 18 November 2026 (owner, 2026-11-18, question 1 of the
@@ -74,10 +74,9 @@ Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (
   record carries only what is left.
 
 To build: an advance's ticket when money is paid towards a bill whose ticket is not yet issued,
-its deduction on the final ticket and record, and issuing, when the trading day ends, a bill that
-was neither printed nor fully paid. Today a payment that leaves a bill part-paid issues no invoice
-(`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on a €120.00 bill …
-and issues no invoice"). Printing the bill issues the ticket before payment; a payment after that
+and its deduction on the final ticket and record. Today a payment that leaves a bill part-paid
+issues no invoice (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on
+a €120.00 bill … and issues no invoice"). Printing the bill issues the ticket before payment; a payment after that
 is not an advance but a payment slip (question 2). An advance taken at the till is issued by Waitron when the payment is
 taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
 table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the

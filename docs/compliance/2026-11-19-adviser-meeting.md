@@ -8,7 +8,8 @@ English beside Spanish; this header and everything after Part 2 are not in it.
 **Decisions taken while rewriting (owner, 18 November).**
 
 - A bill still open when the venue's trading day ends is issued then (question 1). Nothing does
-  this today; it is to be built after the meeting, depending on the answer.
+  this today; it is to be built after the meeting, depending on the answer. (2026-11-19: built on
+  branch `feat/adviser-close-of-day-ticket`, the `bills.close_of_day` job.)
 - The pre-bill (backlog A446) stays parked in favour of correctives when a table splits after
   printing; question 2 asks whether that is acceptable.
 - When a set menu's items carry different VAT rates, the price is split between them in proportion

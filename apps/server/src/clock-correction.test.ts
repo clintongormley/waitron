@@ -96,6 +96,7 @@ function harness(
     /** Runs while the host sets the clock. */
     duringSet?: () => void | Promise<void>;
     onCorrectedThrows?: boolean;
+    onSetEnded?: (releasedAt: Date | null) => void;
     /** Steady time the host takes to set. */
     setTakesMs?: number;
     /** The start's clock check, and the chain heads the seat reads for it. */
@@ -204,6 +205,7 @@ function harness(
       calls.push("onCorrected");
       corrected.push(incident);
     },
+    ...(options.onSetEnded === undefined ? {} : { onSetEnded: options.onSetEnded }),
     nodeId: "node-1",
     log,
     ...(options.start === undefined
@@ -464,6 +466,72 @@ describe("the step not yet written, for the backups' hold", () => {
     unwritten = null;
     expect(await latest()).toEqual(recorded);
     expect(order).toEqual(["unwritten", "unwritten", "recorded"]);
+  });
+});
+
+describe("the end of a set that was with the host", () => {
+  it("is told once per set, after its hold, with the reading then, whether the host set, refused or threw, or the clocks could not be read after", async () => {
+    const seen: unknown[] = [];
+    const cases = [
+      { host: "sets" },
+      { host: "refuses" },
+      { host: "throws" },
+      { bootThrowsAfterSet: true },
+    ] as const;
+    for (const options of cases) {
+      const h: Harness = harness({
+        ...options,
+        onSetEnded: (releasedAt) =>
+          void seen.push([
+            h.correction.unwrittenStep() === "setting",
+            releasedAt?.toISOString() ?? null,
+          ]),
+      });
+      await h.correction.set(byAdmin(h)).catch(() => {});
+    }
+    const unmoved = new Date(START_MS + 50).toISOString();
+    expect(seen).toEqual([
+      [false, SET_AT],
+      [false, unmoved],
+      [false, unmoved],
+      [false, null],
+    ]);
+  });
+
+  it("is told before the anchors, so a refresh still under way does not hold back the end", async () => {
+    const h: Harness = harness({ onSetEnded: () => void h.calls.push("ended") });
+    await h.correction.set(byAdmin(h));
+    expect(h.calls.slice(h.calls.indexOf("setClock"), h.calls.indexOf("reanchor") + 1)).toEqual([
+      "setClock",
+      "ended",
+      "reanchor",
+    ]);
+  });
+
+  it("keeps a set's answer, its hold's end and its row when the listener throws, and logs it", async () => {
+    const h = harness({
+      onSetEnded: () => {
+        throw new Error("wake failed");
+      },
+    });
+    expect(await h.correction.set(byAdmin(h))).toEqual({
+      set: true,
+      confirmationId: "confirmation-1",
+      stepMs: H,
+      confirmedAt: SET_AT,
+    });
+    expect(h.correction.unwrittenStep()).toBeNull();
+    expect(h.seatCalls).toHaveLength(1);
+    expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.set_ended_failed", {
+      errorCode: "unknown",
+    });
+  });
+
+  it("is not told of a set refused before the host was asked", async () => {
+    const ended = vi.fn();
+    const h = harness({ status: { ...UNSYNCHRONISED, synchronised: true }, onSetEnded: ended });
+    expect(await h.correction.set(byAdmin(h))).toEqual({ set: false, reason: "synchronised" });
+    expect(ended).not.toHaveBeenCalled();
   });
 });
 

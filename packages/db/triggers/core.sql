@@ -715,6 +715,8 @@ BEGIN
   WHERE NOT (
     old.status = 'open'
     OR (old.status = 'placed' AND new.status IN ('settled', 'abandoned')
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.invoice_type IS old.invoice_type
         AND new.recipient_tax_id IS old.recipient_tax_id
         AND new.recipient_legal_name IS old.recipient_legal_name
@@ -733,6 +735,8 @@ BEGIN
         AND new.order_number IS old.order_number
         AND new.label IS old.label
         AND new.opened_at IS old.opened_at
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.payment_attempt_at IS old.payment_attempt_at
@@ -759,6 +763,8 @@ BEGIN
         AND new.order_number IS old.order_number
         AND new.label IS old.label
         AND new.opened_at IS old.opened_at
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.delivery_table_id IS old.delivery_table_id
         AND new.revision IS old.revision
@@ -791,6 +797,8 @@ BEGIN
         AND new.order_number IS old.order_number
         AND new.label IS old.label
         AND new.opened_at IS old.opened_at
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.delivery_table_id IS old.delivery_table_id
         AND new.revision IS old.revision
@@ -832,6 +840,8 @@ BEGIN
         AND new.service_mode IS old.service_mode
         AND new.status IS old.status
         AND new.opened_at IS old.opened_at
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.delivery_table_id IS old.delivery_table_id
@@ -858,6 +868,8 @@ BEGIN
         AND new.label IS old.label
         AND new.status IS old.status
         AND new.opened_at IS old.opened_at
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
         AND new.revision IS old.revision
@@ -880,6 +892,74 @@ BEGIN
         AND new.bill_name IS old.bill_name
         AND new.editor_id IS old.editor_id
         AND new.editor_version IS old.editor_version)
+    OR (old.status = 'placed' AND new.status = 'placed'
+        AND old.trusted_opened_at IS NULL AND new.trusted_opened_at IS NOT NULL
+        AND new.before_restore IS old.before_restore
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.delivery_table_id IS old.delivery_table_id
+        AND new.delivery_table_label IS old.delivery_table_label
+        AND new.collected_at IS old.collected_at
+        AND new.revision IS old.revision
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.party_id IS old.party_id
+        AND new.bill_number IS old.bill_number
+        AND new.bill_name IS old.bill_name
+        AND new.editor_id IS old.editor_id
+        AND new.editor_version IS old.editor_version
+        AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode)
+    OR (old.status = 'placed' AND new.status = 'placed'
+        AND old.before_restore = 0 AND new.before_restore = 1
+        AND new.trusted_opened_at IS old.trusted_opened_at
+        AND new.id IS old.id
+        AND new.source IS old.source
+        AND new.device_id IS old.device_id
+        AND new.node_id IS old.node_id
+        AND new.order_number IS old.order_number
+        AND new.label IS old.label
+        AND new.opened_at IS old.opened_at
+        AND new.settled_at IS old.settled_at
+        AND new.delivery_table_id IS old.delivery_table_id
+        AND new.delivery_table_label IS old.delivery_table_label
+        AND new.collected_at IS old.collected_at
+        AND new.revision IS old.revision
+        AND new.invoice_type IS old.invoice_type
+        AND new.recipient_tax_id IS old.recipient_tax_id
+        AND new.recipient_legal_name IS old.recipient_legal_name
+        AND new.recipient_address IS old.recipient_address
+        AND new.recipient_country_code IS old.recipient_country_code
+        AND new.recipient_identifier_type IS old.recipient_identifier_type
+        AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
+        AND new.invoice_delivery IS old.invoice_delivery
+        AND new.receipt_locale IS old.receipt_locale
+        AND new.payment_attempt_at IS old.payment_attempt_at
+        AND new.party_id IS old.party_id
+        AND new.bill_number IS old.bill_number
+        AND new.bill_name IS old.bill_name
+        AND new.editor_id IS old.editor_id
+        AND new.editor_version IS old.editor_version
+        AND new.dining IS old.dining
+        AND new.zone_id IS old.zone_id
+        AND new.department_id IS old.department_id
+        AND new.service_mode IS old.service_mode)
   );
 END;
 --> statement-breakpoint

@@ -160,6 +160,22 @@ describe("moving between states", () => {
   });
 });
 
+describe("counting the waits that begin", () => {
+  it("counts the start's wait, and each move back to waiting from a confirmed time, not a repeat while waiting", () => {
+    const state = startClockState();
+    expect(state.waitsBegun()).toBe(1);
+    state.backToWaiting("clock_jumped");
+    expect(state.waitsBegun()).toBe(1);
+    state.confirm("by_person", HEADS);
+    expect(state.waitsBegun()).toBe(1);
+    state.backToWaiting("future_date_refused", "2027-03-15");
+    expect(state.waitsBegun()).toBe(2);
+    state.confirm("by_devices", HEADS);
+    state.backToWaiting("start");
+    expect(state.waitsBegun()).toBe(3);
+  });
+});
+
 describe("waiting because AEAT refused a sale as dated in the future", () => {
   it("keeps that cause and the refused sale's date when sent back to waiting for a jump, and clears the date on confirmation", () => {
     const state = startClockState();
@@ -288,4 +304,20 @@ it("shows the waiting notice a count of at most 1, so never 2 of 2 while the box
   expect(startClockAgreed(witnesses())).toBe(0);
   expect(startClockAgreed(witnesses(["192.168.10.20", 3_000]))).toBe(1);
   expect(startClockAgreed(witnesses(["192.168.10.20", 3_000], ["192.168.10.21", 4_000]))).toBe(1);
+});
+
+it("tells its listener each time a wait ends by a confirmation, and at no other change", async () => {
+  const onConfirmed = vi.fn();
+  const state = startClockState(onConfirmed);
+  state.confirm("by_person", {});
+  state.confirm("by_person", {});
+  expect(onConfirmed).toHaveBeenCalledTimes(1);
+
+  state.backToWaiting("clock_jumped");
+  expect(onConfirmed).toHaveBeenCalledTimes(1);
+  await state.confirmDevices(
+    witnesses(["192.168.10.20", 1_000], ["192.168.10.21", 2_000]),
+    async () => ({}),
+  );
+  expect(onConfirmed).toHaveBeenCalledTimes(2);
 });

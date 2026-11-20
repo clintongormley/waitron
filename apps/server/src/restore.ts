@@ -33,7 +33,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, posix, sep } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { AppError, isAppError, nodeId as brandNodeId } from "@waitron/shared";
 import {
   insertNodeSeriesTx,
@@ -44,6 +44,7 @@ import {
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
+  workingOrders,
   readVenueSettings,
   type Database,
   type NodeDatabase,
@@ -977,8 +978,8 @@ function wrapHookError(module: string, err: unknown): unknown {
  * transaction. Order: check the node exists → hooks in
  * list order → at most one module may return `series` → if one did, retire the node's live series and
  * open the returned ones → on EVERY path require one live standard and one live full series —
- * zero or two of either aborts the transaction. Returns the standard series id
- * and the hooks' reports.
+ * zero or two of either aborts the transaction → mark every open and placed bill
+ * `before_restore`. Returns the standard series id and the hooks' reports.
  */
 export async function runRestoreHooks(args: {
   db: Database;
@@ -1042,6 +1043,11 @@ export async function runRestoreHooks(args: {
     } catch (err) {
       throw wrapHookError(owner, err);
     }
+    // Bills from before a restore are left for staff (D6).
+    await tx
+      .update(workingOrders)
+      .set({ beforeRestore: true })
+      .where(inArray(workingOrders.status, ["open", "placed"]));
     for (const m of args.modules) {
       if (m.backup?.restore !== undefined) {
         try {

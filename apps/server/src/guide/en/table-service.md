@@ -96,7 +96,7 @@ When a table customer needs an invoice in their name, choose **Full invoice** fo
 enter their identifier, legal name and complete address before the bill is printed or takes its final payment. The
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
 or printing it with **Print the bill** issues the invoice; recording an unpaid departure also issues
-it, leaving the amount unpaid.
+it, leaving the amount unpaid. A bill still open when the business day ends is issued then.
 
 **Full invoice** is in the bill's payment area below the order, and in the **⋮** menu under the
 bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
@@ -579,6 +579,10 @@ recorded as unpaid; any amount already paid is kept. When the guest comes back t
 from **Find a bill** and take the rest there. The table stays open while another bill needs closing
 or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
 everyone has finished.
+
+A bill still open when the business day ends gets its receipt then, without printing. Take its
+payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
+open.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this

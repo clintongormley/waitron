@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3179891d-9b68-4ed0-91c7-57d0f7058aaa",
+  "id": "46404aa5-b766-48af-9e1a-5ba7833628d5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -2187,7 +2187,7 @@
       "checkConstraints": {
         "registros_facturacion_source_ck": {
           "name": "registros_facturacion_source_ck",
-          "value": "\"registros_facturacion\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+          "value": "\"registros_facturacion\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')"
         },
         "registros_facturacion_source_device_ck": {
           "name": "registros_facturacion_source_device_ck",

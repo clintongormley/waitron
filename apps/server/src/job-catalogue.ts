@@ -15,6 +15,7 @@ export const JOB_CATALOGUE = {
   },
   "menu.activation": stop,
   "receipt.owed": stop,
+  "bills.close_of_day": stop,
   "fiscal.tamper_watch": {
     kind: "job",
     stepdown: {

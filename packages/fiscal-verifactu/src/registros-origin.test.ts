@@ -76,4 +76,10 @@ describe("registros_facturacion — the source and device", () => {
       { source: "readiness_test", device_id: null },
     ]);
   });
+
+  it("accepts a record from the close of the business day with no device", async () => {
+    expect(await insertRegistro("business_day_close", null)).toEqual([
+      { source: "business_day_close", device_id: null },
+    ]);
+  });
 });

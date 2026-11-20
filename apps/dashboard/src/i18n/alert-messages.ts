@@ -587,6 +587,10 @@ export const ALERT_WORDS: Readonly<
         en: "retrying receipts that did not print",
         es: "el reintento de los tickets que no se imprimieron",
       },
+      "bills.close_of_day": {
+        en: "issuing the receipts of bills left open at the end of the business day",
+        es: "la emisión de los tickets de las cuentas abiertas al terminar el día de trabajo",
+      },
       "fiscal.tamper_watch": {
         en: "checking the invoice record's protections",
         es: "la comprobación de las protecciones del registro de facturas",

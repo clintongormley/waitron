@@ -428,6 +428,7 @@ import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } fr
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { owedReceiptJob } from "./owed-receipts.js";
+import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -2528,7 +2529,17 @@ async function bootServer(
   const declarationsSeat = enabledFiscal.declarations;
   if (declarationsSeat !== undefined)
     keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
-  const startClock = startClockState();
+  const tillClock = systemClock();
+  // Bound once the job runner is built below. The close-of-day job stamps bills opened while the
+  // clock held, so a stop soon after the hold ends does not lose its moment.
+  let wakeOnClockReleased = () => {};
+  // Every end of a hold sets it, so the job never stamps a bill with an earlier hold's end.
+  let clockReleasedAt: Date | null = null;
+  const clockReleased = (at: Date | null) => {
+    clockReleasedAt = at;
+    wakeOnClockReleased();
+  };
+  const startClock = startClockState(() => clockReleased(tillClock.now().instant));
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
   const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
@@ -2556,6 +2567,7 @@ async function bootServer(
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
+    clockUnconfirmed: startClockHolds,
   };
   const cloudConnection = cloudOrigin
     ? createCloudConnection({
@@ -2748,6 +2760,7 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
+  wakeOnClockReleased = () => jobRunner.wake("bills.close_of_day");
   const stopJobRunner = async () => {
     await jobRunner.stopJobs();
     await jobRunner.stopServices();
@@ -2871,7 +2884,6 @@ async function bootServer(
       incidents: recordIncidentOnce,
       captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
     });
-  const tillClock = systemClock();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   const clockService = sharedClockServiceReading(boxHost, now);
   const readClockService = clockService.read;
@@ -2887,6 +2899,7 @@ async function bootServer(
     transaction: (fn) => withTransaction(db, fn),
     // Called only once a set has run, after the email duty below has started.
     onCorrected: (incident) => boxEmails.remember(incident),
+    onSetEnded: clockReleased,
     nodeId: tradingContext.nodeId,
     log,
     start: { state: startClock, heads: recordHeads },
@@ -4502,6 +4515,25 @@ async function bootServer(
       db,
       isPrimary: () => holders.singletonRole.current === "primary",
       log,
+    }),
+  );
+  jobRunner.add(
+    closeOfDayJob({
+      admission: tradingAdmission,
+      db,
+      backend: nodeBackend,
+      clock: tillClock,
+      cfg: tradingContext,
+      log,
+      selling: {
+        mode: () => holders.mode.current,
+        role: () => holders.singletonRole.current,
+        fenced: () => fenced,
+      },
+      clockUnconfirmed: startClockHolds,
+      // A set with the host holds from its step on (`clockCorrection`'s `steps`).
+      clockHoldsBegun: () => startClock.waitsBegun() + correction.steps(),
+      clockReleasedAt: () => clockReleasedAt,
     }),
   );
 

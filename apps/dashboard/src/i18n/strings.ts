@@ -1244,6 +1244,7 @@ export const en = {
   "source.demo_seed": "Demo data",
   "source.readiness_test": "Readiness test",
   "source.operator_script": "Operator script",
+  "source.business_day_close": "Close of business day",
   "source.backup": "Backups",
   "alerts.no_handled": "Nothing was handled in the last 30 days.",
   "alerts.no_access": "You don't have access to any alerts.",
@@ -1269,6 +1270,8 @@ export const en = {
   "venue_details.locked": "locked",
   "business_day.title": "Business-day start",
   "business_day.starts_at": "Starts at",
+  "business_day.starts_at_help":
+    "Choose a time when the venue is closed. Table bills still open then get their receipt, without printing.",
   "business_day.new_start": "New start",
   "business_day.new_start_value": "{time}, from {when}",
   "business_day.day_length": "Business day {day} lasts {duration}.",
@@ -5770,6 +5773,8 @@ export const es: Record<StringKey, string> = {
   "venue_details.locked": "bloqueado",
   "business_day.title": "Inicio del día de trabajo",
   "business_day.starts_at": "Empieza a las",
+  "business_day.starts_at_help":
+    "Elige una hora en que el local esté cerrado. Las cuentas de mesa que sigan abiertas entonces reciben su ticket, sin imprimirlo.",
   "business_day.new_start": "Nuevo inicio",
   "business_day.new_start_value": "{time}, desde {when}",
   "business_day.day_length": "El día de trabajo {day} dura {duration}.",
@@ -5920,6 +5925,7 @@ export const es: Record<StringKey, string> = {
   "source.demo_seed": "Datos de demostración",
   "source.readiness_test": "Prueba de preparación",
   "source.operator_script": "Script del operador",
+  "source.business_day_close": "Fin del día de trabajo",
   "source.backup": "Copias de seguridad",
   "alerts.no_handled": "No se ha resuelto nada en los últimos 30 días.",
   "alerts.no_access": "No tienes acceso a ningún aviso.",

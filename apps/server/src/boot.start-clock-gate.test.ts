@@ -66,7 +66,8 @@ vi.mock("./start-clock-check.js", async (original) => {
   const actual = await original<typeof import("./start-clock-check.js")>();
   return {
     ...actual,
-    startClockState: () => (built.start = actual.startClockState()),
+    startClockState: (...args: Parameters<typeof actual.startClockState>) =>
+      (built.start = actual.startClockState(...args)),
   };
 });
 vi.mock("./clock-correction.js", async (original) => {
@@ -82,6 +83,8 @@ vi.mock("./clock-correction.js", async (original) => {
 const mounted = vi.hoisted(() => ({
   till: undefined as (() => boolean) | undefined,
   payments: undefined as (() => boolean) | undefined,
+  /** The gate on the trading context boot handed `mountTillApi`, which opening a bill reads. */
+  tillContext: undefined as (() => boolean) | undefined,
 }));
 vi.mock("./till-api.js", async (original) => {
   const actual = await original<typeof import("./till-api.js")>();
@@ -89,6 +92,7 @@ vi.mock("./till-api.js", async (original) => {
     ...actual,
     mountTillApi: (...args: Parameters<typeof actual.mountTillApi>) => {
       mounted.till = args[1].clockUnconfirmed;
+      mounted.tillContext = args[1].cfg.clockUnconfirmed;
       actual.mountTillApi(...args);
     },
   };
@@ -262,6 +266,121 @@ describe("the start clock gate as boot wires it", () => {
     });
 
     expect(seen).toEqual({ waiting: [true, true], confirmed: [false, false] });
+  });
+
+  it("hands the till's trading context, which opening a bill reads, the same gate as the till", async () => {
+    mounted.till = mounted.tillContext = undefined;
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const waiting = mounted.tillContext?.();
+      built.start!.confirm("by_devices", {});
+      return {
+        same: mounted.tillContext === mounted.till,
+        waiting,
+        confirmed: mounted.tillContext?.(),
+      };
+    });
+
+    expect(seen).toEqual({ same: true, waiting: true, confirmed: false });
+  });
+
+  it("gives a bill opened while the start waited its trusted opening time as soon as the time is confirmed", async () => {
+    const billId = randomUUID();
+    venue.db.run(sql`
+      insert into working_orders (id, source, node_id, order_number, status, opened_at, dining)
+      values (${billId}, 'dashboard', ${venue.cfg.nodeId},
+        (select coalesce(max(order_number), 0) + 1 from working_orders), 'open',
+        ${new Date().toISOString()}, 'eat_in')
+    `);
+    const trusted = () =>
+      venue.db.all<{ at: string | null }>(
+        sql`select trusted_opened_at as at from working_orders where id = ${billId}`,
+      )[0]!.at;
+
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const waiting = trusted();
+      built.start!.confirm("by_devices", {});
+      // The job's own next look is a minute away.
+      await vi.waitFor(() => expect(trusted()).not.toBeNull(), { timeout: 10_000 });
+      return { waiting, confirmed: trusted() };
+    });
+
+    expect(seen).toEqual({ waiting: null, confirmed: expect.any(String) });
+  });
+
+  it("gives a bill opened while a clock set was with the host its trusted opening time as soon as the set ends, and never an earlier hold's end", async () => {
+    let reached!: () => void;
+    const asked = new Promise<void>((resolve) => (reached = resolve));
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    const host: BoxHostClient = {
+      clockStatus: async () => clockServiceAnswer(false),
+      setClock: async () => {
+        reached();
+        await answered;
+        return { available: false, reason: "refused", refusal: "set_failed" };
+      },
+    };
+    const openBill = () => {
+      const id = randomUUID();
+      venue.db.run(sql`
+        insert into working_orders (id, source, node_id, order_number, status, opened_at, dining)
+        values (${id}, 'dashboard', ${venue.cfg.nodeId},
+          (select coalesce(max(order_number), 0) + 1 from working_orders), 'open',
+          ${new Date().toISOString()}, 'eat_in')
+      `);
+      return id;
+    };
+    const trusted = (id: string) =>
+      venue.db.all<{ at: string | null }>(
+        sql`select trusted_opened_at as at from working_orders where id = ${id}`,
+      )[0]!.at;
+    const openedAt = (id: string) =>
+      venue.db.all<{ at: string }>(
+        sql`select opened_at as at from working_orders where id = ${id}`,
+      )[0]!.at;
+
+    const seen = await serving(host, async () => {
+      const correction = built.correction!;
+      // Once this bill is stamped, the pass the confirmation woke has run.
+      const waited = openBill();
+      const confirming = new Date().toISOString();
+      built.start!.confirm("by_devices", {});
+      const confirmed = new Date().toISOString();
+      // The woken pass cannot run until this turn ends, so it reads the clock at least 20 ms on.
+      const until = Date.now() + 20;
+      while (Date.now() < until);
+      await vi.waitFor(() => expect(trusted(waited)).not.toBeNull(), { timeout: 10_000 });
+      const atConfirmation = trusted(waited)!;
+      const set = correction.set({
+        reason: "start",
+        source: "staff",
+        offsetMs: 2 * 24 * 3_600_000,
+        measuredAt: { wallMs: Date.now(), monoMs: performance.now() },
+        stepsSeen: correction.steps(),
+        witnesses: [],
+        requester: { source: "staff", person: null, device: null },
+      });
+      await asked;
+      const billId = openBill();
+      release();
+      expect(await set).toEqual({ set: false, reason: "refused" });
+      const held = trusted(billId);
+      // The job's own next look is a minute away.
+      await vi.waitFor(() => expect(trusted(billId)).not.toBeNull(), { timeout: 10_000 });
+      return {
+        status: built.start!.status,
+        held,
+        confirmationStamp: atConfirmation >= confirming && atConfirmation <= confirmed,
+        setStampNotBeforeOpening: trusted(billId)! >= openedAt(billId),
+      };
+    });
+
+    expect(seen).toEqual({
+      status: "by_devices",
+      held: null,
+      confirmationStamp: true,
+      setStampNotBeforeOpening: true,
+    });
   });
 
   it("hands the box-health routes the start check it builds", async () => {

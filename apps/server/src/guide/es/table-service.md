@@ -103,7 +103,8 @@ Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura 
 la cuenta e introduce su identificador, su razón social y su dirección completa antes de imprimir
 la cuenta o de su último pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
 la cuenta o al imprimirla con **Imprimir la cuenta** se emite la factura; al registrar que se han
-ido sin pagar también se emite y queda pendiente de pago.
+ido sin pagar también se emite y queda pendiente de pago. Una cuenta que sigue abierta al terminar
+el día de trabajo se emite entonces.
 
 **Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
 bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
@@ -620,6 +621,10 @@ pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagad
 el cliente vuelva a pagar, abre la cuenta desde **Buscar cuenta** y cobra allí lo que falta. La
 mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por servir. Sirve lo que
 queda y elige **Cerrar mesa** cuando todos hayan terminado.
+
+Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
+imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
+o sin enviar sigue abierta.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba

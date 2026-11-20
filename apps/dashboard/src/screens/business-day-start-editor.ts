@@ -18,6 +18,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
@@ -26,6 +27,7 @@ import type {
   BusinessDayStartPreview,
 } from "../api/client.js";
 import { t, fill } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
@@ -545,7 +547,15 @@ export class BusinessDayStartEditor extends LitElement {
                     @wt-change=${(event: CustomEvent<{ value: string }>) => {
                       if (active()) this.#change("dayCutover", event);
                     }}
-                  ></wt-input>
+                    ><wt-help-tooltip
+                      slot="help"
+                      mode="help-mode"
+                      aria-label=${fill("help.badge_label", { part: t("venue_details.dayCutover") })}
+                      guide-href=${guideHref("table-service.bill-switcher")}
+                      guide-label=${t("help.guide_link")}
+                      >${t("business_day.starts_at_help")}</wt-help-tooltip
+                    ></wt-input
+                  >
                   ${
                     preview
                       ? html`<div class="preview" data-test="preview">
