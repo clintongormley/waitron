@@ -1,7 +1,9 @@
 import { readBillAdjustments } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
-import { sales, saleLines } from "@waitron/db";
+import { invoiceSeries, sales, saleLines } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
 import { eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   addDecimal,
   basisPointsToDecimal,
@@ -9,11 +11,17 @@ import {
   compareDecimal,
   decimal,
   isZeroDecimal,
+  localCalendarDate,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
+import {
+  groupByParent,
+  ticketLinesFrom,
+  trimQuantityForDisplay,
+  type ReceiptSource,
+} from "./receipt-lines.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 import { hasStoredLines, readStoredOrder, type OrderLineIdentity } from "./working-order.js";
@@ -65,28 +73,100 @@ export async function receiptLines(
   identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross" | "lineIds">[],
   saleId?: string,
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
+  const filed = saleId === undefined ? undefined : await readFiledLines(tx, saleId);
+  const dishes = await dishLines(tx, workingOrderId, priced, identities, filed);
+  const advances = filed?.filter((row) => row.advance !== null) ?? [];
+  if (advances.length === 0) return dishes;
+  const fullInvoice = filed![0]!.counterpartyTaxId !== null;
+  return {
+    ...dishes,
+    lines: [...dishes.lines, ...advances.map((row) => advanceLine(row, fullInvoice))],
+  };
+}
+
+const advanceSales = alias(sales, "advance_sales");
+const advanceSeries = alias(invoiceSeries, "advance_series");
+
+/** The sale's filed lines, each line taking an advance off naming that advance as its own ticket
+ * does. One read, whatever the number of lines. */
+async function readFiledLines(tx: Transaction, saleId: string) {
+  const rows = await tx
+    .select({
+      lineNo: saleLines.lineNo,
+      descriptions: saleLines.descriptions,
+      quantity: saleLines.quantity,
+      unitPrice: saleLines.unitPrice,
+      priceQuantity: saleLines.priceQuantity,
+      base: saleLines.lineTotal,
+      rate: saleLines.vatRate,
+      gross: saleLines.lineGross,
+      listGross: saleLines.listGross,
+      listUnitPriceGross: saleLines.listUnitPriceGross,
+      counterpartyTaxId: sales.counterpartyTaxId,
+      advanceRole: saleLines.advanceRole,
+      advanceCode: advanceSeries.code,
+      advanceNumber: advanceSales.invoiceNumber,
+      advanceIssuedAt: advanceSales.issuedAt,
+      advanceOffset: advanceSales.issuedOffsetMinutes,
+    })
+    .from(saleLines)
+    .innerJoin(sales, eq(sales.id, saleLines.saleId))
+    .leftJoin(advanceSales, eq(advanceSales.id, saleLines.deductsSaleId))
+    .leftJoin(advanceSeries, eq(advanceSeries.id, advanceSales.seriesId))
+    .where(eq(sales.id, saleId))
+    .orderBy(saleLines.lineNo);
+  return rows.map(
+    ({ advanceRole, advanceCode, advanceNumber, advanceIssuedAt, advanceOffset, ...row }) => ({
+      ...row,
+      advance:
+        advanceRole !== "deduction"
+          ? null
+          : {
+              invoiceNumber: formatInvoiceNumber(advanceCode!, advanceNumber!),
+              issuedOn: localCalendarDate(new Date(advanceIssuedAt!), advanceOffset!),
+            },
+    }),
+  );
+}
+
+type FiledLine = Awaited<ReturnType<typeof readFiledLines>>[number];
+
+/** A line taking an advance off: never merged with another, and nothing printed beneath it. */
+function advanceLine(row: FiledLine, fullInvoice: boolean): TillSaleLine {
+  const rate = basisPointsToDecimal(row.rate);
+  const gross = centsToDecimal(row.gross!);
+  return {
+    descriptions: row.descriptions,
+    quantity: trimQuantityForDisplay(thousandthsToDecimal(row.quantity)),
+    gross,
+    vatRate: rate,
+    parentLineNo: null,
+    advance: row.advance!,
+    ...(fullInvoice
+      ? {
+          net: {
+            unitPrice: centsToDecimal(row.unitPrice),
+            priceQuantity: thousandthsToDecimal(row.priceQuantity),
+            base: centsToDecimal(row.base),
+            rate,
+            tax: subtractDecimal(gross, centsToDecimal(row.base)),
+          },
+        }
+      : {}),
+  };
+}
+
+async function dishLines(
+  tx: Transaction,
+  workingOrderId: string | null,
+  priced: { lines: readonly ReceiptSource[] },
+  identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross" | "lineIds">[],
+  filed: readonly FiledLine[] | undefined,
+): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const each = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
     identities.flatMap((identity, i) => (priced.lines[i]?.unitName != null ? [identity.id] : [])),
   );
-  const filed =
-    saleId === undefined
-      ? undefined
-      : await tx
-          .select({
-            lineNo: saleLines.lineNo,
-            unitPrice: saleLines.unitPrice,
-            priceQuantity: saleLines.priceQuantity,
-            base: saleLines.lineTotal,
-            rate: saleLines.vatRate,
-            gross: saleLines.lineGross,
-            listGross: saleLines.listGross,
-            listUnitPriceGross: saleLines.listUnitPriceGross,
-            counterpartyTaxId: sales.counterpartyTaxId,
-          })
-          .from(saleLines)
-          .innerJoin(sales, eq(sales.id, saleLines.saleId))
-          .where(eq(sales.id, saleId));
   // A full invoice prints no price each, so it never reads the order's lines for one.
   const fullInvoice = filed?.[0]?.counterpartyTaxId != null;
   let lines = ticketLinesFrom(

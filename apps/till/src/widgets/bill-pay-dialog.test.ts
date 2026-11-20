@@ -3599,3 +3599,199 @@ it("labels the operation number on a saved manual payment", async () => {
   });
   expect(text(root(el).querySelector("[data-payment]"))).toContain("Operation number OP-73");
 });
+
+describe("till-bill-pay-dialog: the payer's own receipt", () => {
+  const PART_WAYS: { way: PayRequest["choice"]["kind"]; choice: PayRequest["choice"] }[] = [
+    { way: "contribution", choice: { kind: "contribution", amount: "30.00" } },
+    { way: "share", choice: { kind: "share", shareOf: 4 } },
+    { way: "items", choice: { kind: "items", picks: [{ lineNo: 1 }] } },
+  ];
+
+  async function confirming(
+    choice: PayRequest["choice"],
+    applied = "30.00",
+    over: Partial<TillBillPayDialog> = {},
+  ) {
+    return mount({
+      way: choice.kind,
+      ownReceiptOffered: true,
+      asked: { choice, pay: { method: "cash", tendered: applied } },
+      preview: cashPreview(applied, "0.00"),
+      ...over,
+    });
+  }
+  const question = (el: TillBillPayDialog) => root(el).querySelector("[data-pay-own-receipt]");
+  const answers = (el: TillBillPayDialog) =>
+    [...root(el).querySelectorAll<HTMLInputElement>('input[name="ownReceipt"]')].map((radio) => ({
+      value: radio.value,
+      checked: radio.checked,
+    }));
+
+  it.each(PART_WAYS)(
+    "asks on $way with neither answer chosen, and takes nothing until answered",
+    async ({ choice }) => {
+      const el = await confirming(choice);
+
+      expect(text(question(el)!.querySelector("legend"))).toContain(t("bill_pay.own_receipt"));
+      expect(answers(el)).toEqual([
+        { value: "yes", checked: false },
+        { value: "no", checked: false },
+      ]);
+      expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+      expect(
+        root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-pay-confirm]")!.variant,
+      ).toBe("secondary");
+    },
+  );
+
+  it("Yes sends ownReceipt, No sends without it", async () => {
+    const el = await confirming({ kind: "contribution", amount: "30.00" });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+
+    await pick(el, "ownReceipt", "yes");
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
+    expect(
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-pay-confirm]")!.variant,
+    ).toBe("primary");
+    await click(el, "[data-pay-confirm]");
+    await pick(el, "ownReceipt", "no");
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed[0]).toMatchObject({ ownReceipt: true });
+    expect(confirmed[1]).not.toHaveProperty("ownReceipt");
+  });
+
+  it("asks again, unanswered, for the next payer", async () => {
+    const el = await confirming({ kind: "contribution", amount: "30.00" });
+    await pick(el, "ownReceipt", "yes");
+
+    el.paymentAccepted();
+    await el.updateComplete;
+
+    expect(answers(el).map(({ checked }) => checked)).toEqual([false, false]);
+  });
+
+  it("answering it changes no payment-slip choice", async () => {
+    const el = await mount({
+      way: "contribution",
+      ownReceiptOffered: true,
+      takesCash: false,
+      cardReader: "simulator",
+      slipPrinterAvailable: true,
+      asked: {
+        choice: { kind: "contribution", amount: "10.00" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+      preview: {
+        kind: "allocated",
+        choice: null,
+        applied: "10.00",
+        tip: "0.00",
+        change: null,
+        charged: "10.00",
+      },
+    });
+    const slip = () =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]')!;
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+
+    await pick(el, "ownReceipt", "yes");
+    expect(slip().checked).toBe(false);
+    await click(el, "[data-pay-confirm]");
+    await pick(el, "ownReceipt", "no");
+    slip().dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
+    );
+    await el.updateComplete;
+    await pick(el, "ownReceipt", "yes");
+    expect(slip().checked).toBe(true);
+    await click(el, "[data-pay-confirm]");
+
+    expect(confirmed).toEqual([
+      expect.objectContaining({ ownReceipt: true, printCardSlip: false }),
+      expect.objectContaining({ ownReceipt: true, printCardSlip: true }),
+    ]);
+  });
+
+  it("never asks on Whole bill", async () => {
+    const el = await confirming({ kind: "whole" }, "120.00");
+    expect(question(el)).toBeNull();
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
+  });
+
+  it("never asks when the amount pays the bill off", async () => {
+    const el = await confirming({ kind: "contribution", amount: "120.00" }, "120.00");
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+
+    expect(question(el)).toBeNull();
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed[0]).not.toHaveProperty("ownReceipt");
+  });
+
+  it("never asks when the bill has an invoice or is set for a full invoice", async () => {
+    const el = await confirming({ kind: "contribution", amount: "30.00" }, "30.00", {
+      ownReceiptOffered: false,
+    });
+    expect(question(el)).toBeNull();
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
+  });
+
+  it.each(["en", "es"] as const)("words the question and its answers in %s", async (locale) => {
+    setLocale(locale);
+    try {
+      const el = await confirming({ kind: "contribution", amount: "30.00" });
+      const labels = [...question(el)!.querySelectorAll("label")].map((label) => text(label));
+      expect(labels).toEqual(
+        locale === "es"
+          ? [es["bill_pay.own_receipt_yes"], es["bill_pay.own_receipt_no"]]
+          : [t("bill_pay.own_receipt_yes"), t("bill_pay.own_receipt_no")],
+      );
+    } finally {
+      setLocale("en");
+    }
+  });
+});
+
+describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
+  const advanceRow = (left: string) =>
+    balanceOf({
+      received: left,
+      outstanding: "90.00",
+      payments: [
+        {
+          ...pendingCard,
+          state: "received",
+          receivedAt: pendingCard.createdAt,
+          applied: "30.00",
+          tip: "0.00",
+          hasTicket: true,
+          saleId: "advance-sale",
+          left,
+          tipLeft: "0.00",
+        },
+      ],
+    });
+
+  it("offers no Refund once Correct invoice has given all of it back", async () => {
+    const el = await mount({ balance: advanceRow("0.00") });
+
+    expect(root(el).querySelector("[data-payment-refund]")).toBeNull();
+    expect(text(root(el).querySelector("[data-payment]"))).toContain(
+      `${t("bill_pay.applied")} ${money("0.00")}`,
+    );
+  });
+
+  it("shows, and offers to refund, what a part correction left", async () => {
+    const el = await mount({ balance: advanceRow("20.00") });
+
+    expect(text(root(el).querySelector("[data-payment]"))).toContain(
+      `${t("bill_pay.applied")} ${money("20.00")}`,
+    );
+    expect(root(el).querySelector("[data-payment-refund]")!.getAttribute("aria-label")).toBe(
+      t("bill_pay.refund_label")
+        .replace("{n}", "1")
+        .replace("{amount}", () => money("20.00")),
+    );
+  });
+});

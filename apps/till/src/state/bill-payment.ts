@@ -259,6 +259,7 @@ export interface DialogRefusal {
   code: string;
   field?: string;
   recoveryUrl?: string;
+  invoiceNumber?: string;
 }
 
 /** The longest reason a refund or an unpaid departure is sent with. */
@@ -282,6 +283,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     offsetMinutes?: unknown;
     reason?: unknown;
     recoveryUrl?: unknown;
+    invoiceNumber?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -295,6 +297,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     ...(typeof refused.offsetMinutes === "number" ? { offsetMinutes: refused.offsetMinutes } : {}),
     ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
     ...(typeof refused.recoveryUrl === "string" ? { recoveryUrl: refused.recoveryUrl } : {}),
+    ...(typeof refused.invoiceNumber === "string" ? { invoiceNumber: refused.invoiceNumber } : {}),
   };
 }
 
@@ -324,8 +327,11 @@ export function refundSubmissionFor(
   return sentAs(JSON.stringify([billId, paymentId, ask]), ask, unanswered, mint);
 }
 
-/** What is left to give back of a payment: what it took less its completed refunds. */
+/** What is left to give back of a payment: what it took less its completed refunds, or, for one
+ * that paid an advance, what the server says is left of it. */
 export function refundableOf(payment: BillPaymentView): { applied: string; tip: string } {
+  if (payment.left !== undefined && payment.tipLeft !== undefined)
+    return { applied: payment.left, tip: payment.tipLeft };
   const done = payment.refunds.filter((refund) => refund.state === "completed");
   const less = (amount: string, refunded: string[]) =>
     toScale(

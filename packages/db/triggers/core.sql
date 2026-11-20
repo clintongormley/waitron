@@ -109,6 +109,7 @@ BEGIN
     AND new.device_id IS old.device_id
     AND new.created_at IS old.created_at
     AND new.slip_wanted IS old.slip_wanted
+    AND new.own_receipt IS old.own_receipt
     AND (
       (new.state IS old.state
         AND new.received_at IS old.received_at

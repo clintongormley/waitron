@@ -762,6 +762,36 @@ describe("computeCategorySales at time of sale", () => {
     ]);
   });
 
+  it("category sales count example 1's dishes once and leave out the advance's line and the deduction line", async () => {
+    // Example 1: €120 of food at 10%; Ana's €30 advance ticket A/12 (27.27 + 2.73) at 21:30, and
+    // the rest's ticket at 23:00 taking A/12 off.
+    const advance = await sellLines(suite.db, venue, at("2026-08-04", "19:30"), [
+      { net: "27.27", gross: "30.00", advanceRole: "payment_on_account" },
+    ]);
+    await sellLines(suite.db, venue, at("2026-08-04", "21:00"), [
+      { net: "109.09", gross: "120.00", cls: classified(chain(DRINKS)) },
+      { net: "-27.27", gross: "-30.00", advanceRole: "deduction", deductsSaleId: advance },
+    ]);
+
+    const report = await run();
+    expect(rows(report.tree)).toEqual([
+      {
+        path: "Drinks",
+        id: "cat-drinks",
+        depth: 0,
+        gross: "120.00",
+        net: "109.09",
+        direct: "120.00/109.09/1",
+      },
+    ]);
+    expect(report).toMatchObject({
+      gross: "120.00",
+      net: "109.09",
+      grossComplete: true,
+      linesWithoutGross: 0,
+    });
+  });
+
   it("counts only the node asked for, and every node when none is", async () => {
     const other = await seedNodeAndSeries(suite.db);
     await sell("2026-08-04", [{ net: "1.00", gross: "1.10", cls: classified(chain(DRINKS)) }]);

@@ -136,6 +136,7 @@ export function mountTenderRefundApi(
       "tender.refund_in_progress": 409,
       "tender.refund_exceeds_payment": 409,
       "tender.refund_exceeds_cancelled": 409,
+      "tender.refund_of_advance": 409,
       "tender.refund_unavailable": 409,
       "invoice_correction.already_open": 409,
       "invoice_correction.not_found": 404,

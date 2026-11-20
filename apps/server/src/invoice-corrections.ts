@@ -55,6 +55,7 @@ import { canonicaliseUuid } from "./till-session.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
+import { saleScopeInZones } from "./find-bill-transactions.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -303,9 +304,10 @@ function summaryFrom(row: InvoiceCorrectionRow, { refunds, money }: CorrectionLe
   return { view, row, back, pending };
 }
 
-/** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow` and with the number of the invoice it corrects: one read of the corrections, then one
- * read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no correction is open. */
+/** The open corrections whose invoice `inZones` admits ({@link saleScopeInZones}), oldest first,
+ * each without `fileNow` and with the number of the invoice it corrects: one read of the
+ * corrections, then one read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no
+ * correction is open. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
@@ -316,7 +318,12 @@ export async function listOpenInvoiceCorrections(
     .innerJoin(sales, eq(sales.id, invoiceCorrections.originalSaleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(
-      and(eq(invoiceCorrections.state, "open"), inZones?.(sql`${sales.workingOrderId}`) ?? sql`1`),
+      and(
+        eq(invoiceCorrections.state, "open"),
+        inZones === undefined
+          ? sql`1`
+          : saleScopeInZones(sql`${invoiceCorrections.originalSaleId}`, inZones),
+      ),
     )
     .orderBy(asc(invoiceCorrections.createdAt), asc(invoiceCorrections.id));
   const legs = await readCorrectionLegsOf(

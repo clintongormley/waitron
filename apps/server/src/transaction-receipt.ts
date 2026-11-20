@@ -86,6 +86,8 @@ export async function readTransactionReceipt(
     .orderBy(saleLines.lineNo);
   const byId = new Map(rows.map((row) => [row.id, row.lineNo]));
   const grosses = receiptGrosses(rows, sale.vatBreakdown);
+  // `receiptLines` adds the lines that take an advance off, naming each advance.
+  const dishes = rows.filter((row) => row.advanceRole !== "deduction");
   const orderLines =
     sale.workingOrderId === null
       ? []
@@ -98,7 +100,7 @@ export async function readTransactionReceipt(
     tx,
     sale.workingOrderId,
     {
-      lines: rows.map((row) => ({
+      lines: dishes.map((row) => ({
         lineNo: row.lineNo,
         descriptions: row.descriptions,
         variantDescriptions: row.variantDescriptions,
@@ -112,7 +114,7 @@ export async function readTransactionReceipt(
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
       })),
     },
-    rows.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));

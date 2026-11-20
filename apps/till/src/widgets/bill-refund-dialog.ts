@@ -335,7 +335,7 @@ export class TillBillRefundDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     if (refusal.code === "network") return t("bill_refund.unconfirmed");
     if (refusal.code === "approvers") return t("bill_refund.approvers_failed");
-    return recoveryRefusalText(refusal) ?? codeMessage(refusal.code);
+    return recoveryRefusalText(refusal) ?? codeMessage(refusal.code, undefined, refusal);
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {

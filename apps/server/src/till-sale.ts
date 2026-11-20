@@ -108,7 +108,7 @@ type TillSaleDeps = BaseTillSaleDeps & {
 import { issuancePass } from "./issuance-pass.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
-import { pinnedAt } from "./issue-moment.js";
+import { NO_ADVANCES, pinnedAt } from "./issue-moment.js";
 import { CARD_TIMING_COLUMNS, cardSaleMoment, issueOrderMoment } from "./sale-day.js";
 import { ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
@@ -259,6 +259,10 @@ export interface TillSaleLine {
   /** The diner's answers to this dish's OPTIONS lists, copied by value so a later menu edit
    *  cannot rewrite what a completed sale says was ordered. An extras pick is a child line instead. */
   optionSnapshots?: OptionSnapshot[];
+  /** On a line taking an advance off this invoice: the advance as its own ticket names it, read
+   *  through the line's `deducts_sale_id`. `issuedOn` is its issue day in the venue's zone;
+   *  `fullAmount` is the advance's whole amount where only part of it is taken off. */
+  advance?: { invoiceNumber: string; issuedOn: string; fullAmount?: string };
 }
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
@@ -829,6 +833,7 @@ async function fileImmediateSale(
     deps,
     workingOrderId,
     await issuancePass(tx, workingOrderId, order),
+    NO_ADVANCES,
   );
   // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
   const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
@@ -1591,6 +1596,7 @@ async function finalizeCapture(
         deps,
         req.id,
         grossInP1,
+        NO_ADVANCES,
       );
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, selected.receiptLocale, {
@@ -1727,6 +1733,7 @@ async function finalizeRecovery(
         deps,
         req.id,
         await issuancePass(tx, req.id, order),
+        NO_ADVANCES,
         cardSaleMoment(startedOn!) ?? undefined,
       );
       const capturedAmount = decimal(captured.amount);

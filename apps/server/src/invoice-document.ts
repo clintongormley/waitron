@@ -84,6 +84,8 @@ async function readDocument(
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
   const byId = new Map(rows.map((row) => [row.id, row.lineNo]));
+  // `receiptLines` adds the lines that take an advance off, naming each advance.
+  const dishes = rows.filter((row) => row.advanceRole !== "deduction");
   const orderLines =
     sale.workingOrderId === null
       ? []
@@ -97,7 +99,7 @@ async function readDocument(
     tx,
     sale.workingOrderId,
     {
-      lines: rows.map((row) => ({
+      lines: dishes.map((row) => ({
         lineNo: row.lineNo,
         descriptions: row.descriptions,
         variantDescriptions: row.variantDescriptions,
@@ -111,7 +113,7 @@ async function readDocument(
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
       })),
     },
-    rows.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));

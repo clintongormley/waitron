@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -17,6 +17,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { eq } from "drizzle-orm";
 import { recordCorrection } from "./record-correction.js";
+import { checkPartialCorrectionHistory } from "./partial-correction-breakdown.js";
 import { recordReplacement } from "./record-replacement.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
@@ -560,4 +561,60 @@ it("files partial refunds of a replaced sale against its replacement, the second
   expect(refund!.correctsSaleId).toBe(replacementId);
   spy.mockRestore();
   await expectRefused("sale.correction_breakdown_invalid", draft, asked);
+});
+
+describe("an invoice that takes an advance off (example 8)", () => {
+  type Stored = { vatRate: number; quantity: number; lineTotal: number; lineGross: number | null };
+  const dish: Stored = { vatRate: 1000, quantity: 1000, lineTotal: 95, lineGross: 105 };
+  // Seven €1.05 dishes at 10% less a €3.00 advance (2.73 + 0.27): the record is 3.92/0.43.
+  const lines = new Map<string, Stored>([
+    ...Array.from({ length: 7 }, (_, index): [string, Stored] => [`dish-${index}`, dish]),
+    ["advance", { vatRate: 1000, quantity: 1000, lineTotal: -273, lineGross: -300 }],
+  ]);
+  const history = (
+    invoiceLines: ReadonlyMap<string, Stored>,
+    invoiceBreakdown = [{ rate: "10.00", base: "3.92", tax: "0.43" }],
+  ) => ({ invoiceBreakdown, invoiceLines, earlierBreakdowns: [], earlierLines: [] });
+  const take = (...grosses: [dish: number, gross: string][]): RecordSaleLine[] =>
+    grosses.map(([index, gross], at) => ({
+      ...line(at + 1, undefined, "10.00", "-0.01", gross),
+      correctsLineId: `dish-${index}`,
+    }));
+  const split = (base: string, tax: string): VatBreakdownLine[] => [
+    { rate: decimal("10.00"), base: decimal(base), tax: decimal(tax) },
+  ];
+  const three = take([0, "-1.05"], [1, "-1.05"], [2, "-0.90"]);
+
+  it("checks €3.00 against the meal's figures, -2.72/-0.28, not the rest's -2.73/-0.27", () => {
+    expect(() =>
+      checkPartialCorrectionHistory(three, split("-2.72", "-0.28"), history(lines)),
+    ).not.toThrow();
+    expect(() =>
+      checkPartialCorrectionHistory(three, split("-2.73", "-0.27"), history(lines)),
+    ).toThrow(expect.objectContaining({ code: "sale.correction_breakdown_invalid" }));
+  });
+
+  it("refuses a dish the advance already took, from the last line back", () => {
+    expect(() =>
+      checkPartialCorrectionHistory(take([6, "-1.05"]), split("-0.95", "-0.10"), history(lines)),
+    ).toThrow(expect.objectContaining({ code: "sale.correction_breakdown_invalid" }));
+    expect(() =>
+      checkPartialCorrectionHistory(take([4, "-0.16"]), split("-0.14", "-0.02"), history(lines)),
+    ).toThrow(expect.objectContaining({ code: "sale.correction_breakdown_invalid" }));
+    expect(() =>
+      checkPartialCorrectionHistory(take([4, "-0.15"]), split("-0.13", "-0.02"), history(lines)),
+    ).not.toThrow();
+  });
+
+  it("cannot read an invoice with no single group at the advance's rate, or a dish there with no gross", () => {
+    const unusable = expect.objectContaining({ code: "sale.correction_history_unusable" });
+    const one = take([0, "-1.05"]);
+    expect(() =>
+      checkPartialCorrectionHistory(one, split("-0.95", "-0.10"), history(lines, [])),
+    ).toThrow(unusable);
+    const noGross = new Map([...lines, ["dish-3", { ...dish, lineGross: null }]]);
+    expect(() =>
+      checkPartialCorrectionHistory(one, split("-0.95", "-0.10"), history(noGross)),
+    ).toThrow(unusable);
+  });
 });

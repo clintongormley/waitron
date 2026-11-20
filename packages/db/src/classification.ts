@@ -83,6 +83,11 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "which lines an item payment paid for; never corrected, refunded by a refund row instead",
   ),
+  appendOnly(
+    "bill_advances",
+    "ledger",
+    "which advance invoice was issued against which bill; never corrected",
+  ),
   classify(
     "bill_payment_refunds",
     "ledger",

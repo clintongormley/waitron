@@ -22,6 +22,7 @@ import {
 } from "./correction-allocation.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
 import { correctionTargetFor } from "./correction-target.js";
+import { deductionsTaken, type TakenCents } from "./deductions-taken.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
@@ -249,28 +250,92 @@ async function readHistory(
     if (groups.size > 0) unusable();
   }
 
+  const meal = lines.filter((line) => line.advanceRole !== "deduction");
+  const { vatBreakdown, taken } = mealView(sale.vatBreakdown, meal, lines);
   const history: CorrectionAmountHistory = {
-    lines: lines.map((line) => ({
+    lines: meal.map((line) => ({
       id: line.id,
       lineNo: line.lineNo,
       rate: basisPointsToDecimal(line.vatRate),
       gross: centsToDecimal(line.lineGross!),
       base: centsToDecimal(line.lineTotal),
     })),
-    vatBreakdown: sale.vatBreakdown.map((group) => ({
-      rate: decimal(group.rate),
-      base: decimal(group.base),
-      tax: decimal(group.tax),
-    })),
-    consumed: earlierLines.map((line) => ({
-      saleLineId: line.correctsLineId!,
-      rate: basisPointsToDecimal(line.vatRate),
-      gross: centsToDecimal(-line.lineGross!),
-      base: centsToDecimal(-line.lineTotal),
-      tax: centsToDecimal(line.lineTotal - line.lineGross!),
-    })),
+    vatBreakdown,
+    consumed: [
+      ...taken.map((piece) => ({
+        saleLineId: piece.saleLineId,
+        rate: basisPointsToDecimal(piece.rate),
+        gross: centsToDecimal(piece.gross),
+        base: centsToDecimal(piece.base),
+        tax: centsToDecimal(piece.gross - piece.base),
+      })),
+      ...earlierLines.map((line) => ({
+        saleLineId: line.correctsLineId!,
+        rate: basisPointsToDecimal(line.vatRate),
+        gross: centsToDecimal(-line.lineGross!),
+        base: centsToDecimal(-line.lineTotal),
+        tax: centsToDecimal(line.lineTotal - line.lineGross!),
+      })),
+    ],
   };
   return { history, invoiceLines: lines };
+}
+
+/**
+ * The invoice as the allocator reads it: an invoice that takes advances off holds its meal, at
+ * each rate its stored split plus what its deduction lines take off, and each deduction is
+ * something already taken from the meal (`deductionsTaken`). A rate only a deduction line holds
+ * drops out, and must then net to nothing. An invoice with no deduction line reads as stored.
+ */
+function mealView(
+  stored: readonly { rate: string; base: string; tax: string }[],
+  meal: readonly InvoiceLine[],
+  lines: readonly InvoiceLine[],
+): { vatBreakdown: CorrectionAmountHistory["vatBreakdown"]; taken: TakenCents[] } {
+  const deductions = lines.filter((line) => line.advanceRole === "deduction");
+  if (deductions.length === 0) {
+    return {
+      vatBreakdown: stored.map((group) => ({
+        rate: decimal(group.rate),
+        base: decimal(group.base),
+        tax: decimal(group.tax),
+      })),
+      taken: [],
+    };
+  }
+  const vatBreakdown: CorrectionAmountHistory["vatBreakdown"] = [];
+  for (const group of stored) {
+    const rate = decimalToBasisPoints(decimal(group.rate));
+    const atRate = deductions.filter((line) => line.vatRate === rate);
+    const base =
+      decimalToCents(decimal(group.base)) - atRate.reduce((sum, line) => sum + line.lineTotal, 0);
+    const tax =
+      decimalToCents(decimal(group.tax)) -
+      atRate.reduce((sum, line) => sum + line.lineGross! - line.lineTotal, 0);
+    if (!meal.some((line) => line.vatRate === rate)) {
+      if (base !== 0 || tax !== 0) unusable();
+      continue;
+    }
+    vatBreakdown.push({
+      rate: decimal(group.rate),
+      base: centsToDecimal(base),
+      tax: centsToDecimal(tax),
+    });
+  }
+  const taken = deductionsTaken(
+    meal.map((line) => ({
+      id: line.id,
+      rate: line.vatRate,
+      base: line.lineTotal,
+      gross: line.lineGross!,
+    })),
+    deductions.map((line) => ({
+      rate: line.vatRate,
+      base: line.lineTotal,
+      gross: line.lineGross!,
+    })),
+  );
+  return { vatBreakdown, taken };
 }
 
 /**
@@ -318,6 +383,8 @@ export function correctionLinesFor(
       classification: line.classification,
       parentLineNo: line.parentLineId === null ? null : (lineNoOf.get(line.parentLineId) ?? null),
       correctsLineId: line.id,
+      advanceRole: line.advanceRole,
+      deductsSaleId: line.deductsSaleId,
     } satisfies Required<RecordSaleLine>;
   });
 }

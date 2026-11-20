@@ -206,6 +206,7 @@ export async function computeCategorySales(
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
+        and sl.advance_role is null
         ${nodeClause}
       union all
       select s.id, s.issued_at, sl.line_no, sl.id, -sl.line_total, -sl.line_gross,
@@ -214,6 +215,7 @@ export async function computeCategorySales(
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
       where ${reversedSalesClause(window)}
+        and sl.advance_role is null
         ${nodeClause}
     ),
     -- A correction's extra named without its dish takes the dish of the first line up the chain

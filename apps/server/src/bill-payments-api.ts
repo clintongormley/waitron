@@ -133,6 +133,10 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     throw invalid("kind");
   if (body.receiptLanguage !== undefined)
     request.receiptLanguage = requireString(body.receiptLanguage, "receiptLanguage");
+  if (body.ownReceipt !== undefined) {
+    if (typeof body.ownReceipt !== "boolean") throw invalid("ownReceipt");
+    request.ownReceipt = body.ownReceipt;
+  }
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
   const readerOnly = ["readerId", "simulationOutcome"] as const;

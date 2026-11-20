@@ -1026,6 +1026,9 @@ export interface TillSaleLine {
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else null/absent.
    *  Presentation only — never hashed, never a fiscal figure. */
   parentLineNo?: number | null;
+  /** On a line taking an advance off this invoice: the advance's number and its issue day
+   *  (`YYYY-MM-DD`, the venue's zone); `fullAmount` where only part of it is taken off. */
+  advance?: { invoiceNumber: string; issuedOn: string; fullAmount?: string };
 }
 
 /** An amount a comp or a discount took off; `amount` is positive, as a decimal string. */
@@ -1162,6 +1165,8 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   simulationOutcome?: "captured" | "declined" | "attempting";
   guestCount?: number | null;
   receiptLanguage?: string;
+  /** The payer wants their own receipt for this amount. */
+  ownReceipt?: true;
 }
 
 /** How one payment splits between the bill, change and tip, or the two ways an item payment that
@@ -1194,6 +1199,12 @@ export interface BillRefundView {
 
 export interface BillPaymentView extends OutsideCardDetails {
   externalRef?: string;
+  /** It paid an advance, whose own ticket is the sale `saleId`; `left` and `tipLeft` are what
+   * Correct invoice on that ticket has not given back. */
+  hasTicket?: true;
+  saleId?: string;
+  left?: string;
+  tipLeft?: string;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";

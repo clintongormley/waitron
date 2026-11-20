@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { addDecimal, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
-import { grossBasketWithOptions, grossLockedLines, priceBasket, rateLines } from "./pricing.js";
+import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
+import {
+  baseFromGross,
+  grossBasketWithOptions,
+  grossLockedLines,
+  priceBasket,
+  rateLines,
+  splitGross,
+  vatSignRefused,
+} from "./pricing.js";
 import * as vatRates from "@waitron/shared";
 import type {
   BasketItemWithOptions,
@@ -770,5 +779,161 @@ describe("frozen options answers", () => {
     expect(live.vatBreakdown).toEqual(
       priceBasket([{ product: each("2.20", "reduced"), quantity: "2" }], ON).vatBreakdown,
     );
+  });
+});
+
+const cents = (n: number): Decimal => {
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  return decimal(`${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`);
+};
+
+const grossOf = (amounts: readonly string[], vatClass: PriceableProduct["vatClass"]) => {
+  const lines = amounts.map((amount, i) => ({
+    lineNo: i + 1,
+    name: `line ${i + 1}`,
+    descriptions: {},
+    quantity: "1",
+    vatClass,
+    grossUnitPrice: decimal(amount),
+    lineGross: decimal(amount),
+  }));
+  return { lines, total: sumDecimals(lines.map((line) => line.lineGross)) };
+};
+
+describe("the one-cent rule (D11)", () => {
+  it("a lone €0.05 item at 10% rates 0.04 + 0.01", () => {
+    const r = rateLines(grossOf(["0.05"], "reduced"), ON);
+    expect(r.vatBreakdown).toEqual([{ rate: "10.00", base: "0.04", tax: "0.01" }]);
+    expect(r.lines[0]!.lineTotal).toBe("0.04");
+    expect(r.total).toBe("0.05");
+    expect(splitGross(decimal("0.05"), decimal("10.00"))).toEqual({ base: "0.04", tax: "0.01" });
+    expect(splitGross(decimal("-0.05"), decimal("10.00"))).toEqual({
+      base: "-0.04",
+      tax: "-0.01",
+    });
+  });
+
+  it("€0.13 at 4% rates 0.12 + 0.01", () => {
+    const r = rateLines(grossOf(["0.13"], "super_reduced"), ON);
+    expect(r.vatBreakdown).toEqual([{ rate: "4.00", base: "0.12", tax: "0.01" }]);
+    expect(r.lines[0]!.lineTotal).toBe("0.12");
+    expect(splitGross(decimal("0.13"), decimal("4.00"))).toEqual({ base: "0.12", tax: "0.01" });
+  });
+
+  it("the cent comes off the largest line, never a €0.00 line", () => {
+    const r = rateLines(grossOf(["0.05", "0.00"], "reduced"), ON);
+    expect(r.lines.map((line) => line.lineTotal)).toEqual(["0.04", "0.00"]);
+    expect(r.vatBreakdown).toEqual([{ rate: "10.00", base: "0.04", tax: "0.01" }]);
+    const last = rateLines(grossOf(["0.00", "0.05"], "reduced"), ON);
+    expect(last.lines.map((line) => line.lineTotal)).toEqual(["0.00", "0.04"]);
+  });
+
+  it("on a tie the cent comes off the last of the largest lines", () => {
+    const r = rateLines(grossOf(["0.03", "0.03", "-0.01"], "reduced"), ON);
+    expect(r.lines.map((line) => line.lineTotal)).toEqual(["0.03", "0.02", "-0.01"]);
+    expect(r.vatBreakdown).toEqual([{ rate: "10.00", base: "0.04", tax: "0.01" }]);
+  });
+
+  it("with a negative rate total the cent comes off the most negative line, the last on a tie, and no €0.00 line moves", () => {
+    const one = rateLines(grossOf(["0.00", "-0.04", "-0.01"], "reduced"), ON);
+    expect(one.lines.map((line) => line.lineTotal)).toEqual(["0.00", "-0.03", "-0.01"]);
+    expect(one.vatBreakdown).toEqual([{ rate: "10.00", base: "-0.04", tax: "-0.01" }]);
+    const tie = rateLines(grossOf(["-0.03", "0.00", "-0.03", "0.01"], "reduced"), ON);
+    expect(tie.lines.map((line) => line.lineTotal)).toEqual(["-0.03", "0.00", "-0.02", "0.01"]);
+    expect(tie.vatBreakdown).toEqual([{ rate: "10.00", base: "-0.04", tax: "-0.01" }]);
+  });
+
+  it("every other amount rates as before", () => {
+    const changed: string[] = [];
+    for (const vatClass of ["general", "reduced", "super_reduced", "zero"] as const) {
+      for (let n = -20000; n <= 20000; n += 1) {
+        const gross = cents(n);
+        const r = rateLines(grossOf([gross], vatClass), ON);
+        const rate = r.vatBreakdown[0]!.rate;
+        const base = baseFromGross(gross, rate);
+        const before = { rate, base, tax: subtractDecimal(gross, base) };
+        if (JSON.stringify(r.vatBreakdown[0]) !== JSON.stringify(before)) {
+          changed.push(`${gross}@${rate}`);
+        }
+      }
+    }
+    expect(changed.sort()).toEqual(["-0.05@10.00", "-0.13@4.00", "0.05@10.00", "0.13@4.00"].sort());
+  });
+
+  it("in baskets of two to four lines at one rate, only a group whose VAT was 0.00 on a base vatSignRefused refuses changes", () => {
+    const amounts = ["0.00", "0.05", "-0.05", "0.13", "0.03", "-0.01", "0.01", "1.00"];
+    const baskets: string[][] = [[]];
+    const all: string[][] = [];
+    for (let size = 1; size <= 4; size += 1) {
+      const longer = baskets.splice(0).flatMap((b) => amounts.map((a) => [...b, a]));
+      baskets.push(...longer);
+      if (size >= 2) all.push(...longer);
+    }
+    const unexpected: string[] = [];
+    let moved = 0;
+    for (const vatClass of ["general", "reduced", "super_reduced", "zero"] as const) {
+      for (const basket of all) {
+        const r = rateLines(grossOf(basket, vatClass), ON);
+        const rate = r.vatBreakdown[0]!.rate;
+        const bases = basket.map((amount) => baseFromGross(decimal(amount), rate));
+        const base = sumDecimals(bases);
+        const gross = sumDecimals(basket.map((amount) => decimal(amount)));
+        const tax = subtractDecimal(gross, base);
+        const refused =
+          compareDecimal(tax, decimal("0.00")) === 0 && vatSignRefused(base, tax, rate);
+        const lineTotals = r.lines.map((line) => line.lineTotal);
+        const linesMoved = lineTotals.filter((total, i) => total !== bases[i]).length;
+        const expected = refused
+          ? (() => {
+              const cent = decimal(compareDecimal(gross, decimal("0")) < 0 ? "-0.01" : "0.01");
+              return { rate, base: subtractDecimal(base, cent), tax: addDecimal(tax, cent) };
+            })()
+          : { rate, base, tax };
+        if (refused) moved += 1;
+        const label = `${basket.join("+")}@${rate}`;
+        if (JSON.stringify(r.vatBreakdown) !== JSON.stringify([expected])) unexpected.push(label);
+        if (linesMoved !== (refused ? 1 : 0))
+          unexpected.push(`${label} lines ${lineTotals.join(",")}`);
+        basket.forEach((amount, i) => {
+          if (amount === "0.00" && lineTotals[i] !== bases[i])
+            unexpected.push(`${label} zero line`);
+        });
+      }
+    }
+    expect(unexpected.slice(0, 20)).toEqual([]);
+    // Control: some baskets do move a cent.
+    expect(moved).toBeGreaterThan(0);
+  });
+});
+
+describe("vatSignRefused — AEAT's sign rule for one rate's base and VAT", () => {
+  const refused = (base: string, tax: string, rate: string) =>
+    vatSignRefused(decimal(base), decimal(tax), decimal(rate));
+
+  it("refuses VAT 0.00 on a base whose VAT does not round to 0.00", () => {
+    expect(refused("0.05", "0.00", "10.00")).toBe(true);
+    expect(refused("-0.05", "0.00", "10.00")).toBe(true);
+    expect(refused("0.13", "0.00", "4.00")).toBe(true);
+  });
+
+  it("accepts VAT 0.00 on a base whose VAT rounds to 0.00, and 0.00 on 0.00", () => {
+    expect(refused("0.04", "0.00", "10.00")).toBe(false);
+    expect(refused("-0.04", "0.00", "10.00")).toBe(false);
+    expect(refused("0.12", "0.00", "4.00")).toBe(false);
+    expect(refused("5.00", "0.00", "0.00")).toBe(false);
+    expect(refused("0.00", "0.00", "21.00")).toBe(false);
+  });
+
+  it("refuses VAT on a 0.00 base", () => {
+    expect(refused("0.00", "0.01", "10.00")).toBe(true);
+    expect(refused("0.00", "-0.01", "10.00")).toBe(true);
+  });
+
+  it("refuses a base and VAT of opposite signs, and accepts matching signs", () => {
+    expect(refused("0.03", "-0.03", "10.00")).toBe(true);
+    expect(refused("-0.03", "0.03", "10.00")).toBe(true);
+    expect(refused("-27.27", "-2.73", "10.00")).toBe(false);
+    expect(refused("27.27", "2.73", "10.00")).toBe(false);
   });
 });

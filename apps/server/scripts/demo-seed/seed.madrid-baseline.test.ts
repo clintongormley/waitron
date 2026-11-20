@@ -321,6 +321,7 @@ const ADDED_TABLES = [
   "set_menu_variant_exclusions",
   "set_menu_dish_courses",
   "bill_set_menu_copies",
+  "bill_advances",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues", "locations"];
 const REMOVED_TABLES = [
@@ -1277,6 +1278,24 @@ for (const locale of ["en", "es"] as const) {
         })),
         ...orderLines.foreignKeys.map((key) => ({ ...key, id: key.id + 7 })),
       ];
+      const saleLines = expected[phase].tables.sale_lines!;
+      for (const name of ["advance_role", "deducts_sale_id"]) {
+        saleLines.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(saleLines.rows)) row[name] = null;
+      }
+      saleLines.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "sales",
+          from: "deducts_sale_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+        ...saleLines.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
       type Classed = { vatClass: string; takeawayVatClass?: string };
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {
@@ -1404,6 +1423,11 @@ for (const locale of ["en", "es"] as const) {
         [
           "bill_payments",
           { name: "slip_wanted", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+          0,
+        ],
+        [
+          "bill_payments",
+          { name: "own_receipt", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
           0,
         ],
         [

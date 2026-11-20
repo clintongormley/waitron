@@ -234,6 +234,9 @@ pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **
 Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo. Un pago de artículos concretos se devuelve
 entero y después esos artículos pueden pagarse de nuevo.
 
+Mientras la cuenta no tenga factura, **Devolver** junto a un pago que tiene su propio ticket abre
+**Rectificar factura** en ese ticket.
+
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
 encargado introduce su PIN. En una devolución en efectivo, entrega el dinero al cliente cuando el
 resultado te lo indique.
@@ -689,6 +692,10 @@ ticket se abona y sus platos pasan a una cuenta nueva, listos para [**Mover plat
 Una vez pagada una parte, ya no se puede dividir así: los demás clientes pagan el resto con
 **Cobrar**.
 
+Cuando un cliente ya ha pagado una parte de la cuenta con
+[un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta
+ese pago con el número de su ticket, su fecha y su importe.
+
 Cobra con **Cobrar** como siempre, de una vez o por partes.
 
 ## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
@@ -947,6 +954,10 @@ para ver las mismas opciones.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
+
+**Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura, la
+confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
+propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
 
 **Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La
 confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver**. Si el local

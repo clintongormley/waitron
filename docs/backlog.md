@@ -260,10 +260,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — NOT SCHEDULED: it stays on the backlog for the foreseeable future (owner, 2026-11-17: "the printed pre-bill, leave it on the backlog for the foreseeable future").** A table's ticket is issued when staff print the bill instead (decision D1). The design stays A803 §3.9, kept as written. The owner's answer (owner, 2026-11-18, question 2 of the [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): no pre-bill is needed, and a bill changed after it is issued takes a corrective or a cancellation; the adviser is still to confirm the details.
   [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
-- **A447. Money paid before a meal's ticket is an advance.** Owner, 2026-11-18 (question 1 of the
-  [19 November sheet](compliance/2026-11-19-adviser-meeting.md)): every payment towards a meal before its ticket is issued, even one
-  naming no dishes, gets its own invoice with VAT, and the final ticket deducts it; the adviser is still to confirm the details. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#a447-money-paid-before-a-meals-ticket-is-an-advance).
+- **A447. A part payment whose payer wants a receipt is an advance.** Owner, 2026-11-19 (decision D1 and the 20:30 answers): a part payment during the meal is an advance, with its own invoice and VAT, only when its payer wants their own receipt, and the final ticket takes it off; the adviser is still to confirm the details. The till's advance ticket is built; left are an advance as a full invoice and an advance paid before the day. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a447-a-part-payment-whose-payer-wants-a-receipt-is-an-advance).
 
 - **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full invoice.**
   [Detail](backlog/fiscal.md#decisions-and-deliberate-limits) _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b

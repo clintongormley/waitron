@@ -2,12 +2,15 @@ import { and, eq, or } from "drizzle-orm";
 import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
 import {
   adjustmentRefunds,
+  billAdvances,
   billPaymentRefunds,
+  invoiceSeries,
   sales,
   tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -131,6 +134,26 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
+/** A payment on account's money is not refunded this way; its tip alone may come back here. */
+async function refuseAdvanceRefund(
+  tx: Transaction,
+  saleId: string,
+  tenderId: string,
+): Promise<void> {
+  const [advance] = await tx
+    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(billAdvances)
+    .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(eq(billAdvances.advanceSaleId, saleId));
+  if (advance === undefined) return;
+  throw new AppError("tender.refund_of_advance", {
+    tenderId,
+    saleId,
+    invoiceNumber: formatInvoiceNumber(advance.code, advance.number),
+  });
+}
+
 export async function reserveTenderRefund(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -195,6 +218,8 @@ export async function reserveTenderRefund(
     return { refund: earlier, replayed: true };
   }
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
+  if (correctionLink === undefined && appliedAmount > 0)
+    await refuseAdvanceRefund(tx, saleId, tenderId);
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,

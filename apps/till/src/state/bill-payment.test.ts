@@ -508,6 +508,15 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps the ticket number a payment on account's refusal names, as text only", () => {
+    expect(
+      refusalOf({ code: "bill.payment_has_ticket", status: 409, invoiceNumber: "A/12" }),
+    ).toEqual({ code: "bill.payment_has_ticket", invoiceNumber: "A/12" });
+    expect(refusalOf({ code: "bill.payment_has_ticket", invoiceNumber: 12 })).toEqual({
+      code: "bill.payment_has_ticket",
+    });
+  });
+
   it("keeps the permission a refusal names as text", () => {
     expect(
       refusalOf({ code: "authorization.not_permitted", status: 403, permission: "sale.refund" }),

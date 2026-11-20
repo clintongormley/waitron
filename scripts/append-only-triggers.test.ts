@@ -36,6 +36,7 @@ const EXPECTED = [
   "adjustment_refunds",
   "adjustments",
   "attendance_answers",
+  "bill_advances",
   "bill_payment_lines",
   "clock_checks",
   "clock_confirmations",

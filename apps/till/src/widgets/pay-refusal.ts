@@ -22,6 +22,8 @@ export interface PayRefusal {
   offsetMinutes?: number;
   /** A `sale.charged_not_recorded`'s cause. */
   reason?: string;
+  /** The ticket a payment on account was issued on, which gives it back. */
+  invoiceNumber?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }

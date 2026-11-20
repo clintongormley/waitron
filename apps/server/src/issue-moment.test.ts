@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { grossBasketWithOptions, type PriceableProduct } from "@waitron/menu";
 import type { TrustedClock, TrustedTimeAnchor } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
-import { issueMoment } from "./issue-moment.js";
+import { NO_ADVANCES, issueMoment } from "./issue-moment.js";
 
 // A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal) => {
@@ -72,7 +72,7 @@ describe("issueMoment", () => {
     // 23:59:59.999 on 31 December in Madrid; every later reading is New Year's Day.
     const { clock, now } = movingClock("2026-12-31T22:59:59.999Z", 60, 1);
 
-    const issue = issueMoment(clock, gross(), anyReading);
+    const issue = issueMoment(clock, gross(), anyReading, NO_ADVANCES);
 
     expect(issue.priced.vatBreakdown).toEqual([{ rate: "10.00", base: "2.27", tax: "0.23" }]);
     expect(issue.priced.total).toBe("2.50");
@@ -87,15 +87,19 @@ describe("issueMoment", () => {
     const east = movingClock("2026-12-31T23:30:00.000Z", 60, 0);
     const utc = movingClock("2026-12-31T23:30:00.000Z", 0, 0);
 
-    expect(issueMoment(east.clock, gross(), anyReading).priced.lines[0]!.vatRate).toBe("11.00");
-    expect(issueMoment(utc.clock, gross(), anyReading).priced.lines[0]!.vatRate).toBe("10.00");
+    expect(issueMoment(east.clock, gross(), anyReading, NO_ADVANCES).priced.lines[0]!.vatRate).toBe(
+      "11.00",
+    );
+    expect(issueMoment(utc.clock, gross(), anyReading, NO_ADVANCES).priced.lines[0]!.vatRate).toBe(
+      "10.00",
+    );
   });
 
   it("rates at an earlier close day and names it as the sale's operation date", () => {
     // 09:10 on 1 January 2027 in Madrid; the meal closed on 31 December.
     const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
 
-    const issue = issueMoment(clock, gross(), anyReading, "2026-12-31");
+    const issue = issueMoment(clock, gross(), anyReading, NO_ADVANCES, "2026-12-31");
 
     expect(issue.priced.lines[0]!.vatRate).toBe("10.00");
     expect(issue.operationDate).toBe("2026-12-31");
@@ -107,7 +111,7 @@ describe("issueMoment", () => {
     (mealDay) => {
       const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
 
-      const issue = issueMoment(clock, gross(), anyReading, mealDay);
+      const issue = issueMoment(clock, gross(), anyReading, NO_ADVANCES, mealDay);
 
       expect(issue.priced.lines[0]!.vatRate).toBe("11.00");
       expect(issue).not.toHaveProperty("operationDate");
@@ -117,12 +121,12 @@ describe("issueMoment", () => {
   it("names no operation date without a close day", () => {
     const { clock } = movingClock("2027-01-01T08:10:00.000Z", 60, 0);
 
-    expect(issueMoment(clock, gross(), anyReading)).not.toHaveProperty("operationDate");
+    expect(issueMoment(clock, gross(), anyReading, NO_ADVANCES)).not.toHaveProperty("operationDate");
   });
 
   it("passes anchoring through to the clock it was given", () => {
     const { clock, anchor, current } = movingClock("2026-12-31T12:00:00.000Z", 60, 0);
-    const issue = issueMoment(clock, gross(), anyReading);
+    const issue = issueMoment(clock, gross(), anyReading, NO_ADVANCES);
     const trusted = {
       instant: new Date("2026-12-31T12:00:05.000Z"),
       offsetMinutes: 60,
@@ -141,7 +145,7 @@ describe("issueMoment", () => {
     const clock: TrustedClock = { ...moving, now };
     const asked: unknown[] = [];
 
-    issueMoment(clock, gross(), { assertRecordableAt: (r) => void asked.push(r) });
+    issueMoment(clock, gross(), { assertRecordableAt: (r) => void asked.push(r) }, NO_ADVANCES);
 
     expect(asked).toHaveLength(1);
     expect(asked[0]).toBe(reading);
@@ -153,11 +157,16 @@ describe("issueMoment", () => {
     const refusal = new AppError("clock.unusable", { clockAt: "x", offsetMinutes: 0 });
 
     expect(() =>
-      issueMoment(clock, gross(), {
-        assertRecordableAt: () => {
-          throw refusal;
+      issueMoment(
+        clock,
+        gross(),
+        {
+          assertRecordableAt: () => {
+            throw refusal;
+          },
         },
-      }),
+        NO_ADVANCES,
+      ),
     ).toThrow(refusal);
   });
 });

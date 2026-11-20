@@ -3,8 +3,8 @@ import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
-  flag,
   enumType,
+  flag,
   id,
   label,
   labelList,
@@ -66,6 +66,8 @@ export const billPayments = table(
      * outcome is known. False for cash and a typed card, whose slip prints as the row is made. Never
      * changes (the guard trigger). */
     slipWanted: flag("slip_wanted").notNull().default(false),
+    /** The payer asked for their own receipt for this payment. */
+    ownReceipt: flag("own_receipt").notNull().default(false),
   },
   (t) => [
     foreignKey({

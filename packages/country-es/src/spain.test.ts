@@ -384,6 +384,26 @@ describe("receipt labels", () => {
   it("names a bill closed as a deferred payment as still to be paid, in Spanish", () => {
     expect(SPAIN.receiptLabels?.["es-ES"]?.deferredPayment).toBe("Pago aplazado");
   });
+
+  it("words an advance's line by its table, else by its order number, in Spanish", () => {
+    const labels = SPAIN.receiptLabels?.["es-ES"];
+    expect(labels?.paymentOnAccountAtTable.replace("{table}", "7")).toBe(
+      "Pago a cuenta — consumo en mesa 7",
+    );
+    expect(labels?.paymentOnAccountForOrder.replace("{number}", "123")).toBe(
+      "Pago a cuenta — consumo en pedido 123",
+    );
+  });
+
+  it("names the advance a rest's invoice takes off by its stored words, number and date, in Spanish", () => {
+    const labels = SPAIN.receiptLabels?.["es-ES"];
+    expect(
+      labels?.advanceTakenOff
+        .replace("{paymentOnAccount}", labels.paymentOnAccount)
+        .replace("{number}", "A/12")
+        .replace("{date}", "19/11/2026"),
+    ).toBe("Pago a cuenta n.º A/12, 19/11/2026");
+  });
 });
 
 describe("validateSpanishPhone", () => {

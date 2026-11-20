@@ -79,7 +79,7 @@ export async function creditWholeInvoice(
   return credit.saleId;
 }
 
-function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {
+export function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[] {
   const lineNoOf = new Map(rows.map((row) => [row.id, row.lineNo]));
   return rows.map(
     (row) =>
@@ -111,6 +111,8 @@ function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[
           row.listUnitPriceGross === null ? null : centsToDecimal(row.listUnitPriceGross),
         classification: row.classification,
         correctsLineId: row.id,
+        advanceRole: row.advanceRole,
+        deductsSaleId: row.deductsSaleId,
       }) satisfies Required<RecordSaleLine>,
   );
 }

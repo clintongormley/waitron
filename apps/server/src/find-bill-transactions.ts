@@ -12,7 +12,7 @@ import type {
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
-function scopeRelation(saleId?: string): SQL {
+function scopeRelation(saleId?: string | SQL): SQL {
   return sql`with recursive invoice_scope(sale_id, source_sale_id) as (
     select s.id, s.id from sales s ${saleId === undefined ? sql`` : sql`where s.id = ${saleId}`}
     union
@@ -22,8 +22,11 @@ function scopeRelation(saleId?: string): SQL {
     select g.sale_id, ss.substituted_sale_id from invoice_scope g
       join sale_substitutions ss on ss.substitution_sale_id = g.source_sale_id
   ), scope_orders as (
-    select distinct g.sale_id, s.working_order_id as order_id from invoice_scope g
+    select g.sale_id, s.working_order_id as order_id from invoice_scope g
       join sales s on s.id = g.source_sale_id where s.working_order_id is not null
+    union
+    select g.sale_id, ba.working_order_id from invoice_scope g
+      join bill_advances ba on ba.advance_sale_id = g.source_sale_id
   )`;
 }
 
@@ -31,6 +34,15 @@ function scopeCondition(inZones?: OrderZoneCondition): SQL {
   // Every source matters: allowing one order must not reveal another order's invoice facts.
   return sql`not exists(select 1 from scope_orders so
     where so.sale_id = s.id and not (${inZones?.(sql`so.order_id`) ?? sql`1`}))`;
+}
+
+/**
+ * True when `inZones` admits every order of the sale `saleId` names, as Find a bill decides it: the
+ * sale's own bill, an advance's bill, and those of the invoices it corrects or replaces.
+ */
+export function saleScopeInZones(saleId: SQL, inZones: OrderZoneCondition): SQL {
+  return sql`not exists(${scopeRelation(saleId)}
+    select 1 from scope_orders so where not (${inZones(sql`so.order_id`)}))`;
 }
 
 export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {

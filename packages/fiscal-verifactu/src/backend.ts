@@ -144,7 +144,7 @@ export function fechaOperacionFor(
  * which AEAT reads as IVA, and IVA requires a regime: "01" is the general regime (AEAT
  * validation §3.1.3.15.6, enforced by `@waitron/verifactu` from 0.2.0). Not a huella input.
  */
-function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput {
+export function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput {
   return {
     ClaveRegimen: "01",
     CalificacionOperacion: "S1",

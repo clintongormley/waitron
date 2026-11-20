@@ -423,6 +423,15 @@ it("marks the amount when the refund exceeds the cancelled dishes", async () => 
   expect(field(el, "appliedAmount").error).toBe(codeMessage("tender.refund_exceeds_cancelled"));
 });
 
+it("names the payment on account's ticket when its money is refused here", async () => {
+  const el = await mount({ refusal: { code: "tender.refund_of_advance", invoiceNumber: "A/12" } });
+  const shown = codeMessage("tender.refund_of_advance", undefined, { invoiceNumber: "A/12" });
+  expect(shown).toContain("A/12");
+  expect(root(el).querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error).toBe(
+    shown,
+  );
+});
+
 it("keeps request refusals actionable, maps named fields and validates Enter through the same handler", async () => {
   const el = await mount({ refusal: { code: "tender.refund_exceeds_payment" } });
   const asks = collect(el, "tender-refund-submit");

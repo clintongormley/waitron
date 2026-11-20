@@ -299,7 +299,10 @@ export class TillTenderRefundDialog extends LitElement {
     if (this.shownRefusal === null) return "";
     if (this.shownRefusal.code === "network") return t("tender_refund.pending");
     if (this.shownRefusal.code === "storage") return t("tender_refund.storage");
-    return recoveryRefusalText(this.shownRefusal) ?? codeMessage(this.shownRefusal.code);
+    return (
+      recoveryRefusalText(this.shownRefusal) ??
+      codeMessage(this.shownRefusal.code, undefined, this.shownRefusal)
+    );
   }
   #emit(type: string, detail: unknown = {}): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
