@@ -78,8 +78,9 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 
-// `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
+// `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
 // and file no second record. Route logic that needs no real fiscal write lives in the
 // hermetic `till-api.test.ts`, whose fiscal seat is an empty object.
@@ -485,7 +486,7 @@ describe("POST /api/session (PIN login body handling)", () => {
   });
 });
 
-describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
+describe("the fiscal sale path over HTTP", () => {
   it("answers 400 course.not_found for a course only the body names", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((product) => product.pricingUnit === "each")!;
@@ -495,13 +496,18 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const courseId = randomUUID();
 
-    const res = await app.request("/api/sales", {
+    const id = randomUUID();
+    const res = await app.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
       body: JSON.stringify({
         dining: "eat_in",
-        lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
-        tender: { method: "cash", amount: "1.50" },
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "1.50",
+        basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }] },
       }),
     });
 
@@ -511,7 +517,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
   });
-  it.each(["sale", "collect"])(
+  it.each(["payments", "collect"])(
     "manual tip validates at the HTTP boundary for %s",
     async (route) => {
       const { cfg, operatorId } = await setupVenue();
@@ -522,16 +528,29 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
         await seedProfileFF("till", ["hand-keyed-card-payment"]),
       );
       const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-      const url = route === "sale" ? "/api/sales" : `/api/working-orders/${randomUUID()}/collect`;
+      const id = randomUUID();
+      const url = `/api/working-orders/${id}/${route}`;
       for (const addedTip of [null, -1, "-0.30", "bad", "0.001", ["0.30"]]) {
         const answer = await app.request(url, {
           method: "POST",
           headers: { cookie: `${cookie}; ${deviceCookie}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            expectedEdit: null,
-            lines: [],
-            tender: { method: "card", amount: "1.50", addedTip },
-          }),
+          body: JSON.stringify(
+            route === "payments"
+              ? {
+                  submissionId: id,
+                  kind: "share",
+                  shareOf: 1,
+                  method: "card",
+                  entry: "manual",
+                  addedTip,
+                  basket: { lines: [] },
+                }
+              : {
+                  expectedEdit: null,
+                  lines: [],
+                  tender: { method: "card", amount: "1.50", addedTip },
+                },
+          ),
         });
         expect(answer.status).toBe(400);
         expect(await answer.json()).toMatchObject({
@@ -550,19 +569,22 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     const id = randomUUID();
     const pay = (workingOrderId: string) =>
-      app.request("/api/sales", {
+      app.request(`/api/working-orders/${workingOrderId}/payments`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           dining: "eat_in",
-          workingOrderId,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          tender: { method: "cash", amount: "1.50" },
+          submissionId: workingOrderId,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "1.50",
+          basket: { lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
         }),
       });
     const original = await pay(id);
     expect(original.status).toBe(200);
-    const ticket = await original.json();
+    const { invoice: ticket } = await original.json();
     const [record] = await suite.db.select().from(registrosFacturacion);
     await withTransaction(suite.db, (tx) =>
       openFilingCase(tx, {
@@ -582,7 +604,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     });
     const replay = await pay(id);
     expect(replay.status).toBe(200);
-    expect(await replay.json()).toEqual(ticket);
+    expect((await replay.json()).invoice).toEqual(ticket);
     expect(await suite.db.select().from(registrosFacturacion)).toEqual([record]);
   });
 
@@ -994,7 +1016,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
   });
 });
 
-describe("paying a parked pay-first order over POST /api/sales sends its dishes to the kitchen", () => {
+describe("paying a parked pay-first order sends its dishes to the kitchen", () => {
   it.each(["cash", "card"] as const)(
     "a %s payment sends its dish once, and a replay sends nothing more",
     async (method) => {
@@ -1051,16 +1073,23 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       expect(park.status).toBe(200);
       expect(await kitchenItems(workingOrderId)).toEqual({ items: 0, fired: 0 });
 
-      const pay = () =>
-        app.request("/api/sales", {
+      const path = `/api/working-orders/${workingOrderId}/payments`;
+      const pay = async () =>
+        app.request(path, {
           method: "POST",
           headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-          body: JSON.stringify({
-            dining: "eat_in",
-            workingOrderId,
-            lines: [],
-            tender: { method, amount: "5.00" },
-          }),
+          body: JSON.stringify(
+            await observedPaymentBody(suite.db, path, {
+              submissionId: workingOrderId,
+              dining: "eat_in",
+              kind: "share",
+              shareOf: 1,
+              method,
+              applied: "3.00",
+              tip: "0.00",
+              ...(method === "cash" ? { tendered: "5.00" } : { entry: "manual" }),
+            }),
+          ),
         });
       expect((await pay()).status).toBe(200);
       expect(await kitchenItems(workingOrderId)).toEqual({ items: 2, fired: 2 });
