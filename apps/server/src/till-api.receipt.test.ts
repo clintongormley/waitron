@@ -2601,7 +2601,7 @@ describe("payment slip persisted capture facts", () => {
       expect(response.status).toBe(200);
       const [savedSale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
       expect(savedSale!.locale).toBe(saved);
-      const settledAt = new Date(2026, 8, 12, 9, 5).toISOString();
+      const settledAt = "2026-09-12T07:05:00.000Z";
       await liftPaymentGuard(suite.db, () =>
         suite.db.execute(
           sql`update payments set provider = 'sumup', settled_at = ${settledAt}, card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,

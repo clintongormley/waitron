@@ -1007,16 +1007,63 @@ describe("management invoice receipt resends", () => {
     expect(delivery).toMatchObject({ saleId: ctx.sale.saleId, status: "queued" });
   });
 
-  it("refuses resending completed original bytes and leaves its history unchanged", async () => {
+  it("reprints a completed thermal invoice as an audited duplicate and keeps its history", async () => {
     const ctx = await setup();
     const invoiceClaim = await held(ctx);
     await ctx.result({ status: "done", invoiceClaim });
+    const [original] = await suite.db
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.id, ctx.job.jobId));
+    const [history] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.id, ctx.delivery.id));
+    const command = await manager(ctx);
+
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const [copy] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(copy).toMatchObject({
+      printerId: ctx.printer.id,
+      kind: "document",
+      receiptCopy: true,
+      payload: await laidOut(ctx.sale.saleId, true, ctx.printer.id),
+    });
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({ designation: "duplicate", generation: 2, status: "queued" });
+    const [audit] = await suite.db
+      .select()
+      .from(receiptReprints)
+      .where(eq(receiptReprints.printJobId, jobId));
+    expect(audit).toMatchObject({ saleId: ctx.sale.saleId, personId: delivery!.personId });
+    expect(await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.job.jobId))).toEqual([
+      original,
+    ]);
+    expect(
+      await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.id, ctx.delivery.id)),
+    ).toEqual([history]);
+  });
+
+  it("reports an outstanding invoice delivery when a completed original is reprinted", async () => {
+    const ctx = await setup();
+    const claim = await held(ctx);
+    await ctx.result({ status: "done", invoiceClaim: claim });
+    await emailRetry(ctx);
     const jobs = await suite.db.select().from(printJobs);
     const deliveries = await suite.db.select().from(invoiceDeliveries);
     const command = await manager(ctx);
+
     const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+    expect(await response.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
     expect(await suite.db.select().from(printJobs)).toEqual(jobs);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
   });
@@ -1552,7 +1599,7 @@ describe("invoice receipt printer deletion", () => {
 });
 
 describe("completed receipt original management actions", () => {
-  it.each(["done", "failed", "queued", "printing", "retrying"] as const)(
+  it.each(["failed", "queued", "printing", "retrying"] as const)(
     "hides resend for an original while its delivery is %s",
     async (status) => {
       const ctx = await setup();
@@ -1568,21 +1615,16 @@ describe("completed receipt original management actions", () => {
         );
         await tx
           .update(printJobs)
-          .set({
-            status: status === "done" ? "done" : "failed",
-            attempts: status === "done" ? 0 : 5,
-          })
+          .set({ status: "failed", attempts: 5 })
           .where(eq(printJobs.id, job.jobId));
-        if (status !== "done") {
-          const retry = await resendPrintJob(tx, job.jobId);
-          await tx
-            .update(printJobs)
-            .set({
-              status: status === "failed" ? "done" : status === "retrying" ? "failed" : status,
-              attempts: status === "retrying" ? 1 : 0,
-            })
-            .where(eq(printJobs.id, retry.jobId));
-        }
+        const retry = await resendPrintJob(tx, job.jobId);
+        await tx
+          .update(printJobs)
+          .set({
+            status: status === "failed" ? "done" : status === "retrying" ? "failed" : status,
+            attempts: status === "retrying" ? 1 : 0,
+          })
+          .where(eq(printJobs.id, retry.jobId));
         return job;
       });
       const listing = await command("/management-api/print-jobs", undefined, "GET");

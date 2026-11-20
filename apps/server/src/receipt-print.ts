@@ -373,7 +373,7 @@ export async function enqueueReceiptCopy(
   return job;
 }
 
-async function requireReceiptBytes(
+export async function requireReceiptBytes(
   tx: Transaction,
   cfg: Pick<TradingContext, "practiceMode">,
   ticket: TillSaleResult,
@@ -420,21 +420,19 @@ export async function layOutSaleReceipt(
  */
 export async function enqueueInvoiceReceipt(
   tx: Transaction,
-  cfg: Pick<TradingContext, "practiceMode">,
-  ticket: TillSaleResult,
   saleId: string,
-  printer: { id: string } & EscSetting,
+  printerId: string,
+  bytes: Uint8Array,
   designation: "original" | "duplicate",
-  request: { requestKey: string; personId: string },
+  { requestKey, personId }: { requestKey?: string; personId: string },
 ): Promise<InvoiceDelivery> {
-  const duplicate = designation === "duplicate";
-  const bytes = await requireReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
-  const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
+  const job = await enqueuePrintJob(tx, printerId, bytes, "document", {
     saleId,
-    receiptCopy: duplicate,
+    receiptCopy: designation === "duplicate",
   });
   return reserveInvoiceDelivery(tx, saleId, {
-    ...request,
+    requestKey: requestKey ?? job.jobId,
+    personId,
     medium: "receipt",
     printJobId: job.jobId,
     printerChosen: true,

@@ -340,11 +340,10 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 Hardware and inbox checks to complete in the owner session.
 
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
-  check the payment window, the final Receipt / Full invoice choice and that **Done** prints the receipt; original and copy
-  paper output; a payment slip requested for a reader, cash and another card machine, and a lost
-  slip reprinted from Print Queue; and Receipt Email arriving in the intended inbox. No physical printer, reader or
-  inbox qualification was performed by the software cuts. The watcher moved these remaining
-  checks here on 11 November 2026 at 17:20; they add no prerequisite to A840/A842/A848.
+  check slips requested for cash and another card machine, receipt email delivery, and the new
+  local time and marked receipt copy from Print Queue. The owner's 20 November session confirmed
+  thermal original output from the till, a copy from Orders, a Solo slip and its reprint from Print Queue.
+  One Solo payment recorded no printable card details, so its receipt and slip could not show them.
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
   Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
@@ -470,6 +469,7 @@ Hardware and inbox checks to complete in the owner session.
   (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the
   plan at 17:49; [A1532 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1532-print-payload-retention.md)).
   The owner’s 2026-10-14 distinction stays: the print queue is for something just lost or failed;
+  Reprint makes a marked copy of a finished thermal original while its queue job still has data.
   Orders rebuilds sale receipts and invoices at any age. Expired queue reprints refuse consistently,
   including another printer. Kitchen tickets, refund receipts, payment slips and reports lose their
   queue reprint. Keeping rows preserves receipt-copy audits, invoice delivery and kitchen/resend links;

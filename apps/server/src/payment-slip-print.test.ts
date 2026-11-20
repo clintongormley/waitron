@@ -23,7 +23,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { issueOrderInvoice, printOrderForTest } from "./testing/issue-order.js";
 import { readBillEditState } from "./bill-editing.js";
-import type { enqueueRequestedPaymentSlip } from "./payment-slip-print.js";
+import { enqueueRequestedPaymentSlip } from "./payment-slip-print.js";
 import { AppError, decimal } from "@waitron/shared";
 import type { DiskFullState } from "./disk-full-state.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -53,6 +53,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import {
   layOutSaleReceipt,
+  printerLookup,
   refreshWaitingOriginals,
   type LayOutSaleReceipt,
 } from "./receipt-print.js";
@@ -115,6 +116,36 @@ it("a bill payment's slip shows no amount owed", async () => {
   expect(text).toContain("10,00");
   expect(text).not.toContain("Pendiente");
   expect(text).not.toContain("20,00");
+});
+
+it("prints the payment instant on the next date in the venue's time zone", async () => {
+  vi.stubEnv("TZ", "UTC");
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
+  const billId = await tabWith(venue, "Red wine bottle");
+
+  const before = await venue.db.select().from(printJobs);
+  await withTransaction(venue.db, (tx) =>
+    enqueueRequestedPaymentSlip(
+      tx,
+      venue.cfg,
+      billId,
+      true,
+      {
+        method: "cash",
+        charged: 1000,
+        tip: 0,
+        paidAt: "2026-09-12T23:30:00.000Z",
+        reference: null,
+        machine: null,
+      },
+      printerLookup(tx, venue.cfg.origin),
+    ),
+  );
+  const jobs = await venue.db.select().from(printJobs);
+  expect(jobs).toHaveLength(before.length + 1);
+  expect(decodeTicket(jobs.at(-1)!.payload)).toContain("13 sept 2026, 01:30");
 });
 
 it("prints a requested slip only for the fresh confirmed reader capture", async () => {

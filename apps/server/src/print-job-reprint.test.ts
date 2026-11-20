@@ -8,6 +8,7 @@ import {
   parties,
   printJobs,
   printers,
+  receiptReprints,
   sales,
   tenders,
   type Transaction,
@@ -36,6 +37,7 @@ import { printSaleReceipt } from "./till-sale.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { inTx, send as rawGroupSend } from "./testing/bill-venue.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
+import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
 import {
   billlessSale,
@@ -495,6 +497,36 @@ describe("the print queue's resend to another printer", () => {
       resendOf: original.id,
       payload: expected,
     });
+  });
+
+  it("offers a printed original receipt and queues an audited copy on the chosen printer", async () => {
+    const { saleId, original } = await paidSale(at80);
+    await setJob(original.id, { status: "done" });
+    const printed = await jobRow(original.id);
+    const target = await printerAt(at58);
+
+    const listing = await printApi().request("/management-api/print-jobs", {
+      headers: { cookie: venue.adminDashboard },
+    });
+    expect(listing.status).toBe(200);
+    const jobs = (await listing.json()) as { id: string; canResend: boolean }[];
+    expect(jobs.find((job) => job.id === original.id)).toMatchObject({ canResend: true });
+
+    const response = await resend(original.id, target);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const job = await jobRow(jobId);
+    expect(job).toMatchObject({ printerId: target, kind: "document", saleId, receiptCopy: true });
+    const bytes = job.payload!;
+    expect(readPrintArea(bytes)?.widthDots).toBe(dots(at58));
+    expect(decodeTicket(bytes)).toContain("DUPLICADO");
+    expect(opensDrawer(bytes)).toBe(false);
+    expect(await jobRow(original.id)).toEqual(printed);
+    const [audit] = await venue.db
+      .select()
+      .from(receiptReprints)
+      .where(eq(receiptReprints.printJobId, jobId));
+    expect(audit).toMatchObject({ saleId, personId: venue.adminId });
   });
 
   it("answers a printout's or a printer's refusal as a conflict", async () => {

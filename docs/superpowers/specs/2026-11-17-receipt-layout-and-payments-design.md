@@ -93,6 +93,9 @@ to say what is still owed.
 - _20 November 2026: a card reader payment's slip request is stored with the payment and its slip
   prints once the payment is settled, however late; see the plan's "20 November 2026" note under
   the 19 November rework._
+- _20 November 2026: a payment slip shows the venue's local time at the payment instant.
+  Reprint in Print Queue makes a marked copy of a completed thermal original while the job retains
+  its data. Use Orders for office A4 copies or older documents._
 - After a ticket is issued, a payment must settle the whole amount due (`settle-sale.ts`). Part
   payments are bill payments, kept in `bill_payments` until the sale settles; only settlement
   writes `tenders`, which is all today's receipt reads (`readBillTenderLines`). So for an issued,

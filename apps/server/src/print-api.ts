@@ -73,7 +73,6 @@ import {
   claimInvoicePrintJobs,
   reportInvoicePrintJob,
   endInvoicePrintDeliveries,
-  resendInvoicePrintJob,
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
@@ -100,6 +99,7 @@ import type { PagePrinterDiscovery } from "./page-printers.js";
 import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import {
+  isCompletedReceiptOriginal,
   isStuckJob,
   isWaiting,
   linkedKitchenPrintoutSql,
@@ -157,6 +157,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.bluetooth_not_paired": 400,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
+  "invoice_delivery.active": 409,
   "print_job.payload_expired": 409,
   "print_job.sale_payload_expired": 409,
   "print_job.own_printer_only": 409,
@@ -1869,9 +1870,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               stuck,
               canResend:
                 printerDeletedAt === null &&
-                !(receiptCopy === false && reservedByAnother({ id: job.id, saleId })) &&
-                (canResendPrintJob({ ...job, kind, receiptCopy }) ||
-                  (stuck && where.reprintPrinterIds.length > 0)),
+                (isCompletedReceiptOriginal({ ...job, kind, receiptCopy, saleId }) ||
+                  (!(receiptCopy === false && reservedByAnother({ id: job.id, saleId })) &&
+                    (canResendPrintJob({ ...job, kind, receiptCopy }) ||
+                      (stuck && where.reprintPrinterIds.length > 0)))),
             };
           },
         );
@@ -1890,11 +1892,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const result = await gated(
         sessionId,
         (tx, personId) =>
-          printerId === undefined
-            ? resendInvoicePrintJob(tx, deps.layOutSaleReceipt, id, personId, deps.now?.())
-            : reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
-                seen,
-              }),
+          reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), { seen }),
         "hardware.manage",
       );
       return c.json(result, 202);

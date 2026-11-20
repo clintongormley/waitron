@@ -2299,17 +2299,18 @@ repair permanently refused. An expired or unusable reserved CA still refuses.
 `enqueueOriginalReceipt` keeps a sale's existing original job for both F1 and F2, including failed
 jobs. When the receipt helper resolves no printer, it adds no job. Deleting an original's printer
 retains that original's history; an explicit reprint can send a marked copy to its replacement.
-A completed original and its failed predecessors cannot be resent through the printer-job action.
-An original with an active retry blocks another retry as well. Exhausted attempts without one of
-those reservations may retry on their retained printer, keeping their bytes, or on another active
-printer, laid out again from the sale and still unmarked (`reprintJobOn`,
+The printer-job action makes a marked copy of a completed original on an active receipt printer.
+An original that printed or has an active retry blocks another original retry. Exhausted attempts
+without one of those reservations may retry on their retained printer or another active printer.
+The retry is laid out again from the sale and still unmarked (`reprintJobOn`,
 `apps/server/src/print-job-reprint.ts`). An original still waiting on a disabled printer, or on a
 USB or Bluetooth printer no agent sees, may be moved to another printer the same way; the move ends it on its own printer
 in the transaction that queues the reprint.
 
-The dashboard's offered action combines `canResendPrintJob`, or a waiting job's `stuck`, with a
-sale-wide reservation read in `print-api.ts` that skips the job itself; the helper alone does not
-read sibling jobs. The open physical-delivery limit is in
+For retries, the dashboard combines `canResendPrintJob`, or a waiting job's `stuck`, with a
+sale-wide reservation read in `print-api.ts` that skips the job itself. For a completed thermal
+original, Reprint is a copy request. An outstanding full-invoice delivery can refuse it with
+`invoice_delivery.active`. The open physical-delivery limit is in
 [the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
 
 | Source, checked 2026-10-22 | Source words | Applied here |

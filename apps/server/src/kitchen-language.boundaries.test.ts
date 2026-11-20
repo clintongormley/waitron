@@ -5,6 +5,7 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 import { payments } from "@waitron/payments";
+import { timeZoneOffsetMinutes } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
@@ -330,7 +331,9 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
     );
     expect(next).toHaveLength(1);
     const paper = text(next[0]!.payload!);
-    expect(paper).toContain(receiptDateTime(payment!.settledAt!, "ca-ES"));
+    const settledAt = payment!.settledAt!;
+    const venueOffset = timeZoneOffsetMinutes("Europe/Madrid", new Date(settledAt));
+    expect(paper).toContain(receiptDateTime(settledAt, "ca-ES", venueOffset));
     expect(paper).toContain(formatMoney("1234.56", "ca-ES"));
     expect(formatMoney("1234.56", "en-GB")).not.toBe(formatMoney("1234.56", "es-ES"));
     expect(receiptDateTime(payment!.settledAt!, "en-GB")).not.toBe(
