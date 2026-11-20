@@ -1430,11 +1430,6 @@ this section records the remaining build and real-box qualification.
   check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
   [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)
 
-- **A1549. Run the two-box test again for the spare's watch of the main box and the
-  emergency-switch prompt.** The owner's test of 18 November 2026 did not exercise them. The one
-  precondition: a main box that is not in development mode, so that its own `.local` name answers.
-  [Detail](backlog/replication-cloud.md#a1549-run-the-two-box-test-again-for-the-spares-watch-of-the-main-box-and-the-emergency-switch-prompt)
-
 - **A1551. Each box offers to print its own switch label after setup, with a simple link (owner,
   2026-11-18; wanted, not built).** The owner's point from the two-box test of 18 November, as
   that session recorded it: labels should be automatic, not a chore. Today both labels are printed

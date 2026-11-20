@@ -273,27 +273,6 @@ a spare of a venue that files with Veri*Factu does too; nothing yet delivers a r
 changes after the join (A1273). Re-encrypting the certificate when restoring onto Cloud also
 remains open.
 
-## A1549. Run the two-box test again for the spare's watch of the main box and the emergency-switch prompt
-
-Left open by the owner's two-box test of 18 November 2026 (3b plan Task 6.11), which is recorded
-in the [A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), §11, under
-slice 3b. That test showed a spare joining with the internet blocked, and the main box restarting
-without waiting for it.
-
-Still to test: the spare's watch of the main box, which the spare's own page reports (the guide's
-"When you open the spare box"), and the prompt to make an emergency switch that depends on it. On
-18 November the main box ran in development mode (`WAITRON_ENV=dev`), which switches off the
-service that answers the box's own `.local` name, so the spare never reached
-`box-158e.waitron.local` and its page said "This spare cannot reach the main server" throughout.
-
-The one precondition: a main box that is not in development mode, so that its own `.local` name
-answers on the venue's network.
-
-Two things that test did differently from Task 6.11's wording, for whoever runs it again. The main
-box held a test venue of 4,063,232 bytes, not a venue's real data, so the first copy's measured
-time (12,095 ms) is for that size only. And the internet was blocked at the gateway, not
-unplugged, so outside names still resolved.
-
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
 
 If that file is

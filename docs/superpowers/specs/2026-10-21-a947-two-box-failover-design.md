@@ -1850,7 +1850,7 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     the main server" throughout. The join still worked only because the main box's operating
     system announces `waitron.local` itself. The session judged this an effect of the test
     set-up, not shown to be a product fault. A rerun needs a main box that is not in development
-    mode: A1549 in [the backlog](../../backlog.md).
+    mode: A1549 in [the backlog](../../backlog.md). (Run on 20 November 2026: see the block below.)
   - **Where the screens differed from the guide.** Entered as the main box's address,
     `https://192.168.10.10` was refused (`mirror.primary_url_invalid`) and only the name
     `https://waitron.local` worked; neither the guide, the field's hint nor the refusal says an
@@ -1865,6 +1865,71 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     reports itself unhealthy from then on, and a normal first step of joining logged as an error,
     both lane J's item SPARE-AFTER-JOIN; and the joining screens' wording and the joining page
     that never moves on, lane B's item TWO-BOX-TEST-FOLLOWUPS.
+
+  **20 November 2026, the owner's rerun (A1549): the spare's watch, the switch prompt and a full
+  emergency switch.** Run from about 14:50 to 17:16 Madrid time (all times below are Madrid time)
+  by the owner with a guiding session. Both boxes ran build eca67e9dcd, pre-production.
+  - **Set-up.** The main box was the same test box, reset with `waitron.sh reset` and set up as a
+    new pre-production venue by the owner, NOT in development mode. Moving the development compose
+    override aside was not enough on its own: a venue set up in development mode records
+    `WAITRON_ENV=dev` in its own `state/trading.env`, so the box stayed in development mode (no
+    `mdns.responding`) until it was reset. After setup the main box answered
+    `box-db91.waitron.local` and `waitron.local`; `dns-sd -G v4 box-db91.waitron.local` from the
+    Mac returned 192.168.10.10. Backups were turned on to a folder (`/var/lib/waitron/backups`).
+    The spare (the Lenovo) was reset with `waitron.sh --reset --yes install eca67e9dcd`; the
+    internet was not blocked this time.
+  - **Found and fixed: a reset spare showed the connection-repair page.** Resetting a box that
+    had joined another left an empty `tls/` folder, and the next start served "The server's secure
+    connection needs repair" instead of setup. Control on the same box: removing the empty folder
+    and restarting minted a new certificate and reached setup. Fixed in
+    [#3881](https://github.com/clintongormley/waitron/pull/3881) (the script's reset and the setup
+    wizard's reset).
+  - **Measured: the join.** Four refused sign-ins first (three wrong passwords, one unknown
+    account; typing errors). Then `spare.first_copy_ready` read `bytes` 3,735,552 and `ms` 12,025,
+    and the spare finished joining at 16:49:46 as `box-0793.waitron.local`. The main box logged
+    `stream.spare_store_refused` (`mirror.peer_unresolved`) once at 16:49:34, then
+    `stream.streaming` at 16:49:42; and `spare-settings.send_failed` (404) once at 16:49:40. Servers
+    showed the spare as Standby, 23 s behind. The joined spare presented a certificate under the
+    venue's authority: `curl --cacert` with only that authority verified it, and the owner's
+    Chrome opened it with no warning, though the owner had skipped installing the spare's own
+    certificate before joining.
+  - **Measured: the spare's watch of the main box.** With the main box answering, the spare's page
+    showed no "cannot reach the main server" line. The owner then unplugged the main box's network
+    cable at about 16:55:48 (the Mac lost its health check at 16:55:50). The spare logged
+    `main_silence.silent` at 16:56:16, and its page read "The main server has not answered for 24
+    seconds. Open the switch page" from 16:56:19.
+  - **Measured: the switch prompt on a till.** A till (Chrome on the Mac) first showed only its
+    status line ("waitron.local: unreachable · box-db91.waitron.local: unreachable ·
+    box-0793.waitron.local: standby, not promoted — Local server unreachable — waiting for the
+    standby to be promoted"), then the red strip "The main server is not answering" with **Switch
+    to the spare server**; the second's time was not captured. The till then showed
+    "waitron.local: standby", the spare having taken the venue's name as designed. The button
+    opened the spare's `/handover/emergency` page with `back=` the till.
+  - **Measured: the full emergency switch.** Check this copy restarted the spare at 17:00:46 (it
+    logged `handover.copy_mismatch` first; the page then showed the copy as expected). The owner
+    declared and proceeded; `promotion.completed` at 17:07:40, and by 17:07:51 the spare answered
+    `/api/node` as `serving-primary`, term 2, accepting sales, under both its own name and
+    `waitron.local`; its start check read `proceed`, the old box `unreachable`, not counted. It
+    took a backup to the folder at 17:07:51. New series `FS-0E757`, `FF-0E757`, `FR-0E757` beside
+    the old box's `…-0E73Z`; the owner's €1.00 sale became `FS-0E757/1` at 17:13:37, its
+    `registros_facturacion` row the first of a new chain (no previous record).
+  - **Measured: the old box returning.** The owner plugged the old box back in at about 17:14:27.
+    It stopped at 17:14:27 (`loop.stopped`, `mdns.stopped`), restarted at 17:14:32, and answered
+    `/api/node` as `sell-only`, term 2, `acceptingSales: false` from 17:14:35, answering only
+    `box-db91.waitron.local`. A poll at 17:14:27 still read `acceptingSales: true` while it was
+    stopping. Its log names no reason for standing down.
+  - **Test set-up effect, not the box image:** after the old box returned, `waitron.local` from the
+    Mac resolved to it again, because that test box's operating system is named "Waitron" and runs
+    avahi. The box image (`deploy/box/mkosi.conf`) installs no mDNS daemon; a `waitron.sh` install
+    on a Debian host named "waitron" would show the same clash.
+  - **Not measured:** the till's strip time to the second; a passkey sign-in; the switch labels;
+    the spare-host clock (the internet time service was reachable throughout).
+  - **Where it went.** The owner asked that findings be queued, not fixed during the run. Screen
+    findings, in the owner's words, are campaign items A1555–A1559; the joining and switching
+    screens (wall-of-text pages, the trust page pointing at `waitron.local`, the main box's
+    password typed on the new box, the switch page's time zone taken from the browser —
+    Europe/Rome against the venue's saved Europe/Madrid — and the series page that does not wait)
+    are A1558, which starts with a plan for the owner.
 
 - **3c. The spare follows.** The waiting start mode; `restore -f` into the follower copy (follow mode
   exists at tag v0.5.18, `cmd/litestream/restore.go:38`, but has never been run in this repository —
