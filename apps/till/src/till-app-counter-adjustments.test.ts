@@ -1464,6 +1464,68 @@ describe("till-app: comping a stored counter order", () => {
     expect(getInvoiceDeliveryOptions).toHaveBeenCalledWith(counter(el).store.id, expect.anything());
   });
 
+  it("reopens a staged counter invoice with no saved delivery on the receipt printer", async () => {
+    const options = {
+      invoicePrinter: null,
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    };
+    const el = await placeCounter({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      getInvoiceDeliveryOptions: vi
+        .fn()
+        .mockResolvedValueOnce(options)
+        .mockResolvedValue({ ...options, invoicePrinter: { id: "pp-office", name: "Office HP" } }),
+    });
+    const form = () => el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    emit(form(), "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Example Guest",
+        address: "1 Main Street",
+        countryCode: "ES",
+      },
+    });
+    await flush(el);
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    expect(
+      form().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=delivery]",
+      )!.value,
+    ).toBe("receipt");
+  });
+
+  it("opens a retrieved counter full invoice on the receipt printer", async () => {
+    const el = await placeCounter({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, orderFlow: "ticket_then_pay", fullInvoices: true }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({ ...heldOrder(4), invoiceType: "F1" }),
+      getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+        invoicePrinter: { id: "pp-office", name: "Office HP" },
+        emailAvailable: false,
+        emailNeedsReceiptContact: false,
+      }),
+    });
+    const choose = counter(el)
+      .shadowRoot!.querySelector("till-tender-pay")!
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-full-invoice]")!;
+    expect(choose.disabled).toBe(false);
+    await press(el, choose);
+    const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=delivery]",
+      )!.value,
+    ).toBe("receipt");
+  });
+
   it("replays a lost placing reply without saving the confirmed recipient again", async () => {
     const placeOrder = vi
       .fn()

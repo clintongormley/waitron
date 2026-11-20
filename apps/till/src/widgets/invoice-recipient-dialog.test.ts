@@ -375,35 +375,32 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
   it.each([
     ["en", "Receipt printer", "A4 on Office HP", "Delivery"],
     ["es-ES", "Impresora de tickets", "A4 en Office HP", "Entrega"],
-  ])(
-    "offers the receipt printer first and A4 on the invoice printer in %s",
-    async (locale, receipt, a4, label) => {
-      setLocale(locale);
-      const el = await mountWithPrinter();
-      const field = deliveryField(el)!;
-      expect(field.label).toBe(label);
-      expect(field.options.map((option) => [option.value, option.label])).toEqual([
-        ["receipt", receipt],
-        ["a4", a4],
-      ]);
-      expect(field.value).toBe("receipt");
-    },
-  );
+  ])("offers both printers with A4 selected in %s", async (locale, receipt, a4, label) => {
+    setLocale(locale);
+    const el = await mountWithPrinter();
+    const field = deliveryField(el)!;
+    expect(field.label).toBe(label);
+    expect(field.options.map((option) => [option.value, option.label])).toEqual([
+      ["receipt", receipt],
+      ["a4", a4],
+    ]);
+    expect(field.value).toBe("a4");
+  });
 
-  it("sends the receipt printer by default, and A4 on the invoice printer once chosen", async () => {
+  it("sends A4 on the invoice printer by default and lets staff choose Receipt printer", async () => {
     const el = await mountWithPrinter();
     const sent = confirmations(el);
     await fillValid(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
-    await chooseDelivery(el, "a4");
+    await chooseDelivery(el, "receipt");
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
     expect(sent).toEqual([
-      { invoiceType: "F1", recipient: anaGarcia, delivery: { medium: "receipt" } },
       {
         invoiceType: "F1",
         recipient: anaGarcia,
         delivery: { medium: "a4", pagePrinterId: "pp-office" },
       },
+      { invoiceType: "F1", recipient: anaGarcia, delivery: { medium: "receipt" } },
     ]);
   });
 

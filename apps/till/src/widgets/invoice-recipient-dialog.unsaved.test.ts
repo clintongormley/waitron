@@ -352,19 +352,20 @@ async function chooseDelivery(form: TillInvoiceRecipientDialog, value: string) {
   await form.updateComplete;
 }
 
-it("a changed delivery choice asks before discarding, Keep keeps it, and choosing the receipt again is clean", async () => {
+it("a changed delivery choice asks before discarding, Keep keeps it, and returning to the A4 default is clean", async () => {
   const { app, form } = await mountDelivery();
+  expect(deliveryField(form).value).toBe("a4");
   expect(unload()).toBe(false);
-  await chooseDelivery(form, "a4");
+  await chooseDelivery(form, "receipt");
   expect(unload()).toBe(true);
   await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
-  expect(deliveryField(form).value).toBe("a4");
+  expect(deliveryField(form).value).toBe("receipt");
   expect(app.closes).toBe(0);
-  await chooseDelivery(form, "receipt");
+  await chooseDelivery(form, "a4");
   expect(unload()).toBe(false);
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.closes).toBe(1);
@@ -372,7 +373,7 @@ it("a changed delivery choice asks before discarding, Keep keeps it, and choosin
 
 it("discarding a changed delivery choice closes without sending it", async () => {
   const { app, form } = await mountDelivery();
-  await chooseDelivery(form, "a4");
+  await chooseDelivery(form, "receipt");
   cancel(form);
   const q = await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
@@ -432,7 +433,7 @@ it("a typed email address asks before discarding, and stops counting once anothe
   await chooseDelivery(form, "email");
   await fill(form, "email", "ana@example.com");
   expect(unload()).toBe(true);
-  await chooseDelivery(form, "receipt");
+  await chooseDelivery(form, "a4");
   expect(unload()).toBe(false);
   await chooseDelivery(form, "email");
   expect(unload()).toBe(true);

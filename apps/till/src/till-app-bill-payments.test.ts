@@ -8683,13 +8683,16 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
     expect(recipientDialog(el)).toBeNull();
   });
 
-  it("opens on the bill's saved delivery when the full invoice is chosen again", async () => {
+  it.each([
+    ["a saved A4", { medium: "a4", pagePrinterId: "pp-office" }, "a4"],
+    ["no saved delivery", undefined, "receipt"],
+  ] as const)("reopens a staged table invoice with %s", async (_, invoiceDelivery, expected) => {
     const getInvoiceDeliveryOptions = vi.fn().mockResolvedValue({ invoicePrinter: officePrinter });
     const getPartyBills = vi.fn().mockResolvedValue([
       billOf({
         invoiceType: "F1",
         recipient,
-        invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" },
+        invoiceDelivery,
       }),
     ]);
     const { el } = await mountApp({
@@ -8705,12 +8708,12 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
       .click();
     await flush(el);
     const dialog = recipientDialog(el)!;
-    expect(dialog.savedDelivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
+    expect(dialog.savedDelivery).toEqual(invoiceDelivery);
     expect(
       dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         "wt-combobox[name=delivery]",
       )!.value,
-    ).toBe("a4");
+    ).toBe(expected);
   });
 
   it("puts a refused email address under the dialog's email field, and unavailable email at the bottom", async () => {

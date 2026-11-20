@@ -48,7 +48,9 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
             },
             ...(state === "saved-choice"
               ? { savedDelivery: { medium: "email", recipient: "ana@example.com" } as const }
-              : {}),
+              : state === "delivery-receipt"
+                ? { savedDelivery: { medium: "receipt" } as const }
+                : {}),
           }
         : state === "simplified-offered"
           ? { offerSimplified: true }
@@ -63,7 +65,8 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
       )!;
       expect(delivery).not.toBeNull();
       if (state === "saved-choice") expect(delivery.value).toBe("saved");
-      else if (state !== "delivery-receipt") {
+      else if (state === "delivery-receipt") expect(delivery.value).toBe("receipt");
+      else {
         const medium = withEmail ? "email" : "a4";
         delivery.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
         await delivery.updateComplete;
