@@ -657,7 +657,6 @@ was (W100).
   (`drawer.not_attached`). The till shows the button only where the device equipment answer's
   `opensDrawer` is true (`deviceOpensDrawer`: the same `drawerPrinter` check, the profile's
   permission included), so a handheld with the permission but no drawer printer is offered none.
-  The sign-in read, the equipment poll and an equipment change's answer update it.
 - **Taking cash.** A cash collection
   (`POST /api/working-orders/:id/collect`) and a cash bill payment
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device
