@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billAdvances,
   deviceProfiles,
   devices,
   invoiceDeliveries,
@@ -1174,6 +1175,42 @@ describe("printOwedTickets", () => {
       .returning({ id: sales.id });
     return copy!.id;
   }
+
+  it("prints an advance's own ticket that never printed, with the bytes its payment printed", async () => {
+    const { venue, cfg, ring } = await till();
+    const sale = await ring();
+    const orderId = await tabWith(venue, "Croquettes");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${orderId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "cash",
+        tendered: "1.00",
+        applied: "1.00",
+        tip: "0.00",
+        ownReceipt: true,
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [advance] = await suite.db
+      .select({ saleId: billAdvances.advanceSaleId })
+      .from(billAdvances)
+      .where(eq(billAdvances.workingOrderId, orderId));
+    const [printedAtOnce] = await jobsOf(advance!.saleId);
+    await suite.db.delete(printJobs).where(eq(printJobs.id, printedAtOnce!.id));
+
+    expect((await pass(cfg, after(sale, 11))).queued).toEqual([sale.saleId, advance!.saleId]);
+    const [owed] = await jobsOf(advance!.saleId);
+    expect(owed!.id).not.toBe(printedAtOnce!.id);
+    expect(owed!.receiptCopy).toBe(false);
+    expect(Buffer.from(owed!.payload!)).toEqual(Buffer.from(printedAtOnce!.payload!));
+    expect(warnings).toEqual([]);
+  });
 
   it("leaves a sale with no working order", async () => {
     const { cfg, ring } = await till();
