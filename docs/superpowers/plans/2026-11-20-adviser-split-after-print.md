@@ -138,7 +138,8 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
   - `bill.unserved_dishes { workingOrderId, dishes: { lineId, dishName, quantity, released }[] }`,
     the dish shape of `meal_end.unserved_dishes`.
 - Refusal order: the bill's state first (`working_order.not_placed`, `bill.not_at_table`,
-  `bill.left_unpaid`, `bill.not_issued`, `bill.payments_received`, `order.payment_in_flight`), then
+  `bill.left_unpaid`, `bill.not_issued`, `sale.correction_unsupported` for a full invoice naming a
+  customer, `bill.payments_received`, `order.payment_in_flight`), then
   `bill.unserved_dishes`, then `sale.rectify`. So staff are never told to mark dishes served — which
   also takes them off the pass board (`leftToServe`, `kitchen-print.ts:959-973`) — on a bill that
   would then be refused anyway.

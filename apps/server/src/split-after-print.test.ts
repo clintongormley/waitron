@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -91,6 +91,16 @@ useVenueDb({
 
 type Party = { partyId: string; tabId: string; tableId: string };
 type Line = { name: string; extras?: unknown[] };
+
+async function revisionOfBill(billId: string): Promise<number> {
+  const [bill] = await inTx(venue, (tx) =>
+    tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId)),
+  );
+  return bill!.revision;
+}
 
 function revisionOf(partyId: string): number {
   const [row] = venue.db.all<{ revision: number }>(
@@ -411,6 +421,43 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
+  it("refuses a full invoice naming a customer before its unserved dishes or the permission", async () => {
+    venue.db.run(sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, Madrid'`);
+    onTestFinished(() => {
+      venue.db.run(sql`update taxpayer set taxpayer_domicile = null`);
+    });
+    const party = await seat("Tarta");
+    const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
+      readBillEditState(tx, party.tabId),
+    );
+    const chosen = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${party.tabId}/invoice-choice`,
+      {
+        revision: await revisionOfBill(party.tabId),
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Harbour Foods",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+        expectedEdit: { billId: party.tabId, editorVersion, draftId, draftRevision },
+      },
+    );
+    expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
+    const printedAnyway = await printBill(party, party.tabId, true);
+    expect(printedAnyway.status, JSON.stringify(printedAnyway.json)).toBe(200);
+    expect((await invoiceOf(party.tabId)).counterpartyTaxId).not.toBeNull();
+
+    await expectRefused(party.tabId, () => split(party.tabId, venue.cookie), {
+      status: 409,
+      code: "sale.correction_unsupported",
+    });
+  });
+
   it("refuses a bill its party left unpaid", async () => {
     const party = await departed(venue, "Tarta");
     await expectRefused(party.tabId, () => split(party.tabId), {
@@ -578,6 +625,71 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
     expect(shape(first).lines[0]).toMatchObject({ adjustments: [{ kind: "comp" }] });
     expect(shape(second)).toEqual(shape(first));
+  });
+
+  it("keeps the bill's receipt language on the new bill", async () => {
+    const party = await seat("Tarta");
+    const chosen = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${party.tabId}/receipt-language`,
+      {
+        revision: await revisionOfBill(party.tabId),
+        language: "es-ES",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
+      },
+    );
+    expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId)).status).toBe(200);
+
+    const answer = await split(party.tabId);
+
+    expect(answer.status).toBe(200);
+    const [bill] = await inTx(venue, (tx) =>
+      tx
+        .select({ receiptLocale: workingOrders.receiptLocale })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    );
+    expect(bill).toEqual({ receiptLocale: "es-ES" });
+  });
+
+  it("copies an extra stored after a later dish straight after its own dish", async () => {
+    const party = await seat(
+      {
+        name: "Steak",
+        extras: [{ listId: extraListId, picks: [{ productId: canaId, quantity: 1 }] }],
+      },
+      "Tarta",
+    );
+    const [, cana] = await dishesOf(party.tabId);
+    venue.db.run(sql`update working_order_lines set line_no = 4 where id = ${cana!.id}`);
+    expect((await dishesOf(party.tabId)).map((line) => line.name)).toEqual([
+      "Steak",
+      "Tarta",
+      "Caña",
+    ]);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId)).status).toBe(200);
+
+    const answer = await split(party.tabId);
+
+    expect(answer.status).toBe(200);
+    const newBill = answer.json.billId as string;
+    const copies = await dishesOf(newBill);
+    expect(copies.map((line) => [line.name, line.lineNo])).toEqual([
+      ["Steak", 1],
+      ["Caña", 2],
+      ["Tarta", 3],
+    ]);
+    expect(copies[1]!.parentLineId).toBe(copies[0]!.id);
+    expect((await printBill(party, newBill)).status).toBe(200);
+    const ticket = await send(venue.app, venue.cookie, "GET", `/api/sales/${newBill}`);
+    expect((ticket.json.lines as { gross: string }[]).map((line) => line.gross)).toEqual(
+      copies.map((line) => (line.unitPriceGross / 100).toFixed(2)),
+    );
   });
 
   it("copies a dish taken off service but charged, so the new bill prints without Print anyway", async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   insertInChunks,
   lineServiceCancellations,
@@ -9,7 +9,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { correctionTargetFor } from "@waitron/core";
+import { correctionTargetFor, requireSupportedCorrection } from "@waitron/core";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { readOrderInvoice, type IssuedInvoice } from "./cancel-credit.js";
@@ -19,12 +19,7 @@ import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import {
-  cancelPlaced,
-  createOpenOrder,
-  readInvoiceNumbers,
-  type TillSaleDeps,
-} from "./working-order.js";
+import { cancelPlaced, createOpenOrder, type TillSaleDeps } from "./working-order.js";
 import "./errors.js";
 
 export interface SplitAfterPrint {
@@ -71,6 +66,13 @@ export async function refuseSplitBill(
     .where(eq(unpaidDepartures.workingOrderId, id));
   if (departure !== undefined) throw new AppError("bill.left_unpaid", { workingOrderId: id });
   if (invoice === undefined) throw new AppError("bill.not_issued", { workingOrderId: id });
+  // `recordCorrection` refuses the same invoice, but only after the dishes and the permission.
+  const target = await correctionTargetFor(tx, invoice.id);
+  const [credited] = await tx
+    .select({ counterpartyTaxId: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, target));
+  requireSupportedCorrection(credited!.counterpartyTaxId, target);
 }
 
 export async function refuseUnservedDishes(tx: Transaction, id: string): Promise<void> {
@@ -102,22 +104,6 @@ export async function openSplitBill(
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
   return { billId, billNumber: made!.billNumber! };
-}
-
-/** The credit note a whole credit of `invoice` just filed, as its ticket names it. */
-export async function creditNoteNumberOf(tx: Transaction, invoice: IssuedInvoice): Promise<string> {
-  const [credit] = await tx
-    .select({ id: sales.id })
-    .from(sales)
-    .where(
-      and(
-        eq(sales.correctsSaleId, await correctionTargetFor(tx, invoice.id)),
-        eq(sales.replacesOriginal, false),
-      ),
-    )
-    .orderBy(desc(sales.invoiceNumber))
-    .limit(1);
-  return (await readInvoiceNumbers(tx, [credit!.id])).get(credit!.id)!;
 }
 
 /**

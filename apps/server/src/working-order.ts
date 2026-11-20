@@ -353,7 +353,6 @@ import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
-  creditNoteNumberOf,
   openSplitBill,
   refuseSplitBill,
   refuseUnservedDishes,
@@ -7873,7 +7872,8 @@ export async function cancelPlaced(
       await refuseUnservedDishes(tx, id);
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
     }
-    if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+    const creditNoteId =
+      invoice === undefined ? undefined : await creditWholeInvoice(tx, deps, cfg, invoice, authz);
 
     const toCorrect = await tx
       .select({
@@ -7910,7 +7910,8 @@ export async function cancelPlaced(
     if (mode.kind === "split") {
       // `refuseSplitBill` checked that a split's bill has a party and an invoice.
       const opened = await openSplitBill(tx, cfg, id, locked.partyId!);
-      split = { ...opened, creditNoteNumber: await creditNoteNumberOf(tx, invoice!) };
+      const numbers = await readInvoiceNumbers(tx, [creditNoteId!]);
+      split = { ...opened, creditNoteNumber: numbers.get(creditNoteId!)! };
       await bumpPartyRevision(tx, locked.partyId!);
     } else if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);
