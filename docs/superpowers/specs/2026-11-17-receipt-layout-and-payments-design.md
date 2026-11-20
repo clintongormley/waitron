@@ -85,9 +85,11 @@ to say what is still owed.
   `readTransactionReceipt`); only a retry of a failed original reuses stored bytes
   (`enqueueOriginalReceipt` in `receipt-print.ts`). Goal 5 relies on that.
   _20 November 2026: wrong as written: a receipt's bytes are built when it is queued. An original
-  no printer has taken or tried is laid out again after each payment (`refreshWaitingOriginals`,
-  `receipt-print.ts`); a copy, and an original a printer has taken, tried or resent, keep the bytes
-  they were queued with._
+  no printer has taken or tried, a resend included, is laid out again after each payment
+  (`refreshWaitingOriginals`, `receipt-print.ts`); one a printer has taken or tried keeps its bytes.
+  Every resend of a sale's receipt, original or copy, is laid out again from the sale, in the
+  sale's own language (`resendInvoicePrintJob`, `invoice-print.ts`); a payment slip and other
+  printouts keep the bytes they were queued with._
 - After a ticket is issued, a payment must settle the whole amount due (`settle-sale.ts`). Part
   payments are bill payments, kept in `bill_payments` until the sale settles; only settlement
   writes `tenders`, which is all today's receipt reads (`readBillTenderLines`). So for an issued,
