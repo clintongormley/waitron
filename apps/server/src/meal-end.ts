@@ -212,7 +212,7 @@ function needsPaper(
 }
 
 /** The bill's dishes neither served in full nor cancelled, as Finish table reckons them. */
-async function unservedDishes(tx: Transaction, billId: string) {
+export async function unservedDishes(tx: Transaction, billId: string) {
   const lines = await tx
     .select({
       line: workingOrderLines,

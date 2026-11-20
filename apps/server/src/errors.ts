@@ -744,6 +744,23 @@ declare module "@waitron/shared" {
       dishes: { lineId: string; dishName: string; quantity: string; released: boolean }[];
     };
     /**
+     * Reopen to split refuses a counter order: Mark served, which its unserved refusal offers, is
+     * per party.
+     */
+    "bill.not_at_table": { workingOrderId: string };
+    /** Reopen to split refuses a bill its party left without paying: its guests have gone. */
+    "bill.left_unpaid": { workingOrderId: string };
+    /** Reopen to split found no ticket on the bill to credit. */
+    "bill.not_issued": { workingOrderId: string };
+    /**
+     * Reopen to split found dishes neither served in full nor taken off service, printed with Print
+     * anyway; Mark served on `released` ones lets it carry on.
+     */
+    "bill.unserved_dishes": {
+      workingOrderId: string;
+      dishes: { lineId: string; dishName: string; quantity: string; released: boolean }[];
+    };
+    /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.
      */

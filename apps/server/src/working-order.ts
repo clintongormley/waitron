@@ -352,6 +352,13 @@ import {
 import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
+import {
+  creditNoteNumberOf,
+  openSplitBill,
+  refuseSplitBill,
+  refuseUnservedDishes,
+  type SplitAfterPrint,
+} from "./split-after-print.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import {
@@ -7812,18 +7819,30 @@ export async function cancelPlacedOrder(
         );
 
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
-    cancelPlaced(deps, cfg, id, reason, operator, withCheck(override, checked)),
+    cancelPlaced(
+      deps,
+      cfg,
+      id,
+      { kind: "cancel", reason },
+      operator,
+      withCheck(override, checked),
+    ).then(() => undefined),
   );
 }
 
-async function cancelPlaced(
+/**
+ * Cancel a placed order, or, as `split`, credit a table's printed ticket and put copies of its
+ * dishes on a new open bill (`splitAfterPrint`). A split refuses in the order the till offers the
+ * fix: the bill's state, then its unserved dishes, then the permission.
+ */
+export async function cancelPlaced(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   id: string,
-  reason: string,
+  mode: { kind: "cancel"; reason: string } | { kind: "split" },
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
   override: Override | undefined,
-): Promise<void> {
+): Promise<SplitAfterPrint | undefined> {
   const authz = { sessionId: operator.sessionId, override };
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
@@ -7839,7 +7858,8 @@ async function cancelPlaced(
     }
 
     const invoice = await readOrderInvoice(tx, id);
-    if (invoice !== undefined) {
+    if (mode.kind === "split") await refuseSplitBill(tx, id, locked.partyId, invoice);
+    else if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
     }
     await refusePendingPartPayment(tx, [id], "any");
@@ -7848,6 +7868,10 @@ async function cancelPlaced(
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
       throw new AppError("order.payment_in_flight", { workingOrderId: id });
+    }
+    if (mode.kind === "split") {
+      await refuseUnservedDishes(tx, id);
+      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
     }
     if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
 
@@ -7882,7 +7906,13 @@ async function cancelPlaced(
     );
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
-    if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
+    let split: (SplitAfterPrint & { billNumber: number }) | undefined;
+    if (mode.kind === "split") {
+      // `refuseSplitBill` checked that a split's bill has a party and an invoice.
+      const opened = await openSplitBill(tx, cfg, id, locked.partyId!);
+      split = { ...opened, creditNoteNumber: await creditNoteNumberOf(tx, invoice!) };
+      await bumpPartyRevision(tx, locked.partyId!);
+    } else if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);
     }
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
@@ -7892,13 +7922,19 @@ async function cancelPlaced(
       workingOrderId: id,
       kind: "order_cancelled",
       actorId: operator.personId,
-      reason,
+      reason:
+        mode.kind === "cancel"
+          ? mode.reason
+          : `Bill split after printing to bill ${split!.billNumber}`,
       origin: cfg.origin,
       capturedByNodeId: cfg.nodeId,
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,
     });
     await captureOrderAmendment(tx, deps.attendance, amendment.id, operator.personId, now.instant);
+    return split === undefined
+      ? undefined
+      : { billId: split.billId, creditNoteNumber: split.creditNoteNumber };
   });
 }
 
