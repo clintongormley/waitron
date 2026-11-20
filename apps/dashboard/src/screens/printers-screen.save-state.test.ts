@@ -28,6 +28,7 @@ const agent: PrintAgentRow = {
   active: true,
   host: "kitchen-pi",
   nodeId: null,
+  onThisBox: false,
   lastSeenAt: "2026-08-25T14:30:00.000Z",
   setupUrl: null,
   enrolledAt: "2026-08-20T09:00:00.000Z",

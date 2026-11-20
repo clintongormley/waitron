@@ -183,6 +183,11 @@ function printerRowId(r: PrinterTableRow): string {
   return r.kind === "receipt" ? r.printer.id : r.row.id;
 }
 
+function agentProvenance(agent: PrintAgentRow): string | null {
+  if (agent.nodeId === null) return null;
+  return agent.onThisBox ? t("printers.provenance_self") : t("printers.provenance_other_box");
+}
+
 function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
 }
@@ -2745,8 +2750,7 @@ export class PrintersScreen extends LitElement {
         key: "host",
         choosable: "shown",
         label: t("printers.agent_host"),
-        searchValue: (a) =>
-          [a.host ?? "", a.nodeId === null ? "" : t("printers.provenance_self")].join(" "),
+        searchValue: (a) => [a.host ?? "", agentProvenance(a) ?? ""].join(" "),
         cell: (a) =>
           html`${
             a.setupUrl && /^https?:\/\//i.test(a.setupUrl)
@@ -2755,7 +2759,15 @@ export class PrintersScreen extends LitElement {
                 >`
               : (a.host ?? (a.nodeId === null ? t("printers.not_reported") : nothing))
           }
-          ${a.nodeId !== null ? html` <span part="printer-provenance" data-test=${`agent-provenance-${a.id}`}>${t("printers.provenance_self")}</span>` : nothing}`,
+          ${
+            a.nodeId === null
+              ? nothing
+              : html` <span
+                  part="printer-provenance"
+                  data-test=${a.onThisBox ? `agent-provenance-${a.id}` : `agent-provenance-other-${a.id}`}
+                  >${agentProvenance(a)}</span
+                >`
+          }`,
       },
       {
         key: "lastSeen",
@@ -2839,7 +2851,7 @@ export class PrintersScreen extends LitElement {
                 .map(
                   (agent) =>
                     html`<p data-test=${`retained-agent-${agent.id}`}>
-                      ${agent.name}${agent.nodeId !== null ? html` · ${t("printers.provenance_self")}` : nothing}
+                      ${agent.name}${agent.nodeId !== null ? html` · ${agentProvenance(agent)}` : nothing}
                       <wt-button
                         variant="primary"
                         data-test=${`allow-agent-${agent.id}`}

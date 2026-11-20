@@ -1394,6 +1394,28 @@ describe("mountPrintApi — management: agents", () => {
     expect(rows).toContainEqual(expect.objectContaining({ id: agentId, setupUrl: null }));
   });
 
+  it("says an agent is on this box only when it was enrolled under this box's node id", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    try {
+      for (const [nodeId, expected] of [
+        [cfg.nodeId, true],
+        [randomUUID(), false],
+        [null, false],
+      ] as const) {
+        await suite.db.update(printAgents).set({ nodeId }).where(eq(printAgents.id, agentId));
+        const rows = await (
+          await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+        ).json();
+        expect(rows).toContainEqual(
+          expect.objectContaining({ id: agentId, nodeId, onThisBox: expected }),
+        );
+      }
+    } finally {
+      await suite.db.update(printAgents).set({ nodeId: null }).where(eq(printAgents.id, agentId));
+    }
+  });
+
   it("uses this node's advertised LAN address only for its own agent and actual listener port", async () => {
     const app = mountApp({ listIpv4: () => ["192.168.10.40", "10.0.0.40"] });
     const { agentId, token } = await joinAndAccept(app);

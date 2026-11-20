@@ -1072,6 +1072,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       return c.json(
         rows.map(({ setupPort, ...row }) => ({
           ...row,
+          onThisBox: row.nodeId !== null && row.nodeId === deps.cfg.nodeId,
           setupUrl:
             row.setupUrl ??
             (row.nodeId === deps.cfg.nodeId && setupPort !== null && address !== undefined

@@ -2052,6 +2052,7 @@ export const en = {
   "printers.join_hint":
     "On the computer the printer is plugged into (or from here, at http://<that computer>:9110), open the print-agent setup page and enter this server address:",
   "printers.provenance_self": "On this box",
+  "printers.provenance_other_box": "On another box",
   "printers.list_title": "Printers",
   "printers.no_printers": "No printers yet.",
   "printers.name": "Name",
@@ -6635,6 +6636,7 @@ export const es: Record<StringKey, string> = {
   "printers.join_hint":
     "En el ordenador al que está conectada la impresora (o desde aquí, en http://<ese ordenador>:9110), abre la página de configuración del agente de impresión e introduce esta dirección del servidor:",
   "printers.provenance_self": "En este servidor",
+  "printers.provenance_other_box": "En otro servidor",
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",

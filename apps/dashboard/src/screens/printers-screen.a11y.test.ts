@@ -36,6 +36,7 @@ const agents: PrintAgentRow[] = [
     active: true,
     host: null,
     nodeId: null,
+    onThisBox: false,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -46,6 +47,7 @@ const agents: PrintAgentRow[] = [
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
+    onThisBox: true,
     lastSeenAt: null,
     setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",

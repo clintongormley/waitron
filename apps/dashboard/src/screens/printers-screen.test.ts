@@ -113,6 +113,7 @@ const agents: PrintAgentRow[] = [
     active: true,
     host: null,
     nodeId: null, // manually enrolled — no provenance marker
+    onThisBox: false,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -123,6 +124,7 @@ const agents: PrintAgentRow[] = [
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
+    onThisBox: true,
     lastSeenAt: null,
     setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -2266,6 +2268,52 @@ describe("printers-screen", () => {
     );
     // a1 has a null node id (manual enrolment) → no marker.
     expect(q(el, "[data-test=agent-provenance-a1]")).toBeNull();
+  });
+
+  it("marks an agent another box enrolled for itself as on another box, not this one", async () => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue([
+        { ...agents[0]!, onThisBox: false },
+        { ...agents[1]!, active: true, onThisBox: false },
+        { ...agents[1]!, id: "a3", active: false, onThisBox: false },
+      ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=agent-provenance-a2]")).toBeNull();
+    const marker = q(el, "[data-test=agent-provenance-other-a2]")!;
+    expect(marker.textContent?.trim()).toBe(t("printers.provenance_other_box", "es-ES"));
+    expect(marker.getAttribute("part")).toBe("printer-provenance");
+    expect(q(el, "[data-test=agent-provenance-other-a1]")).toBeNull();
+
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    const retained = text(el, "[data-test=retained-agent-a3]");
+    expect(retained).toContain(t("printers.provenance_other_box", "es-ES"));
+    expect(retained).not.toContain(t("printers.provenance_self", "es-ES"));
+  });
+
+  it("finds an agent by its host cell's provenance words", async () => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue([
+        { ...agents[0]!, id: "a1", nodeId: "n2", onThisBox: false },
+        { ...agents[1]!, id: "a2", active: true, onThisBox: true },
+      ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    const columns = (
+      q(el, "[data-test=agents-table]") as unknown as {
+        columns: { key: string; searchValue?: (row: PrintAgentRow) => string }[];
+      }
+    ).columns;
+    const host = columns.find((column) => column.key === "host")!;
+    const rows = (await api.listAgents()) as PrintAgentRow[];
+    expect(host.searchValue!(rows[0]!)).toContain(t("printers.provenance_other_box", "es-ES"));
+    expect(host.searchValue!(rows[0]!)).not.toContain(t("printers.provenance_self", "es-ES"));
+    expect(host.searchValue!(rows[1]!)).toContain(t("printers.provenance_self", "es-ES"));
   });
 
   it("sizes the provenance marker from the small font token, inside the table's shadow root", async () => {

@@ -1250,6 +1250,7 @@ export interface PrintAgentRow {
   setupUrl: string | null;
   active: boolean;
   nodeId: string | null;
+  onThisBox: boolean;
   lastSeenAt: string | null;
   enrolledAt: string;
 }
