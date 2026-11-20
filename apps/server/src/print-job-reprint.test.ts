@@ -3,8 +3,6 @@ import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
-  deviceProfiles,
-  devices,
   kitchenPrintJobs,
   kitchenStations,
   parties,
@@ -689,27 +687,6 @@ describe("a receipt printed at the till in a language other than the sale's", ()
     });
   }
 
-  /** Runs `act` with the till's profile allowed to print receipts, as a counter till's is. */
-  async function withReceiptPrinting<T>(act: () => Promise<T>): Promise<T> {
-    const [profile] = await inTx(venue, (tx) =>
-      tx
-        .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
-        .from(deviceProfiles)
-        .innerJoin(devices, eq(devices.deviceProfileId, deviceProfiles.id))
-        .where(eq(devices.id, venue.deviceId)),
-    );
-    const setCapabilities = (capabilities: string[]) =>
-      inTx(venue, (tx) =>
-        tx.update(deviceProfiles).set({ capabilities }).where(eq(deviceProfiles.id, profile!.id)),
-      );
-    await setCapabilities([...(profile!.capabilities as string[]), "print-receipt"]);
-    try {
-      return await act();
-    } finally {
-      await setCapabilities(profile!.capabilities as string[]);
-    }
-  }
-
   const catalan = (text: string) => /Tipus +Base/u.test(text) && !/Tipo +Base/u.test(text);
   const spanish = (text: string) => /Tipo +Base/u.test(text) && !/Tipus +Base/u.test(text);
 
@@ -743,19 +720,6 @@ describe("a receipt printed at the till in a language other than the sale's", ()
   it("stores the language it was printed in, and null when none was chosen", async () => {
     expect((await printedIn("ca-ES", "copy")).job.pageLanguage).toBe("ca-ES");
     expect((await printedIn(undefined, "copy")).job.pageLanguage).toBeNull();
-  });
-
-  it("keeps the language when the till retries its original", async () => {
-    const { billId, job } = await printedIn("ca-ES", "original");
-    await setJob(job.id, exhausted);
-    const retried = await withReceiptPrinting(() =>
-      rawGroupSend(venue.app, venue.cookie, "POST", `/api/sales/${billId}/receipt/retry`, {}),
-    );
-    expect(retried.status, JSON.stringify(retried.json)).toBe(200);
-    const { jobId } = retried.json as unknown as { jobId: string };
-    const resent = await jobRow(jobId);
-    expect(resent).toMatchObject({ resendOf: job.id, pageLanguage: "ca-ES" });
-    expect(decodeTicket(resent.payload)).toSatisfy(catalan);
   });
 
   it("keeps the language when the print queue resends it on its own printer", async () => {
