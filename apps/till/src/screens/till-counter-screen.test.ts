@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { UNDECLARED_DIET } from "@waitron/shared";
 import { page, userEvent } from "vitest/browser";
 import { TillShell } from "../widgets/till-shell.js";
 import {
@@ -373,14 +374,16 @@ describe("till-counter-screen", () => {
     id: "vegan",
     name: "Ensalada",
     customerName: { es: "Ensalada para el cliente" },
-    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    diet: UNDECLARED_DIET,
+    dietaryDeclarations: ["vegan"],
   };
   const meatDish: TillProduct = {
     ...coffee,
     id: "meat",
     name: "Chuleta",
     customerName: { es: "Chuleta para el cliente" },
-    diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+    diet: UNDECLARED_DIET,
+    dietaryDeclarations: ["no_fish"],
   };
 
   it("offers Filter without a published diet so allergen exclusions stay reachable", async () => {

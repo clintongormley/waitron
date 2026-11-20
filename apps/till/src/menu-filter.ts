@@ -1,4 +1,5 @@
-import type { AllergenCode, Kind, ProductAllergens } from "@waitron/shared";
+import type { AllergenCode, DietaryLabel, Kind, ProductAllergens } from "@waitron/shared";
+import { nutritionDietLabels } from "./diet-labels.js";
 import type { TillProduct } from "./api/client.js";
 import { offeredListsOf } from "./state/order-line.js";
 
@@ -16,23 +17,21 @@ export function filterProductsByMenu(
 
 export type DietPredicate = "vegan" | "vegetarian" | "no-meat" | "no-fish";
 
-/**
- * A product with no `diet` is dropped from every lens. `vegan`/`vegetarian` keep only an exact
- * `"yes"`, so `"unknown"` is excluded. `no-meat`/`no-fish` only hide dishes KNOWN to contain it, so an
- * unreviewed dish whose `contains` lacks the tag is kept.
- */
+const DIET_LABEL_FOR: Record<DietPredicate, DietaryLabel> = {
+  vegan: "vegan",
+  vegetarian: "vegetarian",
+  "no-meat": "no_meat",
+  "no-fish": "no_fish",
+};
+
 export function filterProductsByDiet(
   products: TillProduct[],
   predicate: DietPredicate,
 ): TillProduct[] {
-  return products.filter((product) => {
-    const diet = product.diet;
-    if (!diet) return false;
-    if (predicate === "vegan") return diet.vegan === "yes";
-    if (predicate === "vegetarian") return diet.vegetarian === "yes";
-    if (predicate === "no-meat") return !diet.contains.includes("meat");
-    return !diet.contains.includes("fish");
-  });
+  const label = DIET_LABEL_FOR[predicate];
+  return products.filter((product) =>
+    nutritionDietLabels(product.diet, product.dietaryDeclarations).includes(label),
+  );
 }
 
 type Exclusion = "all" | readonly Kind[];

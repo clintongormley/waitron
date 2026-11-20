@@ -1,8 +1,6 @@
 import { css, html, nothing } from "lit";
 import { NUTRITION_ICONS, registerIcons, type WtIconSize } from "@waitron/ui";
-import { expandDietaryDeclarations, type DietaryLabel } from "@waitron/shared";
-import type { ProductAllergens } from "@waitron/shared";
-import type { DietProfile } from "../api/client.js";
+import type { DietaryLabel, ProductAllergens } from "@waitron/shared";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -17,16 +15,6 @@ const DIET_KEYS: Record<DietaryLabel, StringKey> = {
   no_meat: "diet.filter.no_meat",
   no_fish: "diet.filter.no_fish",
 };
-
-export function nutritionDietLabels(
-  diet?: DietProfile | null,
-  declarations?: readonly string[],
-): DietaryLabel[] {
-  if (declarations !== undefined) return expandDietaryDeclarations(declarations as DietaryLabel[]);
-  return (["vegan", "vegetarian", "halal", "kosher"] as const).filter(
-    (label) => diet?.[label] === "yes",
-  );
-}
 
 export function dietLabel(label: DietaryLabel): string {
   return t(DIET_KEYS[label]);

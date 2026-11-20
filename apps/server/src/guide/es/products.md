@@ -275,6 +275,9 @@ Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también 
 y tamaños sin revisar. Revisa los alérgenos de cada tamaño que vendes, o elige **No contiene
 ninguno de los 14**, y guarda. No necesitas publicar la carta.
 
+Con una dieta elegida en **Filtros** de la caja, solo se muestran los platos con esa marca en
+**Dietética**, así que marca **Sin carne** o **Sin pescado** en los platos que correspondan.
+
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
 

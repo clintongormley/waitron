@@ -10,7 +10,8 @@ import { trackDialog } from "./track-dialog.js";
 import { descriptionFor } from "./dish-format.js";
 import { productName } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
-import { dietLabel, nutritionDietLabels } from "./nutrition-icons.js";
+import { dietLabel } from "./nutrition-icons.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import { takesExtras } from "../state/order-line.js";
 
 export type ChangeAvailability = (productId: string, available: boolean) => Promise<void>;

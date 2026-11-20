@@ -672,7 +672,7 @@ describe("payWorkingOrder", () => {
     expect(await fiscalRecordCount(id)).toBe(1);
   });
 
-  it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock (Finding 2 — no silent drop)", async () => {
+  it("retrieve → edit → pay files the RE-LOCKED edit, not the pre-edit lock", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const id = randomUUID();
 
