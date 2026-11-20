@@ -1454,8 +1454,8 @@ Amazon S3 rehearsal reuses ([aws-backup-rehearsal.md](aws-backup-rehearsal.md));
 the bucket and how to freeze it. The scenario boots one streaming server with `startServer`'s
 third argument, a test seam, setting the side-file limit to 16 MiB; a 1 MiB limit paused the stream
 while its generation was still opening, from boot's own writes (measured 2026-09-26). One till
-session has three sellers posting sales at once to `/api/sales` over the box's TLS. At least ten
-sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen (the
+session has three sellers posting to `/api/working-orders/:id/payments` at once over the box's
+TLS. At least ten sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen (the
 test stops versitygw with `SIGSTOP`), and a listing sent to it is checked to be still unanswered at the bound. Then the test
 kills Litestream (`SIGKILL`, by the PID the supervisor records in
 `<stateDir>/stream/litestream.pid`) and waits until the supervisor has started another and logged
