@@ -769,6 +769,38 @@ it("keeps Start again after an unavailable request when the status is read again
   expect(el.shadowRoot!.querySelector("#restart")).not.toBeNull();
 });
 
+it("shows Connect to Cloud beside the refusal when Confirm finds no saved request", async () => {
+  setLocale("en");
+  let saved = true;
+  const api = new DashboardApi("", async (url) => {
+    if (String(url).endsWith("/complete")) {
+      saved = false;
+      return Response.json(
+        { error: { code: "cloud.request_not_found", params: {} } },
+        { status: 400 },
+      );
+    }
+    return Response.json(
+      saved
+        ? {
+            ...awaitingCloud,
+            state: "awaiting_local",
+            organisationId,
+            legalBusinessId,
+            organisationName: "Sun Cafe",
+            legalBusinessName: "Sun SL",
+          }
+        : { state: "not_connected", configured: true, isPrimary: true, code: "" },
+    );
+  });
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
+  click(el, "confirm");
+  await expect.poll(() => el.shadowRoot!.querySelector("#connect")).not.toBeNull();
+  expect(cloudError(el)?.textContent?.trim()).toBe(codeMessage("cloud.request_not_found"));
+  expect(el.shadowRoot!.textContent).not.toContain("Sun SL");
+});
+
 it("does not move focus to a failure of a status read made in the background", async () => {
   setLocale("en");
   let reachable = true;
