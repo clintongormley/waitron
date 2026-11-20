@@ -3072,24 +3072,115 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     ).toBe(t("device_profiles.err_no_cash_drawer"));
   });
 
+  function a4(id: string, name: string, active = true): PagePrinterRow {
+    return {
+      id,
+      name,
+      host: "10.0.0.20",
+      port: 631,
+      resourcePath: "/ipp/print",
+      documentFormat: "application/pdf",
+      supportedFormats: ["application/pdf"],
+      media: "iso_a4_210x297mm",
+      resolutionDpi: 300,
+      active,
+      agentId: "ag1",
+      agentName: "Box",
+    };
+  }
+  const offices = [a4("pg1", "Office"), a4("pg2", "Storeroom", false), a4("pg3", "Reception")];
+
+  function equipmentSwitches(el: DeviceProfilesScreen, group: string) {
+    return [...el.shadowRoot!.querySelectorAll<HTMLElement>(`[data-test=${group}] wt-switch`)];
+  }
+
+  function equipmentState(rows: HTMLElement[]) {
+    return rows.map((row) => [row.dataset.test, row.shadowRoot!.querySelector("input")!.checked]);
+  }
+
+  it.each([
+    ["receipt-printers", "receiptPrinterIds", "pr1", "pr3"],
+    ["payment-slip-printers", "paymentSlipPrinterIds", "pr1", "pr3"],
+    ["cash-drawer-printers", "cashDrawerPrinterIds", "pr1", "pr3"],
+    ["invoice-printers", "invoicePrinterIds", "pr1", "pg1"],
+    ["profile-readers", "readerIds", "r1", "r2"],
+  ] as const)(
+    "switches only the clicked row in %s and saves in display order",
+    async (group, key, first, last) => {
+      const { el, api } = await editListed(
+        {
+          listPrinters: async () =>
+            venuePrinters.map((printer) => ({ ...printer, hasCashDrawer: true })),
+          listPagePrinters: async () => offices,
+          getProfileReaders: async () => ({ readerIds: [], defaultReaderId: null }),
+        },
+        {
+          ...listedProfile,
+          receiptPrinterIds: [],
+          paymentSlipPrinterIds: [],
+          receiptPrinterDefaultId: null,
+        },
+      );
+      await selectProfileTab(el, "equipment");
+      const rows = equipmentSwitches(el, group);
+      const prefix = group === "profile-readers" ? "profile-reader" : group;
+      const targetId = `${prefix}-${last}`;
+      const target = rows.find((row) => row.dataset.test === targetId)!;
+      const control = (row: HTMLElement) => row.shadowRoot!.querySelector("input")!;
+      const before = equipmentState(rows);
+      await userEvent.click(control(target));
+      await flush(el);
+      expect({
+        state: equipmentState(equipmentSwitches(el, group)),
+        focused: el.shadowRoot!.activeElement?.getAttribute("data-test"),
+      }).toEqual({
+        state: before.map(([id]) => [id, id === targetId]),
+        focused: targetId,
+      });
+      await userEvent.click(target.shadowRoot!.querySelector("label")!);
+      await flush(el);
+      expect(equipmentState(equipmentSwitches(el, group))).toEqual(before);
+
+      await userEvent.click(control(target));
+      await userEvent.click(
+        control(rows.find((row) => row.dataset.test === `${prefix}-${first}`)!),
+      );
+      await save(el);
+      const sent =
+        key === "readerIds"
+          ? vi.mocked(api.setProfileReaders).mock.calls[0]?.[1].readerIds
+          : key === "receiptPrinterIds" || key === "paymentSlipPrinterIds"
+            ? vi.mocked(api.updateDeviceProfile).mock.calls[0]?.[5]?.[key]
+            : savedExtras(api)?.[key];
+      expect(sent).toEqual([first, last]);
+    },
+  );
+
+  it("keeps a moved printer in place when switched off and back on", async () => {
+    const { el, api } = await editListed();
+    await selectProfileTab(el, "equipment");
+    field(el, "receipt-printers-up-pr1").focus();
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    const rowOrder = () => equipmentState(equipmentSwitches(el, "receipt-printers"));
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "receipt-printers-down-pr1"));
+    const counter = field(el, "receipt-printers-pr1").shadowRoot!.querySelector("label")!;
+    await userEvent.click(counter);
+    await flush(el);
+    expect(rowOrder()).toEqual([
+      ["receipt-printers-pr1", false],
+      ["receipt-printers-pr2", true],
+      ["receipt-printers-pr3", false],
+    ]);
+    await userEvent.click(counter);
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![5].receiptPrinterIds).toEqual([
+      "pr1",
+      "pr2",
+    ]);
+  });
+
   describe("the invoice list", () => {
-    function a4(id: string, name: string, active = true): PagePrinterRow {
-      return {
-        id,
-        name,
-        host: "10.0.0.20",
-        port: 631,
-        resourcePath: "/ipp/print",
-        documentFormat: "application/pdf",
-        supportedFormats: ["application/pdf"],
-        media: "iso_a4_210x297mm",
-        resolutionDpi: 300,
-        active,
-        agentId: "ag1",
-        agentName: "Box",
-      };
-    }
-    const offices = [a4("pg1", "Office"), a4("pg2", "Storeroom", false), a4("pg3", "Reception")];
     const invoiceProfile: DeviceProfile = {
       ...listedProfile,
       invoicePrinterIds: ["pg3", "pr2"],
