@@ -7,6 +7,7 @@ import { readVenueClock, withTransaction } from "@waitron/db";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
+  cashPayment,
   provisionBillVenue,
   seatedHeldWith,
   seatedWith,
@@ -19,8 +20,10 @@ import {
   clockAtIso as clockAt,
   filedFor,
 } from "./testing/later-sale-date-fixture.js";
+import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { payWorkingOrderIntegratedOrchestration as reader } from "./testing/whole-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
@@ -59,6 +62,8 @@ const TUE_0030 = "2026-03-16T23:30:00.000Z";
 const TUE_0500 = "2026-03-17T04:00:00.000Z";
 const TUE_0501 = "2026-03-17T04:01:00.000Z";
 const WED_1100 = "2026-03-18T10:00:00.000Z";
+const WED_235959 = "2026-03-18T22:59:59.900Z";
+const THU_0000 = "2026-03-18T23:00:00.100Z";
 const THU_1200 = "2026-03-19T11:00:00.000Z";
 
 function openedAt(venue: BillVenue, billId: string, at: string): void {
@@ -73,12 +78,12 @@ async function mondayBill(venue: BillVenue) {
 }
 
 function cashSale(venue: BillVenue, at: string, billId: string) {
-  return send(venue.appAt(clockAt(at)), venue.cookie, "POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId: billId,
-    lines: [],
-    tender: { method: "cash", amount: "10.00" },
-  });
+  return cashPayment(
+    { db: venue.db, app: venue.appAt(clockAt(at)) },
+    venue.cookie,
+    billId,
+    "10.00",
+  );
 }
 
 function partyRevisionNow(venue: BillVenue, partyId: string): number {
@@ -268,5 +273,31 @@ describe("a table bill issued after the business day it was opened in ended", ()
 
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     await expectOneDate(venue, party.tabId, "2026-03-17", 2100);
+  });
+
+  it("dates the issue by the payment's one clock reading when the clock passes Madrid midnight after it", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const party = await mondayBill(venue);
+    const paymentReading = clockAt(WED_235959).now();
+    const afterMidnight = clockAt(THU_0000).now();
+    const now = vi.fn(() => afterMidnight).mockReturnValueOnce(paymentReading);
+    const sessionId = await openTillSession(venue.db, {
+      personId: venue.operatorId,
+      deviceId: venue.cfg.origin.deviceId,
+    });
+
+    await paySavedBillInCash(
+      { ...venue, clock: { ...venue.clock, now }, admission: testTradingAdmission() },
+      venue.cfg,
+      { personId: venue.operatorId, sessionId },
+      party.tabId,
+      "10.00",
+    );
+
+    await expectCloseOfDay(venue, party.tabId, "2026-03-18");
+    expect(
+      venue.db.all(sql`select settled_at from working_orders where id = ${party.tabId}`),
+    ).toEqual([{ settled_at: WED_235959 }]);
+    expect(now).toHaveBeenCalledTimes(1);
   });
 });

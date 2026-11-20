@@ -7,6 +7,7 @@ import { withTransaction } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import {
+  cashPayment,
   provisionBillVenue,
   seatedWith,
   send,
@@ -38,12 +39,7 @@ const WED_1100 = "2026-03-18T10:00:00.000Z";
 const THU_1200 = "2026-03-19T11:00:00.000Z";
 
 function cashSale(venue: BillVenue, at: string, billId: string, amount: string) {
-  return send(venue.appAt(clockAt(at)), venue.cookie, "POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId: billId,
-    lines: [],
-    tender: { method: "cash", amount },
-  });
+  return cashPayment({ db: venue.db, app: venue.appAt(clockAt(at)) }, venue.cookie, billId, amount);
 }
 
 async function expectOneDate(venue: BillVenue, billId: string, issueDay: string) {
