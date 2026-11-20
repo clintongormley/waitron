@@ -192,6 +192,14 @@ process deadline: a hang inside that step reports unfinished files and a live pr
 before the job limit, within the measured setup allowance. Setup stalls and runner loss remain
 outside that report. Neither this diagnostic nor the passing runs locates the original wait.
 
+**Second sighting of database-open hooks timing out (PR #3898, 2026-11-21).** Run
+[44838869956](https://github.com/clintongormley/waitron/actions/runs/44838869956), job `test-server`
+shard 12: `set-menu-bill.test.ts` and `table-actions.dining.test.ts`, which the branch does not touch,
+each hit the 60-second hook limit while opening their test database; both pass locally in about 4
+seconds, and the one re-run of the failed job passed. The log is kept at
+`~/waitron-campaign-l/ci-logs/pr3898-run44838869956-test-server-12.log`; it does not show what the
+hooks were waiting on.
+
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 
 Written 2026-09-14 during the tenant-column removal. It flags a comment whose
