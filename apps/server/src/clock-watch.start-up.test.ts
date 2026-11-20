@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "@waitron/db";
-import type { ClockServiceStatus } from "./box-host-client.js";
+import type { ClockServiceStatus, TimeServiceOnAnswer } from "./box-host-client.js";
 import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
+import { timeServiceRetry } from "./time-service-retry.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
@@ -22,6 +23,12 @@ function harness(
     heads?: () => Promise<Record<string, number>>;
     /** Hands the watch the same shared reading to read at every look, as boot does. */
     readTimeService?: boolean;
+    /** Hands the start a restart of the time service, as boot does, on a host whose restarts
+     * succeed unless `restartAnswer` answers otherwise. */
+    restarts?: boolean;
+    restartAnswer?: () => Promise<TimeServiceOnAnswer>;
+    /** Whether the box files records, asked at each look; it does unless this answers otherwise. */
+    filesRecords?: () => boolean;
   } = {},
 ) {
   let wallMs = options.startMs ?? START_MS;
@@ -52,6 +59,8 @@ function harness(
     options.readTimeService === true && reading !== undefined ? vi.fn(reading.read) : undefined;
   let steps = 0;
   let inTurnNow = false;
+  let turnsAsked = 0;
+  const heldTurns = new Map<number, Promise<void>>();
   const hostReadsInTurn: boolean[] = [];
   host?.mockImplementation(async () => {
     hostReadsInTurn.push(inTurnNow);
@@ -60,6 +69,8 @@ function harness(
   const correction = {
     steps: () => steps,
     inTurn: async <T>(fn: () => Promise<T>) => {
+      turnsAsked++;
+      await heldTurns.get(turnsAsked);
       inTurnNow = true;
       try {
         return await fn();
@@ -70,6 +81,22 @@ function harness(
     writePending: vi.fn(async () => {}),
   };
   const startState = options.startState ?? startClockState();
+  const restartsInTurn: boolean[] = [];
+  const retryTimeService =
+    options.restarts === true
+      ? timeServiceRetry({
+          host: {
+            retryTimeService: async () => {
+              restartsInTurn.push(inTurnNow);
+              return options.restartAnswer?.() ?? { available: true };
+            },
+          },
+          state: startState,
+          steps: () => steps,
+          monotonic: () => monoMs,
+          log: (_level, event, fields) => logs.push({ event, fields }),
+        })
+      : undefined;
   const heads = vi.fn(options.heads ?? (async () => ({ "node-1": 7 })));
   const transaction = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const watch = createClockWatch({
@@ -84,7 +111,16 @@ function harness(
     ...(startUp === undefined ? {} : { startUp }),
     ...(clockStatus === undefined
       ? {}
-      : { start: { state: startState, clockStatus, clearClockStatus, heads } }),
+      : {
+          start: {
+            state: startState,
+            clockStatus,
+            clearClockStatus,
+            filesRecords: options.filesRecords ?? (() => true),
+            heads,
+            ...(retryTimeService === undefined ? {} : { retryTimeService }),
+          },
+        }),
     ...(readTimeService === undefined ? {} : { readTimeService }),
   });
 
@@ -98,6 +134,13 @@ function harness(
   function jump(ms: number, options: { bySet?: boolean } = {}) {
     wallMs += ms;
     if (options.bySet === true) steps++;
+  }
+
+  /** Holds the `nth` turn asked for from now until the answer is called. */
+  function holdTurn(nth: number): () => void {
+    let release!: () => void;
+    heldTurns.set(turnsAsked + nth, new Promise<void>((resolve) => (release = resolve)));
+    return release;
   }
 
   /** The steady clock answering NaN from now on, as the boot reader does when a read fails. */
@@ -119,6 +162,7 @@ function harness(
     halt: () => watch.halt(),
     writePending: correction.writePending,
     hostReadsInTurn,
+    restartsInTurn,
     clockStatus,
     readTimeService,
     startState,
@@ -127,6 +171,8 @@ function harness(
     noteDevice,
     jump,
     breakSteady,
+    holdTurn,
+    turnsAsked: () => turnsAsked,
     wall: () => wallMs,
   };
 }
@@ -258,6 +304,132 @@ describe("the clock watch and the start check", () => {
     expect(h.clockStatus).not.toHaveBeenCalled();
     expect(h.heads).not.toHaveBeenCalled();
     expect(startLogs(h)).toEqual([]);
+  });
+});
+
+describe("the clock watch restarting the time service while the start waits", () => {
+  it("restarts it at most every 30 s while waiting, in the correction's turn", async () => {
+    const h = harness({ host: async () => NOT_SYNCHRONISED, restarts: true });
+    for (let look = 0; look < 4; look++) await h.tick();
+    expect(h.restartsInTurn).toEqual([true, true]);
+  });
+
+  it("restarts nothing once confirmed by the internet", async () => {
+    let answer = NOT_SYNCHRONISED;
+    const h = harness({ host: async () => answer, restarts: true, readTimeService: true });
+    await h.tick();
+    expect(h.restartsInTurn).toHaveLength(1);
+    answer = SYNCHRONISED;
+    await h.tick();
+    expect(h.startState.status).toBe("by_internet");
+    for (let look = 0; look < 8; look++) await h.tick();
+    expect(h.restartsInTurn).toHaveLength(1);
+  });
+
+  it("is confirmed by the internet at the look after the host refuses a restart as synchronised, the service having synchronised since that look read it", async () => {
+    let answer = NOT_SYNCHRONISED;
+    let synchroniseAtNextRestart = false;
+    const h = harness({
+      host: async () => answer,
+      restarts: true,
+      restartAnswer: async () => {
+        if (!synchroniseAtNextRestart) return { available: true };
+        answer = SYNCHRONISED;
+        return { available: false, reason: "refused", refusal: "synchronised" };
+      },
+    });
+    for (let look = 0; look < 6; look++) await h.tick();
+    expect(h.restartsInTurn).toHaveLength(3);
+    synchroniseAtNextRestart = true;
+    await h.tick();
+    expect(h.restartsInTurn).toHaveLength(4);
+    expect(h.logs).toContainEqual({
+      event: "time_service.restart_failed",
+      fields: { reason: "refused", refusal: "synchronised" },
+    });
+    expect(h.startState.status).toBe("waiting");
+    // 15 s after the look that read it unsynchronised, inside the shared reading's minute.
+    await h.tick();
+    expect(h.startState.status).toBe("by_internet");
+  });
+
+  it("on a box that does not file records, reads the shared minute-long reading and restarts nothing while the start waits, and reads afresh and restarts once it files records", async () => {
+    let files = false;
+    const h = harness({
+      host: async () => NOT_SYNCHRONISED,
+      restarts: true,
+      readTimeService: true,
+      filesRecords: () => files,
+    });
+    for (let look = 0; look < 4; look++) await h.tick();
+    expect(h.startState.status).toBe("waiting");
+    expect(h.clockStatus).toHaveBeenCalledTimes(4);
+    expect(h.host).toHaveBeenCalledTimes(1);
+    expect(h.restartsInTurn).toEqual([]);
+    files = true;
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(2);
+    expect(h.restartsInTurn).toEqual([true]);
+    // 15 s after that read, inside the shared reading's minute.
+    await h.tick();
+    expect(h.host).toHaveBeenCalledTimes(3);
+  });
+
+  it("confirms by two agreeing devices without waiting for a restart the host has not answered", async () => {
+    let answerRestart: ((answer: TimeServiceOnAnswer) => void) | undefined;
+    const h = harness({
+      host: async () => NOT_SYNCHRONISED,
+      restarts: true,
+      restartAnswer: () => new Promise((resolve) => (answerRestart = resolve)),
+    });
+    h.noteDevice("till-1", "10.0.0.2", 3_000);
+    h.noteDevice("till-2", "10.0.0.3", 4_000);
+    const look = h.tick();
+    await vi.waitFor(() => expect(h.startState.status).toBe("by_devices"), { timeout: 500 });
+    answerRestart?.({ available: true });
+    await look;
+    expect(h.restartsInTurn).toEqual([]);
+  });
+
+  it("asks for no restart queued behind another turn once the watch has halted", async () => {
+    const h = harness({ host: async () => NOT_SYNCHRONISED, restarts: true });
+    const release = h.holdTurn(2);
+    const look = h.tick();
+    await vi.waitFor(() => expect(h.turnsAsked()).toBe(2), { timeout: 500 });
+    h.halt();
+    release();
+    await look;
+    expect(h.restartsInTurn).toEqual([]);
+  });
+
+  it("restarts nothing once the box's clock has been set", async () => {
+    const h = harness({ host: async () => NOT_SYNCHRONISED, restarts: true });
+    h.jump(-120_000, { bySet: true });
+    for (let look = 0; look < 8; look++) await h.tick();
+    expect(h.startState.status).toBe("waiting");
+    expect(h.restartsInTurn).toEqual([]);
+  });
+
+  it("restarts nothing while confirmed by devices or a person, nor after a person's confirmation when a jump sends the box back to waiting", async () => {
+    const byDevices = startClockState();
+    byDevices.confirm("by_devices", {});
+    const d = harness({
+      host: async () => NOT_SYNCHRONISED,
+      restarts: true,
+      startState: byDevices,
+    });
+    for (let look = 0; look < 4; look++) await d.tick();
+    expect(d.restartsInTurn).toEqual([]);
+
+    const byPerson = startClockState();
+    byPerson.confirm("by_person", {});
+    const p = harness({ host: async () => NOT_SYNCHRONISED, restarts: true, startState: byPerson });
+    await p.tick();
+    p.jump(-120_000);
+    await p.tick();
+    expect(p.startState.status).toBe("waiting");
+    for (let look = 0; look < 4; look++) await p.tick();
+    expect(p.restartsInTurn).toEqual([]);
   });
 });
 

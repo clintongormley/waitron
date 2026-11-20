@@ -33,6 +33,8 @@ export interface StartClockState {
   readonly refusedOn: string | null;
   /** False while the latest look could not hear from the host's time service. */
   readonly hostAnswers: boolean;
+  /** Whether a person has confirmed the time at any point in this process, whatever since. */
+  readonly confirmedByPerson: boolean;
   unconfirmed(): boolean;
   /** Grows by one each time a wait begins, the start's included. */
   waitsBegun(): number;
@@ -58,9 +60,11 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
   let refusedOn: string | null = null;
   let hostAnswers = true;
   let waits = 1;
+  let confirmedByPerson = false;
   const current = (): StartClockStatus => status;
 
   const confirm = (by: StartClockConfirmation, heads: ChainHeads) => {
+    if (by === "by_person") confirmedByPerson = true;
     if (status === "by_internet") return;
     const ended = status === "waiting";
     status = by;
@@ -85,6 +89,9 @@ export function startClockState(onConfirmed: () => void = () => {}): StartClockS
     },
     get hostAnswers() {
       return hostAnswers;
+    },
+    get confirmedByPerson() {
+      return confirmedByPerson;
     },
     unconfirmed: () => status === "waiting",
     waitsBegun: () => waits,

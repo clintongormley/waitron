@@ -176,7 +176,11 @@ service, so after a power cut part way through, the time service starts at the n
 Each set it begins writes one line, naming the time asked for and the ids of who asked, to the
 system journal: `journalctl -t waitron-box` shows them. When the app asks it to switch time
 synchronisation back on, the service runs `timedatectl set-ntp true` and writes a `clock.sync-on`
-line to the same journal.
+line to the same journal. While payments wait for the box's time to be confirmed and the time
+service runs unsynchronised, the app asks at most every 30 seconds for a `systemctl restart` of
+it, so it tries its servers at once rather than after its own growing wait. It stops asking once someone has asked to set the time,
+even if the set was refused, or has confirmed it, and the service refuses while the time service's saved clock is ahead of now. A restart
+writes no `waitron-box` line.
 
 The box has no secret it needs before it boots: the venue's databases are files in the `state`
 volume that open with no password, and every other setting has a default in the image that suits a

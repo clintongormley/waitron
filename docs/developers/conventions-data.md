@@ -4672,10 +4672,12 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   moves it.
 - **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
   `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading. While
-  the start waits, the look first clears that reading and time health's cache (`clearClockStatus`),
-  so the host program, which systemd starts once per request, runs at every look, and a service
-  that has just synchronised is seen at the next one; once devices or a person have confirmed, the
-  reading's minute applies. A synchronised answer confirms `by_internet`, from `waiting`,
+  the start waits on a box that files records, the one kind whose payments wait for it, the look
+  first clears that reading and time health's cache (`clearClockStatus`), so the host program,
+  which systemd starts once per request, runs at every look, and a service that has just
+  synchronised is seen at the next one; on a box that files none, and once devices or a person
+  have confirmed, the reading's minute applies. While the start waits on a box that files records,
+  `clock.retry` (under *The server's client* below) adds a request at most every 30 seconds. A synchronised answer confirms `by_internet`, from `waiting`,
   `by_devices` or `by_person`.
 - **Two devices.** While waiting, except for a future-date refusal (below), each look also offers
   the stored device readings: two or more devices at different network addresses, each within 5
@@ -4824,14 +4826,14 @@ covered only once that file lists it. The jump cases in `clock-watch.start-up.te
 suspend. `boot.clock-correction.test.ts` checks that boot hands the watch the boot reader's
 `elapsed` and adds the watch as an anchor, by identity; no boot test makes a jump, and none
 checks what boot's own `clearClockStatus` clears: the control case of
-`boot.restricted-quiet.test.ts` runs the watch while the start waits, so it calls it, but asserts
-only that looks ran.
+`boot.restricted-quiet.test.ts` runs the watch while the start waits on a box that files records,
+so it calls it, but asserts only that looks ran.
 
 ### The box sets its own clock
 
 Built by A798-B slice 9b ([plan](https://github.com/clintongormley/waitron/blob/cb1aeeb7b2/docs/superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
-the container — the **host service** — sets it, or switches its time synchronisation back on, when the server asks. The box sets its clock
+the container — the **host service** — sets it, switches its time synchronisation back on, or restarts the time service, when the server asks. The box sets its clock
 inside a stop it already has (before 28-10-2024, `clock.unusable`), and, from a till's time or an administrator's own device, while a start waits for its time to be
 confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), from the setup,
 restore and handover pages' clock step, and from the done screen or waiting page while a restore's
@@ -4866,6 +4868,13 @@ comes out:
 - `clock.sync-on` is refused `busy` while a set holds the same lock, running nothing. Otherwise it
   writes one `logger -t waitron-box` line and runs `timedatectl set-ntp true`, answering
   `{"ok":true}` or `sync_on_failed`.
+- `clock.retry` takes the same lock (`busy`), then is refused `synchronised`, `not_running`
+  (automatic time off, synchronisation read as neither yes nor no, or no listed time service
+  running) or `saved_time_ahead` (timesyncd's saved
+  clock file is dated after now, or its date cannot be read). The reason is timesyncd's man page,
+  read, not measured: it "will advance the clock when it is started and notices that the system
+  clock is before the modification time of /var/lib/systemd/timesync/clock". Otherwise it runs `systemctl restart` on each running listed time service, writing no
+  journal line of its own, and answers `{"ok":true}` or `restart_failed`.
   Any other line answers `unknown_request`.
 
 The requester is JSON the server reports about itself: the host only logs it, never runs it, and
@@ -4875,7 +4884,11 @@ the app mounts the socket's folder only once `.env` names it (`WAITRON_BOX_SOCKE
 `deploy/compose.yml`).
 
 **The server's client** (`apps/server/src/box-host-client.ts`). `clockStatus()` waits 2 seconds and
-`setClock()` and `timeServiceOn()` 20, longer than the host's own 15-second limit. Every failure is an answer, never a
+`setClock()` and `timeServiceOn()` 20, longer than the host's own 15-second limit;
+`retryTimeService()` waits 5, so a stalled restart holds a person's confirmation in the correction's
+turn no longer than that; a set asked straight after a restart that timed out may be refused
+`busy` (reported to the person as `refused`) until the host's 15-second limit ends the restart, and,
+like any set asked of the host, it ends the restarts for this process. Every failure is an answer, never a
 throw: `missing` (no connection was made), `lost` (the connection broke, or closed with no answer,
 after the request was sent, so the clock may have moved), `refused`, `timeout` or `malformed`.
 The start check, the clock watch, time health, the `clock.sync_off` warning
@@ -4883,7 +4896,7 @@ The start check, the clock watch, time health, the `clock.sync_off` warning
 production only), the `clock.disagrees` and `clock.peer_disagrees` warnings and the till's
 `clock.device_wrong` notice read the status through one 60-second cache
 (`sharedClockServiceReading`), which a set clears, and the clock watch clears before each look
-while the start waits; a clock set asks the host itself. Boot hands
+while the start waits on a box that files records; a clock set asks the host itself. Boot hands
 every reader the host through `keepTimeServiceOn` (`apps/server/src/time-service-kept-on.ts`): a
 status reading `off` asks `clock.sync-on` and waits for its answer, logs `time_service.switched_on`
 or, once per distinct failure, `time_service.switch_on_failed`, and answers the reading as it was.
@@ -4895,8 +4908,20 @@ reading that finds the service not `off`, starts the wait again at a minute. So 
 `timedatectl set-ntp true` keeps failing is asked about once an hour rather than at every reading.
 In trading mode the clock watch also reads the shared reading at the end of every look, every 15
 seconds, whatever the start's state (`readTimeService` in `createClockWatch`), so a service
-switched off is found with no request from a screen; once the start is confirmed, the cache keeps
-that to about one host request a minute. It reads outside the correction's turn.
+switched off is found with no request from a screen; once the start is confirmed, or on a box
+that files no records, the cache keeps that to about one host request a minute. It reads outside
+the correction's turn.
+While the start waits on a box that files records, a look whose device check leaves it waiting
+then asks `clock.retry` (`retryTimeService`, `apps/server/src/time-service-retry.ts`) in a
+correction turn of its own,
+after the devices', at most once every 30 seconds of the steady clock, and never once a set has
+been asked of the host, whatever it answered, or a person has confirmed the time in this process. Measured on the test box on
+2026-11-20 ([PR #3854's comment](https://github.com/clintongormley/waitron/pull/3854#issuecomment-7025912599)):
+timesyncd left alone tried again after waits that doubled (32, 64, 128 and 256 s were seen; by
+systemd v257's `src/timesync/timesyncd-manager.c`, read, not measured, they go on doubling up to
+`PollIntervalMaxSec=`, 34 min 8 s by default), and a restart synchronised it in under half a
+second, twice. It logs `time_service.restarted` at the first
+restart and every tenth, and `time_service.restart_failed` once per distinct failure.
 The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the
@@ -5113,8 +5138,8 @@ time service; every printed line is in the plan's "Measured for 9b" table):
   [run 41175687596](https://github.com/clintongormley/waitron/actions/runs/41175687596),
   [run 41176674962](https://github.com/clintongormley/waitron/actions/runs/41176674962)).
 
-Not measured: what timesyncd does with its clock file at the next boot (the runners run chrony), and
-Docker Desktop (M7).
+Not measured: what timesyncd does with its clock file when it starts, at the next boot or after a
+`clock.retry` restart (the runners run chrony), and Docker Desktop (M7).
 
 Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.start-up.test.ts`,
 `clock-start-up.test.ts`, `clock-set.route.test.ts`, `till-box-clock-api.test.ts` and

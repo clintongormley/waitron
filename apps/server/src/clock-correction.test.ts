@@ -1247,7 +1247,12 @@ describe("the start check's device confirmation and a set", () => {
       read: (fn) => fn(TX),
       correction: h.correction,
       startUp: { noStop },
-      start: { state, clockStatus: async () => UNSYNCHRONISED, heads: watchHeads },
+      start: {
+        state,
+        clockStatus: async () => UNSYNCHRONISED,
+        filesRecords: () => true,
+        heads: watchHeads,
+      },
       log: () => {},
     });
     for (const [id, address] of AGREEING) store.noteDevice(id, address, START_MS, h.measured());
@@ -1372,7 +1377,12 @@ describe("the clock watch's jump check and a set", () => {
       },
       read: (fn) => fn(TX),
       correction: h.correction,
-      start: { state, clockStatus: async () => UNSYNCHRONISED, heads: async () => HEADS_AFTER },
+      start: {
+        state,
+        clockStatus: async () => UNSYNCHRONISED,
+        filesRecords: () => true,
+        heads: async () => HEADS_AFTER,
+      },
       wall: () => h.measured().wallMs,
       monotonic: () => h.measured().monoMs,
       log,

@@ -125,6 +125,25 @@ describe("keepTimeServiceOn", () => {
     expect(host.setClock).toHaveBeenCalledWith(input);
   });
 
+  it("passes a restart of the time service straight to the host, and leaves it out for a host without one", async () => {
+    const retryTimeService = vi.fn(async () => ({
+      available: false as const,
+      reason: "refused" as const,
+      refusal: "busy",
+    }));
+    const host = { ...fakeHost(ON, []), retryTimeService };
+    const kept = keepTimeServiceOn(host, vi.fn<Logger>(), testClock().now);
+    expect(await kept.retryTimeService?.()).toEqual({
+      available: false,
+      reason: "refused",
+      refusal: "busy",
+    });
+    expect(retryTimeService).toHaveBeenCalledTimes(1);
+    expect(
+      keepTimeServiceOn(fakeHost(ON, []), vi.fn<Logger>(), testClock().now).retryTimeService,
+    ).toBeUndefined();
+  });
+
   it("answers the reading and warns lost when the switch-on throws before it returns a promise", async () => {
     const host: BoxHostClient = {
       clockStatus: async () => OFF,

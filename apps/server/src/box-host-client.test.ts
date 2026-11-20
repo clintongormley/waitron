@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   boxHostClient,
+  DEFAULT_RETRY_MS,
   DEFAULT_SET_MS,
   DEFAULT_SOCKET_PATH,
   DEFAULT_STATUS_MS,
@@ -340,5 +341,39 @@ describe("boxHostClient().timeServiceOn", () => {
       available: false,
       reason: "timeout",
     });
+  });
+});
+
+describe("boxHostClient().retryTimeService", () => {
+  it("sends one clock.retry line and answers available when the host restarted the service", async () => {
+    const h = await host(answer({ ok: true }));
+    expect(await boxHostClient({ socketPath: h.path }).retryTimeService()).toEqual({
+      available: true,
+    });
+    expect(h.lines).toEqual(["clock.retry"]);
+  });
+
+  it("answers refused with the host's reason", async () => {
+    const h = await host(answer({ ok: false, reason: "saved_time_ahead" }));
+    expect(await boxHostClient({ socketPath: h.path }).retryTimeService()).toEqual({
+      available: false,
+      reason: "refused",
+      refusal: "saved_time_ahead",
+    });
+  });
+
+  it("answers timeout at its own limit, not the set's", async () => {
+    const h = await host(() => {});
+    const started = performance.now();
+    expect(
+      await boxHostClient({ socketPath: h.path, setMs: 2_000, retryMs: 200 }).retryTimeService(),
+    ).toEqual({ available: false, reason: "timeout" });
+    const took = performance.now() - started;
+    expect(took).toBeGreaterThanOrEqual(190);
+    expect(took).toBeLessThan(1000);
+  });
+
+  it("waits 5 seconds by default", () => {
+    expect(DEFAULT_RETRY_MS).toBe(5_000);
   });
 });

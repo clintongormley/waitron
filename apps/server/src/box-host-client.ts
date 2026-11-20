@@ -39,6 +39,9 @@ export interface BoxHostClient {
   clockStatus(): Promise<ClockServiceStatus>;
   /** Switches the host's automatic time back on (`clock.sync-on`); test fakes may leave it out. */
   timeServiceOn?(): Promise<TimeServiceOnAnswer>;
+  /** Restarts the host's running time service so it asks its servers now (`clock.retry`); test
+   * fakes may leave it out. */
+  retryTimeService?(): Promise<TimeServiceOnAnswer>;
   setClock(input: {
     targetMs: number;
     requester: Record<string, string | null>;
@@ -49,6 +52,10 @@ export const DEFAULT_SOCKET_PATH = "/run/waitron-box/box.sock";
 export const DEFAULT_STATUS_MS = 2_000;
 /** Longer than the host unit's `RuntimeMaxSec=15`, so the host ends a stuck set first. */
 export const DEFAULT_SET_MS = 20_000;
+/** Short, since a restart is asked in the correction's turn, where a person's confirmation waits;
+ * the host may hold its lock past it, so a set just after a timed-out restart can be refused `busy`,
+ * which still counts as a set and ends the restarts. */
+export const DEFAULT_RETRY_MS = 5_000;
 const MAX_REPLY_BYTES = 4096;
 /** The host's own limit on a requester (`deploy/box/waitron-box.sh`). */
 const MAX_REQUESTER_BYTES = 512;
@@ -148,7 +155,7 @@ const isMs = (value: unknown): value is number =>
 const SERVICES: ReadonlySet<unknown> = new Set(["on", "off", "stopped"]);
 
 export function boxHostClient(
-  deps: { socketPath?: string; statusMs?: number; setMs?: number } = {},
+  deps: { socketPath?: string; statusMs?: number; setMs?: number; retryMs?: number } = {},
 ): Required<BoxHostClient> {
   const socketPath = isUnset(deps.socketPath) ? DEFAULT_SOCKET_PATH : deps.socketPath;
   return {
@@ -204,19 +211,22 @@ export function boxHostClient(
       if (!isMs(beforeMs) || !isMs(afterMs)) return { available: false, reason: "malformed" };
       return { available: true, beforeMs, afterMs };
     },
-    async timeServiceOn() {
-      const result = await exchange(socketPath, "clock.sync-on", deps.setMs ?? DEFAULT_SET_MS);
-      if (!result.ok) {
-        return {
-          available: false,
-          reason: result.reason,
-          ...(result.refusal === undefined ? {} : { refusal: result.refusal }),
-          ...(result.detail === undefined ? {} : { detail: result.detail }),
-        };
-      }
-      return { available: true };
-    },
+    timeServiceOn: () => askToAct("clock.sync-on", deps.setMs ?? DEFAULT_SET_MS),
+    retryTimeService: () => askToAct("clock.retry", deps.retryMs ?? DEFAULT_RETRY_MS),
   };
+
+  async function askToAct(line: string, limitMs: number): Promise<TimeServiceOnAnswer> {
+    const result = await exchange(socketPath, line, limitMs);
+    if (!result.ok) {
+      return {
+        available: false,
+        reason: result.reason,
+        ...(result.refusal === undefined ? {} : { refusal: result.refusal }),
+        ...(result.detail === undefined ? {} : { detail: result.detail }),
+      };
+    }
+    return { available: true };
+  }
 }
 
 export type HostActor = { source: "person"; person: string } | { source: "server" };
