@@ -1711,7 +1711,7 @@ it("advances from a country whose filing module offers no description", async ()
 describe("owner's fixes of 2026-11-20", () => {
   afterEach(() => setLocale("en-GB"));
 
-  it("names the venue-name input for the venue, so a browser does not offer the person's own name", async () => {
+  it("renders the native venueName input with autocomplete off", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const field = q(el, "[data-test=name]") as HTMLElement & { updateComplete: Promise<unknown> };
     await field.updateComplete;

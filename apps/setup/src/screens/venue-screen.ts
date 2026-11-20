@@ -1,7 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   baseStyles,
   leaveCoordinatorFor,
@@ -87,7 +87,6 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   rectificativeSeriesCode: "off",
 };
 
-/** A browser can offer the person's own name for an input named `name`, even with autocomplete off. */
 const INPUT_NAME: Readonly<Partial<Record<TextField, string>>> = { name: "venueName" };
 
 const CODE_FIELDS: ReadonlySet<TextField> = new Set([
@@ -310,10 +309,9 @@ export class SetupVenueScreen extends LitElement {
 
   @state() private invoiceLocales: string[] = ["es-ES"];
 
-  @state() private attempted = false;
   @state() private staffLanguage?: "en" | "es";
 
-  @state() private refusalDismissed = false;
+  readonly #feedback = new FormFeedback(this);
 
   /** Which address search last returned an address in a country other than the form's. */
   @state() private foreignAddress?: { readonly which: AddressSearch; readonly country: string };
@@ -403,7 +401,7 @@ export class SetupVenueScreen extends LitElement {
         this.values = form.values;
         this.invoiceLocales = form.invoiceLocales;
         this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
-        this.attempted = false;
+        this.#feedback.attempted = false;
       },
     });
     this.#scope?.commit(this.#baseline);
@@ -423,7 +421,7 @@ export class SetupVenueScreen extends LitElement {
         this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
       this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
     }
-    if (changed.has("refusal")) this.refusalDismissed = false;
+    if (changed.has("refusal")) this.#feedback.newRefusal("request");
     this.#errors = this.#collectErrors();
   }
 
@@ -702,7 +700,7 @@ export class SetupVenueScreen extends LitElement {
 
   #collectErrors(): Map<FieldKey, string> {
     const errors = new Map<FieldKey, string>();
-    if (this.attempted) {
+    if (this.#feedback.attempted) {
       for (const key of this.#invalidFields()) errors.set(key, this.#fieldMessage(key));
     }
     if (this.serverInvalid !== undefined) {
@@ -720,11 +718,10 @@ export class SetupVenueScreen extends LitElement {
     if (identity !== undefined) {
       this.values = { ...this.values, taxId: identity.taxId, legalName: identity.legalName };
     }
-    this.attempted = true;
-    this.refusalDismissed = true;
+    this.#feedback.press("request");
     this.serverInvalid = undefined;
     if (this.#invalidFields().size > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const pack = this.#pack();
@@ -866,13 +863,17 @@ export class SetupVenueScreen extends LitElement {
     const fixedReason =
       fixed === undefined ? "" : resolveContentText(fixed.reason, currentLocale(), "en");
     const errors = this.#errors;
-    const fieldErrors = [...errors.keys()].filter((key) => this.#shows(key));
-    const invalid = this.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
-    const bottom = [
-      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
-      ...[...errors].filter(([key]) => !this.#shows(key)).map(([, message]) => message),
-      ...(fieldErrors.length > 0 ? [t("venue.fix_fields")] : []),
-    ].join(" ");
+    const fieldErrors = new Set([...errors.keys()].filter((key) => this.#shows(key)));
+    const invalid =
+      this.#feedback.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
+    const bottom = this.#feedback.message(
+      {
+        request: this.#feedback.shows("request") ? this.errorMessage : undefined,
+        ...Object.fromEntries(errors),
+      },
+      fieldErrors,
+      t("venue.fix_fields"),
+    );
     return html`
       <h1>${t("venue.heading")}</h1>
       <p class="intro">${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
