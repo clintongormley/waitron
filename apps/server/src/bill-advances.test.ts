@@ -777,3 +777,66 @@ describe("an advance in the day's cash count", () => {
     });
   });
 });
+
+describe("an advance's clock", () => {
+  /** Reads 11:00:00Z on 14 April 2026 first, and one second later on every read after. */
+  function steppingClock(): TrustedClock {
+    const base = systemClock();
+    let next = Date.parse("2026-04-14T11:00:00.000Z");
+    return {
+      ...base,
+      now: () => {
+        const instant = new Date(next);
+        next += 1000;
+        return { ...base.now(), instant };
+      },
+    };
+  }
+
+  async function heldCounterOrder(): Promise<string> {
+    const billId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: billId,
+      lines: MEAL.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+      zoneId: venue.zoneId,
+      operatorId: venue.operatorId,
+    });
+    return billId;
+  }
+
+  it.each(["a table's bill", "a held counter order"])(
+    "a cash advance on %s is issued at the one reading its payment was received at",
+    async (kind) => {
+      const held = kind === "a held counter order";
+      const billId = held ? await heldCounterOrder() : (await bill120()).billId;
+
+      const paid = await pay(
+        billId,
+        {
+          amount: "30.00",
+          method: "cash",
+          tendered: "30.00",
+          applied: "30.00",
+          ownReceipt: true,
+          ...(held
+            ? { expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)) }
+            : {}),
+        },
+        venue.appAt(steppingClock()),
+      );
+
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const [payment] = await paymentRows(venue, billId);
+      const [sale] = await inTx(venue, (tx) =>
+        tx
+          .select({ issuedAt: sales.issuedAt })
+          .from(sales)
+          .innerJoin(billAdvances, eq(billAdvances.advanceSaleId, sales.id))
+          .where(eq(billAdvances.workingOrderId, billId)),
+      );
+      expect(new Date(sale!.issuedAt).toISOString()).toBe(
+        new Date(payment!.receivedAt!).toISOString(),
+      );
+    },
+  );
+});

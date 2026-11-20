@@ -1954,9 +1954,10 @@ export async function takeBillPayment(
       } else {
         await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
       }
+      const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const { invoice, total } = await issueWhenFullyPaid(
         tx,
-        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        paidAt,
         cfg,
         workingOrderId,
         operator.personId,
@@ -1967,7 +1968,7 @@ export async function takeBillPayment(
           guestCount: req.guestCount,
         },
       );
-      await issueAdvanceIfOwed(tx, deps, cfg, payment, printers, total);
+      await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, total);
       const slip = await enqueueRequestedPaymentSlip(
         tx,
         cfg,
