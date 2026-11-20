@@ -80,7 +80,7 @@ describe("changeTaxpayerDomicile", () => {
     });
   }
 
-  it("changes the registered address and nothing else, and records the old and new address", async () => {
+  it("changes the registered address and nothing else, and records who changed it without the address", async () => {
     await seed("2º 1ª");
     const before = await stored();
     const result = await withTransaction(suite.db, (tx) =>
@@ -97,11 +97,8 @@ describe("changeTaxpayerDomicile", () => {
     });
     const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({
-      kind: "taxpayer.domicile_changed",
-      personId: null,
-      data: { from: "2º 1ª", to: "Calle Mayor 1, 2º 1ª, 08010 Barcelona" },
-    });
+    expect(entries[0]).toMatchObject({ kind: "taxpayer.domicile_changed", personId: null });
+    expect(entries[0]!.data).toEqual({});
   });
 
   it("writes nothing and records nothing when the stored address is not the one expected", async () => {
@@ -138,6 +135,7 @@ describe("changeTaxpayerDomicile", () => {
     expect(result).toEqual({ changed: true });
     expect((await stored())?.taxpayerDomicile).toBe("Calle Mayor 1");
     const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
-    expect(entries[0]).toMatchObject({ data: { from: null, to: "Calle Mayor 1" } });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.data).toEqual({});
   });
 });

@@ -58,7 +58,7 @@ export async function changeTaxpayerDomicile(
       kind: "taxpayer.domicile_changed",
       subjectId: "1",
       personId: input.personId,
-      data: { from: input.expected, to: input.taxpayerDomicile },
+      data: {},
     });
   return { changed: updated.length > 0 };
 }

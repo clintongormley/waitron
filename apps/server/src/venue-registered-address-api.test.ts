@@ -120,8 +120,8 @@ describe("changing the taxpayer's registered address", () => {
       personId: suite.db.all<{ id: string }>(
         sql`select id from persons where display_name = 'The Manager'`,
       )[0]!.id,
-      data: { from: ORIGINAL, to: next },
     });
+    expect(entries[0]!.data).toEqual({});
   });
 
   it("fills an address that was never stored when the page showed none", async () => {
@@ -219,7 +219,7 @@ describe("the registered address on full invoices", () => {
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.purpose, "full"));
-    const billId = await parked(venue, "Caña");
+    const billId = await parked(venue, "Tarta");
     const { saleId } = await inTx(venue, (tx) =>
       recordSale(tx, venue.backend, {
         operationDescription: "Restaurante",
