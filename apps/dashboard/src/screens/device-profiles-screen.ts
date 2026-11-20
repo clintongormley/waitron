@@ -3,12 +3,14 @@ import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.j
 import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
   parseDecimalInput,
   baseStyles,
   pageTitleStyles,
+  FormFeedback,
   draftScopeFor,
   saveActionState,
   UrlStateController,
@@ -16,6 +18,7 @@ import {
   navigationGuardFor,
   type DraftScope,
   type LeaveCoordinator,
+  type WtButton,
 } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -32,7 +35,6 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { bottomMessage } from "../i18n/form-message.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { a4Choices, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -84,6 +86,39 @@ type PrinterDefaultKey =
 /** A receipt printer, or on the invoice list an A4 printer too. */
 type ListablePrinter = Pick<Printer, "id" | "name" | "active">;
 type PrinterChoice = { printer: ListablePrinter; listed: boolean; label: string };
+const printerIdOf = ({ printer }: PrinterChoice) => printer.id;
+
+function equipmentInOrder<T extends { id: string; active: boolean }>(
+  pool: readonly T[],
+  order: readonly string[],
+  listed: readonly string[],
+): T[] {
+  const available = new Map(
+    pool.filter((item) => item.active || listed.includes(item.id)).map((item) => [item.id, item]),
+  );
+  return [
+    ...order.flatMap((id) => {
+      const item = available.get(id);
+      available.delete(id);
+      return item === undefined ? [] : [item];
+    }),
+    ...available.values(),
+  ];
+}
+
+function toggleEquipment(
+  listed: readonly string[],
+  visible: readonly string[],
+  id: string,
+  checked: boolean,
+): string[] {
+  const others = listed.filter((other) => other !== id);
+  if (checked) {
+    const next = visible.slice(visible.indexOf(id) + 1).find((other) => others.includes(other));
+    others.splice(next === undefined ? others.length : others.indexOf(next), 0, id);
+  }
+  return others;
+}
 
 interface ProfileDraft {
   name: string;
@@ -781,6 +816,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftInactivityMinutes: number | null = null;
   @state() private invalidInactivityText: string | null = null;
   @state() private draftPrinterLists: PrinterDraft = NO_PRINTER_LISTS;
+  #printerDisplayOrder: Partial<Record<PrinterListKey, readonly string[]>> = {};
   /** The drawer list and defaults as opened, so a save sends only the ones it changed. */
   #loadedEquipment: ProfileEquipmentDefaults | null = null;
   /** "hidden" when the session may not manage card readers. */
@@ -803,8 +839,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** The edited profile as opened, so an edit sends only the parts it changed; null for a new one. */
   #loaded: DeviceProfile | null = null;
 
-  /** Set by the first Save; from then on the form's own checks mark their fields. */
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A refusal's sentence under the field it names, until that field changes or Save is pressed. */
   @state() private fieldRefusal: { field: EditorField; sentence: string } | null = null;
 
@@ -854,6 +889,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftInactivityMinutes = value.inactivityMinutes;
         this.invalidInactivityText = value.invalidInactivityText;
         this.draftPrinterLists = structuredClone(value.printerLists);
+        this.#printerDisplayOrder = {};
         this.draftKitchenScreens = structuredClone(value.kitchenScreens);
         this.draftDepartmentId = value.departmentId;
         this.draftEveryZone = value.everyZone;
@@ -1079,7 +1115,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #ownErrors(): FieldErrors {
-    if (!this.attempted) return {};
+    if (!this.#feedback.attempted) return {};
     const errors: FieldErrors = {};
     if (this.draftName.trim() === "") errors.name = t("form.name_required");
     if (this.#ordering()) {
@@ -1106,14 +1142,25 @@ export class DeviceProfilesScreen extends LitElement {
   #errors(): FieldErrors {
     const errors = this.#ownErrors();
     const refused = this.fieldRefusal;
-    if (refused !== null && this.#shownFields().includes(refused.field) && !errors[refused.field])
+    if (
+      refused !== null &&
+      this.#feedback.shows(refused.field) &&
+      this.#shownFields().includes(refused.field) &&
+      !errors[refused.field]
+    )
       errors[refused.field] = refused.sentence;
     return errors;
   }
 
   #clearRefusal(...fields: EditorField[]): void {
     if (this.fieldRefusal !== null && fields.includes(this.fieldRefusal.field))
-      this.fieldRefusal = null;
+      this.#feedback.dismiss(this.fieldRefusal.field);
+  }
+
+  #showFieldRefusal(refused: NonNullable<typeof this.fieldRefusal>): void {
+    this.fieldRefusal = refused;
+    this.#feedback.newRefusal(refused.field);
+    void this.#focusFirstError({ [refused.field]: refused.sentence });
   }
 
   #fieldTab(field: EditorField): EditorTab {
@@ -1254,6 +1301,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftInactivityMinutes = null;
     this.invalidInactivityText = null;
     this.draftPrinterLists = NO_PRINTER_LISTS;
+    this.#printerDisplayOrder = {};
     this.#loadedEquipment = null;
     this.readerState = "loading";
     this.readers = [];
@@ -1269,7 +1317,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftRoles = this.jobRoles.map((role) => role.id);
     this.draftStartingScreen = null;
     this.#loaded = null;
-    this.attempted = false;
+    this.#feedback.reset();
     this.fieldRefusal = null;
     this.#opened += 1;
   }
@@ -1399,8 +1447,8 @@ export class DeviceProfilesScreen extends LitElement {
       }
       this.draftRoles = [...profile.admittedStaffRoleIds];
       this.draftStartingScreen = profile.startingScreen;
-      this.attempted =
-        this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
+      if (this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0)
+        this.#feedback.press();
       this.mode = "editor";
       this.#registerDraft();
       this.#selectTargetTab(view);
@@ -1526,18 +1574,28 @@ export class DeviceProfilesScreen extends LitElement {
     this.#draftScope?.changed();
   }
 
-  /** Appended when switched on; switching off the list's default leaves it with none. */
+  #printerOrder(key: PrinterListKey, visible?: readonly string[]): readonly string[] {
+    const order = this.#printerDisplayOrder[key] ?? this.#loaded?.[key] ?? [];
+    return visible === undefined ? order : [...new Set([...order, ...visible])];
+  }
+
   #onPrinterToggle(
     event: CustomEvent<{ checked: boolean }>,
     list: (typeof PRINTER_LISTS)[number],
     printerId: string,
+    visible: readonly string[],
   ): void {
     event.stopPropagation();
-    const others = this.draftPrinterLists[list.key].filter((id) => id !== printerId);
+    this.#printerDisplayOrder[list.key] = this.#printerOrder(list.key, visible);
     const unlisted = !event.detail.checked && this.draftPrinterLists[list.defaultKey] === printerId;
     this.draftPrinterLists = {
       ...this.draftPrinterLists,
-      [list.key]: event.detail.checked ? [...others, printerId] : others,
+      [list.key]: toggleEquipment(
+        this.draftPrinterLists[list.key],
+        visible,
+        printerId,
+        event.detail.checked,
+      ),
       ...(unlisted ? { [list.defaultKey]: null } : {}),
     };
     this.#clearRefusal(
@@ -1560,12 +1618,20 @@ export class DeviceProfilesScreen extends LitElement {
     this.#draftScope?.changed();
   }
 
-  #onReaderToggle(event: CustomEvent<{ checked: boolean }>, readerId: string): void {
+  #onReaderToggle(
+    event: CustomEvent<{ checked: boolean }>,
+    readerId: string,
+    visible: readonly string[],
+  ): void {
     event.stopPropagation();
-    const others = this.draftReaders.readerIds.filter((id) => id !== readerId);
     const unlisted = !event.detail.checked && this.draftReaders.defaultReaderId === readerId;
     this.draftReaders = {
-      readerIds: event.detail.checked ? [...others, readerId] : others,
+      readerIds: toggleEquipment(
+        this.draftReaders.readerIds,
+        visible,
+        readerId,
+        event.detail.checked,
+      ),
       defaultReaderId: unlisted ? null : this.draftReaders.defaultReaderId,
     };
     this.#clearRefusal("readerDefault");
@@ -1698,14 +1764,34 @@ export class DeviceProfilesScreen extends LitElement {
 
   /** Swaps with the neighbour on screen, so an id the printer list has not delivered is passed
    * over rather than swapped with unseen. */
-  #movePrinter(key: PrinterListKey, drawn: readonly string[], printerId: string, by: -1 | 1): void {
+  async #movePrinter(
+    key: PrinterListKey,
+    drawn: readonly string[],
+    visible: readonly string[],
+    printerId: string,
+    by: -1 | 1,
+    button: WtButton,
+  ): Promise<void> {
+    const focused = this.shadowRoot!.activeElement === button;
     const neighbour = drawn[drawn.indexOf(printerId) + by]!;
     const list = [...this.draftPrinterLists[key]];
     const from = list.indexOf(printerId);
     const to = list.indexOf(neighbour);
     [list[from], list[to]] = [neighbour, printerId];
+    this.#printerDisplayOrder[key] = this.#printerOrder(key, visible).map((id) =>
+      id === printerId ? neighbour : id === neighbour ? printerId : id,
+    );
     this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };
     this.#draftScope?.changed();
+    if (!focused) return;
+    await this.updateComplete;
+    const active = this.shadowRoot!.activeElement;
+    if (button.isConnected && (active === null || active === button)) {
+      const target = button.disabled
+        ? button.parentElement?.querySelector<WtButton>("wt-button:not([disabled])")
+        : button;
+      target?.focus();
+    }
   }
 
   async #cancel(reason: "cancel" | "navigation" = "cancel"): Promise<void> {
@@ -1762,10 +1848,7 @@ export class DeviceProfilesScreen extends LitElement {
         void this.#rereadReaders(saved.id, this.#opened, turn);
       const refused = this.#refusedField(error);
       if (refused === null) this.#showError(codeOf(error));
-      else {
-        this.fieldRefusal = refused;
-        void this.#focusFirstError({ [refused.field]: refused.sentence });
-      }
+      else this.#showFieldRefusal(refused);
       return false;
     }
     if (!active()) return false;
@@ -1778,7 +1861,7 @@ export class DeviceProfilesScreen extends LitElement {
   async #save(): Promise<void> {
     const state = this.#saveState();
     if (this.saving || state.unchanged || state.awaitingJobs) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.fieldRefusal = null;
     this.#showError(null);
     const own = this.#ownErrors();
@@ -1855,10 +1938,7 @@ export class DeviceProfilesScreen extends LitElement {
       else {
         const refused = this.#refusedField(error);
         if (refused === null) this.#showError(codeOf(error));
-        else {
-          this.fieldRefusal = refused;
-          void this.#focusFirstError({ [refused.field]: refused.sentence });
-        }
+        else this.#showFieldRefusal(refused);
       }
     } finally {
       if (turn === this.#saveTurn) this.saving = false;
@@ -2115,10 +2195,6 @@ export class DeviceProfilesScreen extends LitElement {
     `;
   }
 
-  /** The list's own printers first, in its order, switched-off ones included so a save keeps them;
-   * then every other printer that is switched on. The drawer list offers only printers with a
-   * drawer, and marks one it still holds whose drawer was since taken off; the invoice list offers
-   * the A4 printers too, after the receipt printers, each marked. */
   #printerChoices(key: PrinterListKey): PrinterChoice[] {
     const listed = this.draftPrinterLists[key];
     const drawers = key === "cashDrawerPrinterIds";
@@ -2132,15 +2208,11 @@ export class DeviceProfilesScreen extends LitElement {
       printer.drawerless
         ? `${printerLabel(printer)} (${t("device_profiles.no_drawer_attached")})`
         : printerLabel(printer);
-    return [
-      ...listed.flatMap((id) => {
-        const printer = pool.find((p) => p.id === id);
-        return printer === undefined ? [] : [{ printer, listed: true, label: label(printer) }];
-      }),
-      ...pool
-        .filter((printer) => printer.active && !listed.includes(printer.id))
-        .map((printer) => ({ printer, listed: false, label: label(printer) })),
-    ];
+    return equipmentInOrder(pool, this.#printerOrder(key), listed).map((printer) => ({
+      printer,
+      listed: listed.includes(printer.id),
+      label: label(printer),
+    }));
   }
 
   #renderPrinterList(
@@ -2148,7 +2220,8 @@ export class DeviceProfilesScreen extends LitElement {
     choices: PrinterChoice[],
     errors: FieldErrors,
   ): TemplateResult {
-    const drawn = choices.filter((choice) => choice.listed).map((choice) => choice.printer.id);
+    const visible = choices.map(printerIdOf);
+    const drawn = choices.filter((choice) => choice.listed).map(printerIdOf);
     const listError = list.key === "cashDrawerPrinterIds" ? errors.drawerList : undefined;
     const defaultError = errors[list.defaultField] ?? "";
     return html`<div
@@ -2160,7 +2233,7 @@ export class DeviceProfilesScreen extends LitElement {
       >
         <span class="panel-subtitle" id="${list.test}-heading">${t(list.heading)}</span>
         <div class="toggles">
-          ${choices.map(({ printer, listed, label }) => {
+          ${repeat(choices, printerIdOf, ({ printer, listed, label }) => {
             const position = drawn.indexOf(printer.id);
             return html`<div class="printer-choice">
               <wt-switch
@@ -2170,7 +2243,7 @@ export class DeviceProfilesScreen extends LitElement {
                 label=${label}
                 .checked=${listed}
                 @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                  this.#onPrinterToggle(e, list, printer.id)}
+                  this.#onPrinterToggle(e, list, printer.id, visible)}
               ></wt-switch>
               ${
                 listed
@@ -2181,7 +2254,7 @@ export class DeviceProfilesScreen extends LitElement {
                         data-test="${list.test}-up-${printer.id}"
                         aria-label="${t("device_profiles.move_up")} ${printer.name}"
                         ?disabled=${position === 0}
-                        @click=${() => this.#movePrinter(list.key, drawn, printer.id, -1)}
+                        @click=${(event: Event) => void this.#movePrinter(list.key, drawn, visible, printer.id, -1, event.currentTarget as WtButton)}
                         >${t("device_profiles.move_up")}</wt-button
                       >
                       <wt-button
@@ -2190,7 +2263,7 @@ export class DeviceProfilesScreen extends LitElement {
                         data-test="${list.test}-down-${printer.id}"
                         aria-label="${t("device_profiles.move_down")} ${printer.name}"
                         ?disabled=${position === drawn.length - 1}
-                        @click=${() => this.#movePrinter(list.key, drawn, printer.id, 1)}
+                        @click=${(event: Event) => void this.#movePrinter(list.key, drawn, visible, printer.id, 1, event.currentTarget as WtButton)}
                         >${t("device_profiles.move_down")}</wt-button
                       ></span
                     >`
@@ -2249,31 +2322,26 @@ export class DeviceProfilesScreen extends LitElement {
       reader.active
         ? reader.name
         : `${reader.name} (${t(reader.canEnable ? "payments.reader_unavailable" : "payments.reader_unpaired")})`;
-    const choices = [
-      ...listed.flatMap((id) => {
-        const reader = this.readers.find((r) => r.id === id);
-        return reader === undefined ? [] : [{ reader, listed: true }];
-      }),
-      ...this.readers
-        .filter((reader) => reader.active && !listed.includes(reader.id))
-        .map((reader) => ({ reader, listed: false })),
-    ];
+    const choices = equipmentInOrder(this.readers, this.#loadedReaders.readerIds, listed);
+    const visible = choices.map(({ id }) => id);
     const error = errors.readerDefault ?? "";
     return html`${this.#switchGroup(
         "profile-readers",
         t("device_profiles.card_readers"),
         undefined,
-        choices.map(
-          ({ reader, listed }) =>
+        html`${repeat(
+          choices,
+          ({ id }) => id,
+          (reader) =>
             html`<wt-switch
               data-test="profile-reader-${reader.id}"
               name="readerIds"
               label=${label(reader)}
-              .checked=${listed}
+              .checked=${listed.includes(reader.id)}
               @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
-                this.#onReaderToggle(e, reader.id)}
+                this.#onReaderToggle(e, reader.id, visible)}
             ></wt-switch>`,
-        ),
+        )}`,
       )}
       <wt-combobox
         class="field"
@@ -2287,8 +2355,8 @@ export class DeviceProfilesScreen extends LitElement {
         .options=${[
           { value: "", label: t("device_profiles.default_none") },
           ...choices
-            .filter((choice) => choice.listed)
-            .map(({ reader }) => ({ value: reader.id, label: label(reader) })),
+            .filter(({ id }) => listed.includes(id))
+            .map((reader) => ({ value: reader.id, label: label(reader) })),
         ]}
         .value=${this.draftReaders.defaultReaderId ?? ""}
         .error=${error}
@@ -2461,7 +2529,7 @@ export class DeviceProfilesScreen extends LitElement {
     test: string,
     heading: string,
     error: string | undefined,
-    switches: TemplateResult[],
+    switches: TemplateResult | TemplateResult[],
     hint?: { test: string; text: string },
   ): TemplateResult {
     const described = [hint ? `${test}-hint` : "", error ? `${test}-error` : ""]
@@ -2687,12 +2755,12 @@ export class DeviceProfilesScreen extends LitElement {
   #renderEditor(): TemplateResult {
     const errors = this.#errors();
     const ordering = this.#ordering();
-    const marked = FIELDS.some((field) => errors[field]);
     const ownMarked = Object.keys(this.#ownErrors()).length > 0;
     const save = this.#saveState();
-    const message = bottomMessage(
-      this.errorKey === null ? null : codeMessage(this.errorKey),
-      marked ? t("form.fix_fields") : null,
+    const message = this.#feedback.message(
+      { request: this.errorKey === null ? undefined : codeMessage(this.errorKey) },
+      new Set(FIELDS.filter((field) => errors[field])),
+      t("form.fix_fields"),
     );
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>

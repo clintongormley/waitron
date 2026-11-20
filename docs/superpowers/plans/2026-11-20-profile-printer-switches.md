@@ -1,0 +1,18 @@
+# Keep equipment switches with their device profile rows
+
+**Finish line.** In the Equipment tab, switching a receipt, slip, drawer or invoice printer or a card reader changes just that assignment. Available choices stay in place as you switch them. Use Move up and Move down to change the order in which printer choices appear.
+
+**Reproduction.** In Chromium, clicking Office A4 with the invoice list empty made Office and Terrace look on. The native switch that was clicked became the Terrace row. Save still sent only Office. The editor matches switches by position when row order changes, while a native click changes the switch's own checked property.
+
+**Change** in `apps/dashboard/src/screens/device-profiles-screen.ts`. Start each section with its loaded assignments in saved order, followed by available choices. Read labels and eligibility from the current equipment reads. Add an id when enabled just before the next enabled row on screen, or at the end. This saves new choices top to bottom and puts a re-enabled choice back in its visible place. Printer Move swaps with the next enabled visible row in the chosen direction, skipping unchecked rows and undisplayed ids. From the first switch or Move, remember the printer list's display order until the draft closes or is restored. The watcher cleared retaining order on a switch at 22:05 after Claude reproduced drift on a live rename and a refused reader save. Keep switches tied to their equipment id with Lit's keyed `repeat`. On Move, return keyboard focus to the corresponding control on the moved row if it was focused. Keep default selection and saving through the existing handlers.
+
+**Availability choice for the watcher.** A globally inactive or drawerless assignment can be removed today, at which point the row disappears. Keep that rule. The stable-position promise applies to choices that are still eligible to be switched on. Default removal still clears its selection.
+
+**Checks.** In `apps/dashboard/src/screens/device-profiles-screen.test.ts`, start with a real `userEvent` click of the A4 switch in Equipment. Watch it fail before changing the screen. Use the same browser test shape for receipt, slip, drawer and readers. Check on and off, stable row and focus, and the saved assignment. Cover reverse activation order and re-enabling a saved printer, and check keyboard focus after Move. Retain coverage of late reads, undisplayed ids, disabled equipment and defaults. Update the Device profiles section in both `apps/server/src/guide/{en,es}/staff.md` guides with how to order choices. Run the changed browser and guide checks, dashboard typecheck and a visual check in both languages and themes at phone and desktop widths.
+
+**Size.** About 75 added lines in the screen, 70 in tests and a short guide edit in each language.
+
+**Forms rule.** On 20 November at 21:56 the watcher cleared a small migration to the shared
+`FormFeedback` helper alongside the equipment fix. Keep the profile editor's field mapping,
+tab markings and focus, and how it shows or dismisses refusals. Verify those behaviors in the
+existing device-profiles screen, draft and accessibility suites.

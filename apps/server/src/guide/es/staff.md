@@ -175,6 +175,10 @@ fila para editarlo. Usa su menú **⋮** para duplicarlo o eliminarlo.
 Elige **Qué puede hacer** para las acciones y pantallas. Elige una pantalla de cocina y sus estaciones y zonas; todos los dispositivos que usan el perfil la heredan. Abre una pestaña marcada para corregir su campo
 y pulsa **Guardar**.
 
+En **Impresoras y lectores de tarjetas**, activa los equipos que puede usar este perfil. Para
+cambiar el orden de las impresoras seleccionadas en la lista, pulsa **Subir** o **Bajar** junto
+a la impresora.
+
 Para imprimir comandas, elige la impresora en **Estaciones de preparación**.
 
 Si al mover o eliminar una zona un perfil de dispositivo se queda sin zonas para tomar pedidos,

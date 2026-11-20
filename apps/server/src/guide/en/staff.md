@@ -163,6 +163,9 @@ edit. Use its **⋮** menu to duplicate or delete it.
 
 Choose **What it can do** for actions and screens. Choose one kitchen screen and its stations and zones; every device using the profile inherits it. Open a marked tab to fix its field, then choose **Save**.
 
+In **Printers and card readers**, switch on the equipment this profile can use. To reorder
+the selected printers in the list, use **Move up** or **Move down** beside the printer.
+
 To print station tickets, choose the printer in **Prep stations**.
 
 If moving or deleting a zone would leave a device profile with nowhere to take orders, choose
