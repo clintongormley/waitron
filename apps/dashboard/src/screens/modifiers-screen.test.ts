@@ -1270,7 +1270,7 @@ it("puts a refusal to offer a product with Active variants beside that item's pr
     updateExtraList: vi.fn().mockRejectedValue({
       code: "extras.product_has_variants",
       params: { field: "items.1.productId", productId: RYE },
-      status: 409,
+      status: 400,
     }),
   });
   const el = await mount(client);

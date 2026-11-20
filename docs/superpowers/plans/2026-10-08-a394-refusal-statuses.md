@@ -229,7 +229,7 @@ pin today's number are in the part named.
 - **Printing, orders, reports (A394-14)** — part 3: `printer.not_found` from a body on
   `/orders/:id/reprint`, `/reports/categories/print`, `/watchers/:id/printers`,
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
-  `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; it waits on question 4).
+  `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; done 2026-11-20 by A394-20c).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
   (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10; it
   waits on question 4); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
@@ -693,9 +693,9 @@ Status changes:
   **2026-11-20 (A394-20c, lane C):** the menu and print rows are done, by questions 4, 8 and 9.
   In `apps/server/src/menu-api.ts` (was `catalogue-api.ts`): `menu.shortcut_unreachable` and
   `extras.product_has_variants` answer 400 (each is raised only about what the body names);
-  `menu_section.wrong_role` answers 400 on the routes where only the body can name the wrong kind
-  of list (`runBodySection`: section-members remove, sections delete, shortcut add; `runBodyRole`:
-  shortcut replace) and keeps 409 where the address or a stored member can raise it (section create,
+  `menu_section.wrong_role` answers 400 on the routes where only the body names the list, section
+  or member of the wrong kind (`runBodySection`: section-members remove, sections delete, shortcut add; `runBodyRole`:
+  shortcut replace) and keeps 409 where the address can name it (section create,
   edit and delete by address, the members routes, the include-folder route), the choice A394-11
   made; `GET /management-api/folders/summary` answers `category.not_found` 400 for its query ids.
   In `apps/server/src/print-api.ts`: `printer.invalid_config` 422 → 400 and both Bluetooth codes

@@ -1884,6 +1884,20 @@ describe("mountPrintApi — management: printers CRUD", () => {
     });
   });
 
+  it("edit leaving a transport short of its required fields → 400 printer.invalid_config", async () => {
+    const app = mountApp();
+    const { agentId } = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, agentId);
+    const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
+      body: { host: null },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { error: { code: string } }).toMatchObject({
+      error: { code: "printer.invalid_config" },
+    });
+  });
+
   it("create screens the body (missing name → 400; bad transport → 400; non-integer port → 400)", async () => {
     const app = mountApp();
     const noName = await send(app, "POST", "/management-api/printers", {

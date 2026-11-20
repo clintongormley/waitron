@@ -1762,7 +1762,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#loose-ends-left-by-a394-3-1447).
 
 - **A394-16 and A394-20 to A394-22 — refusal statuses by one rule** —
-  OPEN, queued in lane B (2026-11-20); A394-20's menu and print rows are done (A394-20c, lane C). (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
+  OPEN, queued in lane B (2026-11-20); A394-20's rows outside `menu-api.ts` and `print-api.ts` remain. (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
   [Detail](backlog/architecture.md#a394-16-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
 

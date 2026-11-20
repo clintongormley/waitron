@@ -125,7 +125,9 @@ Malformed ids answer `shared.invalid_id` (400); a malformed body answers
 section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`): 400 on
 `sections/delete`, `section-members/remove` and the Device Home Page shortcut add, where only the
 body names the section or member, and 404 elsewhere.
-`menu_section.wrong_role` (409, `sectionId`, `role`) refuses presentation edits or deletes of roots
+`menu_section.wrong_role` (`sectionId`, `role`; 400 on `sections/delete`, `section-members/remove`
+and the Device Home Page shortcut add and replace, where only the body names the section or member,
+and 409 elsewhere) refuses presentation edits or deletes of roots
 and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
 anything other than a menu root.
 It also refuses removing or replacing a member that references an owned section, naming that
@@ -321,7 +323,7 @@ the menu's own structure, and how each of the two kinds of device lays them out.
 inherits another menu's. A shortcut points at a product or a section and adds no product, price or
 placement to the menu. The shortcut writer checks that the menu's working structure reaches the
 target, including targets in included menus. Use the shortcut routes to write it: the generic
-section writes refuse its section with `menu_section.wrong_role` (409).
+section writes refuse its section with `menu_section.wrong_role`.
 
 `GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
 shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
@@ -350,10 +352,10 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 (`field: "device"`). An unknown menu answers `menu.not_found` (404).
 `menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
 `field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
-order. `menu.shortcut_unreachable` (409, `ref`) refuses a target outside the working structure,
+order. `menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
 including the menu's own root, and a Archived product, which no list holds. A shortcut to a product
 archived later becomes a missing tile in its place, which publishes as an empty slot with a
-`shortcut_missing` warning. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
+`shortcut_missing` warning. `menu_section.wrong_role` (400, `sectionId`, `role`) refuses a Device Home Page section,
 this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
 member the menu's Device Home Page does not hold: 400 when the shortcut add's `ref` names the
 section, 404 otherwise; a product target must be a stored top-level

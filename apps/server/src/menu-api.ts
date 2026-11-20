@@ -357,8 +357,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 409: the body was well formed, and what the stored lists hold refused it.
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
-  // 400 on the routes where only the body can name the wrong kind of list: `runBodySection`,
-  // `runBodyRole`.
+
+  // 409 where the address names the list or member that is the wrong kind; 400 under
+  // `runBodySection` and `runBodyRole`, where only the body names it.
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
@@ -403,8 +404,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "menu.failed");
-/** For a route where these codes can only name an id the request body sent, never its path
- * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+/** For a route where these codes can only be raised by what the request body or query string
+ * names, never by its path (docs/developers/conventions-data.md, "A refusal's HTTP status says what
+ * was wrong"). */
 const runBodyIds = (...codes: string[]) =>
   createErrorBoundary(
     { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
@@ -417,7 +419,8 @@ const runBodyCategory = runBodyIds("category.not_found");
 // A folder move or delete names its products and folders in the body.
 const runFolder = runBodyIds("category.not_found", "product.not_found");
 const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_role");
-// A shortcut replace's path and body can both name a missing section, which stays a 404.
+// A shortcut replace's address (its member) and body (the section it names) can both raise
+// `menu_section.not_found`, so that code keeps its 404.
 const runBodyRole = runBodyIds("menu_section.wrong_role");
 const runBodySetMenu = runBodyIds("set_menu.not_found");
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
