@@ -1,6 +1,8 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { customElement, property, queryAssignedElements, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import {
   THEME_SELECTED_EVENT,
   ThemeChoiceController,
@@ -20,6 +22,7 @@ import {
 import { countText, currentLocale, t } from "../i18n/t.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { PressBuzzController, pressBuzzOn, setPressBuzz } from "../press-buzz-choice.js";
 import { HelpIdleController } from "../state/help-idle.js";
 import type { FormFactor } from "../layout.js";
 import {
@@ -97,6 +100,7 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
+    new PressBuzzController(this);
     // A kitchen screen never waits at the lock screen, so help and a sheet left open go after two
     // idle minutes.
     new HelpIdleController(this, {
@@ -432,6 +436,10 @@ export class TillShell extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
+      }
+
+      .press-buzz-switch {
+        padding-inline-start: var(--wt-space-4);
       }
 
       .settings-heading {
@@ -1182,11 +1190,26 @@ export class TillShell extends LitElement {
   }
 
   #themeChoices(): TemplateResult {
-    return themeChoices({
+    return html`${themeChoices({
       active: currentThemeChoice(),
       labels: themeLabels(),
       onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
-    });
+    })}${this.#pressBuzzSwitch()}`;
+  }
+
+  #pressBuzzSwitch(): TemplateResult | typeof nothing {
+    if (typeof navigator.vibrate !== "function") return nothing;
+    return html`<wt-switch
+      class="press-buzz-switch"
+      data-test="press-buzz-switch"
+      name="pressBuzz"
+      label=${t("press_buzz.label")}
+      .checked=${live(pressBuzzOn())}
+      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+        setPressBuzz(event.detail.checked);
+        this.requestUpdate();
+      }}
+    ></wt-switch>`;
   }
 
   /** A handheld's More, in the design's order: the name's group, the screens, Settings, About Waitron, Log out,

@@ -435,8 +435,9 @@ wrapping between **Floor** and your tables. Home opens **Floor** and End opens t
 Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
 in **More** (☰): your name, with your clock actions if you clock in on this device, when the bar
 has no room for it, which on a phone is always; the screens your profile allows; **Zones on this
-device**, **Equipment**, **Language** and **Theme** under a **Settings** heading; **About
-Waitron**; **Log out**; and, while the venue has a logo, **Powered by Waitron** under it.
+device**, **Equipment**, **Language**, **Theme** and, where this device's browser supports
+vibration, **Vibrate on button press**, under a **Settings** heading; **About Waitron**; **Log
+out**; and, while the venue has a logo, **Powered by Waitron** under it.
 
 ## Take an order on a phone {#phone-order}
 
