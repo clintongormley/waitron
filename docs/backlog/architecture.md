@@ -126,15 +126,6 @@ The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pa
   rather than flatten it to a boolean, since the flag deliberately distinguishes a no-work pass from
   a pass that exercised the certificate and skipped.
 
-## A394-22 — refusal statuses by one rule
-
-OPEN,
-queued in lane B (2026-11-20). A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455. The audit (read, not run) found 96 status rows off the rule across
-49 boundaries (`docs/developers/conventions-data.md`); 17 defects answered 500, or success for a
-missing id (A394-1 to -6); all are fixed; 16 owner questions, settled by the watcher
-2026-11-20 on the owner's delegation. The follow-ups and the rows:
-`docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
-
 ## A913's fix items: general code English only
 
 **2026-11-15, A1308 vb6:** the retired venue fixture field is removed. The historical
@@ -457,11 +448,6 @@ reset and operator gates; this entry does not start that job.
   device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted printer
   has its own "That printer no longer exists". Owner to choose whether readers get one too. Step 3
   (#1520), whose plan kept the existing sentence.
-
-## Loose ends left by A394-3 (#1447)
-
-- A malformed menu path id still answers 400 `shared.invalid_id` until A394-22, while the course
-  route answers 404.
 
 ## Loose ends left by A483 (#1544)
 
@@ -1124,6 +1110,14 @@ The owner withdrew Google sign-in from A646 on 2026-11-11; it is A1507 in [later
 An export with an optional module Off loads on a new box with that module On and empty (owner, 2026-11-06 23:03, A1384).
 See the [design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a646-modules-page-design.md) and [remaining-switches plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a646-remaining-module-switches.md).
 
+
+**A malformed path id keeps the status it answers today (A394 question 7, the watcher's decision of 2026-11-20 22:35 on the owner's delegation of 14:31, not the owner's own).**
+An address whose id is not even well formed answers 400 `shared.invalid_id` on most routes; the A394
+audit (read, not run) found the resource's not-found 404 on management-api and orders-api and 409 on
+three till routes. The rule's 404 is not applied to it. The watcher's reason: such an id comes only
+from a hand-typed address, never from the screens, and the change would have touched 179 calls to
+the id check in 23 files (`git grep` on main, 2026-11-20), about 30 of them screening body or query
+ids that must stay 400. A394-22, which would have made it 404 everywhere, is dropped.
 
 **Three till refusals keep their statuses (A394-9, owner 2026-11-10: "Leave them, write it down (Rec.)").**
 On the till, `service_zone.not_found`, `table.not_found`/`table.inactive` and `reader.not_found`

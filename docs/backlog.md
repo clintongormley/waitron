@@ -1762,14 +1762,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   territory picker in the setup wizard (it offers `ES-common` only).
 
 
-- **Loose ends left by A394-3 (#1447).**
-  [Detail](backlog/architecture.md#loose-ends-left-by-a394-3-1447).
-
-- **A394-22 — refusal statuses by one rule** —
-  OPEN, queued in lane B (2026-11-20). A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455. The follow-ups and the rows:
-  `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
-  [Detail](backlog/architecture.md#a394-22--refusal-statuses-by-one-rule)
-
 - **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
   **Next action:** decide whether a read-only body should take the lock at all.
   [Detail](backlog/architecture.md#every-read-route-now-takes-the-venues-exclusive-write-lock-and-issues-a-delete)

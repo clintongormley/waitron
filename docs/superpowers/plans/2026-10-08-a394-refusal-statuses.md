@@ -350,7 +350,9 @@ recommended answer (the owner agreed, 2026-11-20 14:31, that the watcher settle 
    answer as `image.invalid_file` for an upload that cannot be decoded.
 7. **A malformed path id** (400 `shared.invalid_id` on most boundaries, 404 on two, 409 on three
    till routes). **Recommend 404**: an id that cannot exist names nothing. Done last, as its own
-   item, because it touches every boundary.
+   item, because it touches every boundary. **Overridden 2026-11-20 22:35 by the watcher, on the
+   owner's delegation: keep today's statuses; A394-22 is dropped** (179 calls to the id check, about
+   30 of them screening body ids that must stay 400, for an id only a hand-typed address holds).
 8. **A query-string id** (receipt preview's `departmentId`, the till's `zoneId` on menu state,
    venue-service's routing explain, catalogue folder summary). **Recommend treating a query value
    like the body → 400.**
@@ -826,7 +828,7 @@ Status changes:
   `POST /api/working-orders/:id/payments` as a send that may have been recorded, so it now takes
   `menu.reset_required` as a plain refusal whatever its status (`apps/till/src/api/client.ts`,
   `apps/till/src/state/bill-payment.ts`). A394-21 is done.
-- **A394-22 — Malformed path ids, one answer everywhere.** Files:
+- **A394-22 — Malformed path ids, one answer everywhere. DROPPED 2026-11-20 (question 7 above).** Files:
   `packages/server-kit/src/request-screens.ts` and every table that maps `shared.invalid_id`, plus the
   three till 409s (re-check them first). Statuses per question 7. Size: split by package or
   `apps/server` area before dispatching. Depends on: question 7, and last, after A394-8 to A394-21.

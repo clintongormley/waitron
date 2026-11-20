@@ -122,8 +122,11 @@ code. That grep misses range reads such as `>= 500`, which
 `git grep -nE 'status.{0,8}(>=|<) ?[0-9]{3}'` finds: the till's payment client treats a 5xx as a send
 that may have been recorded (`apps/till/src/api/client.ts`,
 `apps/till/src/state/bill-payment.ts`), so a change moving a code into or out of 5xx greps for range
-reads first. Nothing guards the rule. The routes that broke it on that date, and the follow-ups that fix
-them: `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
+reads first. A malformed path id is outside the rule: it keeps answering as it does today, mostly
+400 `shared.invalid_id` (the watcher's decision on the A394 plan's question 7, 2026-11-20; the
+reason is in `docs/backlog/architecture.md` under "Decisions and deliberate limits"). Nothing guards
+the rule. The routes that broke it on that date, and how each was settled:
+`docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
 ## A recorded incident code needs an area claim and English and Spanish alert wording
 
