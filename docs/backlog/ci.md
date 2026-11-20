@@ -153,6 +153,17 @@ was this case. Earlier sightings were not searched further. The log is kept at
 `~/waitron-campaign-c/ci-logs/pr2979-run43259195658-attempt1-test-till-3.log`.
 
 
+**The set-menu kitchen test listed the station queue in the other order once (PR #3890, 2026-11-20).**
+Run [44780754610](https://github.com/clintongormley/waitron/actions/runs/44780754610), attempt 1,
+`test-server (24)`, job `136443195774`: `apps/server/src/set-menu-kitchen.test.ts:60` "keeps the set
+menu off kitchen paper and the station queue while showing its dish" received the station queue's
+items as `['BURG', 'FLAN']` where it expects `['FLAN', 'BURG']`. The two dishes are fired in one
+`fireLines` call. PR #3890 does not change that test, `listStationQueue` or `fireLines`; the case
+passed 5 of 5 locally and on the job's re-run (attempt 2). Whether the queue's order is fixed when two
+items share one firing was not checked; that is the first thing to read, since a real ordering gap
+would show on a kitchen screen too. No earlier sighting was searched for. The test arrived with #3826
+(A1515, 2026-11-19). Log kept at `~/waitron-campaign-l/ci-logs/pr3890-run44780754610-attempt1-test-server-24.log`.
+
 **Native Chromium startup exceeded its test budget once (PR #3686, 2026-11-17).**
 Run [44177182245](https://github.com/clintongormley/waitron/actions/runs/44177182245),
 `test-dashboard (6)`, job `134372042174`: the native reload case at
