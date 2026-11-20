@@ -913,7 +913,6 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
-    // Before closing no print job exists, so there is no print status to state or check.
     const closingPrints =
       notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
     if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();

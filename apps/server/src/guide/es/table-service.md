@@ -88,7 +88,7 @@ Pulsa **Listo** o cierra la ventana para continuar. Salvo que lo hayas enviado p
 electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada o no funciona, se
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, elige una o envía el
-correo antes de cerrar; si no, se imprime cuando el dispositivo tenga una. Cierras la mesa por separado.
+correo antes de cerrar; si no, se imprime si el dispositivo pasa a tener una en el plazo de un día. Cierras la mesa por separado.
 Después de imprimir una cuenta con **Imprimir la cuenta**, la ventana que aparece tras el último
 pago ofrece una copia en lugar del original, que se imprimió con la cuenta; imprímela solo si el
 cliente pide otro recibo.

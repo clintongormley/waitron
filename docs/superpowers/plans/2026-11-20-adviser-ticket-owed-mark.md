@@ -15,7 +15,7 @@ who made it (`source = 'device'` with `device_id`, a check ties the two: `packag
 `sales.ts:73-75, 201`), when (`issued_at`, `sales.ts:87`, indexed `:133`), and under which node and series
 (`node_id :82`, `series_id :77`). #3835's existing `receipt.owed` job (`apps/server/src/owed-receipts.ts`)
 gains a second pass. It takes sales made by a device under this box's live installation, issued
-between 10 minutes and 24 hours ago, still owed (`stillOwed`, unchanged) and with no original
+between 10 minutes and 24 hours ago, still owed (`stillOwed`) and with no original
 print job. It queues their original on that device's receipt printer through the same function the
 till's close request uses.
 
@@ -91,7 +91,7 @@ guide 8 changed), about +330 test lines, no generated files, no migration, no ve
   remaining sale gets its own `withTransaction` that checks again that there is no original job, then
   calls `queueOwedOriginal(tx, backend, { ...cfg, origin: deviceOrigin(deviceId) }, workingOrderId, null)`.
   A throw → `log("warn", "receipt.owed_ticket_failed", { saleId, errorCode })`, then the next sale.
-  (Changed in review, 2026-11-20: no separate re-check; each sale's transaction relies on `queueOwedOriginal`'s `owesOriginal` and `enqueueOriginalReceipt`'s exists check.)
+  (Changed in review, 2026-11-20, twice: each sale's transaction reruns `owedSales` for that sale and `deviceMayPrintReceipts`, so a series retired or a profile losing `print-receipt` while the pass waited prints nothing.)
 - `working_order_id is not null`: on main every device sale has one (the four `recordSale` calls,
   `till-sale.ts:1151, 1891, 2039`, `bill-payments.ts:898`, and `working-order.ts:7709`). Correctives,
   which may have none, are already excluded by `stillOwed`. The advance ticket (advances branch) has none; see below.
@@ -138,7 +138,8 @@ guide 8 changed), about +330 test lines, no generated files, no migration, no ve
   «Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el recibo se imprimirá cuando este
   dispositivo tenga una.» Guide EN `:83`: "If the device has no receipt printer, choose one or send the email
   before closing; otherwise it prints once the device has one." ES likewise («…; si no, se imprime cuando el
-  dispositivo tenga una.»).
+  dispositivo tenga una.»). (Changed in review, 2026-11-20: these lines now say it prints if the device gets one
+  within a day, and `pay_equipment.printer_none` says the ticket will not print now.)
 - [ ] **Step 4:** run the two till files, `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`,
   root `pnpm exec vitest run scripts/guide-links.test.ts`; PASS. Then `/finish-branch`.
 - [ ] **Step 5:** `git commit -s` "Say in the till and the guide that a ticket prints once the device has a printer".
