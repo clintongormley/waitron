@@ -3303,8 +3303,8 @@ export class TillApi {
 
   /** `GET /api/invoice-delivery-options`. `orderId` names the bill; Email is offered when mail is
    * set up and the bill's department receipt, or the default department's, has a contact email.
-   * The till's service zone, else its profile's starting zone, decides the department of a bill not
-   * saved yet, as saving it would. */
+   * The till's service zone decides the department of a bill not saved yet; without one, the server
+   * uses the zone saving the bill would open it in. */
   getInvoiceDeliveryOptions(
     orderId: string,
     options: ReadOptions = {},

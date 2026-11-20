@@ -2257,7 +2257,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ id: workingOrders.id })
           .from(workingOrders)
           .where(eq(workingOrders.id, orderId));
-        // The zone decides only a bill not saved yet.
+        // The till sends its service zone even for a saved bill; a saved bill's own zone is checked
+        // through orderId.
         await checkZones(
           tx,
           session,

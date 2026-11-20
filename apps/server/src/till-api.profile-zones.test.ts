@@ -127,7 +127,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses the read for a zone outside the profile department |
  * | PUT  /api/service-zones/:zoneId/zone-extension          | path zone              | till-api.keep-open.test.ts: refuses a zone outside the profile department |
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
- * | GET  /api/invoice-delivery-options                      | query order; query zone | refuses GET /api/invoice-delivery-options (order), (zone); a bill not saved yet: "reads the device's invoice printer for a bill not saved yet" |
+ * | GET  /api/invoice-delivery-options                      | query order; query zone, for a bill not saved yet only | refuses GET /api/invoice-delivery-options (order), (zone); a bill not saved yet: "reads the device's invoice printer for a bill not saved yet"; a saved bill ignores the zone: "reads a saved bill's invoice options whatever zone the till sends with it" |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
  * | POST /api/pay                                           | body zone; body order  | refuses POST /api/pay (zone), (order)                |
  * | POST /api/working-orders                                | body zone; body order  | refuses POST /api/working-orders (zone), (order)     |
