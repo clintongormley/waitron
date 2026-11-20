@@ -4,14 +4,12 @@ import {
   adjustmentRefunds,
   billAdvances,
   billPaymentRefunds,
-  invoiceSeries,
   sales,
   tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
-import { formatInvoiceNumber } from "@waitron/core";
-import { refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { refuseAdvanceRefund, refuseTakenOffAdvance } from "./advance-taken-off.js";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -135,26 +133,18 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
-/** A payment on account's money is not refunded this way; its tip alone may come back here. Once
- * an invoice took the advance off, the refusal names that invoice. */
-async function refuseAdvanceRefund(
+/** A payment on account's money is not refunded this way; its tip alone may come back here. */
+async function refuseRefundOfAdvance(
   tx: Transaction,
   saleId: string,
   tenderId: string,
 ): Promise<void> {
   const [advance] = await tx
-    .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+    .select({ saleId: billAdvances.advanceSaleId })
     .from(billAdvances)
-    .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
-    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(billAdvances.advanceSaleId, saleId));
-  if (advance === undefined) return;
-  await refuseTakenOffAdvance(tx, saleId);
-  throw new AppError("tender.refund_of_advance", {
-    tenderId,
-    saleId,
-    invoiceNumber: formatInvoiceNumber(advance.code, advance.number),
-  });
+  if (advance !== undefined)
+    await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", { tenderId });
 }
 
 export async function reserveTenderRefund(
@@ -225,7 +215,7 @@ export async function reserveTenderRefund(
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
   else await refuseTakenOffAdvance(tx, saleId);
   if (correctionLink === undefined && appliedAmount > 0)
-    await refuseAdvanceRefund(tx, saleId, tenderId);
+    await refuseRefundOfAdvance(tx, saleId, tenderId);
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,
