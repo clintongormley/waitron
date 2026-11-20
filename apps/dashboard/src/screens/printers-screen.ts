@@ -57,6 +57,7 @@ import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
   BluetoothFailureReason,
+  BluetoothUnavailableReason,
   DashboardApi,
   DiscoveredPrinter,
   JoinRequestRow,
@@ -343,6 +344,13 @@ const FAILURE_REASON_TEXT: Readonly<Record<BluetoothFailureReason, StringKey>> =
   out_of_range: "printers.bluetooth_reason.out_of_range",
   timed_out: "printers.bluetooth_reason.timed_out",
   bluetooth_unavailable: "printers.bluetooth_reason.bluetooth_unavailable",
+};
+
+const BLUETOOTH_UNAVAILABLE_TEXT: Readonly<Record<BluetoothUnavailableReason, StringKey>> = {
+  no_controller: "printers.bluetooth_unavailable.no_controller",
+  bluez_not_answering: "printers.bluetooth_unavailable.service",
+  failed: "printers.bluetooth_unavailable.service",
+  dbus_unreachable: "printers.bluetooth_unavailable.not_allowed",
 };
 
 const FAILURE_GENERAL_TEXT: Record<BluetoothCommandStatus["kind"], StringKey> = {
@@ -5279,6 +5287,16 @@ export class PrintersScreen extends LitElement {
         >${t("printers.add_help")}</wt-help-tooltip
       >
       <p class="hint">${t("printers.discovery_hint")}</p>
+      ${this.agents.map(({ id, name, active, bluetooth }) =>
+        active && bluetooth !== null && bluetooth !== "available"
+          ? html`<p class="hint" data-test=${`bluetooth-unavailable-${id}`}>
+              ${fill("printers.bluetooth_unavailable", {
+                agent: name,
+                reason: t(BLUETOOTH_UNAVAILABLE_TEXT[bluetooth]),
+              })}
+            </p>`
+          : nothing,
+      )}
       ${bluetooth ? html`<p class="hint" data-test="bluetooth-note">${t("printers.bluetooth_pair_note")}</p>` : nothing}
       <details class="probe-panel" data-test="probe-panel">
         <summary>${t("printers.probe_title")}</summary>

@@ -114,6 +114,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: null, // manually enrolled — no provenance marker
     onThisBox: false,
+    bluetooth: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -125,6 +126,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
     onThisBox: true,
+    bluetooth: null,
     lastSeenAt: null,
     setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -7964,6 +7966,100 @@ describe("printers-screen Bluetooth pairing", () => {
     await openDiscovery(el);
     expect(q(el, sel("bluetooth-note"))).toBeNull();
     expect(q(el, sel("show-all-bluetooth"))).toBeNull();
+  });
+
+  describe("says why an agent cannot look for Bluetooth printers", () => {
+    const reasonKey = {
+      no_controller: "printers.bluetooth_unavailable.no_controller",
+      bluez_not_answering: "printers.bluetooth_unavailable.service",
+      failed: "printers.bluetooth_unavailable.service",
+      dbus_unreachable: "printers.bluetooth_unavailable.not_allowed",
+    } as const satisfies Record<string, StringKey>;
+    const mountWithAgents = (rows: PrintAgentRow[]) =>
+      mountPairing(discovered, { listAgents: vi.fn().mockResolvedValue(rows) });
+    const unavailableLines = (el: PrintersScreen) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=bluetooth-unavailable-]")].map(
+        (line) => [line.dataset.test, line.textContent!.trim()],
+      );
+
+    for (const [reason, key] of Object.entries(reasonKey)) {
+      it(`names the agent and why for ${reason}, under the searching line`, async () => {
+        const { el } = await mountWithAgents([
+          { ...agents[0]!, bluetooth: reason as keyof typeof reasonKey },
+        ]);
+        await openDiscovery(el);
+        expect(unavailableLines(el)).toEqual([
+          [
+            "bluetooth-unavailable-a1",
+            fill("printers.bluetooth_unavailable", { agent: "Kitchen agent", reason: t(key) }),
+          ],
+        ]);
+        const hint = q(el, "[data-test=new-printer-modal] p.hint")!;
+        expect(hint.textContent!.trim()).toBe(t("printers.discovery_hint"));
+        expect(hint.nextElementSibling?.getAttribute("data-test")).toBe("bluetooth-unavailable-a1");
+      });
+    }
+
+    it("says nothing for an agent that can use Bluetooth, one with no recent report, or an inactive one", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, id: "a1", bluetooth: "available" },
+        { ...agents[0]!, id: "a3", bluetooth: null },
+        { ...agents[1]!, id: "a2", active: false, bluetooth: "no_controller" },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([]);
+    });
+
+    it("gives each active agent its own line", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, bluetooth: "dbus_unreachable" },
+        { ...agents[1]!, active: true, bluetooth: "no_controller" },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([
+        [
+          "bluetooth-unavailable-a1",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Kitchen agent",
+            reason: t("printers.bluetooth_unavailable.not_allowed"),
+          }),
+        ],
+        [
+          "bluetooth-unavailable-a2",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Bar agent",
+            reason: t("printers.bluetooth_unavailable.no_controller"),
+          }),
+        ],
+      ]);
+    });
+
+    it("uses the brief's words in both languages", () => {
+      expect(en["printers.bluetooth_unavailable"]).toBe(
+        "Bluetooth printers can't be found through {agent}: {reason}",
+      );
+      expect(es["printers.bluetooth_unavailable"]).toBe(
+        "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}",
+      );
+      expect(en["printers.bluetooth_unavailable.no_controller"]).toBe(
+        "its computer has no Bluetooth adapter. Plug one in.",
+      );
+      expect(es["printers.bluetooth_unavailable.no_controller"]).toBe(
+        "su equipo no tiene adaptador Bluetooth. Conecta uno.",
+      );
+      expect(en["printers.bluetooth_unavailable.service"]).toBe(
+        "its computer's Bluetooth service isn't working.",
+      );
+      expect(es["printers.bluetooth_unavailable.service"]).toBe(
+        "el servicio Bluetooth de su equipo no funciona.",
+      );
+      expect(en["printers.bluetooth_unavailable.not_allowed"]).toBe(
+        "its computer isn't letting Waitron use Bluetooth.",
+      );
+      expect(es["printers.bluetooth_unavailable.not_allowed"]).toBe(
+        "su equipo no permite que Waitron use Bluetooth.",
+      );
+    });
   });
 
   it("asks for the PIN, checks it beside the field and in the bottom message, then pairs through the named agent", async () => {
