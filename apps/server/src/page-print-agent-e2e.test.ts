@@ -927,13 +927,26 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
       expect(await row(held.id)).toMatchObject({ status: "sending", printerHold: "paper_out" });
       expect(ipp!.printJobs()).toHaveLength(1);
 
+      const waitingOrder = randomUUID();
+      const waiting = await printOnA4(await fullInvoice(v, waitingOrder), office);
+      expect(await tillStatus(v, waitingOrder)).toMatchObject({
+        current: { status: "queued", printerName: "Back office", printerHold: "paper_out" },
+      });
+
       ipp!.tray.empty = false;
       await until("the held invoice to be sent", async () => {
         return (await row(held.id)).status === "sent";
       });
+      await until("the waiting invoice to be sent", async () => {
+        return (await row(waiting.id)).status === "sent";
+      });
       await pollUntilIdle(running);
 
-      expect(running.claims.map((job) => job.id)).toEqual([held.printJobId, other.printJobId]);
+      expect(running.claims.map((job) => job.id)).toEqual([
+        held.printJobId,
+        other.printJobId,
+        waiting.printJobId,
+      ]);
       expect(await row(held.id)).toMatchObject({
         status: "sent",
         designation: "original",
@@ -945,9 +958,10 @@ describe("an A4 invoice through the real agent loop and a fake IPP printer", () 
         originalCompleted: true,
       });
       expect(await readEquipment()).toEqual([]);
-      const [printed, ...again] = ipp!.printJobs();
+      const [printed, queued, ...again] = ipp!.printJobs();
       expect(again).toEqual([]);
       expect(printed!.data.equals(await originalPdf(v, saleId))).toBe(true);
+      expect(queued!.data.equals(await originalPdf(v, waiting.saleId))).toBe(true);
     } finally {
       running.stopped.now = true;
     }

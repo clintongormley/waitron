@@ -6747,7 +6747,7 @@ export const es: Record<StringKey, string> = {
   "printers.job_paper_out": "{printer} se ha quedado sin papel. Añade papel y se imprimirá.",
   "printers.job_held":
     "En espera en {printer} ({reason}). Revisa la impresora. Se imprimirá cuando esté lista.",
-  "printers.job_switched_to_receipt": "Enviada a una impresora de tickets",
+  "printers.job_switched_to_receipt": "Se cambió a una impresora de tickets",
   "printers.job_a4_invoice": "Factura en A4",
   "printers.job_a4_page": "Página en A4",
   "printers.job_a4_receipt": "Ticket en A4",

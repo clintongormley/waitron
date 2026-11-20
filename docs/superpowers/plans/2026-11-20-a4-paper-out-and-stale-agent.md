@@ -6,7 +6,7 @@ quiet without raising a warning.
 
 ## 1. Detect and explain a stop
 
-- The Lenovo saved `paper_out` and completed the invoice in one attempt. Its log has no first-hold
+- The Lenovo saved the HP's `paper_out` hold and completed the invoice in one attempt. Its log has no first-hold
   timestamp or raw reply. Claude reproduced a near-deadline hold when a stopped printer's job still
   reports processing. The watcher cleared asking the printer on every unfinished job poll at 23:07
   on 20 November. Use the HP's recorded empty-tray reply in the test and assert one submission.

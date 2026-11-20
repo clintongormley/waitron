@@ -19,6 +19,7 @@ import {
   kitchenStations,
   type Database,
   withTransaction,
+  writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
@@ -60,7 +61,7 @@ import {
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { deleteCardReader } from "./card-reader-delete.js";
-import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
 import type { SealedStateStatus } from "./sealed-state.js";
@@ -977,10 +978,11 @@ async function readAlerts(now = NOW) {
 describe("printingAlertSource — agent.silent", () => {
   it("drops a former primary warning after reassignment and keeps the serving spare warning", async () => {
     await seedFixtureVenue();
+    const formerNode = randomUUID();
     const former = await seedAgent({
       name: "Former primary",
       lastSeenAt: minsAgo(30),
-      nodeId: randomUUID(),
+      nodeId: formerNode,
     });
     const current = await seedAgent({
       name: "Serving box",
@@ -988,10 +990,16 @@ describe("printingAlertSource — agent.silent", () => {
       nodeId: SERVING_NODE,
     });
     const spare = randomUUID();
-    await holdChartNamingMainBox(
+    await writeNodeMembership(
       suite.db,
-      { nodeId: SERVING_NODE, contactUrl: "https://main.example" },
-      { nodeId: spare, contactUrl: "https://spare.example" },
+      signedMembershipDoc(2, {
+        signerNodeId: SERVING_NODE,
+        nodes: [
+          { nodeId: SERVING_NODE, contactUrl: "https://main.example", standing: "serving-primary" },
+          { nodeId: formerNode, contactUrl: "https://former.example", standing: "sell-only" },
+          { nodeId: spare, contactUrl: "", standing: "serving-secondary" },
+        ],
+      }),
     );
     const standby = await seedAgent({
       name: "Serving spare",

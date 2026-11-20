@@ -461,14 +461,6 @@ describe("readInvoiceDeliveries", () => {
       return row!;
     }
 
-    it("reports the hold on an invoice queued behind another invoice", async () => {
-      const v = await venue();
-      const office = await pagePrinter();
-      await heldA4(v, await invoice(v.nodeId), "sending", office);
-      const waiting = await reserve(await invoice(v.nodeId), "a4", office);
-      expect((await read(waiting.saleId))?.current?.printerHold).toBe("paper_out");
-    });
-
     it.each([
       ["sending", "paper_out"],
       ["unknown", "paper_out"],

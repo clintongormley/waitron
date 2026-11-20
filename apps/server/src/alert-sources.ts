@@ -27,7 +27,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { listDevices } from "@waitron/layouts";
-import { routableServers } from "@waitron/membership";
+import { isFencedStanding } from "@waitron/membership";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
@@ -458,11 +458,10 @@ export function printingAlertSource(nodeId: string): AlertSource {
       const alerts: OngoingAlert[] = [];
 
       const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS).toISOString();
+      const members = (await readNodeMembership(tx))?.body.nodes ?? [];
       const servingNodes = [
         nodeId,
-        ...routableServers(await readNodeMembership(tx))
-          .filter((node) => node.standing !== "sell-only")
-          .map((node) => node.nodeId),
+        ...members.filter((node) => !isFencedStanding(node.standing)).map((node) => node.nodeId),
       ];
       const agents = await tx
         .select({ id: printAgents.id, name: printAgents.name, seen: printAgents.lastSeenAt })
