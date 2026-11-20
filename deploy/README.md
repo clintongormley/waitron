@@ -589,8 +589,9 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
   files in `tls/repair/` until the next start stays healthy for two minutes. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`. The exception is a box that
   joined another server as a spare (its `tls/` holds `joined.json`): joining replaced this box's
-  certificate authority with that server's, so a plain `reset` empties `tls/` there, and the box
-  mints a new authority on its next boot. Devices then have to trust it again.
+  certificate authority with that server's, so a plain `reset` removes `tls/` there, and the box
+  mints a new authority on its next boot. Devices then have to trust it again. A plain `reset`
+  also removes a `tls/` it finds empty, since it holds no certificate.
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
   and the files a Move set aside or unreadable module records that Start again kept
   (`records/set-aside/`). Each Move's folder also holds

@@ -3195,7 +3195,7 @@ describe("waitron.sh reset", () => {
     return state;
   }
 
-  it("the reset of a box that joined another empties tls/", () => {
+  it("the reset of a box that joined another removes tls/", () => {
     const state = resetStateWith([
       "ca.crt",
       "ca.key",
@@ -3204,17 +3204,21 @@ describe("waitron.sh reset", () => {
       "install.json",
       "joined.json",
     ]);
-    expect(readdirSync(state)).toEqual(["tls"]);
-    expect(readdirSync(join(state, "tls"))).toEqual([]);
+    expect(readdirSync(state)).toEqual([]);
   });
 
-  it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset empties tls/", () => {
+  it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset removes tls/", () => {
     const state = stateWith(["ca.crt", "ca.key", "server.pem", "joined.json"]);
     expect(cleanUp(state, "server.pem")).not.toBe(0);
     expect(readdirSync(join(state, "tls")).sort()).toEqual(["joined.json", "server.pem"]);
 
     expect(cleanUp(state)).toBe(0);
-    expect(readdirSync(join(state, "tls"))).toEqual([]);
+    expect(readdirSync(state)).toEqual([]);
+  });
+
+  it("a reset cut short after removing the joined record leaves an empty tls/, which the next reset removes", () => {
+    const state = resetStateWith([]);
+    expect(readdirSync(state)).toEqual([]);
   });
 
   it("the reset of a box that never joined keeps its authority and leaf", () => {
