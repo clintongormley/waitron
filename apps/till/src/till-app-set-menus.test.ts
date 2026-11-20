@@ -2,12 +2,16 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   allergyView,
+  api,
+  emit as emitApp,
   flush,
   menu,
   mountApp,
   openTable,
   resetAllergyFixture,
+  shell,
 } from "../test/allergy-app-fixture.js";
+import { t } from "./i18n/t.js";
 import { setMenuCopyOf } from "@waitron/shared";
 import {
   emit,
@@ -432,4 +436,251 @@ it("renders a reopened set-menu dish from the recorded offer and saved price", a
   expect(counter.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent).toContain(
     "€19.00",
   );
+});
+
+async function tableWithSetMenus(overrides: Record<string, unknown> = {}) {
+  const zone = menu("lunch");
+  zone.setMenus = [daily, special].map((copy) => ({
+    ...copy,
+    versionIds: ["lunch"],
+    orderable: true,
+    newestOnSale: true,
+  }));
+  const state = { bill: bill as typeof bill };
+  const getPartyBills = vi.fn(async () => [
+    { ...partyBillOf("v1", "wo-4", 1), setMenus: state.bill, setMenuCopies: [daily, special] },
+  ]);
+  const { el } = await mountApp({
+    listZoneOffers: vi.fn(async () => zone),
+    getPartyBills,
+    ...overrides,
+  });
+  const screen = await openTable(el);
+  await showView(screen, "order", { ifShown: true, scripted: true });
+  await flush(el);
+  return { el, screen, state, getPartyBills };
+}
+
+const lineIds = (screen: { bills: readonly { setMenus?: typeof bill }[] }) =>
+  screen.bills[0]!.setMenus!.setMenus.map(({ lineId }) => lineId);
+
+it("shows a refused set-menu count under it and re-reads a table someone else changed", async () => {
+  const setSetMenuCount = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "set_menu.not_selling", setMenuName: "Daily menu" })
+    .mockRejectedValueOnce({ code: "party.out_of_date" });
+  const { screen, getPartyBills } = await tableWithSetMenus({ setSetMenuCount });
+  const counts = screen.shadowRoot!.querySelector("till-set-menu-counts")!;
+  const increase = page.elementLocator(counts).getByRole("button", { name: "Increase Daily menu" });
+
+  await userEvent.click(increase);
+  const stepper = counts.shadowRoot!.querySelector("wt-number-stepper")!;
+  expect(stepper.label).toBe("Daily menu");
+  await vi.waitFor(() =>
+    expect(stepper.error).toBe(
+      "Daily menu is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
+    ),
+  );
+  expect(stepper.value).toBe("2");
+  expect(lineIds(screen)).toEqual(["daily-1", "daily-2", "special-1"]);
+
+  const reads = getPartyBills.mock.calls.length;
+  await userEvent.click(increase);
+  await vi.waitFor(() =>
+    expect(stepper.error).toBe("Someone else changed this table. Reload it and try again"),
+  );
+  expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
+  expect(setSetMenuCount.mock.calls.map((call) => call.slice(0, 4))).toEqual([
+    ["wo-4", daily.menuId, 3, 3],
+    ["wo-4", daily.menuId, 3, 3],
+  ]);
+});
+
+it("removes a set menu and moves a dish at a table with the party's revision", async () => {
+  const removeSetMenu = vi.fn(async () => {
+    state.bill = { ...bill, setMenus: bill.setMenus.slice(0, 2) };
+    return { setMenus: state.bill, partyRevision: 4 };
+  });
+  const moveSetMenuDishes = vi.fn(async () => {
+    state.bill = {
+      ...state.bill,
+      dishes: [{ ...bill.dishes[0]!, setMenuLineId: "daily-2" }],
+    };
+    return { setMenus: state.bill, partyRevision: 5 };
+  });
+  const { screen, state } = await tableWithSetMenus({ removeSetMenu, moveSetMenuDishes });
+
+  await expect(screen.changeSetMenu!({ remove: "special-1" })).resolves.toBeUndefined();
+  expect(removeSetMenu.mock.calls[0]!.slice(0, 3)).toEqual(["wo-4", "special-1", 3]);
+  expect(lineIds(screen)).toEqual(["daily-1", "daily-2"]);
+
+  const move = { lineId: "sent-sirloin", to: { setMenuLineId: "daily-2", place: 1 } };
+  await expect(screen.changeSetMenu!({ moves: [move] })).resolves.toBeUndefined();
+  expect(moveSetMenuDishes.mock.calls[0]!.slice(0, 3)).toEqual(["wo-4", [move], 4]);
+  expect(screen.bills[0]!.setMenus!.dishes[0]!.setMenuLineId).toBe("daily-2");
+});
+
+it("refuses a set-menu change while the table's order is locked", async () => {
+  const setSetMenuCount = vi.fn();
+  const { screen } = await tableWithSetMenus({ setSetMenuCount });
+  const unlock = screen.draftStore!.lockEdits();
+
+  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBe(
+    t("table.reread_failed"),
+  );
+  unlock();
+  expect(setSetMenuCount).not.toHaveBeenCalled();
+  expect(lineIds(screen)).toEqual(["daily-1", "daily-2", "special-1"]);
+});
+
+it("does not change set menus when the drafted dishes cannot be saved first", async () => {
+  const setSetMenuCount = vi.fn();
+  const { screen } = await tableWithSetMenus({ setSetMenuCount });
+  api.saveDraft.mockRejectedValue(new TypeError("offline"));
+  const product = setMenuProduct({
+    offer: daily.offers[0]!,
+    setMenuId: daily.menuId,
+    versionId: "lunch",
+  });
+  screen.draftStore!.addProduct(product, "1", { setMenu: { id: daily.menuId } });
+
+  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBe(
+    t("table.draft_save_failed"),
+  );
+  expect(setSetMenuCount).not.toHaveBeenCalled();
+  expect(api.saveDraft).toHaveBeenCalled();
+});
+
+it("asks to reopen the table when it cannot be read after a set-menu change", async () => {
+  const setSetMenuCount = vi.fn(async () => {
+    getPartyBills.mockRejectedValue(new TypeError("offline"));
+    return { setMenus: bill, partyRevision: 4 };
+  });
+  const { el, screen, getPartyBills } = await tableWithSetMenus({ setSetMenuCount });
+
+  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBeUndefined();
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain(t("table.reread_failed"));
+});
+
+it.each(["answer", "refusal"])(
+  "drops a set-menu %s that arrives after the table was left",
+  async (kind) => {
+    let answer!: (value: { setMenus: typeof bill; partyRevision: number }) => void;
+    let refuse!: (error: unknown) => void;
+    const setSetMenuCount = vi.fn(
+      () =>
+        new Promise<{ setMenus: typeof bill; partyRevision: number }>((resolve, reject) => {
+          answer = resolve;
+          refuse = reject;
+        }),
+    );
+    const { el, screen, getPartyBills } = await tableWithSetMenus({ setSetMenuCount });
+
+    const saved = screen.changeSetMenu!({ menuId: daily.menuId, count: 3 });
+    await vi.waitFor(() => expect(setSetMenuCount).toHaveBeenCalled());
+    emitApp(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    const reads = getPartyBills.mock.calls.length;
+    if (kind === "answer")
+      answer({ setMenus: { ...bill, setMenus: bill.setMenus.slice(0, 1) }, partyRevision: 9 });
+    else refuse({ code: "party.out_of_date" });
+
+    await expect(saved).resolves.toBeUndefined();
+    await flush(el);
+    expect(getPartyBills.mock.calls.length).toBe(reads);
+    expect(el.shadowRoot!.textContent).not.toContain(t("table.reread_failed"));
+  },
+);
+
+async function counterWithSetMenus(policy: string, overrides: Record<string, unknown> = {}) {
+  resetBillPayDrafts();
+  const zone = {
+    ...offers,
+    context: {
+      ...offers.context,
+      dining: { policy, startsAs: policy === "takeaway" ? "takeaway" : "eat_in" },
+    },
+    setMenus: [{ ...daily, versionIds: ["v1"], orderable: true, newestOnSale: true }],
+  };
+  const api = counterApi({
+    listDefaultZoneOffers: vi.fn(async () => zone),
+    listZoneOffers: vi.fn(async () => zone),
+    ...overrides,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flushCounter(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flushCounter(el);
+  return { el, counter: el.shadowRoot!.querySelector("till-counter-screen")! };
+}
+
+const counterSaved = (count: number) => ({
+  copies: [setMenuCopyOf(daily, "v1")],
+  recorded: { [daily.menuId]: "v1" },
+  setMenus: bill.setMenus.slice(0, count).map((line) => ({ ...line, copyId: daily.key })),
+  dishes: [],
+});
+
+it("refuses a counter set-menu count on an eat-in order or a first count of none", async () => {
+  const parkOrder = vi.fn();
+  const { counter } = await counterWithSetMenus("till_choice", { parkOrder });
+  const generic = "Something went wrong, try again";
+
+  expect(counter.store.dining).toBe("eat_in");
+  await expect(counter.saveSetMenuCount!(daily.menuId, 1)).resolves.toBe(generic);
+  await userEvent.click(page.elementLocator(counter).getByText("Take away", { exact: true }));
+  await vi.waitFor(() => expect(counter.store.dining).toBe("takeaway"));
+  await expect(counter.saveSetMenuCount!(daily.menuId, 0)).resolves.toBe(generic);
+  expect(parkOrder).not.toHaveBeenCalled();
+  expect(counter.store.persisted).toBe(false);
+});
+
+it("keeps a counter takeaway unsaved when parking its first set menu answers incompletely", async () => {
+  const parkOrder = vi.fn(async ({ id }: { id: string }) => ({ id, orderNumber: 10, revision: 7 }));
+  const { counter } = await counterWithSetMenus("takeaway", { parkOrder });
+
+  expect(counter.store.dining).toBe("takeaway");
+  await expect(counter.saveSetMenuCount!(daily.menuId, 1)).resolves.toBe(
+    "Something went wrong, try again",
+  );
+  expect(parkOrder).toHaveBeenCalledOnce();
+  expect(counter.store.persisted).toBe(false);
+});
+
+it("saves later set-menu changes on a parked counter takeaway and shows a refusal", async () => {
+  const parkOrder = vi.fn(async ({ id }: { id: string }) => ({
+    id,
+    orderNumber: 10,
+    revision: 7,
+    setMenus: counterSaved(1),
+  }));
+  const setSetMenuCount = vi
+    .fn()
+    .mockResolvedValueOnce({ setMenus: counterSaved(2), partyRevision: 8 })
+    .mockRejectedValueOnce({ code: "set_menu.not_selling", setMenuName: "Daily menu" });
+  const moveSetMenuDishes = vi.fn(async () => ({ setMenus: counterSaved(2), partyRevision: 9 }));
+  const { counter } = await counterWithSetMenus("takeaway", {
+    parkOrder,
+    setSetMenuCount,
+    moveSetMenuDishes,
+  });
+  const id = counter.store.id;
+
+  await expect(counter.saveSetMenuCount!(daily.menuId, 2)).resolves.toBeUndefined();
+  expect(counter.store.persisted).toBe(true);
+  expect(counter.diningChoice).toBe("none");
+  expect(setSetMenuCount.mock.calls[0]!.slice(0, 4)).toEqual([id, daily.menuId, 2, 7]);
+  expect(counter.store.revision).toBe(8);
+
+  const move = { lineId: "sent-sirloin", to: { setMenuLineId: "daily-2", place: 1 } };
+  await expect(counter.moveSetMenuDishes!([move])).resolves.toBeUndefined();
+  expect(moveSetMenuDishes.mock.calls[0]!.slice(0, 3)).toEqual([id, [move], 8]);
+  expect(counter.store.revision).toBe(9);
+
+  await expect(counter.saveSetMenuCount!(daily.menuId, 3)).resolves.toBe(
+    "Daily menu is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
+  );
+  expect(counter.store.revision).toBe(9);
+  expect(parkOrder).toHaveBeenCalledOnce();
 });
