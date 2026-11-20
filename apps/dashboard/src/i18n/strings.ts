@@ -660,6 +660,9 @@ export const en = {
   "cloud.organisation": "Organisation",
   "cloud.business": "Legal business",
   "cloud.connected": "Connected",
+  "cloud.ended": "Cloud access for this server has ended. It was stopped here or in Waitron Cloud.",
+  "cloud.ended_help": "Connect again to add this venue to Waitron Cloud as a new venue.",
+  "cloud.connect_again": "Connect again",
   "cloud.snapshots": "Snapshots",
   "cloud.translation": "Translate all",
   "cloud.continuous": "Continuous backups",
@@ -667,7 +670,6 @@ export const en = {
   "cloud.access_active": "Cloud access active",
   "cloud.access_unavailable":
     "Cloud status is unavailable. The last known configuration is shown below.",
-  "cloud.access_revoked": "Cloud access stopped",
   "cloud.refresh": "Refresh status",
   "cloud.last_contact": "Last contact",
   "cloud.access_expires": "Cloud access expires",
@@ -676,7 +678,7 @@ export const en = {
   "cloud.confirm_stop": "Confirm stop",
   "cloud.cancel_stop": "Keep Cloud access",
   "cloud.stop_help":
-    "This permanently stops this server’s Cloud access, including remote access and new backups. Local trading continues. Stored backups and subscriptions are kept; this does not cancel billing.",
+    "This ends this server’s current Cloud connection, including remote access and new backups. Local trading continues. Stored backups and subscriptions stay with this venue in Waitron Cloud; this does not cancel billing. Connect again later adds the server to Waitron Cloud as a new venue.",
   "cloud.state_unconfigured": "Not configured",
   "cloud.state_provisioning": "Setting up",
   "cloud.state_ready": "Configured",
@@ -5205,6 +5207,11 @@ export const es: Record<StringKey, string> = {
   "cloud.organisation": "Organización",
   "cloud.business": "Negocio legal",
   "cloud.connected": "Conectado",
+  "cloud.ended":
+    "El acceso a Cloud de este servidor ha terminado. Se detuvo aquí o en Waitron Cloud.",
+  "cloud.ended_help":
+    "Vuelve a conectar para añadir este local a Waitron Cloud como un local nuevo.",
+  "cloud.connect_again": "Volver a conectar",
   "cloud.snapshots": "Instantáneas",
   "cloud.translation": "Traducir todo",
   "cloud.continuous": "Copias continuas",
@@ -5212,7 +5219,6 @@ export const es: Record<StringKey, string> = {
   "cloud.access_active": "Acceso a Cloud activo",
   "cloud.access_unavailable":
     "El estado de Cloud no está disponible. Se muestra la última configuración conocida.",
-  "cloud.access_revoked": "Acceso a Cloud detenido",
   "cloud.refresh": "Actualizar estado",
   "cloud.last_contact": "Último contacto",
   "cloud.access_expires": "El acceso a Cloud caduca",
@@ -5221,7 +5227,7 @@ export const es: Record<StringKey, string> = {
   "cloud.confirm_stop": "Confirmar detención",
   "cloud.cancel_stop": "Mantener el acceso a Cloud",
   "cloud.stop_help":
-    "Esto detiene permanentemente el acceso de este servidor a Cloud, incluido el acceso remoto y las nuevas copias. La venta local continúa. Se conservan las copias guardadas y suscripciones; no se cancela la facturación.",
+    "Esto termina la conexión actual de este servidor con Cloud, incluido el acceso remoto y las nuevas copias. La venta local continúa. Las copias guardadas y las suscripciones se quedan con este local en Waitron Cloud; no se cancela la facturación. Si vuelves a conectar más tarde, el servidor se añade a Waitron Cloud como un local nuevo.",
   "cloud.state_unconfigured": "Sin configurar",
   "cloud.state_provisioning": "Configurando",
   "cloud.state_ready": "Configurado",

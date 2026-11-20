@@ -257,11 +257,14 @@ for (const [isPrimary, state] of [
     const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
       api,
     });
-    await expect.poll(() => el.shadowRoot!.querySelector("dl")).not.toBeNull();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(state === "revoked" ? "#connect-again" : "dl"))
+      .not.toBeNull();
     expect(el.shadowRoot!.querySelector("#remote-access")).toBeNull();
     expect(el.shadowRoot!.querySelector("#remote-access-heading") === null).toBe(
       state === "revoked",
     );
+    expect(el.shadowRoot!.textContent!.includes(t("cloud.ended"))).toBe(state === "revoked");
   });
 
 it("confirms remote off with Stop before disconnecting, while remote on stays direct", async () => {

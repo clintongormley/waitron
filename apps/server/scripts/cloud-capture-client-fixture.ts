@@ -55,6 +55,9 @@ const client = createCloudConnection({
   recordVenueId: async () => {
     throw new Error("The capture fixture does not pair");
   },
+  forgetVenueId: async () => {
+    throw new Error("The capture fixture does not pair");
+  },
   environment: saved.environment,
 });
 let result;

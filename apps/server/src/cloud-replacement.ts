@@ -6,7 +6,7 @@ import {
   CLOUD_REPLACEMENT_SET_ASIDE_PREFIX,
 } from "@waitron/store";
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
-import { link, lstat, readFile } from "node:fs/promises";
+import { link, lstat, readFile, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -271,12 +271,16 @@ export function createCloudReplacement(options: ReplacementOptions) {
         throw error;
     }
     if ((await options.connection.status()).state !== "not_connected") conflict();
+    // A second name, never a move: `replacement.json` stays the unreadable original until the
+    // fresh request replaces it, so an interrupted reissue still shows the refusal.
+    await linkAside();
+    return true;
+  }
+  async function linkAside() {
     const aside = join(
       resolve(options.stateDir),
       `${CLOUD_REPLACEMENT_SET_ASIDE_PREFIX}${new Date().toISOString().replace(/[:.]/g, "-")}`,
     );
-    // A second name, never a move: `replacement.json` stays the unreadable original until the
-    // fresh request replaces it, so an interrupted reissue still shows the refusal.
     try {
       await link(path, aside);
     } catch (error) {
@@ -284,7 +288,6 @@ export function createCloudReplacement(options: ReplacementOptions) {
       throw error;
     }
     await syncFolderHolding(aside);
-    return true;
   }
   async function exchange(
     action: "prepare" | "status" | "reissue",
@@ -382,6 +385,23 @@ export function createCloudReplacement(options: ReplacementOptions) {
         const saved = await read();
         if (!saved?.view || saved.view.state !== "complete") return;
         await importInto(saved, saved.view);
+      });
+    },
+    /** Connect again: a completed replacement left in place would be imported by a start's resume
+     * if the box stops before the new pairing is saved, bringing back the forgotten Cloud venue.
+     * Resume imports neither an unfinished nor an unreadable one, so those stay. */
+    async retire(): Promise<void> {
+      await locked(async () => {
+        let saved: SavedReplacement | undefined;
+        try {
+          saved = await read();
+        } catch {
+          return;
+        }
+        if (saved?.view?.state !== "complete") return;
+        await linkAside();
+        await unlink(path);
+        await syncFolderHolding(path);
       });
     },
     /** `cloud/connection.json` alone cannot keep the stop if it is deleted. */

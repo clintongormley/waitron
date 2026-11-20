@@ -714,8 +714,10 @@ export class CloudServicesScreen extends LitElement {
       }
     </section>`;
   }
-  #installation(s: CloudConnectionStatus) {
-    const installation = s.installation;
+  #installation(
+    s: CloudConnectionStatus,
+    installation: Exclude<CloudConnectionStatus["installation"], { state: "revoked" }>,
+  ) {
     const date = (value: string | null | undefined) =>
       value
         ? html`<time datetime=${value}>${new Date(value).toLocaleString(currentLocale())}</time>`
@@ -748,13 +750,13 @@ export class CloudServicesScreen extends LitElement {
                   service.service === "remote_access" && s.remoteAccessEnabled === false
                     ? t("cloud.remote_off")
                     : html`${t(`cloud.state_${service.state}`)} ·
-                      ${t(`cloud.health_${installation?.state === "revoked" || !service.observedAt || Date.parse(service.observedAt) <= Date.now() - 300000 ? "unknown" : service.health}`)}`
+                      ${t(`cloud.health_${!service.observedAt || Date.parse(service.observedAt) <= Date.now() - 300000 ? "unknown" : service.health}`)}`
                 }
               </dd>`,
         )}
       </dl>
       ${
-        typeof s.remoteAccessEnabled === "boolean" && installation?.state !== "revoked"
+        typeof s.remoteAccessEnabled === "boolean"
           ? html`<section aria-labelledby="remote-access-heading">
               <h2 id="remote-access-heading">${t("cloud.remote_local")}</h2>
               <p data-test="remote-access-status" role="status">
@@ -816,54 +818,48 @@ export class CloudServicesScreen extends LitElement {
           : nothing
       }
       ${
-        installation?.state === "revoked"
-          ? nothing
-          : html`
-              ${
-                s.isPrimary
-                  ? html`<wt-button
-                      id="refresh"
-                      .disabled=${this.busy}
-                      @click=${() => {
-                        void this.#run(() => this.api.refreshCloudConnection());
-                      }}
-                      >${t("cloud.refresh")}</wt-button
-                    >`
-                  : nothing
-              }
-              ${
-                this.confirmingStop
-                  ? html`<div role="group" aria-label=${t("cloud.stop")}>
-                      <p>${t("cloud.stop_help")}</p>
-                      <wt-form-actions>
-                        <wt-button
-                          id="cancel-stop"
-                          .disabled=${this.busy}
-                          @click=${() => {
-                            this.confirmingStop = false;
-                          }}
-                          >${t("cloud.cancel_stop")}</wt-button
-                        >
-                        <wt-button
-                          id="confirm-stop"
-                          .disabled=${this.busy}
-                          @click=${() => {
-                            void this.#run(() => this.api.revokeCloudConnection());
-                          }}
-                          >${t("cloud.confirm_stop")}</wt-button
-                        >
-                      </wt-form-actions>
-                    </div>`
-                  : html`<wt-button
-                      id="stop-access"
-                      .disabled=${this.busy}
-                      @click=${() => {
-                        this.confirmingStop = true;
-                      }}
-                      >${t("cloud.stop")}</wt-button
-                    >`
-              }
-            `
+        s.isPrimary
+          ? html`<wt-button
+              id="refresh"
+              .disabled=${this.busy}
+              @click=${() => {
+                void this.#run(() => this.api.refreshCloudConnection());
+              }}
+              >${t("cloud.refresh")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        this.confirmingStop
+          ? html`<div role="group" aria-label=${t("cloud.stop")}>
+              <p>${t("cloud.stop_help")}</p>
+              <wt-form-actions>
+                <wt-button
+                  id="cancel-stop"
+                  .disabled=${this.busy}
+                  @click=${() => {
+                    this.confirmingStop = false;
+                  }}
+                  >${t("cloud.cancel_stop")}</wt-button
+                >
+                <wt-button
+                  id="confirm-stop"
+                  .disabled=${this.busy}
+                  @click=${() => {
+                    void this.#run(() => this.api.revokeCloudConnection());
+                  }}
+                  >${t("cloud.confirm_stop")}</wt-button
+                >
+              </wt-form-actions>
+            </div>`
+          : html`<wt-button
+              id="stop-access"
+              .disabled=${this.busy}
+              @click=${() => {
+                this.confirmingStop = true;
+              }}
+              >${t("cloud.stop")}</wt-button
+            >`
       }`;
   }
   override render() {
@@ -977,10 +973,14 @@ export class CloudServicesScreen extends LitElement {
                                 : nothing
                             }`
                     : s.state === "complete"
-                      ? html`<p role="status">${t("cloud.connected")}</p>
-                          <p>${s.legalBusinessName}</p>
-                          ${this.#installation(s)}
-                          ${readsBilling(s) ? html`${this.#recoveryPanel(s)}${this.#billing(s)}${this.#emergency(s)}` : nothing}`
+                      ? s.installation?.state === "revoked"
+                        ? html`<p role="status">${t("cloud.ended")}</p>
+                            <p>${t("cloud.ended_help")}</p>
+                            ${s.isPrimary ? button("connect-again", t("cloud.connect_again"), () => this.api.reconnectCloudConnection()) : nothing}`
+                        : html`<p role="status">${t("cloud.connected")}</p>
+                            <p>${s.legalBusinessName}</p>
+                            ${this.#installation(s, s.installation)}
+                            ${readsBilling(s) ? html`${this.#recoveryPanel(s)}${this.#billing(s)}${this.#emergency(s)}` : nothing}`
                       : html`
                           ${
                             s.state === "awaiting_cloud"

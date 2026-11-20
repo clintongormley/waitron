@@ -679,7 +679,7 @@ Slice 3.
 
 ## Decisions and deliberate limits
 
-**`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today."
+**`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice, not the owner's): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
 
 ### Integrity waits and waiting reasons
 

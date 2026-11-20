@@ -183,6 +183,171 @@ it("requires explicit bound local confirmation and checks authority again after 
     await f.close();
   }
 });
+async function revokedConnection(
+  f: Awaited<ReturnType<typeof fixture>>,
+  saved: Record<string, unknown> = {},
+) {
+  const forgetVenueId = vi.fn(f.options.forgetVenueId);
+  const options = { ...f.options, forgetVenueId };
+  const client = createCloudConnection(options);
+  await client.start();
+  f.approve();
+  const approved = await client.check();
+  await client.complete(
+    {
+      requestId: approved.requestId!,
+      organisationId: f.organisationId,
+      legalBusinessId: f.legalBusinessId,
+    },
+    async () => {},
+  );
+  const path = join(f.stateDir, "cloud/connection.json");
+  const old = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(
+    path,
+    JSON.stringify({ ...old, ...saved, lifecycle: { unavailable: false, revoked: true } }),
+    { mode: 0o600 },
+  );
+  f.forgetPairings();
+  return { client, options, forgetVenueId, path, old };
+}
+it("connects again with a new key and no Cloud venue only once the installation was revoked", async () => {
+  const f = await fixture();
+  try {
+    const reconnect = vi.fn(async () => {});
+    const { client, options, forgetVenueId, path, old } = await revokedConnection(f);
+    await writeFile(path, JSON.stringify({ ...old, lifecycle: undefined }), { mode: 0o600 });
+    const sent = f.requests.length;
+    expect((await client.start(false, reconnect)).state).toBe("complete");
+    expect(f.requests).toHaveLength(sent);
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(forgetVenueId).not.toHaveBeenCalled();
+    await writeFile(
+      path,
+      JSON.stringify({ ...old, lifecycle: { unavailable: false, revoked: true } }),
+      { mode: 0o600 },
+    );
+    const again = await client.start(false, reconnect);
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(forgetVenueId).toHaveBeenCalledOnce();
+    expect(reconnect.mock.invocationCallOrder[0]).toBeLessThan(
+      forgetVenueId.mock.invocationCallOrder[0]!,
+    );
+    expect(await options.readVenueId()).toBeNull();
+    expect(again.state).toBe("awaiting_cloud");
+    expect(again.requestId).not.toBe(old.requestId);
+    const request = f.requests.at(-1)!;
+    expect(request[2]).toBe("start");
+    expect(request[3]).not.toBe(old.requestId);
+    expect(request[4]).not.toBe(old.publicKey);
+    expect(request[5]).toBe("");
+  } finally {
+    await f.close();
+  }
+});
+it("keeps a revoked installation when Start or Start again is pressed without Connect again", async () => {
+  const f = await fixture();
+  try {
+    const { client, options, forgetVenueId, path, old } = await revokedConnection(f);
+    const before = await readFile(path, "utf8");
+    const sent = f.requests.length;
+    for (const restart of [false, true]) {
+      const status = await client.start(restart);
+      expect(status.state).toBe("complete");
+      expect(status.installation?.state).toBe("revoked");
+    }
+    expect(f.requests).toHaveLength(sent);
+    expect(forgetVenueId).not.toHaveBeenCalled();
+    expect(await options.readVenueId()).toBe(old.venueId);
+    expect(await readFile(path, "utf8")).toBe(before);
+  } finally {
+    await f.close();
+  }
+});
+it("Connect again from a stale page changes nothing once a new pairing has begun", async () => {
+  const f = await fixture();
+  try {
+    const { client, options, forgetVenueId, path } = await revokedConnection(f);
+    const begun = await client.start(false, async () => {});
+    const before = await readFile(path, "utf8");
+    const sent = f.requests.length;
+    const reconnect = vi.fn(async () => {});
+    expect(await client.start(false, reconnect)).toEqual(begun);
+    expect(reconnect).not.toHaveBeenCalled();
+    expect(forgetVenueId).toHaveBeenCalledOnce();
+    expect(f.requests).toHaveLength(sent);
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(await options.readVenueId()).toBeNull();
+  } finally {
+    await f.close();
+  }
+});
+it("checks authority again inside the lock before Connect again forgets the Cloud venue", async () => {
+  const f = await fixture();
+  try {
+    const { client, options, forgetVenueId, path, old } = await revokedConnection(f);
+    const before = await readFile(path, "utf8");
+    const sent = f.requests.length;
+    await expect(
+      client.start(false, async () => {
+        throw new Error("authority lost");
+      }),
+    ).rejects.toThrow("authority lost");
+    expect(forgetVenueId).not.toHaveBeenCalled();
+    expect(await options.readVenueId()).toBe(old.venueId);
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect(f.requests).toHaveLength(sent);
+    expect((await client.status()).installation?.state).toBe("revoked");
+  } finally {
+    await f.close();
+  }
+});
+it("a box that forgot its Cloud venue before saving the new pairing reads as not connected and pairs afresh", async () => {
+  const f = await fixture();
+  try {
+    const { client, options, path, old } = await revokedConnection(f);
+    await options.forgetVenueId();
+    expect(JSON.parse(await readFile(path, "utf8")).requestId).toBe(old.requestId);
+    expect((await client.status()).state).toBe("not_connected");
+    const again = await client.start(false, async () => {});
+    expect(again.state).toBe("awaiting_cloud");
+    const request = f.requests.at(-1)!;
+    expect(request[2]).toBe("start");
+    expect(request[3]).not.toBe(old.requestId);
+    expect(request[4]).not.toBe(old.publicKey);
+    expect(request[5]).toBe("");
+  } finally {
+    await f.close();
+  }
+});
+it("Connect again keeps remote access off through a lost reply and the new pairing", async () => {
+  const f = await fixture();
+  try {
+    const { client, path } = await revokedConnection(f, { remoteAccessEnabled: false });
+    f.reject();
+    await expect(client.start(false, async () => {})).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    expect(JSON.parse(await readFile(path, "utf8")).remoteAccessEnabled).toBe(false);
+    f.accept();
+    await client.start();
+    f.approve();
+    const approved = await client.check();
+    const complete = await client.complete(
+      {
+        requestId: approved.requestId!,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      },
+      async () => {},
+    );
+    expect(complete.state).toBe("complete");
+    expect(complete.remoteAccessEnabled).toBe(false);
+    expect((await createCloudConnection(f.options).status()).remoteAccessEnabled).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
 it("rejects changed binding, malformed state, and mismatched replies without overwriting the recorded state", async () => {
   const f = await fixture();
   try {

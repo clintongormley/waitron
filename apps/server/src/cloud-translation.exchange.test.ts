@@ -203,6 +203,7 @@ it("an unreachable Cloud is cloud.unavailable and a never-connected box is cloud
       readVenueId: async () => null,
       readVenueName: async () => "",
       recordVenueId: async () => {},
+      forgetVenueId: async () => {},
       environment: "test",
     });
     await expect(none.translation.status(crypto.randomUUID())).rejects.toMatchObject({
