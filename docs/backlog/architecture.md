@@ -1134,6 +1134,9 @@ answer as they did before A394, a deliberate exception to the one-status-rule in
 rule's situations (the address names it, the form names it, or a stored row does), so following
 the rule would need a new refusal for each situation; no screen reads the number, and every screen
 acts on the refusal's name. The trace is in the A394 plan, under A394-9.
+2026-11-20 (A394-20d): the watcher's settling of question 14, on the owner's delegation, moved the
+device-with-no-reader case to a new code `device.no_reader` 409; `reader.not_found` keeps 404 for a
+reader the request names or the device holds.
 
 **No runtime planner statistics (A1469, watcher, 2026-11-10).** A box does not gather SQLite's
 planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days

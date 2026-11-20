@@ -269,7 +269,8 @@ pin today's number are in the part named.
 - **Wrong code for the cause**: `booking.not_found` 404 when the booking exists but is no longer
   booked (`packages/bookings/src/bookings.ts:117,146-148`; a state clash, 409 as
   `booking.invalid_transition`); `payments-api.ts:628-629` answers `management.request_invalid
-  {field:"providerId"}` on `/unpair`, which has no such field; `device_profile.not_found` 404 on
+  {field:"providerId"}` on `/unpair`, which has no such field (done 2026-11-20 by A394-20d:
+  `reader.unpair_unsupported` 409); `device_profile.not_found` 404 on
   `POST /api/device/join` in dev mode when the venue has no till profile (`device-api.ts:203`).
 - **A malformed path id** answers `shared.invalid_id` 400 through `requireUuidParam`
   (`packages/server-kit/src/request-screens.ts:14-15`) on most boundaries, the resource's
@@ -487,6 +488,9 @@ Status changes:
   today, a deliberate exception to the 8 October rule: each is raised in more than one of the rule's
   situations (the address, the form, a stored row), no screen reads the number, and every screen acts
   on the refusal's name. No new codes. **A394-9 is done.**
+  2026-11-20 (A394-20d): the watcher's settling of question 14, on the owner's delegation, moved the
+  device-with-no-reader case to a new code `device.no_reader` 409; `reader.not_found` keeps 404 for
+  a reader the request names or the device holds.
 - **A394-10 — Till, lines, groups, drafts and courses: body ids answer 400.** Same files plus
   `adjustments-api.ts` and the doc comment at `apps/till/src/api/client.ts:2723`. Changes
   `tab.line_not_found`, `group.not_found`, `draft.not_found`, `course.not_found`, `station.not_found`,
@@ -723,27 +727,37 @@ Status changes:
   of A394-20 stays with lane B.
   **2026-11-20 (A394-20d, lane C):** the card payment rows are done, by questions 4, 9 and 14. In
   `apps/server/src/payments-api.ts`, `payment.provider_unknown` answers 409 where the provider is
-  read from a stored reader or payment (reader status, unpair and delete, partial-refund retain and
-  release, the two resolve routes; tested on status and unpair, the rest traced through the shared
-  table): that provider's module is off or gone. It keeps 404 on the four
-  routes whose address names the provider (available readers, connect, On/Off, disconnect) and 400
-  on pair and adopt. A refused or wrong-environment key answers 400 on connect, which checks the
-  key the body carries, and 409 elsewhere, where the stored key is refused. `reader.not_listed`
-  and `payment.pairing_refused` answer 400 (each is about what the body sent);
-  `payment.resolve_unsupported` and `payment.refund_exceeds_capture` answer 409 (the second is raised
-  here only by the refund reconciliation, whose checks before it appear, by reading, to keep it from
-  firing; no test reaches it). Unpairing a reader
-  whose provider cannot unpair now answers a new code, `payment.unpair_unsupported`, 409, in place
-  of `management.request_invalid` naming a `providerId` field the request does not have; the
-  dashboard offers Unpair only for a provider that can (`apps/dashboard/src/screens/payments-screen.ts`).
-  In `apps/server/src/till-api.ts`, a card payment from a device with no reader chosen, no profile
-  default and none in the request answers a new code, `device.no_reader`, 409, on the till's pay
-  route (tested) and the bill's card payment route (traced: it uses the till's same table); a
-  reader the request names that is unknown or switched off still answers `reader.not_found` 404. Left: the till's own 422 for
-  `payment.refund_exceeds_capture`. The `enable`/`disable` reader routes the queue named no longer
-  exist (`git grep -nE 'readers/:id/(enable|disable)' -- apps packages` finds nothing). No client
-  compares these routes' statuses (same grep as A394-20c, 2026-11-20). The rest of A394-20 stays
-  with lane B.
+  read from a stored reader or payment (reader status, unpair, delete-impact and delete,
+  partial-refund retain and release, the two resolve routes; tested on all but retain and release,
+  which share the table): the stored provider id is not among the card providers the server is
+  built with (`CARD_PROVIDERS`, `packages/composition/src/card-providers.ts`, looked up by
+  `cardProviderById`), which the tests reach by mounting the routes without that provider. A
+  provider switched Off in the payments settings stays in that list, so it does not raise this
+  code. It keeps 404 on the four routes whose address names the provider (available readers,
+  connect, On/Off, disconnect) and 400 on pair and adopt. A refused or wrong-environment key
+  answers 400 on connect, which checks the key the body carries, and 409 elsewhere, where the
+  stored key is refused. `reader.not_listed` (adopting a reference the provider does not list) and
+  `payment.pairing_refused` answer 400 (each is about what the body sent). An adoption that an
+  Unpair or Delete of the same reader overtook after the provider's list was read answers a new
+  code, `reader.removed_while_adding`, 409 (it used to answer `reader.not_listed`).
+  `payment.resolve_unsupported` and `payment.refund_exceeds_capture` answer 409. A test reaches the
+  second on partial-refund release: provider refunds that add up to the capture but include
+  amounts finer than a cent, which are stored rounded to the cent, take the stored refunds past the
+  capture, and the route answers 409 with the payment and refund rows unchanged
+  (`payments-api.stuck.test.ts`). Unpairing a reader whose provider cannot unpair answers a new
+  code, `reader.unpair_unsupported`, 409, in place of `management.request_invalid` naming a
+  `providerId` field the request does not have; the dashboard offers Unpair only for a provider
+  that can (`apps/dashboard/src/screens/payments-screen.ts`). In `apps/server/src/till-api.ts`, a
+  card payment from a device with no reader chosen, no profile default and none in the request
+  answers a new code, `device.no_reader`, 409, on the till's pay route (tested) and the bill's card
+  payment route (traced: it uses the till's same table). `reader.not_found` still answers 404 for a
+  reader the request names that is unknown or switched off, and for the device's own chosen or
+  default reader once it is switched off (`device-equipment-api.test.ts`). The till's own
+  `payment.refund_exceeds_capture` answers 409 (was 422), tested on the bill refund route with a
+  stored capture smaller than the refund (`bill-refunds.card.test.ts`). The `enable`/`disable`
+  reader routes the queue named no longer exist (`git grep -nE 'readers/:id/(enable|disable)' --
+  apps packages` finds nothing). No client compares these routes' statuses (same grep as A394-20c,
+  2026-11-20). The rest of A394-20 stays with lane B.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
   `mirror-bundle-api.ts`, catalogue's `menu.reset_required` and the two `time_zone.unreadable`
@@ -952,6 +966,7 @@ found no branch on these routes. Where a client branches on the error CODE inste
 
 **Not established.** `reader.not_found` when the device has no reader (`:309`): the request
 carries no id at all. Pinned at 404 by `till-api.fiscal-sale-paths.test.ts:1106-1107`.
+2026-11-20 (A394-20d): it now answers a new code, `device.no_reader`, 409.
 
 #### Out-of-rule statuses that look wrong (till)
 
@@ -1520,6 +1535,9 @@ now answer 400, each pair under its own boundary; an unknown id on the stuck res
 code, `stuck_payment.not_found` 404, and a payment that exists but is not stuck keeps
 `payment.not_stuck` 409. The `reader.not_listed` row, the 422 group, the stored-provider
 `payment.provider_unknown` and `/unpair`'s `management.request_invalid` now sit under A394-20.
+
+**2026-11-20 (A394-20d):** the 422 group, the stored-provider `payment.provider_unknown` rows (409)
+and `/unpair` (`reader.unpair_unsupported` 409) are done; see A394-20 under Follow-up items.
 
 ### print-api.ts — boundary `print-api.ts:136` (map `:110-134`)
 
