@@ -181,6 +181,6 @@ it("closes the new set menu dialog on Cancel and creates nothing", async () => {
   await expect.element(page.getByRole("dialog", { name: "Add set menu" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect.element(page.getByRole("dialog", { name: "Add set menu" })).not.toBeInTheDocument();
-  expect(cancelled).toHaveBeenCalledOnce();
+  await vi.waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
   expect(createMenu).not.toHaveBeenCalled();
 });
