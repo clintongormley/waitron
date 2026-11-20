@@ -80,9 +80,6 @@ same way, and is cancelled there. Other
 printouts reprint only on their own printer. A payment slip is printed again only from here:
 reprint a lost one soon, because the list keeps only the latest finished printouts.
 
-A sale's original receipt or invoice has no **Reprint** once it has printed. To print a copy, follow
-[Print from dashboard Orders](table-service.md#dashboard-documents).
-
 If Print Queue says a printout’s saved data has expired, open **Orders** to print a receipt
 or invoice from the sale. Station tickets, refund receipts, payment slips and reports cannot
 be reprinted from that job once its saved data is removed.
