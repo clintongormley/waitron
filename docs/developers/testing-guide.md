@@ -1846,8 +1846,9 @@ mounts a seventh 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/restore` in the same st
 (it points `TMPDIR` there before `useVenueDb` makes it), fills the disk to 1 MiB free and makes the
 payment slip 8 MiB. A card payment the payment check settles, and one charged while the till
 waits, are recorded `received` with no slip queued; with the second attempt without the slip
-removed from `withSettledSlip` (`apps/server/src/payment-slip-print.ts`), both stayed unrecorded
-with `storage.disk_full` (2026-11-20, macOS HFS+ image). It calls `openSmallDisk("payment-slip",
+removed from `withSettledSlip` (`apps/server/src/payment-slip-print.ts`), the payment check's case
+stayed unrecorded with `storage.disk_full` and the till's answered `507
+sale.charged_not_recorded` with reason `disk_full` (2026-11-20, macOS HFS+ image). It calls `openSmallDisk("payment-slip",
 32)`, and CI mounts an eighth 32 MiB tmpfs at `$RUNNER_TEMP/full-disk/payment-slip` in the same
 step.
 
@@ -4467,7 +4468,7 @@ below records the earlier state; use the [current rule](#the-store-caps-the-valu
 
 ### Separate full-disk filesystems
 
-2026-11-12, env2: current Linux runs set `WAITRON_FULL_DISK_ROOT` to the parent of seven separate mount points; the source excerpt below retains its old names.
+2026-11-12, env2: current Linux runs set `WAITRON_FULL_DISK_ROOT` to the parent of separate mount points; the source excerpt below retains its old names.
 
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
