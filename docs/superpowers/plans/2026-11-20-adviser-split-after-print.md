@@ -61,7 +61,7 @@ same message; the split then carries on. D1–D3 below keep their defaults.
 | `kitchen_print_job_lines`, `ticket_item_moves` (`kitchen-print-job-lines.ts:13-33`, `ticket-item-moves.ts:11-54`) | No | Paper already printed and hand moves made. With no print links, a later Move dishes sends the kitchen no slip for a copy, which is right for a served dish. |
 | `sale_line_dishes` (`sale-line-dishes.ts:7-28`) | No | The originals stay linked to A/1's rows (key `restrict`). Each new ticket links its copies when issued (`linkSaleDishes`, `order-portions.ts:311-329`, called at `working-order.ts:7733`). |
 | `bill_payment_lines` (`bill-payments.ts:118-140`) | None exist | A bill holding money is refused (`refuseBillHoldingMoney`). |
-| `order_events` | A `dish.moved` per original, old bill → new bill | `recordPortionEvents` (`order-portions.ts:273-295`), as `moveOrderLines` records (`working-order.ts:4334-4339`). |
+| `order_events` | No `dish.moved` | The originals stay on the old bill, so "moved" would be false; the old bill's `order_cancelled` entry names the new bill. |
 | The bill: way of dining, service context, receipt language | Yes | `createOpenOrder(…, { copyServiceContextFrom, receiptLocale })` (`working-order.ts:1565-1577`, `:1660`, `:1669-1670`), the new bill made as Move dishes makes one (`bill-actions.ts:327-358`). |
 
 **The database allows it as is.** An inserted line is refused only on a bill that is not open or
@@ -87,11 +87,12 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
   `inmutabilidad` pass unedited.
 - No table, column, trigger or migration. This is not a "Reset test venues" PR.
 - The order history entry reuses kind `order_cancelled`
-  (`packages/db/src/schema/order-amendments.ts:14`), reason `Bill split after printing`; orders lists
+  (`packages/db/src/schema/order-amendments.ts:14`), reason `Bill split after printing to bill <n>`
+  (the new bill's `bill_number`; the table has no column for a target bill, `:26-47`); orders lists
   show the old bill as Cancelled with its dishes (`orders-list.ts:121-132`), which the guide says.
-- Same eligibility as Cancel and credit: a `placed` bill with an issued ticket, no payment, no card
-  payment in flight, no customer-named invoice. Same permission: `sale.rectify`, with an approver's
-  PIN when the operator lacks it.
+- Same eligibility as Cancel and credit — a `placed` bill with an issued ticket, no payment, no card
+  payment in flight, no customer-named invoice — narrowed to a table's bill its party has not left
+  unpaid. Same permission: `sale.rectify`, with an approver's PIN when the operator lacks it.
 - English and Spanish till strings and guide sections change together.
 
 ## Review Focus
@@ -123,10 +124,24 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 - Produces: `POST /api/working-orders/:id/split-after-print`, body `{ override?: unknown }`,
   answers `200 { billId: string, creditNoteNumber: string }`; refusals as the cancel route's
   (`working_order.not_placed`, `bill.payments_received`, `order.payment_in_flight`,
-  `authorization.not_permitted`, the PIN-override codes), plus two new codes, both 409:
-  `bill.not_issued { workingOrderId }` and
-  `bill.unserved_dishes { workingOrderId, dishes: { lineId, dishName, quantity, released }[] }`,
-  the dish shape of `meal_end.unserved_dishes`.
+  `authorization.not_permitted`, the PIN-override codes), plus four new codes, all 409, each
+  `{ workingOrderId }` unless shown:
+  - `bill.not_at_table`: a counter order, `working_orders.party_id` null
+    (`packages/db/src/schema/orders.ts:114-115`). Mark served is per party, so the unserved
+    refusal's button could not be reached.
+  - `bill.left_unpaid`: the bill has an `unpaid_departures` row
+    (`packages/db/src/schema/unpaid-departures.ts:11-21`). Cancel and credit takes it
+    (`cancel-invoiced-order.test.ts:944`), but a split would open a bill for guests who have gone,
+    which the close of day would then issue; Mark served skips it too (`onShownBill`,
+    `order-groups.ts:2134-2143`).
+  - `bill.not_issued`: no ticket.
+  - `bill.unserved_dishes { workingOrderId, dishes: { lineId, dishName, quantity, released }[] }`,
+    the dish shape of `meal_end.unserved_dishes`.
+- Refusal order: the bill's state first (`working_order.not_placed`, `bill.not_at_table`,
+  `bill.left_unpaid`, `bill.not_issued`, `bill.payments_received`, `order.payment_in_flight`), then
+  `bill.unserved_dishes`, then `sale.rectify`. So staff are never told to mark dishes served — which
+  also takes them off the pass board (`leftToServe`, `kitchen-print.ts:959-973`) — on a bill that
+  would then be refused anyway.
 - `copyBillDishes(tx, fromBillId, toBillId, actorId): Promise<Map<string, string>>` (original id →
   copy id).
 
@@ -145,6 +160,11 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
     again → 200.
   - `needs sale.rectify`: a plain operator → 403 `authorization.not_permitted`, nothing filed or
     copied; with an unserved dish the same operator gets `bill.unserved_dishes` first.
+  - `refuses a part-paid bill before its unserved dishes`: a printed bill with a part payment and an
+    unserved Print-anyway dish → 409 `bill.payments_received`, not `bill.unserved_dishes`.
+  - `refuses a bill its party left unpaid` (`bill.left_unpaid`, set up as
+    `cancel-invoiced-order.test.ts:944` does) and `refuses a counter order` (`bill.not_at_table`, a
+    placed counter order with a ticket); nothing filed or copied in either.
   - `refuses a part-paid bill` (`bill.payments_received`), `a second request`
     (`working_order.not_placed`, one R5 in total), `a placed bill with no ticket`
     (`bill.not_issued`), `a box waiting for its time` (the cancel route's refusal, nothing copied).
@@ -158,17 +178,18 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 - [ ] **Step 2: Run, watch them fail:** `pnpm --filter @waitron/server exec vitest run src/split-after-print.test.ts`
 - [ ] **Step 3: Implement.** Add both codes to `errors.ts` and the status map, and run
   `scripts/errors-reachable.test.ts`. The route's outer step mirrors `cancelPlacedOrder`
-  (`working-order.ts:7789-7814`) with the fixed reason. In `cancelPlaced`'s transaction, with the
-  bill locked, the split mode refuses in this order: `working_order.not_placed`, `bill.not_issued`
-  when there is no ticket, `bill.unserved_dishes` from `unservedDishes`, then the `sale.rectify`
-  check. The till asks for a PIN only after `authorization.not_permitted`
-  (`till-app.ts:21029-21031`), so the unserved refusal comes before any PIN. Then the money checks,
-  `creditWholeInvoice`, the new bill made as Move dishes makes it (`bill-actions.ts:327-358`) with
-  the old bill's `receiptLocale`, and `copyBillDishes`. `copyBillDishes` follows the table above:
-  read the rows with `select()`, insert with `insertInChunks`, then `carryLineReductions`, the
-  service cancellations, `copyAllergyWorkingTicks` and `recordPortionEvents`. The split skips the
-  VOID slips and `ensureFamilyBill`, still withdraws pending department transfers, sets the old
-  bill `abandoned`, appends the amendment, and bumps the party revision.
+  (`working-order.ts:7789-7814`). In `cancelPlaced`'s transaction, with the bill locked, the split
+  mode refuses in the Interfaces order; today's mode keeps its own (`sale.rectify` at
+  `working-order.ts:7840`, before the money checks at `:7842-7847`). The till asks for a PIN only
+  after `authorization.not_permitted` (`till-app.ts:21029-21031`), so every other refusal comes
+  before any PIN. Then `creditWholeInvoice`, the new bill made as Move dishes makes it
+  (`bill-actions.ts:327-358`) with the old bill's `receiptLocale`, and `copyBillDishes`.
+  `copyBillDishes` follows the table above: read the rows with `select()`, insert with
+  `insertInChunks`, then `carryLineReductions`, the service cancellations and
+  `copyAllergyWorkingTicks`. The VOID-slip step runs unchanged: it finds only unserved dishes
+  (`working-order.ts:7850-7867`) and the unserved refusal leaves none. The split skips
+  `ensureFamilyBill`, still withdraws pending department transfers, sets the old bill `abandoned`,
+  appends the amendment naming the new bill, and bumps the party revision.
 - [ ] **Step 4: Run the file and `cancel-invoiced-order.test.ts`; both pass.** Then the golden
   huella test and `inmutabilidad` (RUNNER cheatsheet), unedited.
 - [ ] **Step 5: Commit** (`git commit -s`).
@@ -185,7 +206,7 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 (`client.ts:4744-4750`).
 
 - [ ] **Step 1: Failing tests:** the menu shows **Reopen to split** exactly when it shows **Cancel and
-  credit**; choosing it opens the cancel-credit dialog in split mode with no reason field, scope text
+  credit** (`till-table-order-screen.ts:7040`) and the bill is not `leftUnpaid`; choosing it opens the cancel-credit dialog in split mode with no reason field, scope text
   `Ticket {invoice} ({amount}) is credited in full with a credit note, and its dishes go back on a new open bill so each guest can have their own ticket.`,
   confirm button `Reopen to split`, keep button `Keep the bill`; the approver PIN step is the same;
   on 200 the till shows `Credit note {number} issued. Move each guest's dishes to their own bill, then print each one.`
@@ -193,8 +214,9 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
   `These dishes are not marked served, so the bill cannot be reopened yet. Mark served records that the guests have had them; the bill then reopens to split.`
   with a **Mark served** button for the dishes with `released: true` when the operator may hand
   over orders; pressing it marks them served and sends the split again. Dishes with
-  `released: false`, or an operator without `hand-over-orders`, get D4's text and no button. Each
-  other refusal shows the cancel-credit refusal text for that code.
+  `released: false`, or an operator without `hand-over-orders`, get D4's text and no button.
+  `bill.left_unpaid` and `bill.not_at_table` get their own text in `codes.ts`; each other refusal
+  shows the cancel-credit refusal text for that code.
 - [ ] **Step 2: Run, watch them fail.**
 - [ ] **Step 3: Implement** with a `mode: "cancel" | "split"` on the existing `CancelCrediting`
   state; Spanish strings beside the English (`Estos platos no están marcados como servidos, así que
@@ -217,9 +239,12 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 - **D3 A printed bill already part paid:** refused today, and its payment cannot be refunded once the
   ticket exists. [Keep refused; the refusal tells staff the other guests pay the rest on this ticket.]
 - **D4 An unserved dish the kitchen has not been asked for** (still held in its course): Mark served
-  refuses it, `group.line_held` (`working-order.ts:3954-3958`). [The refusal says to send its
-  course to the kitchen first, then mark it served; no button for it, as Print the bill's list does
-  (`till-table-order-screen.ts:5484`).]
+  refuses it, `group.line_held` (`working-order.ts:3953-3958`); sending the course
+  (`/groups/:gid/fire`) and then Mark served works, as the fresh read ran. [The refusal says to send
+  its course to the kitchen first, then mark it served; no button for it, as Print the bill's list
+  does (`till-table-order-screen.ts:5484`).] Alternative for the owner: such a dish has no kitchen
+  state, so the split could copy it as it is, still held, instead of firing it to the kitchen only to
+  mark it served.
 - **Splitting by amount** needs ADVISER-ADVANCES piece 1's "own receipt" part payment: after
   Reopen to split, it gives a guest their own ticket for an amount. Until it lands, split by dishes.
 - **A bill holding an advance** (ADVISER-ADVANCES, not on main): that branch already counts an
@@ -229,5 +254,5 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
   to split could serve it too, but this plan does not offer it for that.
 - **Full invoices naming a customer** wait for ADVISER-ADVANCES piece 3 (their correctives).
 
-**Size:** about 320–400 product lines and 550–650 test lines, no generated files; one pull
+**Size:** about 340–420 product lines and 600–700 test lines, no generated files; one pull
 request; no test venue reset.
