@@ -16,6 +16,7 @@ import { TillApi } from "./api/client.js";
 import { withDevDeviceHeader } from "./api/dev-device.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag, setReportBuild } from "./diagnostics.js";
+import { installPressBuzz } from "./press-buzz.js";
 import { isTrustBroken } from "./trust-check.js";
 import { trustInstructions } from "./trust-instructions.js";
 import "./till-app.js";
@@ -36,6 +37,7 @@ startVenueTheme(document.documentElement, {
 startThemeChoice(document.documentElement);
 
 installErrorCapture(window, diag);
+installPressBuzz(document);
 
 const app = document.querySelector<HTMLElement>("#app")!;
 
