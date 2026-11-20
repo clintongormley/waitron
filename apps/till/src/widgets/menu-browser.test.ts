@@ -493,6 +493,276 @@ describe("set-menu folders", () => {
     expect(store.lines).toEqual([original]);
   });
 
+  describe("when a dish has no place on the bill", () => {
+    const dailyMenu = lunch({ structure: { members: [dailyMember] } });
+    const sirloin = daily.offers[1]!;
+    // Soup sits in the mains place, so a sirloin fits only once the soup moves to a starter place.
+    const soupInMains = {
+      ...setMenuBill,
+      setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId === "daily-1"),
+      dishes: [
+        {
+          lineId: "sent-soup",
+          setMenuLineId: "daily-1",
+          place: 1,
+          productId: daily.offers[0]!.productId,
+          variantId: null,
+          priceCents: 0,
+          countsAsCourseId: "starter",
+          movable: true,
+        },
+      ],
+    };
+    const oneDaily = { ...soupInMains, dishes: [] };
+
+    async function pickInFolder(el: TillMenuBrowser, dish: RegExp): Promise<void> {
+      if (root(el).querySelector("till-set-menu-folder") === null)
+        await tap(el, entry(el, "structure", daily.name));
+      const folder = root(el).querySelector("till-set-menu-folder")!;
+      await folder.updateComplete;
+      await userEvent.click(page.elementLocator(folder).getByRole("button", { name: dish }));
+      await el.updateComplete;
+    }
+
+    function placeModal(el: TillMenuBrowser): import("@waitron/ui").WtDialog | null {
+      return root(el).querySelector<import("@waitron/ui").WtDialog>("[data-set-menu-place]");
+    }
+
+    function placeChoices(el: TillMenuBrowser): string[] {
+      return [...placeModal(el)!.querySelectorAll("wt-button")].map((button) =>
+        button.textContent!.trim(),
+      );
+    }
+
+    it("moves a placed dish to free a place, then puts the picked dish there", async () => {
+      const move = vi.fn(async () => undefined);
+      const { el, store } = await mount({
+        menu: dailyMenu,
+        setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+        setMenuBill: soupInMains,
+        moveSetMenuDishes: move,
+        setMenuDishNames: new Map([["sent-soup", "Soup"]]),
+      });
+      await pickInFolder(el, /Sirloin/);
+      expect(store.lines).toEqual([]);
+      expect(placeChoices(el)).toEqual([
+        "Cancel",
+        "Move Soup to Daily menu (€0.00) and put Sirloin in its place",
+      ]);
+
+      await userEvent.click(
+        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Move Soup/ }),
+      );
+      await vi.waitFor(() =>
+        expect(store.lines).toMatchObject([
+          {
+            setMenuId: daily.menuId,
+            product: { menuItemId: sirloin.id },
+            setMenuReserved: { setMenuLineId: "daily-1", place: 1 },
+          },
+        ]),
+      );
+      expect(move).toHaveBeenCalledExactlyOnceWith([
+        { lineId: "sent-soup", to: { setMenuLineId: "daily-1", place: 0 } },
+      ]);
+      expect(placeModal(el)).toBeNull();
+    });
+
+    it("shows a refused move and adds nothing", async () => {
+      const { el, store } = await mount({
+        menu: dailyMenu,
+        setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+        setMenuBill: soupInMains,
+        moveSetMenuDishes: async () => "That place was taken.",
+      });
+      await pickInFolder(el, /Soup/);
+      const drafted = [...store.lines];
+      await pickInFolder(el, /Sirloin/);
+      // With no name for the moved dish, the choice names its line.
+      await userEvent.click(
+        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Move sent-soup/ }),
+      );
+      await vi.waitFor(() =>
+        expect(placeModal(el)!.querySelector("[role='alert']")?.textContent).toBe(
+          "That place was taken.",
+        ),
+      );
+      expect(store.lines).toEqual(drafted);
+    });
+
+    it("pins the drafted dishes before adding the picked one to a new set menu", async () => {
+      const { el, store } = await mount({
+        menu: dailyMenu,
+        setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
+        setMenuBill: oneDaily,
+      });
+      el.addSetMenu = vi.fn(async () => {
+        el.setMenuBill = {
+          ...oneDaily,
+          setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId !== "special-1"),
+        };
+        await el.updateComplete;
+        return undefined;
+      });
+      await pickInFolder(el, /Sirloin/);
+      expect(store.lines).toHaveLength(1);
+      await pickInFolder(el, /Sirloin/);
+      expect(placeChoices(el)).toEqual([
+        "Cancel",
+        "Add a Daily menu (€14.00)",
+        "Add a Special menu (€19.00)",
+      ]);
+      await userEvent.click(
+        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Add a Daily menu/ }),
+      );
+      await vi.waitFor(() =>
+        expect(store.lines).toMatchObject([
+          { setMenuReserved: { setMenuLineId: "daily-1", place: 1 } },
+          { setMenuReserved: { setMenuLineId: "daily-2", place: 1 } },
+        ]),
+      );
+      expect(el.addSetMenu).toHaveBeenCalledExactlyOnceWith(daily.menuId);
+    });
+
+    it.each([
+      ["refuses", async (): Promise<string> => "No more set menus.", "No more set menus."],
+      [
+        "fails",
+        async (): Promise<string> => {
+          throw new Error("network down");
+        },
+        "Something went wrong, try again",
+      ],
+    ] as const)("shows why when adding a set menu %s", async (_, add, message) => {
+      const { el, store } = await mount({
+        menu: dailyMenu,
+        setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+        setMenuBill: oneDaily,
+        addSetMenu: add,
+      });
+      await pickInFolder(el, /Sirloin/);
+      const drafted = [...store.lines];
+      await pickInFolder(el, /Sirloin/);
+      await userEvent.click(
+        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Add a Daily menu/ }),
+      );
+      await vi.waitFor(() =>
+        expect(placeModal(el)?.querySelector("[role='alert']")?.textContent).toBe(message),
+      );
+      expect(store.lines).toEqual(drafted);
+      expect(drafted[0]).not.toHaveProperty("setMenuReserved");
+    });
+  });
+
+  it("adds a set menu from its folder once, and not while edits are locked", async () => {
+    let finish: (error: string | undefined) => void = () => {};
+    const add = vi.fn(() => new Promise<string | undefined>((resolve) => (finish = resolve)));
+    const { el, store } = await mount({
+      menu: lunch({ structure: { members: [dailyMember] } }),
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+      addSetMenu: add,
+    });
+    await tap(el, entry(el, "structure", daily.name));
+    const folder = root(el).querySelector("till-set-menu-folder")!;
+    const press = () =>
+      folder.dispatchEvent(
+        new CustomEvent("add-set-menu", {
+          detail: { setMenuId: daily.menuId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    press();
+    press();
+    expect(add).toHaveBeenCalledExactlyOnceWith(daily.menuId);
+    finish("The bill was closed.");
+    await vi.waitFor(() => expect(notice(el)).toBe("The bill was closed."));
+
+    const unlock = store.lockEdits();
+    press();
+    expect(add).toHaveBeenCalledTimes(1);
+    unlock();
+  });
+
+  it("ignores a set-menu dish picked while edits are locked, or one that is sold out", async () => {
+    // The one Daily menu's mains place is taken, so a picked sirloin would ask where to put it.
+    const { el, store } = await mount({
+      menu: lunch({ structure: { members: [dailyMember] } }),
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill: {
+        ...setMenuBill,
+        setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId === "daily-1"),
+      },
+    });
+    await tap(el, entry(el, "structure", daily.name));
+    const folder = root(el).querySelector("till-set-menu-folder")!;
+    const pick = (offer: (typeof daily.offers)[number]) =>
+      folder.dispatchEvent(
+        new CustomEvent("pick-set-menu-dish", {
+          detail: { setMenuId: daily.menuId, versionId: "lunch", offer },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    const unlock = store.lockEdits();
+    pick(daily.offers[1]!);
+    unlock();
+    pick(daily.offers[3]!);
+    await el.updateComplete;
+    expect(store.lines).toEqual([]);
+    expect(root(el).querySelector("[data-set-menu-place]")).toBeNull();
+    pick(daily.offers[0]!);
+    expect(store.lines).toMatchObject([{ product: { menuItemId: "soup" } }]);
+  });
+
+  it("goes back from a held set menu to the list of held set menus", async () => {
+    const { el } = await mount({
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+    });
+    await tap(el, entry(el, "structure", "Set menus"));
+    await tap(el, entry(el, "section", daily.name));
+    const back = () => tap(el, root(el).querySelector<HTMLElement>("nav.breadcrumb wt-button")!);
+    await back();
+    expect(root(el).querySelector("till-set-menu-folder")).toBeNull();
+    expect(names(entries(el, "section"))).toEqual([daily.name]);
+    await back();
+    expect(entries(el, "section")).toEqual([]);
+    expect(names(entries(el, "structure"))).toContain("Set menus");
+  });
+
+  it("closes an open set menu that the bill no longer offers", async () => {
+    const { el } = await mount({
+      menu: lunch({ structure: { members: [dailyMember, member("cafe")] } }),
+      setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
+    });
+    await tap(el, entry(el, "structure", daily.name));
+    expect(root(el).querySelector("till-set-menu-folder")).not.toBeNull();
+    el.setMenuCopies = [{ copy: special, versionId: "lunch" }];
+    await el.updateComplete;
+    expect(root(el).querySelector("till-set-menu-folder")).toBeNull();
+    expect(names(entries(el, "structure"))).toEqual(["Café"]);
+  });
+
+  it("does not offer to place a dish whose set menu or dish has gone", async () => {
+    const { el, store } = await mount({
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+      setMenuBill,
+    });
+    const offer = daily.offers[0]!;
+    store.addProduct(setMenuProduct({ offer, setMenuId: daily.menuId, versionId: "lunch" }), "1", {
+      setMenu: { id: daily.menuId },
+    });
+    const line = store.lines[0]!;
+    expect(el.openSetMenuPlace({ ...line, setMenuId: special.menuId })).toBe(false);
+    expect(el.openSetMenuPlace({ ...line, product: { ...line.product, menuItemId: "gone" } })).toBe(
+      false,
+    );
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-set-menu-place]")).toBeNull();
+  });
+
   it("hides set menus on a surface without set-menu ordering", async () => {
     const { el } = await mount({ menu });
     expect(names(entries(el, "structure"))).not.toContain("Lunch choices");

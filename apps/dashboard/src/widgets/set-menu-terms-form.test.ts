@@ -131,3 +131,66 @@ it("sends only the changed term when renaming an existing set menu", async () =>
     }),
   );
 });
+
+it("refuses a blank name beside the name and sends nothing", async () => {
+  const { root, updateMenuDetails } = await mount();
+  change(root, "name", "   ");
+  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
+  save(root).click();
+  const name = root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!;
+  await vi.waitFor(() => expect(name.error).toBe("Enter a name for the menu."));
+  expect(updateMenuDetails).not.toHaveBeenCalled();
+});
+
+it("ignores a cleared eat-in VAT rate and saves a newly chosen one", async () => {
+  const { root, updateMenuDetails } = await mount();
+  const eatIn = root.querySelector<HTMLElementTagNameMap["wt-combobox"]>('[name="setVatClass"]')!;
+  change(root, "setVatClass", "");
+  await (root.host as HTMLElementTagNameMap["dashboard-set-menu-terms-form"]).updateComplete;
+  expect(eatIn.value).toBe("reduced");
+  expect(save(root).disabled).toBe(true);
+  change(root, "setVatClass", "general");
+  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
+  save(root).click();
+  await vi.waitFor(() =>
+    expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", { setVatClass: "general" }),
+  );
+});
+
+it("saves a customer-facing name typed for one language", async () => {
+  const { root, updateMenuDetails } = await mount();
+  await page.getByRole("textbox", { name: /^Customer-facing name \(es\)/ }).fill("Set lunch");
+  await vi.waitFor(() => expect(save(root).disabled).toBe(false));
+  save(root).click();
+  await vi.waitFor(() =>
+    expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", {
+      names: { en: "Today's menu", es: "Set lunch" },
+    }),
+  );
+});
+
+it.each(["Cancel", "Escape"])(
+  "closes the new set menu dialog on %s, reports it cancelled and creates nothing",
+  async (how) => {
+    const createMenu = vi.fn();
+    const { el } = await mountWidget("dashboard-set-menu-terms-form", {
+      api: { createMenu } as unknown as DashboardApi,
+      creating: true,
+      languages,
+    } as Partial<HTMLElement>);
+    const cancelled = vi.fn();
+    el.addEventListener("set-menu-terms-cancelled", cancelled);
+    await expect.element(page.getByRole("dialog", { name: "Add set menu" })).toBeVisible();
+    const reported = new Promise((resolve) =>
+      el.addEventListener("set-menu-terms-cancelled", resolve, { once: true }),
+    );
+    if (how === "Cancel") await page.getByRole("button", { name: "Cancel" }).click();
+    else await userEvent.keyboard("{Escape}");
+    await reported;
+    expect(cancelled).toHaveBeenCalledOnce();
+    await expect
+      .element(page.getByRole("dialog", { name: "Add set menu" }))
+      .not.toBeInTheDocument();
+    expect(createMenu).not.toHaveBeenCalled();
+  },
+);
