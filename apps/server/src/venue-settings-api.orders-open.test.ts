@@ -19,6 +19,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
+  cashPayment,
   provisionBillVenue,
   send as rawSend,
   seatedWith,
@@ -130,26 +131,33 @@ function refusedFor(count: number) {
 /** A walk-up counter sale of one Paella, paid in cash. */
 async function counterSale(): Promise<string> {
   const id = randomUUID();
-  const sold = await till("POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId: id,
-    zoneId: counter.zoneId,
+  const sold = await counterCash(id, "35.00", {
     lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
-    tender: { method: "cash", amount: "35.00" },
   });
   expect(sold.status).toBe(200);
   return id;
 }
 
+function counterCash(
+  id: string,
+  tendered: string,
+  basket: { lines: { menuItemId: string; quantity: string }[]; revision?: number },
+) {
+  return till("POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered,
+    dining: "eat_in",
+    basket: { zoneId: counter.zoneId, ...basket },
+  });
+}
+
 /** A seated party's bill with a Paella sent to the kitchen, paid in cash; the party stays seated. */
 async function paidPartyBill(): Promise<{ partyId: string; tabId: string }> {
   const party = await seatedWith(venue, "Paella");
-  const paid = await till("POST", "/api/sales", {
-    dining: "eat_in",
-    workingOrderId: party.tabId,
-    lines: [],
-    tender: { method: "cash", amount: "35.00" },
-  });
+  const paid = await cashPayment(venue, venue.cookie, party.tabId, "35.00");
   expect(paid.status).toBe(200);
   expect(statusOf(party.tabId)).toBe("settled");
   return party;
@@ -170,11 +178,9 @@ describe("a receipt-language change while orders are open", () => {
     expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
     expect(language()).toEqual(["es-ES"]);
 
-    const paid = await till("POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
+    const paid = await counterCash(id, "35.00", {
+      revision: parked.json.revision as number,
       lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
-      tender: { method: "cash", amount: "35.00" },
     });
     expect(paid.status).toBe(200);
     expect(await changeTo("gl-ES")).toMatchObject({
@@ -206,26 +212,34 @@ describe("a receipt-language change while orders are open", () => {
     const id = randomUUID();
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
-    const paying = till("POST", "/api/pay", {
+    const paying = till("POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
       dining: "eat_in",
-      id,
-      zoneId: counter.zoneId,
-      lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+      basket: {
+        zoneId: counter.zoneId,
+        lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
+      },
     });
-    await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
-    expect(
-      rows<{ payment_attempt_at: string | null }>(
-        sql`select payment_attempt_at from working_orders where id = ${id}`,
-      )[0]!.payment_attempt_at,
-    ).not.toBeNull();
-
-    const during = await changeTo("gl-ES");
-    release();
+    try {
+      await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+      expect(
+        rows<{ state: string }>(
+          sql`select state from bill_payments where working_order_id = ${id}`,
+        ),
+      ).toEqual([{ state: "pending" }]);
+      expect(await changeTo("gl-ES")).toEqual(refusedFor(1));
+    } finally {
+      release();
+      await paying;
+    }
     const paid = await paying;
 
-    expect(during).toEqual(refusedFor(1));
     expect(paid.status).toBe(200);
-    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     expect(statusOf(id)).toBe("settled");
     const [sale] = rows<{ locale: string }>(
       sql`select locale from sales where working_order_id = ${id}`,
@@ -316,12 +330,7 @@ describe("a receipt-language change while orders are open", () => {
             where wo.id = ${merged.tabId}`,
       ),
     ).toEqual([{ state: "open", party_id: survivor.partyId }]);
-    const paid = await till("POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: survivor.tabId,
-      lines: [],
-      tender: { method: "cash", amount: "18.00" },
-    });
+    const paid = await cashPayment(venue, venue.cookie, survivor.tabId, "18.00");
     expect(paid.status).toBe(200);
     expect(
       rows<{ state: string }>(sql`select state from parties where id = ${survivor.partyId}`),
@@ -339,12 +348,8 @@ describe("a receipt-language change while orders are open", () => {
     const id = randomUUID();
     venue.db.run(sql`update kitchen_stations set active = 0`);
     try {
-      const sold = await till("POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        zoneId: counter.zoneId,
+      const sold = await counterCash(id, "35.00", {
         lines: [{ menuItemId: counter.offerFor(productId("Paella")), quantity: "1" }],
-        tender: { method: "cash", amount: "35.00" },
       });
       expect(sold.status).toBe(200);
     } finally {
@@ -371,15 +376,11 @@ describe("a receipt-language change while orders are open", () => {
     const id = randomUUID();
     venue.db.run(sql`update kitchen_stations set active = 0 where is_default = 1`);
     try {
-      const sold = await till("POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        zoneId: counter.zoneId,
+      const sold = await counterCash(id, "53.00", {
         lines: [
           { menuItemId: counter.offerFor(productId("Paella")), quantity: "1" },
           { menuItemId: counter.offerFor(productId("Tarta")), quantity: "1" },
         ],
-        tender: { method: "cash", amount: "53.00" },
       });
       expect(sold.status).toBe(200);
     } finally {
@@ -417,9 +418,7 @@ describe("a receipt-language change while orders are open", () => {
         json: { receiptLanguage: "gl-ES" },
       });
 
-      const collected = await till("POST", `/api/working-orders/${id}/collect`, {
-        tender: { method: "cash", amount: "35.00" },
-      });
+      const collected = await cashPayment(venue, venue.cookie, id, "35.00");
       expect(collected.status).toBe(200);
       expect(statusOf(id)).toBe("settled");
       expect(
@@ -483,9 +482,7 @@ describe("a receipt-language change while orders are open", () => {
       });
       expect(language()).toEqual(["gl-ES"]);
 
-      const collected = await till("POST", `/api/working-orders/${id}/collect`, {
-        tender: { method: "cash", amount: "35.00" },
-      });
+      const collected = await cashPayment(venue, venue.cookie, id, "35.00");
       expect(collected.status).toBe(200);
       expect(statusOf(id)).toBe("settled");
       expect(filed()).toEqual(before);

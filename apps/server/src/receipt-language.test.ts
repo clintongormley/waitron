@@ -39,11 +39,10 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { recordCorrection } from "@waitron/core";
-import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { deploymentEnvironment } from "./config.js";
@@ -56,10 +55,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  printSaleReceipt,
-} from "./testing/whole-payment-fixture.js";
+import { printSaleReceipt } from "./till-sale.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -526,69 +522,44 @@ describe("a card-reader sale files and prints in the venue's language when the o
       db: venue.db,
       backend: venue.backend,
       clock: venue.clock,
-      provider: new SimulatorPaymentProvider(venue.db),
     };
     await takePrinted(suite.db);
     return { venue, deps, zoneId, menuItemId: offerFor(tarta!.id) };
   }
 
-  it("files and prints a captured card sale in Catalan", async () => {
-    const { venue, deps, zoneId, menuItemId } = await catalanCounter();
-    const id = randomUUID();
+  it.each(["directly", "after a lost response"])(
+    "files and prints a captured card sale in Catalan %s",
+    async (attempt) => {
+      const { venue, deps, zoneId, menuItemId } = await catalanCounter();
+      const id = randomUUID();
+      const request = {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        dining: "eat_in",
+        basket: { zoneId, lines: [{ menuItemId, quantity: "1" }] },
+      };
+      const path = `/api/working-orders/${id}/payments`;
+      if (attempt === "after a lost response") {
+        venue.card.crashNextCollect("captured");
+        expect((await send(venue.app, venue.cookie, "POST", path, request)).status).toBe(500);
+        expect(await saleRow(suite.db, id)).toBeUndefined();
+      }
 
-    const out = await payWorkingOrderIntegrated(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId, quantity: "1" }],
-        simulationOutcome: "captured",
-      },
-    );
+      const payment = await send(venue.app, venue.cookie, "POST", path, request);
 
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.locale).toBe("ca-ES");
-    expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
-    await printSaleReceipt(deps, venue.cfg, id, "original");
-    const receipt = await takeReceipt(suite.db);
-    expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
-    expect(startsWith(receipt, "Tarjeta")).toBe(false);
-  });
-
-  it("files and prints in Catalan a card payment captured before a lost response", async () => {
-    const { venue, deps, zoneId, menuItemId } = await catalanCounter();
-    const id = randomUUID();
-    await inTx(venue, async (tx) => {
-      await createOpenOrder(tx, venue.cfg, id, [{ menuItemId, quantity: "1" }], null, { zoneId });
-      await insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: id,
-        provider: "simulator",
-        paymentRef: `sim-ref-${randomUUID()}`,
-        amount: decimal("18.00"),
-        settledAt: new Date(),
-        externalRef: `sim-lost-${randomUUID()}`,
-      });
-    });
-
-    const out = await payWorkingOrderIntegrated(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      { id, lines: [] },
-    );
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.locale).toBe("ca-ES");
-    expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
-    await printSaleReceipt(deps, venue.cfg, id, "original");
-    const receipt = await takeReceipt(suite.db);
-    expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
-    expect(startsWith(receipt, "Tarjeta")).toBe(false);
-  });
+      expect(payment.status).toBe(200);
+      expect(payment.json).toMatchObject({ outcome: "received", invoice: { locale: "ca-ES" } });
+      expect(venue.card.collectCalls).toHaveLength(1);
+      expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+      await printSaleReceipt(deps, venue.cfg, id, "original");
+      const receipt = await takeReceipt(suite.db);
+      expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
+      expect(startsWith(receipt, "Tarjeta")).toBe(false);
+    },
+  );
 });
 
 /** Every row of these tables, so a reprint that changed one of them is seen. */
@@ -1525,6 +1496,24 @@ describe("a sale files in the receipt language saved on its order", () => {
     });
   }
 
+  function reader(
+    venue: BillVenue,
+    id: string,
+    submissionId = randomUUID(),
+    receiptLanguage?: string,
+  ) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "18.00",
+      tip: "0.00",
+      receiptLanguage,
+    });
+  }
+
   /** A counter order parked with one Tarta, through the working-order functions. */
   async function parkedTarta(venue: BillVenue): Promise<{ id: string; zoneId: string }> {
     const { zoneId } = await inTx(venue, (tx) =>
@@ -1701,16 +1690,10 @@ describe("a sale files in the receipt language saved on its order", () => {
       const { id } = await parkedTarta(venue);
       if (stored !== null) await choose(venue, id, stored);
 
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        lines: [],
-        tender: { method: "cash", amount: "20.00" },
-      });
+      const paid = await cash(venue, id, "18.00");
 
       expect(paid.status).toBe(200);
-      expect(paid.json.locale).toBe(expected.locale);
-      expect(paid.json.namesLocale).toBe("ca-ES");
+      expect(paid.json.invoice).toMatchObject({ locale: expected.locale, namesLocale: "ca-ES" });
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
 
@@ -1718,27 +1701,11 @@ describe("a sale files in the receipt language saved on its order", () => {
       const venue = await barcelonaVenue();
       const { id } = await parkedTarta(venue);
       if (stored !== null) await choose(venue, id, stored);
-      const deps = {
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        provider: new SimulatorPaymentProvider(venue.db),
-      };
+      const paid = await reader(venue, id);
 
-      const out = await payWorkingOrderIntegrated(
-        { ...deps, admission: testTradingAdmission() },
-        venue.cfg,
-        {
-          id,
-          lines: [],
-          simulationOutcome: "captured",
-        },
-      );
-
-      expect(out.outcome).toBe("captured");
-      expect(out.outcome === "captured" && out.ticket).toMatchObject({
-        locale: expected.locale,
-        namesLocale: "ca-ES",
+      expect(paid).toMatchObject({
+        status: 200,
+        json: { outcome: "received", invoice: { locale: expected.locale, namesLocale: "ca-ES" } },
       });
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
@@ -1747,36 +1714,18 @@ describe("a sale files in the receipt language saved on its order", () => {
       const venue = await barcelonaVenue();
       const { id } = await parkedTarta(venue);
       if (stored !== null) await choose(venue, id, stored);
-      await inTx(venue, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: venue.cfg.origin,
-          nodeId: venue.cfg.nodeId,
-          workingOrderId: id,
-          provider: "simulator",
-          paymentRef: `sim-ref-${randomUUID()}`,
-          amount: decimal("18.00"),
-          settledAt: new Date(),
-          externalRef: `sim-lost-${randomUUID()}`,
-        }),
-      );
-      const deps = {
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        provider: new SimulatorPaymentProvider(venue.db),
-      };
+      const submissionId = randomUUID();
+      venue.card.crashNextCollect("captured");
+      expect((await reader(venue, id, submissionId)).status).toBe(500);
+      const calls = venue.card.collectCalls.length;
 
-      const out = await payWorkingOrderIntegrated(
-        { ...deps, admission: testTradingAdmission() },
-        venue.cfg,
-        { id, lines: [] },
-      );
+      const paid = await reader(venue, id, submissionId);
 
-      expect(out.outcome).toBe("captured");
-      expect(out.outcome === "captured" && out.ticket).toMatchObject({
-        locale: expected.locale,
-        namesLocale: "ca-ES",
+      expect(paid).toMatchObject({
+        status: 200,
+        json: { outcome: "received", invoice: { locale: expected.locale, namesLocale: "ca-ES" } },
       });
+      expect(venue.card.collectCalls).toHaveLength(calls);
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
   });
@@ -1853,24 +1802,9 @@ describe("a sale files in the receipt language saved on its order", () => {
     const { id } = await parkedTarta(venue);
     await choose(venue, id, "es-ES");
     await seedVenueSettings(venue.db, { defaultContentLanguage: "ca", contentLanguages: ["ca"] });
-    const deps = {
-      db: venue.db,
-      backend: venue.backend,
-      clock: venue.clock,
-      provider: new SimulatorPaymentProvider(venue.db),
-    };
+    const paid = await reader(venue, id);
 
-    const out = await payWorkingOrderIntegrated(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      {
-        id,
-        lines: [],
-        simulationOutcome: "captured",
-      },
-    );
-
-    expect(out.outcome).toBe("captured");
+    expect(paid).toMatchObject({ status: 200, json: { outcome: "received" } });
     expect(await filed(venue, id)).toEqual({
       locale: "ca-ES",
       invoiceLocales: ["ca-ES"],
@@ -1935,7 +1869,21 @@ describe("a sale files in the receipt language saved on its order", () => {
   describe("the language the counter sends with the sale", () => {
     const SPANISH_TARTA = { ...SPANISH, lines: [{ "ca-ES": "ES Tarta" }] };
     const CATALAN_TARTA = { ...CATALAN, lines: [{ "ca-ES": "ES Tarta" }] };
-    const CASH = { method: "cash", amount: "20.00" };
+    const CASH = { method: "cash", tendered: "20.00" };
+    const READER = { method: "card", entry: "reader" };
+    const TENDERS = [CASH, READER] as const;
+
+    function whole(venue: BillVenue, id: string, fields: Record<string, unknown>) {
+      return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        applied: "18.00",
+        tip: "0.00",
+        ...(fields.method === "card" ? {} : CASH),
+        ...fields,
+      });
+    }
 
     /** A counter basket of one Tarta, in a counter zone. */
     async function counterBasket(venue: BillVenue) {
@@ -1990,29 +1938,15 @@ describe("a sale files in the receipt language saved on its order", () => {
      * until `release` is called.
      */
     async function payHeldAtReader(venue: BillVenue, id: string, language: string) {
-      const simulator = new SimulatorPaymentProvider(venue.db);
-      const collect = simulator.collect.bind(simulator);
-      let atReader!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => (atReader = resolve));
-      const gate = new Promise<void>((resolve) => (release = resolve));
-      simulator.collect = async (params) => {
-        atReader();
-        await gate;
-        return collect(params);
-      };
-      const pay = payWorkingOrderIntegrated(
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-          provider: simulator,
-        },
-        venue.cfg,
-        { id, lines: [], receiptLanguage: language, simulationOutcome: "captured" },
-      );
-      await reached;
+      const release = venue.card.holdNextCollect();
+      const pay = reader(venue, id, randomUUID(), language);
+      try {
+        await expect.poll(() => venue.card.collectCalls.length).toBe(1);
+      } catch (error) {
+        release();
+        await pay;
+        throw error;
+      }
       return { pay, release };
     }
 
@@ -2050,24 +1984,6 @@ describe("a sale files in the receipt language saved on its order", () => {
               },
             ] as const,
         ],
-        [
-          "the language a second card payment sends",
-          (id: string) =>
-            [
-              "POST",
-              "/api/pay",
-              { dining: "eat_in", id, lines: [], receiptLanguage: "ca-ES" },
-            ] as const,
-        ],
-        [
-          "the language a collect sends",
-          (id: string) =>
-            [
-              "POST",
-              `/api/working-orders/${id}/collect`,
-              { tender: CASH, receiptLanguage: "ca-ES" },
-            ] as const,
-        ],
       ] as const)(
         "refuses %s, and files the language the payment started with",
         async (_name, request) => {
@@ -2091,7 +2007,7 @@ describe("a sale files in the receipt language saved on its order", () => {
           const result = await pay;
 
           expect(answer).toEqual(refused(id));
-          expect(result.outcome === "captured" && result.ticket.locale).toBe("es-ES");
+          expect(result).toMatchObject({ status: 200, json: { invoice: { locale: "es-ES" } } });
           expect(saleCount(venue, id)).toBe(1);
           expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
           expect(
@@ -2103,21 +2019,33 @@ describe("a sale files in the receipt language saved on its order", () => {
         },
       );
 
+      it.each(TENDERS)(
+        "refuses another $method payment without changing the receipt language",
+        async (tender) => {
+          const venue = await barcelonaVenue();
+          const id = await placedTarta(venue);
+          const { pay, release } = await payHeldAtReader(venue, id, "es-ES");
+          let answer;
+          try {
+            answer = await whole(venue, id, { ...tender, receiptLanguage: "ca-ES" });
+          } finally {
+            release();
+          }
+
+          const paid = await pay;
+          expect(answer).toEqual(refused(id));
+          expect(paid).toMatchObject({ status: 200, json: { invoice: { locale: "es-ES" } } });
+          expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+          expect(venue.card.collectCalls).toHaveLength(1);
+          expect(saleCount(venue, id)).toBe(1);
+        },
+      );
+
       it("refuses a saved receipt language while a captured card payment waits to be filed", async () => {
         const venue = await barcelonaVenue();
         const id = await placedTarta(venue);
-        await inTx(venue, (tx) =>
-          insertCapturedPayment(tx, {
-            origin: venue.cfg.origin,
-            nodeId: venue.cfg.nodeId,
-            workingOrderId: id,
-            provider: "simulator",
-            paymentRef: `sim-ref-${randomUUID()}`,
-            amount: decimal("18.00"),
-            settledAt: new Date(),
-            externalRef: `sim-lost-${randomUUID()}`,
-          }),
-        );
+        venue.card.crashNextCollect("captured");
+        expect((await reader(venue, id)).status).toBe(500);
         const before = await orderRow(venue, id);
 
         const answer = await send(
@@ -2135,18 +2063,9 @@ describe("a sale files in the receipt language saved on its order", () => {
       it("takes the language again once the card has resolved", async () => {
         const venue = await barcelonaVenue();
         const id = await placedTarta(venue);
-        const declined = await payWorkingOrderIntegrated(
-          {
-            admission: testTradingAdmission(),
-            db: venue.db,
-            backend: venue.backend,
-            clock: venue.clock,
-            provider: new SimulatorPaymentProvider(venue.db),
-          },
-          venue.cfg,
-          { id, lines: [], receiptLanguage: "es-ES", simulationOutcome: "declined" },
-        );
-        expect(declined.outcome).toBe("declined");
+        venue.card.failNextCollect();
+        const declined = await reader(venue, id, randomUUID(), "es-ES");
+        expect(declined).toMatchObject({ status: 200, json: { outcome: "declined" } });
 
         const { revision } = (await orderRow(venue, id))!;
         const saved = await send(
@@ -2161,56 +2080,43 @@ describe("a sale files in the receipt language saved on its order", () => {
       });
     });
 
-    it("stores and files the language a counter cash sale sends", async () => {
-      const venue = await barcelonaVenue();
-      const id = randomUUID();
+    it.each(TENDERS)(
+      "stores and files the language a counter $method payment sends",
+      async (tender) => {
+        const venue = await barcelonaVenue();
+        const id = randomUUID();
 
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
-        dining: "eat_in",
-        workingOrderId: id,
-        ...(await counterBasket(venue)),
-        tender: CASH,
-        receiptLanguage: "es-ES",
-      });
+        const paid = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${id}/payments`,
+          {
+            ...tender,
+            submissionId: randomUUID(),
+            kind: "share",
+            shareOf: 1,
+            dining: "eat_in",
+            basket: await counterBasket(venue),
+            receiptLanguage: "es-ES",
+          },
+        );
 
-      expect(paid.status).toBe(200);
-      expect(paid.json.locale).toBe("es-ES");
-      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
-      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
-    });
+        expect(paid).toMatchObject({ status: 200, json: { invoice: { locale: "es-ES" } } });
+        expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+        expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+      },
+    );
 
-    it("stores and files the language a counter card payment sends", async () => {
-      const venue = await barcelonaVenue();
-      const id = randomUUID();
-
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        ...(await counterBasket(venue)),
-        receiptLanguage: "es-ES",
-      });
-
-      expect(paid.status).toBe(200);
-      expect(paid.json.outcome).toBe("captured");
-      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
-      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
-    });
-
-    it.each([
-      [
-        "/api/sales",
-        (id: string) => ({ dining: "eat_in", workingOrderId: id, lines: [], tender: CASH }),
-      ],
-      ["/api/pay", (id: string) => ({ dining: "eat_in", id, lines: [] })],
-    ] as const)(
-      "stores the language sent with %s for a parked order, one revision on, and files it",
-      async (path, body) => {
+    it.each(TENDERS)(
+      "stores the language sent with $method for a parked order, one revision on, and files it",
+      async (tender) => {
         const venue = await barcelonaVenue();
         const { id } = await parkedTarta(venue);
         const before = await orderRow(venue, id);
 
-        const paid = await send(venue.app, venue.cookie, "POST", path, {
-          ...body(id),
+        const paid = await whole(venue, id, {
+          ...tender,
           receiptLanguage: "es-ES",
         });
 
@@ -2224,15 +2130,9 @@ describe("a sale files in the receipt language saved on its order", () => {
       },
     );
 
-    it.each([
-      [
-        "/api/sales",
-        (id: string) => ({ dining: "eat_in", workingOrderId: id, lines: [], tender: CASH }),
-      ],
-      ["/api/pay", (id: string) => ({ dining: "eat_in", id, lines: [] })],
-    ] as const)(
-      "writes nothing to a parked order when %s sends no language, or the one already saved",
-      async (path, body) => {
+    it.each(TENDERS)(
+      "writes nothing to a parked order when $method sends no language, or the one already saved",
+      async (tender) => {
         const venue = await barcelonaVenue();
         const bare = (await parkedTarta(venue)).id;
         const saved = (await parkedTarta(venue)).id;
@@ -2240,9 +2140,9 @@ describe("a sale files in the receipt language saved on its order", () => {
         const bareBefore = await orderRow(venue, bare);
         const savedBefore = await orderRow(venue, saved);
 
-        expect((await send(venue.app, venue.cookie, "POST", path, body(bare))).status).toBe(200);
-        const again = await send(venue.app, venue.cookie, "POST", path, {
-          ...body(saved),
+        expect((await whole(venue, bare, tender)).status).toBe(200);
+        const again = await whole(venue, saved, {
+          ...tender,
           receiptLanguage: "es-ES",
         });
 
@@ -2261,15 +2161,6 @@ describe("a sale files in the receipt language saved on its order", () => {
         expect(await filed(venue, saved)).toEqual(SPANISH_TARTA);
       },
     );
-
-    const WHOLE_CASH = {
-      kind: "share",
-      shareOf: 1,
-      method: "cash",
-      tendered: CASH.amount,
-      applied: "18.00",
-      tip: "0.00",
-    };
 
     it("leaves the receipt language and edit revision alone after a part payment", async () => {
       const venue = await barcelonaVenue();
@@ -2331,44 +2222,21 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
     });
 
-    const placedCashRequests = [
-      ["collect", (id: string) => [`/api/working-orders/${id}/collect`, { tender: CASH }] as const],
-      [
-        "bill payment",
-        (id: string) =>
-          [
-            `/api/working-orders/${id}/payments`,
-            { ...WHOLE_CASH, submissionId: randomUUID() },
-          ] as const,
-      ],
-    ] as const;
+    it("stores and files the language sent with a cash payment on a placed order", async () => {
+      const venue = await barcelonaVenue();
+      const id = await placedTarta(venue);
 
-    it.each(placedCashRequests)(
-      "stores and files the language sent with %s on a placed order",
-      async (method, request) => {
-        const venue = await barcelonaVenue();
-        const id = await placedTarta(venue);
-        const [path, body] = request(id);
+      const paid = await whole(venue, id, { receiptLanguage: "es-ES" });
 
-        const paid = await send(venue.app, venue.cookie, "POST", path, {
-          ...body,
-          receiptLanguage: "es-ES",
-        });
+      expect(paid.status).toBe(200);
+      expect(paid.json.invoice).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
 
-        expect(paid.status).toBe(200);
-        const ticket = method === "collect" ? paid.json : paid.json.invoice;
-        expect(ticket).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
-        expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
-        expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
-      },
-    );
-
-    it.each([
-      ...placedCashRequests,
-      ["card pay", (id: string) => ["/api/pay", { dining: "eat_in", id, lines: [] }] as const],
-    ] as const)(
-      "ignores the language sent with the %s of a placed order whose invoice is already issued",
-      async (_name, request) => {
+    it.each(TENDERS)(
+      "ignores the language sent with the $method payment of a placed order whose invoice is already issued",
+      async (tender) => {
         const venue = await barcelonaVenue();
         const id = await placedTarta(venue);
         const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -2379,10 +2247,8 @@ describe("a sale files in the receipt language saved on its order", () => {
           venue.operatorId,
         );
         const before = await orderRow(venue, id);
-        const [path, body] = request(id);
-
-        const paid = await send(venue.app, venue.cookie, "POST", path, {
-          ...body,
+        const paid = await whole(venue, id, {
+          ...tender,
           receiptLanguage: "es-ES",
         });
 
@@ -2401,12 +2267,22 @@ describe("a sale files in the receipt language saved on its order", () => {
       const id = randomUUID();
       venue.card.crashNextCollect("attempting");
 
-      const stuck = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        ...(await counterBasket(venue)),
-        receiptLanguage: "es-ES",
-      });
+      const stuck = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "reader",
+          dining: "eat_in",
+          basket: await counterBasket(venue),
+          receiptLanguage: "es-ES",
+        },
+      );
       expect(stuck.status).toBe(500);
       expect(saleCount(venue, id)).toBe(0);
       expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
@@ -2451,18 +2327,18 @@ describe("a sale files in the receipt language saved on its order", () => {
       );
       venue.card.scriptAbandonedAttempt({ outcome: "captured" });
       const [payment] = venue.db.all<{ id: string }>(
-        sql`select id from payments where working_order_id = ${id}`,
+        sql`select id from bill_payments where working_order_id = ${id}`,
       );
 
       const resolved = await send(
         management,
         `${MANAGEMENT_COOKIE}=${managerSid}`,
         "POST",
-        `/management-api/payments/stuck/${payment!.id}/resolve`,
+        `/management-api/payments/bill-payments/${payment!.id}/resolve`,
       );
 
       expect(resolved.status).toBe(200);
-      expect(resolved.json.outcome).toBe("filed");
+      expect(resolved.json.outcome).toBe("received");
       expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
     });
 
@@ -2476,11 +2352,9 @@ describe("a sale files in the receipt language saved on its order", () => {
         const venue = await barcelonaVenue();
         const id = randomUUID();
 
-        const refused = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        const refused = await whole(venue, id, {
           dining: "eat_in",
-          workingOrderId: id,
-          ...(await counterBasket(venue)),
-          tender: CASH,
+          basket: await counterBasket(venue),
           receiptLanguage: language,
         });
 
@@ -2494,10 +2368,10 @@ describe("a sale files in the receipt language saved on its order", () => {
         const venue = await barcelonaVenue();
         const id = randomUUID();
 
-        const refused = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        const refused = await whole(venue, id, {
+          ...READER,
           dining: "eat_in",
-          id,
-          ...(await counterBasket(venue)),
+          basket: await counterBasket(venue),
           // A reader that does not exist: choosing it first would answer `reader.not_found`.
           readerId: randomUUID(),
           receiptLanguage: language,
@@ -2510,18 +2384,12 @@ describe("a sale files in the receipt language saved on its order", () => {
         expect(saleCount(venue, id)).toBe(0);
       });
 
-      it("on the collect of a placed order, leaving it as it was", async () => {
+      it("on a payment of a placed order, leaving it as it was", async () => {
         const venue = await barcelonaVenue();
         const id = await placedTarta(venue);
         const before = await orderRow(venue, id);
 
-        const refused = await send(
-          venue.app,
-          venue.cookie,
-          "POST",
-          `/api/working-orders/${id}/collect`,
-          { tender: CASH, receiptLanguage: language },
-        );
+        const refused = await whole(venue, id, { receiptLanguage: language });
 
         expect(refused.status).toBe(400);
         expect(refused.json).toEqual(REFUSED);
@@ -2534,40 +2402,42 @@ describe("a sale files in the receipt language saved on its order", () => {
       const venue = await barcelonaVenue();
       const id = randomUUID();
 
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      const paid = await whole(venue, id, {
         dining: "eat_in",
-        workingOrderId: id,
-        ...(await counterBasket(venue)),
-        tender: CASH,
+        basket: await counterBasket(venue),
         receiptLanguage: "fr-FR",
       });
 
       expect(paid.status).toBe(200);
-      expect(paid.json.locale).toBe("ca-ES");
+      expect(paid.json.invoice).toMatchObject({ locale: "ca-ES" });
       expect((await orderRow(venue, id))?.receiptLocale).toBe("fr-FR");
       expect(await filed(venue, id)).toEqual(CATALAN_TARTA);
     });
 
-    it.each([
-      ["/api/sales", (id: string) => ({ dining: "eat_in", workingOrderId: id, tender: CASH })],
-      ["/api/pay", (id: string) => ({ dining: "eat_in", id })],
-    ] as const)(
-      "answers a %s retry of a settled sale sending another language with the stored ticket",
-      async (path, body) => {
+    it.each(TENDERS)(
+      "answers a $method retry of a settled bill sending another language with the stored ticket",
+      async (tender) => {
         const venue = await barcelonaVenue();
         const id = randomUUID();
-        const basket = await counterBasket(venue);
+        const path = `/api/working-orders/${id}/payments`;
+        const body = {
+          ...tender,
+          submissionId: randomUUID(),
+          expectedEdit: null,
+          kind: "share",
+          shareOf: 1,
+          dining: "eat_in",
+          basket: await counterBasket(venue),
+        };
         const first = await send(venue.app, venue.cookie, "POST", path, {
-          ...body(id),
-          ...basket,
+          ...body,
           receiptLanguage: "es-ES",
         });
         expect(first.status).toBe(200);
         const settled = await orderRow(venue, id);
 
         const retry = await send(venue.app, venue.cookie, "POST", path, {
-          ...body(id),
-          ...basket,
+          ...body,
           receiptLanguage: "ca-ES",
         });
 

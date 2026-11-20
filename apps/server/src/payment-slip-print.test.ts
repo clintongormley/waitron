@@ -25,6 +25,7 @@ import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-gua
 import { validateCapabilities } from "@waitron/layouts";
 import {
   fiscalRecordCount,
+  paymentRows,
   provisionBillVenue,
   send,
   tabWith,
@@ -342,7 +343,7 @@ it.each([null, "true", 1])(
 );
 
 it.each(["whole", "short", "presented", "issued"])(
-  "prints the %s card slip once and rejects an invalid choice",
+  "prints the %s card slip on capture and prints nothing on retry",
   async (kind) => {
     const id = await tabWith(venue, "Red wine bottle");
     if (kind === "issued")
@@ -361,31 +362,23 @@ it.each(["whole", "short", "presented", "issued"])(
         ).status,
       ).toBe(200);
     const before = (await venue.db.select().from(printJobs)).length;
-    const invalid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      printCardSlip: "true",
-    });
-    expect(invalid.status).toBe(400);
-    expect(invalid.json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "printCardSlip" },
-    });
     if (kind === "short") {
       const collect = venue.card.collect.bind(venue.card);
       vi.spyOn(venue.card, "collect").mockImplementationOnce((params) =>
         collect({ ...params, amount: decimal("10.00") }),
       );
     }
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
+    const path = `/api/working-orders/${id}/payments`;
+    const body = {
+      ...readerContribution,
+      submissionId: randomUUID(),
+      amount: "30.00",
+      applied: "30.00",
       printCardSlip: true,
-    });
+    };
+    const paid = await send(venue.app, venue.cookie, "POST", path, body);
     expect(paid.status).toBe(200);
-    expect(paid.json).toMatchObject({ outcome: kind === "short" ? "partial" : "captured" });
+    expect(paid.json).toMatchObject({ outcome: "received" });
     if (kind === "short")
       expect(paid.json).toMatchObject({ balance: { payments: [{ canCopySlip: true }] } });
     const jobs = await venue.db.select().from(printJobs);
@@ -397,12 +390,7 @@ it.each(["whole", "short", "presented", "issued"])(
     expect(slips).toHaveLength(1);
     expect(decodeTicket(slips[0]!.payload)).toContain(kind === "short" ? "20,00" : "0,00");
     expect(opensDrawer(slips[0]!.payload)).toBe(false);
-    const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      printCardSlip: true,
-    });
+    const replay = await send(venue.app, venue.cookie, "POST", path, body);
     expect(replay.status).toBe(200);
     expect(await venue.db.select().from(printJobs)).toHaveLength(jobs.length);
   },
@@ -743,21 +731,25 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
   expect(await venue.db.select().from(printJobs)).toHaveLength(before + 1);
 });
 
-it("rolls back the whole-card attempt when preparing its optional slip fails", async () => {
+it("rolls back the card payment when preparing its optional slip fails", async () => {
   const id = await tabWith(venue, "Red wine bottle");
   const calls = venue.card.collectCalls.length;
   venue.db.run(sql`create temp table printers (broken text)`);
   try {
-    const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      printCardSlip: true,
-    });
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        submissionId: randomUUID(),
+        ...readerContribution,
+        printCardSlip: true,
+      },
+    );
     expect(answer.status).toBe(500);
     expect(venue.card.collectCalls).toHaveLength(calls);
-    const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
-    expect(order!.paymentAttemptAt).toBeNull();
+    expect(await paymentRows(venue, id)).toEqual([]);
   } finally {
     venue.db.run(sql`drop table temp.printers`);
   }
@@ -928,10 +920,11 @@ describe("the Payment slip button on a paid sale", () => {
 
   it("prints one marked copy of a sale paid by a single card", async () => {
     const id = await tabWith(venue, "Red wine bottle");
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
+    const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...readerContribution,
+      amount: "30.00",
+      applied: "30.00",
     });
     expect(paid.status).toBe(200);
     const [only] = await offered(id);
@@ -1312,19 +1305,26 @@ describe("the Payment slip button on a paid sale", () => {
 
     it("keeps the copy of a card that paid the whole bill, through part and then all of a refund", async () => {
       const id = await tabWith(venue, "Red wine bottle");
-      const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        lines: [],
-      });
+      const paid = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payments`,
+        {
+          submissionId: randomUUID(),
+          ...readerContribution,
+          amount: "30.00",
+          applied: "30.00",
+        },
+      );
       expect(paid.status).toBe(200);
       const [card] = await venue.db.select().from(payments).where(eq(payments.workingOrderId, id));
-      expect(card!.billPaymentId).toBeNull();
+      expect(card!.billPaymentId).not.toBeNull();
       for (const [applied, state] of [
         ["5.00", "partially_refunded"],
         ["25.00", "refunded"],
       ] as const) {
-        const refunded = await refundAfterSale(id, null, applied, "0.00");
+        const refunded = await refundAfterSale(id, card!.billPaymentId, applied, "0.00");
         expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
         const [now] = await venue.db.select().from(payments).where(eq(payments.id, card!.id));
         expect(now!.state).toBe(state);

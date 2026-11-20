@@ -818,10 +818,14 @@ describe("bills already presented", () => {
 
 describe("a presented bill whose card is in flight", () => {
   function pay(billId: string) {
-    return send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: billId,
-      lines: [],
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "18.00",
+      tip: "0.00",
     });
   }
 
@@ -894,7 +898,7 @@ describe("a presented bill whose card is in flight", () => {
       expect(observed.status).toBe("placed");
       await expectNothingWritten(party.partyId, party.tabId);
       expect(paid.status).toBe(200);
-      expect(paid.json.outcome).toBe("captured");
+      expect(paid.json.outcome).toBe("received");
       const sales = await salesOf(placedId);
       expect(sales).toHaveLength(1);
       expect(sales[0]!.settledAt).not.toBeNull();
@@ -933,7 +937,7 @@ describe("a presented bill whose card is in flight", () => {
       const party = await seatedWith(venue, "Caña");
       const placedId = await presented(party);
       venue.card.failNextCollect();
-      expect(await pay(placedId)).toEqual({ status: 200, json: { outcome: "declined" } });
+      expect(await pay(placedId)).toMatchObject({ status: 200, json: { outcome: "declined" } });
 
       const answer = await depart(party.partyId, {
         billId: placedId,
@@ -1688,13 +1692,23 @@ describe("what is refused", () => {
       collect({ ...params, amount: decimal("20.00") }),
     );
 
-    const short = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: party.tabId,
-      lines: [],
-    });
+    const short = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        applied: "30.00",
+        tip: "0.00",
+      },
+    );
     expect(short.status, JSON.stringify(short)).toBe(200);
-    expect(short.json).toMatchObject({ outcome: "partial", balance: { outstanding: "10.00" } });
+    expect(short.json).toMatchObject({ outcome: "received", balance: { outstanding: "10.00" } });
 
     const rest = await send(
       venue.app,
@@ -1739,34 +1753,14 @@ describe("what is refused", () => {
     ]);
   });
 
-  const collectWays = [
-    {
-      label: "collected in cash",
-      method: "cash",
-      collect: (billId: string) =>
-        send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/collect`, {
-          tender: { method: "cash", amount: "30.00" },
-        }),
-    },
-    {
-      label: "paid by card at the reader",
-      method: "card",
-      collect: (billId: string) =>
-        send(venue.app, venue.cookie, "POST", "/api/pay", {
-          dining: "eat_in",
-          id: billId,
-          lines: [],
-        }),
-    },
-  ];
-
-  it.each(
-    (["cash", "card"] as const).flatMap((givenBack) =>
-      collectWays.map((way) => ({ ...way, givenBack })),
-    ),
-  )(
-    "settles the whole unpaid debt $label after its $givenBack part payment was given back in full, the given-back payment no tender",
-    async ({ method, collect, givenBack }) => {
+  it.each([
+    { method: "cash", givenBack: "cash" },
+    { method: "card", givenBack: "cash" },
+    { method: "cash", givenBack: "card" },
+    { method: "card", givenBack: "card" },
+  ] as const)(
+    "settles the whole unpaid debt by $method after its $givenBack part payment was given back in full, the given-back payment no tender",
+    async ({ method, givenBack }) => {
       const party = await seatedWith(venue, "Red wine bottle");
       await payPartAndGiveItBack(party, givenBack);
       expect(
@@ -1779,7 +1773,20 @@ describe("what is refused", () => {
       ).toBe(200);
       const [invoiced] = await salesOf(party.tabId);
 
-      const collected = await collect(party.tabId);
+      const collected = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${party.tabId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "share",
+          shareOf: 1,
+          applied: "30.00",
+          tip: "0.00",
+          ...(method === "cash" ? { method, tendered: "30.00" } : { method, entry: "reader" }),
+        },
+      );
 
       expect(collected.status, JSON.stringify(collected)).toBe(200);
       expect(await salesOf(party.tabId)).toEqual([
@@ -1796,7 +1803,9 @@ describe("what is refused", () => {
             .from(tenders)
             .where(eq(tenders.saleId, invoiced!.id)),
         ),
-      ).toEqual([{ method, amount: 3000, billPaymentId: null }]);
+      ).toEqual([
+        { method, amount: 3000, billPaymentId: (collected.json.payment as { id: string }).id },
+      ]);
       expect(await statusOf(venue, party.tabId)).toBe("settled");
     },
   );
@@ -2142,7 +2151,20 @@ describe("the guests its invoice's receipts print", () => {
     );
   }
 
-  it("stores the party's count at the departure, and a later collect's guests is ignored", async () => {
+  function payDepartedInvoice(billId: string, guestCount: number) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "30.00",
+      applied: "30.00",
+      tip: "0.00",
+      guestCount,
+    });
+  }
+
+  it("stores the party's count at the departure, and keeps it when the bill payment sends another count", async () => {
     const party = await seatedFor(4, "Red wine bottle");
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
@@ -2153,13 +2175,7 @@ describe("the guests its invoice's receipts print", () => {
 
     // By direct write: the guests route answers 409 `party.not_open` for the party the departure closed.
     venue.db.run(sql`update parties set guest_count = 6 where id = ${party.partyId}`);
-    const collected = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/collect`,
-      { tender: { method: "cash", amount: "30.00" }, guestCount: 2 },
-    );
+    const collected = await payDepartedInvoice(party.tabId, 2);
     expect(collected.status).toBe(200);
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
 
@@ -2177,7 +2193,7 @@ describe("the guests its invoice's receipts print", () => {
     expect(decodeTicket(copies.at(-1)!.payload)).toContain("4 comensales");
   });
 
-  it("refuses a collect's guests 0 on the departed invoice, and writes nothing", async () => {
+  it("refuses a guest count of 0 on a payment of the departed invoice, and writes nothing", async () => {
     const party = await seatedFor(4, "Red wine bottle");
     expect(
       (
@@ -2188,13 +2204,7 @@ describe("the guests its invoice's receipts print", () => {
       ).status,
     ).toBe(200);
     const before = await salesOf(party.tabId);
-    const refused = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/collect`,
-      { tender: { method: "cash", amount: "30.00" }, guestCount: 0 },
-    );
+    const refused = await payDepartedInvoice(party.tabId, 0);
     expect(refused).toEqual({
       status: 400,
       json: { code: "management.request_invalid", params: { field: "guestCount" } },

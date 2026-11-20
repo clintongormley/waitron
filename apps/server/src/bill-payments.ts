@@ -1218,7 +1218,7 @@ async function resultOf(
 
 /** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
  * the money scale, an absent added tip as none, so a resend that spells the same request another
- * way is the same request. `guestCount` is left out: a resend is matched on the payment alone. */
+ * way is the same request. Receipt language and guest count are excluded from the match. */
 export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   const scaled = (value: string | undefined) =>
     value === undefined ? undefined : money(decimal(value));
@@ -1226,6 +1226,7 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     ...req,
     expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
     guestCount: undefined,
+    receiptLanguage: undefined,
     printCardSlip: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
@@ -1443,9 +1444,9 @@ async function saveCounterBasket(
  * lines are inserted in `state`. A new payment answers the bill's total too, which the insert
  * leaves as it was.
  *
- * Keyed by `submissionId` within the bill (design §5.1): the same payment again, whatever its
- * `guestCount`, answers the first row and writes nothing; the id with another payment, or naming one of
- * the bill's refunds, is `submission.id_reused`.
+ * Keyed by `submissionId` within the bill (design §5.1): a matched retry returns the first row
+ * without changing it here. A different fingerprint or an id already used for a refund is
+ * `submission.id_reused`.
  */
 async function beginBillPayment(
   tx: Transaction,

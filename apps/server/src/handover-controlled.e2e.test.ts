@@ -774,6 +774,7 @@ const filingStateOf = (file: string, recordId: string): string | undefined =>
 interface StepdownSeen {
   records: { filed: string; inFlight: string; waiting: string };
   attemptingRef: string;
+  cardOrderId: string;
   m1Selling: boolean;
   m2SellingBefore: boolean;
   m2SeedHeld: { tabs: number; records: number; payments: number };
@@ -873,9 +874,9 @@ function chartOf(box: Box): SignedMembershipDocument {
 type HeardBatch = (typeof outside.submits)[number];
 
 /** A cash sale on a box, by its record. */
-async function sale(boxes: Boxes, box: Box = boxes.m1): Promise<string> {
+async function sale(boxes: Boxes, box: Box = boxes.m1, orderId = randomUUID()): Promise<string> {
   const before = new Set(recordIds(box.venueFile));
-  const answer = await askSale(boxes, box);
+  const answer = await askSale(boxes, box, orderId);
   const text = await answer.text();
   expect(answer.status, text).toBe(200);
   const added = recordIds(box.venueFile).filter((id) => !before.has(id));
@@ -883,8 +884,8 @@ async function sale(boxes: Boxes, box: Box = boxes.m1): Promise<string> {
   return added[0]!;
 }
 
-function askSale(boxes: Boxes, box: Box) {
-  return ask(box, `/api/working-orders/${randomUUID()}/payments`, {
+function askSale(boxes: Boxes, box: Box, orderId = randomUUID()) {
+  return ask(box, `/api/working-orders/${orderId}/payments`, {
     cookie: boxes.venue.cookie,
     body: {
       submissionId: randomUUID(),
@@ -934,6 +935,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
 
   const aeat = hold();
   releaseAeat = aeat.release;
+  const cardOrderId = randomUUID();
   let attemptingRef: string;
   let m2SeedHeld: StepdownSeen["m2SeedHeld"];
   let m1SweepsBeforeStepdown: number;
@@ -952,12 +954,18 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     await vi.waitFor(() => expect(outside.holdSubmit).toBeNull(), { timeout: 10_000 });
 
     m1.card!.stallNextCollect();
-    const paying = await ask(m1, "/api/pay", {
+    const paying = await ask(m1, `/api/working-orders/${cardOrderId}/payments`, {
       cookie: boxes.venue.cookie2,
       body: {
-        id: randomUUID(),
-        zoneId: boxes.venue.zoneId,
-        lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: {
+          zoneId: boxes.venue.zoneId,
+          lines: [{ menuItemId: boxes.venue.offerFor("Caña"), quantity: "1" }],
+        },
         dining: "eat_in",
       },
     });
@@ -1025,6 +1033,7 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   return {
     records: { filed, inFlight, waiting },
     attemptingRef,
+    cardOrderId,
     m1Selling,
     m2SellingBefore,
     m2SeedHeld,
@@ -1123,6 +1132,25 @@ async function loadTillRouter(options: {
   return new ServerRouter(options);
 }
 
+interface OrderInvoice {
+  code: string;
+  invoice_number: number;
+  total: number;
+  sale_id: string;
+  record_id: string;
+}
+
+function orderInvoices(box: Box, orderId: string): OrderInvoice[] {
+  return readRows<OrderInvoice>(
+    box.venueFile,
+    `select series.code, sales.invoice_number, sales.total, sales.id as sale_id, record.id as record_id
+     from sales join invoice_series series on series.id = sales.series_id
+     join registros_facturacion record on record.sale_id = sales.id
+     where sales.working_order_id = ?`,
+    orderId,
+  );
+}
+
 /** What the run saw from the switch-on to M2 selling and filing, with M1 still running. */
 interface SellingSeen {
   selected: { softwareId: string; identity: string };
@@ -1138,7 +1166,11 @@ interface SellingSeen {
   m2Chart: SignedMembershipDocument;
   ownRecord: string;
   ownRecordFiling: string | undefined;
-  ownSale: { code: string; invoice_number: number }[];
+  ownSale: OrderInvoice[];
+  cardSale: OrderInvoice[];
+  cardSaleOnM1: OrderInvoice[];
+  ownSaleOnM1: OrderInvoice[];
+  cardSaleId: string | null;
   heard: HeardBatch[];
   tableOnM2: { id: string; items: { name: string }[] }[];
   m1TableStatus: unknown[];
@@ -1274,7 +1306,11 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
     () => expect(filingStateOf(m2.venueFile, stepdown.records.waiting)).toBe("aceptado"),
     { timeout: 15_000, interval: 100 },
   );
-  const ownRecord = await sale(boxes, m2);
+  await vi.waitFor(() => expect(orderInvoices(m2, stepdown.cardOrderId)).toHaveLength(1), {
+    timeout: 10_000,
+  });
+  const ownOrderId = randomUUID();
+  const ownRecord = await sale(boxes, m2, ownOrderId);
   await sendOutbox(boxes, m2);
   await vi.waitFor(() => expect(filingStateOf(m2.venueFile, ownRecord)).toBe("aceptado"), {
     timeout: 15_000,
@@ -1315,13 +1351,17 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
     m2Chart: chartOf(m2),
     ownRecord,
     ownRecordFiling: filingStateOf(m2.venueFile, ownRecord),
-    ownSale: readRows(
-      m2.venueFile,
-      `select series.code, sales.invoice_number from sales
-       join invoice_series series on series.id = sales.series_id
-       where sales.node_id = ?`,
-      m2.nodeId,
-    ),
+    ownSale: orderInvoices(m2, ownOrderId),
+    cardSale: orderInvoices(m2, stepdown.cardOrderId),
+    cardSaleOnM1: orderInvoices(m1, stepdown.cardOrderId),
+    ownSaleOnM1: orderInvoices(m1, ownOrderId),
+    cardSaleId:
+      readRows<{ sale_id: string | null }>(
+        m2.venueFile,
+        "select sale_id from payments where payment_ref = ? and working_order_id = ?",
+        stepdown.attemptingRef,
+        stepdown.cardOrderId,
+      )[0]?.sale_id ?? null,
     heard: [...outside.submits],
     tableOnM2: JSON.parse(ordersText) as SellingSeen["tableOnM2"],
     m1TableStatus: readRows(
@@ -2175,7 +2215,14 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       ["A", "FF", "R"].map((prefix) => `${prefix}-${identity}`),
     );
     expect(own.every((row) => row.retired_at === null)).toBe(true);
-    expect(on.ownSale).toEqual([{ code: `A-${identity}`, invoice_number: 1 }]);
+    expect(on.cardSaleOnM1).toEqual([]);
+    expect(on.ownSaleOnM1).toEqual([]);
+    expect(on.cardSale).toMatchObject([
+      { code: `A-${identity}`, invoice_number: 1, total: 300, sale_id: on.cardSaleId },
+    ]);
+    expect(on.ownSale).toMatchObject([
+      { code: `A-${identity}`, invoice_number: 2, record_id: on.ownRecord },
+    ]);
   });
 
   it("M1 holds M2's chart, naming M2 the main box, and goes on selling nothing", () => {
@@ -2189,7 +2236,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     expect(on.m1).toMatchObject({ term: 4, acceptingSales: false });
   });
 
-  it("M2 files M1's waiting record under M1's identity, and its own first sale under its own", () => {
+  it("M2 files the inherited record under M1's identity and both new invoices under its own", () => {
     const { b, run, on } = sold();
     const m1Batch = on.heard.find((batch) => batch.venueFile === b.m1.venueFile)!;
     const m1Identity = m1Batch.numeroInstalacion[0]!;
@@ -2200,6 +2247,12 @@ describe("a controlled handover between two boxes, simulated in one process", ()
         recordIds: [run.records.waiting],
         idSistemaInformatico: m1Batch.idSistemaInformatico,
         numeroInstalacion: [m1Identity],
+      },
+      {
+        venueFile: b.m2.venueFile,
+        recordIds: [on.cardSale[0]!.record_id],
+        idSistemaInformatico: [on.selected.softwareId],
+        numeroInstalacion: [on.selected.identity],
       },
       {
         venueFile: b.m2.venueFile,

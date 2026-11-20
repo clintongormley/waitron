@@ -240,24 +240,33 @@ async function parked(app: Hono, offers: ZoneOffers, basket: Basket): Promise<st
   return id;
 }
 
+function payCounter(
+  id: string,
+  lines: ReturnType<typeof linesOf>,
+  payment: { method: "cash"; tendered: string } | { method: "card"; entry: "reader" },
+  invoice: { invoiceType?: unknown; recipient?: unknown } = {},
+) {
+  return send(limited, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    dining: "eat_in",
+    ...payment,
+    basket: { lines, zoneId: counter.zoneId, ...invoice },
+  });
+}
+
 describe("a counter sale", () => {
   function cashSale(basket: Basket, id = randomUUID()) {
-    return send(limited, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: linesOf(counter, basket),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "4000.00" },
-    });
+    return payCounter(id, linesOf(counter, basket), { method: "cash", tendered: "4000.00" });
   }
 
   it("is filed at exactly the limit", async () => {
     const answer = await cashSale({ Lote: 1 });
     expect(answer.status).toBe(200);
-    expect(answer.json.total).toBe("3000.00");
+    expect(answer.json).toMatchObject({ invoice: { total: "3000.00" } });
   });
 
-  // Paired with the refusal below: whoever switches full invoices on changes both.
   it("does not file an explicit walk-up F1 request as F2", async () => {
     const boot = await send(limited, venue.cookie, "GET", "/api/till");
     expect(boot.status).toBe(200);
@@ -265,20 +274,20 @@ describe("a counter sale", () => {
 
     const before = written();
     const id = randomUUID();
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: linesOf(counter, { Mitad: 1 }),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "1600.00" },
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
+    const answer = await payCounter(
+      id,
+      linesOf(counter, { Mitad: 1 }),
+      { method: "cash", tendered: "1600.00" },
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
       },
-    });
+    );
 
     expect(answer).toEqual({
       status: 409,
@@ -344,25 +353,30 @@ describe("a counter sale", () => {
 
   it("replays a settled cash sale despite a later F1 request", async () => {
     const id = randomUUID();
-    const first = await cashSale({ Mitad: 1 }, id);
+    const first = await payCounter(id, linesOf(counter, { Mitad: 1 }), {
+      method: "cash",
+      tendered: "4000.00",
+    });
     expect(first.status).toBe(200);
     const before = written();
 
-    const replay = await send(limited, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: [],
-      tender: { method: "cash", amount: "0.00" },
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
+    const replay = await payCounter(
+      id,
+      [],
+      { method: "cash", tendered: "0.00" },
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
       },
-    });
+    );
 
-    expect(replay).toEqual(first);
+    expect(replay.status).toBe(200);
+    expect(replay.json.invoice).toEqual(first.json.invoice);
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("settled");
   });
@@ -370,14 +384,14 @@ describe("a counter sale", () => {
   it("refuses a non-scalar walk-up invoice type before filing", async () => {
     const before = written();
     const id = randomUUID();
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: linesOf(counter, { Mitad: 1 }),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "1600.00" },
-      invoiceType: ["F2"],
-    });
+    const answer = await payCounter(
+      id,
+      linesOf(counter, { Mitad: 1 }),
+      { method: "cash", tendered: "1600.00" },
+      {
+        invoiceType: ["F2"],
+      },
+    );
 
     expect(answer).toEqual({
       status: 400,
@@ -390,20 +404,20 @@ describe("a counter sale", () => {
   it("refuses a recipient on an explicit F2 walk-up sale", async () => {
     const before = written();
     const id = randomUUID();
-    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
-      dining: "eat_in",
-      workingOrderId: id,
-      lines: linesOf(counter, { Mitad: 1 }),
-      zoneId: counter.zoneId,
-      tender: { method: "cash", amount: "1600.00" },
-      invoiceType: "F2",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
+    const answer = await payCounter(
+      id,
+      linesOf(counter, { Mitad: 1 }),
+      { method: "cash", tendered: "1600.00" },
+      {
+        invoiceType: "F2",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
       },
-    });
+    );
 
     expect(answer).toEqual({
       status: 400,
@@ -493,19 +507,23 @@ describe("a card on the integrated reader", () => {
   it("does not ask the reader to file an explicit walk-up F1 request as F2", async () => {
     const before = written();
     const id = randomUUID();
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
+    const answer = await payCounter(
       id,
-      lines: linesOf(counter, { Mitad: 1 }),
-      zoneId: counter.zoneId,
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
+      linesOf(counter, { Mitad: 1 }),
+      {
+        method: "card",
+        entry: "reader",
       },
-    });
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+      },
+    );
 
     expect(answer).toEqual({
       status: 409,
@@ -540,11 +558,9 @@ describe("a card on the integrated reader", () => {
   it("is refused for a walk-up basket over the limit before the reader is asked", async () => {
     const before = written();
     const id = randomUUID();
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: linesOf(counter, { Lote: 1, Céntimo: 1 }),
-      zoneId: counter.zoneId,
+    const answer = await payCounter(id, linesOf(counter, { Lote: 1, Céntimo: 1 }), {
+      method: "card",
+      entry: "reader",
     });
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
