@@ -133,6 +133,7 @@ import {
   enqueueSaleDrawer,
   enqueueOriginalReceipt,
   enqueueReceiptReprint,
+  refreshWaitingOriginals,
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
@@ -1590,6 +1591,7 @@ async function retainShortCapture(
         .update(workingOrders)
         .set({ paymentAttemptAt: null })
         .where(eq(workingOrders.id, orderId));
+    await refreshWaitingOriginals(deps.backend, tx, cfg, orderId);
   }
   return {
     outcome: "partial",
@@ -2126,6 +2128,7 @@ async function finalizeSettle(
         .where(eq(workingOrders.id, req.id));
       await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -2202,6 +2205,7 @@ async function finalizeSettleRecovery(
       .where(eq(workingOrders.id, req.id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -2351,6 +2355,7 @@ async function runCollectOrder(
           .where(eq(workingOrders.id, req.id));
         await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
         await clearBillRequestIfPaid(tx, req.id, deps.log);
+        await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
 
         const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
         const printers = printerLookup(tx, cfg.origin);

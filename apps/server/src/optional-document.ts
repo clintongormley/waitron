@@ -2,7 +2,10 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 
 type SaleDocument =
-  "enqueueSaleReceipt" | "enqueueCorrectiveReceipt" | "reserveStagedInvoiceDelivery";
+  | "enqueueSaleReceipt"
+  | "enqueueCorrectiveReceipt"
+  | "reserveStagedInvoiceDelivery"
+  | "refreshWaitingOriginal";
 
 /** A payment slip can come before the sale exists, so it names the order. */
 export type OptionalDocumentDiagnostic = (

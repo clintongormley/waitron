@@ -89,6 +89,7 @@ import {
   enqueueBillPaymentDrawer,
   enqueueSaleReceipt,
   printerLookup,
+  refreshWaitingOriginals,
 } from "./receipt-print.js";
 import type { PrinterLookup } from "./receipt-print.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
@@ -768,26 +769,42 @@ export async function readBillBalance(
   };
 }
 
-/**
- * {@link issueIfFullyPaid}, answering also the bill's total when it knows it. `alreadyRead` is the
- * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
- * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
- * caller has priced its current lines in this transaction already.
- */
+type IssueOptions = {
+  moneyMoved?: boolean;
+  closeZero?: boolean;
+  total?: Decimal;
+  alreadyRead?: IssuedAndTotal;
+  printers?: PrinterLookup;
+  guestCount?: GuestCountChoice;
+};
+
+/** {@link issueOrSettleWhenFullyPaid}, then an issued sale's waiting original lists the bill's payments. */
 async function issueWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
-  options: {
-    moneyMoved?: boolean;
-    closeZero?: boolean;
-    total?: Decimal;
-    alreadyRead?: IssuedAndTotal;
-    printers?: PrinterLookup;
-    guestCount?: GuestCountChoice;
-  },
+  options: IssueOptions,
+): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+  const done = await issueOrSettleWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options);
+  await refreshWaitingOriginals(deps.backend, tx, cfg, workingOrderId);
+  return done;
+}
+
+/**
+ * {@link issueIfFullyPaid}, answering also the bill's total when it knows it. `alreadyRead` is the
+ * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
+ * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
+ * caller has priced its current lines in this transaction already.
+ */
+async function issueOrSettleWhenFullyPaid(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  operatorId: string | undefined,
+  options: IssueOptions,
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const notYet = { invoice: null, total: options.alreadyRead?.total ?? options.total };

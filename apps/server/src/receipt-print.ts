@@ -564,6 +564,44 @@ async function hasOriginalReceiptJob(tx: Transaction, saleId: string): Promise<b
   return original !== undefined;
 }
 
+const waitingOriginal = and(
+  eq(printJobs.kind, "document"),
+  eq(printJobs.receiptCopy, false),
+  eq(printJobs.status, "queued"),
+  eq(printJobs.attempts, 0),
+  isNull(printJobs.claimedAt),
+  isNull(printJobs.resendOf),
+);
+
+/**
+ * Lays out again each original receipt of the order's sale that no printer has taken or tried,
+ * so it lists every payment taken before it prints. Called in the transaction that records a
+ * payment. A print agent's claim is one write too, so a job is rewritten before its claim or left
+ * with the bytes it was claimed with.
+ */
+export async function refreshWaitingOriginals(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  workingOrderId: string,
+): Promise<void> {
+  const waiting = await tx
+    .select({ id: printJobs.id, saleId: sales.id, ...receiptRollColumns })
+    .from(sales)
+    .innerJoin(printJobs, and(eq(printJobs.saleId, sales.id), waitingOriginal))
+    .innerJoin(printers, and(isReceiptPrinter(), eq(printers.id, printJobs.printerId)))
+    .where(eq(sales.workingOrderId, workingOrderId));
+  for (const job of waiting) {
+    await optionalDocument(tx, "refreshWaitingOriginal", job.saleId, async () => {
+      const payload = await layOutSaleReceipt(backend, tx, cfg, job.saleId, false, job);
+      await tx
+        .update(printJobs)
+        .set({ payload })
+        .where(and(eq(printJobs.id, job.id), waitingOriginal));
+    });
+  }
+}
+
 /**
  * Queues the sale's original receipt on the receipt printer, and says what it did: `"exists"` when
  * the sale already has an original job, `"not_queued"` when no printer or receipt resolves, else the

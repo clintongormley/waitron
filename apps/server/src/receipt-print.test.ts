@@ -1490,7 +1490,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await fiscalRecordCount(cfg)).toBe(1);
   });
 
-  it("an explicitly printed unpaid original is retained; collection only opens and audits the drawer", async () => {
+  it("an explicitly printed unpaid original no printer has taken lists the collection's cash; collection opens and audits the drawer", async () => {
     const base = await setupVenue("ticket_then_pay");
     const { cfg } = base;
     const printerId = await makePrinter();
@@ -1535,7 +1535,11 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
     expect(jobs[0]!.printerId).toBe(printerId);
-    expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(original));
+    const receipts = jobs.filter((job) => !opensDrawer(job.payload));
+    expect(receipts).toHaveLength(1);
+    const listed = decodeTicket(receipts[0]!.payload);
+    expect(listed).toMatch(/Efectivo\s+2,00/u);
+    expect(listed).not.toContain("DUPLICADO");
     expect(jobs.map((job) => job.payload)).toContainEqual(Buffer.from(DRAWER_KICK));
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);

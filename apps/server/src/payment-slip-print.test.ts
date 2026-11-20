@@ -9,6 +9,7 @@ import {
   workingOrders,
   printAgents,
   printJobs,
+  printers,
   saleSettlements,
   sales,
   tenders,
@@ -24,7 +25,13 @@ import { decimal } from "@waitron/shared";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { cardReaders, payments } from "@waitron/payments";
 import { validateCapabilities } from "@waitron/layouts";
-import { claimPrintJobs, createPrinter } from "@waitron/printing";
+import {
+  claimPrintJobs,
+  createPrinter,
+  MAX_DELIVERY_ATTEMPTS,
+  reportPrintJob,
+  resendPrintJob,
+} from "@waitron/printing";
 import {
   fiscalRecordCount,
   paymentRows,
@@ -35,6 +42,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { refreshWaitingOriginals } from "./receipt-print.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
@@ -969,7 +977,7 @@ describe("a payment after the ticket was issued", () => {
     expect(await slipsSince(before)).toHaveLength(2);
   });
 
-  it("a cash payment of an issued ticket prints a payment slip", async () => {
+  it("a cash payment of an issued ticket prints a payment slip when asked", async () => {
     const bill = await billPrintedByPrintTheBill();
     const before = await jobCount();
 
@@ -989,8 +997,189 @@ describe("a payment after the ticket was issued", () => {
     expect(decodeTicket(slips[1]!.payload)).not.toMatch(/\s5,00/u);
   });
 
+  /**
+   * Claims jobs on the original's printer, as a network print agent does, until it takes the
+   * original. The venue's printer polls the cloud, which an agent's claim does not serve, so it is
+   * a network printer for the claim.
+   */
+  async function claimOriginal(saleId: string) {
+    const [original] = await venue.db
+      .select()
+      .from(printJobs)
+      .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)));
+    const [printer] = await venue.db
+      .select()
+      .from(printers)
+      .where(eq(printers.id, original!.printerId));
+    const [agent] = await withTransaction(venue.db, async (tx) => {
+      await tx
+        .update(printers)
+        .set({ transport: "network_tcp", host: `${randomUUID()}.printer.test`, pollId: null })
+        .where(eq(printers.id, printer!.id));
+      return tx
+        .insert(printAgents)
+        .values({ name: `Agent ${randomUUID()}`, tokenHash: "scrypt$fixture" })
+        .returning({ id: printAgents.id });
+    });
+    try {
+      for (;;) {
+        const [claimed] = await withTransaction(venue.db, (tx) =>
+          claimPrintJobs(tx, agent!.id, { visibleKeys: [], printerId: printer!.id }),
+        );
+        expect(claimed).toBeDefined();
+        if (claimed!.id === original!.id) return { ...claimed!, agentId: agent!.id };
+      }
+    } finally {
+      await withTransaction(venue.db, (tx) =>
+        tx
+          .update(printers)
+          .set({ transport: printer!.transport, host: printer!.host, pollId: printer!.pollId })
+          .where(eq(printers.id, printer!.id)),
+      );
+    }
+  }
+
+  const originalOf = async (saleId: string) =>
+    (
+      await venue.db
+        .select()
+        .from(printJobs)
+        .where(and(eq(printJobs.saleId, saleId), eq(printJobs.receiptCopy, false)))
+    )[0]!;
+
+  const owedLine = (amount: string) => new RegExp(`${labels.owed}\\s+${amount}`, "u");
+
+  it("an original laid out again with nothing changed keeps the bytes it was queued with", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const queued = await originalOf(bill.saleId);
+
+    await withTransaction(venue.db, (tx) =>
+      refreshWaitingOriginals(venue.backend, tx, venue.cfg, bill.id),
+    );
+
+    const after = await originalOf(bill.saleId);
+    expect(Buffer.from(after.payload!).equals(Buffer.from(queued.payload!))).toBe(true);
+  });
+
+  it("an original still waiting to print lists a payment taken before its printer takes it", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    expect(decodeTicket((await originalOf(bill.saleId)).payload)).toMatch(owedLine("30,00"));
+
+    expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
+    const claimed = await claimOriginal(bill.saleId);
+
+    const text = decodeTicket(claimed.payload);
+    expect(text).toMatch(/Efectivo\s+5,00/u);
+    expect(text).toMatch(owedLine("25,00"));
+    expect(text).not.toMatch(owedLine("30,00"));
+    expect(text).not.toContain(labels.duplicate);
+  });
+
+  it.each(["taken by its printer", "tried and failed", "resent from the print queue"] as const)(
+    "an original already %s keeps its bytes when a payment follows",
+    async (state) => {
+      const bill = await billPrintedByPrintTheBill();
+      const claimed = await claimOriginal(bill.saleId);
+      if (state === "resent from the print queue") {
+        const resent = await withTransaction(venue.db, async (tx) => {
+          await tx
+            .update(printJobs)
+            .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+            .where(eq(printJobs.id, claimed.id));
+          return resendPrintJob(tx, claimed.id);
+        });
+        onTestFinished(async () => {
+          await withTransaction(venue.db, (tx) =>
+            tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.jobId)),
+          );
+        });
+
+        expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
+
+        const [copy] = await venue.db
+          .select()
+          .from(printJobs)
+          .where(eq(printJobs.id, resent.jobId));
+        expect(copy!.status).toBe("queued");
+        expect(Buffer.from(copy!.payload!).equals(Buffer.from(claimed.payload))).toBe(true);
+        return;
+      }
+      if (state === "tried and failed") {
+        const reported = await withTransaction(venue.db, (tx) =>
+          reportPrintJob(tx, {
+            agentId: claimed.agentId,
+            jobId: claimed.id,
+            outcome: { status: "failed", error: "printer.offline" },
+          }),
+        );
+        expect(reported.updated).toBe(true);
+      }
+      onTestFinished(async () => {
+        await withTransaction(venue.db, (tx) =>
+          tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, claimed.id)),
+        );
+      });
+
+      expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
+
+      const original = await originalOf(bill.saleId);
+      expect(original.status).toBe(state === "tried and failed" ? "failed" : "printing");
+      expect(Buffer.from(original.payload!).equals(Buffer.from(claimed.payload))).toBe(true);
+      expect(decodeTicket(original.payload)).toMatch(owedLine("30,00"));
+    },
+  );
+
+  it.each([
+    ["a reader part payment", /Tarjeta\s+10,00/u, "20,00"],
+    ["a reader payment the recovery loop records", /Tarjeta\s+10,00/u, "20,00"],
+    ["a cash collection", /Efectivo\s+30,00/u, null],
+    ["a reader Pay of the whole bill", /^Tarjeta$/mu, null],
+  ] as const)("an original still waiting to print lists %s", async (path, listed, owed) => {
+    const bill = await billPrintedByPrintTheBill();
+
+    if (path === "a reader part payment") {
+      await readerPaymentOn(bill.id);
+    } else if (path === "a reader payment the recovery loop records") {
+      venue.card.crashNextCollect("captured");
+      const paid = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${bill.id}/payments`,
+        { submissionId: randomUUID(), ...readerContribution },
+      );
+      expect(paid.status).toBe(500);
+      await settlePendingBillPayments({
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+      });
+    } else {
+      const paid =
+        path === "a cash collection"
+          ? await send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/collect`, {
+              tender: { method: "cash", amount: "30.00" },
+            })
+          : await send(venue.app, venue.cookie, "POST", "/api/pay", {
+              dining: "eat_in",
+              id: bill.id,
+              lines: [],
+            });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    }
+    const claimed = await claimOriginal(bill.saleId);
+
+    const text = decodeTicket(claimed.payload);
+    expect(text).toMatch(listed);
+    if (owed === null) expect(text).not.toContain(labels.owed);
+    else expect(text).toMatch(owedLine(owed));
+  });
+
   it("a copy of the receipt lists a cash payment taken after the original, and what is owed", async () => {
     const bill = await billPrintedByPrintTheBill();
+    await claimOriginal(bill.saleId);
     expect((await billPayment(bill.id, cash("5.00"))).status).toBe(200);
 
     const copied = await send(venue.app, venue.cookie, "POST", `/api/sales/${bill.id}/reprint`, {});
@@ -1007,7 +1196,7 @@ describe("a payment after the ticket was issued", () => {
     expect(copy).toMatch(new RegExp(`${labels.owed}\\s+25,00`, "u"));
   });
 
-  it("a card typed into another machine on an issued ticket prints a payment slip", async () => {
+  it("a card typed into another machine on an issued ticket prints a payment slip when asked", async () => {
     const bill = await billPrintedByPrintTheBill();
     const before = await jobCount();
 
@@ -1471,7 +1660,7 @@ describe("a payment after the ticket was issued", () => {
   });
 
   it.each(["cash bill payment", "typed card bill payment", "cash collection"] as const)(
-    "a payment on an issued ticket whose receipt never printed prints no slip: %s",
+    "a payment on an issued ticket whose receipt never printed is listed on the original printed next: %s",
     async (path) => {
       const bill = await billIssuedNeverPrinted();
       const before = await jobCount();
@@ -1510,73 +1699,44 @@ describe("a payment after the ticket was issued", () => {
     },
   );
 
-  it.each([
-    ["email", "sent"],
-    ["email", "sending"],
-    ["email", "unknown"],
-    ["email", "queued"],
-    ["email", "failed"],
-    ["a4", "sent"],
-    ["a4", "sending"],
-    ["a4", "unknown"],
-    ["a4", "queued"],
-    ["a4", "failed"],
-  ] as const)(
-    "a payment on an issued ticket whose original %s is %s prints a slip",
-    async (medium, status) => {
-      const bill = await billIssuedNeverPrinted();
-      await withTransaction(venue.db, (tx) =>
-        tx.insert(invoiceDeliveries).values({
-          saleId: bill.saleId,
-          requestKey: randomUUID(),
-          medium,
-          designation: "original",
-          status,
-          generation: 1,
-          recipient: medium === "email" ? "guest@example.test" : null,
-          personId: venue.operatorId,
-        }),
-      );
-      const before = await jobCount();
-
-      const paid = await billPayment(bill.id, { ...cash("5.00"), printCardSlip: true });
-
-      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-      const slips = await slipsSince(before);
-      expect(slips).toHaveLength(1);
-      expect(decodeTicket(slips[0]!.payload)).toContain("5,00");
-      if (status !== "failed") return;
-      // Nothing reached the guest, so the receipt printed next is the original, and it lists the
-      // payment as well.
-      const printed = await send(
-        venue.app,
-        venue.cookie,
-        "POST",
-        `/api/sales/${bill.id}/receipt`,
-        {},
-      );
-      expect(printed.status, JSON.stringify(printed.json)).toBe(200);
-      const [original] = await venue.db
-        .select()
-        .from(printJobs)
-        .where(and(eq(printJobs.saleId, bill.saleId), eq(printJobs.receiptCopy, false)));
-      expect(decodeTicket(original!.payload)).toMatch(/\s5,00/u);
-    },
-  );
-
-  it("a cash payment that issues the ticket itself prints no payment slip", async () => {
-    const id = await tabWith(venue, "Red wine bottle");
+  it("a slip asked for after a failed emailed original prints, and the next original lists the payment", async () => {
+    const bill = await billIssuedNeverPrinted();
+    await withTransaction(venue.db, (tx) =>
+      tx.insert(invoiceDeliveries).values({
+        saleId: bill.saleId,
+        requestKey: randomUUID(),
+        medium: "email",
+        designation: "original",
+        status: "failed",
+        generation: 1,
+        recipient: "guest@example.test",
+        personId: venue.operatorId,
+      }),
+    );
     const before = await jobCount();
 
-    expect((await billPayment(id, cash("5.00"))).status).toBe(200);
-    const last = await billPayment(id, cash("25.00"));
+    const paid = await billPayment(bill.id, { ...cash("5.00"), printCardSlip: true });
 
-    expect(last.status, JSON.stringify(last.json)).toBe(200);
-    expect(await venue.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
-    expect(await slipsSince(before)).toHaveLength(0);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const slips = await slipsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(decodeTicket(slips[0]!.payload)).toContain("5,00");
+    const printed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/sales/${bill.id}/receipt`,
+      {},
+    );
+    expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+    const [original] = await venue.db
+      .select()
+      .from(printJobs)
+      .where(and(eq(printJobs.saleId, bill.saleId), eq(printJobs.receiptCopy, false)));
+    expect(decodeTicket(original!.payload)).toMatch(/\s5,00/u);
   });
 
-  it("a device without a payment slip printer prints no slip for a later payment", async () => {
+  it("a device without a payment slip printer prints no slip for a payment", async () => {
     const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
     onTestFinished(async () => {
       await withTransaction(venue.db, (tx) =>
@@ -1599,7 +1759,7 @@ describe("a payment after the ticket was issued", () => {
     expect(await slipsSince(before)).toHaveLength(0);
   });
 
-  it("a profile without print-receipt prints no slip for a later payment", async () => {
+  it("a profile without print-receipt prints no slip for a payment", async () => {
     const bill = await billPrintedByPrintTheBill();
     const profiles = await venue.db.select().from(deviceProfiles);
     onTestFinished(() =>
@@ -1645,7 +1805,7 @@ describe("a payment after the ticket was issued", () => {
     expect(await jobCount()).toBe(before);
   });
 
-  it("keeps a later cash payment when enqueueing its slip fails", async () => {
+  it("keeps a cash payment when enqueueing its slip fails", async () => {
     const { id } = await billPrintedByPrintTheBill();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
