@@ -1,5 +1,5 @@
 import { VENUE_DIR_NAME, VENUE_FILE } from "../packages/store/src/state-layout.js";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import {
   chmodSync,
@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { clearTimeout, setTimeout } from "node:timers";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -26,6 +27,20 @@ import { signReleaseList } from "./box/release-list.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, "..", "deploy", "waitron.sh");
+
+// The two closes of the host lock around refresh_self's hand-over, each as [the text, what is left
+// without it], for the sandbox variants that leave one out.
+const OUTGOING_LOCK_CLOSE = [
+  "  exec 9>&-\n  WAITRON_SH_REFRESHED=1 exec ",
+  "  WAITRON_SH_REFRESHED=1 exec ",
+];
+const INHERITED_LOCK_CLOSE = ['[ -z "${WAITRON_SH_REFRESHED:-}" ] || exec 9>&-\n', ""];
+function without(text, [part, rest]) {
+  if (!text.includes(part)) {
+    throw new Error(`deploy/waitron.sh no longer contains ${JSON.stringify(part)}`);
+  }
+  return text.replace(part, rest);
+}
 
 const dirs = [];
 afterEach(() => {
@@ -77,7 +92,8 @@ afterEach(() => {
 // WT_CMP_FAIL=1, and is the one stub not logged (see `quietStub`). `curl` asked for the script itself
 // copies WT_SELF_SCRIPT's file into the existing output file, keeping that file's mode as the real
 // curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
-// another host operation holds the lock. WT_RECOVERY_UNIT=1 models Docker's dependency on
+// another host operation holds the lock; WT_REAL_FLOCK=1 makes `flock -n <fd>` take a real lock on that
+// fd, so a lock held elsewhere refuses it. WT_RECOVERY_UNIT=1 models Docker's dependency on
 // the upgrade recovery service, which takes the host lock itself: once a `flock -n 9` has succeeded
 // in the case, `systemctl start waitron-upgrade-recovery.service` and `systemctl enable --now docker`
 // fail until that service has run; with WT_UPGRADE_BUSY=1 as well, the service exits 75, as it does
@@ -419,6 +435,9 @@ stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 stub(
   "flock",
   `[ "\${WT_UPGRADE_BUSY:-0}" != 1 ] || exit 1
+if [ "\${WT_REAL_FLOCK:-0}" = 1 ] && [ "$1" = "-n" ]; then
+  perl -MFcntl=:flock -e 'open(my $fh, ">&=", $ARGV[0]) or exit 1; flock($fh, LOCK_EX|LOCK_NB) or exit 1' "$2" || exit 1
+fi
 [ "$*" = "-n 9" ] && [ -n "\${WT_TRUST_AT_LOCK:-}" ] && ln -sfn "$WT_TRUST_AT_LOCK" "$WAITRON_HOST_DIR/release-trust"
 [ "\${WT_RECOVERY_UNIT}" = "1" ] && [ "$*" = "-n 9" ] && : > "\${WT_LOG}.locked"
 exit 0`,
@@ -525,19 +544,29 @@ function sandbox({
   // in <>, so a case can count the runs and see where each argument begins and ends. "pre-reset"
   // stands in for a ref whose waitron.sh predates `--reset`: it logs its start as "marked" does, exits
   // 0 when its first argument is `install`, and otherwise refuses that argument as an unknown
-  // command, which is what such a copy does with `--reset`.
+  // command, which is what such a copy does with `--reset`. "passes-lock" is this repository's script
+  // without refresh_self's close of the host lock, standing in for an installed copy from before it:
+  // it runs the ref's copy with the locked descriptor still open (its own top-level close acts only
+  // in a copy run again, so it does nothing as the running copy). "marked-keeps-lock" is "marked"
+  // without the top-level close of a lock handed on, standing in for a ref whose copy predates it.
   const startLine = `printf 'waitron.sh-start %s\\n' "$(printf '<%s>' "$@")" >> "$WT_LOG"\n`;
-  const marked = join(root, "marked-waitron.sh");
-  writeFileSync(
-    marked,
-    readFileSync(SCRIPT, "utf8").replace("set -euo pipefail\n", `set -euo pipefail\n${startLine}`),
-  );
-  const preReset = join(root, "pre-reset-waitron.sh");
-  writeFileSync(
-    preReset,
-    `#!/usr/bin/env bash\n${startLine}[ "$1" = install ] && exit 0\necho "waitron.sh: unknown command '$1'" >&2\nexit 2\n`,
-  );
-  const pick = (which) => ({ marked, "pre-reset": preReset })[which] ?? SCRIPT;
+  const variants = {
+    marked: () =>
+      readFileSync(SCRIPT, "utf8").replace(
+        "set -euo pipefail\n",
+        `set -euo pipefail\n${startLine}`,
+      ),
+    "pre-reset": () =>
+      `#!/usr/bin/env bash\n${startLine}[ "$1" = install ] && exit 0\necho "waitron.sh: unknown command '$1'" >&2\nexit 2\n`,
+    "passes-lock": () => without(readFileSync(SCRIPT, "utf8"), OUTGOING_LOCK_CLOSE),
+    "marked-keeps-lock": () => without(variants.marked(), INHERITED_LOCK_CLOSE),
+  };
+  const pick = (which) => {
+    if (!(which in variants)) return SCRIPT;
+    const file = join(root, `${which}-waitron.sh`);
+    if (!existsSync(file)) writeFileSync(file, variants[which]());
+    return file;
+  };
   // scriptInCheckout: "repository" makes the checkout with `git init`; "worktree" writes the `.git`
   // FILE a linked worktree has, pointing nowhere, with no git involved.
   const scriptDir = scriptInCheckout ? join(root, "checkout", "deploy") : root;
@@ -3758,6 +3787,76 @@ it.each([
   const recovery = calls.indexOf("systemctl start waitron-upgrade-recovery.service");
   expect(recovery).toBeGreaterThanOrEqual(0);
   expect(recovery).toBeLessThan(calls.indexOf("flock -n 9"));
+});
+
+describe("waitron.sh --reset install on a managed box, with a real host lock", () => {
+  const managedBox = (scripts) => {
+    const sb = sandbox({ systemd: true, ...scripts });
+    installedBox(sb);
+    writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed gate");
+    return sb;
+  };
+  const args = ["--reset", "--yes", "install", "my-branch"];
+
+  it.each([
+    ["takes the lock again and carries on when it replaces waitron.sh", "repo", "marked"],
+    [
+      "carries on when the copy it replaces hands on its locked descriptor",
+      "passes-lock",
+      "marked",
+    ],
+    [
+      "carries on when the ref's copy does not close a descriptor handed on",
+      "repo",
+      "marked-keeps-lock",
+    ],
+  ])("%s", (_name, runningScript, refScript) => {
+    const sb = managedBox({ runningScript, refScript });
+    expect(readFileSync(sb.script, "utf8")).not.toBe(readFileSync(sb.env.WT_SELF_SCRIPT, "utf8"));
+    const result = run(sb, args, { WT_REAL_FLOCK: "1" });
+    expect(result.stderr).not.toContain("another host operation");
+    expect(result.status).toBe(0);
+    const calls = loggedCalls(sb);
+    expect(calls.filter((line) => line.startsWith("waitron.sh-start "))).toEqual([
+      "waitron.sh-start <--reset><--yes><install><my-branch>",
+    ]);
+    expect(calls.filter((line) => line === "flock -n 9")).toHaveLength(2);
+  });
+
+  it("refuses while another process holds the lock", async () => {
+    const sb = managedBox();
+    const holder = spawn(
+      "perl",
+      [
+        "-MFcntl=:flock",
+        "-e",
+        'open(my $fh, ">", $ARGV[0]) or die; flock($fh, LOCK_EX) or die; print "held\\n"; STDOUT->flush; sleep 60',
+        `${sb.boxDir}.upgrade.lock`,
+      ],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    const exited = new Promise((resolve) => holder.once("close", resolve));
+    let timer;
+    try {
+      await new Promise((resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("the lock holder did not hold the lock in 5s")),
+          5000,
+        );
+        holder.stdout.once("data", resolve);
+        holder.once("error", reject);
+        exited.then(() => reject(new Error("the lock holder exited before holding the lock")));
+      });
+      const result = run(sb, args, { WT_REAL_FLOCK: "1" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("another host operation is running");
+      expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+    } finally {
+      clearTimeout(timer);
+      holder.kill("SIGKILL");
+      await exited;
+    }
+  });
 });
 
 it.each([
