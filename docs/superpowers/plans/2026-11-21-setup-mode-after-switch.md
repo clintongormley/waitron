@@ -4,36 +4,31 @@ Lane D’s `SETUP-MODE-AFTER-SWITCH` asks that a box which becomes primary by sw
 restore show the same Live label and offer the same configuration export as its predecessor.
 
 The join and emergency-copy writers omit the original setup choice from `trading.env`. Promotion
-keeps the joined file and restore copies the saved file. `config.ts` accepts explicit Live in
-production or development. The owner’s 20 November Lenovo rehearsal used ordinary preproduction
-on both boxes, according to the [two-box rehearsal record](../specs/2026-10-21-a947-two-box-failover-design.md).
-That record does not name the original setup choice. Ordinary preproduction supports Prepare and
-Demo, so its environment alone cannot recover the missing choice.
+keeps the joined file and restore copies the saved file. `config.ts` accepts Live on production and
+development boxes. An ordinary preproduction box could have started in Prepare or Demo. The
+[20 November rehearsal record](../specs/2026-10-21-a947-two-box-failover-design.md) says both
+boxes were ordinary preproduction and does not name the original setup choice.
 
-**Proposed outcome.** On a configured production primary, show Live even when the original choice
-is absent. A manager on a serving primary with no saved choice can download the usual encrypted
-configuration export, including on the rehearsal box. Leave the badge absent on preproduction
-copies with no saved choice. An explicit choice continues to determine the badge and Demo keeps
-its export restriction. Confirm this wording for the rehearsal with the watcher before building.
+**Proposed production fix.** A serving production primary with no recorded setup choice shows Live
+on the dashboard and offers its usual encrypted configuration export. An explicit choice takes
+precedence. The watcher still needs to settle the outcome for the rehearsal Lenovo. Carrying the
+original choice for future joins would also affect practice payments and fiscal test submission
+policy. That requires a decision before including it in this item.
 
-- [ ] Extend the existing export-route matrix in `apps/server/src/boot.setup-routes.test.ts` with
-  unmarked production and preproduction primaries. Assert the displayed mode in `/management-api/locales`
-  and `/management-api/session/me` as well as the route’s existing sign-in refusal. Confirm a
-  freshly signed-in manager can download and that explicit Demo still gets 404. Run the new cases
-  and see the missing badge and route assertions fail before editing production code.
-- [ ] In the full trading boot path in `apps/server/src/boot.ts`, pass `mountMeApi` a dashboard
-  intent that falls back to Live only for a production primary. Compute export availability from
-  the same route mount condition and publish it on the signed-in answer in `apps/server/src/me-api.ts`.
-  Keep the export handler’s permission and fresh sign-in checks. Reuse the existing serving-primary
-  check for the new unmarked case. Leave copy files, fiscal policy and the setup-mode parser alone.
-- [ ] Carry `configurationExportAvailable` through `apps/dashboard/src/api/client.ts` and
-  `dashboard-app.ts` to `screens/backup-screen.ts`. Use the existing export card and banner. In
-  `dashboard-app.test.ts` test the reported flag with an unmarked rehearsal response and test the
-  badge with the reported Live response. In `screens/backup-screen.test.ts` verify the flag selects
-  the card and retain the existing download behaviour assertions. Run the affected files and inspect
-  the banner and Backups in English and Spanish, light and dark, phone and desktop.
-- [ ] Point to **Backups** on the main server in `apps/server/src/guide/{en,es}/backups.md` and take
-  the resolved A496 export item out of `docs/backlog/setup.md`. Run the guide checks.
+- [ ] Extend the export-route matrix in `apps/server/src/boot.setup-routes.test.ts` with a configured
+  production primary whose choice is absent. Assert that `/management-api/locales` and
+  `/management-api/session/me` report Live and a fresh manager session can download the encrypted
+  export. Reuse the session and export request pattern from the configuration-import cases in the
+  same file. An unsigned request still answers 401. Keep the Demo and unmarked preproduction
+  controls at 404. Run the new case before editing boot. Expect it to see an absent choice and 404.
+- [ ] In the full trading boot path in `apps/server/src/boot.ts`, derive one dashboard intent
+  from the explicit choice or Live when `acceptingSales` is true and `config.environment` is
+  `production`. Use it for the existing `mountMeApi` and export route condition. The dashboard
+  banner and Backups card already consume the same intent. Keep the route’s existing permission
+  and fresh sign-in checks. Leave the raw intent with the till, box name job and fiscal policy.
+- [ ] Rerun the export matrix and `configuration-export-api.test.ts`. In a disposable Chromium
+  dashboard, inspect the Live label and export card with the server's response in both languages,
+  themes and phone and desktop widths. Keep the existing Backups guide instructions. Narrow the
+  A496 note in `docs/backlog/setup.md` to the still-open case if the watcher takes this cut.
 
-Estimate: 25–45 production lines across five files, 45–85 test lines across three files and three
-small documentation edits. No migration or new data on disk.
+Estimate: 5–12 production lines in one file, 35–70 test lines in one file and a short backlog edit.
