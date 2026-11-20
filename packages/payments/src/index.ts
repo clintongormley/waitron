@@ -109,8 +109,8 @@ export type { OpenPayments, OpenPaymentState } from "./handover-summary.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export {
   DEFAULT_SETTLEMENT_LAG_MS,
-  SUMUP_BACKUP_AUDIT_PADDING_MS,
-  SUMUP_BACKUP_MATCH_WINDOW_MS,
+  BACKUP_AUDIT_PADDING_MS,
+  BACKUP_MATCH_WINDOW_MS,
   classify,
   reconcilePayments,
 } from "./reconcile.js";

@@ -81,9 +81,9 @@ export interface PaymentMismatch {
   workingOrderId: string | null;
 }
 
-export const SUMUP_BACKUP_MATCH_WINDOW_MS = 30 * 60 * 1000;
+export const BACKUP_MATCH_WINDOW_MS = 30 * 60 * 1000;
 // A candidate across midnight can have a same-amount rival another match window away.
-export const SUMUP_BACKUP_AUDIT_PADDING_MS = 2 * SUMUP_BACKUP_MATCH_WINDOW_MS;
+export const BACKUP_AUDIT_PADDING_MS = 2 * BACKUP_MATCH_WINDOW_MS;
 
 export interface BackupPaymentMatch {
   references: string[];
