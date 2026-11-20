@@ -615,6 +615,7 @@ export const en = {
   "label.tendered": "Tendered",
   // Basket
   "basket.empty": "Basket is empty",
+  "basket.waiting": "Waiting for the server",
   // A basket line's −/+ dish count, combined with the product name at render ("Increase Café").
   "basket.increase": "Increase",
   "basket.decrease": "Decrease",
@@ -2819,6 +2820,7 @@ export const es: Record<StringKey, string> = {
   "label.total": "Total",
   "label.tendered": "Entregado",
   "basket.empty": "La cesta está vacía",
+  "basket.waiting": "Esperando al servidor",
   "basket.increase": "Aumentar",
   "basket.decrease": "Disminuir",
   "basket.not_offered": "No se ofrece ahora",

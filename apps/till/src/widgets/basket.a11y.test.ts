@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./basket.js";
@@ -33,6 +33,17 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
   it("an empty basket has no violations", async () => {
     const store = new WorkingOrderStore();
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("a basket waiting for the server has no violations", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "2");
+    const { el, host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    store.lockEdits();
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".waiting")).not.toBeNull(), {
+      timeout: 2000,
+    });
     await expectNoA11yViolations(host);
   });
 

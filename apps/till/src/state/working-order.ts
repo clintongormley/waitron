@@ -471,6 +471,11 @@ export class WorkingOrderStore {
     return this.#editLock !== null;
   }
 
+  /** Only {@link lockEdits}' lock, which a subclass's wider {@link editsLocked} does not change. */
+  get awaitingServer(): boolean {
+    return this.#editLock !== null;
+  }
+
   get #refusesEdits(): boolean {
     return this.#sending || this.editsLocked;
   }
