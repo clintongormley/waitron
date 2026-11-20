@@ -28,6 +28,7 @@ import {
   latestNextAttempt,
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
+  takeOverReceiptDelivery,
   tokenHash,
 } from "./invoice-delivery.js";
 
@@ -116,18 +117,7 @@ export async function resendInvoicePrintJob(
     return resend();
   }
   const retry = await resend();
-  const takenOver = await tx
-    .update(invoiceDeliveries)
-    .set({ printJobId: retry.jobId })
-    .where(
-      and(
-        eq(invoiceDeliveries.printJobId, jobId),
-        eq(invoiceDeliveries.medium, "receipt"),
-        eq(invoiceDeliveries.status, "queued"),
-      ),
-    )
-    .returning({ id: invoiceDeliveries.id });
-  if (takenOver.length > 0) return retry;
+  if (await takeOverReceiptDelivery(tx, invoice.saleId, jobId, retry.jobId)) return retry;
   try {
     await reserveInvoiceDelivery(tx, invoice.saleId, {
       requestKey: requestKey ?? retry.jobId,

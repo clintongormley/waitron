@@ -185,6 +185,36 @@ function originalCompleted(
   );
 }
 
+/**
+ * Moves the receipt delivery still waiting on `fromJobId` onto its resend `toJobId`, only while its
+ * original-or-duplicate marking still holds as {@link reserveInvoiceDelivery} would decide it now;
+ * `false` moves nothing.
+ */
+export async function takeOverReceiptDelivery(
+  tx: Transaction,
+  saleId: string,
+  fromJobId: string,
+  toJobId: string,
+): Promise<boolean> {
+  const rows = await tx
+    .select()
+    .from(invoiceDeliveries)
+    .where(eq(invoiceDeliveries.saleId, saleId));
+  const moved = rows.find(
+    (row) => row.printJobId === fromJobId && row.medium === "receipt" && row.status === "queued",
+  );
+  if (moved === undefined) return false;
+  // `invoice_deliveries_active_uq` leaves it the sale's only queued or sending row.
+  const others = rows.filter((row) => row.id !== moved.id);
+  const completed = originalCompleted(await receiptOriginalJobs(tx, saleId), others);
+  if (completed !== (moved.designation === "duplicate")) return false;
+  await tx
+    .update(invoiceDeliveries)
+    .set({ printJobId: toJobId })
+    .where(eq(invoiceDeliveries.id, moved.id));
+  return true;
+}
+
 function receiptOriginalJobs(tx: Transaction, saleId: string) {
   return tx
     .select({ id: printJobs.id, status: printJobs.status, attempts: printJobs.attempts })

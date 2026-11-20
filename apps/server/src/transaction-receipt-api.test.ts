@@ -43,7 +43,14 @@ import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { invoiceDeliveryAlertSource } from "./alert-sources.js";
 import { createPageTestPages } from "./page-test-pages.js";
-import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import {
+  abandonInvoiceEmail,
+  reserveInvoiceDelivery,
+  settleInvoiceEmail,
+  startInvoiceEmail,
+} from "./invoice-delivery.js";
+import { resendInvoicePrintJob } from "./invoice-print.js";
+import { RECEIPT_OUT_OF_DATE, saleReceiptLayout } from "./receipt-print.js";
 import * as receiptDocument from "./receipt-document.js";
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -1216,4 +1223,71 @@ it("raises no undelivered-invoice alert when a replacement of a full invoice's o
     }),
   );
   expect(alerts).toEqual([]);
+});
+it("refuses to resend a full invoice's out-of-date original once an earlier email arrived late", async () => {
+  const sale = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "Stored address",
+  });
+  const profileId = await profile();
+  await inTx(venue, (tx) =>
+    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
+  );
+  const now = new Date();
+  const email = await inTx(venue, async (tx) => {
+    const delivery = await reserveInvoiceDelivery(tx, sale.id, {
+      medium: "email",
+      requestKey: randomUUID(),
+      personId: venue.operatorId,
+      recipient: "customer@example.test",
+    });
+    await startInvoiceEmail(tx, delivery.id);
+    await abandonInvoiceEmail(tx, delivery.id, now);
+    return delivery;
+  });
+  const printed = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/deliveries`,
+    {
+      medium: "print",
+      requestKey: randomUUID(),
+      printerId: venue.printerId,
+    },
+  );
+  expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+  const job = (await jobs()).prints.at(-1)!;
+  await inTx(venue, async (tx) => {
+    await tx
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: RECEIPT_OUT_OF_DATE })
+      .where(eq(printJobs.id, job.id));
+    await settleInvoiceEmail(tx, email, 1, { status: "sent" }, now);
+  });
+  const deliveries = () =>
+    inTx(venue, (tx) =>
+      tx.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.saleId, sale.id)),
+    );
+  const before = { deliveries: await deliveries(), prints: (await jobs()).prints };
+  expect(before.deliveries).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: email.id, status: "sent", designation: "original" }),
+      expect.objectContaining({ printJobId: job.id, status: "queued", designation: "original" }),
+    ]),
+  );
+
+  await expect(
+    inTx(venue, (tx) =>
+      resendInvoicePrintJob(
+        tx,
+        saleReceiptLayout(venue.backend, venue.cfg),
+        job.id,
+        venue.operatorId,
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "print_job.not_resendable" });
+  expect({ deliveries: await deliveries(), prints: (await jobs()).prints }).toEqual(before);
 });
