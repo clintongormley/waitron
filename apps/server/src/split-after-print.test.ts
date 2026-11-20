@@ -24,6 +24,10 @@ import {
   resolveVenueClock,
 } from "@waitron/reporting";
 import { thousandthsToDecimal } from "@waitron/shared";
+import {
+  filedKindsBySale,
+  invoiceRecords,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -49,9 +53,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
 let venue: OrderVenue;
-/** Steak's extras list, offering a Caña at 1.00. */
+/** Steak's extras list, offering Croquettes at 1.00. */
 let extraListId: string;
-let canaId: string;
+let croquettesId: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -65,7 +69,7 @@ useVenueDb({
           .all<{ id: string; name: string }>(sql`select id, name from products`)
           .map((row) => [row.name, row.id]),
       );
-      canaId = ids.get("Caña")!;
+      croquettesId = ids.get("Croquettes")!;
       const extras = await createExtraList(
         tx,
         {
@@ -75,7 +79,7 @@ useVenueDb({
           minPicks: 0,
           maxPicks: 1,
           active: true,
-          items: [{ productId: canaId, maxQuantity: 1, preselected: false, price: "1.00" }],
+          items: [{ productId: croquettesId, maxQuantity: 1, preselected: false, price: "1.00" }],
         },
         venue.cfg.locale,
       );
@@ -247,7 +251,7 @@ function written() {
   return venue.db.all(sql`
     select
       (select count(*) from sales) as sales,
-      (select count(*) from registros_facturacion) as registros,
+      (select count(*) from ${invoiceRecords}) as records,
       (select count(*) from working_orders) as bills,
       (select count(*) from working_order_lines) as lines,
       (select count(*) from order_amendments) as amendments,
@@ -294,11 +298,9 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       creditNoteNumber: `R/${credits[0]!.invoiceNumber}`,
     });
     const newBill = answer.json.billId as string;
-    const [registro] = venue.db.all<{ tipo: string; importe: string }>(
-      sql`select tipo_factura as tipo, importe_total as importe from registros_facturacion
-        where sale_id = ${credits[0]!.id}`,
+    expect(await filedKindsBySale(venue.db, [credits[0]!.id])).toEqual(
+      new Map([[credits[0]!.id, "R5"]]),
     );
-    expect(registro).toEqual({ tipo: "R5", importe: "-48.00" });
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");
     expect(await dishesOf(party.tabId)).toEqual(before);
     expect(await statusOf(venue, newBill)).toBe("open");
@@ -548,7 +550,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     const party = await seat(
       {
         name: "Steak",
-        extras: [{ listId: extraListId, picks: [{ productId: canaId, quantity: 1 }] }],
+        extras: [{ listId: extraListId, picks: [{ productId: croquettesId, quantity: 1 }] }],
       },
       "Tarta",
     );
@@ -761,7 +763,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
 describe("copyBillDishes", () => {
   it("throws on a set-menu line, which no printed bill holds", async () => {
     const from = await parked(venue, "Tarta");
-    const to = await parked(venue, "Caña");
+    const to = await parked(venue, "Croquettes");
 
     const copied = inTx(venue, async (tx) => {
       await tx.run(sql`pragma defer_foreign_keys = on`);
