@@ -18,10 +18,10 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const period = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
 const now = new Date("2026-07-25T00:00:00Z");
 
-async function failedPayment(paymentRef: string) {
+async function failedPayment(paymentRef: string, at = "2026-07-01T12:00:00.000Z") {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
   vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+  vi.setSystemTime(new Date(at));
   try {
     await withTransaction(suite.db, (tx) =>
       insertFailedPayment(tx, {
@@ -303,8 +303,10 @@ describe("backup-machine comparison", () => {
     },
   );
 
-  it("does not offer an integrated reference or lost-reply hint to a backup entry", async () => {
-    const seeded = await failedPayment("lost");
+  it.each([false, true])("excludes integrated charges (next day: %s)", async (nextDay) => {
+    const manualAt = nextDay ? "2026-07-01T23:55:00.000Z" : "2026-07-01T12:00:00.000Z";
+    const chargeAt = nextDay ? "2026-07-02T00:20:00.000Z" : manualAt;
+    const seeded = await failedPayment("lost", chargeAt);
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         provider: "manual",
@@ -314,7 +316,7 @@ describe("backup-machine comparison", () => {
         origin: deviceOrigin(seeded.deviceId),
         nodeId: seeded.nodeId,
         workingOrderId: seeded.workingOrderId,
-        settledAt: new Date("2026-07-01T12:00:00Z"),
+        settledAt: new Date(manualAt),
       });
       await insertCapturedPayment(tx, {
         provider: "sumup",
@@ -335,7 +337,7 @@ describe("backup-machine comparison", () => {
         status: "SUCCESSFUL",
         amount: 10,
         currency: "EUR",
-        timestamp: "2026-07-01T12:00:00Z",
+        timestamp: chargeAt,
       })),
     });
     vi.spyOn(client, "findTransaction").mockResolvedValue({
@@ -343,7 +345,7 @@ describe("backup-machine comparison", () => {
       status: "SUCCESSFUL",
       amount: decimal("10.00"),
       currency: "EUR",
-      timestamp: "2026-07-01T12:00:00Z",
+      timestamp: chargeAt,
       foreignTransactionId: "lost",
     });
     const result = await new SumUpReconciler({
@@ -358,7 +360,7 @@ describe("backup-machine comparison", () => {
       { kind: "recorded", paymentRef: "backup", reason: "unmatched" },
     ]);
     expect(result.unlinkedCharges).toBe(0);
-    expect(result.missingLocal.map((row) => row.references)).toEqual([["hinted"]]);
+    expect(result.missingLocal.map((row) => row.references)).toEqual(nextDay ? [] : [["hinted"]]);
   });
 });
 

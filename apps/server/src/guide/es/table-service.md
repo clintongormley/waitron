@@ -58,8 +58,8 @@ En **Comprobar pagos con tarjeta**, dentro de Informes, abre **Comparación de S
 en la zona horaria del local. Una coincidencia vincula una anotación de la misma cuenta con un
 cargo de SumUp del mismo importe, incluida la propina, con un margen de 30 minutos. Comprueba
 los cargos ambiguos o sin coincidencia en SumUp antes de corregir nada. La comparación no envía
-devoluciones. Un día incompleto espera la comprobación diaria que falta; el día completo estará
-disponible tras la comprobación de la 01:00 UTC.
+devoluciones. Si la comparación está incompleta, vuelve a intentarlo tras la última comprobación,
+prevista para la 01:00 UTC después de que termine el día.
 
 Los grupos de devoluciones comparan la consulta guardada de SumUp con tus anotaciones actuales.
 Actualiza después de anotar un resultado. Una coincidencia confirmada tiene el mismo identificador

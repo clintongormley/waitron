@@ -62,7 +62,7 @@ export interface DeriveConfig {
   horizonDays: number;
   maxPeriodsPerTick: number;
   staleAfterMs: number;
-  firstRunDelayMs?: number;
+  firstRunDelayMs: number;
   /** The furthest after its writing that this duty's `nextAttemptAt` is ever set (`longestWait`
    * in `run.ts`). A row further ahead than this was written before the clock stepped back. */
   longestWaitMs: number;
@@ -101,10 +101,11 @@ export const DEFAULTS = {
 } as const;
 
 export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig): Derivation {
-  const firstRunDelayMs = config.firstRunDelayMs ?? 0;
+  const { firstRunDelayMs } = config;
   const eligibilityTime = new Date(now.getTime() - firstRunDelayMs);
   const newest = mostRecentCompleteDay(eligibilityTime);
   const horizonStart = horizonStartFor(now, config.horizonDays);
+  // A new duty has no missed periods to backfill while yesterday’s run waits.
   const floor =
     snapshot.earliestPeriodFrom === null
       ? mostRecentCompleteDay(now)
