@@ -3189,6 +3189,73 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     ]);
   });
 
+  it("moves printers in the shown order after a live rename", async () => {
+    const liveData = new LiveData();
+    const { el, api } = await editListed(
+      { liveData },
+      {
+        ...listedProfile,
+        receiptPrinterIds: [],
+        receiptPrinterDefaultId: null,
+      },
+    );
+    toggle(el, "receipt-printers-pr3", true);
+    toggle(el, "receipt-printers-pr1", true);
+    await flush(el);
+    const shown = () => equipmentState(equipmentSwitches(el, "receipt-printers"));
+    const before = shown();
+    vi.mocked(api.listPrinters).mockResolvedValue([
+      { ...venuePrinters[2]!, name: "Aardvark" },
+      ...venuePrinters.slice(0, 2),
+    ]);
+    liveData.invalidate([{ type: "printers", id: "pr3" }]);
+    await expect
+      .poll(() => field(el, "receipt-printers-pr3").getAttribute("label"))
+      .toBe("Aardvark");
+    expect(shown()).toEqual(before);
+
+    field(el, "receipt-printers-up-pr3").click();
+    await flush(el);
+    expect(
+      shown()
+        .filter(([, checked]) => checked)
+        .map(([id]) => id),
+    ).toEqual(["receipt-printers-pr3", "receipt-printers-pr1"]);
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![5].receiptPrinterIds).toEqual([
+      "pr3",
+      "pr1",
+    ]);
+  });
+
+  it("keeps the printer rows in place after a card-reader save fails", async () => {
+    const profile = { ...listedProfile, receiptPrinterIds: [], receiptPrinterDefaultId: null };
+    const { el, api } = await editListed(
+      {
+        updateDeviceProfile: vi.fn(async (_id, _name, _actions, _factor, _timeout, lists) => ({
+          ...profile,
+          ...lists,
+        })),
+        setProfileReaders: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      },
+      profile,
+    );
+    toggle(el, "receipt-printers-pr3", true);
+    toggle(el, "receipt-printers-pr1", true);
+    toggle(el, "profile-reader-r2", true);
+    await flush(el);
+    const shown = () => equipmentState(equipmentSwitches(el, "receipt-printers"));
+    const before = shown();
+
+    await save(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![5].receiptPrinterIds).toEqual([
+      "pr1",
+      "pr3",
+    ]);
+    expect(shownText(el)).toContain(codeMessage("connection.failed"));
+    expect(shown()).toEqual(before);
+  });
+
   describe("the invoice list", () => {
     const invoiceProfile: DeviceProfile = {
       ...listedProfile,

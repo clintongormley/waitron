@@ -816,7 +816,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftInactivityMinutes: number | null = null;
   @state() private invalidInactivityText: string | null = null;
   @state() private draftPrinterLists: PrinterDraft = NO_PRINTER_LISTS;
-  #movedPrinterOrder: Partial<Record<PrinterListKey, string[]>> = {};
+  #printerDisplayOrder: Partial<Record<PrinterListKey, readonly string[]>> = {};
   /** The drawer list and defaults as opened, so a save sends only the ones it changed. */
   #loadedEquipment: ProfileEquipmentDefaults | null = null;
   /** "hidden" when the session may not manage card readers. */
@@ -889,7 +889,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftInactivityMinutes = value.inactivityMinutes;
         this.invalidInactivityText = value.invalidInactivityText;
         this.draftPrinterLists = structuredClone(value.printerLists);
-        this.#movedPrinterOrder = {};
+        this.#printerDisplayOrder = {};
         this.draftKitchenScreens = structuredClone(value.kitchenScreens);
         this.draftDepartmentId = value.departmentId;
         this.draftEveryZone = value.everyZone;
@@ -1301,7 +1301,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftInactivityMinutes = null;
     this.invalidInactivityText = null;
     this.draftPrinterLists = NO_PRINTER_LISTS;
-    this.#movedPrinterOrder = {};
+    this.#printerDisplayOrder = {};
     this.#loadedEquipment = null;
     this.readerState = "loading";
     this.readers = [];
@@ -1574,6 +1574,11 @@ export class DeviceProfilesScreen extends LitElement {
     this.#draftScope?.changed();
   }
 
+  #printerOrder(key: PrinterListKey, visible?: readonly string[]): readonly string[] {
+    const order = this.#printerDisplayOrder[key] ?? this.#loaded?.[key] ?? [];
+    return visible === undefined ? order : [...new Set([...order, ...visible])];
+  }
+
   #onPrinterToggle(
     event: CustomEvent<{ checked: boolean }>,
     list: (typeof PRINTER_LISTS)[number],
@@ -1581,6 +1586,7 @@ export class DeviceProfilesScreen extends LitElement {
     visible: readonly string[],
   ): void {
     event.stopPropagation();
+    this.#printerDisplayOrder[list.key] = this.#printerOrder(list.key, visible);
     const unlisted = !event.detail.checked && this.draftPrinterLists[list.defaultKey] === printerId;
     this.draftPrinterLists = {
       ...this.draftPrinterLists,
@@ -1772,8 +1778,7 @@ export class DeviceProfilesScreen extends LitElement {
     const from = list.indexOf(printerId);
     const to = list.indexOf(neighbour);
     [list[from], list[to]] = [neighbour, printerId];
-    const order = this.#movedPrinterOrder[key] ?? this.#loaded?.[key] ?? [];
-    this.#movedPrinterOrder[key] = [...new Set([...order, ...visible])].map((id) =>
+    this.#printerDisplayOrder[key] = this.#printerOrder(key, visible).map((id) =>
       id === printerId ? neighbour : id === neighbour ? printerId : id,
     );
     this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };
@@ -2190,7 +2195,6 @@ export class DeviceProfilesScreen extends LitElement {
     `;
   }
 
-  // Switching equipment on or off changes membership independently of its place in the editor.
   #printerChoices(key: PrinterListKey): PrinterChoice[] {
     const listed = this.draftPrinterLists[key];
     const drawers = key === "cashDrawerPrinterIds";
@@ -2204,8 +2208,7 @@ export class DeviceProfilesScreen extends LitElement {
       printer.drawerless
         ? `${printerLabel(printer)} (${t("device_profiles.no_drawer_attached")})`
         : printerLabel(printer);
-    const order = this.#movedPrinterOrder[key] ?? this.#loaded?.[key] ?? [];
-    return equipmentInOrder(pool, order, listed).map((printer) => ({
+    return equipmentInOrder(pool, this.#printerOrder(key), listed).map((printer) => ({
       printer,
       listed: listed.includes(printer.id),
       label: label(printer),

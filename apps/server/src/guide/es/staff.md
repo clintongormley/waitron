@@ -176,8 +176,8 @@ Elige **Qué puede hacer** para las acciones y pantallas. Elige una pantalla de 
 y pulsa **Guardar**.
 
 En **Impresoras y lectores de tarjetas**, activa los equipos que puede usar este perfil. Para
-cambiar el orden en que se muestran las impresoras seleccionadas, pulsa **Subir** o **Bajar**
-junto a la impresora.
+cambiar el orden de las impresoras seleccionadas en la lista, pulsa **Subir** o **Bajar** junto
+a la impresora.
 
 Para imprimir comandas, elige la impresora en **Estaciones de preparación**.
 
