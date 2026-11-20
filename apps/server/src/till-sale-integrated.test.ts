@@ -1,5 +1,3 @@
-import { payCounterBasket } from "./testing/bill-payment-fixture.js";
-import { openTillSession } from "./testing/session-device.js";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -21,6 +19,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { TradingAdmission } from "./trading-admission.js";
 import {
   payWorkingOrderIntegratedOrchestration as readerPay,
+  payWorkingOrder,
   collectOrderOrchestration as collectOrder,
 } from "./testing/whole-payment-fixture.js";
 import {
@@ -181,24 +180,6 @@ describe("saved-zone payment transactions", () => {
       expectedEdit: null,
     };
   }
-  async function zoneCounterPayment(
-    deps: ReturnType<typeof zoneDeps>,
-    req: ReturnType<typeof zoneRequest>,
-    method: "cash" | "card",
-  ) {
-    const cfg = zoneVenue.cfg;
-    const personId = zoneVenue.operatorId;
-    const sessionId = await openTillSession(deps.db, { deviceId: cfg.origin.deviceId, personId });
-    return payCounterBasket(
-      deps,
-      cfg,
-      { personId, sessionId },
-      req.id,
-      { lines: req.lines },
-      method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
-      req.id,
-    );
-  }
   function economicSnapshot() {
     return Object.fromEntries(
       [
@@ -311,14 +292,12 @@ describe("saved-zone payment transactions", () => {
       },
     );
     it.each(["cash", "card"] as const)("dates immediate %s from the saved zone", async (method) => {
-      const { clock } = zoneClock();
+      const { clock, now } = zoneClock();
       const deps = zoneDeps(clock);
       const req = zoneRequest();
-      await zoneCounterPayment(deps, req, method);
+      await payWorkingOrder(deps, zoneVenue.cfg, { ...req, tender: { method, amount: "2.50" } });
       expect(await issueFacts(req.id)).toEqual([nightFacts]);
-      expect(
-        zoneDb.db.all(sql`select settled_at from working_orders where id = ${req.id}`),
-      ).toEqual([{ settled_at: nightFacts.issued_at }]);
+      expect(now).toHaveBeenCalledTimes(1);
     });
     it.each(["cash", "card", "reader"] as const)(
       "collects an already-issued invoice with %s without redating or issuing again",
@@ -356,7 +335,10 @@ describe("saved-zone payment transactions", () => {
                     ...req,
                     tender: { method: "cash", amount: "2.50" },
                   })
-                : zoneCounterPayment(deps, req, method);
+                : payWorkingOrder(deps, zoneVenue.cfg, {
+                    ...req,
+                    tender: { method, amount: "2.50" },
+                  });
           await expect(run).rejects.toMatchObject({
             code: "venue.time_zone_not_ready",
             params: { reason: state },

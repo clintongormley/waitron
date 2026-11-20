@@ -579,7 +579,7 @@ beforeAll(() => {
   });
 });
 
-describe("payWorkingOrder", () => {
+describe("cash bill payments", () => {
   it("walk-up: creates an open working order, files, and settles it in one tx", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
     const id = randomUUID();
@@ -1004,8 +1004,7 @@ describe("payWorkingOrder", () => {
 describe("parkOrder concurrent replay", () => {
   it("concurrent double-park of the same id parks ONE order with one line, and both calls return the same result", async () => {
     const { cfg, coffee, zoneId } = await setupVenue();
-    // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
-    // `payWorkingOrder`, `parkOrder` reads no existing row first, so the second call's insert
+    // With a fresh id, both park calls try an insert. The second
     // collides on `working_orders`' primary key and `parkOrder`'s duplicate-key catch returns the
     // winner's committed `{ id, orderNumber }`. The catch re-throws anything `isUniqueViolation` fails
     // to classify, so an unrecognised refusal would surface here as a rejection.
@@ -1138,9 +1137,7 @@ describe("card tender (manual / datáfono)", () => {
       );
 
     const first = await pay();
-    // The retry — same id, same body (a lost first response). The `sales_working_order_id_key`
-    // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second fiscal record,
-    // and — the card-specific part — no second captured payment.
+    // Reuse the same submission to recover its ticket without another filing or card payment.
     const second = await pay();
 
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
@@ -1762,7 +1759,7 @@ describe("prepare & collect — zone payment timing", () => {
   });
 
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
-  // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
+  // walk-up and saved bill payments, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.
   it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
@@ -2368,7 +2365,7 @@ describe("prepare & collect — zone payment timing", () => {
 
 // The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
 
-// `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
+// `ticket_items`. Bill payment (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {

@@ -19,7 +19,10 @@ import {
   previewBillPayment,
   type BillPaymentAsk,
 } from "./testing/bill-payment-fixture.js";
-import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
+import {
+  payWorkingOrder,
+  payWorkingOrderIntegratedOrchestration,
+} from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import {
   inTx,
@@ -43,6 +46,20 @@ useVenueDb({
 });
 
 describe("payment reservations and previously received money", () => {
+  it.each(["cash", "card"] as const)("refuses whole %s through the sale route", async (method) => {
+    const billId = await tabWith(venue, "Tarta");
+    await unsent(billId);
+    const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+      dining: "eat_in",
+      workingOrderId: billId,
+      lines: [],
+      tender: { method, amount: "18.00" },
+    });
+    expect(paid.status).toBe(409);
+    expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
+  });
+
   it("refuses a new whole payment through /api/pay", async () => {
     const billId = await tabWith(venue, "Tarta");
     await unsent(billId);
@@ -426,6 +443,22 @@ describe("unsent dishes block new payments on their own bill", () => {
       });
     }
   }
+
+  it.each(["cash", "card"] as const)(
+    "refuses a whole %s payment through the public service",
+    async (method) => {
+      const billId = await tabWith(venue, "Tarta");
+      await unsent(billId);
+      await expect(
+        payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, venue.cfg, {
+          id: billId,
+          lines: [],
+          tender: { method, amount: "18.00" },
+        }),
+      ).rejects.toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
+      expect(fiscalRecordCount(venue, billId)).toBe(0);
+    },
+  );
 
   it("refuses a new integrated whole payment before asking the reader", async () => {
     const billId = await tabWith(venue, "Tarta");

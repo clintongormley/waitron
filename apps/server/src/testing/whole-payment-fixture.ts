@@ -7,7 +7,6 @@ import {
   recordTillSaleOrchestration as sale,
   payWorkingOrderIntegratedOrchestration as reader,
   collectOrder as deviceCollect,
-  recordTillSale as deviceSale,
   payWorkingOrderIntegrated as deviceReader,
   type PayWorkingOrderRequest as PayRequest,
   type TillSaleRequest as SaleRequest,
@@ -122,15 +121,6 @@ export function collectOrder(
 ) {
   const captured = observed(deps.db, req.id, req, operator.personId);
   return deviceCollect(deps, cfg, captured.request, operator);
-}
-export function recordTillSale(
-  deps: Parameters<typeof deviceSale>[0],
-  cfg: Parameters<typeof deviceSale>[1],
-  req: TillSaleRequest,
-  operator: Parameters<typeof deviceSale>[3],
-) {
-  const captured = observed(deps.db, req.workingOrderId, req, operator.personId);
-  return deviceSale(deps, cfg, captured.request, operator);
 }
 export function payWorkingOrderIntegrated(
   deps: Parameters<typeof deviceReader>[0],

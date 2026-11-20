@@ -478,6 +478,26 @@ beforeAll(() => {
 });
 
 describe("POST /api/session (PIN login body handling)", () => {
+  it("an empty (unparseable) request body is a clean 401 pin.invalid, never a 500", async () => {
+    const { cfg } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // An empty POST body is invalid JSON: a bare `c.req.json()` throws a SyntaxError that escapes to
+    // the error boundary as `server.internal` (500). Reading it through `readJsonBody` coerces it to
+    // `{}`, so the route's own `personId` validation refuses it with `pin.invalid` (401) — the
+    // same code+status a well-formed-but-unknown id gets — instead of a 500.
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "",
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "pin.invalid" } });
+  });
+});
+
+describe("the fiscal sale path over HTTP", () => {
   it.each(["voucher", "deferred", "other"])(
     "refuses the unsupported %s payment method before saving a basket",
     async (method) => {
@@ -506,26 +526,29 @@ describe("POST /api/session (PIN login body handling)", () => {
     },
   );
 
-  it("an empty (unparseable) request body is a clean 401 pin.invalid, never a 500", async () => {
-    const { cfg } = await setupVenue();
+  it("refuses a non-UUID bill address before saving a basket", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-
-    // An empty POST body is invalid JSON: a bare `c.req.json()` throws a SyntaxError that escapes to
-    // the error boundary as `server.internal` (500). Reading it through `readJsonBody` coerces it to
-    // `{}`, so the route's own `personId` validation refuses it with `pin.invalid` (401) — the
-    // same code+status a well-formed-but-unknown id gets — instead of a 500.
-    const res = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "",
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const each = available.find((item) => item.pricingUnit === "each")!;
+    const id = "not-a-uuid";
+    const response = await payFreshBasket(
+      app,
+      cookie,
+      id,
+      [{ menuItemId: each.menuItemId, quantity: "1" }],
+      { method: "cash", tendered: "5.00" },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "working_order.not_found", params: { workingOrderId: id } },
     });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "pin.invalid" } });
+    expect(await suite.db.select().from(workingOrders)).toEqual([]);
+    expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
   });
-});
 
-describe("the fiscal sale path over HTTP", () => {
   it("answers 400 course.not_found for a course only the body names", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((product) => product.pricingUnit === "each")!;
@@ -3371,7 +3394,13 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
     expect(opensDrawer(new Uint8Array(printed.documents[0]!))).toBe(false);
 
-    const replay = await cardSale(app, await on(deviceCookie), body);
+    const changed = await cardSale(app, cookie, { workingOrderId, menuItemId: each.menuItemId });
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({
+      error: { code: "submission.id_reused", params: { submissionId: workingOrderId } },
+    });
+
+    const replay = await cardSale(app, cookie, body);
     expect(replay.status, await replay.clone().text()).toBe(200);
     expect((await replay.json()).payment).toMatchObject({
       id: payment.id,
@@ -3525,7 +3554,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect(printed.documents).toHaveLength(1);
   });
 
-  it.each(["sales", "collect"] as const)(
+  it.each(["bill payments", "collect"] as const)(
     "normalizes outside-card details on the %s route",
     async (route) => {
       const { each, app, cookie } = await venueWithTill("ticket_then_pay");
@@ -3551,7 +3580,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         ).toBe(200);
       }
       const request = (tender: Record<string, unknown>) =>
-        route === "sales"
+        route === "bill payments"
           ? payFreshBasket(
               app,
               cookie,
@@ -3584,7 +3613,9 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       });
       expect(paid.status).toBe(200);
       const body = await paid.json();
-      expect(route === "sales" ? body.payment : body.tender).not.toHaveProperty("externalMachine");
+      expect(route === "bill payments" ? body.payment : body.tender).not.toHaveProperty(
+        "externalMachine",
+      );
       expect(
         await suite.db
           .select({ source: payments.externalProvider, machine: payments.externalMachine })

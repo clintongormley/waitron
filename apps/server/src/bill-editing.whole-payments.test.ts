@@ -11,10 +11,13 @@ import { readBillEditState } from "./bill-editing.js";
 import { saveDraft } from "./order-drafts.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import {
+  payWorkingOrder,
   collectOrderOrchestration,
   payWorkingOrderIntegratedOrchestration,
+  recordTillSaleOrchestration,
   type PayWorkingOrderRequest,
   type IntegratedPayRequest,
+  type TillSaleRequest,
 } from "./till-sale.js";
 import {
   inTx,
@@ -33,7 +36,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
   },
 });
-const modes = ["collect", "reader", "reader-placed"] as const;
+const modes = ["cash", "manual", "sale", "collect", "reader", "reader-placed"] as const;
 type Mode = (typeof modes)[number];
 const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
 const edit = (id: string) => inTx(venue, (tx) => readBillEditState(tx, id));
@@ -79,13 +82,13 @@ function frozen(http = false) {
       ]),
   );
 }
-function request(p: Fixture, expectedEdit: unknown) {
+function request(p: Fixture, expectedEdit: unknown, mode: Mode) {
   return {
     id: p.id,
     workingOrderId: p.id,
     expectedEdit,
     lines: [],
-    tender: { method: "cash", amount: "35.00" },
+    tender: { method: mode === "manual" ? "card" : "cash", amount: "35.00" },
     dining: "eat_in",
   };
 }
@@ -95,7 +98,7 @@ function run(
   expectedEdit: unknown,
   operatorId: string | undefined = venue.operatorId,
 ) {
-  const ask = request(p, expectedEdit);
+  const ask = request(p, expectedEdit, mode);
   if (mode === "reader" || mode === "reader-placed")
     return payWorkingOrderIntegratedOrchestration(
       { admission: testTradingAdmission(), ...deps(), provider: venue.card },
@@ -103,7 +106,21 @@ function run(
       ask as IntegratedPayRequest,
       operatorId,
     );
-  return collectOrderOrchestration(
+  if (mode === "collect")
+    return collectOrderOrchestration(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      ask as PayWorkingOrderRequest,
+      operatorId,
+    );
+  if (mode === "sale")
+    return recordTillSaleOrchestration(
+      { ...deps(), admission: testTradingAdmission() },
+      venue.cfg,
+      ask as TillSaleRequest,
+      operatorId,
+    );
+  return payWorkingOrder(
     { ...deps(), admission: testTradingAdmission() },
     venue.cfg,
     ask as PayWorkingOrderRequest,
@@ -148,7 +165,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
                 ? { ...current, editorVersion: -1 }
                 : current;
       // An explicit undefined actor must reach the raw orchestration function.
-      const ask = request(p, wanted);
+      const ask = request(p, wanted, mode);
       const operator = kind === "no-actor" ? undefined : venue.operatorId;
       const attempt =
         mode === "reader" || mode === "reader-placed"
@@ -158,12 +175,26 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
               ask as IntegratedPayRequest,
               operator,
             )
-          : collectOrderOrchestration(
-              { ...deps(), admission: testTradingAdmission() },
-              venue.cfg,
-              ask as PayWorkingOrderRequest,
-              operator,
-            );
+          : mode === "collect"
+            ? collectOrderOrchestration(
+                { ...deps(), admission: testTradingAdmission() },
+                venue.cfg,
+                ask as PayWorkingOrderRequest,
+                operator,
+              )
+            : mode === "sale"
+              ? recordTillSaleOrchestration(
+                  { ...deps(), admission: testTradingAdmission() },
+                  venue.cfg,
+                  ask as TillSaleRequest,
+                  operator,
+                )
+              : payWorkingOrder(
+                  { ...deps(), admission: testTradingAdmission() },
+                  venue.cfg,
+                  ask as PayWorkingOrderRequest,
+                  operator,
+                );
       await expect(attempt).rejects.toMatchObject({
         code: "management.request_invalid",
         params: {
@@ -228,18 +259,30 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
   it("retains counter payments without an editor observation or actor", async () => {
     const p = await fixture(mode, true),
       current = await edit(p.id);
-    const ask = request(p, null);
+    const ask = request(p, null, mode);
     const result = mode.startsWith("reader")
       ? await payWorkingOrderIntegratedOrchestration(
           { admission: testTradingAdmission(), ...deps(), provider: venue.card },
           venue.cfg,
           ask as IntegratedPayRequest,
         )
-      : await collectOrderOrchestration(
-          { ...deps(), admission: testTradingAdmission() },
-          venue.cfg,
-          ask as PayWorkingOrderRequest,
-        );
+      : mode === "collect"
+        ? await collectOrderOrchestration(
+            { ...deps(), admission: testTradingAdmission() },
+            venue.cfg,
+            ask as PayWorkingOrderRequest,
+          )
+        : mode === "sale"
+          ? await recordTillSaleOrchestration(
+              { ...deps(), admission: testTradingAdmission() },
+              venue.cfg,
+              ask as TillSaleRequest,
+            )
+          : await payWorkingOrder(
+              { ...deps(), admission: testTradingAdmission() },
+              venue.cfg,
+              ask as PayWorkingOrderRequest,
+            );
     expect(result).toMatchObject(
       mode.startsWith("reader")
         ? { outcome: "captured", ticket: { total: "35.00" } }
@@ -284,13 +327,18 @@ describe.each(["reader", "reader-placed"] as const)("%s captured recovery", (mod
   });
 });
 
-describe.each(["collect", "reader"] as const)("%s HTTP authority", (mode) => {
+describe.each(["sale", "collect", "reader"] as const)("%s HTTP authority", (mode) => {
   async function http(p: Fixture, expectedEdit: unknown, extra = {}) {
-    const path = mode === "reader" ? "/api/pay" : `/api/working-orders/${p.id}/collect`;
+    const path =
+      mode === "sale"
+        ? "/api/sales"
+        : mode === "reader"
+          ? "/api/pay"
+          : `/api/working-orders/${p.id}/collect`;
     const response = await venue.app.request(path, {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
-      body: JSON.stringify({ ...request(p, expectedEdit), ...extra }),
+      body: JSON.stringify({ ...request(p, expectedEdit, mode), ...extra }),
     });
     const parsed = (await response.json()) as Record<string, unknown>;
     return { status: response.status, json: parsed.error ?? parsed };
