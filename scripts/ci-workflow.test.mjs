@@ -7559,8 +7559,8 @@ describe("the publish job on a release tag", () => {
       expect(step().text).not.toMatch(/--depth|--shallow/);
     });
 
-    // Real git, against a local origin fetched as actions/checkout fetches a tag's commit: that
-    // commit alone, one deep, with no branch.
+    // Real git with a one-commit checkout. A local lightweight tag makes the fetch replace it
+    // with the remote annotation.
     describe("against a real repository", () => {
       const bin = stubBin("release-on-main-bin-", { timeout: TIMEOUT_STUB });
       const root = mkdtempSync(join(tmpdir(), "release-on-main-"));
@@ -7641,7 +7641,7 @@ describe("the publish job on a release tag", () => {
         const result = run(offMain, "v1.2.5");
         expect(result.status).toBe(1);
         expect(result.stderr).toContain("v1.2.5");
-        expect(result.stderr).toContain("main");
+        expect(result.stderr).toContain("not a commit of main");
       });
 
       it.each([
@@ -7656,12 +7656,19 @@ describe("the publish job on a release tag", () => {
         },
       );
 
-      it.each(["v1.2.5", "v1.2.6", "v1.2.7", "v1.2.8", "v1.2.9"])(
+      it.each([
+        ["v1.2.5", "pointing directly to this commit"],
+        ["v1.2.6", "must carry the Waitron release annotation"],
+        ["v1.2.7", "pointing directly to this commit"],
+        ["v1.2.8", "must carry the Waitron release annotation"],
+        ["v1.2.9", "pointing directly to this commit"],
+      ])(
         "refuses %s when it does not directly annotate this commit with its version",
-        (tag) => {
+        (tag, error) => {
           const result = run(tagged, tag);
           expect(result.status).toBe(1);
           expect(result.stderr).toContain(tag);
+          expect(result.stderr).toContain(error);
           expect(result.output).toBe("");
         },
       );

@@ -56,7 +56,7 @@ docker cp "$container:/app/declaration/declaration.txt" "$txt"
 errors="$work/view-errors"
 if existing=$(gh release view "$tag" --json isPrerelease --jq .isPrerelease 2>"$errors"); then
   if [ "$existing" != "$RELEASE_PRERELEASE" ]; then
-    echo "The GitHub Release $tag has a different prerelease flag. Check its signed file before correcting it." >&2
+    echo "The GitHub Release $tag has a different prerelease flag. Check its tag annotation and signed file before correcting it." >&2
     exit 1
   fi
   gh release upload "$tag" --clobber "$pdf" "$txt"

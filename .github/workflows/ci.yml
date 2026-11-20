@@ -4549,7 +4549,7 @@ jobs:
             "Waitron $version:") prerelease=false ;;
             "Waitron prerelease $version:") prerelease=true ;;
             *)
-              echo "$GITHUB_REF_NAME must carry the Waitron release annotation for its version" >&2
+              echo "$GITHUB_REF_NAME must carry the Waitron release annotation. Use the release tag command." >&2
               exit 1
               ;;
           esac
