@@ -10,6 +10,7 @@ import {
   parseDecimalInput,
   baseStyles,
   pageTitleStyles,
+  FormFeedback,
   draftScopeFor,
   saveActionState,
   UrlStateController,
@@ -34,7 +35,6 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { bottomMessage } from "../i18n/form-message.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { a4Choices, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -839,8 +839,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** The edited profile as opened, so an edit sends only the parts it changed; null for a new one. */
   #loaded: DeviceProfile | null = null;
 
-  /** Set by the first Save; from then on the form's own checks mark their fields. */
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A refusal's sentence under the field it names, until that field changes or Save is pressed. */
   @state() private fieldRefusal: { field: EditorField; sentence: string } | null = null;
 
@@ -1116,7 +1115,7 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   #ownErrors(): FieldErrors {
-    if (!this.attempted) return {};
+    if (!this.#feedback.attempted) return {};
     const errors: FieldErrors = {};
     if (this.draftName.trim() === "") errors.name = t("form.name_required");
     if (this.#ordering()) {
@@ -1143,14 +1142,25 @@ export class DeviceProfilesScreen extends LitElement {
   #errors(): FieldErrors {
     const errors = this.#ownErrors();
     const refused = this.fieldRefusal;
-    if (refused !== null && this.#shownFields().includes(refused.field) && !errors[refused.field])
+    if (
+      refused !== null &&
+      this.#feedback.shows(refused.field) &&
+      this.#shownFields().includes(refused.field) &&
+      !errors[refused.field]
+    )
       errors[refused.field] = refused.sentence;
     return errors;
   }
 
   #clearRefusal(...fields: EditorField[]): void {
     if (this.fieldRefusal !== null && fields.includes(this.fieldRefusal.field))
-      this.fieldRefusal = null;
+      this.#feedback.dismiss(this.fieldRefusal.field);
+  }
+
+  #showFieldRefusal(refused: NonNullable<typeof this.fieldRefusal>): void {
+    this.fieldRefusal = refused;
+    this.#feedback.newRefusal(refused.field);
+    void this.#focusFirstError({ [refused.field]: refused.sentence });
   }
 
   #fieldTab(field: EditorField): EditorTab {
@@ -1307,7 +1317,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftRoles = this.jobRoles.map((role) => role.id);
     this.draftStartingScreen = null;
     this.#loaded = null;
-    this.attempted = false;
+    this.#feedback.reset();
     this.fieldRefusal = null;
     this.#opened += 1;
   }
@@ -1437,8 +1447,8 @@ export class DeviceProfilesScreen extends LitElement {
       }
       this.draftRoles = [...profile.admittedStaffRoleIds];
       this.draftStartingScreen = profile.startingScreen;
-      this.attempted =
-        this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
+      if (this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0)
+        this.#feedback.press();
       this.mode = "editor";
       this.#registerDraft();
       this.#selectTargetTab(view);
@@ -1832,10 +1842,7 @@ export class DeviceProfilesScreen extends LitElement {
         void this.#rereadReaders(saved.id, this.#opened, turn);
       const refused = this.#refusedField(error);
       if (refused === null) this.#showError(codeOf(error));
-      else {
-        this.fieldRefusal = refused;
-        void this.#focusFirstError({ [refused.field]: refused.sentence });
-      }
+      else this.#showFieldRefusal(refused);
       return false;
     }
     if (!active()) return false;
@@ -1848,7 +1855,7 @@ export class DeviceProfilesScreen extends LitElement {
   async #save(): Promise<void> {
     const state = this.#saveState();
     if (this.saving || state.unchanged || state.awaitingJobs) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.fieldRefusal = null;
     this.#showError(null);
     const own = this.#ownErrors();
@@ -1925,10 +1932,7 @@ export class DeviceProfilesScreen extends LitElement {
       else {
         const refused = this.#refusedField(error);
         if (refused === null) this.#showError(codeOf(error));
-        else {
-          this.fieldRefusal = refused;
-          void this.#focusFirstError({ [refused.field]: refused.sentence });
-        }
+        else this.#showFieldRefusal(refused);
       }
     } finally {
       if (turn === this.#saveTurn) this.saving = false;
@@ -2747,12 +2751,12 @@ export class DeviceProfilesScreen extends LitElement {
   #renderEditor(): TemplateResult {
     const errors = this.#errors();
     const ordering = this.#ordering();
-    const marked = FIELDS.some((field) => errors[field]);
     const ownMarked = Object.keys(this.#ownErrors()).length > 0;
     const save = this.#saveState();
-    const message = bottomMessage(
-      this.errorKey === null ? null : codeMessage(this.errorKey),
-      marked ? t("form.fix_fields") : null,
+    const message = this.#feedback.message(
+      { request: this.errorKey === null ? undefined : codeMessage(this.errorKey) },
+      new Set(FIELDS.filter((field) => errors[field])),
+      t("form.fix_fields"),
     );
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>

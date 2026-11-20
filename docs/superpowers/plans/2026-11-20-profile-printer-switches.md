@@ -11,3 +11,8 @@
 **Checks.** In `apps/dashboard/src/screens/device-profiles-screen.test.ts`, start with a real `userEvent` click of the A4 switch in Equipment. Watch it fail before changing the screen. Use the same browser test shape for receipt, slip, drawer and readers. Check on and off, stable row and focus, and the saved assignment. Cover reverse activation order and re-enabling a saved printer, and check keyboard focus after Move. Retain coverage of late reads, undisplayed ids, disabled equipment and defaults. Update the Device profiles section in both `apps/server/src/guide/{en,es}/staff.md` guides with how to order choices. Run the changed browser and guide checks, dashboard typecheck and a visual check in both languages and themes at phone and desktop widths.
 
 **Size.** About 75 added lines in the screen, 70 in tests and a short guide edit in each language.
+
+**Forms rule.** On 20 November at 21:56 the watcher cleared a small migration to the shared
+`FormFeedback` helper alongside the equipment fix. Keep the profile editor's field mapping,
+tab markings and focus, and how it shows or dismisses refusals. Verify those behaviors in the
+existing device-profiles screen, draft and accessibility suites.
