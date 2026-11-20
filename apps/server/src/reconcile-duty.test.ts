@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  DEFAULTS,
   PAYMENTS_MIGRATIONS,
+  runDue,
   insertCapturedPayment,
   listOpenHolds,
   recordHoldOutcome,
@@ -62,6 +64,27 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     const outcome = await duty.run(PERIOD, NOW);
     expect(outcome.summary.checked).toBe(0);
     expect(outcome.resweepAfter).toBeUndefined();
+  });
+
+  it("gives SumUp one hour to see cross-midnight rivals before its daily audit", async () => {
+    const stripe = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
+    const sumup = reconcilerAsDuty({
+      ...reconcilerReturning(emptyResult(PERIOD)),
+      provider: "sumup",
+    });
+    const deps = { db: suite.db, duties: [stripe, sumup], ...DEFAULTS };
+
+    const midnight = await runDue(deps, PERIOD.to);
+    expect(midnight.ran.map(({ duty }) => duty)).toEqual(["payments.reconcile.stripe"]);
+    const due = new Date("2026-07-25T01:00:00Z");
+    expect(midnight.nextDueAt).toEqual(due);
+    expect((await runDue(deps, new Date(due.getTime() - 1))).ran).toEqual([]);
+
+    const result = await runDue(deps, due);
+    expect(result.ran).toMatchObject([
+      { duty: "payments.reconcile.sumup", period: PERIOD, generation: 0, outcome: "succeeded" },
+    ]);
+    expect((await runDue(deps, NOW)).ran).toEqual([]);
   });
 
   it("carries an audit's pending-recovery resweep and unrelated-charge count", async () => {

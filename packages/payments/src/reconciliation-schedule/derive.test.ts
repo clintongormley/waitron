@@ -78,6 +78,7 @@ const CONFIG = {
   horizonDays: 30,
   maxPeriodsPerTick: 7,
   staleAfterMs: 3_600_000,
+  firstRunDelayMs: 0,
   longestWaitMs: DAY_MS,
 };
 
@@ -100,6 +101,20 @@ function snapshot(rows: LedgerRow[], recordedBelowHorizon = 0): LedgerSnapshot {
 }
 
 describe("derive: a duty that has never run", () => {
+  it("holds a new duty's latest period until the delay has elapsed", () => {
+    const config = { ...CONFIG, firstRunDelayMs: 60 * 60 * 1_000 };
+    const boundary = new Date("2026-07-25T01:00:00.000Z");
+    const before = derive(snapshot([]), new Date(boundary.getTime() - 1), config);
+    expect(before.due).toEqual([]);
+    expect(before.nextDueAt).toEqual(boundary);
+
+    const due = derive(snapshot([]), boundary, config);
+    expect(due.due).toEqual([
+      { kind: "gap", period: dayPeriod(new Date("2026-07-24T00:00:00.000Z")) },
+    ]);
+    expect(due.nextDueAt).toEqual(new Date("2026-07-26T01:00:00.000Z"));
+  });
+
   // The floor for a duty with no rows is the most recent complete period, NOT the horizon: you
   // cannot have missed periods before you existed. Otherwise day one runs thirty empty sweeps.
   it("starts from the most recent complete period, not the horizon", () => {

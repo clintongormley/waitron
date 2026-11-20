@@ -52,6 +52,7 @@ describe("boot payment audits", () => {
       return Response.json({ items: [], links: [] });
     });
     try {
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-20T04:00:00Z") });
       await copyMigrationsRoot(scratch);
       server = await fixture.startServer({
         ...KEY_ENV,
@@ -85,6 +86,7 @@ describe("boot payment audits", () => {
       expect(suite.db.all(sql`select * from payment_refunds`)).toEqual([]);
     } finally {
       await server?.close();
+      vi.useRealTimers();
       build.mockRestore();
       vi.unstubAllGlobals();
       await rm(scratch, { recursive: true, force: true });

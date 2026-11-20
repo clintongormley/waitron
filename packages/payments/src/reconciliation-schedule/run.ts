@@ -82,7 +82,11 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
       const snapshot = await withTransaction(deps.db, (tx) =>
         readSnapshot(tx, { duty: duty.name, horizonStart }),
       );
-      const derivation = derive(snapshot, now, { ...deps, longestWaitMs: longestWait(deps, duty) });
+      const derivation = derive(snapshot, now, {
+        ...deps,
+        longestWaitMs: longestWait(deps, duty),
+        firstRunDelayMs: duty.firstRunDelayMs ?? 0,
+      });
       result.deferred += derivation.deferred;
       result.beyondHorizon += derivation.beyondHorizon;
       earliestFuture = Math.min(earliestFuture, derivation.nextDueAt.getTime());

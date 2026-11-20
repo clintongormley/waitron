@@ -62,6 +62,7 @@ export interface DeriveConfig {
   horizonDays: number;
   maxPeriodsPerTick: number;
   staleAfterMs: number;
+  firstRunDelayMs: number;
   /** The furthest after its writing that this duty's `nextAttemptAt` is ever set (`longestWait`
    * in `run.ts`). A row further ahead than this was written before the clock stepped back. */
   longestWaitMs: number;
@@ -100,10 +101,15 @@ export const DEFAULTS = {
 } as const;
 
 export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig): Derivation {
-  const newest = mostRecentCompleteDay(now);
+  const { firstRunDelayMs } = config;
+  const eligibilityTime = new Date(now.getTime() - firstRunDelayMs);
+  const newest = mostRecentCompleteDay(eligibilityTime);
   const horizonStart = horizonStartFor(now, config.horizonDays);
+  // A new duty has no missed periods to backfill while yesterday’s run waits.
   const floor =
-    snapshot.earliestPeriodFrom === null ? newest : new Date(snapshot.earliestPeriodFrom);
+    snapshot.earliestPeriodFrom === null
+      ? mostRecentCompleteDay(now)
+      : new Date(snapshot.earliestPeriodFrom);
   const start = new Date(Math.max(floor.getTime(), horizonStart.getTime()));
 
   const recorded = new Set(snapshot.rows.map((r) => new Date(r.periodFrom).getTime()));
@@ -138,8 +144,7 @@ export function derive(snapshot: LedgerSnapshot, now: Date, config: DeriveConfig
     (a, b) => periodStart(a).getTime() - periodStart(b).getTime(),
   );
 
-  // The next gap appears when today's period closes.
-  const nextBoundary = utcDayStart(now).getTime() + DAY_MS;
+  const nextBoundary = utcDayStart(eligibilityTime).getTime() + DAY_MS + firstRunDelayMs;
 
   let beyondHorizon = 0;
   if (floor.getTime() < horizonStart.getTime()) {

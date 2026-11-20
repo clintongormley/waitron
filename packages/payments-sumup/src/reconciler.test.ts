@@ -18,10 +18,10 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const period = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
 const now = new Date("2026-07-25T00:00:00Z");
 
-async function failedPayment(paymentRef: string) {
+async function failedPayment(paymentRef: string, at = "2026-07-01T12:00:00.000Z") {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
   vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
+  vi.setSystemTime(new Date(at));
   try {
     await withTransaction(suite.db, (tx) =>
       insertFailedPayment(tx, {
@@ -182,7 +182,10 @@ describe("backup-machine comparison", () => {
     { competing: "charge", matched: 0, unmatched: 2 },
     { competing: "adjacent-day charge", matched: 0, unmatched: 1 },
     { competing: "wrong amount", matched: 0, unmatched: 1 },
+    { competing: "ten minutes", matched: 1, unmatched: 0 },
+    { competing: "thirty minutes", matched: 1, unmatched: 0 },
     { competing: "late", matched: 0, unmatched: 1 },
+    { competing: "late adjacent-day charge", matched: 0, unmatched: 1 },
     { competing: "other provider", matched: 0, unmatched: 1 },
     { competing: "next-day only", matched: 0, unmatched: 0 },
     { competing: "next-day competitor", matched: 0, unmatched: 0 },
@@ -190,7 +193,12 @@ describe("backup-machine comparison", () => {
     "keeps $competing candidates separate without changing money",
     async ({ competing, matched, unmatched }) => {
       const seeded = await seedWorkingOrder(suite.db, freshNif());
-      const manualAt = "2026-07-01T23:58:00.000Z";
+      const manualAt =
+        competing === "late adjacent-day charge"
+          ? "2026-07-02T00:15:00.000Z"
+          : competing === "next-day competitor"
+            ? "2026-07-01T23:55:00.000Z"
+            : "2026-07-01T23:58:00.000Z";
       const manual = async (ref: string, at = manualAt) =>
         withTransaction(suite.db, (tx) =>
           insertCapturedPayment(tx, {
@@ -209,7 +217,7 @@ describe("backup-machine comparison", () => {
       await manual("backup");
       if (competing === "manual") await manual("second-entry");
       if (competing === "next-day competitor")
-        await manual("next-entry", "2026-07-02T00:06:00.000Z");
+        await manual("next-entry", "2026-07-02T00:45:00.000Z");
       const item = (id: string, timestamp: string, amount = 10.25) => ({
         transaction_id: id,
         type: "PAYMENT",
@@ -218,21 +226,25 @@ describe("backup-machine comparison", () => {
         currency: "EUR",
         timestamp,
       });
+      const timestamps: Record<string, string> = {
+        "ten minutes": "2026-07-01T23:48:00.000Z",
+        "thirty minutes": "2026-07-01T23:28:00.000Z",
+        late: "2026-07-01T23:27:59.999Z",
+        "late adjacent-day charge": "2026-07-01T23:50:00.000Z",
+        "next-day only": "2026-07-02T00:02:00.000Z",
+        "next-day competitor": "2026-07-02T00:20:00.000Z",
+      };
+      const chargeAt = timestamps[competing] ?? "2026-07-01T23:57:00.000Z";
       const client = new FakeSumUp();
       const history = vi.spyOn(client, "historyPage").mockResolvedValue({
         items: [
-          item(
-            "backup-charge",
-            competing.startsWith("next-day")
-              ? "2026-07-02T00:02:00Z"
-              : competing === "late"
-                ? "2026-07-01T23:50:00Z"
-                : "2026-07-01T23:57:00Z",
-            competing === "wrong amount" ? 10 : 10.25,
-          ),
+          item("backup-charge", chargeAt, competing === "wrong amount" ? 10 : 10.25),
           ...(competing === "charge" ? [item("second-charge", "2026-07-01T23:59:00Z")] : []),
           ...(competing === "adjacent-day charge"
             ? [item("tomorrow-charge", "2026-07-02T00:01:00Z")]
+            : []),
+          ...(competing === "late adjacent-day charge"
+            ? [item("tomorrow-charge", "2026-07-02T00:44:00Z")]
             : []),
         ],
       });
@@ -248,7 +260,10 @@ describe("backup-machine comparison", () => {
         unmatched,
       );
       expect(result.backupUnmatched?.filter((row) => row.kind === "recorded")).toHaveLength(
-        competing === "other provider" || competing === "next-day only" || matched
+        competing === "other provider" ||
+          competing === "next-day only" ||
+          competing === "late adjacent-day charge" ||
+          matched
           ? 0
           : competing === "manual"
             ? 2
@@ -265,7 +280,7 @@ describe("backup-machine comparison", () => {
           {
             references: ["backup-charge"],
             amount: "10.25",
-            settledAt: "2026-07-01T23:57:00.000Z",
+            settledAt: chargeAt,
             paymentRef: "backup",
             workingOrderId: seeded.workingOrderId,
             externalMachine: "Backup Solo",
@@ -280,14 +295,18 @@ describe("backup-machine comparison", () => {
         });
       expect(await suite.db.execute(sql`select * from payments`)).toEqual(before);
       expect(result.remediated).toBe(0);
-      const query = new URLSearchParams(history.mock.calls[0]![0]);
-      expect(query.get("oldest_time")).toBe("2026-06-30T23:50:00.000Z");
-      expect(query.get("newest_time")).toBe("2026-07-02T00:10:00.000Z");
+      if (competing === "none") {
+        const query = new URLSearchParams(history.mock.calls[0]![0]);
+        expect(query.get("oldest_time")).toBe("2026-06-30T23:00:00.000Z");
+        expect(query.get("newest_time")).toBe("2026-07-02T01:00:00.000Z");
+      }
     },
   );
 
-  it("does not offer an integrated reference or lost-reply hint to a backup entry", async () => {
-    const seeded = await failedPayment("lost");
+  it.each([false, true])("excludes integrated charges (next day: %s)", async (nextDay) => {
+    const manualAt = nextDay ? "2026-07-01T23:55:00.000Z" : "2026-07-01T12:00:00.000Z";
+    const chargeAt = nextDay ? "2026-07-02T00:20:00.000Z" : manualAt;
+    const seeded = await failedPayment("lost", chargeAt);
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         provider: "manual",
@@ -297,7 +316,7 @@ describe("backup-machine comparison", () => {
         origin: deviceOrigin(seeded.deviceId),
         nodeId: seeded.nodeId,
         workingOrderId: seeded.workingOrderId,
-        settledAt: new Date("2026-07-01T12:00:00Z"),
+        settledAt: new Date(manualAt),
       });
       await insertCapturedPayment(tx, {
         provider: "sumup",
@@ -318,7 +337,7 @@ describe("backup-machine comparison", () => {
         status: "SUCCESSFUL",
         amount: 10,
         currency: "EUR",
-        timestamp: "2026-07-01T12:00:00Z",
+        timestamp: chargeAt,
       })),
     });
     vi.spyOn(client, "findTransaction").mockResolvedValue({
@@ -326,7 +345,7 @@ describe("backup-machine comparison", () => {
       status: "SUCCESSFUL",
       amount: decimal("10.00"),
       currency: "EUR",
-      timestamp: "2026-07-01T12:00:00Z",
+      timestamp: chargeAt,
       foreignTransactionId: "lost",
     });
     const result = await new SumUpReconciler({
@@ -341,7 +360,7 @@ describe("backup-machine comparison", () => {
       { kind: "recorded", paymentRef: "backup", reason: "unmatched" },
     ]);
     expect(result.unlinkedCharges).toBe(0);
-    expect(result.missingLocal.map((row) => row.references)).toEqual([["hinted"]]);
+    expect(result.missingLocal.map((row) => row.references)).toEqual(nextDay ? [] : [["hinted"]]);
   });
 });
 
@@ -522,7 +541,7 @@ it.each([false, true, "midnight"])(
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     const capturedAt =
       historical === "midnight"
-        ? "2026-06-01T23:59:00.000Z"
+        ? "2026-06-01T23:40:00.000Z"
         : historical
           ? "2026-06-01T12:00:00.000Z"
           : "2026-07-01T12:00:00.000Z";
@@ -578,7 +597,7 @@ it.each([false, true, "midnight"])(
       status: "SUCCESSFUL",
       amount: decimal("10.00"),
       currency: "EUR",
-      timestamp: capturedAt,
+      timestamp: historical === "midnight" ? "2026-06-02T00:05:00.000Z" : capturedAt,
       refundEvents: [],
     });
     const result = await new SumUpReconciler({

@@ -745,7 +745,8 @@ it for payment audits instead of a fiscal submission. This `/health` label cover
 Stripe and SumUp duties together. Each run's row in `reconciliation_runs` keeps its provider's own
 `duty` key, `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each provider's check runs
 only while the `payments` module is on and its own credential is provisioned; credentials are
-checked each pass.
+checked each pass. The first SumUp audit for a UTC day is due at 01:00 UTC the next day, allowing
+time for manual backup entries and other possible matches across midnight.
 
 The SumUp audit compares gross EUR charges with local captures and looks up locally failed
 payments by their saved references. An alert can identify a charge whose reply was lost, but the

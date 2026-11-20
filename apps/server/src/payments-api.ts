@@ -48,6 +48,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   PAYMENTS_SETTINGS,
+  BACKUP_MATCH_WINDOW_MS,
   reconciliationRuns,
   listRefundAuditRows,
   listPaymentAuditRuns,
@@ -823,7 +824,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
                   ) ?? [],
               ),
             ].flatMap((at) =>
-              [-300_000, 0, 300_000].map(
+              [-BACKUP_MATCH_WINDOW_MS, 0, BACKUP_MATCH_WINDOW_MS].map(
                 (offset) =>
                   `${new Date(Date.parse(at) + offset).toISOString().slice(0, 10)}T00:00:00.000Z`,
               ),

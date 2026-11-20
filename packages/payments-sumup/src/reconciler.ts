@@ -2,6 +2,8 @@ import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import {
+  BACKUP_AUDIT_PADDING_MS,
+  BACKUP_MATCH_WINDOW_MS,
   claimAbandonedCapture,
   getPaymentByRef,
   listAbandonedRefundOutcomes,
@@ -126,7 +128,7 @@ export class SumUpReconciler implements PaymentReconciler {
           this.provider,
           refundRows.flatMap((row) =>
             manualRefs.has(row.paymentRef) && row.settledAt !== null
-              ? [-300_000, 0, 300_000].map(
+              ? [-BACKUP_MATCH_WINDOW_MS, 0, BACKUP_MATCH_WINDOW_MS].map(
                   (offset) =>
                     `${new Date(Date.parse(row.settledAt!) + offset).toISOString().slice(0, 10)}T00:00:00.000Z`,
                 )
@@ -146,8 +148,12 @@ export class SumUpReconciler implements PaymentReconciler {
             (row) => row.workingOrderStatus === "abandoned" && row.reconcileRemediatedAt === null,
           ),
           candidates: await listAuditCandidates(tx, this.provider, period),
-          nearbyCandidates: await listAuditCandidates(tx, this.provider, pad(600_000)),
-          manual: await listBackupPayments(tx, pad(600_000)),
+          nearbyCandidates: await listAuditCandidates(
+            tx,
+            this.provider,
+            pad(BACKUP_AUDIT_PADDING_MS),
+          ),
+          manual: await listBackupPayments(tx, pad(BACKUP_AUDIT_PADDING_MS)),
           refundRows,
           backupRefundRefs: [...links.values()].flatMap((refs) =>
             refs.size === 1 ? [...refs] : [],
@@ -188,8 +194,8 @@ export class SumUpReconciler implements PaymentReconciler {
       async fetch(window: ReconcilePeriod, localReferences: readonly string[] = []) {
         const records = await source.fetch(
           {
-            from: new Date(window.from.getTime() - 600_000),
-            to: new Date(window.to.getTime() + 600_000),
+            from: new Date(window.from.getTime() - BACKUP_AUDIT_PADDING_MS),
+            to: new Date(window.to.getTime() + BACKUP_AUDIT_PADDING_MS),
           },
           localReferences,
         );
@@ -207,7 +213,8 @@ export class SumUpReconciler implements PaymentReconciler {
           manual.filter(
             (row) =>
               compareDecimal(row.amount, charge.amount) === 0 &&
-              Math.abs(Date.parse(row.settledAt!) - charge.settledAt.getTime()) <= 300_000,
+              Math.abs(Date.parse(row.settledAt!) - charge.settledAt.getTime()) <=
+                BACKUP_MATCH_WINDOW_MS,
           ),
         );
         const matchedManual = new Set<(typeof manual)[number]>();

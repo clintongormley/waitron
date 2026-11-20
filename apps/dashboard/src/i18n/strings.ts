@@ -3176,7 +3176,7 @@ export const en = {
   "payments.backup.title": "SumUp comparison",
   "payments.backup.day": "Venue calendar day",
   "payments.backup.incomplete":
-    "Comparison incomplete. One or both daily checks are not available yet. The complete day is available after the following UTC midnight’s check.",
+    "Comparison incomplete. One or both daily checks are not available yet. The final check is due at 01:00 UTC after this day ends.",
   "payments.backup.matched": "Matched payments",
   "payments.backup.recorded_unmatched": "No matching SumUp charge — check in SumUp",
   "payments.backup.exceptions": "Payments to check",
@@ -3189,7 +3189,7 @@ export const en = {
   "payments.backup.machine": "Machine",
   "payments.backup.operation": "Operation number",
   "payments.backup.note":
-    "Matches use the same amount, including tips, within five minutes. This comparison does not change payments or send refunds.",
+    "Matches use the same amount, including tips, within 30 minutes. This comparison does not change payments or send refunds.",
 
   "payments.readers_heading": "Card readers",
   "payments.readers_search": "Search card readers",
@@ -7771,7 +7771,7 @@ export const es: Record<StringKey, string> = {
   "payments.backup.title": "Comparación de SumUp",
   "payments.backup.day": "Día natural del local",
   "payments.backup.incomplete":
-    "Comparación incompleta. Falta una o ambas comprobaciones diarias. El día completo estará disponible tras la comprobación de la siguiente medianoche UTC.",
+    "Comparación incompleta. Falta una o ambas comprobaciones diarias. La última comprobación está prevista para la 01:00 UTC después de que termine este día.",
   "payments.backup.matched": "Pagos vinculados",
   "payments.backup.recorded_unmatched": "Sin cargo coincidente de SumUp — compruébalo en SumUp",
   "payments.backup.exceptions": "Pagos por comprobar",
@@ -7784,7 +7784,7 @@ export const es: Record<StringKey, string> = {
   "payments.backup.machine": "Datáfono",
   "payments.backup.operation": "Número de operación",
   "payments.backup.note":
-    "Las coincidencias usan el mismo importe, incluida la propina, con un margen de cinco minutos. Esta comparación no cambia pagos ni envía devoluciones.",
+    "Las coincidencias usan el mismo importe, incluida la propina, con un margen de 30 minutos. Esta comparación no cambia pagos ni envía devoluciones.",
 
   "payments.readers_heading": "Lectores de tarjetas",
   "payments.readers_search": "Buscar lectores de tarjetas",
