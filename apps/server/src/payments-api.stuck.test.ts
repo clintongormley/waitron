@@ -182,6 +182,8 @@ async function setup(
     extra?: PaymentProvider;
     partialRefundRelease?: boolean;
     attendance?: AttendanceRecorder;
+    /** Mount the routes without Stripe's seat, so a stored Stripe payment names no served provider. */
+    withoutStripeSeat?: boolean;
   } = {},
 ): Promise<Venue> {
   const venue = await applyVenue(
@@ -296,7 +298,7 @@ async function setup(
       pool,
       ...{ attendance: opts.attendance },
       providers: [
-        stripeSeat,
+        ...(opts.withoutStripeSeat ? [] : [stripeSeat]),
         ...(opts.extra === undefined
           ? []
           : [
@@ -1770,6 +1772,22 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
   });
 
+  it("refuses 409 provider_unknown when the payment's provider is no longer served", async () => {
+    const v = await setup({ withoutStripeSeat: true });
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "payment.provider_unknown",
+      params: { providerId: "stripe" },
+    });
+    expect((await paymentRow(paymentId)).state).toBe("attempting");
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+  });
+
   it("refuses provider_disconnected when the payment's provider has no credential any more", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
@@ -2136,6 +2154,23 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(res.status).toBe(409);
     expect(await errorOf(res)).toEqual({
       code: "payment.resolve_unsupported",
+      params: { providerId: "stripe" },
+    });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses 409 provider_unknown when the bill payment's provider is no longer served", async () => {
+    const v = await setup({ withoutStripeSeat: true });
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "payment.provider_unknown",
       params: { providerId: "stripe" },
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
@@ -3395,6 +3430,38 @@ describe("provider-confirmed partial-refund release", () => {
     expect(
       await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
     ).toHaveLength(1);
+    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+  });
+
+  it("refuses with 409 provider refunds that, stored in whole cents, would exceed the capture, changing nothing", async () => {
+    const { v, payment, evidence } = await partial({ mark: true });
+    // 0.40 + 0.555 + 0.545 is the 1.50 captured, but 0.555 is stored as 0.56, so 0.545 more
+    // would take the stored refunds to 1.505.
+    evidence.refunds.splice(
+      1,
+      1,
+      ...[
+        { providerRefundRef: "second", amount: decimal("0.555") },
+        { providerRefundRef: "third", amount: decimal("0.545") },
+      ],
+    );
+    const before = await suite.db
+      .select()
+      .from(paymentRefunds)
+      .where(eq(paymentRefunds.paymentId, payment.id));
+
+    const result = await send(v, "POST", releasePath(payment.id));
+
+    expect({ status: result.status, code: (await errorOf(result)).code }).toEqual({
+      status: 409,
+      code: "payment.refund_exceeds_capture",
+    });
+    expect(await suite.db.select().from(payments).where(eq(payments.id, payment.id))).toEqual([
+      payment,
+    ]);
+    expect(
+      await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
+    ).toEqual(before);
     expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
   });
 

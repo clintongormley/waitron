@@ -1860,7 +1860,7 @@ describe("reader adoption and local management", () => {
     },
   );
 
-  it("refuses unpair with 409 payment.unpair_unsupported when the provider cannot unpair", async () => {
+  it("refuses unpair with 409 reader.unpair_unsupported when the provider cannot unpair", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -1870,7 +1870,7 @@ describe("reader adoption and local management", () => {
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
-      error: { code: "payment.unpair_unsupported", params: { providerId: "stripe" } },
+      error: { code: "reader.unpair_unsupported", params: { providerId: "stripe" } },
     });
   });
 
@@ -2034,6 +2034,8 @@ describe("screens and unknown ids", () => {
     for (const [method, suffix] of [
       ["GET", "/status"],
       ["POST", "/unpair"],
+      ["GET", "/delete-impact"],
+      ["DELETE", ""],
     ] as const) {
       const res = await send(
         withoutStripe,
@@ -2053,18 +2055,26 @@ describe("screens and unknown ids", () => {
 
   it("answers a pairing code the provider refuses with 400 payment.pairing_refused, writing no reader", async () => {
     const venue = await seedVenueWithStaff();
+    const received: (string | undefined)[] = [];
     const refusing: CardProviderContribution = {
       ...stripeSeat,
       readers: {
         ...stripeSeat.readers,
-        add: async () => {
-          throw new AppError("payment.pairing_refused", { providerId: "stripe" });
+        add: async (_deps, input) => {
+          received.push(input.code);
+          if (input.code === "wrong-code-123")
+            throw new AppError("payment.pairing_refused", { providerId: "stripe" });
+          throw new Error(`the route forwarded ${String(input.code)}, not the typed code`);
         },
       },
     };
     const app = mountApp(venue, [refusing]);
     await connectStripe(app, venue);
-    const res = await addReader(app, venue, nextRef());
+    const res = await send(app, "POST", "/management-api/payments/readers", {
+      cookie: venue.managerCookie,
+      body: { providerId: "stripe", name: "Barra 1", code: "wrong-code-123" },
+    });
+    expect(received).toEqual(["wrong-code-123"]);
     expect({ status: res.status, body: await res.json() }).toEqual({
       status: 400,
       body: { error: { code: "payment.pairing_refused", params: { providerId: "stripe" } } },
@@ -2856,7 +2866,7 @@ describe("reader delete", () => {
     ],
     ["a Delete", deleteOf],
   ] as const) {
-    it(`refuses adopting a provider id whose listing was taken before ${action} dropped it there, changing nothing`, async () => {
+    it(`refuses adopting a provider id whose listing was taken before ${action} dropped it there with 409 reader.removed_while_adding, changing nothing`, async () => {
       const venue = await seedVenueWithStaff();
       const { seat, removed } = unpairingSeat();
       let dropped: { status: number; row: Awaited<ReturnType<typeof readerRow>> } | undefined;
@@ -2883,8 +2893,10 @@ describe("reader delete", () => {
       expect(dropped?.status).toBe(action === "a Delete" ? 200 : 204);
       expect(removed).toEqual([ref]);
       expect({ status: res.status, body: await res.json() }).toEqual({
-        status: 400,
-        body: { error: { code: "reader.not_listed", params: { providerId: "stripe" } } },
+        status: 409,
+        body: {
+          error: { code: "reader.removed_while_adding", params: { providerId: "stripe" } },
+        },
       });
       expect(
         (await suite.db.select().from(cardReaders).where(eq(cardReaders.providerRef, ref))).map(

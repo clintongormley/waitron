@@ -538,6 +538,20 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
     expect(await refundRowsOf(card.id)).toEqual([]);
     expect(venue.card.refundCalls).toHaveLength(calls);
   });
+
+  it("refuses with 409 a refund larger than the provider's record of the capture, before asking it", async () => {
+    const billId = await bill("Octopus", "Croquettes");
+    const card = await pay(billId, "card", "20.00");
+    venue.db.run(sql`update payments set amount = 300 where bill_payment_id = ${card.id}`);
+    const calls = venue.card.refundCalls.length;
+
+    const refused = await refund(billId, card.id, { applied: "5.00" });
+
+    expect(refused.answer.status).toBe(409);
+    expect(refused.answer.json).toMatchObject({ code: "payment.refund_exceeds_capture" });
+    expect(await refundRowsOf(card.id)).toEqual([]);
+    expect(venue.card.refundCalls).toHaveLength(calls);
+  });
 });
 
 describe("design §8 test 17: the provider refunded and the answer was lost", () => {

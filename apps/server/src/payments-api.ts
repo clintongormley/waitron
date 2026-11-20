@@ -200,7 +200,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.payment_in_progress": 409,
   "reader.unpair_failed": 502,
   "reader.unpair_in_progress": 409,
-  "payment.unpair_unsupported": 409,
+  "reader.removed_while_adding": 409,
+  "reader.unpair_unsupported": 409,
   "device.not_found": 404,
   "device.binding_invalid": 400,
   "device.equipment_held": 409,
@@ -689,7 +690,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             )
             .limit(1);
           if (existing !== undefined) refuseWhileUnpairing(existing.id);
-          if (adopt.stale) throw new AppError("reader.not_listed", { providerId });
+          if (adopt.stale) throw new AppError("reader.removed_while_adding", { providerId });
           if (existing !== undefined) {
             await tx
               .update(cardReaders)
@@ -1171,7 +1172,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         });
         const seat = cardProviderById(deps.providers, reader.provider);
         if (!seat.readers.canUnpair)
-          throw new AppError("payment.unpair_unsupported", { providerId: reader.provider });
+          throw new AppError("reader.unpair_unsupported", { providerId: reader.provider });
         await gated(sessionId, (tx) => requireConnected(tx, seat));
         // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
         await removeAtProvider(seat, reader.providerRef);

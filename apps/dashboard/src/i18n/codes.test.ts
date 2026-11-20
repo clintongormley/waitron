@@ -732,6 +732,24 @@ it("says a card reader another request is unpairing or deleting can be tried aga
   );
 });
 
+it("says a provider that cannot unpair leaves a deleted reader registered there, in English and Spanish", () => {
+  expect(codeMessage("reader.unpair_unsupported", "en")).toBe(
+    "This card provider cannot unpair readers from Waitron. Delete the reader here; it stays registered with the provider until you remove it there.",
+  );
+  expect(codeMessage("reader.unpair_unsupported", "es")).toBe(
+    "Este proveedor de pagos no permite desvincular lectores desde Waitron. Elimina el lector aquí; seguirá registrado en el proveedor hasta que lo quites allí.",
+  );
+});
+
+it("says a card reader removed while it was being added can be looked for again, in English and Spanish", () => {
+  expect(codeMessage("reader.removed_while_adding", "en")).toBe(
+    "That card reader was unpaired or deleted while it was being added. Check the list and try again.",
+  );
+  expect(codeMessage("reader.removed_while_adding", "es")).toBe(
+    "Ese lector de tarjetas se desvinculó o se eliminó mientras se añadía. Revisa la lista e inténtalo de nuevo.",
+  );
+});
+
 it.each(["en", "es"])("hierarchy deletion refusals have actionable %s messages", (language) => {
   for (const code of [
     "service_zone.not_found",

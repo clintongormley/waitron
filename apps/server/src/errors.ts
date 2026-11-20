@@ -506,7 +506,6 @@ declare module "@waitron/shared" {
     "payment.not_stuck": { paymentId: string };
     "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
-    "payment.unpair_unsupported": { providerId: string };
     "payment.outcome_unknown": {
       paymentId: string;
       reason: "unreachable" | "ambiguous" | "refund_reference_missing";
@@ -514,11 +513,13 @@ declare module "@waitron/shared" {
     };
     /** No card reader with this id. `id` is the reader uuid the caller already holds, not a secret. */
     "reader.not_found": { id: string };
-    /**
-     * Adoption names a reference absent from the provider account, or one an Unpair or Delete
-     * dropped there after the adoption's list request began. Public provider id only.
-     */
+    /** Adoption names a reference absent from the provider account. Public provider id only. */
     "reader.not_listed": { providerId: string };
+    /**
+     * An Unpair or Delete removed the reader an adoption names after the adoption's list request
+     * began. Public provider id only.
+     */
+    "reader.removed_while_adding": { providerId: string };
     /**
      * A reader operation was asked for a provider that has no sealed credential. `providerId` is the
      * public provider token (`"sumup"`/`"stripe"`), never a credential.
@@ -530,6 +531,8 @@ declare module "@waitron/shared" {
      * uuid, which the reader list shows under the same permission; not a secret.
      */
     "reader.unpair_in_progress": { readerId: string };
+    /** Unpair asked of a reader whose provider cannot unpair readers from Waitron. */
+    "reader.unpair_unsupported": { providerId: string };
     /**
      * An active card reader's battery is at or below the warning floor — a dashboard alert, not a
      * thrown request error (`alert-sources.ts`). `reader` is the display name, `percent` a whole

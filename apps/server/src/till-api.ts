@@ -680,7 +680,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.manual_refund_pin_required": 403,
   "bill.refund_in_progress": 409,
   "payment.not_refundable": 409,
-  "payment.refund_exceeds_capture": 422,
+  "payment.refund_exceeds_capture": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
   // No till address holds a reason id: only a request body can name a missing one.
