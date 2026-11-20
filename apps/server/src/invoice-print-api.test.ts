@@ -1052,6 +1052,22 @@ describe("management invoice receipt resends", () => {
     ).toEqual([history]);
   });
 
+  it("reports an outstanding invoice delivery when a completed original is reprinted", async () => {
+    const ctx = await setup();
+    const claim = await held(ctx);
+    await ctx.result({ status: "done", invoiceClaim: claim });
+    await emailRetry(ctx);
+    const jobs = await suite.db.select().from(printJobs);
+    const deliveries = await suite.db.select().from(invoiceDeliveries);
+    const command = await manager(ctx);
+
+    const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
+    expect(await suite.db.select().from(printJobs)).toEqual(jobs);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual(deliveries);
+  });
+
   it("rolls back a resend while another medium holds the invoice", async () => {
     const ctx = await setup();
     const invoiceClaim = await held(ctx);

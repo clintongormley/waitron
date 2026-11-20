@@ -157,6 +157,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.bluetooth_not_paired": 400,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
+  "invoice_delivery.active": 409,
   "print_job.payload_expired": 409,
   "print_job.sale_payload_expired": 409,
   "print_job.own_printer_only": 409,

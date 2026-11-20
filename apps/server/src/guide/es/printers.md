@@ -79,10 +79,10 @@ Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no 
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
-Elige **Reimprimir** en un ticket o una factura que ya se haya impreso para enviar un
-duplicado a cualquier impresora de tickets. Para una copia en A4, abre **Pedidos**.
-También puedes reimprimir una comanda de estación o un justificante de devolución en
-una impresora al menos igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
+Elige **Reimprimir** para enviar un ticket o una factura a cualquier impresora de tickets.
+Si el original ya se imprimió, obtendrás un duplicado. Para una copia en A4, abre **Pedidos**.
+También puedes reimprimir una comanda de estación o un justificante de devolución en una
+impresora al menos igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
 ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora. Un justificante de pago solo se vuelve a imprimir desde aquí:
 reimprime cuanto antes uno perdido, porque la lista guarda solo las últimas impresiones terminadas.
 

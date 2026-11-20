@@ -6,23 +6,28 @@ import {
   printJobs,
   isReceiptPrinter,
   printers,
+  receiptReprints,
+  sales,
   type Transaction,
 } from "@waitron/db";
 import {
   canResendPrintJob,
   endMovedPrintJob,
+  enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
   readPrintArea,
   textGrid,
+  type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import {
   assertPrintPayload,
   endInvoicePrintDeliveries,
-  enqueueCompletedReceiptCopy,
   resendInvoicePrintJob,
 } from "./invoice-print.js";
-import type { LayOutSaleReceipt } from "./receipt-print.js";
+import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
+import { deliversAsFullInvoiceSql } from "./invoice-selection.js";
+import { enqueueInvoiceReceipt, type LayOutSaleReceipt } from "./receipt-print.js";
 
 /** Whether an agent can reach `printer` now. */
 export type PrinterSeen = (printer: { transport: string; localKey: string | null }) => boolean;
@@ -144,7 +149,8 @@ export async function reprintJobOn(
     );
   if (target === undefined)
     throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
-  if (completedOriginal) return enqueueCompletedReceiptCopy(tx, layOut, job, target, personId, now);
+  if (completedOriginal)
+    return enqueueCompletedReceiptCopy(tx, layOut, job.saleId, target, personId, now);
   const printerDots = textGrid(target.paperWidth, target.resolution).widthDots;
   let payload: Uint8Array;
   if (job.saleId !== null) {
@@ -174,4 +180,34 @@ export async function reprintJobOn(
     printerId: targetId,
     payload,
   });
+}
+
+async function enqueueCompletedReceiptCopy(
+  tx: Transaction,
+  layOut: LayOutSaleReceipt,
+  saleId: string,
+  printer: { id: string } & EscSetting,
+  personId: string,
+  now: Date,
+): Promise<{ jobId: string }> {
+  const bytes = await layOut(tx, saleId, true, printer);
+  const [full] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(and(eq(sales.id, saleId), deliversAsFullInvoiceSql()));
+  let jobId: string;
+  if (full === undefined) {
+    ({ jobId } = await enqueuePrintJob(tx, printer.id, bytes, "document", {
+      saleId,
+      receiptCopy: true,
+    }));
+  } else {
+    await expireInvoiceDeliveryClaims(tx, now);
+    const delivery = await enqueueInvoiceReceipt(tx, saleId, printer.id, bytes, "duplicate", {
+      personId,
+    });
+    jobId = delivery.printJobId!;
+  }
+  await tx.insert(receiptReprints).values({ saleId, printJobId: jobId, personId });
+  return { jobId };
 }

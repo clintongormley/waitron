@@ -33,6 +33,7 @@ import { resendInvoicePrintJob } from "./invoice-print.js";
 import {
   enqueueInvoiceReceipt,
   enqueueOriginalReceipt,
+  requireReceiptBytes,
   saleReceiptLayout,
 } from "./receipt-print.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -115,12 +116,19 @@ export async function requestPrintDelivery(
     sale.workingOrderId === null
       ? await readTransactionReceipt(deps.backend, tx, deps.cfg, sale.id)
       : await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
-  const row = await enqueueInvoiceReceipt(
+  const bytes = await requireReceiptBytes(
     tx,
     deps.cfg,
     ticket,
     sale.id,
-    { id: printer.id, ...setting! },
+    print.designation === "duplicate",
+    setting!,
+  );
+  const row = await enqueueInvoiceReceipt(
+    tx,
+    sale.id,
+    printer.id,
+    bytes,
     print.designation,
     reserved,
   );
