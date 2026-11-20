@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
+import { isNumberedVersion } from "./box/release-list.mjs";
 import { isMainScript } from "./is-main-script.mjs";
 import { writeBundledNpmNotices } from "./npm-bundle-notices.mjs";
 import { readBuildHourRelease } from "./generate-hour-release.mjs";
@@ -25,15 +26,11 @@ export function esbuildArgs(entry, outfile) {
   ];
 }
 
-// A copy of `isReleaseVersion` in packages/shared/src/built-release.ts, which says where the 50
-// comes from; `scripts/bundle-node.test.mjs` holds the two to the same answers.
-const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
 /** Unset or empty, as `isUnset` reads a setting, is not a release. */
 export function releaseDefine(env) {
   const value = env.WAITRON_RELEASE_VERSION;
   if (value === undefined || value === "") return "null";
-  if (value.length > 50 || !RELEASE_VERSION.test(value)) {
+  if (!isNumberedVersion(value)) {
     throw new Error(`Not a release version: ${value}`);
   }
   return JSON.stringify({ version: value });

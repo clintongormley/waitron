@@ -1,7 +1,59 @@
 import { Buffer } from "node:buffer";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { selectUpgradeOffer, signReleaseList, verifyReleaseList } from "./release-list.mjs";
+import * as builtRelease from "../../packages/shared/src/built-release.ts";
+import {
+  compareReleaseVersions,
+  isNumberedVersion,
+  selectUpgradeOffer,
+  signReleaseList,
+  verifyReleaseList,
+} from "./release-list.mjs";
+
+describe("release versions", () => {
+  it.each([
+    "0.0.0",
+    "1.10.0",
+    `1.0.${"9".repeat(46)}`,
+    "0.0.0-alpha.0",
+    "1.2.3-beta.2",
+    "1.2.3-rc.10",
+    `1.2.3-rc.${"9".repeat(41)}`,
+  ])("accepts %s in both readers", (version) => {
+    expect(isNumberedVersion(version)).toBe(true);
+    expect(builtRelease.isReleaseVersion(version)).toBe(true);
+  });
+
+  it.each([
+    "",
+    "1.0",
+    "v1.0.0",
+    "01.0.0",
+    "1.0.0 ",
+    `1.0.${"9".repeat(47)}`,
+    "1.2.3-preview.1",
+    "1.2.3-rc.01",
+    "1.2.3-rc.1+metadata",
+    "1.2.3-rc.1\n",
+    `1.2.3-rc.${"9".repeat(42)}`,
+  ])("refuses %j in both readers", (version) => {
+    expect(isNumberedVersion(version)).toBe(false);
+    expect(builtRelease.isReleaseVersion(version)).toBe(false);
+  });
+
+  it.each([
+    ["1.3.0-alpha.10", "1.3.0-beta.1", -1],
+    ["1.3.0-beta.10", "1.3.0-rc.1", -1],
+    ["1.3.0-rc.10", "1.3.0-rc.2", 1],
+    ["1.3.0-rc.1", "1.3.0", -1],
+    ["1.3.0-rc.1", "1.2.9", 1],
+    ["1.3.0-rc.1", "1.3.0-rc.1", 0],
+    ["1.3.0-rc.9007199254740992", "1.3.0-rc.9007199254740993", -1],
+  ])("compares %s with %s the same way on the box and server", (left, right, order) => {
+    expect(compareReleaseVersions(left, right)).toBe(order);
+    expect(builtRelease.compareReleaseVersions(left, right)).toBe(order);
+  });
+});
 
 const keyPair = () =>
   generateKeyPairSync("ed25519", {
@@ -37,6 +89,13 @@ describe("the signed release file", () => {
   it.each([current, spare])("verifies a file signed with either trusted key", ({ privateKey }) => {
     const bytes = signReleaseList(release, privateKey);
     expect(verifyReleaseList(bytes, trusted)).toEqual(release);
+  });
+
+  it("verifies a signed release candidate", () => {
+    const candidate = { ...release, version: "1.3.0-rc.1", prerelease: true };
+    expect(verifyReleaseList(signReleaseList(candidate, current.privateKey), trusted)).toEqual(
+      candidate,
+    );
   });
 
   it("counts equivalent PEM encodings as one trusted key", () => {
@@ -99,6 +158,7 @@ describe("the signed release file", () => {
     { format: 2 },
     { kind: "rollout" },
     { version: "1.2.3-rc.1" },
+    { prerelease: true },
     { prerelease: "false" },
     { sourceSha: "main" },
     { platform: "linux/arm64" },
@@ -159,6 +219,27 @@ function select(bytes, changes) {
 }
 
 describe("a signed upgrade offer", () => {
+  it("offers stable to a release candidate without qualifying it for the stable floor", () => {
+    const bytes = signedOffer({
+      default: "1.10.0",
+      entries: [{ condition: { atLeast: "1.10.0" }, target: "1.11.0" }],
+    });
+    expect(select(bytes, { installedVersion: "1.10.0-rc.1" }).version).toBe("1.10.0");
+  });
+
+  it.each([
+    [{ default: "1.10.0-rc.1" }, /payload/i],
+    [{ entries: [{ condition: { atLeast: "1.10.0-rc.1" }, target: "1.10.0" }] }, /condition/i],
+    [
+      {
+        entries: [{ condition: { bucketBelow: 10, bucketVersion: "1.10.0-rc.1" }, target: "none" }],
+      },
+      /condition/i,
+    ],
+  ])("refuses a prerelease in a stable offer field (%#)", (changes, error) => {
+    expect(() => select(signedOffer(changes))).toThrow(error);
+  });
+
   it("chooses the first matching group and offers the older default to unnamed boxes", () => {
     const bytes = signedOffer(
       {

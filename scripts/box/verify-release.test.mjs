@@ -18,7 +18,7 @@ const release = {
   format: 1,
   kind: "release",
   version: "1.10.3",
-  prerelease: true,
+  prerelease: false,
   sourceSha,
   platform: "linux/amd64",
   images: { app, printAgent, tunnel },
@@ -71,7 +71,11 @@ async function invoke(args, input = Buffer.alloc(0)) {
 
 describe("verify-release on the box", () => {
   it("accepts a prerelease signed by the current key through the installed script", () => {
-    const result = runInstalledVerifier(["v1.10.3"], signReleaseList(release, current.privateKey));
+    const candidate = { ...release, version: "1.10.3-rc.1", prerelease: true };
+    const result = runInstalledVerifier(
+      ["v1.10.3-rc.1"],
+      signReleaseList(candidate, current.privateKey),
+    );
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toBe(`${sourceSha} ${app} ${printAgent} ${tunnel}\n`);
   });
@@ -126,6 +130,10 @@ describe("verify-release on the box", () => {
   });
 
   it.each([
+    ["v1.10.3-beta.1", "v1.10.3-alpha.10", 0],
+    ["v1.10.3-rc.2", "v1.10.3-rc.10", 1],
+    ["v1.10.3-rc.1", "v1.10.3", 1],
+    ["v1.10.3", "v1.10.3-rc.1", 0],
     ["v1.10.3", "v1.9.3", 0],
     ["v1.9.3", "v1.10.3", 1],
     ["v2.0.0", "v1.999.999", 0],

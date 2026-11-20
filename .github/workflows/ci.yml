@@ -4545,14 +4545,16 @@ jobs:
           subject=$(git for-each-ref --format='%(contents:subject)' "$GITHUB_REF")
           body=$(git for-each-ref --format='%(contents:body)' "$GITHUB_REF")
           version=${GITHUB_REF_NAME#v}
-          case "$subject:$body" in
-            "Waitron $version:") prerelease=false ;;
-            "Waitron prerelease $version:") prerelease=true ;;
-            *)
-              echo "$GITHUB_REF_NAME must carry the Waitron release annotation. Use the release tag command." >&2
-              exit 1
-              ;;
-          esac
+          prerelease=false
+          annotation="Waitron $version"
+          if [[ $version == *-* ]]; then
+            prerelease=true
+            annotation="Waitron prerelease $version"
+          fi
+          if [ "$subject:$body" != "$annotation:" ]; then
+            echo "$GITHUB_REF_NAME must carry the Waitron release annotation. Use the release tag command." >&2
+            exit 1
+          fi
           echo "the tag $GITHUB_REF_NAME is on a commit of main"
           echo "release_prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
@@ -4635,8 +4637,8 @@ jobs:
             refs/tags/v*)
               release_version=${REF#refs/tags/v}
               # The same form the bundle build accepts (`isReleaseVersion`), refused here before any read.
-              if ! [[ $release_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || [ "${#release_version}" -gt 50 ]; then
-                echo "the tag ${REF#refs/tags/} is not a release: a release tag is v followed by X.Y.Z" >&2
+              if ! [[ $release_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$ ]] || [ "${#release_version}" -gt 50 ]; then
+                echo "the tag ${REF#refs/tags/} is not a release: expected vX.Y.Z or vX.Y.Z-{alpha,beta,rc}.N" >&2
                 exit 1
               fi
               release_image="$repo:$release_version"

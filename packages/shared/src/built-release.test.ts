@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { builtRelease, isReleaseVersion } from "./built-release.js";
+import * as release from "./built-release.js";
+
+const { builtRelease, isReleaseVersion } = release;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -29,6 +31,22 @@ describe("isReleaseVersion", () => {
   });
 });
 
+describe("compareReleaseVersions", () => {
+  it.each([
+    ["1.2.3-rc.1", "1.2.3", -1],
+    ["1.2.3-rc.10", "1.2.3-rc.2", 1],
+    ["1.2.3-rc.1", "1.2.3-rc.1", 0],
+  ] as const)("compares %s with %s", (left, right, order) => {
+    expect(release.compareReleaseVersions(left, right)).toBe(order);
+  });
+
+  it("refuses an invalid version", () => {
+    expect(() => release.compareReleaseVersions("1.2.3-rc.01", "1.2.3")).toThrow(
+      "Expected a numbered release version",
+    );
+  });
+});
+
 describe("builtRelease", () => {
   it("is not bundled when the bundle stamp is absent", () => {
     expect(builtRelease()).toEqual({ bundled: false });
@@ -39,10 +57,13 @@ describe("builtRelease", () => {
     expect(builtRelease()).toEqual({ bundled: true, version: null });
   });
 
-  it.each([["1.2.3"], [LONGEST]])("is that release when stamped with %s", (version) => {
-    vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version });
-    expect(builtRelease()).toEqual({ bundled: true, version });
-  });
+  it.each([["1.2.3"], ["1.2.3-rc.1"], [LONGEST]])(
+    "is that release when stamped with %s",
+    (version) => {
+      vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version });
+      expect(builtRelease()).toEqual({ bundled: true, version });
+    },
+  );
 
   it.each([
     [{ version: "1.2" }],

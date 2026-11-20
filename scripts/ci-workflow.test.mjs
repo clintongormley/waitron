@@ -7512,6 +7512,15 @@ describe("the publish job on a release tag", () => {
       });
     });
 
+    it("hands on the full release candidate version for publication", () => {
+      const result = run("refs/tags/v1.20.3-rc.1");
+      expect(result.status, result.stderr).toBe(0);
+      expect(outputs(result.output)).toMatchObject({
+        release_version: "1.20.3-rc.1",
+        release_image: "ghcr.io/example/waitron:1.20.3-rc.1",
+      });
+    });
+
     it("hands on an empty version on main", () => {
       const result = run("refs/heads/main");
       expect(result.status, result.stderr).toBe(0);
@@ -7591,7 +7600,9 @@ describe("the publish job on a release tag", () => {
       const offMain = git(origin, "rev-parse", "HEAD");
       git(origin, "checkout", "-q", "main");
       git(origin, "tag", "-a", "v1.2.3", tagged, "-m", "Waitron 1.2.3");
+      git(origin, "tag", "-a", "v1.2.4-rc.1", tagged, "-m", "Waitron prerelease 1.2.4-rc.1");
       git(origin, "tag", "-a", "v1.2.4", tagged, "-m", "Waitron prerelease 1.2.4");
+      git(origin, "tag", "-a", "v1.2.4-rc.2", tagged, "-m", "Waitron 1.2.4-rc.2");
       git(origin, "tag", "-a", "v1.2.5", offMain, "-m", "Waitron 1.2.5");
       git(origin, "tag", "-a", "v1.2.6", tagged, "-m", "Waitron prerelease 1.2.7");
       git(origin, "tag", "v1.2.7", tagged);
@@ -7646,7 +7657,7 @@ describe("the publish job on a release tag", () => {
 
       it.each([
         ["v1.2.3", "false"],
-        ["v1.2.4", "true"],
+        ["v1.2.4-rc.1", "true"],
       ])(
         "reads the prerelease flag for %s even when checkout has a lightweight tag",
         (tag, flag) => {
@@ -7657,6 +7668,8 @@ describe("the publish job on a release tag", () => {
       );
 
       it.each([
+        ["v1.2.4", "must carry the Waitron release annotation"],
+        ["v1.2.4-rc.2", "must carry the Waitron release annotation"],
         ["v1.2.5", "pointing directly to this commit"],
         ["v1.2.6", "must carry the Waitron release annotation"],
         ["v1.2.7", "pointing directly to this commit"],

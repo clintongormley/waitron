@@ -155,12 +155,14 @@ describe("isImageInputPath", () => {
     expect(isImageInputPath("apps/print-agent/src/rfcomm-send.py")).toBe(true);
   });
 
-  it.each(["scripts/is-main-script.mjs", "scripts/backup-verification-runtime.mjs"])(
-    "treats %s, which the image's bundle-node.mjs imports, as an image input",
-    (path) => {
-      expect(isImageInputPath(path)).toBe(true);
-    },
-  );
+  it.each([
+    "scripts/is-main-script.mjs",
+    "scripts/backup-verification-runtime.mjs",
+    "scripts/box/release-list.mjs",
+    "scripts/box/upgrades/contracts.mjs",
+  ])("treats %s, which the image's bundle-node.mjs imports, as an image input", (path) => {
+    expect(isImageInputPath(path)).toBe(true);
+  });
 
   // Reads image-smoke.yml as TEXT and sees only literal `scripts/…` paths, so a script reached
   // through a variable or outside `scripts/` is invisible to it.

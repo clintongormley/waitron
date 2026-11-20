@@ -25,8 +25,8 @@ spare-server sentence only if the version can do them, and deletes the line.
 
 Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). The two commands check
 what they can before the tag exists, and a tag pushed by hand skips those checks. CI then refuses to
-publish a tag that is not on a commit of `main`, whose name is not `v` followed by a version such as
-`1.0.0`, whose declaration file is missing, still carries a blocker line or disagrees with the
+publish a tag that is not on a commit of `main`, whose name or annotation does not match a
+release version, whose declaration file is missing, still carries a blocker line or disagrees with the
 code, or whose version is already published.
 
 ## Set up signing before the first signed release
@@ -180,12 +180,21 @@ code, version and yes/no answers still match the code; unless the version is sti
 and `tag`, which is why it checks the declaration again. Then it makes the annotated tag
 `v1.0.0` ("Waitron 1.0.0") and pushes it.
 
-To publish a version for manual installation only, prepare and land its own declaration as above,
-then tag it with `pnpm release tag 1.0.0 --prerelease`. Pick a higher version number and prepare a
-new declaration for the next release. For example, once you tag prerelease `1.1.0`, the next
-release must be higher than `1.1.0`, even for a fix to `1.0.x`. Keep the tag fixed once you push it.
-The publish job reads the annotation when it runs, and the signed release file records the
-prerelease choice.
+To publish a version for manual installation only, give it a suffix such as `1.3.0-rc.1`.
+Use the full version in the branch name, in `pnpm release prepare 1.3.0-rc.1 --place …` and,
+once its declaration has landed, in `pnpm release tag 1.3.0-rc.1`. The tag is `v1.3.0-rc.1`
+and its annotation is “Waitron prerelease 1.3.0-rc.1”. You can use `-alpha.N`, `-beta.N` or
+`-rc.N`. Each number can be zero. Leave off any leading zeroes and keep the full version within
+50 characters.
+
+Versions increase in a single order. Compare the three version numbers first. For the same
+three numbers, alpha comes before beta, then release candidates, then stable. Within each
+suffix, the largest sequence number comes last. After `1.3.0-rc.1` you can prepare
+`1.3.0-rc.2` or `1.3.0`. A `1.2.1` patch is below that candidate and the command refuses it.
+If you abandon a prepared version before tagging it, remove its declaration from `main`
+through a pull request before preparing the next one. Once tagged, keep the tag and its
+declaration fixed. CI checks that the annotation agrees with the version and passes the
+prerelease flag to the GitHub Release and signed release file.
 
 `main`'s green run proves less than it sounds: an ordinary push to `main` runs no package tests.
 The tag's own CI run is the full one, and publishing the image waits for it.
@@ -194,7 +203,7 @@ The push goes through the repository's pre-push hook, whose messages are printed
 Nobody has pushed a tag through it yet: what it does with an annotated tag's id, which is the
 tag's own id rather than its commit's, was read (`.husky/pre-push:24-40`), not run. If the push
 stops, the command deletes the tag it made on your machine. Fix what the push's messages name and
-repeat your tag command with the same options. If that run says `1.0.0 is already released`, the tag reached
+repeat your tag command with the same version. If that run says `1.0.0 is already released`, the tag reached
 GitHub before the push stopped: go on to step 7. Never push with `--no-verify`.
 
 ## 7. Watch the tag's CI run
@@ -207,8 +216,8 @@ gh run watch <run id>
 Pick the run whose branch is `v1.0.0`. It runs every check, as the nightly run does, and then
 two jobs make the release:
 
-1. **`publish`** waits for the whole run to be green. It requires a tag named `v` followed by X.Y.Z,
-   with the annotation from step 6 and a direct pointer to a commit on `main`. It then builds the
+1. **`publish`** waits for the whole run to be green. It requires a tag named `v` followed by the full version,
+   with the matching annotation from step 6 and a direct pointer to a commit on `main`. It then builds the
    image with the version stamped in. The build renders the version's declaration into
    `/app/declaration/` and fails if the committed `declarations/v1.0.0.md` is missing, carries a
    blocker line or disagrees with the code. It runs `check-release 1.0.0` inside the built image,
@@ -218,7 +227,7 @@ two jobs make the release:
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
    out of the published image, they are the same bytes every box running that image serves.
-   With `--prerelease`, this job creates a GitHub prerelease and leaves Latest alone.
+   For a version with a prerelease suffix, this job creates a GitHub prerelease and leaves Latest alone.
    When signing is configured, it also attaches `waitron-release.json`. The signed
    payload names the release, its prerelease flag, the source commit and the app, print agent and
    tunnel image digests.
@@ -270,12 +279,16 @@ For the first publication of the tunnel companion, run full verification on main
 Before a fresh `install main`, check that a box without registry credentials can pull
 `ghcr.io/clintongormley/waitron-tunnel:main`. If GHCR refuses the pull because the package is
 private, make the companion package public and check the pull again.
-A production box starts only on a numbered release. Use the same manual command for a signed
-prerelease. The offer publisher refuses to include prereleases in automatic upgrade offers.
+Use the full tag for a signed prerelease. Update the retained installer and verifier first.
+[Install a release](../../deploy/README.md#installing-a-release)
+
+```sh
+sudo bash /opt/waitron-host/waitron.sh install v1.3.0-rc.1
+```
 
 ## Offer a release to a group
 
-Once a numbered release includes the publication workflow and has a signed
+Once a stable release includes the publication workflow and has a signed
 `waitron-release.json`, use that tag to publish an upgrade offer. First create the
 dedicated `upgrade-offer` release once. Keep it out of the latest-release slot so
 operators still see the latest numbered release.
@@ -299,8 +312,9 @@ as a target to pause a group. For a paused percentage group, keep the version
 that defined its membership in the condition's `bucketVersion`. To pause
 everyone, dispatch `{"format":1,"entries":[],"default":"none"}`.
 
-The workflow checks the numbered tag's signed release file and checks that every
-target is published, signed, and stable. It writes only `waitron-offer.json` on
+Use stable versions for the dispatch tag, offer targets, `atLeast` and `bucketVersion`.
+The workflow checks the dispatch tag's signed release file and checks that every target is
+published, signed, and stable. It writes only `waitron-offer.json` on
 the `upgrade-offer` release, then reads it back to compare the exact bytes. The
 workflow run number is the offer's serial. Keep the workflow at
 `.github/workflows/publish-upgrade-offer.yml` so that its run numbers continue

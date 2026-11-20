@@ -89,6 +89,17 @@ describe("runDeclarationCommand", () => {
     });
   });
 
+  it("writes and checks the release candidate's own declaration file", async () => {
+    const version = "1.3.0-rc.1";
+    const signing = ["--version", version, ...SIGNING.slice(2)];
+    const written = await run(unblocked, ["write", ...signing], {});
+    expect(written.status, written.stderr).toBe(0);
+    expect(await run(unblocked, ["check", "--version", version], {})).toMatchObject({
+      status: 0,
+      stdout: "declarations/v1.3.0-rc.1.md agrees\n",
+    });
+  });
+
   it("writes and checks a version as long as a record's Version field holds", async () => {
     const longest = `${"9".repeat(46)}.2.3`;
     const signing = ["--version", longest, "--place", "Elche", "--date", "2026-10-22"];
@@ -182,7 +193,7 @@ describe("runDeclarationCommand", () => {
       invalid("--out"),
     ],
     ["a version with a leading zero", ["check", "--version", "1.01.0"], invalid("--version")],
-    ["a version with a suffix", ["check", "--version", "1.0.0-rc.1"], invalid("--version")],
+    ["a suffix with a leading zero", ["check", "--version", "1.0.0-rc.01"], invalid("--version")],
     [
       "a version longer than a record's Version field holds",
       ["check", "--version", `${"9".repeat(47)}.2.3`],

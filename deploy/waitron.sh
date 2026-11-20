@@ -430,7 +430,7 @@ install_box_service() {
 is_release_tag() {
   local version="${1#v}"
   [ "$1" != "$version" ] && [ "${#version}" -le 50 ] \
-    && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+    && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$ ]]
 }
 
 refuse_legacy_release_trust() {

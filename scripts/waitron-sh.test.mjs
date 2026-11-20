@@ -1865,7 +1865,7 @@ describe("waitron.sh install of a release", () => {
   it("checks a release on a provisioned development box and passes the signed digests into its upgrade", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);
-    const args = { ...signedRelease(sb, { prerelease: true }), WT_RUN_CANDIDATE: "1" };
+    const args = { ...signedRelease(sb), WT_RUN_CANDIDATE: "1" };
     const r = run(sb, ["install", "v1.2.3"], { ...args, WT_INSTALLED_RELEASE_REF: "main" });
     expect(r.status, r.stderr).toBe(0);
     const calls = loggedCalls(sb);
@@ -1922,6 +1922,31 @@ describe("waitron.sh install of a release", () => {
     expect(calls).toContainEqual(expect.stringMatching(`^docker image inspect .*${image}.*$`));
     expect(calls.some((call) => /\b(apply|pull)\b/.test(call))).toBe(false);
     expect(calls.some((call) => call.startsWith("install "))).toBe(false);
+  });
+
+  it.each([
+    ["v1.2.2", 0],
+    ["v1.2.3", 1],
+  ])("checks the signed release candidate against installed %s", (installed, status) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb, { version: "1.2.3-rc.1", prerelease: true });
+    const result = run(sb, ["install", "v1.2.3-rc.1"], {
+      ...release,
+      WT_RUN_CANDIDATE: "1",
+      WT_INSTALLED_RELEASE_REF: installed,
+    });
+    expect(result.status, result.stderr).toBe(status);
+    const calls = loggedCalls(sb);
+    expect(calls).toContainEqual(expect.stringContaining("/v1.2.3-rc.1/waitron-release.json"));
+    if (status === 0) {
+      expect(calls).toContainEqual(
+        expect.stringContaining(` __candidate v1.2.3-rc.1 ${signedSource}`),
+      );
+    } else {
+      expect(result.stderr).toContain("v1.2.3-rc.1 is older than installed release v1.2.3");
+      expect(calls.some((call) => /\b(apply|pull)\b/.test(call))).toBe(false);
+    }
   });
 
   it("refuses release metadata for a commit other than the signed commit", () => {

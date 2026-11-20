@@ -21,7 +21,6 @@ import {
   parsePairs,
   releaseDefine,
 } from "./bundle-node.mjs";
-import { isReleaseVersion } from "../packages/shared/src/built-release.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BANNER =
@@ -30,13 +29,15 @@ const BANNER =
 // These fixtures exercise plain bundles; appliance provenance has its own real-source CLI tests.
 function plainBundleCommand(directory) {
   const scripts = join(directory, "scripts");
-  mkdirSync(scripts);
+  mkdirSync(join(scripts, "box/upgrades"), { recursive: true });
   for (const file of [
     "bundle-node.mjs",
     "generate-hour-release.mjs",
     "npm-bundle-notices.mjs",
     "backup-verification-runtime.mjs",
     "is-main-script.mjs",
+    "box/release-list.mjs",
+    "box/upgrades/contracts.mjs",
   ])
     copyFileSync(join(ROOT, "scripts", file), join(scripts, file));
   return realpathSync(join(scripts, "bundle-node.mjs"));
@@ -169,31 +170,7 @@ describe("the shared node bundle command", () => {
   );
 
   it.each([
-    ["1.2.3"],
-    ["0.0.0"],
-    [LONGEST_RELEASE],
-    [TOO_LONG_RELEASE],
-    ["1.2"],
-    ["1.2.3.4"],
-    ["01.2.3"],
-    ["1.02.3"],
-    ["1.2.03"],
-    ["v1.2.3"],
-    ["1.2.3-rc1"],
-    ["1.2.3\n"],
-    [" 1.2.3"],
-  ])("answers %j as the reader's isReleaseVersion does", (value) => {
-    let stamped;
-    try {
-      releaseDefine({ WAITRON_RELEASE_VERSION: value });
-      stamped = true;
-    } catch {
-      stamped = false;
-    }
-    expect(stamped).toBe(isReleaseVersion(value));
-  });
-
-  it.each([
+    ["1.2.3-rc.1", '{"version":"1.2.3-rc.1"}'],
     [null, "null"],
     ["1.2.3", '{"version":"1.2.3"}'],
   ])("stamps a bundle given the release version %j", (releaseVersion, literal) => {

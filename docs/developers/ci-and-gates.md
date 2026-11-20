@@ -2456,11 +2456,12 @@ to the app build only. In order, the publish job:
    whose app image is published is then a whole publication, and a run after either push failed
    pushes both.
 
-On a `v*` tag it also refuses a commit that is not on `main` (before step 1) and a tag that is not
-`v` plus X.Y.Z (in the tags step), and runs `check-release <version>` in the loaded image and
-refuses a version the registry already holds (both before step 7); runs for one tag publish one at
-a time. A `release` job then attaches the declaration to the GitHub Release
-([runbook](../operations/release.md)).
+On a `v*` tag it checks that the commit is on `main` and that the tag annotation agrees with
+its version suffix before step 1. The tags step accepts `vX.Y.Z` and
+`vX.Y.Z-{alpha,beta,rc}.N`. Before step 7 it runs `check-release <version>` in the loaded image
+and refuses a version the registry already holds. Runs for one tag publish one at a time.
+The `release` job uses the suffix's prerelease flag when publishing the GitHub Release and
+signing the release file. [Release runbook](../operations/release.md)
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:

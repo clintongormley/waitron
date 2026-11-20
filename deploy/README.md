@@ -487,7 +487,7 @@ The installer checks the release file against the two public keys retained under
 identifies the app, print agent and tunnel by digest, a fingerprint of each exact image. If the box has
 venue data, the checked manual upgrade uses those images for the trial and for restart. You
 can reinstall the same version or move forward. An install that keeps the data refuses an
-older release. A confirmed reset wipes the venue and can install an older signed release with
+older release. For example, a box on `v1.3.0-rc.1` can move to `v1.3.0`. A confirmed reset wipes the venue and can install an older signed release with
 all three image digests.
 Fresh and reset installs use the retained installer's steps and keep its verifier and keys.
 With the current installer, a checked upgrade to a numbered release loads the driver,
@@ -510,6 +510,15 @@ sudo bash ./waitron.sh install main
 
 On plain Debian, first [install main](#setting-up-a-box). Then run the checked upgrade to main
 as shown above. Use the retained installer for numbered releases after the upgrade.
+
+Before installing a prerelease, refresh both the retained installer and its verifier to a
+version that reads prerelease suffixes. On a test box you can do this with the checked upgrade
+to a published main image that includes suffix support, as shown above. Then run the retained
+installer with the full tag.
+
+```bash
+sudo bash /opt/waitron-host/waitron.sh install v1.3.0-rc.1
+```
 
 If `/opt/waitron-host/release-trust` is missing or its link is broken on a development box,
 repeat the checked main upgrade to reload the verifier and keys. If an early test image
@@ -959,9 +968,10 @@ An image you build yourself names you as the software's producer: pass
 without them (`sif.producer_unset`). A fork's publish job reads three repository secrets of those names and
 stops when any is empty, so a fork sets its own.
 
-An image is a release only when built with `--build-arg WAITRON_RELEASE_VERSION=<x.y.z>` and the
-three producer arguments above. That renders the version's declaration into `/app/declaration/`.
-The build fails unless `packages/fiscal-verifactu/declarations/v<x.y.z>.md` is in the folder being
+An image is a release only when built with `--build-arg WAITRON_RELEASE_VERSION=<version>` and
+the three producer arguments above. Use the full version, such as `1.3.0-rc.1` or `1.3.0`.
+That renders the version's declaration into `/app/declaration/`. The build fails unless
+`packages/fiscal-verifactu/declarations/v<version>.md` is in the folder being
 built, has no release-blocker line, and names that version. Built without it, the image is a
 test build: it has no `/app/declaration/`, and its production start refuses with
 `server.unreleased_build`.
