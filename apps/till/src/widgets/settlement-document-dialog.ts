@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TillTicketView } from "../screens/till-ticket-view.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -65,6 +65,27 @@ export class TillSettlementDocumentDialog extends TillTicketView {
               )
             : t(email ? "settlement.closing_prints" : "settlement.closing_prints_no_email");
     return html`<p data-settlement-closing=${state}>${text}</p>`;
+  }
+
+  #choiceStarted = false;
+  #startedOnInvoice = false;
+
+  /** A full-invoice sale starts on the document it got; later results never undo a tap. */
+  override willUpdate(changed: PropertyValues<this>): void {
+    super.willUpdate(changed);
+    if (this.#choiceStarted || !changed.has("result") || this.result === undefined) return;
+    this.#choiceStarted = true;
+    if (this.result.invoiceType !== "F1") return;
+    this.choice = "invoice";
+    this.printDocument = "invoice";
+    this.#startedOnInvoice = true;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    if (!this.#startedOnInvoice) return;
+    this.#startedOnInvoice = false;
+    this.readInvoicePrinters();
   }
 
   #close(): void {

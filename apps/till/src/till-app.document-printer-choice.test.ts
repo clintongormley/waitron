@@ -122,6 +122,12 @@ async function sold(invoiceType = "F1", overrides: Record<string, unknown> = {})
   emit(counter, "confirm-payment", { method: "cash", amount: "12.00" });
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+  if (invoiceType === "F1") {
+    await userEvent.click(
+      ticket(el).shadowRoot!.querySelector<HTMLElement>("[data-settlement-choice=receipt]")!,
+    );
+    await flush(el);
+  }
   await press(el, "invoice-printer-toggle");
   return { el, api, id };
 }
@@ -335,7 +341,9 @@ it("Receipt opens without waiting for a changed Invoice printer's offer", async 
   });
   expect(part(el, "print-receipt").hasAttribute("disabled")).toBe(false);
   expect(part(el, "print-receipt").textContent!.trim()).toBe("Print on Bar");
-  expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
+  // The window's own read, then the one its Full invoice start makes for the changed printer;
+  // choosing Receipt adds none.
+  expect(getInvoiceDeliveries).toHaveBeenCalledTimes(2);
 });
 
 async function orderless(overrides: Record<string, unknown> = {}) {

@@ -2451,6 +2451,86 @@ describe("till-app counter: the guests the receipt prints", () => {
       "eat_in",
     );
   });
+
+  describe("reopening the counter's Full invoice before payment", () => {
+    const invoice = {
+      invoiceType: "F1" as const,
+      recipient: {
+        taxId: "12345678Z",
+        legalName: "Ana García",
+        address: "Calle Mayor 1, 2º B, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      },
+    };
+    const form = (el: TillApp) => el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    const control = (el: TillApp, name: string) =>
+      form(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!;
+
+    async function chosenAndReopened() {
+      const opened = await counterWithCoffee();
+      emit(opened.c, "choose-invoice");
+      await flush(opened.el);
+      emit(form(opened.el), "invoice-recipient-confirm", invoice);
+      await flush(opened.el);
+      expect(form(opened.el)).toBeNull();
+      emit(opened.c, "choose-invoice");
+      await flush(opened.el);
+      await form(opened.el).updateComplete;
+      return opened;
+    }
+
+    it("shows the recipient already chosen for the basket", async () => {
+      const { el } = await chosenAndReopened();
+      expect(
+        Object.fromEntries(
+          ["identifierType", "taxId", "legalName", "address", "postalCode", "locality"]
+            .concat(["province", "countryCode"])
+            .map((name) => [name, control(el, name).value]),
+        ),
+      ).toEqual({
+        identifierType: "tax-number",
+        taxId: "12345678Z",
+        legalName: "Ana García",
+        address: "Calle Mayor 1, 2º B",
+        postalCode: "28013",
+        locality: "Madrid",
+        province: "Madrid",
+        countryCode: "ES",
+      });
+    });
+
+    it("pays with the edit made in the reopened window", async () => {
+      const { el, c } = await chosenAndReopened();
+      const input = control(el, "legalName");
+      await input.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(input.shadowRoot!.querySelector("input")!),
+        "Ana García López",
+      );
+      await form(el).updateComplete;
+      form(el).shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      await flush(el);
+      expect(form(el)).toBeNull();
+
+      await payCash(el, {});
+
+      expect(vi.mocked(api.recordSale).mock.calls[0]![4]).toEqual({
+        invoiceType: "F1",
+        recipient: { ...invoice.recipient, legalName: "Ana García López" },
+      });
+      expect(vi.mocked(api.recordSale).mock.calls[0]![2]).toBe(c.store.id);
+    });
+
+    it("pays with the original recipient after the reopened window is cancelled", async () => {
+      const { el } = await chosenAndReopened();
+      form(el).shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+      await vi.waitFor(() => expect(form(el)).toBeNull());
+
+      await payCash(el, {});
+
+      expect(vi.mocked(api.recordSale).mock.calls[0]![4]).toEqual(invoice);
+    });
+  });
 });
 
 describe("till-app integrated card collection", () => {

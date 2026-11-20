@@ -10,6 +10,7 @@ import {
   emit,
   openTable,
   resetBillPayDrafts,
+  billOf,
 } from "../test/bill-pay-app.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -271,4 +272,48 @@ it("offers no way back to a simplified invoice in the Counter's own invoice wind
   const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
   expect(form).not.toBeNull();
   expect(form.shadowRoot!.querySelector("[data-invoice-simplified]")).toBeNull();
+});
+it("opens a full-invoice bill's invoice window with its saved recipient filled in", async () => {
+  const api = stubApi({
+    getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
+    getPartyBills: vi.fn().mockResolvedValue([
+      billOf({
+        invoiceType: "F1",
+        recipient: { ...recipient, address: "Calle Mayor 1, 28013 Madrid, Madrid" },
+      } as Partial<ReturnType<typeof billOf>>),
+    ]),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  order
+    .shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]:not([data-table-menu] *)")!
+    .click();
+  await flush(el);
+  const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+  await form.updateComplete;
+  const value = (name: string) =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!.value;
+  expect(
+    [
+      "identifierType",
+      "identifierCountryCode",
+      "taxId",
+      "legalName",
+      "address",
+      "postalCode",
+      "locality",
+      "province",
+      "countryCode",
+    ].map(value),
+  ).toEqual([
+    "passport",
+    "FR",
+    "P123",
+    "Guest",
+    "Calle Mayor 1",
+    "28013",
+    "Madrid",
+    "Madrid",
+    "ES",
+  ]);
 });

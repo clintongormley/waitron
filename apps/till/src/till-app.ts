@@ -4547,6 +4547,7 @@ export class TillApp extends LitElement {
   /** Null after a failed or timed-out read. */
   @state() private invoiceRecipientOptions: InvoiceDeliveryOptions | null = null;
   @state() private invoiceRecipientSaved?: InvoiceDeliveryChoice;
+  @state() private invoiceRecipientSavedRecipient?: InvoiceRecipientDetail["recipient"];
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
@@ -7601,7 +7602,7 @@ export class TillApp extends LitElement {
         this.invoiceRecipientOrderId === orderId &&
         this.#store.id === orderId &&
         this.#operatorSession === session,
-      this.invoiceChoice?.orderId === orderId ? this.invoiceChoice.invoice.delivery : undefined,
+      this.invoiceChoice?.orderId === orderId ? this.invoiceChoice.invoice : undefined,
     );
   }
 
@@ -7625,7 +7626,10 @@ export class TillApp extends LitElement {
   async #openInvoiceRecipient(
     orderId: string,
     stillAsked: () => boolean,
-    saved?: InvoiceDeliveryChoice,
+    saved?: {
+      delivery?: InvoiceDeliveryChoice;
+      recipient: InvoiceRecipientDetail["recipient"] | null;
+    },
   ): Promise<void> {
     const ask = {};
     this.#invoiceRecipientAsk = ask;
@@ -7635,7 +7639,8 @@ export class TillApp extends LitElement {
     this.invoiceRecipientReading = false;
     if (!this.isConnected || !stillAsked()) return;
     this.invoiceRecipientOptions = options;
-    this.invoiceRecipientSaved = saved;
+    this.invoiceRecipientSaved = saved?.delivery;
+    this.invoiceRecipientSavedRecipient = saved?.recipient ?? undefined;
     this.invoiceRecipientOpen = true;
   }
 
@@ -21456,7 +21461,7 @@ export class TillApp extends LitElement {
         this.invoiceRecipientBill === target &&
         this.#operatorSession === target.session &&
         this.#orderVisit === visit,
-      bill.invoiceDelivery,
+      { delivery: bill.invoiceDelivery, recipient: bill.recipient },
     );
   }
 
@@ -23296,7 +23301,8 @@ export class TillApp extends LitElement {
     this.originalReceiptAvailable = invoiceIssuedNow;
     if (settlement !== null) {
       this.settlementDocument = settlement;
-      void this.#readInvoicePrinters("receipt");
+      // A full-invoice sale's window starts on Full invoice and asks for the invoice printers itself.
+      if (this.result?.invoiceType !== "F1") void this.#readInvoicePrinters("receipt");
     } else {
       this.#pushDrill({ kind: "ticket" });
       if (this.#ticketDeliveryTarget()?.transaction) void this.#readInvoicePrinters("receipt");
@@ -24707,6 +24713,7 @@ export class TillApp extends LitElement {
                       (this.#counterStoredInvoice?.orderId === this.invoiceRecipientOrderId &&
                         this.#counterStoredInvoice.invoiceType === "F1")))
                 }
+                .savedRecipient=${this.invoiceRecipientSavedRecipient}
                 .refusal=${this.invoiceRecipientRefusal}
                 .refusalField=${this.invoiceRecipientRefusalField}
                 .offerSimplified=${this.invoiceRecipientBill?.full === true}

@@ -17,6 +17,7 @@ import {
 } from "../test/bill-pay-app.js";
 
 import { transactionRow } from "../test/find-bill-fixtures.js";
+import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import type {
   DeviceEquipmentRead,
   InvoiceDeliveryStatus,
@@ -800,3 +801,48 @@ describe.each(Object.keys(signOutBy) as (keyof typeof signOutBy)[])(
     });
   },
 );
+
+const fullSale = {
+  ...invoiceOf("1.50"),
+  invoiceType: "F1" as const,
+  recipient: {
+    legalName: "Harbour Ltd",
+    taxId: "B12345678",
+    address: "1 Harbour Road",
+    countryCode: "ES",
+  },
+};
+
+async function documentsAfter(sale: ReturnType<typeof invoiceOf>) {
+  const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+  const office = equipmentItem("office", "Office", { kind: "a4" });
+  const getDeviceEquipment = vi.fn().mockResolvedValue({
+    roles: [roleOf("receipt", bar, [bar]), roleOf("invoice", office, [office])],
+    readers: [],
+  });
+  const api = closingApi({ recordSale: vi.fn().mockResolvedValue(sale), getDeviceEquipment });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await payAtCounter(el, api);
+  await flush(el);
+  const dialog = documents(el)!;
+  await dialog.updateComplete;
+  return { shown: dialog.shadowRoot!, reads: getDeviceEquipment.mock.calls.length };
+}
+
+it("opens a full-invoice counter sale's documents window on Full invoice with the invoice printer", async () => {
+  const { shown } = await documentsAfter(fullSale);
+  expect(
+    shown.querySelector("[data-settlement-choice=invoice]")!.getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(shown.textContent).toContain("Harbour Ltd");
+  const printer = shown.querySelector("[data-test=invoice-printer-toggle]")!.textContent!;
+  expect(printer).toContain("Office");
+  expect(printer).not.toContain("Bar");
+});
+
+it("reads the device's printers no more often for a full-invoice sale than for a simplified one", async () => {
+  const simplified = await documentsAfter({ ...invoiceOf("1.50"), invoiceType: "F2" });
+  cleanupWidgets();
+  const full = await documentsAfter(fullSale);
+  expect(full.reads).toBe(simplified.reads);
+});

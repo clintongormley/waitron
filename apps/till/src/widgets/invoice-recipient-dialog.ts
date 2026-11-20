@@ -30,6 +30,7 @@ import {
   recipientIdentifierResult,
   recipientAddressErrors,
   composeRecipientAddress,
+  recipientAddressFields,
   type RecipientIdentifier,
   type RecipientIdentifierType,
 } from "@waitron/country-packs";
@@ -119,6 +120,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
   /** A staged invoice without a delivery choice starts on receipt paper. */
   @property({ attribute: false }) staged = false;
+  /** The recipient already staged for the order, shown on opening and kept unless changed. */
+  @property({ attribute: false }) savedRecipient?: InvoiceRecipientDetail["recipient"] | null;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
@@ -274,6 +277,15 @@ export class TillInvoiceRecipientDialog extends LitElement {
           ? "a4"
           : this.#openingMedium();
       if (this.savedDelivery?.medium === "email") this.email = this.savedDelivery.recipient;
+      const saved = this.savedRecipient;
+      if (saved) {
+        this.identifierType = saved.identifierType ?? "tax-number";
+        this.identifierCountryCode = saved.identifierCountryCode ?? "";
+        this.taxId = saved.taxId;
+        this.legalName = saved.legalName;
+        this.countryCode = saved.countryCode;
+        Object.assign(this, recipientAddressFields(saved.address, saved.countryCode));
+      }
       this.#baseline = {
         ...this.#value(),
         medium: this.savedDelivery === undefined ? this.medium : this.#savedMedium(),

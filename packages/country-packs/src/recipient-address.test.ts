@@ -119,3 +119,135 @@ describe("recipient postal address independent of identity", () => {
     expect(draft).toEqual(before);
   });
 });
+
+describe("recipientAddressFields", () => {
+  it.each([
+    [
+      "ES",
+      "Calle Mayor 1, 2º B, 28013 Madrid, Madrid",
+      {
+        streetAddress: "Calle Mayor 1, 2º B",
+        postalCode: "28013",
+        locality: "Madrid",
+        province: "Madrid",
+      },
+    ],
+    [
+      "ES",
+      "Calle Mayor 1, 08001 Sant Adrià de Besòs, Barcelona",
+      {
+        streetAddress: "Calle Mayor 1",
+        postalCode: "08001",
+        locality: "Sant Adrià de Besòs",
+        province: "Barcelona",
+      },
+    ],
+    [
+      "FR",
+      "2 Main Street, Paris",
+      {
+        streetAddress: "2 Main Street",
+        postalCode: "",
+        locality: "Paris",
+        province: "",
+      },
+    ],
+    [
+      "FR",
+      "2 Main Street, 75001 Paris",
+      {
+        streetAddress: "2 Main Street",
+        postalCode: "75001",
+        locality: "Paris",
+        province: "",
+      },
+    ],
+    [
+      "US",
+      "1 Broadway, New York, NY",
+      {
+        streetAddress: "1 Broadway",
+        postalCode: "",
+        locality: "New York",
+        province: "NY",
+      },
+    ],
+    [
+      "IT",
+      "Via Roma 3, 00100 Roma, RM",
+      {
+        streetAddress: "Via Roma 3",
+        postalCode: "00100",
+        locality: "Roma",
+        province: "RM",
+      },
+    ],
+    [
+      "GB",
+      "10 Downing Street, SW1A 2AA London",
+      {
+        streetAddress: "10 Downing Street",
+        postalCode: "SW1A",
+        locality: "2AA London",
+        province: "",
+      },
+    ],
+    [
+      "ES",
+      "Calle Mayor 1",
+      {
+        streetAddress: "Calle Mayor 1",
+        postalCode: "",
+        locality: "",
+        province: "",
+      },
+    ],
+    [
+      "ES",
+      "Calle Mayor 1, Madrid, Madrid",
+      {
+        streetAddress: "Calle Mayor 1",
+        postalCode: "",
+        locality: "Madrid",
+        province: "Madrid",
+      },
+    ],
+    ["FR", "", { streetAddress: "", postalCode: "", locality: "", province: "" }],
+  ])(
+    "splits a %s address %j back into the fields it was composed from",
+    (countryCode, address, fields) => {
+      const split = addresses.recipientAddressFields(address, countryCode);
+      expect(split).toEqual(fields);
+      expect(addresses.composeRecipientAddress({ ...split, countryCode })).toBe(address);
+    },
+  );
+
+  it("round-trips a composed address for every shape of draft", () => {
+    for (const draft of [
+      { ...spanish, streetAddress: "Av. de la Paz, 4, portal 2" },
+      spanish,
+      foreign,
+      { ...foreign, countryCode: "GB", postalCode: "SW1A 2AA", locality: "London" },
+      { ...foreign, countryCode: "US", locality: "New York", province: "NY" },
+    ]) {
+      const composed = addresses.composeRecipientAddress(draft);
+      const split = addresses.recipientAddressFields(composed, draft.countryCode);
+      expect(addresses.composeRecipientAddress({ ...split, countryCode: draft.countryCode })).toBe(
+        composed,
+      );
+    }
+    const spanishSplit = addresses.recipientAddressFields(
+      addresses.composeRecipientAddress({
+        ...spanish,
+        streetAddress: "Av. de la Paz, 4, portal 2",
+      }),
+      "ES",
+    );
+    expect(spanishSplit).toEqual({
+      streetAddress: "Av. de la Paz, 4, portal 2",
+      postalCode: "28013",
+      locality: "Madrid",
+      province: "Madrid",
+    });
+  });
+});
