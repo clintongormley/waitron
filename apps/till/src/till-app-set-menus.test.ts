@@ -12,6 +12,7 @@ import {
   shell,
 } from "../test/allergy-app-fixture.js";
 import { t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { setMenuCopyOf } from "@waitron/shared";
 import {
   emit,
@@ -461,6 +462,8 @@ async function tableWithSetMenus(overrides: Record<string, unknown> = {}) {
   return { el, screen, state, getPartyBills };
 }
 
+const notSelling = codeMessage("set_menu.not_selling", "en", { setMenuName: "Daily menu" });
+
 const lineIds = (screen: { bills: readonly { setMenus?: typeof bill }[] }) =>
   screen.bills[0]!.setMenus!.setMenus.map(({ lineId }) => lineId);
 
@@ -476,11 +479,7 @@ it("shows a refused set-menu count under it and re-reads a table someone else ch
   await userEvent.click(increase);
   const stepper = counts.shadowRoot!.querySelector("wt-number-stepper")!;
   expect(stepper.label).toBe("Daily menu");
-  await vi.waitFor(() =>
-    expect(stepper.error).toBe(
-      "Daily menu is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
-    ),
-  );
+  await vi.waitFor(() => expect(stepper.error).toBe(notSelling));
   expect(stepper.value).toBe("2");
   expect(lineIds(screen)).toEqual(["daily-1", "daily-2", "special-1"]);
 
@@ -678,9 +677,7 @@ it("saves later set-menu changes on a parked counter takeaway and shows a refusa
   expect(moveSetMenuDishes.mock.calls[0]!.slice(0, 3)).toEqual([id, [move], 8]);
   expect(counter.store.revision).toBe(9);
 
-  await expect(counter.saveSetMenuCount!(daily.menuId, 3)).resolves.toBe(
-    "Daily menu is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
-  );
+  await expect(counter.saveSetMenuCount!(daily.menuId, 3)).resolves.toBe(notSelling);
   expect(counter.store.revision).toBe(9);
   expect(parkOrder).toHaveBeenCalledOnce();
 });

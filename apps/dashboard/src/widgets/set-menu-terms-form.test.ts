@@ -159,12 +159,12 @@ it("ignores a cleared eat-in VAT rate and saves a newly chosen one", async () =>
 
 it("saves a customer-facing name typed for one language", async () => {
   const { root, updateMenuDetails } = await mount();
-  await page.getByRole("textbox", { name: /^Customer-facing name \(es\)/ }).fill("Menú del día");
+  await page.getByRole("textbox", { name: /^Customer-facing name \(es\)/ }).fill("Set lunch");
   await vi.waitFor(() => expect(save(root).disabled).toBe(false));
   save(root).click();
   await vi.waitFor(() =>
     expect(updateMenuDetails).toHaveBeenCalledExactlyOnceWith("daily", {
-      names: { en: "Today's menu", es: "Menú del día" },
+      names: { en: "Today's menu", es: "Set lunch" },
     }),
   );
 });
