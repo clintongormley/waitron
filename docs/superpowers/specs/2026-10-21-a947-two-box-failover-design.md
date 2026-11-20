@@ -1918,6 +1918,17 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     `/api/node` as `sell-only`, term 2, `acceptingSales: false` from 17:14:35, answering only
     `box-db91.waitron.local`. A poll at 17:14:27 still read `acceptingSales: true` while it was
     stopping. Its log names no reason for standing down.
+  - **Measured: the old box rejoins as the new spare, but the switch never closes.** The old box
+    showed "waiting to return its invoice records… Do not reset this box" for 35+ minutes; it
+    held 0 sales and 0 invoice records, and a return with nothing in it never reaches "confirmed"
+    (`apps/server/src/return-records.ts:58`). It was reset and joined the new main box as
+    `box-5e40.waitron.local` (Standby, 36 s behind at 20:05): rejoining works. A controlled
+    **Hand over the venue** to it was then refused, `handover.operation_in_progress`: the new main
+    box still held the emergency switch as an open operation (state `activated` since 17:07:40),
+    and no running code moves an emergency operation on to `return_complete` or
+    `return_abandoned` (read). So after one emergency switch the venue cannot hand over again, and
+    the replaced box's row (labelled "Former primary, now only sells", though it neither sells nor
+    files) has no way to be removed. Campaign item A1561; a go-live blocker for failover.
   - **Test set-up effect, not the box image:** after the old box returned, `waitron.local` from the
     Mac resolved to it again, because that test box's operating system is named "Waitron" and runs
     avahi. The box image (`deploy/box/mkosi.conf`) installs no mDNS daemon; a `waitron.sh` install
