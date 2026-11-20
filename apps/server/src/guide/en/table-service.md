@@ -599,7 +599,7 @@ everyone has finished.
 
 A bill still open when the business day ends gets its receipt then, without printing. Take its
 payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
-open.
+open. In **Sales & takings**, select the day the bill opened to see the sale.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this

@@ -142,6 +142,7 @@ export const workingOrders = table(
       .where(sql`${t.collectedAt} is null and ${t.status} <> 'abandoned'`),
     index("working_orders_status_idx").on(t.status),
     index("working_orders_opened_at_idx").on(t.openedAt),
+    index("working_orders_trusted_opened_at_idx").on(t.trustedOpenedAt),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],

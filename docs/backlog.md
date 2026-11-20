@@ -1117,6 +1117,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### Purchasing, recipes, stock and reports
 
+- **Email the day’s Sales & takings after automatic close.** Let venues opt in and choose recipients.
+  Send the most recently ended day's report through the venue's mail server.
+  [Plan](superpowers/plans/2026-11-20-trading-window.md#pr-2--offer-a-daily-email-after-the-close)
+
 - **Qualify the accountant workbook with a real accountant's import trial** before claiming
   support for a named accounting program. The generic two-sheet period download is available from
   **Sales & takings**; [recorded-data limits](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md)

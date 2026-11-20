@@ -643,7 +643,8 @@ queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
 imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
-o sin enviar sigue abierta.
+o sin enviar sigue abierta. En **Ventas y recaudación**, selecciona el día en que se abrió la
+cuenta para ver la venta.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba

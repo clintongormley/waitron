@@ -18,7 +18,11 @@ export async function computeDepartmentClosedBills(tx: Transaction, input: Daily
     from working_orders wo
     join sales s on s.working_order_id = wo.id
     left join departments d on d.id = s.receipt_department_id
-    where ${window(sql`wo.settled_at`)}
+    where wo.settled_at is not null
+      and ${window(sql`case
+        when s.source = 'business_day_close' and s.total = 0 then wo.trusted_opened_at
+        else wo.settled_at
+      end`)}
       ${nodeScopeClause(input.nodeIds, sql`wo.node_id`)}
     group by s.receipt_department_id
     order by s.receipt_department_id

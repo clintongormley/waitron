@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "./testing/venue-db.js";
+import { seedPerson } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 import { outgoingMail } from "./schema/outgoing-mail.js";
 import {
@@ -41,6 +42,15 @@ describe("mail queue API", () => {
       expect(MAIL_LIFETIME_MS.box_alert).toBe(86400000);
     });
   });
+  it("stores a daily report in the existing mail queue", async () => {
+    const personId = await seedPerson(suite.db);
+    const dedupeKey = "daily_report:2026-11-08";
+    await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, { ...request(dedupeKey), kind: "daily_report", personId }),
+    );
+    expect(await readMail(suite.db, dedupeKey)).toMatchObject({ kind: "daily_report", personId });
+  });
+
   it("dates an ordinary request from the current clock when no queue time is supplied", async () => {
     const before = Date.now();
     await withTransaction(suite.db, (tx) =>

@@ -1,9 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedOpenOrder,
+  seedSale,
+  seedVenueWithSeries,
+  seedVoid,
+  type SeededVenue,
+} from "../test/fixtures.js";
+import { computeDailyClose } from "./daily-close.js";
 import {
   businessDayOf,
   businessDayRangeWindow,
@@ -391,5 +399,68 @@ describe("currentBusinessDay / businessDayOf", () => {
     expect(() =>
       currentBusinessDay({ cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "6:00" }),
     ).toThrow(/cutover/i);
+  });
+});
+
+describe("the trading day of a reported sale", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  const monday = "2026-11-16";
+  const tuesday = "2026-11-17";
+  const thursday = "2026-11-19";
+  let venue: SeededVenue;
+
+  beforeEach(async () => {
+    venue = await seedVenueWithSeries(suite.db);
+  });
+
+  async function sale(issuedAt: string, source?: "business_day_close") {
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    await suite.db
+      .update(workingOrders)
+      .set({ openedAt: "2026-11-16T21:00:00.000Z", trustedOpenedAt: "2026-11-16T21:00:00.000Z" })
+      .where(eq(workingOrders.id, orderId));
+    return seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      source,
+      issuedAt,
+      total: "22.00",
+      lines: [{ vatRate: "10.00", lineTotal: "20.00" }],
+      workingOrderId: orderId,
+    });
+  }
+
+  async function figures(businessDay: string) {
+    const close = await withTransaction(suite.db, (tx) =>
+      computeDailyClose(tx, {
+        nodeIds: [venue.nodeId],
+        businessDay,
+        cutoverChanges: [],
+        timeZone: "Europe/Madrid",
+        dayCutover: "03:00",
+      }),
+    );
+    return { sales: close.counts.sales, voids: close.counts.voids, gross: close.vat.grossTotal };
+  }
+
+  it("counts a Monday bill issued by Thursday's catch-up against Monday", async () => {
+    await sale("2026-11-19T08:00:00.000Z", "business_day_close");
+
+    expect(await figures(monday)).toEqual({ sales: 1, voids: 0, gross: "22.00" });
+    expect(await figures(thursday)).toEqual({ sales: 0, voids: 0, gross: "0.00" });
+  });
+
+  it("counts a Tuesday 04:00 staff sale on Tuesday even when its bill was opened on Monday", async () => {
+    await sale("2026-11-17T03:00:00.000Z");
+
+    expect(await figures(tuesday)).toEqual({ sales: 1, voids: 0, gross: "22.00" });
+    expect(await figures(monday)).toEqual({ sales: 0, voids: 0, gross: "0.00" });
+  });
+
+  it("reverses a Monday automatic close bill in the Tuesday report when voided on Tuesday", async () => {
+    const saleId = await sale("2026-11-17T02:00:00.000Z", "business_day_close");
+    await seedVoid(suite.db, { saleId }, "2026-11-17T08:00:00.000Z");
+
+    expect(await figures(tuesday)).toEqual({ sales: 0, voids: 1, gross: "-22.00" });
+    expect(await figures(monday)).toEqual({ sales: 1, voids: 0, gross: "22.00" });
   });
 });
