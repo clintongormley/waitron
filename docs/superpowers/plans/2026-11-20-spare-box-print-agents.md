@@ -58,85 +58,134 @@ describes the changed behaviour, update it in the same task (`git grep` the guid
   `printers-screen.ts` the host cell, its search value and the saved-agents line show
   `printers.provenance_self` ("On this box" / "En este servidor") only when `onThisBox`; an agent
   with a `nodeId` that is not on this box shows a new string `printers.provenance_other_box`:
-  English "On the other box", Spanish "En el otro servidor". Its badge keeps the same `part` and
-  gets its own `data-test` so tests can tell the two apart. Screen tests cover both badges.
+  English "On another box", Spanish "En otro servidor" (not "the other": a retired box's or a
+  reinstalled box's row gets it too). Its badge keeps the same `part` and gets its own `data-test`
+  so tests can tell the two apart. Screen tests cover both badges.
 
 ### Task 2 — the spare's agent page says why it is waiting
 
 - `packages/print-agent/src/client.ts`: `NodeProbe` gains optional `standing?: string`
-  (parsed when it is a string; absent otherwise — older servers do not send it).
-- `packages/print-agent/src/router.ts`: remember, for the configured address only, whether its last
-  successful probe was same-environment, not accepting sales, with `standing === "serving-secondary"`.
-  Expose it (e.g. `configuredIsSpare: boolean` on `ProbeRound` or a getter).
-- `packages/print-agent/src/agent.ts` ~647: when no server accepts and the configured server is a
-  spare, report a new phase `"spare_box"` (add to `AgentPhase` in `host.ts`) instead of
-  `"unreachable"`, with no `lastError`. It must still set `outOfTouch` exactly as today (the reset
-  logic depends on it) and still never send the token. Agent tests: the spare answer gives
-  `spare_box`; an answer from another environment, an unreachable server, and a not-accepting
-  answer with any other or no `standing` still give `unreachable` with today's text.
-- `apps/print-agent/src/setup-page.ts` `statusCard`: `spare_box` renders
+  (parsed when it is a string; absent otherwise).
+- `packages/print-agent/src/router.ts`: from the configured address's result IN THE CURRENT probe
+  round only, set a flag "configured server is a spare": its probe succeeded, its environment is the
+  pinned one, `acceptingSales` is false and `standing === "serving-secondary"`. Any failure or other
+  answer in a round clears it. Expose it on `ProbeRound` (e.g. `configuredIsSpare`).
+- `packages/print-agent/src/agent.ts` ~647: when no server accepts and the round says the configured
+  server is a spare, report a new phase `"spare_box"` (add to `AgentPhase` in `host.ts`) with
+  `lastError: undefined` written explicitly (`report()` merges into the previous status,
+  `agent.ts:199-200`). It must still set `outOfTouch = true` exactly as today: the reset logic
+  depends on it AND it is what lets the setup page answer from the network
+  (`apps/print-agent/src/setup-page.ts:59-61`). It still never sends the token.
+  Agent tests: the spare answer gives `spare_box` with no `lastError`, also after an earlier
+  unreachable round that set one; a spare round followed by an unreachable round gives
+  `unreachable` with today's text; an answer from another environment, and a not-accepting answer
+  with any other or no `standing`, give `unreachable` with today's text.
+- `apps/print-agent/src/setup-page.ts`: `statusCard` renders `spare_box` as
   "This box is the venue's spare. Printing goes through the main box's own print agent. This agent
-  starts printing again if this box becomes the main box." Keep the page's other cards as they are.
-  Setup-page test for the new card. Check every other consumer of `AgentPhase` (`git grep
-  AgentPhase`, `phase ===`, and anything that maps phases to health or logs) handles the new value.
+  starts printing again if this box becomes the main box." `renderRoot` (~209) does NOT show the
+  reset card ("This agent cannot reach its venue… Join a new network") while the phase is
+  `spare_box`: the agent is not lost, and a reset would make it forget its approval for nothing.
+  Setup-page tests for both. The phase's other consumers were checked in review: only
+  `setup-page.ts` maps phases (its `switch` must return, so TypeScript flags a missing case);
+  `/status.json` passes it through and the compose healthcheck reads only HTTP 200.
+- Server: add to `apps/server/src/boot.mirror.test.ts` (~517, the mirror's `/api/node` case) an
+  assertion that a mirror answers `standing: "serving-secondary"` alongside
+  `acceptingSales: false` and its environment, so the agent's new dependency is pinned.
+- Which boxes show the new message: a mirror (spare), and an old main box stepping down after a
+  handover, whose answer comes from the venue's chart (`restricted-start.ts:48`,
+  `waiting-start.ts:111`) — correct for both. A box whose opening checks are not finished answers
+  only `{acceptingSales:false}` (`node-api.ts:52-53`), which the agent cannot parse, so it keeps
+  today's "unreachable" text; out of scope.
 
-### Task 3 — the agent tells the server whether it can use Bluetooth
+### Task 3a — the agent sends whether it can use Bluetooth
 
-- Agent: the pull inventory (`AgentInventory` in `packages/print-agent/src/client.ts`, built in
-  `agent.ts` ~730-763) carries `bluetooth?: { available: true } | { available: false; reason }`
-  from the host's existing availability (`bluetoothAvailability()` in
-  `apps/print-agent/src/linux-devices.ts`; thread it through the `host` interface in
-  `packages/print-agent/src/host.ts` and the fake host in `src/testing/fake-host.ts`). Omit the
-  field while availability is still unknown. `reason` is one of `BluetoothUnavailableReason`
-  (`dbus_unreachable`, `bluez_not_answering`, `no_controller`, `failed`); never send `detail`.
-- Server: the pull route (`apps/server/src/print-api.ts` ~815) screens the field (anything
-  unrecognised → ignored, never a refusal: older and newer agents must keep pulling) and keeps the
-  latest value per agent id in memory beside the `discovered` map. `GET
-  /management-api/print-agents` adds `bluetooth: "available" | <reason> | null` (null: nothing
-  reported since this server started). Tests: a pull with each reason, a pull without the field
-  (absent means "not known yet": the stored value stays unchanged), a malformed
-  field (ignored, pull still answers 200), and the list showing the value per agent.
+- `packages/print-agent/src/client.ts`: export `BLUETOOTH_UNAVAILABLE_REASONS =
+  ["dbus_unreachable", "bluez_not_answering", "no_controller", "failed"] as const` and its type,
+  beside `BLUETOOTH_FAILURE_REASONS` (~39-49). `apps/print-agent/src/bluetooth-availability.ts`
+  takes its `BluetoothUnavailableReason` from there instead of declaring its own.
+- `AgentInventory` gains `bluetooth?: { available: true } | { available: false; reason }`; never
+  `detail`. Built in `agent.ts` (~730-763) from a new optional host method (e.g.
+  `bluetoothAvailability?(): …` on the host interface in `packages/print-agent/src/host.ts`),
+  implemented in `apps/print-agent/src/host.ts` (`createContainerHost`, `devices?: LinuxDevices`
+  ~36, mapping ~95-100) from `linux-devices.ts`'s `bluetoothAvailability()`, and in
+  `src/testing/fake-host.ts`. Omit the field while availability is unknown.
+  Tests: the pull body carries each state; unknown → no field.
+
+### Task 3b — the server keeps and lists it
+
+- Pull route (`apps/server/src/print-api.ts` ~815): screen `bluetooth` with `oneOf` against
+  `BLUETOOTH_UNAVAILABLE_REASONS`, as ~450 does for the other list. Anything unrecognised is
+  ignored, never a refusal: older and newer agents must keep pulling. Absent → stored value
+  unchanged. Keep the latest value and its time per agent id in memory beside `discovered`.
+- `GET /management-api/print-agents` adds `bluetooth: "available" | <reason> | null`: null when
+  nothing was reported since this server started, or the last report is older than
+  `DISCOVERED_TTL_MS` (the scan list's own freshness limit).
+- When an agent's stored value CHANGES, notify the dashboard the way the agents list already
+  refreshes (it reloads on `print_agents` changes, `apps/server/src/live-queries.ts` ~114; a pull
+  only touches that table about once a minute, `packages/printing/src/agent.ts:33-42`). Find the
+  existing publish path for that subscription and use it; do not add a new poll.
+- Tests: each reason stored and listed; field absent keeps the last value; malformed field ignored
+  and the pull still answers 200; a stale report lists as null; a change publishes, a repeat does
+  not.
 
 ### Task 4 — the scan says when an agent cannot look for Bluetooth printers
 
-- Dashboard: the add-printer dialog (`#renderNewPrinter`, `printers-screen.ts` ~5142), while it is
-  open, shows one line per ACTIVE agent whose `bluetooth` is a reason, under the "Searching for…"
-  line: "Bluetooth printers can't be found through {agent}: {reason}". Reasons (English / Spanish):
+- Dashboard: the agent type gains `bluetooth`; repeat the reason list with a pointer back to
+  `BLUETOOTH_UNAVAILABLE_REASONS`, as `apps/dashboard/src/api/client.ts:1316` does for the other
+  list. The add-printer dialog (`#renderNewPrinter`, `printers-screen.ts` ~5142) shows one line per
+  ACTIVE agent whose `bluetooth` is a reason, under the "Searching for…" line:
+  English "Bluetooth printers can't be found through {agent}: {reason}" /
+  Spanish "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}". Reasons:
   - `no_controller`: "its computer has no Bluetooth adapter. Plug one in." /
     "su equipo no tiene adaptador Bluetooth. Conecta uno."
-  - `bluez_not_answering`, `dbus_unreachable`, `failed`: "its computer's Bluetooth service isn't
-    working. Restarting that computer may fix it." / "el servicio Bluetooth de su equipo no
-    funciona. Reiniciar ese equipo puede solucionarlo."
-  Nothing shows for `available` or `null`. The agents list must be fresh enough when the dialog
-  opens: reuse whatever load or subscription the screen already has for agents; do not add a new
-  poll. Screen tests: each reason shows its line with the agent's name; available/null/inactive
-  agents show nothing.
+  - `bluez_not_answering`, `failed`: "its computer's Bluetooth service isn't working." /
+    "el servicio Bluetooth de su equipo no funciona."
+  - `dbus_unreachable`: "its computer isn't letting Waitron use Bluetooth." /
+    "su equipo no permite que Waitron use Bluetooth."
+  (Wording for the owner to confirm on the PR.) Nothing shows for `available` or `null`, or for an
+  inactive agent. Screen tests: each reason shows its line with the agent's name; the others show
+  nothing.
 
 ### Task 5 — the scan hides office printers already added through that agent
 
 - `printers-screen.ts`: in the scan list, drop rows whose `#officeRow` is `{ kind: "added" }`, as
   receipt printers already added are dropped. Keep `repoint` rows (added through another agent, or
-  one that is gone), so a printer can still be moved after a swap. Keep "Added as A4 printer" for
-  the "Check a known address" probe result (`probeStatus`, ~1634): the person typed that address
-  and needs an answer. Update existing tests that expected the added row in the scan list; add a
-  test that it is gone and that a `repoint` row still shows.
+  one that is gone), so a printer can still be moved after a swap.
+- The "Check a known address" result (~1634-1638) today maps every office printer to
+  `page_printer` ("…see its row below"). For `{kind: "added"}` map it to `registered` ("Printer
+  reachable. This printer is already added.") so it never points at a hidden row; test it.
+- The `added` render branch (~5083-5086), the `page-printer-added` CSS part (~479) and the
+  `printers.page_printer_added` strings (EN ~2124, ES ~6705) become unreachable: delete them, and
+  rework `printers-screen.a11y.test.ts` ~618 to cover the remaining states. Update existing tests
+  that expected the added row in the scan list; add a test that it is gone and that a `repoint` row
+  still shows.
 
 ### Task 6 — `waitron.sh install` installs BlueZ when it is missing
 
-- `deploy/waitron.sh`: a new step before `disable_bluetooth_autopair` (both call sites — grep
-  for it): when `bluetooth.service` is unknown to systemd and `apt-get` exists, install `bluez`
-  with `apt_get install -y --no-install-recommends bluez` (the bounded, retried helper), then
-  `systemctl enable --now bluetooth` best-effort. A failure must NOT stop the install: Bluetooth is
-  optional, so run it so that `apt_get`'s `die` cannot end the script (e.g. a subshell) and print one
-  plain warning saying Bluetooth printers will not be found until BlueZ is installed. When the unit
-  already exists, do nothing. Tests in `scripts/waitron-sh.test.mjs` under its existing stubs: no
-  unit → installs bluez; unit present → no apt call; apt fails → warning, install carries on.
-  Check `scripts/deploy-image-env.test.ts` and `scripts/ci-workflow.test.mjs` for rules about
-  apt calls in `waitron.sh` (CLAUDE.md §2: outer timeout and retries) and keep them green.
-- `deploy/README.md` or the install docs: if they list what `waitron.sh install` puts on the host,
-  add BlueZ.
+- `deploy/waitron.sh`: a new step before `disable_bluetooth_autopair` (every call site — grep).
+  Detect a missing BlueZ as the libatomic step does (~1023-1028):
+  `dpkg-query -W -f '${db:Status-Status}' bluez`. When it is not installed and `apt-get` and
+  `systemctl` exist: `apt_get update`, `apt_get install -y --no-install-recommends bluez`, then
+  `systemctl enable --now bluetooth` best-effort. A failure must NOT stop the install (Bluetooth is
+  optional): run it so `apt_get`'s `die` cannot end the script (e.g. a subshell) and print one plain
+  warning that Bluetooth printers will not be found until BlueZ is installed. Installed → nothing.
+- Tests in `scripts/waitron-sh.test.mjs`: the test `dpkg-query` stand-in answers "installed" by
+  default, so existing cases keep their meaning; add a flag (e.g. `WT_BLUEZ_MISSING`) for the new
+  cases: missing → update + install + enable; installed → no apt call; apt fails three times →
+  warning, install carries on. No existing assertion is loosened: in review, a version detecting
+  through `systemctl` broke "leaves apt alone on an upgrade when libatomic1 is already installed"
+  (~986) and silently changed what "installs a missing metadata reader, with apt failure = true"
+  (~1195) tests. Keep `scripts/deploy-image-env.test.ts` and `scripts/ci-workflow.test.mjs` green.
+- `deploy/README.md` ~113-114 ("A box with no bluetooth.service gets one line saying so") and the
+  upgrade sentence ~282-284 change to say install now adds BlueZ when it is missing.
+
+### After tasks 3a-4
+
+- `docs/backlog/printers.md` ~122-124 (the agent page refuses network requests once joined, so the
+  dashboard cannot show its Bluetooth reason): update it to say the dashboard's scan now shows it.
 
 ## Not in this plan
 
 - A spare's agent printing through the main box (backlog: "Cross-box print-agent TLS").
 - Removing the other box's agent row: it is kept on purpose (see cause 1).
+- A box whose opening checks are not finished still reads as "unreachable" on its agent page.
