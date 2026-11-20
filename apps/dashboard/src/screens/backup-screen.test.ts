@@ -815,7 +815,7 @@ describe("backup-screen", () => {
     q(el, "[data-test=apply]")!.click();
     await flush(el);
     const key = q(el, "[data-test=paste-key]") as WtInput;
-    expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
+    expect(key.error).toBe(codeMessage("backup.new_recovery_key_too_short"));
     expect(key.shadowRoot!.activeElement).toBe(key.shadowRoot!.querySelector("input"));
     expect(q(el, "[data-test=apply-actions]")!.shadowRoot!.textContent).toContain(
       t("form.fix_fields"),
@@ -1627,7 +1627,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
     expect(api.rotateBackupKey).not.toHaveBeenCalled();
     const key = q(el, "[data-test=paste-key]") as WtInput;
     await key.updateComplete;
-    expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
+    expect(key.error).toBe(codeMessage("backup.new_recovery_key_too_short"));
   });
 
   it("opens settings without reading a key and explains a missing key at Save", async () => {
@@ -2895,7 +2895,7 @@ it("starts Rotate quietly after Apply, then corrects a short key and submits it 
   expect(action.hasAttribute("disabled")).toBe(false);
   action.click();
   await flush(el);
-  expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
+  expect(key.error).toBe(codeMessage("backup.new_recovery_key_too_short"));
   expect(key.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
   expect(action.hasAttribute("disabled")).toBe(true);
   expect(

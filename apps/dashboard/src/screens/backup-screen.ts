@@ -1814,7 +1814,7 @@ export class BackupScreen extends LitElement {
                 spellcheck="false"
                 label=${t("backup.key.paste_label")}
                 .value=${this.pastedKey}
-                .error=${this.#pastedKeyInvalid ? codeMessage("backup.recovery_key_too_short") : ""}
+                .error=${this.#pastedKeyInvalid ? codeMessage("backup.new_recovery_key_too_short") : ""}
                 @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPaste(e)}
               ></wt-input>
