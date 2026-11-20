@@ -117,7 +117,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   };
   /** The delivery already staged for the order; kept unless the delivery field is changed. */
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
-  @property({ type: Boolean }) staged = false;
+  /** A staged invoice without a delivery choice starts on receipt paper. */
+  @property({ attribute: false }) staged = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */

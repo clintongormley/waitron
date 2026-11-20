@@ -24703,7 +24703,9 @@ export class TillApp extends LitElement {
                 .staged=${
                   this.invoiceRecipientBill?.full === true ||
                   (this.invoiceRecipientOrderId !== undefined &&
-                    this.invoiceChoice?.orderId === this.invoiceRecipientOrderId)
+                    (this.invoiceChoice?.orderId === this.invoiceRecipientOrderId ||
+                      (this.#counterStoredInvoice?.orderId === this.invoiceRecipientOrderId &&
+                        this.#counterStoredInvoice.invoiceType === "F1")))
                 }
                 .refusal=${this.invoiceRecipientRefusal}
                 .refusalField=${this.invoiceRecipientRefusalField}
