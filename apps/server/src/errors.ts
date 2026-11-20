@@ -1626,6 +1626,8 @@ declare module "@waitron/shared" {
      * A backup admin route (`apply`/`disable`/`rotate`) or the bucket copy's Save or switch-off was refused
      * because this node is not the primary; only the primary runs the backup duty. */
     "backup.not_primary": Record<string, never>;
+    "backup.not_enabled": Record<string, never>;
+    "backup.run_in_progress": Record<string, never>;
     /**
      * A supplied recovery key cannot be stored verbatim in `backup.env`: it carries a control
      * character or leading/trailing whitespace, or does not survive the env-file round-trip

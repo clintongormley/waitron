@@ -96,6 +96,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "backup.not_primary": 409,
+  "backup.not_enabled": 409,
+  "backup.run_in_progress": 409,
   "backup.reload_in_progress": 409,
   "backup.recovery_key_exists": 409,
   "backup.recovery_key_unstorable": 400,
@@ -530,6 +532,15 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
         return writeAnswer(c, reloadErrorCode);
       });
+    }),
+  );
+
+  app.post("/api/backup/run-now", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
+      void deps.supervisor.runNow();
+      return c.json({}, 202);
     }),
   );
 

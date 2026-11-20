@@ -1334,6 +1334,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
     es: "Este servidor tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
   },
+  "backup.not_enabled": {
+    en: "Turn on scheduled backups before starting a backup.",
+    es: "Activa las copias programadas antes de iniciar una copia.",
+  },
+  "backup.run_in_progress": {
+    en: "A backup was already running. Try again once it finishes.",
+    es: "Ya había una copia de seguridad en curso. Vuelve a intentarlo cuando termine.",
+  },
   "backup.reload_in_progress": {
     en: "The box is still applying an earlier change. Wait a moment and try again.",
     es: "El servidor todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",

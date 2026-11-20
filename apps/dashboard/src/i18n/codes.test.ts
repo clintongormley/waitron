@@ -378,6 +378,14 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
   }
 });
 
+it.each(["backup.not_enabled", "backup.run_in_progress"])(
+  "explains the manual backup refusal %s in English and Spanish",
+  (code) => {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  },
+);
+
 it("has English and Spanish copy for each menu section code", () => {
   for (const code of [
     "menu_section.not_found",

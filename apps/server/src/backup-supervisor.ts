@@ -31,6 +31,7 @@ import {
 import { StatusClients } from "./backup-status-clients.js";
 import {
   createBackupSchedule,
+  type ActiveBackupRun,
   type BackupSchedulePass,
   type DestinationResult,
   type LatestClockStep,
@@ -336,6 +337,7 @@ export class BackupSupervisor {
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
         onRunStoppedChanged: () => this.#publish(),
+        onRunChanged: () => this.#publish(),
         stagingTurn: this.#deps.stagingTurn,
         installationStartedAt: this.#deps.readInstallationStart,
         latestClockStep: this.#deps.latestClockStep,
@@ -382,6 +384,17 @@ export class BackupSupervisor {
     } finally {
       if (this.#running === running) this.#running = undefined;
     }
+  }
+
+  runNow(): Promise<void> {
+    if (this.#deps.readSingletonRole() !== "primary") throw new AppError("backup.not_primary", {});
+    if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
+    if (this.#stopped || this.#schedule === undefined || this.#controller === undefined) {
+      throw new AppError("backup.not_enabled", {});
+    }
+    const running = this.#schedule.start("manual", this.#controller.signal);
+    if (running === undefined) throw new AppError("backup.run_in_progress", {});
+    return running;
   }
 
   /** Rewrites the note with the box's latest clock step while backups run. Never throws. */
@@ -497,12 +510,19 @@ export class BackupSupervisor {
 
   /** `current()` plus the async per-destination freshness read and the derived `archiveUnderCurrentKey`. */
   async status(): Promise<
-    BackupRuntimeStatus & { backupStatus: SupervisedBackupStatus; archiveUnderCurrentKey: boolean }
+    BackupRuntimeStatus & {
+      backupStatus: SupervisedBackupStatus;
+      archiveUnderCurrentKey: boolean;
+      activeRun?: ActiveBackupRun;
+      runStoppedCode?: string;
+    }
   > {
     const base = this.current();
     const cfg = this.#config;
     // Taken with the settings: a reload during the read replaces `#sweep`, not this one.
     const sweep = this.#sweep;
+    const activeRun = this.#schedule?.activeRun;
+    const runStoppedCode = this.#deps.outcomes?.runStopped?.code;
     const archiveUnderCurrentKey = () => [...sweep.values()].some((r) => r.storedUnderCurrentKey);
     if (cfg === undefined || !cfg.enabled || (!cfg.cloud && cfg.destinations.length === 0))
       return {
@@ -528,6 +548,8 @@ export class BackupSupervisor {
     }
     return {
       ...base,
+      ...(activeRun === undefined ? {} : { activeRun }),
+      ...(runStoppedCode === undefined ? {} : { runStoppedCode }),
       backupStatus: { configured: true, destinations },
       archiveUnderCurrentKey: archiveUnderCurrentKey(),
     };
@@ -608,7 +630,9 @@ export class BackupSupervisor {
    * a reconfigure never leaks the old connection nor leaves a tick running against a closing one. */
   async #teardown(): Promise<void> {
     this.#controller?.abort();
-    if (this.#running !== undefined) await this.#running.catch(() => {});
+    const pass = this.#running;
+    const run = this.#schedule?.running;
+    if (pass !== undefined || run !== undefined) await Promise.allSettled([pass, run]);
     if (this.#schedule !== undefined) this.#deps.onScheduled?.(null, false);
     this.#closeBackends(this.#backends.splice(0));
     if (this.#db !== undefined) await this.#db.close().catch(() => {});

@@ -1988,6 +1988,8 @@ export interface BackupStatusView {
   keyFingerprint?: string;
   keyRotatedAt?: string;
   backupStatus: BackupFreshness;
+  activeRun?: { kind: "manual" | "scheduled"; startedAt: string };
+  runStoppedCode?: string;
   archiveUnderCurrentKey: boolean;
   /** Whether the box holds a recovery key at all, archives on or off. */
   recoveryKeySet: boolean;
@@ -5370,6 +5372,10 @@ export class DashboardApi {
 
   applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/apply", "POST", body);
+  }
+
+  runBackupNow(): Promise<void> {
+    return this.#request<void>("/api/backup/run-now", "POST");
   }
 
   disableBackup(): Promise<BackupWriteAnswer> {

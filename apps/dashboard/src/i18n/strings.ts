@@ -2317,6 +2317,11 @@ export const en = {
   "backup.configuration.match_error": "The passphrases must match.",
   "backup.configuration.request_error": "The configuration export could not be created.",
   "backup.status.state": "Backups",
+  "backup.run_now": "Back up now",
+  "backup.status.manual_running": "Manual backup in progress (started {time})",
+  "backup.status.scheduled_running": "Scheduled backup in progress (started {time})",
+  "backup.status.stopped_space_low":
+    "The last backup stopped because the box is low on disk space. Free space on Box status and try again.",
   "backup.status.on": "On",
   "backup.status.off": "Off",
   "backup.status.last": "Last backup",
@@ -6907,6 +6912,11 @@ export const es: Record<StringKey, string> = {
   "backup.configuration.match_error": "Las contraseñas deben coincidir.",
   "backup.configuration.request_error": "No se pudo crear la exportación de configuración.",
   "backup.status.state": "Copias de seguridad",
+  "backup.run_now": "Hacer copia ahora",
+  "backup.status.manual_running": "Copia manual en curso (iniciada a las {time})",
+  "backup.status.scheduled_running": "Copia programada en curso (iniciada a las {time})",
+  "backup.status.stopped_space_low":
+    "La última copia se detuvo porque queda poco espacio en el disco. Libera espacio en Estado del servidor y vuelve a intentarlo.",
   "backup.status.on": "Activadas",
   "backup.status.off": "Desactivadas",
   "backup.status.last": "Última copia",

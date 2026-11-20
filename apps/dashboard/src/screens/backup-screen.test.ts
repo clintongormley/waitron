@@ -16,7 +16,7 @@ import type {
 } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { BackupSettingsEvidenceDialog } from "../widgets/backup-settings-evidence.js";
-import { apiAnswering, evidence } from "../testing/backup-settings-evidence-fixture.js";
+import { apiAnswering, deferred, evidence } from "../testing/backup-settings-evidence-fixture.js";
 import { en, es } from "../i18n/strings.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import type { WtInput } from "@waitron/ui";
@@ -607,6 +607,104 @@ describe("backup-screen", () => {
     await flush(on);
     // The on state names where and how fresh.
     expect(on.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+  });
+
+  it("starts one manual backup and follows live status to the destination result", async () => {
+    const request = deferred<void>();
+    const runBackupNow = vi.fn(() => request.promise);
+    const api = stubApi({ runBackupNow }, ENABLED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    const button = page.getByRole("button", { name: "Hacer copia ahora", exact: true });
+    await expect.element(button).toBeEnabled();
+    await button.click();
+    await expect.element(button).toBeDisabled();
+    expect(runBackupNow).toHaveBeenCalledOnce();
+
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ENABLED,
+      activeRun: { kind: "manual", startedAt: "2026-11-20T20:00:00Z" },
+    });
+    request.resolve();
+    await vi.waitFor(() => {
+      expect(q(el, "[data-test=backup-run-status]")).toHaveTextContent("Copia manual en curso");
+    });
+    await expect.element(button).toBeDisabled();
+
+    if (!ENABLED.backupStatus.configured) throw new Error("expected configured backups");
+    const [stored] = ENABLED.backupStatus.destinations;
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ENABLED,
+      destinations: [
+        ...ENABLED.destinations,
+        { id: "second", kind: "local-fs", dir: "/mnt/second" },
+      ],
+      backupStatus: {
+        configured: true,
+        destinations: [
+          stored!,
+          { ...stored!, id: "second", uploadErrorCode: "backup.cloud_unavailable" },
+        ],
+      },
+    });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await expect.element(button).toBeEnabled();
+    expect(q(el, "[data-destination=primary]")).toHaveTextContent(t("backup.destination.stored"));
+    expect(q(el, "[data-destination=second]")).toHaveTextContent(t("backup.destination.failed"));
+  });
+
+  it.each([
+    { status: OFF, canManage: true },
+    { status: ENABLED, canManage: false },
+    { status: { ...ENABLED, isPrimary: false }, canManage: true },
+  ])(
+    "does not offer Back up now when the operator cannot start it",
+    async ({ status, canManage }) => {
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+        api: stubApi({}, status),
+        canManage,
+      });
+      await flush(el);
+      expect(q(el, "[data-test=status]")).not.toBeNull();
+      expect(q(el, "[data-test=run-now]")).toBeNull();
+    },
+  );
+
+  it("explains a busy refusal and refreshes the running backup's status", async () => {
+    const api = stubApi(
+      {
+        runBackupNow: vi.fn().mockRejectedValue({ code: "backup.run_in_progress" }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    const button = page.getByRole("button", { name: "Hacer copia ahora", exact: true });
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ENABLED,
+      activeRun: { kind: "scheduled", startedAt: "2026-11-20T20:00:00Z" },
+    });
+    await button.click();
+    await vi.waitFor(() =>
+      expect(alertText(el)).toContain("Ya había una copia de seguridad en curso"),
+    );
+    await expect.element(button).toBeDisabled();
+    expect(q(el, "[data-test=backup-run-status]")).toHaveTextContent("Copia programada en curso");
+  });
+
+  it("shows the existing reason that the last backup stopped before saving a copy", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, { ...ENABLED, runStoppedCode: "backup.staging_space_low" }),
+      canManage: true,
+    });
+    await flush(el);
+    expect(q(el, "[data-test=backup-run-status]")?.textContent).toContain(
+      "queda poco espacio en el disco",
+    );
   });
 
   it("names a bucket destination by its bucket and archive folder, and leaves the folder field empty", async () => {

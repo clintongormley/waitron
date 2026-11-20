@@ -53,8 +53,13 @@ import type {
   StoredObject,
 } from "./storage-backend.js";
 import { buildBackupBackend } from "./backup-backends.js";
+import { LocalFsBackend } from "./local-fs-backend.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
-import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
+import {
+  BackupSupervisor,
+  keyFingerprint,
+  type BackupSupervisorDeps,
+} from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
@@ -188,8 +193,8 @@ function buildBackend(dest: BackupDestination): StorageBackend {
 
 const readSealed = () => readArchiveSettings(suite.db, RING);
 
-function makeSupervisor(sc: Scenario): BackupSupervisor {
-  const sup = supervisorWithJob({
+function makeSupervisor(sc: Scenario, scheduled = true): BackupSupervisor {
+  const deps: BackupSupervisorDeps = {
     nodeId: BACKUP_NODE_ID,
     // As boot builds it.
     buildConfig: async () =>
@@ -207,7 +212,8 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     jitterSeed: "seed",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: () => {},
-  });
+  };
+  const sup = scheduled ? supervisorWithJob(deps) : new BackupSupervisor(deps);
   cleanup.push(() => sup.stop());
   return sup;
 }
@@ -347,6 +353,7 @@ describe("backup admin routes", () => {
     ["POST", "/api/backup/apply"],
     ["POST", "/api/backup/disable"],
     ["POST", "/api/backup/rotate"],
+    ["POST", "/api/backup/run-now"],
     ["GET", "/api/backup/recovery-key"],
   ])("%s %s requires proof before backup effects", async (method, path) => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
@@ -370,15 +377,16 @@ describe("backup admin routes", () => {
     await setupVenue();
   }, 180_000);
 
-  it("refuses an unproved staff session by permission before asking for proof", async () => {
+  it.each([
+    ["/api/backup/recovery-key", "GET"],
+    ["/api/backup/run-now", "POST"],
+  ])("refuses staff at %s by permission before asking for proof", async (path, method) => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const { token } = await openManagementSession(suite.db, "staff");
-    const response = await buildApp(makeSupervisor(sc), sc.stateDir).request(
-      "/api/backup/recovery-key",
-      {
-        headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
-      },
-    );
+    const response = await buildApp(makeSupervisor(sc), sc.stateDir).request(path, {
+      method,
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+    });
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
@@ -393,6 +401,73 @@ describe("backup admin routes", () => {
     }
     const mint = await app.request("/api/backup/mint-key", { method: "POST" });
     expect(mint.status).toBe(401);
+  });
+
+  it("accepts one manual backup while refusing a second press", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc, false);
+    const app = buildApp(sup, sc.stateDir);
+    const cookie = await login(app);
+    const start = () => app.request("/api/backup/run-now", { method: "POST", headers: { cookie } });
+    const off = await start();
+    expect(off.status).toBe(409);
+    expect(await off.json()).toMatchObject({ error: { code: "backup.not_enabled" } });
+    const settings = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(await settings.json()).toMatchObject({ enabled: true });
+    sc.role = "secondary";
+    const secondary = await start();
+    expect(secondary.status).toBe(409);
+    expect(await secondary.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+    sc.role = "primary";
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const putFile = LocalFsBackend.prototype.putFile;
+    const hold = vi.spyOn(LocalFsBackend.prototype, "putFile").mockImplementation(async function (
+      this: LocalFsBackend,
+      ...args
+    ) {
+      await held;
+      await putFile.apply(this, args);
+    });
+    const read = async () =>
+      (await app.request("/api/backup/status", { headers: { cookie } })).json();
+    try {
+      const responses = await Promise.all([start(), start()]);
+      expect(responses.map((r) => r.status).sort()).toEqual([202, 409]);
+      expect(await responses.find((r) => r.status === 409)!.json()).toMatchObject({
+        error: { code: "backup.run_in_progress" },
+      });
+      expect(await read()).toMatchObject({
+        activeRun: { kind: "manual", startedAt: expect.any(String) },
+      });
+      release();
+      const finished = await poll(async () => {
+        const status = await read();
+        if (!status.activeRun) return status;
+      });
+      expect(finished.backupStatus.destinations[0]).toMatchObject({
+        lastBackupAt: expect.any(String),
+        storedUnderCurrentKey: true,
+        uploadErrorCode: null,
+      });
+      expect(hold).toHaveBeenCalledOnce();
+    } finally {
+      release();
+      await sup.stop();
+      hold.mockRestore();
+    }
   });
 
   it("mint-key returns a strong key and stores nothing", async () => {
