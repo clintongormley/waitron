@@ -591,8 +591,7 @@ function placeLabel(place: string | undefined): TemplateResult | typeof nothing 
   return place ? html`<span class="label">${place}</span>` : nothing;
 }
 
-/** A portion's time is keyed only as the Forgotten mark it draws: the server stamps each ticket
- * item's `queuedAt` on its own, so portions fired together can differ by a millisecond. */
+/** A portion's time is keyed only as the Forgotten mark it draws. */
 function rows(items: readonly ItemView[]): ItemView[][] {
   return portionGroups(
     items,

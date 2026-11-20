@@ -1119,6 +1119,45 @@ describe("department transfer read boundaries", () => {
       expect.objectContaining({ id: ticket!.id, requestedAt, firedAt: null }),
     ]);
   });
+  it("lists the dishes of one send in the bill's line order whatever their ticket ids", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Burger", "Paella", "Flan", "Tarta", "Burger", "Paella");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const tickets = await suite.db
+      .select({
+        id: ticketItems.id,
+        queuedAt: ticketItems.queuedAt,
+        lineNo: workingOrderLines.lineNo,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
+    expect(tickets).toHaveLength(6);
+    expect(new Set(tickets.map((ticket) => ticket.queuedAt)).size).toBe(1);
+    // Ticket ids descending against line order, so a sort that falls back to the id reverses the bill.
+    const descendingIds = tickets.map(() => randomUUID()).sort((x, y) => (x < y ? 1 : -1));
+    const inLineOrder = [...tickets].sort((x, y) => x.lineNo - y.lineNo);
+    for (const [index, ticket] of inLineOrder.entries())
+      await suite.db
+        .update(ticketItems)
+        .set({ id: descendingIds[index]! })
+        .where(eq(ticketItems.id, ticket.id));
+    const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.outstandingWork.map((work: { id: string }) => work.id)).toEqual(
+      descendingIds,
+    );
+    expect(detail.body.outstandingWork.map((work: { lineId: string }) => work.lineId)).toEqual(
+      detail.body.lines.map((line: { id: string }) => line.id),
+    );
+  });
   it.each([
     { name: "held", active: 2000, served: 0, held: true, included: true },
     { name: "partly served", active: 2000, served: 1000, held: false, included: true },

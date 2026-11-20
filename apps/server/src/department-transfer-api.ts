@@ -216,7 +216,7 @@ export function mountDepartmentTransferApi(
               gt(firedQuantity, workingOrderLines.servedQuantity),
             ),
           )
-          .orderBy(asc(ticketItems.queuedAt), asc(ticketItems.id));
+          .orderBy(asc(ticketItems.queuedAt), asc(workingOrderLines.lineNo), asc(ticketItems.id));
         return { request, tab, lines, outstandingWork };
       });
       return c.json(detail);
