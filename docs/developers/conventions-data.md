@@ -3035,7 +3035,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   `storage.disk_full_stop_refused` with the route.
 - Open on the till mount (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`): sign-in,
   sign-out and the session's language, because a refused sign-out keeps someone signed in on a
-  shared till and a refused sign-in keeps the next shift out; the four sale routes, refused inside instead (below); POSTs that save nothing
+  shared till and a refused sign-in keeps the next shift out. The payment routes can answer replays (below). POSTs that save nothing
   of their own — the three checks for dishes whose kitchen station is closed or switched off
   (`/api/dead-ends/*`), four previews. A refused send-preview would turn into the till's
   generic table error and the round would never be sent, so the kitchen send itself is what is
@@ -3044,11 +3044,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   open route still fails by itself, `storage.disk_full`, if its own save does not fit. Opening or
   closing a kitchen station for the day (`station-today-api.ts`, mounted inside `mountTillApi`) is
   refused.
-- The four sale routes — `POST /api/sales`, `POST /api/pay`, `POST /api/working-orders/:id/collect`
-  and `POST /api/working-orders/:id/payments` — refuse a new sale inside their first transaction,
-  after their replay checks, so a resend of a sale or payment already recorded is still answered
-  with what was recorded (`till-sale.ts`'s `runPayWorkingOrder` and `runCollectOrder`,
-  `bill-payments.ts`'s `beginBillPayment`). On `POST /api/pay`, Pay again on a card already charged
+- `POST /api/pay`, `POST /api/working-orders/:id/collect` and
+  `POST /api/working-orders/:id/payments` check for a replay before refusing new money inside
+  their first transaction. A replay can still return the recorded result. On `POST /api/pay`, Pay again on a card already charged
   files the sale without asking the reader.
 - A card-reader payment checks the stop three times: the free-space read before its first
   transaction; inside it, refused when that read said full or a refusal has been noted since; and
@@ -5403,11 +5401,11 @@ absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`)
 %j as a bad field, changing nothing` pin the two halves, and in
 `apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
 null` and `refuses guests %j as a bad %s, changing nothing` do. The payment routes' `guestCount`
-(`POST /api/sales`, `/api/pay`, `/api/working-orders/:id/collect`, and
+(`POST /api/pay`, `/api/working-orders/:id/collect`, and
 `/api/working-orders/:id/payments` for the payment that completes the bill) keeps an explicit null
 as no guests line, while an absent key takes the party's default (`saleReceiptFacts`,
 `apps/server/src/receipt-guests.ts`). In `apps/server/src/receipt-guests.routes.test.ts` a pair of
-cases on a party's bill pins the two halves on each of the four routes.
+cases on a party's bill pins both inputs.
 
 An extras item's `maxQuantity` keeps an explicit null as no cap on that item, while an absent field
 defaults to one (`parseExtraListInput`, `packages/menu/src/extra-contract.ts`); the case

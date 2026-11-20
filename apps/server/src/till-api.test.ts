@@ -178,7 +178,7 @@ const suite = useVenueDb({
     });
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {});
-    // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
+    // Working orders reference the node that writes them.
     // (its FK `(node_id) → nodes(id)` requires a real row).
     const nodeId = await seedNode(db);
     const [person] = await seedPersons(db, {
@@ -2466,71 +2466,6 @@ describe("zone-offer menu routes", () => {
   });
 });
 
-describe("POST /api/sales (session-guarded sale)", () => {
-  it.each([
-    [{}, "lines"],
-    [{ lines: null }, "lines"],
-    [{ lines: [] }, "tender"],
-    [{ lines: [], tender: null }, "tender"],
-    [{ lines: [], tender: [] }, "tender"],
-    [{ lines: [], tender: "cash" }, "tender"],
-  ])("refuses malformed sale fields in %j as %s", async (body, field) => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify(body),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field } },
-    });
-  });
-
-  it("REJECTS (401 session.required) when no cookie is present — the sale never runs unauthenticated", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-
-    // The guard runs before it reads the body.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [],
-        tender: { method: "cash", amount: "0" },
-      }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("POST with a malformed workingOrderId is 400 shared.invalid_id", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-
-    // Only a malformed `workingOrderId` is an error (absent or well-formed-unknown are walk-ups); the
-    // screen refuses it 400 at the HTTP boundary, before any query runs.
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-        workingOrderId: "not-a-uuid",
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
-    });
-  });
-});
-
 describe("the device checks read the session's device, not the device cookie", () => {
   /** A shift on a fresh till device whose profile allows only `capabilities`. */
   async function sessionOnDeviceWith(capabilities: string[]): Promise<string> {
@@ -2543,25 +2478,6 @@ describe("the device checks read the session's device, not the device cookie", (
     return `${SESSION_COOKIE}=${await openSession(suite.db, deviceId)}`;
   }
 
-  it("refuses a cash sale sent with no device cookie from a session on a device that does not take cash", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: await sessionOnDeviceWith(["open-cash-drawer"]),
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
-  });
-
   /** The cookie of a fresh till device whose profile allows `capabilities`. */
   async function deviceCookieWith(capabilities: string[]): Promise<string> {
     const profileId = await seedDeviceProfile(
@@ -2572,22 +2488,33 @@ describe("the device checks read the session's device, not the device cookie", (
     return (await enrolTillDevice(suite.db, profileId)).cookie;
   }
 
-  it("refuses a cash sale from a session on a device that does not take cash, though the cookie names one that does", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${await sessionOnDeviceWith(["open-cash-drawer"])}; ${await deviceCookieWith(["take-cash"])}`;
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-      }),
-    });
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
-  });
+  it.each([false, true])(
+    "refuses a cash payment with a missing or mismatched device proof (other device: %s)",
+    async (withOtherDevice) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const session = await sessionOnDeviceWith(["open-cash-drawer"]);
+      const cookie = withOtherDevice
+        ? `${session}; ${await deviceCookieWith(["take-cash"])}`
+        : session;
+      const id = randomUUID();
+      const res = await app.request(`/api/working-orders/${id}/payments`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          dining: "eat_in",
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "cash",
+          tendered: "10.00",
+          basket: { lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
+        }),
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    },
+  );
 
   it("refuses a drawer open from a session on a device that may not open it, though the cookie names one that may", async () => {
     const app = new Hono();
@@ -2866,29 +2793,6 @@ describe("a device's profile decides who may sign in on it", () => {
 });
 
 describe("malformed zone ids and simulation outcomes on the sale routes", () => {
-  it("POST /api/sales with a malformed zoneId is 400 shared.invalid_id", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-    const res = await app.request("/api/sales", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        tender: { method: "cash", amount: "10.00" },
-        zoneId: "not-a-zone",
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
-    });
-  });
-
   it("refuses a bill payment basket naming a malformed zone before writing it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

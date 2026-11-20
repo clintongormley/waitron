@@ -154,8 +154,8 @@ mark is for rows written some other way.
 ## Ordering and stored facts
 
 A requested line carries two optional fields, `options` and `extras`. These routes take them,
-each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`): the walk-up sale
-`POST /api/sales`, the park `POST /api/working-orders`, the held-order edit
+each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`):
+`POST /api/working-orders` to park an order, the held-order edit
 `PUT /api/working-orders/:id`, the one-line edit `PUT /api/working-orders/:id/lines/:lineNo`
 (through `applyLineEdits`), a seated party's group submission `POST /api/parties/:id/groups`,
 and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or

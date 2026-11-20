@@ -271,8 +271,9 @@ menu's published version holds them (`priceOrderLines`, `apps/server/src/working
 short dish prep station name typed after publishing reaches all three surfaces on lines added once the
 menu is published again. A blank prep station name shows the staff name, including the variant's staff
 name on a variant line. A
-venue with no service zone sells nothing: sent lines with no zone, the till's three line-carrying
-routes, `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, take the starting zone of
+venue with no service zone sells nothing: sent lines with no zone, the till's line-carrying
+routes `POST /api/working-orders/:id/payments`, `POST /api/pay` and `POST /api/working-orders`
+take the starting zone of
 the device's profile when the profile has a department — or, when that zone is switched off or has
 left the department, the first by position of the profile's zones still usable — and refuse
 `device_profile.no_service_zone` when none is; a profile with no

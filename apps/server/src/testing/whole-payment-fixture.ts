@@ -2,14 +2,11 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
 import type { BillEditExpected } from "../order-drafts.js";
 import {
-  payWorkingOrder as pay,
   collectOrderOrchestration as collect,
-  recordTillSaleOrchestration as sale,
   payWorkingOrderIntegratedOrchestration as reader,
   collectOrder as deviceCollect,
   payWorkingOrderIntegrated as deviceReader,
   type PayWorkingOrderRequest as PayRequest,
-  type TillSaleRequest as SaleRequest,
   type IntegratedPayRequest as ReaderRequest,
 } from "../till-sale.js";
 export * from "../till-sale.js";
@@ -17,7 +14,6 @@ export { readBillTenderLines } from "../receipt-payments.js";
 
 type ContentRequest<T> = Omit<T, "expectedEdit"> & { expectedEdit?: BillEditExpected | null };
 export type PayWorkingOrderRequest = ContentRequest<PayRequest>;
-export type TillSaleRequest = ContentRequest<SaleRequest>;
 export type IntegratedPayRequest = ContentRequest<ReaderRequest>;
 const observations = new WeakMap<Database, Map<string, BillEditExpected | null>>();
 
@@ -71,21 +67,11 @@ export function observedWholePaymentBody(db: Database, path: string, body: unkno
   if (body === null || typeof body !== "object" || Array.isArray(body)) return body;
   const value = body as Record<string, unknown>;
   const match = /^\/api\/working-orders\/([^/]+)\/collect$/.exec(path);
-  const id =
-    path === "/api/sales" ? value.workingOrderId : path === "/api/pay" ? value.id : match?.[1];
-  if (path !== "/api/sales" && path !== "/api/pay" && match === null) return body;
+  if (path !== "/api/pay" && match === null) return body;
+  const id = path === "/api/pay" ? value.id : match?.[1];
   return observed(db, typeof id === "string" ? id : undefined, body, undefined).request;
 }
 
-export function payWorkingOrder(
-  deps: Parameters<typeof pay>[0],
-  cfg: Parameters<typeof pay>[1],
-  req: PayWorkingOrderRequest,
-  operatorId?: string,
-) {
-  const captured = observed(deps.db, req.id, req, operatorId);
-  return pay(deps, cfg, captured.request, captured.operatorId);
-}
 export function collectOrderOrchestration(
   deps: Parameters<typeof collect>[0],
   cfg: Parameters<typeof collect>[1],
@@ -94,15 +80,6 @@ export function collectOrderOrchestration(
 ) {
   const captured = observed(deps.db, req.id, req, operatorId);
   return collect(deps, cfg, captured.request, captured.operatorId);
-}
-export function recordTillSaleOrchestration(
-  deps: Parameters<typeof sale>[0],
-  cfg: Parameters<typeof sale>[1],
-  req: TillSaleRequest,
-  operatorId?: string,
-) {
-  const captured = observed(deps.db, req.workingOrderId, req, operatorId);
-  return sale(deps, cfg, captured.request, captured.operatorId);
 }
 export function payWorkingOrderIntegratedOrchestration(
   deps: Parameters<typeof reader>[0],

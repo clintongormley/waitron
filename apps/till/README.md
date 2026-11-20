@@ -77,10 +77,8 @@ itself:
    department, or else the venue's counter-default zone (`GET /api/default-service-zone/offers`).
    A person who signs in again with nobody else signed in between comes back to the zone they left,
    while it is still offered, and the menu they chose there.
-3. **Pay** — one **cash** tender; the sale is filed by `POST /api/sales`, which re-prices the basket
-   authoritatively (the browser never sends a price). _(2026-09-30, lane B item B15: a bill that
-   already holds a payment, or one the operator splits with Pay items, Contribute or Split equally,
-   is paid in several payments through the bill payment dialog instead.)_
+3. **Pay** — pay the whole bill or take part payments with Pay items, Contribute or Split equally.
+   The bill payment request sends your basket to the server, which prices it from the menu.
 4. **Ticket** — the AEAT verification QR first when there is one (after any practice warning), then
    the filed invoice number, per-rate VAT desglose and change, then "new sale". Logging out keeps
    the basket for the next operator.

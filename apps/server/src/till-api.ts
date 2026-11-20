@@ -80,13 +80,12 @@ import type { DiskFullState } from "./disk-full-state.js";
 import {
   collectOrder,
   payWorkingOrderIntegrated,
-  recordTillSale,
   readSettledTicket,
   reprintSale,
   printSaleReceipt,
 } from "./till-sale.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
-import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
+import type { IntegratedPayRequest, TillTender } from "./till-sale.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
@@ -1314,7 +1313,6 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "DELETE /api/session",
   "PUT /api/session/locale",
   // Refused inside, after their replay checks, the one place a resend is told from a new sale.
-  "POST /api/sales",
   "POST /api/pay",
   "POST /api/working-orders/:id/collect",
   "POST /api/working-orders/:id/payments",
@@ -1751,7 +1749,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{
         step: "pay" | "place" | "edit";
-        lines: (TillSaleRequest["lines"][number] & { workingOrderLineId?: string })[];
+        lines: (IntegratedPayRequest["lines"][number] & { workingOrderLineId?: string })[];
         zoneId?: string;
         workingOrderId?: string;
       }>(c);
@@ -1860,71 +1858,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         };
       });
       return c.json(answer);
-    }),
-  );
-
-  app.post("/api/sales", (c) =>
-    runBodyCourse(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "payment.take" });
-      const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const body = await readJsonBody<TillSaleRequest>(c);
-      if (body.workingOrderId !== undefined) {
-        requireUuidParam(body.workingOrderId, "WorkingOrderId");
-      }
-      if (body.receiptLanguage !== undefined) {
-        requireString(body.receiptLanguage, "receiptLanguage");
-      }
-      if (body.zoneId !== undefined) {
-        requireUuidParam(body.zoneId, "ServiceZoneId");
-      }
-      if (body.printCardSlip !== undefined && typeof body.printCardSlip !== "boolean")
-        throw invalid("printCardSlip");
-      const guestCount = readGuestCountChoice(body.guestCount);
-      const lateSend = parseLateSend(body.lateSend);
-      // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
-      // the profile lacks; both before the zone, so a profile that cannot sell is told so.
-      assertTakesTender(session.device, tillTenderKind(body.tender));
-      if (body.tender?.method === "card") optionalMoney(body.tender.addedTip, "addedTip");
-      Object.assign(
-        body.tender ?? {},
-        readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
-      );
-      assertProfileAction(session.device, "take-orders");
-      await assertRequestDevice(deps, c, session);
-      // After the device checks, so a profile or device refusal outranks a malformed `lines`,
-      // `tender` or `dining`.
-      if (!Array.isArray(body.lines)) throw invalid("lines");
-      if (body.tender === null || typeof body.tender !== "object" || Array.isArray(body.tender))
-        throw invalid("tender");
-      const dining = requireDining(body.dining);
-      const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
-      await gateZones(
-        deps,
-        session,
-        named(
-          zoneId !== undefined && { zoneId },
-          body.workingOrderId !== undefined && { orderId: body.workingOrderId },
-        ),
-      );
-      const saleCfg = sendingCfg(cfg, c, session.device);
-      const result = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        recordTillSale(
-          {
-            db: deps.db,
-            backend: deps.backend,
-            admission: deps.admission,
-            clock: deps.clock,
-            log,
-            attendance: deps.attendance,
-            disk: deps.disk,
-          },
-          saleCfg,
-          { ...body, zoneId, guestCount, lateSend: late, dining },
-          { personId, sessionId: session.sessionId },
-        ),
-      );
-      return c.json(result);
     }),
   );
 

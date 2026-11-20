@@ -17,9 +17,10 @@ import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { TradingAdmission } from "./trading-admission.js";
+import { payCounterBasket } from "./testing/bill-payment-fixture.js";
+import { openTillSession } from "./testing/session-device.js";
 import {
   payWorkingOrderIntegratedOrchestration as readerPay,
-  payWorkingOrder,
   collectOrderOrchestration as collectOrder,
 } from "./testing/whole-payment-fixture.js";
 import {
@@ -291,14 +292,46 @@ describe("saved-zone payment transactions", () => {
         expect(deps.provider.collectCalls).toHaveLength(kind === "free" ? 0 : 1);
       },
     );
-    it.each(["cash", "card"] as const)("dates immediate %s from the saved zone", async (method) => {
-      const { clock, now } = zoneClock();
-      const deps = zoneDeps(clock);
-      const req = zoneRequest();
-      await payWorkingOrder(deps, zoneVenue.cfg, { ...req, tender: { method, amount: "2.50" } });
-      expect(await issueFacts(req.id)).toEqual([nightFacts]);
-      expect(now).toHaveBeenCalledTimes(1);
-    });
+    it.each(["cash", "card"] as const)(
+      "dates an immediate %s invoice from the payment reading across Madrid midnight",
+      async (method) => {
+        const beforeMidnight = "2026-10-14T21:59:59.900Z";
+        const { clock, now, set } = zoneClock("2026-10-14T22:00:00.100Z");
+        const afterMidnight = clock.now();
+        set(beforeMidnight);
+        const paymentReading = clock.now();
+        now.mockClear().mockReturnValue(afterMidnight).mockReturnValueOnce(paymentReading);
+        const personId = zoneVenue.operatorId;
+        const sessionId = await openTillSession(zoneDb.db, {
+          personId,
+          deviceId: zoneVenue.cfg.origin.deviceId,
+        });
+        const { id, lines } = zoneRequest();
+
+        await payCounterBasket(
+          zoneDeps(clock),
+          zoneVenue.cfg,
+          { personId, sessionId },
+          id,
+          { lines },
+          method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
+          randomUUID(),
+        );
+
+        expect(await issueFacts(id)).toEqual([
+          {
+            issued_at: beforeMidnight,
+            issued_offset_minutes: 120,
+            fecha_expedicion_factura: "2026-10-14",
+            fecha_hora_huso_gen_registro: "2026-10-14T23:59:59+02:00",
+          },
+        ]);
+        expect(zoneDb.db.all(sql`select settled_at from working_orders where id = ${id}`)).toEqual([
+          { settled_at: beforeMidnight },
+        ]);
+        expect(now).toHaveBeenCalledTimes(1);
+      },
+    );
     it.each(["cash", "card", "reader"] as const)(
       "collects an already-issued invoice with %s without redating or issuing again",
       async (method) => {
@@ -326,6 +359,14 @@ describe("saved-zone payment transactions", () => {
           const deps = zoneDeps(source.clock, admission);
           const req = zoneRequest();
           if (method === "collection") await zonePlaced(req, source.clock, true);
+          const personId = zoneVenue.operatorId;
+          const sessionId =
+            method === "cash" || method === "card"
+              ? await openTillSession(zoneDb.db, {
+                  personId,
+                  deviceId: zoneVenue.cfg.origin.deviceId,
+                })
+              : undefined;
           const before = economicSnapshot();
           const run =
             method === "reader"
@@ -335,10 +376,15 @@ describe("saved-zone payment transactions", () => {
                     ...req,
                     tender: { method: "cash", amount: "2.50" },
                   })
-                : payWorkingOrder(deps, zoneVenue.cfg, {
-                    ...req,
-                    tender: { method, amount: "2.50" },
-                  });
+                : payCounterBasket(
+                    deps,
+                    zoneVenue.cfg,
+                    { personId, sessionId: sessionId! },
+                    req.id,
+                    { lines: req.lines },
+                    method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
+                    randomUUID(),
+                  );
           await expect(run).rejects.toMatchObject({
             code: "venue.time_zone_not_ready",
             params: { reason: state },

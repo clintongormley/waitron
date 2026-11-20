@@ -11,6 +11,7 @@ describe("maskPath", () => {
     ],
     ["/management-api/products/menus/editor", "/management-api/products/:id/editor"],
     ["/api/unknown/guest-name", "/api/:id/:id"],
+    ["/api/sales", "/api/:id"],
     ["/private/guest-name", "/:id/:id"],
     ["http://[", ":unparseable"],
     [":unparseable", ":unparseable"],
@@ -50,7 +51,7 @@ describe("createInstrumentedFetch", () => {
     const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
       makeId: () => "rid-1",
     });
-    await f("http://box/api/sales/9", {
+    await f("http://box/api/working-orders/private-order-id/payments", {
       method: "POST",
       body: JSON.stringify({ card: "4242424242424242" }),
     });
@@ -60,7 +61,7 @@ describe("createInstrumentedFetch", () => {
     const end = events.at(-1)!;
     expect(end.fields).toMatchObject({
       method: "POST",
-      path: "/api/sales/:id",
+      path: "/api/working-orders/:id/payments",
       status: 200,
       requestId: "rid-1",
     });

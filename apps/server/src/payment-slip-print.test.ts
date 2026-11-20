@@ -854,16 +854,18 @@ describe("a payment after the ticket was issued", () => {
       .some((line) => line.trim() === label);
 
   /** A walk-up counter sale of one Red wine bottle (30.00). */
-  async function counterSale(body: Record<string, unknown>) {
+  async function counterSale(body: Record<string, unknown>, workingOrderId = randomUUID()) {
     const { zoneId } = await withTransaction(venue.db, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
-    return send(venue.app, venue.cookie, "POST", "/api/sales", {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${workingOrderId}/payments`, {
       dining: "eat_in",
-      workingOrderId: randomUUID(),
-      zoneId,
-      lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
-      tender: { method: "cash", amount: "30.00" },
+      submissionId: workingOrderId,
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: body.method === "card" ? undefined : "30.00",
+      basket: { zoneId, lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }] },
       ...body,
     });
   }
@@ -948,7 +950,9 @@ describe("a payment after the ticket was issued", () => {
     expect(asked.json).not.toHaveProperty("slipPrintFailed");
     const slips = await slipsSince(before);
     expect(slips).toHaveLength(1);
-    expectPaymentSlip(slips[0]!, "30,00", asked.json.invoiceNumber as string);
+    expect(asked.json.invoice).toMatchObject({ invoiceNumber: expect.any(String) });
+    const { invoiceNumber } = asked.json.invoice as { invoiceNumber: string };
+    expectPaymentSlip(slips[0]!, "30,00", invoiceNumber);
     expect(methodLine(slips[0]!, labels.cash)).toBe(true);
     expect((await counterSale({})).status).toBe(200);
     expect(await slipsSince(before)).toHaveLength(1);
@@ -964,7 +968,8 @@ describe("a payment after the ticket was issued", () => {
     const before = await jobCount();
 
     const asked = await counterSale({
-      tender: { method: "card", amount: "30.00" },
+      method: "card",
+      entry: "manual",
       printCardSlip: true,
     });
 
@@ -972,7 +977,9 @@ describe("a payment after the ticket was issued", () => {
     expect(asked.json).not.toHaveProperty("slipPrintFailed");
     const slips = await slipsSince(before);
     expect(slips).toHaveLength(1);
-    expectPaymentSlip(slips[0]!, "30,00", asked.json.invoiceNumber as string);
+    expect(asked.json.invoice).toMatchObject({ invoiceNumber: expect.any(String) });
+    const { invoiceNumber } = asked.json.invoice as { invoiceNumber: string };
+    expectPaymentSlip(slips[0]!, "30,00", invoiceNumber);
     expect(methodLine(slips[0]!, labels.card)).toBe(true);
     expect(methodLine(slips[0]!, labels.cash)).toBe(false);
   });
@@ -981,13 +988,11 @@ describe("a payment after the ticket was issued", () => {
     const before = await jobCount();
 
     const asked = await counterSale({
-      tender: {
-        method: "card",
-        amount: "30.00",
-        externalProvider: "other",
-        externalRef: "OP-77",
-        externalMachine: "SumUp Solo",
-      },
+      method: "card",
+      entry: "manual",
+      externalProvider: "other",
+      externalRef: "OP-77",
+      externalMachine: "SumUp Solo",
       printCardSlip: true,
     });
 
@@ -1031,7 +1036,7 @@ describe("a payment after the ticket was issued", () => {
     const before = await jobCount();
     const workingOrderId = randomUUID();
 
-    const sold = await counterSale({ workingOrderId, printCardSlip: true });
+    const sold = await counterSale({ printCardSlip: true }, workingOrderId);
 
     expect(sold.status, JSON.stringify(sold.json)).toBe(200);
     expect(sold.json).toMatchObject({ slipPrintFailed: true });
@@ -1059,12 +1064,12 @@ describe("a payment after the ticket was issued", () => {
     expect(await slipsSince(before)).toHaveLength(1);
 
     const workingOrderId = randomUUID();
-    const sold = await counterSale({ workingOrderId, printCardSlip: true });
-    const resold = await counterSale({ workingOrderId, printCardSlip: true });
+    const sold = await counterSale({ printCardSlip: true }, workingOrderId);
+    const resold = await counterSale({ printCardSlip: true }, workingOrderId);
 
     expect(sold.status, JSON.stringify(sold.json)).toBe(200);
     expect(resold.status, JSON.stringify(resold.json)).toBe(200);
-    expect(resold.json.invoiceNumber).toBe(sold.json.invoiceNumber);
+    expect(resold.json.invoice).toEqual(sold.json.invoice);
     expect(await slipsSince(before)).toHaveLength(2);
   });
 

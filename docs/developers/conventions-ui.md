@@ -655,7 +655,7 @@ was (W100).
   `cash.drawer` or the PIN of someone holding it; then the device's drawer must resolve, through
   `resolveDrawerPrinter`, to an active printer (`drawer.no_printer`) that has a drawer
   (`drawer.not_attached`).
-- **Taking cash.** A cash sale (`POST /api/sales`), a cash collection
+- **Taking cash.** A cash collection
   (`POST /api/working-orders/:id/collect`) and a cash bill payment
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device
   whose profile lacks `take-cash` ("Takes cash") are refused `device.cash_not_allowed`
@@ -669,7 +669,7 @@ drawer choice, not its receipt printer"),
 `apps/server/src/till-api.receipt.test.ts` ("opens a handheld's drawer on a cash sale when its
 profile allows the drawer"), `apps/server/src/till-api.fiscal-sale-paths.test.ts` and
 `apps/server/src/bill-payments-api.test.ts`; and the `device.cash_not_allowed` cases in
-`till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, and the
+`till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, and the
 cash refund case in `till-api.profile-actions.test.ts`. Weaker
 than the rule: each holds only the routes it names, so a new route that queues a `drawer` job
 without `drawerPrinter`, or takes cash without `assertTakesCash`, is seen by nothing.

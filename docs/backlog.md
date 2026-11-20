@@ -1596,8 +1596,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Invoice delivery records describe the request and its outcome. The shared mail and print queues keep the retry schedule and active claims.
   The till can take whole or part payments on a presented bill before its invoice is issued.
   The counter saves its basket and takes payment in one request.
-  [One way to pay](superpowers/plans/2026-11-19-a1308-one-way-to-pay.md) still needs the older
-  payment routes retired with their recovery in the 4c sequence before the refund slices.
+  [One way to pay](superpowers/plans/2026-11-19-a1308-one-way-to-pay.md) still needs the separate
+  collection and reader payment requests and their recovery retired before the refund slices.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
