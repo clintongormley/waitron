@@ -194,7 +194,9 @@ export class VenueDetailsPanel extends LitElement {
   /** Each read and each save takes the next place when it is sent, a dialog's answer when it
    * arrives; the card shows a value only if its place is later than the one it shows. A dialog's
    * answer is shown for its own field only, and a read or save sent before that answer arrived
-   * leaves that field as the answer set it. */
+   * leaves that field as the answer set it. A business-day answer takes its place when it arrives,
+   * since the panel does not see when it was sent, so it leaves every answered field as shown and
+   * the read after it brings any later change. */
   #places = 0;
   #shownPlace = 0;
   #answeredPlaces: Partial<Record<TaxpayerField, number>> = {};
@@ -282,6 +284,13 @@ export class VenueDetailsPanel extends LitElement {
       if (before && answered > place)
         shown = withTaxpayerField(shown, before, field as TaxpayerField);
     this.model = shown;
+  }
+  #showBusinessDayAnswer(model: VenueDetailsModel): void {
+    let shown = model;
+    if (this.model)
+      for (const field of Object.keys(this.#answeredPlaces))
+        shown = withTaxpayerField(shown, this.model, field as TaxpayerField);
+    this.#show(++this.#places, shown);
   }
   #showAnswer(field: TaxpayerField, model: VenueDetailsModel): void {
     if (!this.model) return;
@@ -948,7 +957,7 @@ export class VenueDetailsPanel extends LitElement {
               .readOnly=${this.readOnly}
               @saved=${(event: CustomEvent<VenueDetailsModel>) => {
                 event.stopPropagation();
-                this.#show(++this.#places, event.detail);
+                this.#showBusinessDayAnswer(event.detail);
                 this.#readAfterAnswer();
               }}
             ></dashboard-business-day-start-editor>

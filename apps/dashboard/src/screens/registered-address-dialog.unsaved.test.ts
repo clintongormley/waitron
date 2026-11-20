@@ -1,7 +1,13 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { LeaveController, type WtDialog, type WtInput } from "@waitron/ui";
+import {
+  LeaveController,
+  type AddressLookupProvider,
+  type WtAddressLookup,
+  type WtDialog,
+  type WtInput,
+} from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -12,8 +18,12 @@ import "./venue-details-panel.js";
 class RegisteredAddressLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
+  addressProvider?: AddressLookupProvider;
   override render() {
-    return html`<dashboard-venue-details-panel .api=${this.api}></dashboard-venue-details-panel>
+    return html`<dashboard-venue-details-panel
+        .api=${this.api}
+        .addressProvider=${this.addressProvider}
+      ></dashboard-venue-details-panel>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
@@ -24,7 +34,7 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-async function fixture() {
+async function fixture(addressProvider?: AddressLookupProvider) {
   setLocale("en-GB");
   const changeTaxpayerDomicile = vi.fn();
   const api = {
@@ -34,7 +44,7 @@ async function fixture() {
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<RegisteredAddressLeaveApp>(
     "registered-address-leave-test-app",
-    { api },
+    { api, addressProvider },
   );
   const panel = app.shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   await expect
@@ -120,4 +130,36 @@ it("the panel being hidden closes the dialog and releases its draft", async () =
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect((await question(app)).open).toBe(false);
   expect(changeTaxpayerDomicile).not.toHaveBeenCalled();
+});
+
+it("a page discard restores the stored address and clears the other-country line", async () => {
+  const { app, dialog, input } = await fixture({ suggest: async () => [], resolve: vi.fn() });
+  input.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{End} 2");
+  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
+  const search = dialog.querySelector<WtAddressLookup>("wt-address-lookup")!;
+  search.dispatchEvent(
+    new CustomEvent("wt-address-chosen", {
+      detail: {
+        address: {
+          lines: ["Rua Augusta 1"],
+          locality: "Lisboa",
+          postalCode: "1100-148",
+          countryCode: "PT",
+        },
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => search.message).not.toBe("");
+  const request = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  await choose(app, "discard");
+  expect(await request).toBe("proceeded");
+  await expect.poll(() => input.value).toBe("Calle Fiscal 8, 28013 Madrid");
+  expect(search.message).toBe("");
 });

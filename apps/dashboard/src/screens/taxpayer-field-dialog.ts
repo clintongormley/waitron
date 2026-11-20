@@ -117,6 +117,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
         this.value = value;
         this.refusal = "";
         this.bottom = "";
+        this.foreignAddress = false;
         this.#feedback.reset();
         this.#cancelAddressSearch();
       },

@@ -395,6 +395,31 @@ it("a venue-details save sent before an address answer arrived, answering the ol
   expect(shown("taxpayerDomicile")).toBe(NEW);
 });
 
+it("a business-day answer that arrives after an address answer, carrying the old address, keeps the new address", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  const shown = () =>
+    panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim();
+  await expect.poll(shown).toBe(NEW);
+
+  const before = moved(OLD);
+  const editor = panel.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
+  editor.dispatchEvent(
+    new CustomEvent("saved", {
+      detail: { ...before, businessDayClock: { ...before.businessDayClock, revision: 1 } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => editor.model.revision).toBe(1);
+  await panel.updateComplete;
+  expect(shown()).toBe(NEW);
+});
+
 it("an address changed in another session, refused after the dialog was dismissed, still reads the stored address", async () => {
   const STORED = "Calle del Sol 2, 28013 Madrid";
   const api = stubApi();
