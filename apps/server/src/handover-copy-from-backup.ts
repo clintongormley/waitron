@@ -13,8 +13,7 @@ import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { writeFileDurable } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, PAIR_COPY_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
-import { MIN_RECOVERY_KEY_LENGTH, readHeldKey } from "./backup-config.js";
-import { isUnset } from "./env-value.js";
+import { checkedNewRecoveryKey, readHeldKey } from "./backup-config.js";
 import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -83,15 +82,6 @@ export async function stageCheckedCopy(
   }
 }
 
-/** The key the setup page typed; a too-short key the box holds stays `backup.recovery_key_too_short`. */
-function typedRecoveryKey(recoveryKey: string | undefined): string | undefined {
-  if (isUnset(recoveryKey)) return undefined;
-  if (recoveryKey.length < MIN_RECOVERY_KEY_LENGTH) {
-    throw new AppError("backup.new_recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
-  }
-  return recoveryKey;
-}
-
 export async function stageBackupAsCopy(
   deps: CheckedCopyDeps & {
     artifactPath: string;
@@ -101,7 +91,7 @@ export async function stageBackupAsCopy(
   },
 ): Promise<SelectedCopy> {
   const recoveryKey =
-    typedRecoveryKey(deps.recoveryKey) ?? (await readHeldKey(deps.readRecoveryKey)).key;
+    checkedNewRecoveryKey(deps.recoveryKey) ?? (await readHeldKey(deps.readRecoveryKey)).key;
   if (recoveryKey === undefined) throw new AppError("handover.backup_key_missing", {});
   const validated = await validateArtifactFile({
     ...deps,

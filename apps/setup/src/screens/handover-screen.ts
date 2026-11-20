@@ -508,7 +508,7 @@ export class SetupHandoverScreen extends LitElement {
       );
     if (code === "handover.backup_key_missing") return t("handover.emergency.backup_key_missing");
     if (code === "backup.new_recovery_key_too_short")
-      return format("handover.emergency.backup_key_too_short", { min: error?.params?.min ?? "" });
+      return t("handover.emergency.backup_key_too_short");
     if (
       ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
         code ?? "",

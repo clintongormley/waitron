@@ -45,7 +45,7 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
+import { checkedNewRecoveryKey, MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import {
   keyFingerprint,
   type BackupRuntimeStatus,
@@ -205,13 +205,6 @@ async function readBucketCopySettings(db: Database, ring: KeyRing): Promise<Stre
       throw new AppError("backup.stream_settings_unreadable", { reason: error.code });
     }
     throw error;
-  }
-}
-
-/** For a key the request sends. One the box already holds is `backup.recovery_key_too_short`. */
-function assertLongEnough(recoveryKey: string): void {
-  if (recoveryKey.length < MIN_RECOVERY_KEY_LENGTH) {
-    throw new AppError("backup.new_recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
   }
 }
 
@@ -507,7 +500,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             DEFAULT_DESTINATION_TIMEOUT_MS,
         };
         const sealed = archiveRecord(settings).stored;
-        assertLongEnough(recoveryKey);
+        checkedNewRecoveryKey(recoveryKey);
         // Refuse exactly what boot would, before anything is written.
         resolveBackupConfig({ env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
@@ -589,7 +582,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
-        assertLongEnough(recoveryKey);
+        checkedNewRecoveryKey(recoveryKey);
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;

@@ -615,7 +615,7 @@ it.each(["en-GB", "es-ES"])(
     q(el, "[data-test=emergency-backup]").click();
     await vi.waitFor(() =>
       expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
-        format("handover.emergency.backup_key_too_short", { min: 12 }),
+        t("handover.emergency.backup_key_too_short"),
       ),
     );
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).not.toContain(

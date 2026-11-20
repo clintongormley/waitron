@@ -77,7 +77,7 @@ export const handoverEn = {
   "handover.emergency.backup_key_missing":
     "Enter the recovery key for this backup and try again. The box's saved key stays unchanged.",
   "handover.emergency.backup_key_too_short":
-    "That recovery key is too short: a recovery key has at least {min} characters. Check the key for this backup and try again.",
+    "That recovery key is too short. Check the key for this backup and try again.",
   "handover.emergency.backup_invalid":
     "The backup could not be opened. Check the encrypted file and its recovery key, then try again.",
   "handover.emergency.copy_changed":
@@ -163,7 +163,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.backup_key_missing":
     "Introduce la clave de recuperación de esta copia y vuelve a intentarlo. La clave guardada en el servidor no cambia.",
   "handover.emergency.backup_key_too_short":
-    "Esa clave de recuperación es demasiado corta: una clave de recuperación tiene al menos {min} caracteres. Comprueba la clave de esta copia y vuelve a intentarlo.",
+    "Esa clave de recuperación es demasiado corta. Comprueba la clave de esta copia y vuelve a intentarlo.",
   "handover.emergency.backup_invalid":
     "No se ha podido abrir la copia. Comprueba el archivo cifrado y su clave de recuperación y vuelve a intentarlo.",
   "handover.heading": "Traspasar el local",

@@ -56,6 +56,15 @@ export function checkedRecoveryKey(recoveryKey: string | undefined): string | un
   return recoveryKey;
 }
 
+/** A key the request sends, never the box's own. Unset or empty is `undefined`. */
+export function checkedNewRecoveryKey(recoveryKey: string | undefined): string | undefined {
+  if (isUnset(recoveryKey)) return undefined;
+  if (recoveryKey.length < MIN_RECOVERY_KEY_LENGTH) {
+    throw new AppError("backup.new_recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
+  }
+  return recoveryKey;
+}
+
 /** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
 export function loadRecoveryKey(env: Env): string | undefined {
   return checkedRecoveryKey(env.WAITRON_BACKUP_RECOVERY_KEY);
