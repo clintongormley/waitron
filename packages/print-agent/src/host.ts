@@ -26,7 +26,13 @@ export interface AgentConfig {
 }
 
 export type AgentPhase =
-  "unconfigured" | "pending" | "pairing_closed" | "running" | "unauthorized" | "unreachable";
+  | "unconfigured"
+  | "pending"
+  | "pairing_closed"
+  | "running"
+  | "unauthorized"
+  | "unreachable"
+  | "spare_box";
 
 export interface AgentStatus {
   phase: AgentPhase;

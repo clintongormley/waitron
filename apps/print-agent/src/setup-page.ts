@@ -151,6 +151,9 @@ ${lastError}
       return `<h1>Waitron print agent</h1>
 <p>Can't reach ${server} right now — retrying.</p>${detail}`;
     }
+    case "spare_box":
+      return `<h1>Waitron print agent</h1>
+<p>This box is the venue's spare. Printing goes through the main box's own print agent. This agent starts printing again if this box becomes the main box.</p>`;
   }
 }
 
@@ -206,7 +209,9 @@ function renderRoot(deps: SetupDeps, snapshot: AgentSetupSnapshot): string {
     sections.push(card(formCard(deps, snapshot.config?.serverUrl ?? "")));
   } else {
     sections.push(card(connectionCard(snapshot.status)));
-    if (snapshot.outOfTouch) sections.push(card(resetCard(snapshot, deps.now())));
+    // The spare is not lost, and a reset would make it forget its approval for nothing.
+    const offerReset = snapshot.status.phase !== "spare_box" || snapshot.resetAt !== undefined;
+    if (snapshot.outOfTouch && offerReset) sections.push(card(resetCard(snapshot, deps.now())));
   }
   sections.push(bluetoothCard(deps.bluetooth?.()));
   return layout(sections.join(""));

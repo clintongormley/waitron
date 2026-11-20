@@ -21,6 +21,9 @@ export interface RouterOptions {
 export interface ProbeRound {
   moved: boolean;
   anyAccepting: boolean;
+  /** Set only when, in this round, the configured address answered as the venue's spare in the
+   * pinned environment. */
+  configuredIsSpare?: true;
 }
 
 function parseHttpOrigin(url: string): string | undefined {
@@ -109,6 +112,7 @@ export class Router {
     const results = new Map(
       await Promise.all(this.#servers.map(async (s) => [s.url, await this.#probe(s.url)] as const)),
     );
+    let configuredIsSpare = false;
     for (const s of this.#servers) {
       // Keyed by URL, never by list position, so a `merge` mid-round cannot hand one server's
       // answer to another.
@@ -125,10 +129,20 @@ export class Router {
       s.term = node.term;
       s.state =
         node.acceptingSales && node.environment === this.#environment ? "primary" : "standby";
+      if (s.url === this.#configured) {
+        configuredIsSpare =
+          !node.acceptingSales &&
+          node.environment === this.#environment &&
+          node.standing === "serving-secondary";
+      }
     }
     if (this.#environment === undefined) return { moved: false, anyAccepting: false };
     const accepting = this.#servers.filter((s) => s.state === "primary");
-    if (accepting.length === 0) return { moved: false, anyAccepting: false };
+    if (accepting.length === 0) {
+      return configuredIsSpare
+        ? { moved: false, anyAccepting: false, configuredIsSpare: true }
+        : { moved: false, anyAccepting: false };
+    }
     // Equal terms take the earlier list entry, never `#current`, to match the till's
     // `ServerRouter`.
     const best = accepting.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));

@@ -322,6 +322,70 @@ describe("createAgent — phases", () => {
     expect(c.join).not.toHaveBeenCalled();
   });
 
+  describe("the configured server is the venue's spare", () => {
+    const spare: NodeProbe = { ...primary, acceptingSales: false, standing: "serving-secondary" };
+    const unreachableText = "no accepting primary in environment preproduction";
+
+    function scripted(first: Result<NodeProbe>) {
+      let answer = first;
+      const c = client({ probeNode: vi.fn(async () => answer) });
+      return {
+        c,
+        answer: (next: Result<NodeProbe>) => {
+          answer = next;
+        },
+      };
+    }
+
+    it("reports spare_box with no error, also after an earlier unreachable round, and never sends the token", async () => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const { c, answer } = scripted(failR({ kind: "unreachable", detail: "ECONNREFUSED" }));
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "unreachable" });
+      expect(host.statuses.at(-1)?.lastError).toBeDefined();
+
+      answer(okR(spare));
+      await agent.runOnce();
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", current: A });
+      expect(host.statuses.at(-1)?.lastError).toBeUndefined();
+      expect(c.join).not.toHaveBeenCalled();
+      expect(c.joinStatus).not.toHaveBeenCalled();
+      expect(c.pullJobs).not.toHaveBeenCalled();
+    });
+
+    it("a spare round followed by an unreachable round reports unreachable with today's text", async () => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const { c, answer } = scripted(okR(spare));
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      expect(host.statuses.at(-1)?.phase).toBe("spare_box");
+
+      answer(failR({ kind: "unreachable", detail: "ECONNREFUSED" }));
+      await agent.runOnce();
+      expect(host.statuses.at(-1)).toMatchObject({
+        phase: "unreachable",
+        lastError: unreachableText,
+      });
+    });
+
+    it.each([
+      ["another environment", { ...spare, environment: "production" }],
+      ["another standing", { ...spare, standing: "serving-primary" }],
+      ["no standing", { ...primary, acceptingSales: false }],
+    ] as const)("%s reports unreachable with today's text", async (_label, probe) => {
+      const host = fakeHost({ config: { ...CONFIG, environment: "preproduction" }, token: "a1.s" });
+      await createAgent({
+        host,
+        client: client({ probeNode: vi.fn(async () => okR(probe)) }),
+      }).runOnce();
+      expect(host.statuses.at(-1)).toMatchObject({
+        phase: "unreachable",
+        lastError: unreachableText,
+      });
+    });
+  });
+
   it("without an injected client, talks to the server through the host's fetch", async () => {
     const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url) === `${A}/api/node`) {

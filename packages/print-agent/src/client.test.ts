@@ -49,6 +49,21 @@ describe("createClient — probeNode", () => {
     expect(result).toMatchObject({ ok: true, value: { term: null } });
   });
 
+  it("passes on the server's standing when it is a string, and leaves it out otherwise", async () => {
+    const base = { nodeId: "n1", term: 3, acceptingSales: false, environment: "preproduction" };
+    const spare = createClient({
+      fetch: stub(200, { ...base, standing: "serving-secondary" }),
+    });
+    expect(await spare.probeNode(URL_A)).toEqual({
+      ok: true,
+      value: { ...base, standing: "serving-secondary" },
+    });
+
+    const odd = createClient({ fetch: stub(200, { ...base, standing: 7 }) });
+    const result = await odd.probeNode(URL_A);
+    expect(result.ok && "standing" in result.value).toBe(false);
+  });
+
   it("a thrown fetch, a timeout and a 5xx are all `unreachable`", async () => {
     const thrown = createClient({ fetch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) });
     expect(await thrown.probeNode(URL_A)).toMatchObject({

@@ -18,6 +18,7 @@ function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
         term: row.term ?? null,
         acceptingSales: row.acceptingSales ?? false,
         environment: row.environment ?? "preproduction",
+        ...(row.standing === undefined ? {} : { standing: row.standing }),
       },
     };
   });
@@ -90,6 +91,47 @@ describe("Router", () => {
     expect(router.environment).toBeUndefined();
     await router.probe();
     expect(router.environment).toBe("production");
+  });
+
+  it("marks the round when the configured address answers as the venue's spare in the pinned environment", async () => {
+    const spare: Partial<NodeProbe> = { acceptingSales: false, standing: "serving-secondary" };
+    const table: Record<string, Partial<NodeProbe> | "down"> = { [A]: spare };
+    const router = new Router({
+      configuredUrl: A,
+      environment: "preproduction",
+      probe: probeFrom(table),
+    });
+    expect(await router.probe()).toEqual({
+      moved: false,
+      anyAccepting: false,
+      configuredIsSpare: true,
+    });
+
+    // Each round decides afresh: a failure or any other answer clears the mark.
+    for (const row of [
+      "down",
+      { ...spare, environment: "production" },
+      { acceptingSales: false, standing: "serving-primary" },
+      { acceptingSales: false },
+    ] as const) {
+      table[A] = row;
+      expect((await router.probe()).configuredIsSpare).toBeFalsy();
+      table[A] = spare;
+      expect((await router.probe()).configuredIsSpare).toBe(true);
+    }
+  });
+
+  it("does not mark the round from a spare that is not the configured address", async () => {
+    const router = new Router({
+      configuredUrl: A,
+      environment: "preproduction",
+      probe: probeFrom({
+        [A]: { acceptingSales: false },
+        [B]: { acceptingSales: false, standing: "serving-secondary" },
+      }),
+    });
+    router.merge([{ url: B }]);
+    expect((await router.probe()).configuredIsSpare).toBeFalsy();
   });
 
   it("merge never drops the configured url, dedupes by origin and drops non-http urls", () => {

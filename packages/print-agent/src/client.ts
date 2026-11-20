@@ -60,6 +60,7 @@ export interface NodeProbe {
   term: number | null;
   acceptingSales: boolean;
   environment: string;
+  standing?: string;
 }
 
 /** `nodeId` is filled in once a probe has confirmed it. */
@@ -207,7 +208,9 @@ export function describeRejection(error: unknown): string {
   }
 }
 
-function isNodeProbe(value: unknown): value is Omit<NodeProbe, "term"> & { term?: unknown } {
+function isNodeProbe(
+  value: unknown,
+): value is Omit<NodeProbe, "term" | "standing"> & { term?: unknown; standing?: unknown } {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return (
@@ -274,6 +277,7 @@ async function parseNodeProbe(response: Response): Promise<NodeProbe | undefined
     term: typeof body.term === "number" ? body.term : null,
     acceptingSales: body.acceptingSales,
     environment: body.environment,
+    ...(typeof body.standing === "string" ? { standing: body.standing } : {}),
   };
 }
 

@@ -647,6 +647,15 @@ export function createAgent(opts: AgentOptions): Agent {
     // A server in a DIFFERENT environment must never be sent the token (CLAUDE.md §5).
     if (!round.anyAccepting) {
       outOfTouch = true;
+      if (round.configuredIsSpare) {
+        report({
+          phase: "spare_box",
+          serverUrl: config.serverUrl,
+          current,
+          lastError: undefined,
+        });
+        return false;
+      }
       report({
         phase: "unreachable",
         serverUrl: config.serverUrl,
