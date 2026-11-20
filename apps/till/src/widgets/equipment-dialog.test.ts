@@ -271,6 +271,30 @@ describe("till-equipment-dialog", () => {
     );
   });
 
+  it("shows that a free default reader can be claimed and lets staff choose Use default again", async () => {
+    const el = await mountDialog({
+      equipment: equipment({ card_terminal: onDefault("card_terminal", R1, [R1], null) }),
+    });
+    const seen = changes(el);
+
+    expect(resolvedText(el, "card_terminal")).toBe(R1.name);
+    expect(contextText(el, "card_terminal")).toBe("Free to choose");
+    await chooseOption(combobox(el, "cardReaderId")!, "");
+    expect(seen).toEqual([
+      { role: "card_terminal", selection: "default", via: "list", takeOver: false },
+    ]);
+  });
+
+  it("names the default reader and who holds it when another till carries it", async () => {
+    const held = { ...R1, heldBy: BAR };
+    const el = await mountDialog({
+      equipment: equipment({ card_terminal: onDefault("card_terminal", held, [held]) }),
+    });
+
+    expect(resolvedText(el, "card_terminal")).toBe(R1.name);
+    expect(contextText(el, "card_terminal")).toContain("Bar till");
+  });
+
   it("a busy reader is labelled busy", async () => {
     const busy = { ...R2, busy: true };
     const el = await mountDialog({

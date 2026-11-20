@@ -914,6 +914,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 ### Payments and card readers
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
+See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07) for how a default reader reaches a till.
 
 - **A742 — the guest types what they pay, and a tip (owner, 2026-10-15; on the backlog, NOT to be
   queued yet).** A flow where staff hand the device to the customer, who enters how much they want

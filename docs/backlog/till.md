@@ -2015,10 +2015,13 @@ From the [equipment plan](https://github.com/clintongormley/waitron/blob/f2e5e9f
 The owner's answer, 2026-10-07 ~08:50 (lane C's questions file): "Ok", keep every default.
 
 - **Staff cannot switch a device's printing off.** The till's "No printer" choice is gone and the
-  dashboard's empty choice means Use default, so a device is without a printer, reader or drawer
-  only when its profile's default is None (Q1).
+  dashboard's empty choice means Use default (Q1). A named portable default can be held by
+  another device.
 - Q1. A device cannot override its profile's default with "none".
-- Q2. A card reader is never shared by several devices at once; every reader has one holder.
+- Q2. A card reader serves one device at a time. Saving a free default gives it to the active
+  device that held the previous default, or to the only active device on Use default. If several
+  devices follow the profile and none held the previous default, choose **Use default** on the
+  device that will take the payments.
 - Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader busy
   until the sweep or a manager resolves it.
 - Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder.

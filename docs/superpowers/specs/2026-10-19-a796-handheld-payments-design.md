@@ -841,6 +841,9 @@ are given.
     list hands out nothing (`device-readers.ts:410-454`; test "a profile list edit takes nothing for
     a device on Use default", `packages/payments/src/device-readers.test.ts:378`). When the phone has
     it, the form shows it marked "Predeterminado del perfil".
+
+    **2026-11-20:** Saving the profile can also assign a free default. See the current
+    [device equipment defaults](../../backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07).
 19. **Settled (owner, 2026-10-19, answers "(a)" and "(a)"): a reader or printer that has gone.**
     The owner's answers: for the reader, the row opens, reader empty, Continuar greyed out, with a
     reason line where the phone knows one; for the printer, the row opens with the printer empty

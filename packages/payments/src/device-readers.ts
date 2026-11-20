@@ -64,11 +64,37 @@ export async function setProfileReaderList(
   }
   if (list.defaultReaderId !== null && !list.readerIds.includes(list.defaultReaderId))
     return { ok: false, refusal: "default_not_listed" };
+  const following = and(
+    eq(devices.deviceProfileId, profileId),
+    eq(devices.active, true),
+    isNull(devices.cardReaderId),
+  );
+  const previousDefault =
+    list.defaultReaderId === null
+      ? null
+      : (await readProfileReaderList(tx, profileId)).defaultReaderId;
+  // Settling the profile releases the old hold, so identify the till that followed it first.
+  const [previous] =
+    previousDefault === null
+      ? []
+      : await tx
+          .select({ id: devices.id })
+          .from(devices)
+          .innerJoin(cardReaders, eq(cardReaders.heldByDeviceId, devices.id))
+          .where(and(following, eq(cardReaders.id, previousDefault)));
   await tx
     .update(deviceProfiles)
     .set({ cardReaders: { ids: list.readerIds, defaultId: list.defaultReaderId } })
     .where(eq(deviceProfiles.id, profileId));
   await settleProfileReaderDevices(tx, profileId);
+  if (list.defaultReaderId !== null) {
+    if (previous !== undefined) {
+      await settleDeviceReader(tx, previous.id, { acquire: true });
+    } else {
+      const eligible = await tx.select({ id: devices.id }).from(devices).where(following).limit(2);
+      if (eligible.length === 1) await settleDeviceReader(tx, eligible[0]!.id, { acquire: true });
+    }
+  }
   return { ok: true };
 }
 
