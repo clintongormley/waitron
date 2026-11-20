@@ -5,8 +5,12 @@ Status: approved by the owner on 2026-11-20 ("yes" to all five changes below). B
 
 As built (2026-11-20), where the code differs from the tasks below: a Bluetooth report expires
 after its own 60 seconds (`AGENT_BLUETOOTH_TTL_MS`, `apps/server/src/print-api.ts`), not
-`DISCOVERED_TTL_MS`; on the spare the reset card still shows while a reset is already counting
-down, so it can be cancelled, and `POST /network/reset` refuses a new one; the spare's page no
+`DISCOVERED_TTL_MS`; the spare's message applies only to an agent whose configured address is the
+box's own loopback (`127.x.x.x`, `localhost` or `[::1]`), so an agent on a separate machine
+following the spare keeps the "Can't reach" text and its reset; on the spare the reset card still
+shows while a reset is already counting down, so it can be cancelled, and `POST /network/reset`
+refuses a new one, as does a reset already queued when the agent finds the box is the spare; the
+spare's page no
 longer says printing goes through the main box's agent; the `no_controller` line reads "its
 computer shows no Bluetooth adapter. Check that it has one."; the scan says "Every printer
 found is already added." when it found printers and all of them are already added, and an A4

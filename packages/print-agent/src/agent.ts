@@ -895,7 +895,9 @@ export function createAgent(opts: AgentOptions): Agent {
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();
-        if (!isJoined(config, token) || !outOfTouch) return false;
+        // The round this waited behind may have found the spare, which the page no longer offers a
+        // reset on.
+        if (!isJoined(config, token) || !outOfTouch || status.phase === "spare_box") return false;
         resetAt ??= host.now() + RESET_WINDOW_MS;
         wake();
         return true;

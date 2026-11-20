@@ -5,6 +5,7 @@ import { Router } from "./router.js";
 const A = "http://a.test";
 const B = "http://b.test";
 const C = "http://c.test";
+const LOCAL = "https://127.0.0.1";
 
 function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
   return vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
@@ -93,11 +94,11 @@ describe("Router", () => {
     expect(router.environment).toBe("production");
   });
 
-  it("marks the round when the configured address answers as the venue's spare in the pinned environment", async () => {
+  it("marks the round when the configured loopback address answers as the venue's spare in the pinned environment", async () => {
     const spare: Partial<NodeProbe> = { acceptingSales: false, standing: "serving-secondary" };
-    const table: Record<string, Partial<NodeProbe> | "down"> = { [A]: spare };
+    const table: Record<string, Partial<NodeProbe> | "down"> = { [LOCAL]: spare };
     const router = new Router({
-      configuredUrl: A,
+      configuredUrl: LOCAL,
       environment: "preproduction",
       probe: probeFrom(table),
     });
@@ -114,19 +115,52 @@ describe("Router", () => {
       { acceptingSales: false, standing: "serving-primary" },
       { acceptingSales: false },
     ] as const) {
-      table[A] = row;
+      table[LOCAL] = row;
       expect((await router.probe()).configuredIsSpare).toBeFalsy();
-      table[A] = spare;
+      table[LOCAL] = spare;
       expect((await router.probe()).configuredIsSpare).toBe(true);
     }
   });
 
+  it.each([
+    ["https://127.0.0.1", true],
+    ["http://127.0.0.2:8443", true],
+    ["http://localhost:8080", true],
+    ["https://[::1]", true],
+    ["https://waitron.local", false],
+    ["https://192.168.1.10", false],
+    ["https://127.example.test", false],
+  ])(
+    "marks a spare only when the configured address %s is the box's own loopback",
+    async (url, marked) => {
+      const router = new Router({
+        configuredUrl: url,
+        environment: "preproduction",
+        probe: vi.fn(async (): Promise<Result<NodeProbe>> => ({
+          ok: true,
+          value: {
+            nodeId: "n1",
+            term: null,
+            acceptingSales: false,
+            environment: "preproduction",
+            standing: "serving-secondary",
+          },
+        })),
+      });
+      expect(await router.probe()).toEqual(
+        marked
+          ? { moved: false, anyAccepting: false, configuredIsSpare: true }
+          : { moved: false, anyAccepting: false },
+      );
+    },
+  );
+
   it("does not mark the round from a spare that is not the configured address", async () => {
     const router = new Router({
-      configuredUrl: A,
+      configuredUrl: LOCAL,
       environment: "preproduction",
       probe: probeFrom({
-        [A]: { acceptingSales: false },
+        [LOCAL]: { acceptingSales: false },
         [B]: { acceptingSales: false, standing: "serving-secondary" },
       }),
     });

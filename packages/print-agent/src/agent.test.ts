@@ -326,6 +326,8 @@ describe("createAgent — phases", () => {
   describe("the configured server is the venue's spare", () => {
     const spare: NodeProbe = { ...primary, acceptingSales: false, standing: "serving-secondary" };
     const unreachableText = "no accepting primary in environment preproduction";
+    const LOCAL = "https://127.0.0.1";
+    const ON_BOX = { ...CONFIG, serverUrl: LOCAL };
 
     function scripted(first: Result<NodeProbe>) {
       let answer = first;
@@ -339,7 +341,7 @@ describe("createAgent — phases", () => {
     }
 
     it("reports spare_box with no error, also after an earlier unreachable round, and never sends the token", async () => {
-      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const host = fakeHost({ config: ON_BOX, token: "a1.s" });
       const { c, answer } = scripted(failR({ kind: "unreachable", detail: "ECONNREFUSED" }));
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
@@ -348,7 +350,7 @@ describe("createAgent — phases", () => {
 
       answer(okR(spare));
       await agent.runOnce();
-      expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", current: A });
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", current: LOCAL });
       expect(host.statuses.at(-1)?.lastError).toBeUndefined();
       expect(c.join).not.toHaveBeenCalled();
       expect(c.joinStatus).not.toHaveBeenCalled();
@@ -356,7 +358,7 @@ describe("createAgent — phases", () => {
     });
 
     it("a spare round followed by an unreachable round reports unreachable with today's text", async () => {
-      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const host = fakeHost({ config: ON_BOX, token: "a1.s" });
       const { c, answer } = scripted(okR(spare));
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
@@ -375,7 +377,7 @@ describe("createAgent — phases", () => {
       ["another standing", { ...spare, standing: "serving-primary" }],
       ["no standing", { ...primary, acceptingSales: false }],
     ] as const)("%s reports unreachable with today's text", async (_label, probe) => {
-      const host = fakeHost({ config: { ...CONFIG, environment: "preproduction" }, token: "a1.s" });
+      const host = fakeHost({ config: { ...ON_BOX, environment: "preproduction" }, token: "a1.s" });
       await createAgent({
         host,
         client: client({ probeNode: vi.fn(async () => okR(probe)) }),
@@ -384,6 +386,66 @@ describe("createAgent — phases", () => {
         phase: "unreachable",
         lastError: unreachableText,
       });
+    });
+
+    it("an agent on a separate machine, following the box by its network name, keeps today's text and its reset", async () => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const agent = createAgent({
+        host,
+        client: client({ probeNode: vi.fn(async () => okR(spare)) }),
+      });
+      await agent.runOnce();
+      expect(host.statuses.at(-1)).toMatchObject({
+        phase: "unreachable",
+        current: A,
+        lastError: unreachableText,
+      });
+      expect((await agent.setupSnapshot()).outOfTouch).toBe(true);
+      await expect(agent.beginNetworkReset()).resolves.toBe(true);
+    });
+
+    it("refuses a reset queued behind the round that finds this box is the spare", async () => {
+      let now = 1_000;
+      const host = fakeHost({ config: ON_BOX, token: "a1.s", now: () => now });
+      const probeStarted = deferred();
+      const probeReply = deferred<Result<NodeProbe>>();
+      const probeNode = vi
+        .fn(async (): Promise<Result<NodeProbe>> => okR(spare))
+        .mockResolvedValueOnce(failR({ kind: "unreachable", detail: "ECONNREFUSED" }))
+        .mockImplementationOnce(async () => {
+          probeStarted.resolve();
+          return probeReply.promise;
+        });
+      const agent = createAgent({ host, client: client({ probeNode }) });
+      await agent.runOnce();
+      expect((await agent.setupSnapshot()).outOfTouch).toBe(true);
+
+      const tick = agent.runOnce();
+      await probeStarted.promise;
+      const reset = agent.beginNetworkReset();
+      probeReply.resolve(okR(spare));
+      await tick;
+      await expect(reset).resolves.toBe(false);
+      expect(host.statuses.at(-1)?.phase).toBe("spare_box");
+      expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+
+      now = 301_000;
+      await agent.runOnce();
+      expect(await host.token()).toBe("a1.s");
+    });
+
+    it("still cancels a countdown started before this box was found to be the spare", async () => {
+      const host = fakeHost({ config: ON_BOX, token: "a1.s" });
+      const { c, answer } = scripted(failR({ kind: "unreachable", detail: "ECONNREFUSED" }));
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await expect(agent.beginNetworkReset()).resolves.toBe(true);
+
+      answer(okR(spare));
+      await agent.runOnce();
+      expect(host.statuses.at(-1)?.phase).toBe("spare_box");
+      await expect(agent.cancelNetworkReset()).resolves.toBe(true);
+      expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
     });
   });
 

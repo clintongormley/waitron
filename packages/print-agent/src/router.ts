@@ -21,8 +21,9 @@ export interface RouterOptions {
 export interface ProbeRound {
   moved: boolean;
   anyAccepting: boolean;
-  /** Set only when, in this round, the configured address answered as the venue's spare in the
-   * pinned environment. */
+  /** Set only when, in this round, the configured address is this box's own loopback and answered
+   * as the venue's spare in the pinned environment. An agent on a separate machine following the
+   * spare is not on the spare itself. */
   configuredIsSpare?: true;
 }
 
@@ -35,6 +36,12 @@ function parseHttpOrigin(url: string): string | undefined {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
   return parsed.origin;
+}
+
+/** The URL parser has already turned every IPv4 spelling into dotted decimal. */
+function isLoopbackOrigin(origin: string): boolean {
+  const host = new URL(origin).hostname;
+  return host === "localhost" || host === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(host);
 }
 
 /**
@@ -52,6 +59,7 @@ export class Router {
   #environment: string | undefined;
   #round: Promise<ProbeRound> | undefined;
   readonly #configured: string;
+  readonly #configuredIsLoopback: boolean;
   readonly #probe: AgentClient["probeNode"];
 
   constructor(opts: RouterOptions) {
@@ -62,6 +70,7 @@ export class Router {
       );
     }
     this.#configured = origin;
+    this.#configuredIsLoopback = isLoopbackOrigin(origin);
     this.#current = origin;
     this.#environment = opts.environment;
     this.#probe = opts.probe;
@@ -129,7 +138,7 @@ export class Router {
       s.term = node.term;
       s.state =
         node.acceptingSales && node.environment === this.#environment ? "primary" : "standby";
-      if (s.url === this.#configured) {
+      if (s.url === this.#configured && this.#configuredIsLoopback) {
         configuredIsSpare =
           !node.acceptingSales &&
           node.environment === this.#environment &&
