@@ -16,6 +16,7 @@ import {
   decimal,
   diskFullIn,
   subtractDecimal,
+  timeZoneOffsetMinutes,
   type Decimal,
 } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -32,6 +33,7 @@ import {
 } from "./receipt-print.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import type { OriginConfig } from "./trading-context.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 type CardSlipRequest = { printerId: string; locale: string } | null | undefined;
 
@@ -327,6 +329,7 @@ async function enqueueSlips(
   if (taxpayer === null) return;
   /* v8 ignore stop */
   const order = await readReceiptOrder(tx, workingOrderId);
+  const timeZone = await venueTimeZoneIn(tx);
   for (const payment of cards) {
     const charged = centsToDecimal(payment.charged);
     const tip = centsToDecimal(payment.tip);
@@ -334,6 +337,7 @@ async function enqueueSlips(
       issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
       ...order,
       paidAt: payment.paidAt,
+      offsetMinutes: timeZoneOffsetMinutes(timeZone, new Date(payment.paidAt)),
       amount: subtractDecimal(charged, tip),
       charged,
       tip,

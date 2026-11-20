@@ -11,6 +11,7 @@ import {
 const input = {
   issuer: { venueName: "Casa Gormley", nif: "B12345678" },
   paidAt: "2026-09-12T12:32:00.000Z",
+  offsetMinutes: 0,
   orderLabel: "Table 6",
   orderNumber: 41,
   amount: "1.00",
@@ -157,7 +158,7 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toMatch(/unknown/i);
   });
   it("prints the payment time with a two-digit hour", () => {
-    const paidAt = new Date(2026, 8, 12, 9, 5).toISOString();
+    const paidAt = "2026-09-12T09:05:00.000Z";
     expect(decodeTicket(formatPaymentSlip({ ...input, paidAt }))).toContain("12 sept 2026, 09:05");
   });
   it("omits missing card facts, tip and label while keeping the amount", () => {

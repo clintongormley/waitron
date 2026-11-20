@@ -7,6 +7,7 @@ import {
   printers,
   printJobs,
   receiptRollColumns,
+  receiptReprints,
   sales,
   type Transaction,
 } from "@waitron/db";
@@ -14,13 +15,15 @@ import { AppError } from "@waitron/shared";
 import {
   canResendPrintJob,
   claimPrintJobs,
+  enqueuePrintJob,
   reportPrintJob,
   resendPrintJob,
   type ClaimedJob,
   type JobOutcome,
+  type EscSetting,
 } from "@waitron/printing";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
-import { deliversAsFullInvoice } from "./invoice-selection.js";
+import { deliversAsFullInvoice, deliversAsFullInvoiceSql } from "./invoice-selection.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 import {
   invoicePrintDue,
@@ -30,6 +33,7 @@ import {
   reserveInvoiceDelivery,
   takeOverReceiptDelivery,
   tokenHash,
+  type ReceiptDeliveryRequest,
 } from "./invoice-delivery.js";
 
 export type InvoicePrintJob = ClaimedJob & { invoiceClaim?: InvoicePrintClaim };
@@ -118,24 +122,65 @@ export async function resendInvoicePrintJob(
   }
   const retry = await resend();
   if (await takeOverReceiptDelivery(tx, invoice.saleId, jobId, retry.jobId)) return retry;
-  try {
-    await reserveInvoiceDelivery(tx, invoice.saleId, {
-      requestKey: requestKey ?? retry.jobId,
+  await reserveQueuedReceipt(tx, invoice.saleId, jobId, {
+    requestKey: requestKey ?? retry.jobId,
+    personId,
+    medium: "receipt",
+    printJobId: retry.jobId,
+  });
+  return retry;
+}
+
+export async function enqueueCompletedReceiptCopy(
+  tx: Transaction,
+  layOut: LayOutSaleReceipt,
+  original: { id: string; saleId: string },
+  printer: { id: string } & EscSetting,
+  personId: string,
+  now: Date,
+): Promise<{ jobId: string }> {
+  const { saleId } = original;
+  const payload = await layOut(tx, saleId, true, printer);
+  const copy = await enqueuePrintJob(tx, printer.id, payload, "document", {
+    saleId,
+    receiptCopy: true,
+  });
+  const [full] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(and(eq(sales.id, saleId), deliversAsFullInvoiceSql()));
+  if (full !== undefined) {
+    await expireInvoiceDeliveryClaims(tx, now);
+    await reserveQueuedReceipt(tx, saleId, original.id, {
+      requestKey: copy.jobId,
       personId,
       medium: "receipt",
-      printJobId: retry.jobId,
+      printJobId: copy.jobId,
+      printerChosen: true,
     });
+  }
+  await tx.insert(receiptReprints).values({ saleId, printJobId: copy.jobId, personId });
+  return copy;
+}
+
+async function reserveQueuedReceipt(
+  tx: Transaction,
+  saleId: string,
+  sourceJobId: string,
+  request: ReceiptDeliveryRequest,
+): Promise<void> {
+  try {
+    await reserveInvoiceDelivery(tx, saleId, request);
   } catch (error) {
     if (
       error instanceof AppError &&
       (error.code === "invoice_delivery.active" ||
         error.code === "invoice_delivery.receipt_invalid")
     ) {
-      throw new AppError("print_job.not_resendable", { id: jobId });
+      throw new AppError("print_job.not_resendable", { id: sourceJobId });
     }
     throw error;
   }
-  return retry;
 }
 
 export async function claimInvoiceReceipt(

@@ -73,8 +73,9 @@ Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, ch
 power and connection, then use **Open drawer** if you still need it open. If no result was
 reported, check whether the drawer opened before opening it again.
 
-**Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
-receipt printer, a station ticket or refund receipt on one at least as wide. A printout waiting on a
+Choose **Reprint** on a printed receipt or invoice to send a marked copy to any receipt
+printer. Use **Orders** for an A4 copy. You can also reprint a station ticket or refund
+receipt on a printer at least as wide. A printout waiting on a
 printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
 same way, and is cancelled there. Other
 printouts reprint only on their own printer. A payment slip is printed again only from here:

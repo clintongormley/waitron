@@ -19,6 +19,7 @@ import { AppError } from "@waitron/shared";
 import {
   assertPrintPayload,
   endInvoicePrintDeliveries,
+  enqueueCompletedReceiptCopy,
   resendInvoicePrintJob,
 } from "./invoice-print.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
@@ -77,16 +78,30 @@ export function linkedKitchenPrintoutSql(head: SQLWrapper | string): SQL<number>
   return sql<number>`exists (select 1 from ${kitchenPrintJobs} where ${kitchenPrintJobs.printJobId} = ${head})`;
 }
 
+export function isCompletedReceiptOriginal(job: {
+  kind: string;
+  status: string;
+  receiptCopy: boolean | null;
+  saleId: string | null;
+}): job is typeof job & { saleId: string } {
+  return (
+    job.kind === "document" &&
+    job.status === "done" &&
+    job.receiptCopy === false &&
+    job.saleId !== null
+  );
+}
+
 /**
  * Resend a job on `printerId`, as {@link reprintRule} allows: a receipt or full invoice laid out
- * again for it, keeping the job's own original-or-copy marking; a kitchen ticket or refund receipt
+ * again for it, as a marked copy if its original printed; a kitchen ticket or refund receipt
  * centred on it. A job {@link isStuckJob} says is stuck is ended there so it never prints twice.
  */
 export async function reprintJobOn(
   tx: Transaction,
   layOut: LayOutSaleReceipt,
   jobId: string,
-  printerId: string,
+  printerId: string | undefined,
   personId: string,
   now = new Date(),
   { seen }: { seen: PrinterSeen },
@@ -107,23 +122,29 @@ export async function reprintJobOn(
   if (found === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const { job } = found;
   assertPrintPayload(job);
-  if (printerId === job.printerId) return resendInvoicePrintJob(tx, layOut, jobId, personId, now);
-  const resendable = canResendPrintJob(job);
+  const completedOriginal = isCompletedReceiptOriginal(job);
+  const targetId = printerId ?? job.printerId;
+  if (!completedOriginal && targetId === job.printerId)
+    return resendInvoicePrintJob(tx, layOut, jobId, personId, now);
+  if (completedOriginal && found.printer.deletedAt !== null)
+    throw new AppError("printer.not_found", { id: job.printerId });
+  const resendable = completedOriginal || canResendPrintJob(job);
   const stuck = !resendable && isStuckJob(job, found.printer, seen);
   if (!resendable && !stuck) throw new AppError("print_job.not_resendable", { id: jobId });
   const [target] = await tx
-    .select({ ...receiptRollColumns })
+    .select({ id: printers.id, ...receiptRollColumns })
     .from(printers)
     .where(
       and(
         isReceiptPrinter(),
-        eq(printers.id, printerId),
+        eq(printers.id, targetId),
         eq(printers.active, true),
         isNull(printers.deletedAt),
       ),
     );
   if (target === undefined)
-    throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId });
+    throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
+  if (completedOriginal) return enqueueCompletedReceiptCopy(tx, layOut, job, target, personId, now);
   const printerDots = textGrid(target.paperWidth, target.resolution).widthDots;
   let payload: Uint8Array;
   if (job.saleId !== null) {
@@ -141,7 +162,7 @@ export async function reprintJobOn(
     if (rule === "own" || area === null)
       throw new AppError("print_job.own_printer_only", { id: jobId });
     if (!fits(printerDots))
-      throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId });
+      throw new AppError("print_job.printer_unsuitable", { id: jobId, printerId: targetId });
     payload = area.centredOn(printerDots);
   }
   // The resend below refuses the job unless this ended it.
@@ -150,7 +171,7 @@ export async function reprintJobOn(
     await endInvoicePrintDeliveries(tx, [jobId], now);
   }
   return resendInvoicePrintJob(tx, layOut, jobId, personId, now, undefined, {
-    printerId,
+    printerId: targetId,
     payload,
   });
 }

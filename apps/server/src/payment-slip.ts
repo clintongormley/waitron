@@ -9,6 +9,7 @@ import { formatMoney } from "./receipt-money.js";
 export interface PaymentSlipInput {
   issuer: { venueName: string; nif: string };
   paidAt: string;
+  offsetMinutes: number;
   orderLabel: string | null;
   orderNumber: number;
   amount: string;
@@ -41,7 +42,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   text(input.notTaken === true ? labels.paymentNotTakenHeading : labels.paymentHeading);
   text(labels.paymentNotice);
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
-  text(receiptDateTime(input.paidAt, input.invoiceLocale));
+  text(receiptDateTime(input.paidAt, input.invoiceLocale, input.offsetMinutes));
   text([input.orderLabel, `${labels.order} ${input.orderNumber}`].filter(Boolean).join(" · "));
   b.line();
   if (input.card !== null) {
