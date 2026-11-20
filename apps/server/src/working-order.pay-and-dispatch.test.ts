@@ -2070,7 +2070,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect((await readAmendments(id)).map((row) => row.kind)).toEqual(["order_placed"]);
   });
 
-  it("Mode I: a concurrent double collect settles the invoice ONCE and both see the same ticket", async () => {
+  it("Mode I: overlapping retries settle the issued invoice once and each returns its ticket", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
