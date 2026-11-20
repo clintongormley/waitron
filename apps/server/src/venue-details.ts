@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
   saveSettings,
-  readTaxpayer,
   readVenue,
   saveVenueFields,
+  taxpayer as taxpayerTable,
   type Transaction,
 } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
@@ -40,6 +40,7 @@ export const readOnlyVenueFields: ReadonlySet<string> = new Set([
   "legalName",
   "taxId",
   "fiscalTerritory",
+  "taxpayerDomicile",
 ]);
 const nullable = new Set<VenueDetailField>([
   "addressLine1",
@@ -105,24 +106,26 @@ export async function readVenueDetails(
   clockModel?: BusinessDayClockModel,
 ): Promise<VenueDetailsModel> {
   const venue = await readVenue(tx);
-  const taxpayer = await readTaxpayer(tx);
-  if (taxpayer === null) throw new AppError("venue.not_found", {});
+  const [taxpayer] = await tx
+    .select({
+      country: taxpayerTable.country,
+      taxId: taxpayerTable.taxId,
+      legalName: taxpayerTable.legalName,
+      domicile: taxpayerTable.taxpayerDomicile,
+    })
+    .from(taxpayerTable)
+    .where(eq(taxpayerTable.id, 1));
+  if (taxpayer === undefined) throw new AppError("venue.not_found", {});
   const issuer = {
     country: taxpayer.country,
     legalName: taxpayer.legalName,
     taxId: taxpayer.taxId,
   };
   const pack = getCountryPack(issuer.country);
-  const { rows } = await tx.execute<{
-    sales: number;
-    orders: number;
-    closes: number;
-    domicile: string | null;
-  }>(sql`
+  const { rows } = await tx.execute<{ sales: number; orders: number; closes: number }>(sql`
     select exists(select 1 from sales limit 1) as sales,
       exists(select 1 from working_orders limit 1) as orders,
-      exists(select 1 from daily_closes limit 1) as closes,
-      (select taxpayer_domicile from taxpayer where id = 1) as domicile`);
+      exists(select 1 from daily_closes limit 1) as closes`);
   const history = rows[0]!;
   const businessDayClock = clockModel ?? (await readBusinessDayClockModel(tx, at));
   const clockReason =
@@ -155,7 +158,7 @@ export async function readVenueDetails(
           : cutoverForBusinessDay(businessDayClock.clock, businessDayClock.currentBusinessDay),
     },
     issuer,
-    taxpayerDomicile: history.domicile,
+    taxpayerDomicile: taxpayer.domicile,
     hasSales: Boolean(history.sales),
     hasOrderHistory: Boolean(history.orders),
     hasDailyClose: Boolean(history.closes),

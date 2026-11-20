@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import type { WtButton, WtDialog, WtFormActions, WtInput } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -55,7 +55,7 @@ const dialogHost = (panel: Panel) =>
   panel.shadowRoot!.querySelector("dashboard-registered-address-dialog")!;
 const dialog = (panel: Panel) =>
   dialogHost(panel).shadowRoot!.querySelector<WtDialog>(
-    "wt-dialog[data-test=registered-address-dialog]",
+    "wt-dialog[data-test=taxpayer-domicile-dialog]",
   )!;
 const input = (panel: Panel) =>
   dialog(panel).querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
@@ -212,9 +212,13 @@ it("an address changed in another session is the bottom message, and Save stays 
   expect(dialog(panel).open).toBe(true);
 });
 
-it("a successful change closes the dialog and shows the new address", async () => {
+it("a successful change closes the dialog, shows the new address and tells the page the identity changed", async () => {
   const api = stubApi();
   const panel = await mount(api);
+  const told: Event[] = [];
+  const listen = (event: Event) => told.push(event);
+  document.body.addEventListener("venue-identity-changed", listen);
+  onTestFinished(() => document.body.removeEventListener("venue-identity-changed", listen));
   await open(panel);
   await type(panel, NEW);
   const closed = dialogClosed(dialog(panel));
@@ -226,6 +230,8 @@ it("a successful change closes the dialog and shows the new address", async () =
   expect(
     panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
   ).toBe(NEW);
+  expect(told).toHaveLength(1);
+  expect(told[0]!.bubbles && told[0]!.composed).toBe(true);
 });
 
 it("a refusal that arrives after the dialog was dismissed is reported through the panel's own reporter", async () => {
@@ -237,8 +243,8 @@ it("a refusal that arrives after the dialog was dismissed is reported through th
   const panel = await mount(api);
   const legal = vi.fn();
   const address = vi.fn();
-  panel.reportLateRefusal = legal;
-  panel.reportLateAddressRefusal = address;
+  panel.lateRefusalFor = (key) =>
+    key === "venue_details.taxpayer_domicile_not_saved" ? address : legal;
   await panel.updateComplete;
   await open(panel);
   await type(panel, NEW);

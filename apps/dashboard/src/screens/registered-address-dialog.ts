@@ -3,15 +3,14 @@ import { TaxpayerFieldDialog, type TaxpayerFieldSettings } from "./taxpayer-fiel
 
 const SETTINGS: TaxpayerFieldSettings = {
   field: "taxpayerDomicile",
-  dialogTest: "registered-address",
-  buttonTest: "taxpayer-domicile",
+  dataTest: "taxpayer-domicile",
   heading: "venue_details.change_taxpayer_domicile",
   label: "venue_details.taxpayer_domicile",
   hint: "venue_details.taxpayer_domicile_hint",
   note: "venue_details.taxpayer_domicile_note",
   changedElsewhere: "venue_details.taxpayer_domicile_changed",
+  notSaved: "venue_details.taxpayer_domicile_not_saved",
   refusals: {
-    required: "venue_details.required",
     unchanged: "venue_details.taxpayer_domicile_unchanged",
   },
   send: (api, taxpayerDomicile, expected) =>

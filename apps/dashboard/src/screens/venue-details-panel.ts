@@ -41,7 +41,7 @@ import {
 } from "./venue-details-form.js";
 import "./legal-name-dialog.js";
 import "./registered-address-dialog.js";
-import type { VenueIdentityChanged } from "./legal-name-dialog.js";
+import type { VenueIdentityChanged } from "./taxpayer-field-dialog.js";
 
 const LABELS: Record<VenueDetailField, StringKey> = {
   name: "venue_details.name",
@@ -160,8 +160,7 @@ export class VenueDetailsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) reportLateRefusal?: () => void;
-  @property({ attribute: false }) reportLateAddressRefusal?: () => void;
+  @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
   @property({ attribute: false }) readOnly = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
@@ -713,6 +712,22 @@ export class VenueDetailsPanel extends LitElement {
       ${this.#field("province")} ${this.#field("timeZone")}
     </div>`;
   }
+  #changeButton(
+    dataTest: string,
+    label: StringKey,
+    dialog: "dashboard-legal-name-dialog" | "dashboard-registered-address-dialog",
+    stored: (model: VenueDetailsModel) => string,
+    current: () => boolean,
+  ): TemplateResult {
+    return html`<wt-button
+      data-test=${dataTest}
+      @click=${() => {
+        if (current() && this.model)
+          this.renderRoot.querySelector(dialog)?.show(stored(this.model));
+      }}
+      >${t(label)}</wt-button
+    >`;
+  }
   override render(): TemplateResult {
     const model = this.model;
     const expected = this.#expected;
@@ -757,25 +772,19 @@ export class VenueDetailsPanel extends LitElement {
               action: this.readOnly
                 ? nothing
                 : html`<span class="card-actions"
-                    ><wt-button
-                      data-test="change-legal-name"
-                      @click=${() => {
-                        if (current() && this.model)
-                          this.renderRoot
-                            .querySelector("dashboard-legal-name-dialog")
-                            ?.show(this.model.issuer.legalName);
-                      }}
-                      >${t("venue_details.change_legal_name")}</wt-button
-                    ><wt-button
-                      data-test="change-taxpayer-domicile"
-                      @click=${() => {
-                        if (current() && this.model)
-                          this.renderRoot
-                            .querySelector("dashboard-registered-address-dialog")
-                            ?.show(this.model.taxpayerDomicile ?? "");
-                      }}
-                      >${t("venue_details.change_taxpayer_domicile")}</wt-button
-                    ></span
+                    >${this.#changeButton(
+                      "change-legal-name",
+                      "venue_details.change_legal_name",
+                      "dashboard-legal-name-dialog",
+                      (shown) => shown.issuer.legalName,
+                      current,
+                    )}${this.#changeButton(
+                      "change-taxpayer-domicile",
+                      "venue_details.change_taxpayer_domicile",
+                      "dashboard-registered-address-dialog",
+                      (shown) => shown.taxpayerDomicile ?? "",
+                      current,
+                    )}</span
                   >`,
               body: settingsRows([
                 {
@@ -804,12 +813,12 @@ export class VenueDetailsPanel extends LitElement {
             })}
             <dashboard-legal-name-dialog
               .api=${this.api}
-              .reportLateRefusal=${this.reportLateRefusal}
+              .lateRefusalFor=${this.lateRefusalFor}
               @venue-identity-changed=${identityChanged}
             ></dashboard-legal-name-dialog>
             <dashboard-registered-address-dialog
               .api=${this.api}
-              .reportLateRefusal=${this.reportLateAddressRefusal}
+              .lateRefusalFor=${this.lateRefusalFor}
               @venue-identity-changed=${identityChanged}
             ></dashboard-registered-address-dialog>
             ${settingsCard({

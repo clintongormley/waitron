@@ -1,18 +1,15 @@
 import { customElement } from "lit/decorators.js";
 import { TaxpayerFieldDialog, type TaxpayerFieldSettings } from "./taxpayer-field-dialog.js";
 
-export type { VenueIdentityChanged } from "./taxpayer-field-dialog.js";
-
 const SETTINGS: TaxpayerFieldSettings = {
   field: "legalName",
-  dialogTest: "legal-name",
-  buttonTest: "legal-name",
+  dataTest: "legal-name",
   heading: "venue_details.change_legal_name",
   label: "venue_details.legal_name",
   note: "venue_details.legal_name_note",
   changedElsewhere: "venue_details.legal_name_changed",
+  notSaved: "venue_details.legal_name_not_saved",
   refusals: {
-    required: "venue_details.required",
     unchanged: "venue_details.legal_name_unchanged",
     fiscal_format: "venue_details.legal_name_format",
   },

@@ -132,10 +132,43 @@ describe("changing the taxpayer's registered address", () => {
     expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
   });
 
-  it("accepts a padded copy of the stored address as the expected one", async () => {
-    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: ` ${ORIGINAL} ` });
+  it.each([
+    ["padded", (stored: string) => `  ${stored}  `],
+    ["decomposed", (stored: string) => stored.normalize("NFD")],
+  ])("accepts a %s copy of the stored address as the expected one", async (_label, copy) => {
+    await suite.db.execute(
+      sql`update taxpayer set taxpayer_domicile = ${"Pla\u00e7a 1"} where id = 1`,
+    );
+    const response = await put({
+      taxpayerDomicile: "Calle Mayor 1",
+      expected: copy("Pla\u00e7a 1"),
+    });
     expect(response.status).toBe(200);
     expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
+  });
+
+  it("accepts the composed spelling as the expected address for one stored decomposed", async () => {
+    await suite.db.execute(
+      sql`update taxpayer set taxpayer_domicile = ${"Plac\u0327a 1"} where id = 1`,
+    );
+    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: "Pla\u00e7a 1" });
+    expect(response.status).toBe(200);
+    expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
+  });
+
+  it("stores the composed spelling and calls a decomposed spelling of the same address unchanged", async () => {
+    const composed = "Pla\u00e7a 1";
+    const decomposed = "Plac\u0327a 1";
+    expect((await put({ taxpayerDomicile: decomposed, expected: ORIGINAL })).status).toBe(200);
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(composed);
+    const response = await put({ taxpayerDomicile: decomposed, expected: composed });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "venue.detail_invalid",
+        params: { field: "taxpayerDomicile", reason: "unchanged" },
+      },
+    });
   });
 
   it("refuses a stale expected address and writes nothing", async () => {

@@ -373,7 +373,7 @@ type CoreSettingsPanel = AccessRule & {
   render(
     api: DashboardApi,
     canConfigure: boolean,
-    lateRefusalReporter: (key: StringKey) => () => void,
+    lateRefusalFor: (key: StringKey) => () => void,
   ): TemplateResult;
 };
 
@@ -382,11 +382,10 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     key: "venue-details",
     tab: "venue-details",
     requiresPermission: "venue.view",
-    render: (api, canConfigure, lateRefusalReporter) =>
+    render: (api, canConfigure, lateRefusalFor) =>
       html`<dashboard-venue-details-panel
         .api=${api}
-        .reportLateRefusal=${lateRefusalReporter("venue_details.legal_name_not_saved")}
-        .reportLateAddressRefusal=${lateRefusalReporter("venue_details.taxpayer_domicile_not_saved")}
+        .lateRefusalFor=${lateRefusalFor}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
   },
@@ -2328,6 +2327,8 @@ export class DashboardApp extends LitElement {
 
   #saveReporters = new Map<StringKey, { generation: number; report: (name?: string) => void }>();
 
+  readonly #lateRefusalFor = (key: StringKey): (() => void) => this.#lateSaveReporter(key);
+
   #lateSaveReporter(key: StringKey): (name?: string) => void {
     const generation = this.sessionGeneration;
     const existing = this.#saveReporters.get(key);
@@ -2718,8 +2719,10 @@ export class DashboardApp extends LitElement {
       tab: panel.tab,
       order: 0,
       render: () =>
-        panel.render(this.api, this.#sessionPermissions.includes("venue.configure"), (key) =>
-          this.#lateSaveReporter(key),
+        panel.render(
+          this.api,
+          this.#sessionPermissions.includes("venue.configure"),
+          this.#lateRefusalFor,
         ),
     }));
     const modules = this.#activePanels

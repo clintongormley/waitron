@@ -25,14 +25,16 @@ export interface VenueIdentityChanged {
 
 export interface TaxpayerFieldSettings {
   field: "legalName" | "taxpayerDomicile";
-  /** Names the dialog's `data-test` hooks: `<dialogTest>-dialog`, `save-<buttonTest>`, `cancel-<buttonTest>`. */
-  dialogTest: string;
-  buttonTest: string;
+  /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
+  dataTest: string;
   heading: StringKey;
   label: StringKey;
   hint?: StringKey;
   note: StringKey;
   changedElsewhere: StringKey;
+  /** Reported when a save is refused after its dialog has closed. */
+  notSaved: StringKey;
+  /** This field's own refusal reasons; `required` is common to every field. */
   refusals: Record<string, StringKey>;
   send(api: DashboardApi, value: string, expected: string): Promise<{ model: VenueDetailsModel }>;
 }
@@ -56,7 +58,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) reportLateRefusal?: () => void;
+  @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
 
   /** The value the dialog opened with; null while it is shut. */
   @state() private opened: string | null = null;
@@ -152,7 +154,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     }
     const value = this.value.trim();
     const opening = this.#opening;
-    const reportLateRefusal = this.reportLateRefusal;
+    const reportLateRefusal = this.lateRefusalFor?.(this.settings.notSaved);
     this.busy = true;
     try {
       const { model } = await this.settings.send(this.api, value, expected);
@@ -181,7 +183,11 @@ export abstract class TaxpayerFieldDialog extends LitElement {
           ? (error as { params?: Record<string, unknown> }).params
           : undefined;
       if (code === "venue.detail_invalid" && params?.field === this.settings.field) {
-        this.refusal = t(this.settings.refusals[String(params.reason)] ?? "venue_details.invalid");
+        const refusals: Record<string, StringKey> = {
+          required: "venue_details.required",
+          ...this.settings.refusals,
+        };
+        this.refusal = t(refusals[String(params.reason)] ?? "venue_details.invalid");
         await this.#focusField();
       } else {
         this.bottom =
@@ -202,7 +208,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     const action = saveActionState(this.#scope);
     const settings = this.settings;
     return html`<wt-dialog
-      data-test="${settings.dialogTest}-dialog"
+      data-test="${settings.dataTest}-dialog"
       heading=${t(settings.heading)}
       .open=${open}
       .dismissible=${!this.busy}
@@ -226,7 +232,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
                   submitOnEnter(
                     event,
                     this.renderRoot.querySelector<HTMLElement>(
-                      `[data-test=save-${settings.buttonTest}]`,
+                      `[data-test=save-${settings.dataTest}]`,
                     ),
                   )}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(event)}
@@ -238,13 +244,13 @@ export abstract class TaxpayerFieldDialog extends LitElement {
         <wt-button
           slot="cancel"
           variant="secondary"
-          data-test="cancel-${settings.buttonTest}"
+          data-test="cancel-${settings.dataTest}"
           ?disabled=${this.busy}
           @click=${() => void this.#dialog()?.requestClose("cancel")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
-          data-test="save-${settings.buttonTest}"
+          data-test="save-${settings.dataTest}"
           variant=${action.variant}
           ?disabled=${action.unchanged || this.busy || this.#ownError() !== ""}
           @click=${() => void this.#save()}
