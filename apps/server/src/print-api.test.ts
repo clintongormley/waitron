@@ -37,6 +37,7 @@ import {
 } from "@waitron/identity";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED, enqueuePrintJob, esc } from "@waitron/printing";
 import {
+  BLUETOOTH_UNAVAILABLE_REASONS,
   PIN_WITHHELD,
   createAgent,
   FakeSink,
@@ -53,6 +54,7 @@ import type { Logger } from "./logger.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
+import { DISCOVERED_TTL_MS } from "./discovery-listing.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
@@ -1414,6 +1416,102 @@ describe("mountPrintApi — management: agents", () => {
     } finally {
       await suite.db.update(printAgents).set({ nodeId: null }).where(eq(printAgents.id, agentId));
     }
+  });
+
+  describe("Bluetooth state an agent reports", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    async function listedBluetooth(app: Hono, agentId: string): Promise<unknown> {
+      const rows = (await (
+        await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+      ).json()) as { id: string; bluetooth?: unknown }[];
+      const row = rows.find((r) => r.id === agentId);
+      expect(row).toBeDefined();
+      expect(row).toHaveProperty("bluetooth");
+      return row!.bluetooth;
+    }
+
+    it("lists null before any report, then each reported value", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+      await pull(app, token, { bluetooth: { available: true } });
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+      for (const reason of BLUETOOTH_UNAVAILABLE_REASONS) {
+        await pull(app, token, { bluetooth: { available: false, reason } });
+        expect(await listedBluetooth(app, agentId)).toBe(reason);
+      }
+    });
+
+    it("keeps the last value when a pull leaves the field out", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      await pull(app, token, { bluetooth: { available: false, reason: "no_controller" } });
+      await pull(app, token, {});
+      expect(await listedBluetooth(app, agentId)).toBe("no_controller");
+    });
+
+    it.each([
+      ["a reason this server does not know", { available: false, reason: "on_fire" }],
+      ["no reason", { available: false }],
+      ["a string", "available"],
+      ["null", null],
+      ["an available flag that is not a boolean", { available: "yes" }],
+    ])("ignores %s and still answers the pull", async (_label, bluetooth) => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      await pull(app, token, { bluetooth: { available: true } });
+      await pull(app, token, { bluetooth });
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+    });
+
+    it("lists null once the last report is older than the discovered list's freshness", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      await pull(app, token, { bluetooth: { available: true } });
+      vi.setSystemTime(Date.now() + DISCOVERED_TTL_MS);
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+      vi.setSystemTime(Date.now() + 1);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+    });
+
+    it("tells the dashboard's agents list when the value changes, not when it repeats", async () => {
+      const bus = new LiveEvents();
+      const changes: unknown[] = [];
+      bus.subscribe((event) => {
+        changes.push(event);
+      });
+      const app = mountApp({ bus });
+      const { token } = await joinAndAccept(app);
+      const event = { kind: "change", change: { resources: [{ type: "print_agents" }] } };
+      await pull(app, token, { bluetooth: { available: true } });
+      expect(changes).toEqual([event]);
+      await pull(app, token, { bluetooth: { available: true } });
+      await pull(app, token, {});
+      await pull(app, token, { bluetooth: { available: false, reason: "on_fire" } });
+      expect(changes).toEqual([event]);
+      await pull(app, token, { bluetooth: { available: false, reason: "dbus_unreachable" } });
+      expect(changes).toEqual([event, event]);
+    });
+
+    it("tells the dashboard when a repeat follows a report it had stopped listing", async () => {
+      const bus = new LiveEvents();
+      const changes: unknown[] = [];
+      bus.subscribe((event) => {
+        changes.push(event);
+      });
+      const app = mountApp({ bus });
+      const { agentId, token } = await joinAndAccept(app);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      await pull(app, token, { bluetooth: { available: true } });
+      vi.setSystemTime(Date.now() + DISCOVERED_TTL_MS + 1);
+      expect(await listedBluetooth(app, agentId)).toBeNull();
+      await pull(app, token, { bluetooth: { available: true } });
+      expect(changes).toHaveLength(2);
+      expect(await listedBluetooth(app, agentId)).toBe("available");
+    });
   });
 
   it("uses this node's advertised LAN address only for its own agent and actual listener port", async () => {

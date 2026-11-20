@@ -53,9 +53,11 @@ import { authorizeManager, withPassiveManagementRead, type Permission } from "@w
 import {
   BLUETOOTH_COMMAND_LIMIT,
   BLUETOOTH_FAILURE_REASONS,
+  BLUETOOTH_UNAVAILABLE_REASONS,
   isBluetoothAddress,
   isBluetoothPin,
   type BluetoothCommandOutcome,
+  type BluetoothUnavailableReason,
   type OfficePrinterReport,
 } from "@waitron/print-agent";
 import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
@@ -454,6 +456,16 @@ function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
   return out;
 }
 
+type AgentBluetooth = "available" | BluetoothUnavailableReason;
+
+/** Anything unrecognised reads as no report: a refused pull would stop the agent printing. */
+function screenBluetooth(raw: unknown): AgentBluetooth | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const { available, reason } = raw as Record<string, unknown>;
+  if (available === true) return "available";
+  return available === false ? oneOf(BLUETOOTH_UNAVAILABLE_REASONS, reason) : undefined;
+}
+
 /**
  * The claim matches `local_key` against the upper-cased keys `screenVisible` keeps, case-sensitively,
  * so a registered Bluetooth address is stored upper-cased by the same rule.
@@ -515,6 +527,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           paired: entry.transport === "bluetooth" && isListed(entry.pairedAt, Date.now()),
         };
   const discovered = new Map<string, DiscoveredEntry>();
+  const agentBluetooth = new Map<string, { value: AgentBluetooth; at: number }>();
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages();
   const bluetoothCommands = createPrinterBluetoothCommands();
@@ -526,6 +539,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     withinTtl(at, now, DISCOVERED_TTL_MS);
+  const listedBluetooth = (agentId: string, now: number): AgentBluetooth | null => {
+    const report = agentBluetooth.get(agentId);
+    return report !== undefined && isFresh(report.at, now) ? report.value : null;
+  };
   const visibleNow = (now = Date.now()): Set<string> =>
     new Set(
       [...discovered.values()]
@@ -830,6 +847,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         setupPort?: unknown;
         pairedBluetooth?: unknown;
         bluetoothOutcomes?: unknown;
+        bluetooth?: unknown;
       }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
@@ -921,6 +939,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         )
       )
         publishState(deps.bus, "printer_discovery", log);
+
+      const bluetooth = screenBluetooth(body.bluetooth);
+      if (bluetooth !== undefined) {
+        const prior = agentBluetooth.get(agentId);
+        agentBluetooth.set(agentId, { value: bluetooth, at: now });
+        if (deps.bus && (prior?.value !== bluetooth || !isFresh(prior.at, now)))
+          publishState(deps.bus, "print_agents", log);
+      }
 
       const visibleKeys = visible
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")
@@ -1069,10 +1095,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printAgents.enrolledAt)),
       );
       const address = deps.listIpv4?.()[0];
+      const now = Date.now();
       return c.json(
         rows.map(({ setupPort, ...row }) => ({
           ...row,
           onThisBox: row.nodeId !== null && row.nodeId === deps.cfg.nodeId,
+          bluetooth: listedBluetooth(row.id, now),
           setupUrl:
             row.setupUrl ??
             (row.nodeId === deps.cfg.nodeId && setupPort !== null && address !== undefined
