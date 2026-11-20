@@ -355,8 +355,8 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
 
   it("keeps a drawer expiry visible without an action on a profile that cannot open it", async () => {
     const { el } = await mountEquipmentApp({
-      getDeviceEquipment: vi.fn().mockResolvedValue(
-        withNotices([
+      getDeviceEquipment: vi.fn().mockResolvedValue({
+        ...withNotices([
           {
             owner: "drawers",
             key: "one",
@@ -365,7 +365,8 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
             params: {},
           },
         ]),
-      ),
+        opensDrawer: false,
+      }),
     });
     await signIn(el);
     await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
@@ -393,6 +394,60 @@ describe("the staff notice strip on a signed-in till or handheld", () => {
     await signIn(el);
     await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
     expect(strip(el).drawn!.querySelector("[data-open-drawer]")).toBeNull();
+  });
+
+  it("offers Open drawer once a poll says the device may open one, though the till started without the permission", async () => {
+    const expired: StaffNotice = {
+      owner: "drawers",
+      key: "one",
+      code: "print_job.drawer_expired",
+      severity: "warning",
+      params: {},
+    };
+    const getDeviceEquipment = vi
+      .fn()
+      .mockResolvedValue({ ...withNotices([expired]), opensDrawer: false });
+    const { el } = await mountEquipmentApp({ getDeviceEquipment });
+    await signIn(el);
+    await vi.waitFor(() => expect(strip(el).words).toContain("Drawer didn’t open"));
+    expect((el as unknown as { capabilities: string[] }).capabilities).not.toContain(
+      "open-cash-drawer",
+    );
+    expect(strip(el).drawn!.querySelector("[data-open-drawer]")).toBeNull();
+
+    getDeviceEquipment.mockResolvedValue(withDrawerNotices([expired]));
+    await poll(el);
+
+    await vi.waitFor(() =>
+      expect(strip(el).drawn!.querySelector("[data-open-drawer]")).not.toBeNull(),
+    );
+  });
+
+  it("withdraws Open drawer once a poll says the device may no longer open one", async () => {
+    const expired: StaffNotice = {
+      owner: "drawers",
+      key: "one",
+      code: "print_job.drawer_expired",
+      severity: "warning",
+      params: {},
+    };
+    const getDeviceEquipment = vi.fn().mockResolvedValue(withDrawerNotices([expired]));
+    const { el } = await mountEquipmentApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "open-cash-drawer"] }),
+      getDeviceEquipment,
+    });
+    await signIn(el);
+    await vi.waitFor(() =>
+      expect(strip(el).drawn!.querySelector("[data-open-drawer]")).not.toBeNull(),
+    );
+
+    getDeviceEquipment.mockResolvedValue({ ...withNotices([expired]), opensDrawer: false });
+    await poll(el);
+
+    await vi.waitFor(() => expect(strip(el).drawn!.querySelector("[data-open-drawer]")).toBeNull());
+    expect(strip(el).words).toContain("Drawer didn’t open");
   });
 
   it("offers the existing supervisor override when the drawer notice action is refused", async () => {

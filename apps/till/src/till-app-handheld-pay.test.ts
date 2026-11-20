@@ -4150,6 +4150,11 @@ describe("the document choice on a handheld", () => {
         undefined,
         { method: "cash", tendered: "150.00", guestCount: 4 },
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
+        {
+          getDeviceEquipment: vi
+            .fn()
+            .mockResolvedValue({ ...equipmentWith(SECOND_READER), opensDrawer: false }),
+        },
       );
       await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       await documentChoice(el)!.updateComplete;
@@ -4158,11 +4163,17 @@ describe("the document choice on a handheld", () => {
     });
 
     it("a device whose profile does not allow the drawer is offered no Open drawer", async () => {
-      const { el } = await payPresented(simplified(), undefined, {
-        method: "cash",
-        tendered: "150.00",
-        guestCount: 4,
-      });
+      const { el } = await payPresented(
+        simplified(),
+        undefined,
+        { method: "cash", tendered: "150.00", guestCount: 4 },
+        {},
+        {
+          getDeviceEquipment: vi
+            .fn()
+            .mockResolvedValue({ ...equipmentWith(SECOND_READER), opensDrawer: false }),
+        },
+      );
       await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       await documentChoice(el)!.updateComplete;
 

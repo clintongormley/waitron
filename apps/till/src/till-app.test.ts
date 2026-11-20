@@ -6595,6 +6595,7 @@ describe("till-app", () => {
   it("a till whose profile does not allow the drawer shows no Open drawer on the ticket", async () => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["print-receipt", "take-cash"] }),
+      getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [], opensDrawer: false }),
     });
     await toTicket(el);
 

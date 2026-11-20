@@ -3891,10 +3891,9 @@ export class TillApp extends LitElement {
     return this.#tabPerson?.personId ?? "";
   }
 
+  /** The server's `opensDrawer` already includes the profile's `open-cash-drawer`. */
   get #mayOpenDrawer(): boolean {
-    return (
-      this.capabilities.includes("open-cash-drawer") && this.deviceEquipment?.opensDrawer === true
-    );
+    return this.deviceEquipment?.opensDrawer === true;
   }
 
   /** The person every request names, one object per sign-in: a refusal hands back the object its
