@@ -79,6 +79,7 @@ guide 8 changed), about +330 test lines, no generated files, no migration, no ve
   `owedSales(q: Transaction, nodeId: string, now: Date)` selects `{ saleId, deviceId, workingOrderId, issuedAt }`
   `from sales indexed by sales_issued_idx` joining `invoice_series`: `source = 'device'`, `working_order_id is not null`,
   `issued_at` within `[now − 24 h, now]`, `stillOwed`, no `print_jobs` row with this `sale_id` and `receipt_copy = false`.
+  (Changed in review, 2026-11-20: no upper bound `issued_at <= now`; a sale stamped after the pass's time, after a clock step back, is reported as due 10 minutes after its stamp rather than skipped.)
   `printOwedTickets(deps: { db: Database; backend: FiscalBackend; cfg: TradingContext; log: Logger }, now: Date,
   signal?: AbortSignal): Promise<{ queued: string[]; nextDueAt: Date | null }>`. `owedReceiptJob`'s deps gain
   `backend` and `cfg`; `pass` runs `startFreshRounds` then `printOwedTickets` and returns the earlier `nextDueAt`;
@@ -90,6 +91,7 @@ guide 8 changed), about +330 test lines, no generated files, no migration, no ve
   remaining sale gets its own `withTransaction` that checks again that there is no original job, then
   calls `queueOwedOriginal(tx, backend, { ...cfg, origin: deviceOrigin(deviceId) }, workingOrderId, null)`.
   A throw → `log("warn", "receipt.owed_ticket_failed", { saleId, errorCode })`, then the next sale.
+  (Changed in review, 2026-11-20: no separate re-check; each sale's transaction relies on `queueOwedOriginal`'s `owesOriginal` and `enqueueOriginalReceipt`'s exists check.)
 - `working_order_id is not null`: on main every device sale has one (the four `recordSale` calls,
   `till-sale.ts:1151, 1891, 2039`, `bill-payments.ts:898`, and `working-order.ts:7709`). Correctives,
   which may have none, are already excluded by `stillOwed`. The advance ticket (advances branch) has none; see below.
