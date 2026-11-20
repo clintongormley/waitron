@@ -245,7 +245,7 @@ pin today's number are in the part named.
   `venue.detail_read_only`, `cloud.binding_conflict`, `promotion.not_a_local_secondary`,
   `department.not_found` as a query value on receipt preview, `backup.stream_test_failed` 422,
   `backup.recovery_key_too_short` against a stored key, the till's `reader.not_found` when the
-  device has no reader (done 2026-11-20 by A394-20d).
+  device has no reader (kept at 404 by A394-9; watcher, 2026-11-20 18:11).
 
 ## Statuses outside the rule that look wrong
 
@@ -368,7 +368,8 @@ recommended answer (the owner agreed, 2026-11-20 14:31, that the watcher settle 
 13. **A swap whose body contradicts itself** (`swap.not_permitted` 403). **Recommend 400.**
 14. **The till's `reader.not_found` when the device has no reader at all** (404, pinned by
     `till-api.fiscal-sale-paths.test.ts:1106-1107`). **Recommend 409**: the device's set-up clashes
-    with a card payment.
+    with a card payment. **Not applied:** it yields to the owner's A394-9 answer for the till
+    (watcher, 2026-11-20 18:11).
 15. **The join `createdAt` version guard** (`join_request.not_found` 404 when the stored ask
     differs). **Recommend keep 404**: the ask at that path is gone.
 16. **`person.not_found` 401 on the till** when the signed-in operator's own row has gone.
@@ -488,9 +489,8 @@ Status changes:
   today, a deliberate exception to the 8 October rule: each is raised in more than one of the rule's
   situations (the address, the form, a stored row), no screen reads the number, and every screen acts
   on the refusal's name. No new codes. **A394-9 is done.**
-  2026-11-20 (A394-20d): the watcher's settling of question 14, on the owner's delegation, moved the
-  device-with-no-reader case to a new code `device.no_reader` 409; `reader.not_found` keeps 404 for
-  a reader the request names or the device holds.
+  2026-11-20: question 14 yields to this decision for the till; the device-with-no-reader case keeps
+  `reader.not_found` 404 (watcher, 2026-11-20 18:11).
 - **A394-10 — Till, lines, groups, drafts and courses: body ids answer 400.** Same files plus
   `adjustments-api.ts` and the doc comment at `apps/till/src/api/client.ts:2723`. Changes
   `tab.line_not_found`, `group.not_found`, `draft.not_found`, `course.not_found`, `station.not_found`,
@@ -752,10 +752,8 @@ Status changes:
   `providerId` field the request does not have; the dashboard offers Unpair only for a provider
   that can (`apps/dashboard/src/screens/payments-screen.ts`). In `apps/server/src/till-api.ts`, a
   card payment from a device with no reader chosen, no profile default and none in the request
-  answers a new code, `device.no_reader`, 409, on the till's pay route (tested) and the bill's card
-  payment route (traced: it uses the till's same table). `reader.not_found` still answers 404 for a
-  reader the request names that is unknown or switched off, and for the device's own chosen or
-  default reader once it is switched off (`device-equipment-api.test.ts`). The till's own
+  keeps `reader.not_found` 404: question 14 yields to the owner's A394-9 answer for the till
+  (watcher, 2026-11-20 18:11). The till's own
   `payment.refund_exceeds_capture` answers 409 (was 422), tested on the bill refund route with a
   stored capture smaller than the refund (`bill-refunds.card.test.ts`). The `enable`/`disable`
   reader routes the queue named no longer exist (`git grep -nE 'readers/:id/(enable|disable)' --
@@ -969,7 +967,7 @@ found no branch on these routes. Where a client branches on the error CODE inste
 
 **Not established.** `reader.not_found` when the device has no reader (`:309`): the request
 carries no id at all. Pinned at 404 by `till-api.fiscal-sale-paths.test.ts:1106-1107`.
-2026-11-20 (A394-20d): it now answers a new code, `device.no_reader`, 409.
+2026-11-20: kept at 404; question 14 yields to A394-9 (watcher, 2026-11-20 18:11).
 
 #### Out-of-rule statuses that look wrong (till)
 

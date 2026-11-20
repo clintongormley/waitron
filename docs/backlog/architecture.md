@@ -129,8 +129,8 @@ The field reaches `apps/server`'s awaiting-certificate flag (`apps/server/src/pa
 ## A394-20 to A394-22 — refusal statuses by one rule
 
 OPEN,
-queued in lane B (2026-11-20); A394-20's rows outside `menu-api.ts`, `print-api.ts`, `payments-api.ts` and the till's no-reader
-case remain. (A394-1 to
+queued in lane B (2026-11-20); A394-20's rows outside `menu-api.ts`, `print-api.ts` and `payments-api.ts` remain
+(the till's no-reader case keeps 404 by A394-9). (A394-1 to
 A394-4 landed as #1441, #1444, #1447 and #1455.) The audit (read, not run) found 96 status rows off the rule across
 49 boundaries (`docs/developers/conventions-data.md`); 17 defects answered 500, or success for a
 missing id (A394-1 to -6); all are fixed; 16 owner questions, settled by the watcher
@@ -1134,9 +1134,8 @@ answer as they did before A394, a deliberate exception to the one-status-rule in
 rule's situations (the address names it, the form names it, or a stored row does), so following
 the rule would need a new refusal for each situation; no screen reads the number, and every screen
 acts on the refusal's name. The trace is in the A394 plan, under A394-9.
-2026-11-20 (A394-20d): the watcher's settling of question 14, on the owner's delegation, moved the
-device-with-no-reader case to a new code `device.no_reader` 409; `reader.not_found` keeps 404 for a
-reader the request names or the device holds.
+Question 14 of the A394 plan (the no-reader case, 409) yields to this decision (watcher, 2026-11-20
+18:11).
 
 **No runtime planner statistics (A1469, watcher, 2026-11-10).** A box does not gather SQLite's
 planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days

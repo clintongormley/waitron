@@ -395,7 +395,7 @@ async function resolvePayReader(
       const role = await readReaderRole(tx, deviceId);
       readerId = role?.chosenId ?? role?.defaultId ?? undefined;
     }
-    if (readerId === undefined) throw new AppError("device.no_reader", {});
+    if (readerId === undefined) throw new AppError("reader.not_found", { id: "" });
     const [reader] = await tx
       .select({
         id: cardReaders.id,
@@ -597,7 +597,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "route.station_inactive": 409,
   "management.request_invalid": 400,
   "reader.not_found": 404,
-  "device.no_reader": 409,
   "reader.provider_disconnected": 409,
   "reader.not_held": 409,
   "reader.payment_in_progress": 409,

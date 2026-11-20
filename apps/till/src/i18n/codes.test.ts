@@ -450,7 +450,7 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
 });
 
 it("explains a card reader a bill payment cannot use, in both languages, naming no identifier", () => {
-  for (const code of ["reader.not_found", "device.no_reader", "reader.provider_disconnected"]) {
+  for (const code of ["reader.not_found", "reader.provider_disconnected"]) {
     expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
     expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
     expect(codeMessage(code, "en")).not.toContain(code);
@@ -1094,7 +1094,6 @@ it.each([
 it.each([
   "department_transfer.desk_unavailable",
   "reader.not_found",
-  "device.no_reader",
   "reader.provider_disconnected",
   "device.forbidden_station",
   "device.pairing_closed",
