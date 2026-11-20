@@ -117,6 +117,7 @@ declare module "@waitron/shared" {
     "cloud.not_primary": Record<string, never>;
     "cloud.not_configured": Record<string, never>;
     "cloud.request_invalid": Record<string, never>;
+    "cloud.request_not_found": Record<string, never>;
     "cloud.replacement_not_restored": Record<string, never>;
     "cloud.replacement_state_invalid": Record<string, never>;
     "cloud.replacement_refused": Record<string, never>;

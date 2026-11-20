@@ -1072,8 +1072,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     async complete(choice: CloudChoice, authorize: () => Promise<void>) {
       return run(async () => {
         const state = await read();
+        if (!state) throw new AppError("cloud.request_not_found", {});
         if (
-          !state ||
           choice.requestId !== state.requestId ||
           state.view?.organisationId !== choice.organisationId ||
           state.view?.legalBusinessId !== choice.legalBusinessId

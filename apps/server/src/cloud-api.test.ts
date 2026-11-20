@@ -761,6 +761,47 @@ it("losing permission or primary role during the Cloud status wait prevents a co
     await f.close();
   }
 });
+it("Cloud complete answers 400 when no request is saved, and 409 when another request is", async () => {
+  const f = await cloudFixture();
+  try {
+    const manager = await person("manager");
+    const connection = createCloudConnection(f.options);
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      { db: suite.db, connection, managementOrigin: "https://venue.test", isPrimary: () => true },
+      () => {},
+    );
+    const send = (requestId: string) =>
+      app.request("/management-api/cloud/complete", {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          requestId,
+          organisationId: f.organisationId,
+          legalBusinessId: f.legalBusinessId,
+        }),
+      });
+    const unsaved = await send(crypto.randomUUID());
+    expect(unsaved.status).toBe(400);
+    expect(await unsaved.json()).toEqual({
+      error: { code: "cloud.request_not_found", params: {} },
+    });
+    await connection.start();
+    f.approve();
+    await connection.check();
+    const other = await send(crypto.randomUUID());
+    expect(other.status).toBe(409);
+    expect(await other.json()).toEqual({ error: { code: "cloud.binding_conflict", params: {} } });
+    expect(f.requests.some((v) => v[2] === "complete")).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
 it("rejects malformed or extra browser inputs and reports an unconfigured server without creating state", async () => {
   const manager = await person("manager");
   const app = new Hono();
