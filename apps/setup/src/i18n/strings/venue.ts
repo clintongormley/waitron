@@ -134,12 +134,7 @@ export const venueEn = {
     "The province must match the postal code. It determines the fiscal territory and time zone.",
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Choose a time when the venue is closed. Table bills still open then get their receipt, without printing.",
-  "venue.help.series_code":
-    "Ordinary invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FS-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another invoice series.",
-  "venue.help.full_series_code":
-    "Full invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FF-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters.",
-  "venue.help.rectificative_series_code":
-    "Correction invoice numbers start with this prefix, then a code Waitron adds, then the invoice's number: for example FR-0CSQW/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FR unless you need another invoice series.",
+  "venue.help.series_codes": "Leave the defaults unless you have a good reason to change them.",
 
   "venue.error.invoice_locales": "Choose the receipt language.",
   "venue.error.tax_id": "Enter a valid tax ID for the selected country.",
@@ -398,12 +393,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "La provincia debe corresponder al código postal. Determina el territorio fiscal y la zona horaria.",
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Elige una hora en que el local esté cerrado. Las cuentas de mesa que sigan abiertas entonces reciben su ticket, sin imprimirlo.",
-  "venue.help.series_code":
-    "Los números de las facturas ordinarias empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FS-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie de facturas.",
-  "venue.help.full_series_code":
-    "Los números de las facturas completas empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FF-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres.",
-  "venue.help.rectificative_series_code":
-    "Los números de las facturas rectificativas empiezan por este prefijo, seguido de un código que añade Waitron y del número de la factura: por ejemplo FR-0CSQW/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FR salvo que necesites otra serie de facturas.",
+  "venue.help.series_codes":
+    "Deja los valores predeterminados salvo que tengas un buen motivo para cambiarlos.",
 
   "venue.error.invoice_locales": "Elige el idioma del recibo.",
   "venue.error.tax_id": "Introduce un número de identificación fiscal válido para el país elegido.",

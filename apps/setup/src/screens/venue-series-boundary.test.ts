@@ -11,11 +11,19 @@ afterEach(() => {
 });
 
 it.each([
-  ["en-GB", "up to 21 characters"],
-  ["es-ES", "hasta 21 caracteres"],
+  [
+    "en-GB",
+    "up to 21 characters",
+    "Leave the defaults unless you have a good reason to change them.",
+  ],
+  [
+    "es-ES",
+    "hasta 21 caracteres",
+    "Deja los valores predeterminados salvo que tengas un buen motivo para cambiarlos.",
+  ],
 ] as const)(
   "shows the approved series limit beside the refused field in %s",
-  async (locale, limit) => {
+  async (locale, limit, advice) => {
     setLocale(locale);
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",
@@ -31,6 +39,6 @@ it.each([
     await help.updateComplete;
     await userEvent.click(help.shadowRoot!.querySelector("button")!);
     expect(help.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-    expect(help.textContent).toContain(limit);
+    expect(help.textContent!.trim()).toBe(advice);
   },
 );
