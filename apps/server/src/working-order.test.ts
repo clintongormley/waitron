@@ -82,6 +82,7 @@ import {
   readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,
+  routingOnce,
   setOrderInvoiceChoice,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
@@ -5889,6 +5890,35 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, order2));
       expect(await listStationQueue(tx, kitchenStation.id)).toEqual([]);
+    });
+  });
+
+  it("lists bills sent in one send by order number, whichever bill was fired first", async () => {
+    const { cfg } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const coffeeProduct = await makeProduct(tx, {});
+      const earlier = randomUUID();
+      const later = randomUUID();
+      const { orderNumber: earlierNumber } = await createOfferedOrder(tx, cfg, earlier, [
+        line(coffeeProduct),
+      ]);
+      const { orderNumber: laterNumber } = await createOfferedOrder(tx, cfg, later, [
+        line(coffeeProduct),
+      ]);
+      expect(laterNumber).toBeGreaterThan(earlierNumber);
+
+      // One send for both bills, as a group release fires them: the higher number is written first.
+      const routing = routingOnce(tx, new Date());
+      await fireLines(tx, cfg, later, await fireableLines(tx, later), { routing });
+      await fireLines(tx, cfg, earlier, await fireableLines(tx, earlier), { routing });
+
+      const queue = await listStationQueue(tx, kitchenStation.id);
+      expect(queue.map((g) => g.queuedAt)).toEqual([
+        routing.at.toISOString(),
+        routing.at.toISOString(),
+      ]);
+      expect(queue.map((g) => g.orderNumber)).toEqual([earlierNumber, laterNumber]);
     });
   });
 

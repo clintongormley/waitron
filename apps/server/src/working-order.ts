@@ -1976,6 +1976,7 @@ export async function insertSplitExtras(
         note: null,
         quantity: extra.quantity,
         ...stamps,
+        queuedAt: routing.at.toISOString(),
         madeHere: here,
         state: here ? ("ready" as const) : ("queued" as const),
         readyAt: here ? stamps.firedAt : null,
@@ -2560,6 +2561,7 @@ export async function fireLines(
       madeHere: value.madeHere,
       waits: waiting.has(value.stationId),
     }),
+    queuedAt: firedAt,
   }));
   if (values.length > 0) {
     const [alreadyFired] = await tx
@@ -8837,8 +8839,7 @@ export async function listStationQueues(
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(onStationQueues(stationIds))
-    // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
-    .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
+    .orderBy(ticketItems.queuedAt, workingOrders.orderNumber, workingOrderLines.lineNo);
 
   const allergies = await VENUE_SERVICE.readTicketAllergies(
     tx,

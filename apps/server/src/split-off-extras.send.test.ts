@@ -31,7 +31,7 @@ import {
 } from "./testing/split-extras-venue.js";
 import { routeCategoryTo } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { fireLines, unsentDishLines } from "./working-order.js";
+import { fireLines, routingOnce, unsentDishLines } from "./working-order.js";
 import { routingCells, setRoutingCell } from "@waitron/venue-service";
 import { setStationToday } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
@@ -634,6 +634,83 @@ describe("sending split-off extras", () => {
       } finally {
         vi.restoreAllMocks();
       }
+    });
+  });
+
+  it("queues every dish and split-off extra of one send at the send's moment", async () => {
+    const { cfg } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const fryer = await createStation(tx, { name: "Fryer" });
+      const sides = await createCategory(tx, { name: "Sides" });
+      await routeCategoryTo(tx, sides.id, fryer.id);
+      const burger = await createProduct(tx, {
+        categoryId: null,
+        name: "Burger",
+        customerName: { "es-ES": "Classic beef burger" },
+        kitchenName: "BURG",
+        pricingUnit: "each",
+        unitPrice: "10.00",
+        vatClass: "general",
+      });
+      const flan = await createProduct(tx, {
+        categoryId: null,
+        name: "Flan",
+        customerName: { "es-ES": "Caramel custard" },
+        kitchenName: "FLAN",
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+      });
+      const {
+        listId,
+        productIds: [chips],
+      } = await addExtras(tx, cfg, burger.id, [
+        {
+          name: "Chips",
+          customerName: "Hand-cut fries",
+          kitchenName: "CHIPS",
+          categoryId: sides.id,
+        },
+      ]);
+      const orderId = randomUUID();
+      await createOfferedOrder(tx, cfg, orderId, [
+        {
+          productId: burger.id,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: chips!, quantity: 1 }] }],
+        },
+        { productId: flan.id, quantity: "1" },
+      ]);
+      const at = new Date(Date.now() - 1000);
+      await fireLines(tx, cfg, orderId, await unsentDishLines(tx, orderId), {
+        routing: routingOnce(tx, at),
+      });
+      const records = await tx
+        .select({
+          productId: workingOrderLines.productId,
+          stationId: ticketItems.stationId,
+          queuedAt: ticketItems.queuedAt,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      const sent = at.toISOString();
+      expect(records.find((record) => record.productId === burger.id)).toEqual({
+        productId: burger.id,
+        stationId: kitchen.id,
+        queuedAt: sent,
+      });
+      expect(records.find((record) => record.productId === flan.id)).toEqual({
+        productId: flan.id,
+        stationId: kitchen.id,
+        queuedAt: sent,
+      });
+      expect(records.find((record) => record.productId === chips)).toEqual({
+        productId: chips,
+        stationId: fryer.id,
+        queuedAt: sent,
+      });
     });
   });
 

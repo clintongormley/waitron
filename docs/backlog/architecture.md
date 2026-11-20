@@ -1012,7 +1012,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
@@ -1020,9 +1020,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
-- **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
-  ticket `queued_at` and line number; different query plans can reorder bills tied on both.
-  Check whether a product path produces those ties before choosing a stable tie-breaker.
 
 
 ## Bundle: Full-invoice recipient: country code names
