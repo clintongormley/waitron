@@ -816,6 +816,7 @@ describe("till-shell's Zones on this device entry", () => {
             "equipment",
             "wt-language-chooser",
             "theme-choices",
+            "press-buzz-switch",
             "report-problem",
             "about",
             "logout",
@@ -864,6 +865,7 @@ describe("a handheld's More", () => {
       if (item.getAttribute("data-test") === "department-transfers") return ["transfers count"];
       if (item.localName === "wt-language-chooser") return ["language"];
       if (item.getAttribute("data-test") === "theme-choices") return ["theme"];
+      if (item.getAttribute("data-test") === "press-buzz-switch") return ["vibrate"];
       if (item.getAttribute("role") === "group") {
         const heading = item.querySelector(`#${item.getAttribute("aria-labelledby")}`)!;
         return [
@@ -900,6 +902,7 @@ describe("a handheld's More", () => {
         "Equipment",
         "language",
         "theme",
+        "vibrate",
         "]",
         "—",
         "Report a problem",
@@ -960,6 +963,7 @@ describe("a handheld's More", () => {
         "Equipment",
         "language",
         "theme",
+        "vibrate",
         "]",
         "—",
         "Report a problem",
@@ -1036,6 +1040,7 @@ describe("a handheld's More", () => {
         "My hours",
         "Fix my hours",
         "theme",
+        "vibrate",
       ]);
       expect(moreItems(el)).toEqual([
         "find-bill",
@@ -1058,7 +1063,7 @@ describe("a handheld's More", () => {
     });
     const name = el.shadowRoot!.querySelector("header .session > wt-row-actions.operator-menu")!;
     expect(name).not.toBeNull();
-    expect(contents(name)).toEqual(["theme"]);
+    expect(contents(name)).toEqual(["theme", "vibrate"]);
   });
 });
 
@@ -1557,6 +1562,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "press-buzz-switch",
         "report-problem",
         "about",
         "logout",
@@ -1601,7 +1607,8 @@ describe("till-shell at phone width", () => {
       for (const [, type] of phoneMenuActions) el.addEventListener(type, () => fired.push(type));
       const tabsEls = el.shadowRoot!.querySelectorAll<HTMLElement>(".tab");
       // Tab stops into More for each action: they rise in More's order, and before Log out come
-      // the two languages, the three Theme choices, Report a problem and About Waitron.
+      // the two languages, the three Theme choices, the Vibrate on button press switch, Report a
+      // problem and About Waitron.
       const steps: number[] = [];
       for (const [selector] of phoneMenuActions) {
         tabsEls[tabsEls.length - 1]!.focus();
@@ -1625,7 +1632,7 @@ describe("till-shell at phone width", () => {
       }
       expect(fired).toEqual(phoneMenuActions.map(([, type]) => type));
       expect(steps.slice(0, -1)).toEqual(steps.slice(0, -1).map((_, index) => index + 1));
-      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 2 + 1);
+      expect(steps.at(-1)).toBe(steps.at(-2)! + 2 + 3 + 1 + 2 + 1);
     });
   });
 
@@ -1765,6 +1772,7 @@ describe("till-shell at phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "press-buzz-switch",
         "report-problem",
         "about",
         "logout",
@@ -1803,6 +1811,7 @@ describe("till-shell at phone width", () => {
           "equipment",
           "wt-language-chooser",
           "theme-choices",
+          "press-buzz-switch",
           "report-problem",
           "about",
           "logout",
@@ -1948,6 +1957,7 @@ describe("till-shell above phone width", () => {
     "equipment",
     "wt-language-chooser",
     "theme-choices",
+    "press-buzz-switch",
     "report-problem",
     "about",
     "logout",
@@ -2150,6 +2160,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "press-buzz-switch",
         "report-problem",
         "about",
         "logout",
@@ -2233,6 +2244,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "press-buzz-switch",
         "report-problem",
         "about",
         "logout",
@@ -2252,6 +2264,7 @@ describe("till-shell above phone width", () => {
         "equipment",
         "wt-language-chooser",
         "theme-choices",
+        "press-buzz-switch",
         "report-problem",
         "about",
         "logout",

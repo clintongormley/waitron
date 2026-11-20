@@ -639,6 +639,7 @@ export const en = {
   "theme.light": "Light",
   "theme.dark": "Dark",
   "theme.device": "Follow device",
+  "press_buzz.label": "Vibrate on button press",
   // Login / operator selection
   "login.enter_pin": "Enter PIN",
   "login.pick_operator": "Choose your name",
@@ -2840,6 +2841,7 @@ export const es: Record<StringKey, string> = {
   "theme.light": "Claro",
   "theme.dark": "Oscuro",
   "theme.device": "Según el dispositivo",
+  "press_buzz.label": "Vibrar al pulsar un botón",
   "login.enter_pin": "Introduce el PIN",
   "login.pick_operator": "Elige tu nombre",
   "login.loading": "Cargando…",

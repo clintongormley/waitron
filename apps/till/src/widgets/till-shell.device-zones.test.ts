@@ -199,22 +199,34 @@ async function openHandheldMore(affordances: ShellAffordance[]) {
       expect(trigger.getBoundingClientRect().bottom).not.toBe(before);
     });
   };
+  const underTrigger = () => {
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(popup.getBoundingClientRect().top).toBeCloseTo(
+      trigger.getBoundingClientRect().bottom,
+      0,
+    );
+  };
   // A popup shorter than its cap keeps its size when the cap moves, so its own size observer does
   // not place it again.
   const expectPopupUnderTriggerBelowCap = () =>
     vi.waitFor(() => {
-      expect(popup.matches(":popover-open")).toBe(true);
       expect(popup.scrollHeight).toBe(popup.clientHeight);
-      expect(popup.getBoundingClientRect().top).toBeCloseTo(
-        trigger.getBoundingClientRect().bottom,
-        0,
-      );
+      underTrigger();
     });
-  return { resizeUntilTriggerMoves, expectPopupUnderTriggerBelowCap };
+  const expectPopupUnderTrigger = () => vi.waitFor(underTrigger);
+  return {
+    menu,
+    popup,
+    resizeUntilTriggerMoves,
+    expectPopupUnderTriggerBelowCap,
+    expectPopupUnderTrigger,
+  };
 }
 
 it("a short handheld More menu follows ☰ through a rotation and back", async () => {
   await page.viewport(390, 844);
+  // The vibrate switch makes More too tall for 844×480; this case is about a menu that fits.
+  Object.defineProperty(navigator, "vibrate", { value: undefined, configurable: true });
   try {
     const more = await openHandheldMore([]);
     await more.resizeUntilTriggerMoves(844, 480);
@@ -222,6 +234,35 @@ it("a short handheld More menu follows ☰ through a rotation and back", async (
     await more.resizeUntilTriggerMoves(390, 844);
     await more.expectPopupUnderTriggerBelowCap();
   } finally {
+    delete (navigator as { vibrate?: unknown }).vibrate;
+    await page.viewport(1280, 900);
+  }
+});
+
+it("a handheld More menu with the vibrate switch follows ☰ through a rotation and still reaches Log out", async () => {
+  await page.viewport(390, 844);
+  Object.defineProperty(navigator, "vibrate", { value: () => true, configurable: true });
+  try {
+    const more = await openHandheldMore([]);
+    expect(more.menu.querySelector('[data-test="press-buzz-switch"]')).not.toBeNull();
+    const logout = more.menu.querySelector<HTMLElement>("wt-button.logout")!;
+    await more.resizeUntilTriggerMoves(844, 480);
+    await vi.waitFor(() =>
+      expect(more.popup.scrollHeight).toBeGreaterThan(more.popup.clientHeight),
+    );
+    await more.expectPopupUnderTrigger();
+    logout.scrollIntoView({ block: "nearest" });
+    await vi.waitFor(() => {
+      const top = more.popup.getBoundingClientRect().top + more.popup.clientTop;
+      const item = logout.getBoundingClientRect();
+      expect(item.top).toBeGreaterThanOrEqual(top);
+      expect(item.bottom).toBeLessThanOrEqual(top + more.popup.clientHeight);
+      expect(item.bottom).toBeLessThanOrEqual(window.innerHeight);
+    });
+    await more.resizeUntilTriggerMoves(390, 844);
+    await more.expectPopupUnderTrigger();
+  } finally {
+    delete (navigator as { vibrate?: unknown }).vibrate;
     await page.viewport(1280, 900);
   }
 });

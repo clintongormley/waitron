@@ -840,6 +840,9 @@ to the height (design §3.1), so with every entry offered it sits below the menu
 nothing says the menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px).
 Since A1123 a handheld's More opens under ☰ rather than over the bar, so it has less room than
 those measurements had.
+Since TILL-HAPTIC-SWITCH, **Vibrate on button press** adds a row where the browser supports
+vibration; with it, a More that lists no screens no longer fits an 844×480 window, though Log out
+can still be scrolled to.
 Decide whether More should show that it scrolls, or hold fewer items on a short screen.
 
 

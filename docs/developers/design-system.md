@@ -6196,10 +6196,10 @@ drawn outside the shell. Setup's card header starts its controls with the same �
 The Theme chooser (`wt-theme-chooser`) sits just before the language chooser in setup's card header,
 the till's sign-in and join screens and the prep station display's and kiosk mode's corner, and in the
 dashboard's banner while nobody is signed in (signed in, Theme is in the account menu; see
-"Dashboard banner"). On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in person's
-menu under their name, Log out is in More, and the clock actions stay under the name. On a signed-in
-handheld, Theme and Log out are both in More, never in the name's menu: Theme last in the Settings
-group, and Log out last of all but for the "Powered by" line, which follows it under a rule while a
+"Dashboard banner"). On a signed-in till the shell's bar has no Theme chooser: Theme, then Vibrate on button press where
+the browser supports vibration, are in the signed-in person's menu under their name, Log out is in More, and the clock actions stay under the name. On a signed-in
+handheld, Theme and Log out are both in More, never in the name's menu: Theme and then Vibrate on button
+press (where the browser supports vibration) last in the Settings group, and Log out last of all but for the "Powered by" line, which follows it under a rule while a
 venue logo is in use (A1096). Measured 2026-10-17 in A681's re-look of the till's person menu: as
 three rows before Log out, the group pushed Log out below the visible More menu at 360×640, 360×740,
 320×740 and 390×664. Measured 2026-10-17 in the real-browser look for A681: with the chooser on the

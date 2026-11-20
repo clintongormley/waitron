@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi, type Mock } from "vitest";
 import "@waitron/ui";
 import type { WtIconButton } from "@waitron/ui";
 import { installPressBuzz } from "./press-buzz.js";
+import { setPressBuzz } from "./press-buzz-choice.js";
 
 let root: HTMLDivElement;
 let vibrate: Mock<(pattern: number) => boolean>;
@@ -144,4 +145,40 @@ test("by default it buzzes through the browser's own navigator", () => {
   press(button);
   expect(ownVibrate.mock.calls).toEqual([[15]]);
   ownVibrate.mockRestore();
+});
+
+test("a press does not buzz while the buzz is turned off", () => {
+  remove();
+  remove = installPressBuzz(root, { vibrate }, () => false);
+  const button = document.createElement("button");
+  root.append(button);
+  press(button);
+  expect(vibrate).not.toHaveBeenCalled();
+});
+
+test("the choice is read at each press", () => {
+  remove();
+  let on = true;
+  remove = installPressBuzz(root, { vibrate }, () => on);
+  const button = document.createElement("button");
+  root.append(button);
+  press(button);
+  on = false;
+  press(button);
+  expect(vibrate.mock.calls).toEqual([[15]]);
+});
+
+test("by default it follows the stored choice", () => {
+  remove();
+  remove = installPressBuzz(root, { vibrate });
+  const button = document.createElement("button");
+  root.append(button);
+  press(button);
+  setPressBuzz(false);
+  try {
+    press(button);
+  } finally {
+    setPressBuzz(true);
+  }
+  expect(vibrate.mock.calls).toEqual([[15]]);
 });
