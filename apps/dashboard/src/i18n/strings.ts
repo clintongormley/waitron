@@ -652,6 +652,10 @@ export const en = {
     "This recovery request is no longer available. Load requests again to check the current requests.",
   "cloud.recovery_sign_in": "Sign in as administrator",
   "cloud.connect": "Connect to Cloud",
+  "cloud.sign_in": "Sign in to Waitron Cloud",
+  "cloud.sign_in_cancelled":
+    "Cloud sign-in was cancelled. You can sign in again when you’re ready.",
+  "cloud.sign_in_retry": "The connection wasn’t completed. Sign in to Waitron Cloud to continue.",
   "cloud.open": "Open Cloud",
   "cloud.code": "If Cloud asks for a code, enter this one.",
   "cloud.check": "Check connection",
@@ -5199,6 +5203,11 @@ export const es: Record<StringKey, string> = {
     "Esta solicitud de recuperación ya no está disponible. Vuelve a cargar las solicitudes para comprobar cuáles siguen pendientes.",
   "cloud.recovery_sign_in": "Entrar como administrador",
   "cloud.connect": "Conectar con Cloud",
+  "cloud.sign_in": "Iniciar sesión en Waitron Cloud",
+  "cloud.sign_in_cancelled":
+    "Se ha cancelado el inicio de sesión en Cloud. Puedes volver a iniciarla cuando quieras.",
+  "cloud.sign_in_retry":
+    "La conexión no se ha completado. Inicia sesión en Waitron Cloud para continuar.",
   "cloud.open": "Abrir Cloud",
   "cloud.code": "Si Cloud te pide un código, introduce este.",
   "cloud.check": "Comprobar conexión",

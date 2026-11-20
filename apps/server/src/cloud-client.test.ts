@@ -1,12 +1,12 @@
 import { mkdir } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as fs from "node:fs/promises";
 import { syncsAndRenames, writtenDurably } from "./testing/durable-writes.js";
 import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
-import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { createCloudConnection, loadCloudOrigin, loadCloudSignInCallback } from "./cloud-client.js";
 import { createCloudArchiveTarget } from "./cloud-archive-target.js";
 vi.mock("node:fs/promises", { spy: true });
 
@@ -97,6 +97,293 @@ it("requires a pinned secure Cloud origin except explicit loopback development",
     loadCloudOrigin({ WAITRON_ENV: "production", WAITRON_CLOUD_ORIGIN: "http://127.0.0.1:8000" }),
   ).toThrow();
 });
+async function installedSignInFixture() {
+  const callback = "https://box.waitron.test/cloud/pairing/callback";
+  const expiresAt = new Date(Date.now() + 600_000).toISOString();
+  const code = randomBytes(32).toString("base64url");
+  const key = generateKeyPairSync("ed25519");
+  let attemptState = "awaiting_cloud";
+  let challenge = "";
+  let registered = false;
+  let loseComplete = false;
+  let expired = false;
+  let wrongLogin = false;
+  const validProfile: Extract<
+    import("@waitron/contract").PairingV4Claims,
+    { action: "complete" }
+  >["args"] = [
+    "ES",
+    "Bar Pepe",
+    ["First", "", "28001", "Madrid", "Madrid"],
+    "B-12345678",
+    "Pepe SL",
+  ];
+  let profile = validProfile;
+  const publicKey = key.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+  const f = await fixture(undefined, "test", async (values, _saved, _req, res) => {
+    const [, origin, action, requestId, presentedKey, , , args] = values;
+    if (action === "status" && (expired || presentedKey !== publicKey)) {
+      res.writeHead(400);
+      res.end('{"error":"pairing_unavailable"}');
+      return;
+    }
+    const answer: Record<string, unknown> = { requestId, expiresAt };
+    if (action === "start") {
+      attemptState = "awaiting_cloud";
+      const [redirectUri, state, codeChallenge] = args as string[];
+      expect(redirectUri).toBe(callback);
+      challenge = codeChallenge!;
+      const url = new URL("/login", origin as string);
+      url.search = new URLSearchParams({
+        request_id: requestId as string,
+        state: state!,
+        code_challenge: wrongLogin ? code : challenge,
+        code_challenge_method: "S256",
+      }).toString();
+      answer.authorizationUrl = url.href;
+    } else if (action === "redeem") {
+      const [submitted, verifier] = args as string[];
+      expect(submitted).toBe(code);
+      expect(createHash("sha256").update(verifier!).digest("base64url")).toBe(challenge);
+      attemptState = "account_bound";
+    } else if (action === "complete") {
+      registered = true;
+      attemptState = "complete";
+      if (loseComplete) {
+        res.destroy();
+        return;
+      }
+    }
+    answer.state = attemptState;
+    if (registered)
+      answer.registration = {
+        venueId: f.venueId,
+        installationId: f.installationId,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      };
+    res.end(JSON.stringify(answer));
+  });
+  await f.options.forgetVenueId();
+  await mkdir(join(f.stateDir, "cloud"), { mode: 0o700 });
+  const privateKey = key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url");
+  await writeFile(
+    join(f.stateDir, "cloud/connection.json"),
+    JSON.stringify({ version: 4, origin: f.options.origin, publicKey, privateKey }),
+    { mode: 0o600 },
+  );
+  const options = {
+    ...f.options,
+    signIn: { callback, readProfile: async () => profile },
+  };
+  return {
+    ...f,
+    client: (configured = true) => createCloudConnection(configured ? options : f.options),
+    binding: { tab: randomUUID(), session: randomUUID() },
+    authorize: async () => {},
+    code,
+    loseComplete: () => {
+      loseComplete = true;
+    },
+    wrongLogin: () => {
+      wrongLogin = true;
+    },
+    expire: () => {
+      expired = true;
+    },
+    invalidProfile: (name = "Bar\uD800") => {
+      profile = ["ES", name, validProfile[2], validProfile[3], validProfile[4]];
+    },
+    correctProfile: () => {
+      profile = validProfile;
+    },
+  };
+}
+
+it("shows a prepared Cloud sign-in key with no callback as unconfigured", async () => {
+  const f = await installedSignInFixture();
+  try {
+    expect(await f.client(false).status()).toMatchObject({ configured: false });
+    expect(await f.client().status()).toMatchObject({ sameTabSignIn: true });
+  } finally {
+    await f.close();
+  }
+});
+
+it("accepts only the exact HTTPS callback on a test box", () => {
+  const origin = "https://box.test";
+  const callback = origin + "/cloud/pairing/callback";
+  const env = { WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: callback };
+  expect(loadCloudSignInCallback(env, origin)).toBe(callback);
+  expect(loadCloudSignInCallback({ ...env, WAITRON_ENV: "production" }, origin)).toBeUndefined();
+  expect(loadCloudSignInCallback({}, origin)).toBeUndefined();
+  expect(() => loadCloudSignInCallback(env, "https://other.test")).toThrow("server.config_invalid");
+  expect(() =>
+    loadCloudSignInCallback(
+      { WAITRON_TEST_CLOUD_SIGN_IN_CALLBACK: callback.replace("https:", "http:") },
+      "http://box.test",
+    ),
+  ).toThrow("server.config_invalid");
+});
+
+it.each(["original tab", "new sign-in", "different box key"])(
+  "checks the binding on return and handles lost completion from a %s",
+  async (source) => {
+    const f = await installedSignInFixture();
+    try {
+      const client = f.client();
+      const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+      const query = new URL(authorizationUrl!).searchParams;
+      const proof = {
+        requestId: query.get("request_id")!,
+        state: query.get("state")!,
+        code: f.code,
+      };
+      await expect(
+        client.returnSignIn({ ...f.binding, tab: randomUUID() }, proof, f.authorize),
+      ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+      await expect(
+        client.returnSignIn({ ...f.binding, session: randomUUID() }, proof, f.authorize),
+      ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+      expect(f.requests.map((values) => values[2])).toEqual(["start"]);
+      f.loseComplete();
+      await expect(client.returnSignIn(f.binding, proof, f.authorize)).rejects.toMatchObject({
+        code: "cloud.unavailable",
+      });
+      expect(await f.options.readVenueId()).toBeNull();
+      const resumed = f.client();
+      const other = { tab: randomUUID(), session: randomUUID() };
+      if (source === "different box key") {
+        const path = join(f.stateDir, "cloud/connection.json");
+        const saved = JSON.parse(await readFile(path, "utf8"));
+        const key = generateKeyPairSync("ed25519");
+        const publicKey = key.publicKey
+          .export({ format: "der", type: "spki" })
+          .toString("base64url");
+        const privateKey = key.privateKey
+          .export({ format: "der", type: "pkcs8" })
+          .toString("base64url");
+        await writeFile(path, JSON.stringify({ ...saved, publicKey, privateKey }));
+        await expect(resumed.startSignIn(other, f.authorize)).rejects.toMatchObject({
+          code: "cloud.binding_conflict",
+        });
+        expect(await f.options.readVenueId()).toBeNull();
+        expect(f.requests.map((values) => values[2])).toEqual([
+          "start",
+          "redeem",
+          "complete",
+          "status",
+        ]);
+        return;
+      }
+      if (source === "original tab") await resumed.returnSignIn(f.binding, proof, f.authorize);
+      else await expect(resumed.startSignIn(other, f.authorize)).resolves.toEqual({});
+      expect((await resumed.status()).registration?.installationId).toBe(f.installationId);
+      expect(await f.options.readVenueId()).toBe(f.venueId);
+      expect(f.requests.map((values) => values[2])).toEqual([
+        "start",
+        "redeem",
+        "complete",
+        "status",
+      ]);
+      expect(f.requests[2]![7]).toEqual([
+        "ES",
+        "Bar Pepe",
+        ["First", "", "28001", "Madrid", "Madrid"],
+        "B-12345678",
+        "Pepe SL",
+      ]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("allows a fresh local session to start again after Cloud says the old attempt expired", async () => {
+  const f = await installedSignInFixture();
+  try {
+    const client = f.client();
+    const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    f.invalidProfile();
+    await expect(
+      client.returnSignIn(
+        f.binding,
+        {
+          requestId: query.get("request_id")!,
+          state: query.get("state")!,
+          code: f.code,
+        },
+        f.authorize,
+      ),
+    ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+    const other = { tab: randomUUID(), session: randomUUID() };
+    await expect(client.startSignIn(other, f.authorize)).rejects.toMatchObject({
+      code: "cloud.binding_conflict",
+    });
+    expect(f.requests.map((values) => values[2])).toEqual(["start", "redeem"]);
+    f.expire();
+    vi.setSystemTime(Date.now() + 600_001);
+    const retry = await client.startSignIn(other, f.authorize);
+    expect(new URL(retry.authorizationUrl!).searchParams.get("request_id")).not.toBe(
+      query.get("request_id"),
+    );
+  } finally {
+    vi.useRealTimers();
+    await f.close();
+  }
+});
+
+it("refuses a Cloud login URL with a different challenge", async () => {
+  const f = await installedSignInFixture();
+  try {
+    f.wrongLogin();
+    await expect(f.client().startSignIn(f.binding, f.authorize)).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it.each(["Bar\uD800", "x".repeat(121)])(
+  "refuses invalid venue text before sending completion",
+  async (name) => {
+    const f = await installedSignInFixture();
+    try {
+      const client = f.client();
+      const { authorizationUrl } = await client.startSignIn(f.binding, f.authorize);
+      const query = new URL(authorizationUrl!).searchParams;
+      f.invalidProfile(name);
+      await expect(
+        client.returnSignIn(
+          f.binding,
+          {
+            requestId: query.get("request_id")!,
+            state: query.get("state")!,
+            code: f.code,
+          },
+          f.authorize,
+        ),
+      ).rejects.toMatchObject({ code: "cloud.request_invalid" });
+      expect(await f.options.readVenueId()).toBeNull();
+      expect(f.requests.map((values) => values[2])).toEqual(["start", "redeem"]);
+      f.correctProfile();
+      await expect(f.client().startSignIn(f.binding, f.authorize)).resolves.toEqual({});
+      expect(await f.options.readVenueId()).toBe(f.venueId);
+      expect(f.requests[3]![7]).toEqual([
+        "ES",
+        "Bar Pepe",
+        ["First", "", "28001", "Madrid", "Madrid"],
+        "B-12345678",
+        "Pepe SL",
+      ]);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
 it("persists before sending, resumes a failed start after restart and never exposes the private key", async () => {
   const f = await fixture();
   try {

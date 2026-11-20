@@ -2,6 +2,7 @@ import { afterEach, expect, it, onTestFinished } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { createFreshSignInGate } from "../api/fresh-sign-in.js";
 import { DashboardApi } from "../api/client.js";
 import { CloudServicesScreen } from "./cloud-services-screen.js";
 afterEach(cleanupWidgets);
@@ -38,6 +39,52 @@ it.each([
   } finally {
     setLocale(previous);
   }
+});
+
+it("uses fresh local confirmation for Cloud sign-in and keeps the tab across that retry", async () => {
+  const calls: unknown[] = [];
+  const key = "waitron-cloud-sign-in-tab";
+  const old = sessionStorage.getItem(key);
+  onTestFinished(() =>
+    old === null ? sessionStorage.removeItem(key) : sessionStorage.setItem(key, old),
+  );
+  sessionStorage.removeItem(key);
+  const freshSignIn = createFreshSignInGate({
+    sessionGeneration: () => 0,
+    prompt: async () => true,
+  });
+  const api = new DashboardApi(
+    "",
+    async (url, options) => {
+      if (String(url).endsWith("/sign-in/start")) {
+        calls.push(JSON.parse(String(options?.body)));
+        if (calls.length === 1)
+          return Response.json(
+            { error: { code: "management_session.proof_required", params: {} } },
+            { status: 400 },
+          );
+        return Response.json({});
+      }
+      return Response.json({
+        state: "not_connected",
+        code: "",
+        configured: true,
+        isPrimary: true,
+        sameTabSignIn: true,
+      });
+    },
+    undefined,
+    undefined,
+    false,
+    { freshSignIn },
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await flush(el);
+  click(el, "connect");
+  await expect.poll(() => calls.length).toBe(2);
+  const tab = sessionStorage.getItem(key);
+  expect(tab).toMatch(/^[a-f0-9-]{36}$/);
+  expect(calls).toEqual([{ tab }, { tab }]);
 });
 
 it("offers restored server reconnection and a synchronous busy guard", async () => {

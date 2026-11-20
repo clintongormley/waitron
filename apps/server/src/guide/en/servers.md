@@ -264,6 +264,15 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 
 ## Turn remote staff access on or off {#remote-access}
 
+On a test box set up for Cloud sign-in, open **System → Cloud services** and choose **Sign in to
+Waitron Cloud**. Sign in with your existing Cloud account. The same browser tab returns to the
+box to connect your venue. Keep that tab open. If the connection stops, choose **Sign in to
+Waitron Cloud** again in the same tab. If you closed it and Waitron says the previous request is
+still active, wait for that request to expire before trying again.
+
+If Waitron asks you to check the connection details, review the saved name, address and tax details
+in **Venue settings → Venue details**, then try again.
+
 Pair your test box with Waitron Cloud and start the venue’s free trial in **Billing** to open your
 assigned staff address. **Cloud services** shows when remote access needs the trial. After
 starting it, choose **Refresh status** to check the connection again.

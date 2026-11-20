@@ -15,6 +15,8 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { CloudChoice, CloudConnection } from "./cloud-client.js";
+import { mountCloudSignInCallback } from "./cloud-sign-in-callback.js";
+import { cloudSignInId, readCloudSignInReturn } from "./cloud-sign-in.js";
 import type { CloudReplacement } from "./cloud-replacement.js";
 import "./errors.js";
 import { readEmergencyPeople } from "./cloud-emergency-people.js";
@@ -34,6 +36,7 @@ export interface CloudApiDeps {
     | "retire"
   >;
   managementOrigin: string;
+  signInCallback?: boolean;
   isPrimary: () => boolean;
 }
 export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void {
@@ -94,6 +97,31 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       onError: (c) => c.json({ error: { code: "cloud.request_invalid", params: {} } }, 400),
     }),
   );
+  if (deps.signInCallback) mountCloudSignInCallback(app, deps.isPrimary);
+  for (const action of ["start", "return"] as const)
+    app.post(`/management-api/cloud/sign-in/${action}`, (c) =>
+      run(c, log, async () => {
+        c.header("Cache-Control", "no-store");
+        const authorizeSignIn = async () => {
+          await authorize(c);
+          primary();
+          await requireConfirmation(c);
+        };
+        if (isRemoteStaffRequest(c) || c.req.header("origin") !== deps.managementOrigin)
+          return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+        await authorizeSignIn();
+        const data = await readRawJsonBody<Record<string, unknown>>(c);
+        if (!data || typeof data !== "object" || Array.isArray(data) || !cloudSignInId(data.tab))
+          throw new AppError("cloud.request_invalid", {});
+        const binding = { tab: data.tab, session: requireManagementSession(c) };
+        if (action === "start") {
+          if (Object.keys(data).length !== 1) throw new AppError("cloud.request_invalid", {});
+          return c.json(await connection().startSignIn(binding, authorizeSignIn));
+        }
+        await connection().returnSignIn(binding, readCloudSignInReturn(data), authorizeSignIn);
+        return c.body(null, 204);
+      }),
+    );
   for (const action of ["read", "approve", "refuse"] as const)
     app.post(`/management-api/cloud/owner-recovery/${action}`, (c) =>
       run(c, log, async () => {
@@ -151,9 +179,11 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
   app.get("/management-api/cloud/status", (c) =>
     run(c, log, async () => {
       await authorize(c, true);
-      const status = deps.connection
-        ? await deps.connection.status()
-        : { state: "not_connected", code: "" };
+      const status = (await deps.connection?.status()) ?? {
+        state: "not_connected",
+        code: "",
+        configured: false,
+      };
       let replacement = null;
       let replacementPending = false;
       let replacementError: string | null = null;
@@ -168,12 +198,13 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       await authorize(c, true);
       return c.json({
         ...status,
+        ...("sameTabSignIn" in status && isRemoteStaffRequest(c) ? { sameTabSignIn: false } : {}),
         replacement,
         replacementPending,
         replacementApproval,
         replacementError,
         replacementEligible,
-        configured: !!deps.connection,
+        configured: status.configured ?? true,
         isPrimary: deps.isPrimary(),
         isRemote: isRemoteStaffRequest(c),
       });
