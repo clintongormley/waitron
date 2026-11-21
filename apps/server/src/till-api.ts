@@ -338,7 +338,6 @@ export interface TillApiDeps {
   deviceChooserEnabled?: boolean;
   /** The venue's default UI locale, distinct from its receipt language. */
   venueLocale: string;
-  /** The setup journey that created this installation, shown persistently by the till. */
   onboardingIntent?: OnboardingIntent;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;

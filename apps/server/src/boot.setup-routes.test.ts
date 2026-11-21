@@ -59,7 +59,11 @@ import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { buildConfigurationBundle, encodeConfigurationBundle } from "./configuration-transfer.js";
+import {
+  buildConfigurationBundle,
+  decodeConfigurationBundle,
+  encodeConfigurationBundle,
+} from "./configuration-transfer.js";
 import { provisionAllocatedTestVenue as provisionVenue } from "./testing/allocated-provision.js";
 import { venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
@@ -99,6 +103,7 @@ import {
 } from "./testing/boot-harness.js";
 import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clock.js";
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
+import { useTestProducer } from "./testing/test-producer.js";
 import * as bootHarness from "./testing/boot-harness.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
@@ -431,6 +436,21 @@ describe("startServer — background listeners and sinks that fail or close", ()
   }, 60_000);
 });
 
+/** The same venue `provisionVenueBody` describes, with the admin secrets already hashed — the
+ * shape `provisionVenue` takes behind the endpoint. */
+function hashedVenueRequest(taxId: string) {
+  const { admin, ...venue } = provisionVenueBody(taxId);
+  return {
+    ...venue,
+    admin: {
+      displayName: admin.displayName,
+      pinHash: hashPin(admin.pin),
+      passwordHash: hashPassword(admin.password),
+      email: admin.email,
+    },
+  };
+}
+
 describe("startServer — setup-mode routes that hand work to the boot's own wiring", () => {
   /** A restore without recovery details is refused unless the real environment names this file;
    * these cases test what happens after that check. */
@@ -438,21 +458,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     WAITRON_RECOVERY_OPERATION_FILE: join(tmpdir(), "waitron-unread-recovery-operation.json"),
   };
   const ES_MODULE_CONFIG = venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common");
-
-  /** The same venue `provisionVenueBody` describes, with the admin secrets already hashed — the
-   * shape `provisionVenue` takes behind the endpoint. */
-  function hashedVenueRequest(taxId: string) {
-    const { admin, ...venue } = provisionVenueBody(taxId);
-    return {
-      ...venue,
-      admin: {
-        displayName: admin.displayName,
-        pinHash: hashPin(admin.pin),
-        passwordHash: hashPassword(admin.password),
-        email: admin.email,
-      },
-    };
-  }
 
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -2969,6 +2974,81 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 });
 
 describe("startServer — the configuration export route in trading mode", () => {
+  useTestProducer();
+
+  it("exports a configuration from a production primary without a saved setup choice", async () => {
+    const taxId = "60000011A";
+    const passphrase = "a long enough export passphrase";
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-export-route-state-"));
+    let server: StartedServer | undefined;
+    try {
+      const { nodeId } = await provisionVenue(
+        {
+          ownerDb: venue.store.venue,
+          moduleConfig: venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "ES-common"),
+          database: venue.directory,
+          stateDir,
+        },
+        { environment: "production", venue: hashedVenueRequest(taxId) },
+      );
+      const cookie = await withTransaction(venue.store.venue, async (tx) => {
+        const [admin] = await tx.select({ id: persons.id }).from(persons);
+        const session = await startManagementSession(tx, {
+          method: "password",
+          personId: admin!.id,
+        });
+        await setFreshManagementSignIn(tx, session.token);
+        return `${MANAGEMENT_COOKIE}=${session.token}`;
+      });
+      await venue.store.close();
+      server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+          WAITRON_NODE_ID: nodeId,
+        },
+        {},
+        { boxHost: synchronisedBoxHost() },
+      );
+      const base = `http://127.0.0.1:${httpPort()}/management-api`;
+      const exportRequest = {
+        method: "POST",
+        body: JSON.stringify({ passphrase }),
+      };
+      const unsigned = await fetch(`${base}/configuration-export`, {
+        ...exportRequest,
+        headers: { "content-type": "application/json" },
+      });
+      expect(unsigned.status).toBe(401);
+
+      const exported = await fetch(`${base}/configuration-export`, {
+        ...exportRequest,
+        headers: { "content-type": "application/json", cookie },
+      });
+      expect(exported.status, await exported.clone().text()).toBe(200);
+      const bundle = decodeConfigurationBundle(
+        new Uint8Array(await exported.arrayBuffer()),
+        passphrase,
+      );
+      expect(bundle.venue.taxId).toBe(taxId);
+
+      const locales = await fetch(`${base}/locales`);
+      expect(await locales.json()).toMatchObject({ onboardingIntent: "live" });
+      const me = await fetch(`${base}/session/me`, { headers: { cookie } });
+      expect(await me.json()).toMatchObject({ onboardingIntent: "live" });
+    } finally {
+      await server?.close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it.each([
     ["prepare", 401],
     ["live", 401],

@@ -158,14 +158,12 @@ browser's preferred supported language, falling back to English when none is sup
 - A change of country cannot import a configuration. Setup refuses an export whose country
   differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across
   countries needs its own design.
-- A box that joined an existing venue and later took over as its main box cannot make a
-  configuration export, nor can a box restored from such a box's backup. The join records no setup
-  choice (Demo, Prepare or Live) in the box's settings (`adoptFromPrimary`,
-  `apps/server/src/adopt.ts`), nothing writes one later, a restore copies the backup's settings
-  unchanged (`restoreSecrets`, `apps/server/src/restore.ts`), and the export is served only in
-  Prepare or Live (`mountConfigurationExportApi`, `apps/server/src/boot.ts`). So the Backups screen
-  does not show the card there, and step 2 of `deploy/README.md` → _Moving to a new tax ID_ cannot
-  be followed on such a box.
+- Should a preproduction box inherit its original setup choice when it joins a venue? A box that
+  took over after joining, or one restored from a backup taken on such a box, can have no saved
+  setup choice. Backups then offers no configuration export. A venue whose first box chose Live in
+  development mode also loses the Live label. For a venue set up in Prepare, keeping the choice
+  would restore practice mode and could change card simulation and test fiscal submission. The
+  owner needs to decide whether those behaviours should carry over together.
 
 ## Loose ends left by #334.
 
