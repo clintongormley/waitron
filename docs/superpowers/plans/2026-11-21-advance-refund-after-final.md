@@ -139,7 +139,10 @@ here is **not settled**: adviser questions A1 and A2.
    as its own lines route reports them; `moneyLeft` is the smaller of the two. A table's invoice with
    a whole credit has nothing left: its lines route answers `sale.correction_history_unusable` (RUN,
    below), so the check reads the whole credit first rather than calling that route. Otherwise the
-   advance's corrective goes ahead, filed by `recordCorrection` unchanged.
+   advance's corrective goes ahead, filed by `recordCorrection` unchanged. (As built, after review: while a refund of the table's invoice
+   that gives back dish money waits for its result, and a dish is left at the advance's rate, or its
+   lines cannot be read and nothing is refundable, it refuses `advance.final_invoice_refund_pending`
+   instead.)
 2. **Rates below the advance's (server; only under owner O2 (i)).** Refuse
    `advance.rate_below_advance` (`saleId`, `finalSaleId`, `invoiceNumber`, `rate`) when the table's
    invoice holds a dish at a rate below the advance's own. Under O2 (ii), the default, nothing is
@@ -317,7 +320,10 @@ chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run
   (`apps/server/src/guide/en/table-service.md:220-221`, `apps/server/src/guide/es/table-service.md:235-236`)
   becomes: Refund beside a payment that has its own ticket opens Correct invoice on that ticket; once
   the table's receipt has taken it off, money comes back first through Correct invoice on the table's
-  receipt, and what it cannot give back through the guest's own ticket. Run `pnpm --filter
+  receipt, and what it cannot give back through the guest's own ticket. (As built, after review:
+  the guide stops at "the till says so". The sentence about what the table's receipt cannot give
+  back was cut, because while that receipt cannot be corrected the payment on account is refused
+  too.) Run `pnpm --filter
   @waitron/server exec vitest run src/guide-content.test.ts` and `pnpm exec vitest run
   scripts/guide-links.test.ts`. Rewrite `docs/backlog/fiscal.md:97-114` for the new rule and
   `advance.correction_open`'s reason (it keeps the table's invoice from taking off an advance whose

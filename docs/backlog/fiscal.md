@@ -115,7 +115,7 @@ invoice on its ticket, printed bill or not, and a plain or bill refund of its mo
 below 10%, the advance's 10% corrective can declare less VAT than the dishes it gives back: €0.52
 less over the bill when €10 of water at 4% comes back that way (the plan's measured case, O2 (ii)); that, and whether one corrective should name both tickets, are the two points added on 21 November
 to question 12 of the 19 November sheet. A refund leg of a correction of the advance meets the same check as
-opening one; when it is refused, a correction opened, by stored times, before the table's invoice took the advance off
+opening one; when it is refused `advance.final_invoice_first`, a correction opened, by stored times, before the table's invoice took the advance off
 is refused `advance.taken_off_final_invoice` instead. The table's invoice is held
 back while a correction of one of its advances is open, so that the table's invoice takes the advance off as
 corrected: the payment that pays the bill off (refused before any card reader is
