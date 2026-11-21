@@ -18,7 +18,7 @@ const initialVenue = {
   country: "ES",
   taxId: "B12345674",
   legalName: "Deli del Sol SL",
-  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid, Madrid",
   seriesCode: "FA",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
@@ -222,7 +222,7 @@ describe("setup venue unsaved changes", () => {
   it.each([
     ["taxId", "A58818501"],
     ["legalName", "New legal name"],
-    ["taxpayerDomicile", "New fiscal address"],
+    ["registeredStreet", "New fiscal address"],
     ["name", "New venue"],
     ["addressLine1", "New street"],
     ["addressLine2", "Upstairs"],

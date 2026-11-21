@@ -95,7 +95,6 @@ async function fillTheRest(el: SetupVenueScreen): Promise<void> {
   for (const [key, text] of Object.entries({
     taxId: "b 1234567 4",
     legalName: "Deli del Sol SL",
-    taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     name: "Calle Mayor",
   }))
     await type(el, key, text);
