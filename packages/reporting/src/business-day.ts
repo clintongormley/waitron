@@ -217,18 +217,6 @@ function notReplacementClause(): SQL {
   return sql`s.replaces_original = 0`;
 }
 
-/**
- * Excludes every voided sale, whenever the void was made, F3-canje substitutes and replacements.
- * Only the modelo 303 still reads voids this way, until the asesor answers
- * `docs/compliance/asesor-questions.md` Q25. Assumes the outer query aliases `sales` as `s`. No
- * leading `and`.
- */
-export function activeSalesClause(): SQL {
-  return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
-      and ${notSubstituteClause()}
-      and ${notReplacementClause()}`;
-}
-
 function saleInTradingWindow(window: WindowClause): SQL {
   return sql`s.id in (
     select ordinary.id from sales ordinary indexed by sales_issued_idx

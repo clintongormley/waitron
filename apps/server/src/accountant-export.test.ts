@@ -17,7 +17,7 @@ import {
   seedPurchaseInvoice,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { computeVatReturn } from "@waitron/reporting";
+import { computeVatReturn, vatMovements } from "@waitron/reporting";
 import {
   decimal,
   deviceOrigin,
@@ -800,7 +800,7 @@ describe("accountant period selection", () => {
     expect(await ids("2026-04-01", "2026-06-30")).toEqual([sameDay]);
   });
 
-  it("puts every row in the period the VAT return counts its sale in", async () => {
+  it("puts every row in its sale's period, and over both quarters matches the returns and the corrections", async () => {
     const [series] = await suite.db
       .insert(invoiceSeries)
       .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
@@ -851,26 +851,41 @@ describe("accountant period selection", () => {
       lines: [{ vatRate: "10.00", lineTotal: "-3.00" }],
     });
 
-    for (const [quarter, from, to, expected] of [
+    const workbookTax = [];
+    for (const [from, to, expected] of [
       [
-        1,
         "2026-01-01",
         "2026-03-31",
         [marchOriginal, undatedReplacement, futureDated, replacement, later],
       ],
-      [2, "2026-04-01", "2026-06-30", [refund]],
+      ["2026-04-01", "2026-06-30", [refund]],
     ] as const) {
       const exported = (await list(from, to)).invoices;
       expect(exported.map((row) => row.id)).toEqual(expected);
       const counted = exported.filter((row) => row.invoiceType !== "replacement");
-      const vatReturn = await withTransaction(suite.db, (tx) =>
-        computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter } }),
+      workbookTax.push(
+        ...counted.flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.tax))),
       );
-      const exportedTax = sumDecimals(
-        counted.flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.tax))),
-      );
-      expect(toScale(exportedTax, 2)).toBe(toScale(vatReturn.taxTotal, 2));
     }
+
+    const [first, second, secondMovements] = await withTransaction(suite.db, async (tx) => [
+      await computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter: 1 } }),
+      await computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter: 2 } }),
+      await vatMovements(tx, { year: 2026, period: { kind: "quarter", quarter: 2 } }),
+    ]);
+    expect(first.taxTotal).toBe("3.30");
+    expect(second.byRate).toEqual([]);
+    expect(second.taxTotal).toBe("0.00");
+    const secondCorrections = secondMovements.filter(
+      (m) => m.madeDay >= "2026-04-01" && m.belongsDay < "2026-04-01",
+    );
+    expect(toScale(sumDecimals(workbookTax), 2)).toBe("6.30");
+    expect(
+      toScale(
+        sumDecimals([first.taxTotal, second.taxTotal, ...secondCorrections.map((m) => m.tax)]),
+        2,
+      ),
+    ).toBe("6.30");
   });
 
   it("shows a sale date only when it is earlier than the issue date", async () => {

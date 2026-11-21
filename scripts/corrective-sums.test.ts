@@ -66,13 +66,6 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
-    file: "packages/reporting/src/vat-return.ts",
-    fragment: "left join sales repl on repl.corrects_sale_id = s.id and repl.replaces_original = 1",
-    lines: 1,
-    reason:
-      "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",
-  },
-  {
     file: "packages/reporting/src/vat-movements.ts",
     fragment: "left join sales o on o.id = root.corrects_sale_id",
     lines: 1,

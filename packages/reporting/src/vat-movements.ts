@@ -31,7 +31,7 @@ export interface VatMovement {
   correctedSaleId: SaleId | null;
 }
 
-/** The filed issue date of `sales` row `alias`, as `vatReturnDay` reads it. */
+/** The filed issue date of `sales` row `alias`, as `saleVatDay` reads it. */
 function issueDay(alias: string): SQL {
   const s = sql.raw(alias);
   return sql`date(${s}.issued_at, printf('%+d minutes', ${s}.issued_offset_minutes))`;
