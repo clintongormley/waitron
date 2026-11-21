@@ -1367,6 +1367,7 @@ export const en = {
   "venue_details.acknowledge": "I have reviewed these changes",
   "venue_details.name_warning":
     "Departments, saved order names and past receipts keep the names recorded there. This changes the venue’s display name.",
+  "venue_details.postcode_invalid": "Check the postcode for this address.",
   "venue_details.postcode_warning":
     "The postcode must belong to the saved province. A different fiscal or language context requires separate setup.",
   "venue_details.city_warning":
@@ -5974,6 +5975,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.acknowledge": "He revisado estos cambios",
   "venue_details.name_warning":
     "Los departamentos, los nombres guardados de pedidos y los recibos anteriores conservan los nombres registrados. Esto cambia el nombre visible del local.",
+  "venue_details.postcode_invalid": "Revisa el código postal de esta dirección.",
   "venue_details.postcode_warning":
     "El código postal debe pertenecer a la provincia guardada. Otro contexto fiscal o lingüístico requiere una configuración aparte.",
   "venue_details.city_warning":

@@ -2612,7 +2612,7 @@ describe("printers-screen", () => {
     await openDiscovery(el);
     const change = () =>
       q(el, "[data-test=probe-host]")!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "printer.local" } }),
+        new CustomEvent("wt-change", { detail: { value: "10.0.0.49" } }),
       );
     change();
     q(el, "[data-test=probe-printer]")!.click();
@@ -6878,7 +6878,7 @@ describe("printers-screen discovery and add edges", () => {
       .fn()
       .mockRejectedValue({ code: "management.request_invalid", params: { field: "port" } });
     const { el } = await mountWithDiscovered([], { probePrinterAddress: probe });
-    typeField(el, "[data-test=probe-host]", "printer.local");
+    typeField(el, "[data-test=probe-host]", "10.0.0.49");
     typeField(el, "[data-test=probe-port]", "9100");
 
     q(el, "[data-test=probe-printer]")!.click();
@@ -7731,6 +7731,40 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
   });
 
+  it("blocks pasted non-IP addresses after Check address and accepts plain IPv4 and IPv6", async () => {
+    const probe = vi.fn().mockRejectedValue({ code: "printer.probe_busy" });
+    const { el } = await mounted({ probePrinterAddress: probe });
+    await openDiscovery(el);
+    q(el, "[data-test=probe-panel] summary")!.click();
+    const address = "[data-test=probe-host]";
+    const check = "[data-test=probe-printer]";
+    typeField(el, address, "https://10.0.0.50:9100/");
+    await flush(el);
+    expect(errorOf(el, address)).toBe("");
+    expect(isDisabled(el, check)).toBe(false);
+    q(el, check)!.click();
+    await flush(el);
+    expect(errorOf(el, address)).toBe(t("printers.probe_host_invalid"));
+    expect(probeMessage(el)).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, check)).toBe(true);
+    expect(probe).not.toHaveBeenCalled();
+
+    for (const value of ["printer.local", "127.1", "[2001:db8::1]", "fe80::1%en0"]) {
+      typeField(el, address, value);
+      await flush(el);
+      expect(isDisabled(el, check), value).toBe(true);
+    }
+    for (const host of ["10.0.0.50", "2001:db8::1"]) {
+      typeField(el, address, host);
+      await flush(el);
+      expect(errorOf(el, address)).toBe("");
+      expect(isDisabled(el, check)).toBe(false);
+      q(el, check)!.click();
+      await flush(el);
+      expect(probe).toHaveBeenLastCalledWith({ host, port: 9100 });
+    }
+  });
+
   it("keeps a refused address, with Check address working, until that field changes, focusing it when the refusal arrives", async () => {
     const { el } = await mounted({
       probePrinterAddress: vi
@@ -7739,7 +7773,7 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     });
     await openDiscovery(el);
     q(el, "[data-test=probe-panel] summary")!.click();
-    typeField(el, "[data-test=probe-host]", "printer.local");
+    typeField(el, "[data-test=probe-host]", "10.0.0.49");
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     await vi.waitFor(() => expect(inputFocused(el, "[data-test=probe-host]")).toBe(true));

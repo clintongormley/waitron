@@ -1034,9 +1034,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   own-account email change; notices and wording for other administrator-made security changes
   (administrator email edits already notify the old address) and break-glass changes; grouping a burst.
 
-- **Some typed fields still need validation.**
-  [Detail](backlog/dashboard.md#some-typed-fields-still-need-validation)
-
 - **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 
 - **The new key and passkey icons draw lines at width 2** while the change-account icon beside them
