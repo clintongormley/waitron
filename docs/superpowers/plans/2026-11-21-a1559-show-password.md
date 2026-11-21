@@ -1,10 +1,40 @@
 # A1559 — Show password
 
-On the joining box's **Connect to the primary** screen, you can show what you typed, check it, and hide it again without losing your place. The same control appears on masked `wt-input` fields that need one. Lane D's A1559 queue records the owner's report from 20 November and asks for the shared fix and the Profile migration.
+You can check and hide the password you typed on the joining box's **Connect to the primary**
+screen without losing your place. Lane D's A1559 queue records the owner's 20 November report
+and asks for shared behaviour and the Profile migration.
 
-- [ ] **Prove the missing behaviour.** In `packages/ui-core/src/components/wt-input.test.ts`, use the native input and button. Check masked on entry, show/hide by keyboard and pointer, the same value and selection in both directions, and no change or submit event. Cover a programmatic clear, a disabled field and a caller's existing end action. In `apps/setup/src/screens/handover-screen.test.ts`, pass the fingerprint step and assert that the Connect password has the button. Run these cases before changing production code.
-- [ ] **Put it in the shared input.** Change `packages/ui-core/src/components/wt-input.ts`, reusing the `end` slot, the ghost `wt-button` and Profile's eye artwork. A caller's own end control takes precedence. Change the type of the same native input and restore its selection, keeping its name, autocomplete and value. The button leaves keyboard focus in place and does not submit. A cleared field starts masked again. Use the localized Show password and Hide password wording, give the field's label as context, and announce shown/hidden in a quiet status region. Put the English and Spanish words in `packages/ui-core/src/i18n/password-visibility.ts` and choose them from the page language already set by the apps. Follow [WAI's button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/) for changing action names.
-- [ ] **Move Profile onto it.** Remove the duplicate reveal state, artwork and button from `apps/dashboard/src/screens/profile-screen.ts`. Use `profile-screen.test.ts` to check that showing one field leaves the other masked and a reopened editor starts masked. Keep the existing named controls on dashboard login, setup forms and modules where the caller already supplies a button. The till signs in with a PIN keypad. Leave the server-rendered Start again form script-free under the owner's A1098 Q1 decision in `docs/developers/conventions-ui.md`. The standalone Carry on and waiting-clock forms also stay outside this shared-field change.
-- [ ] **Verify and explain.** Check the button's token paint in `wt-input.test.ts`; mount both revealed and masked states for axe in `wt-input.a11y.test.ts` in light and dark. Run those files plus the focused setup handover, dashboard Profile and login files, and the guide-link guards. Open the joining flow in Chromium at phone and desktop widths, in both themes and languages. Record the inventory of shared versus standalone fields. Update Forms in `docs/developers/design-system.md` and the joining instructions in both `apps/server/src/guide/{en,es}/servers.md`.
+- [ ] In `apps/setup/src/screens/connect-screen.test.ts`, use the existing fingerprint and
+  sign-in fixture to show that the password starts masked and that the visibility button
+  reveals it without sending an adopt request. In `packages/ui-core/src/components/wt-input.test.ts`,
+  assert keyboard and pointer activation, retained value and selection in both directions,
+  and no change or submit event. Exercise a form clearing its password, a person editing it
+  to empty, a disabled field, and a caller's existing end action. See the failures first.
+- [ ] In `packages/ui-core/src/components/wt-input.ts`, add a `.passwordVisibility` property
+  with the caller's show, hide, shown and hidden text. Use Profile's eye on a ghost
+  `wt-button` as the end slot's fallback. Reserve room while the fallback is available.
+  Change the type of the same native input and restore its selection. Preserve name,
+  autocomplete and keyboard focus. Start masked on entry and when the form clears or
+  replaces the password. Announce the state in a polite status region, using a label that
+  names the available action. [WAI button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/)
+- [ ] Pass the words from the apps' existing translation tables at the missing password
+  fields in setup's `connect-screen.ts`, `handover-screen.ts` and `initial-setup-screen.ts`,
+  and dashboard's `box-wifi-dialog.ts`. Move Profile's password and PIN fields in
+  `profile-screen.ts` onto the shared control with their own names, and use `FormFeedback`
+  for the editor's existing attempt and refusal feedback. In `profile-screen.test.ts`,
+  check that showing one field leaves the other masked and a reopened editor starts masked.
+- [ ] Check setup and dashboard login fields that already have buttons using their existing
+  tests and the field inventory. The till uses its PIN keypad. Keep payment tokens, backup
+  and recovery keys, and certificate passphrases under their existing controls. The
+  HTML-only Start again page keeps the owner's script-free rule in `conventions-ui.md`.
+  Carry on and the waiting-clock HTML also stay outside this pass. The published UI package's
+  existing consumers keep their current behaviour unless they supply the new property.
+- [ ] Run the focused app suites and the component, token paint, forced-colour and
+  `wt-input.a11y.test.ts` checks, with masked and revealed states in both themes. Run the
+  ui-core consumer check and check the component under the package's mutation rules.
+  Inspect the real Connect screen in English and Spanish at phone and desktop widths and
+  in both themes. Update Forms in `docs/developers/design-system.md` and both
+  `apps/server/src/guide/{en,es}/servers.md` files, and run the guide-link guards.
 
-Expected size is about 70–105 added production lines and 90–125 added browser test lines, plus the Profile deletions and short guide edits. This is local field display and changes no sign-in request or server route.
+About 90–130 added production lines and 90–135 added test lines, plus deletions in Profile
+and short guide edits. Authentication requests and server routes stay as they are.
