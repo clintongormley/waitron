@@ -1,45 +1,43 @@
 # A950 step 5c. Apply a signed offer in the quiet window
 
-**Finish line.** An operator can run `waitron.sh install-offered-upgrade` on a numbered
-standalone test box during 03:00–05:00 venue time. It installs the currently offered stable
-release using the checked installer. If the candidate fails the stopped checks or test sale,
-the old copy reopens automatically. The installed timer still checks offers. Switching the
-timer to install, default activation, editable hours, status/email, pairs and the physical
-release-to-release rehearsal remain open. See the [parent plan](2026-11-09-a950-shorter-upgrades.md)
-and the [staged-offer plan](2026-11-19-a950-staged-offers.md).
+An operator can run `waitron.sh install-offered-upgrade` to qualify an automatic attempt on a
+numbered standalone test box. It applies the stable release the signed offer names for that box.
+If the stopped checks or test sale fail, the old copy reopens automatically. The timer continues
+checking offers. Wiring it to install, default activation, editable hours, status/email, pairs
+and the physical rehearsal remain open. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
+[Staged offers](2026-11-19-a950-staged-offers.md). Codex wrote this plan and worked in both
+Claude reads. The watcher must clear the quiet policy and size before implementation.
 
-**Decision for the watcher.** Claude proposed using the existing checked shutdown as the
-point that closes admission and drains work. The host checks trading activity before stopping
-and again after all writers stop. Work admitted just before shutdown can cause a brief restart
-of the old version. The parent plan calls for closing admission and rechecking. Confirm that
-the brief interruption is acceptable and that business-row activity is the intended measure
-of quiet. Open or placed orders still defer, including tabs left open overnight.
+1. In `host.mjs`, reuse the volume, venue-zone and standalone-box reads. Defer on a stopped app,
+   missing or unknown state, open or placed `working_orders`, `payments` in `attempting` or
+   `initiated`, or pending `bill_payments`, `bill_payment_refunds` or `tender_refunds`.
+   Measure ten quiet minutes from `working_orders.opened_at/settled_at`, `sales.issued_at`,
+   `payments.created_at/updated_at`, `bill_payments.created_at/received_at` and refund creation
+   or completion times. Future timestamps defer. Check the stopped data under the existing
+   state lock on the first stop only, before copying. A late order or payment can cause a
+   brief restart of the old version. The existing shutdown closes admission and drains work.
+2. In `deploy/waitron.sh`, use the installed driver for the early window, quiet and signed
+   offer checks before driver fetch or bootstrap. Reuse checked numbered release verification,
+   digest pinning and host refresh. Refuse a staged source with no automatic entry before
+   replacing any host file. If activity or a pause arrives after the early check and refresh,
+   the app stays on the old release with the refreshed host files.
+3. In `cli.mjs` and `host.mjs`, the new automatic entry reuses Apply in automatic mode.
+   Extract signed selection from its public pending-attempt guard. Call it after online trial,
+   in the same host lock, immediately before disabling restart policies. Re-fetch the offer,
+   save any verified new serial including a pause, and require the same newer stable version.
+   Apply the venue's 03:00–05:00 window with a provisional latest stop at 04:30 for rehearsal.
+   Leave that reserve open for validation on real box data before unattended installation.
+   A failed final pre-stop check takes the existing preparation abort path. Report deferred,
+   upgraded or rolled back from the existing attempt result. Manual installs retain Restore/Keep.
 
-1. In `scripts/box/upgrades/host.mjs`, reuse the installed state-volume and standalone-box
-   reads. Check that the app is running, the venue clock/window can be read, there are no
-   open or placed orders or pending connected payments/refunds, and no sale, order or
-   payment/refund activity is recorded in the last ten minutes. Use the timestamps the rows
-   actually store. A missing venue, unknown role, unreadable data or unknown state defers.
-   Read before shutdown and again after the checked shutdown and state lock, before copying.
-   A failed stopped check takes the transaction's existing reopen-old path. Manual installs
-   keep their current admission and Restore/Keep choices.
-2. In `deploy/waitron.sh` and `scripts/box/upgrades/cli.mjs`, reuse signed-offer selection,
-   accepted pause/serial state, numbered release verification, source and digest staging,
-   and checked Apply. Only the new entry selects automatic mode in `applyUpgrade`. Re-fetch
-   and verify the offer after the online trial, under the existing host lock. Before
-   disabling restart policies or stopping writers, require that it still offers that exact
-   newer stable release and that time remains for the measured copy/check/restore work.
-   Record the timing of that work on the disposable Linux fixture before assigning a
-   budget. Use the existing release trust and checked host refresh. Defer before replacing
-   the driver if the signed target lacks the automatic entry. A pause accepted at the
-   final check prevents any stop. Update `deploy/README.md` and both A950 backlog entries.
-
-**Tests first.** `host.test.mjs` owns busy vs quiet and activity that lands between the checks.
-It must show no candidate copy in the latter case. `cli.test.mjs` owns the mode selected for
-the transaction. `scripts/waitron-sh.test.mjs` owns the final signed offer and window reaching
-Apply or deferring, and keeps the manual install cases. Existing transaction tests own the
-restore transitions. Use `bench/box-installer/upgrade.mjs`'s disposable Linux fixture to run
-the installed entry with a test key and stable release fixtures. Observe deferral while busy,
-candidate success and reopening the old version after a failed candidate sale. Run the
-changed test files and the normal push hook. Estimate +240/−30 production and +220/−0 tests
-and test support, plus docs.
+**Tests first.** `host.test.mjs` uses migrated fixtures via `useVenueDb` for quiet, busy and late
+activity, and proves the rollback stop skips the quiet check. `cli.test.mjs` owns the automatic
+mode and offer, pending-state and time rechecks. `scripts/waitron-sh.test.mjs` owns driver staging
+order, refusing an older target and existing manual calls. Exercise the installed automatic CLI
+in `bench/box-installer/upgrade.mjs` with its prepared disposable Linux candidate. Check busy
+deferral, late activity with no copy, success and failed-candidate rollback against the old
+fingerprint. The physical rehearsal owns the complete installed command and real timings.
+Update `deploy/README.md`, `docs/backlog.md` and `docs/backlog/box.md`. Run the changed test files
+and normal hook. Estimate +240/−30 production and +220/−0 tests and support, plus docs.
+Together with 5a and 5b, production exceeds the parent step's 1.5× estimate. Clear that scope
+on the strength of the real stop, offer recheck and rollback cases above.
