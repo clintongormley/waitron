@@ -1479,7 +1479,7 @@ Killed after 30,005 ms. The mutation phase took about 122 s, then about 32 s.
 On 21 November db moved from 13 to 16 shards, its 25-minute limit unchanged: over the same files,
 the slowest shard took 21 min 03 s of job time in run `44875671062` and 25 min 03 s in run
 `44878081202` (shard 10, cancelled after uploading its complete report). Between those two runs
-one shard's job time changed by between −21% (shard 2, 15 min 13 s to 11 min 59 s) and +72%
+each shard's job time changed by between −21% (shard 2, 15 min 13 s to 11 min 59 s) and +72%
 (shard 1, 9 min 33 s to 16 min 25 s), and the 13 shards averaged 15.1 and 16.5 minutes (job
 start to finish, from the Actions API's job times).
 
@@ -3211,7 +3211,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
-| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066); 24.6 (run 44869195665, slowest of 12 completed); that run's shard 11 hit the limit (all at 13 shards; 16 since 21 November, not yet measured) | 25    |
+| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066); 24.6 (run 44869195665, slowest of 12 completed); that run's shard 11 hit the limit; at 16 shards since 21 November, not yet measured | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
 | mutation.yml       | mutation-handover                 | 3.4 (run 42075592113)          | 10    |
