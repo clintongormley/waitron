@@ -278,28 +278,33 @@ describe("withPendingSweep", () => {
     });
   });
 
-  it("logs an empty sweep and its null nextDueAt at debug", async () => {
-    const result: ForwardResult = {
-      nextDueAt: null,
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    };
-    const log = vi.fn();
-    await withPendingSweep(
-      async () => REPORT,
-      async () => [fakeProvider("stripe", async () => result)],
-      () => OWNERS,
-      log,
-    )(new Date());
-    expect(log).toHaveBeenCalledWith("debug", "resolve_pending.complete", {
-      provider: "stripe",
-      captured: 0,
-      failed: 0,
-      incidentsRaised: 0,
-      nextDueAt: null,
-    });
-  });
+  it.each([
+    { nextDueAt: null, level: "debug", loggedDueAt: null },
+    {
+      nextDueAt: new Date("2026-09-10T12:01:00.000Z"),
+      level: "info",
+      loggedDueAt: "2026-09-10T12:01:00.000Z",
+    },
+  ])(
+    "logs a sweep with nextDueAt $loggedDueAt at $level",
+    async ({ nextDueAt, level, loggedDueAt }) => {
+      const result: ForwardResult = { nextDueAt, forwarded: 0, declined: 0, incidentsRaised: 0 };
+      const log = vi.fn();
+      await withPendingSweep(
+        async () => REPORT,
+        async () => [fakeProvider("stripe", async () => result)],
+        () => OWNERS,
+        log,
+      )(new Date());
+      expect(log).toHaveBeenCalledWith(level, "resolve_pending.complete", {
+        provider: "stripe",
+        captured: 0,
+        failed: 0,
+        incidentsRaised: 0,
+        nextDueAt: loggedDueAt,
+      });
+    },
+  );
 
   it("logs resolve_pending.failed and still returns the inner report when a resolvePending rejects", async () => {
     const resolvePending = vi.fn(async () => {

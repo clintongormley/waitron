@@ -3,7 +3,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
+import type { DashboardApi, DiagnosticsLine, DiagnosticsLog } from "../api/client.js";
 import { DiagnosticsScreen } from "./diagnostics-screen.js";
 
 afterEach(cleanupWidgets);
@@ -91,6 +91,25 @@ describe("diagnostics-screen", () => {
         expect(text).not.toContain("http.request");
       }
     }
+  });
+
+  it("keeps a late response for the old level out of the current log", async () => {
+    const warning = Promise.withResolvers<DiagnosticsLog>();
+    const all = Promise.withResolvers<DiagnosticsLog>();
+    const getRecentLogs = vi.fn().mockReturnValueOnce(warning.promise).mockReturnValue(all.promise);
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+      api: stubApi({ getRecentLogs }),
+    });
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox")!, "all");
+
+    const info = { timeZone: "Europe/Madrid", oldestScannedAt: SEED[0]!.at };
+    warning.resolve({ ...info, lines: [SEED[1]!] });
+    await vi.waitFor(() => expect(getRecentLogs).toHaveBeenLastCalledWith(200, "all"));
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).not.toContain("db.timeout");
+
+    all.resolve({ ...info, lines: SEED });
+    await vi.waitFor(() => expect(q(el, "[data-test=log]")?.textContent).toContain("http.request"));
   });
 
   it("sets the log lines in the design system's monospace font", async () => {

@@ -34,7 +34,8 @@ pulsar, y la página explica por qué bajo **Espacio en disco**.
 
 Abre **Sistema → Diagnóstico**. La lista muestra avisos y errores al abrirse, con las horas de la
 zona horaria del local. Busca por evento, detalle o identificador de solicitud. Para reproducir un
-problema, elige **Activar el registro detallado** y después **Todos los niveles (últimos 5 minutos)**.
+problema, elige **Activar el registro detallado**. Justo después de reproducirlo, elige **Todos los
+niveles (últimos 5 minutos)**.
 
 ## Lee las filas {#rows}
 

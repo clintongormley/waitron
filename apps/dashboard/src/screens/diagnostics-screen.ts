@@ -9,6 +9,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DiagnosticsLevel, DiagnosticsLog, Verbosity } from "../api/client.js";
 
 const POLL_MS = 1500;
+const LINE_LIMIT = 200;
 /** The node auto-reverts after this window, so a raise always expires. */
 const WINDOW_MINUTES = 15;
 const LEVELS = ["error", "warn", "info", "all"] as const;
@@ -136,7 +137,7 @@ export class DiagnosticsScreen extends LitElement {
     try {
       const api = passive ? (this.api.background ?? this.api) : this.api;
       const [recent, verbosity] = await Promise.all([
-        api.getRecentLogs(200, level),
+        api.getRecentLogs(LINE_LIMIT, level),
         api.getVerbosity(),
       ]);
       if (level !== this.level) return;
@@ -230,7 +231,7 @@ export class DiagnosticsScreen extends LitElement {
       ${
         oldest
           ? html`<p class="verbosity">
-              ${fill("diagnostics.searched_since", { time: formatAt(oldest) })}
+              ${fill("diagnostics.searched_since", { limit: String(LINE_LIMIT), time: formatAt(oldest) })}
             </p>`
           : nothing
       }

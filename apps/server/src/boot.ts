@@ -661,8 +661,9 @@ export function withPendingSweep(
     for (const provider of providers) {
       try {
         const r = await provider.resolvePending(now, owned, signal);
-        const changed = r.forwarded > 0 || r.declined > 0 || r.incidentsRaised > 0;
-        log(changed ? "info" : "debug", "resolve_pending.complete", {
+        const hasWork =
+          r.nextDueAt !== null || r.forwarded > 0 || r.declined > 0 || r.incidentsRaised > 0;
+        log(hasWork ? "info" : "debug", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
           failed: r.declined,

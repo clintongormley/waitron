@@ -2251,7 +2251,7 @@ export const en = {
   "diagnostics.action.clear": "Clear",
   "diagnostics.empty": "No log lines yet",
   "diagnostics.no_matches": "No log lines match",
-  "diagnostics.searched_since": "Log checked back to {time}",
+  "diagnostics.searched_since": "Up to {limit} matching lines. Log checked back to {time}.",
   "diagnostics.request_id": "Request",
   "diagnostics.filter.level": "Level",
   "diagnostics.filter.error": "Errors",
@@ -6870,7 +6870,8 @@ export const es: Record<StringKey, string> = {
   "diagnostics.action.clear": "Borrar",
   "diagnostics.empty": "Todavía no hay líneas de registro",
   "diagnostics.no_matches": "No hay líneas de registro que coincidan",
-  "diagnostics.searched_since": "Registro consultado desde {time}",
+  "diagnostics.searched_since":
+    "Hasta {limit} líneas coincidentes. Registro consultado desde {time}.",
   "diagnostics.request_id": "Solicitud",
   "diagnostics.filter.level": "Nivel",
   "diagnostics.filter.error": "Errores",

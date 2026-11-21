@@ -32,8 +32,9 @@ without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/r
 
 Open **Diagnostics** with an account that can manage the system. The list starts with warnings
 and errors and shows times in the venue’s time zone. Search by event, detail or request ID.
-To reproduce a problem, choose **Turn on detailed logging**, then **All levels (last 5 minutes)**.
-Detailed logging lasts 15 minutes. The expiry appears above the list.
+Choose **Turn on detailed logging** before reproducing a problem. Right after reproducing it,
+choose **All levels (last 5 minutes)**. Detailed logging lasts 15 minutes. The expiry appears above
+the list.
 
 **Pause** freezes refresh; **Resume** starts it again. **Clear** removes only the displayed
 lines. It does not delete saved logs, so the next refresh can display them again.

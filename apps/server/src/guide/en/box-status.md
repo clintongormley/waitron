@@ -29,7 +29,7 @@ and the page says why under **Disk space**.
 
 Open **System → Diagnostics**. The list starts with warnings and errors and shows times in the
 venue’s time zone. Search by event, detail or request ID. To reproduce a problem, choose **Turn on
-detailed logging**, then choose **All levels (last 5 minutes)**.
+detailed logging**. Right after reproducing the problem, choose **All levels (last 5 minutes)**.
 
 ## Read the rows {#rows}
 
