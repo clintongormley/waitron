@@ -6,6 +6,13 @@ import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import { formatDecimalInput, readDecimalInput } from "../decimal-input.js";
 
+/** A password field that names no purpose holds a secret other than the person's sign-in, so the
+ * browser is told not to fill the saved login into it. */
+const DEFAULT_AUTOCOMPLETE: Readonly<Record<string, string>> = {
+  password: "new-password",
+  search: "off",
+};
+
 @customElement("wt-input")
 export class WtInput extends LitElement {
   // Delegates .focus() on the host to the inner <input> — a POS constantly needs to
@@ -125,7 +132,7 @@ export class WtInput extends LitElement {
             .value=${this.decimalLocale ? live(formatDecimalInput(this.value, this.decimalLocale)) : this.value}
             type=${this.decimalLocale ? "text" : this.type}
             inputmode=${this.decimalLocale ? "decimal" : nothing}
-            autocomplete=${this.autocomplete || nothing}
+            autocomplete=${this.autocomplete || DEFAULT_AUTOCOMPLETE[this.type] || nothing}
             autocapitalize=${this.autocapitalize || nothing}
             autocorrect=${this.autocorrect ? nothing : "off"}
             spellcheck=${this.spellcheck ? nothing : "false"}

@@ -1244,6 +1244,7 @@ export class WtCombobox extends LitElement {
                 <input
                   class="search"
                   type="text"
+                  autocomplete="off"
                   role="combobox"
                   aria-expanded="true"
                   aria-required=${this.required}

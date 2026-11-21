@@ -48,9 +48,14 @@ their full text.
 
 ## Password-manager autofill in the confirmation window (C98, #934) — still open:
 
-The browser and account address for the owner’s empty-field observation in the confirmation window remain unknown. The payments screen's manager-PIN prompt
-  now says `autocomplete="off"` (owner, 2026-09-30, C110 #940); nobody checked in a real browser
-  whether it then stops offering the dashboard password there.
+The browser and account address for the owner’s empty-field observation in the confirmation window remain unknown. The payments screen's manager-PIN prompts
+  say `autocomplete="off"` (owner, 2026-09-30, C110 #940). Measured on 2026-11-21 in Playwright's
+  Chromium 158, with one saved login for the dashboard's address in a throwaway profile, on the
+  SumUp key field in the Modules dialog (a `wt-input` password field, as the PIN prompts are): with
+  no `autocomplete`, one click put the saved email into the Modules search and filled the key
+  field; with `off`, and with `new-password`, nothing was filled, and pressing the down
+  arrow and Enter afterwards filled nothing either. Not checked: the PIN prompts themselves, other
+  browsers, a password-manager extension, and the window the owner saw.
 
 ## A new passkey is listed under the person's email, with their name as its display name (C99, #939) — still open:
 

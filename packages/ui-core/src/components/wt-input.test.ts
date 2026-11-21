@@ -122,6 +122,32 @@ test("forwards a semantic name and autocomplete purpose to the native input", as
   expect(input.id).toBe("email");
 });
 
+test("a password field that names no autocomplete purpose is marked new-password", async () => {
+  const el = await mount('<wt-input label="API key" name="apiKey" type="password"></wt-input>');
+  expect(parts(el).input.getAttribute("autocomplete")).toBe("new-password");
+});
+
+test("a search field that names no autocomplete purpose is marked off", async () => {
+  const el = await mount('<wt-input label="Search" name="search" type="search"></wt-input>');
+  expect(parts(el).input.getAttribute("autocomplete")).toBe("off");
+});
+
+test("an explicit autocomplete purpose wins over the password and search defaults", async () => {
+  const password = await mount(
+    '<wt-input label="Password" name="password" type="password" autocomplete="current-password"></wt-input>',
+  );
+  const search = await mount(
+    '<wt-input label="Search" name="search" type="search" autocomplete="on"></wt-input>',
+  );
+  expect(parts(password).input.getAttribute("autocomplete")).toBe("current-password");
+  expect(parts(search).input.getAttribute("autocomplete")).toBe("on");
+});
+
+test("a text field that names no autocomplete purpose carries no autocomplete attribute", async () => {
+  const el = await mount('<wt-input label="Name" name="partyName"></wt-input>');
+  expect(parts(el).input.hasAttribute("autocomplete")).toBe(false);
+});
+
 test("forwards a maximum length to the native input, and sets none by default", async () => {
   const limited = await mount('<wt-input label="Name" name="partyName" maxlength="40"></wt-input>');
   const open = await mount('<wt-input label="Name"></wt-input>');

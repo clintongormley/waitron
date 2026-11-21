@@ -228,6 +228,11 @@ test("falls back to a forwarded aria-label when there is no visible label", asyn
   expect(el.shadowRoot!.querySelector(".search")!.getAttribute("aria-label")).toBe("Dietary tags");
 });
 
+test("the panel's search box asks the browser not to fill it", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  expect(el.shadowRoot!.querySelector(".search")!.getAttribute("autocomplete")).toBe("off");
+});
+
 test("a visible label takes precedence over a forwarded aria-label", async () => {
   const el = await mountWith(
     '<wt-combobox label="Dietary tags" aria-label="Ignored"></wt-combobox>',

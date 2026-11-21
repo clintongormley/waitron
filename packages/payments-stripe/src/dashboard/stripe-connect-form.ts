@@ -196,6 +196,7 @@ export class StripeConnectForm extends LitElement {
       <wt-input
         class="field"
         type="password"
+        autocomplete="new-password"
         name="secretKey"
         data-test="secret-key"
         label=${t("payments.stripe.secret_key")}
@@ -208,6 +209,7 @@ export class StripeConnectForm extends LitElement {
       <wt-input
         class="field"
         type="password"
+        autocomplete="new-password"
         name="webhookSecret"
         data-test="webhook-secret"
         label=${t("payments.stripe.webhook_secret")}
