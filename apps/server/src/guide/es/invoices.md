@@ -40,3 +40,25 @@ Un inspector puede tener su propio acceso cuando el correo del servidor está co
   como copia, con una hoja de cálculo de ellas, y después **Guardar el archivo** cuando el aviso
   diga que está listo.
 - Cuando termine la visita, deshabilita su cuenta en **Usuarios**.
+
+## Modelo 303 y correcciones {#vat-return}
+
+**Modelo 303 (IVA)** en **Informes** prepara el fichero que subes a la AEAT para un mes o un
+trimestre. Elige **Ejercicio**, **Periodo** y **Tipo de declaración** y después
+**Descargar fichero**. Desde aquí no se envía nada a la AEAT.
+
+La parte de ventas del fichero cuenta el IVA que corresponde al periodo y se registró hasta su
+último día, así que una rectificación, una anulación o un ticket tardío registrados después de
+terminar el periodo nunca cambian su fichero. Aparecen en cambio en las correcciones del periodo en
+que se registraron.
+
+Antes de presentarlo, elige también **Descargar correcciones (XLSX)** para el mismo periodo y
+entrega ambos a tu asesor. El libro recoge lo que se registró en el periodo para periodos
+anteriores:
+
+- **Resumen**: base imponible e IVA de cada periodo anterior, tipo de IVA y si es una reducción o
+  un aumento.
+- **Correcciones**: una línea por factura y tipo de IVA, con la fecha en que se hizo, su tipo
+  (**Rectificativa**, **Anulación**, **Fecha trasladada (salida)**,
+  **Fecha trasladada (entrada)** o **Emitida después del periodo de su venta**), su número de
+  factura, la factura que corrige y el periodo al que corresponde.

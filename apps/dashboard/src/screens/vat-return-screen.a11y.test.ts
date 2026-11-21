@@ -57,4 +57,45 @@ describe.each(["light", "dark"] as const)("vat-return-screen a11y (%s theme)", (
     }
     await expectNoA11yViolations(host);
   });
+
+  it.each([
+    ["busy", null],
+    ["refused naming period", "period"],
+    ["refused naming no field", "none"],
+  ] as const)(
+    "renders the corrections button's %s state accessibly",
+    async (_state, refusedField) => {
+      const api = {
+        downloadVatReturnFile: vi.fn(),
+        downloadVatCorrections: vi.fn(() =>
+          refusedField === null
+            ? new Promise<Blob>(() => {})
+            : Promise.reject(
+                refusedField === "none"
+                  ? { code: "authorization.not_permitted" }
+                  : { code: "management.request_invalid", params: { field: refusedField } },
+              ),
+        ),
+      } as unknown as DashboardApi;
+      const { el, host } = await mountWidget<VatReturnScreen>(
+        "dashboard-vat-return-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=download-corrections]")!.click();
+      await flush(el);
+      if (refusedField === "none") {
+        const actions = el.shadowRoot!.querySelector<WtFormActions>("wt-form-actions")!;
+        await vi.waitFor(async () =>
+          expect((await formMessageOf(actions))?.textContent?.trim()).toBe(
+            codeMessage("authorization.not_permitted"),
+          ),
+        );
+      } else if (refusedField === "period") {
+        await vi.waitFor(() => expect(field(el, "period").error).not.toBe(""));
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 });

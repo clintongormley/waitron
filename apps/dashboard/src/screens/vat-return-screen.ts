@@ -44,8 +44,8 @@ function periodOptions(): ComboboxOption[] {
 }
 
 /**
- * Downloads the DR303 file the server builds for one period. It files nothing and sends nothing to
- * AEAT: the operator uploads the file themselves.
+ * Downloads the DR303 file the server builds for one period, and the workbook of corrections made
+ * since. It files nothing and sends nothing to AEAT: the operator uploads the file themselves.
  */
 @customElement("dashboard-vat-return-screen")
 export class VatReturnScreen extends LitElement {
@@ -82,6 +82,7 @@ export class VatReturnScreen extends LitElement {
   @state() private declarationType = "";
   readonly #feedback = new FormFeedback(this);
   @state() private busy = false;
+  @state() private correctionsBusy = false;
   /** A refusal's sentence under the field it names, until that field changes or the next press. */
   @state() private refused: Partial<Record<Field, string>> = {};
   /** A refusal that names no field shown here. */
@@ -107,11 +108,42 @@ export class VatReturnScreen extends LitElement {
     this.refused = refused;
   }
 
+  /** Clears the last refusal: the bottom one, and those under `fields`. */
+  #clearRefusals(fields: readonly Field[]): void {
+    this.refusal = "";
+    const refused = { ...this.refused };
+    for (const field of fields) delete refused[field];
+    this.refused = refused;
+  }
+
+  #save(file: Blob, name: string): void {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /** A refusal naming a field that was sent, and is still as sent, goes under that field. */
+  #refuse(error: unknown, sent: Partial<Record<Field, string>>): void {
+    const code = codeOf(error);
+    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    if (
+      code === "management.request_invalid" &&
+      isField(field) &&
+      sent[field] !== undefined &&
+      this[field] === sent[field]
+    ) {
+      this.refused = { ...this.refused, [field]: t(REFUSED[field]) };
+      void this.#feedback.focus(this.shadowRoot!);
+    } else this.refusal = codeMessage(code);
+  }
+
   async #download(): Promise<void> {
     if (this.busy) return;
     this.#feedback.press();
-    this.refused = {};
-    this.refusal = "";
+    this.#clearRefusals(["year", "period", "declarationType"]);
     if (this.declarationType === "") {
       void this.#feedback.focus(this.shadowRoot!);
       return;
@@ -121,22 +153,28 @@ export class VatReturnScreen extends LitElement {
     this.busy = true;
     try {
       const file = await this.api.downloadVatReturnFile({ ...sent, year: Number(sent.year) });
-      const url = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `modelo-303-${sent.year}-${sent.period}.txt`;
-      link.click();
-      URL.revokeObjectURL(url);
+      this.#save(file, `modelo-303-${sent.year}-${sent.period}.txt`);
       this.#feedback.reset();
     } catch (error) {
-      const code = codeOf(error);
-      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-      if (code === "management.request_invalid" && isField(field) && this[field] === sent[field]) {
-        this.refused = { [field]: t(REFUSED[field]) };
-        void this.#feedback.focus(this.shadowRoot!);
-      } else this.refusal = codeMessage(code);
+      this.#refuse(error, sent);
     } finally {
       this.busy = false;
+    }
+  }
+
+  /** Needs year and period only, so it leaves the declaration type and its mark alone. */
+  async #downloadCorrections(): Promise<void> {
+    if (this.correctionsBusy) return;
+    this.#clearRefusals(["year", "period"]);
+    const sent = { year: this.year, period: this.period };
+    this.correctionsBusy = true;
+    try {
+      const file = await this.api.downloadVatCorrections({ ...sent, year: Number(sent.year) });
+      this.#save(file, `corrections-${sent.year}-${sent.period}.xlsx`);
+    } catch (error) {
+      this.#refuse(error, sent);
+    } finally {
+      this.correctionsBusy = false;
     }
   }
 
@@ -201,6 +239,13 @@ export class VatReturnScreen extends LitElement {
             ?disabled=${this.#typeMissing}
             @click=${() => void this.#download()}
             >${t("vat_return.download")}</wt-button
+          >
+          <wt-button
+            variant="secondary"
+            data-test="download-corrections"
+            ?loading=${this.correctionsBusy}
+            @click=${() => void this.#downloadCorrections()}
+            >${t("vat_return.download_corrections")}</wt-button
           >
         </wt-form-actions>
       </div>`;

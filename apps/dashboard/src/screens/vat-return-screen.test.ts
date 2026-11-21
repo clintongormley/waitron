@@ -9,10 +9,15 @@ import "./vat-return-screen.js";
 import type { VatReturnScreen } from "./vat-return-screen.js";
 
 const FILE = new Blob([new Uint8Array([0x4e, 0xd1, 0x0a])]);
+const WORKBOOK = new Blob([new Uint8Array([0x50, 0x4b, 3, 4])]);
 
-function stubApi(download: () => Promise<Blob> = () => Promise.resolve(FILE)): DashboardApi {
+function stubApi(
+  download: () => Promise<Blob> = () => Promise.resolve(FILE),
+  corrections: () => Promise<Blob> = () => Promise.resolve(WORKBOOK),
+): DashboardApi {
   return {
     downloadVatReturnFile: vi.fn(download),
+    downloadVatCorrections: vi.fn(corrections),
     getHandoverWarning: vi
       .fn()
       .mockResolvedValue({ hasEmergencyHandover: false, hasReturnedInvoices: false }),
@@ -44,6 +49,26 @@ async function mount(api: DashboardApi = stubApi()): Promise<VatReturnScreen> {
 async function press(el: VatReturnScreen): Promise<void> {
   button(el).click();
   await flush(el);
+}
+
+const correctionsButton = (el: VatReturnScreen) =>
+  el.shadowRoot!.querySelector<WtButton>("[data-test=download-corrections]")!;
+
+async function pressCorrections(el: VatReturnScreen): Promise<void> {
+  correctionsButton(el).click();
+  await flush(el);
+}
+
+function captureDownloads(): HTMLAnchorElement[] {
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:corrections");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const clicked: HTMLAnchorElement[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    clicked.push(this);
+  });
+  return clicked;
 }
 
 beforeEach(() => {
@@ -266,6 +291,113 @@ describe("dashboard-vat-return-screen", () => {
 
     expect(button(el).loading).toBe(true);
     expect(api.downloadVatReturnFile).toHaveBeenCalledOnce();
+  });
+
+  describe("the corrections workbook", () => {
+    it("asks for the chosen year and period with no declaration type chosen, and saves the workbook", async () => {
+      const api = stubApi();
+      const clicked = captureDownloads();
+      const el = await mount(api);
+      await chooseOption(field(el, "period"), "1T");
+
+      await pressCorrections(el);
+
+      expect(api.downloadVatCorrections).toHaveBeenCalledWith({ year: 2026, period: "1T" });
+      expect(api.downloadVatReturnFile).not.toHaveBeenCalled();
+      expect(clicked).toHaveLength(1);
+      expect(clicked[0]!.download).toBe("corrections-2026-1T.xlsx");
+      expect(clicked[0]!.href).toBe("blob:corrections");
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:corrections");
+      expect(field(el, "declarationType").error).toBe("");
+      expect(await bottom(el)).toBeNull();
+      expect(correctionsButton(el).disabled).toBe(false);
+      expect(correctionsButton(el).textContent?.trim()).toBe(t("vat_return.download_corrections"));
+    });
+
+    it("stays available while a missing declaration type is marked, and leaves that mark alone", async () => {
+      const api = stubApi();
+      captureDownloads();
+      const el = await mount(api);
+      await press(el);
+      expect(button(el).disabled).toBe(true);
+      expect(correctionsButton(el).disabled).toBe(false);
+
+      await pressCorrections(el);
+
+      expect(api.downloadVatCorrections).toHaveBeenCalledOnce();
+      expect(field(el, "declarationType").error).toBe(t("vat_return.type_required"));
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+    });
+
+    it.each(["corrections", "file"] as const)(
+      "shows a server refusal at the bottom until the next press of the %s button",
+      async (next) => {
+        const api = stubApi(
+          () => new Promise<Blob>(() => {}),
+          () => Promise.reject({ code: "authorization.not_permitted" }),
+        );
+        const el = await mount(api);
+        await chooseOption(field(el, "declarationType"), "I");
+
+        await pressCorrections(el);
+
+        expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+        for (const name of ["year", "period", "declarationType"]) {
+          expect(field(el, name).error).toBe("");
+        }
+
+        vi.mocked(api.downloadVatCorrections).mockImplementation(() => new Promise<Blob>(() => {}));
+        if (next === "corrections") await pressCorrections(el);
+        else await press(el);
+
+        expect(await bottom(el)).toBeNull();
+      },
+    );
+
+    it("clears a refusal the file left once the corrections button is pressed", async () => {
+      const api = stubApi(
+        () => Promise.reject({ code: "authorization.not_permitted" }),
+        () => new Promise<Blob>(() => {}),
+      );
+      const el = await mount(api);
+      await chooseOption(field(el, "declarationType"), "I");
+      await press(el);
+      expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+
+      await pressCorrections(el);
+
+      expect(await bottom(el)).toBeNull();
+    });
+
+    it.each([
+      ["period", "vat_return.period_refused"],
+      ["year", "vat_return.year_refused"],
+    ] as const)("marks the %s field when the server refuses it", async (name, sentence) => {
+      const el = await mount(
+        stubApi(undefined, () =>
+          Promise.reject({ code: "management.request_invalid", params: { field: name } }),
+        ),
+      );
+
+      await pressCorrections(el);
+
+      for (const other of ["year", "period", "declarationType"]) {
+        expect(field(el, other).error).toBe(other === name ? t(sentence) : "");
+      }
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+    });
+
+    it("shows its own action busy, and sends one request however often it is pressed", async () => {
+      const api = stubApi(undefined, () => new Promise<Blob>(() => {}));
+      const el = await mount(api);
+
+      await pressCorrections(el);
+      await pressCorrections(el);
+
+      expect(correctionsButton(el).loading).toBe(true);
+      expect(button(el).loading).toBe(false);
+      expect(api.downloadVatCorrections).toHaveBeenCalledOnce();
+    });
   });
 
   it("names the months and the declaration types in Spanish", async () => {

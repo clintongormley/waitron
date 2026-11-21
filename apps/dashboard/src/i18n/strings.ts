@@ -4068,7 +4068,7 @@ export const en = {
   "add_to_menus.skip": "Skip",
   "vat_return.title": "VAT return (modelo 303)",
   "vat_return.intro":
-    "Download the file to upload to AEAT (presentación mediante fichero). Nothing is sent from here; have your adviser check it before you submit it.",
+    "Download the file to upload to AEAT (presentación mediante fichero). Nothing is sent from here; have your adviser check it before you submit it. Corrections and late tickets made after a period ends are not in its file: download the corrections too before you file.",
   "vat_return.year": "Year",
   "vat_return.period": "Period",
   "vat_return.quarters": "Quarters",
@@ -4090,6 +4090,7 @@ export const en = {
   "vat_return.period_refused": "Choose a monthly or quarterly period",
   "vat_return.type_refused": "Choose one of the declaration types offered",
   "vat_return.download": "Download file",
+  "vat_return.download_corrections": "Download corrections (XLSX)",
   "device_profiles.cash_drawer_printers": "Cash drawers",
   "device_profiles.invoice_printers": "Invoice printers",
   "device_profiles.receipt_default": "Default receipt printer",
@@ -8758,7 +8759,7 @@ export const es: Record<StringKey, string> = {
   "add_to_menus.skip": "Omitir",
   "vat_return.title": "Modelo 303 (IVA)",
   "vat_return.intro":
-    "Descarga el fichero para subirlo a la AEAT (presentación mediante fichero). Desde aquí no se envía nada; pide a tu asesor que lo revise antes de presentarlo.",
+    "Descarga el fichero para subirlo a la AEAT (presentación mediante fichero). Desde aquí no se envía nada; pide a tu asesor que lo revise antes de presentarlo. Las rectificaciones y los tickets tardíos hechos después de terminar un periodo no están en su fichero: descarga también las correcciones antes de presentarlo.",
   "vat_return.year": "Ejercicio",
   "vat_return.period": "Periodo",
   "vat_return.quarters": "Trimestres",
@@ -8780,6 +8781,7 @@ export const es: Record<StringKey, string> = {
   "vat_return.period_refused": "Elige un periodo mensual o trimestral",
   "vat_return.type_refused": "Elige uno de los tipos de declaración ofrecidos",
   "vat_return.download": "Descargar fichero",
+  "vat_return.download_corrections": "Descargar correcciones (XLSX)",
   "device_profiles.cash_drawer_printers": "Cajones portamonedas",
   "device_profiles.invoice_printers": "Impresoras de facturas",
   "device_profiles.receipt_default": "Impresora de tickets predeterminada",
