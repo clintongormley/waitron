@@ -63,6 +63,7 @@ export interface DevicePrinter extends EscSetting {
 
 export type PrinterLookup = ((
   role: ProfilePrinterRole,
+  /** Drawer recording can use an inactive assignment while print jobs use the lookup's default. */
   includeSwitchedOff?: boolean,
 ) => Promise<DevicePrinter | undefined>) & {
   /** It also resolves switched-off printers, so a job may be queued on the one it returns. */
@@ -822,9 +823,10 @@ export async function enqueueRefundDrawer(
   refundId: string,
   operatorId: string,
   authorization: { authorizedBy: string; viaOverride: boolean },
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   if (cfg.origin.source !== "device") return;
-  const printer = await drawerPrinter(printerLookup(tx, cfg.origin));
+  const printer = await drawerPrinter(printers);
   if (printer === undefined) return;
   const [refund] = await tx
     .update(refunds)

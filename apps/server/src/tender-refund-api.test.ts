@@ -155,8 +155,19 @@ it("reads refundable money for admitted staff, completes cash once and preserves
       },
     ],
   });
-  const req = ask(tender!.id),
+  const req = ask(tender!.id);
+  const selects = vi.spyOn(store.db, "select");
+  let paid: Awaited<ReturnType<typeof create>>;
+  try {
     paid = await create(saleId.toUpperCase(), req);
+    expect(
+      selects.mock.calls.filter(
+        ([fields]) => fields !== undefined && "hasCashDrawer" in fields && "capabilities" in fields,
+      ),
+    ).toHaveLength(1);
+  } finally {
+    selects.mockRestore();
+  }
   expect(paid).toMatchObject({
     status: 200,
     json: {

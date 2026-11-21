@@ -109,11 +109,18 @@ export async function beginSettledTenderRefund(
           )
             throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
         },
-        openDrawer: (reserved) =>
-          enqueueRefundDrawer(tx, cfg, reserved.id, operator.personId, {
-            authorizedBy: reserved.authorizedBy,
-            viaOverride: reserved.authorizedBy !== operator.personId,
-          }),
+        openDrawer: (reserved, printers) =>
+          enqueueRefundDrawer(
+            tx,
+            cfg,
+            reserved.id,
+            operator.personId,
+            {
+              authorizedBy: reserved.authorizedBy,
+              viaOverride: reserved.authorizedBy !== operator.personId,
+            },
+            printers,
+          ),
       });
       if (refund.state === "pending") claimConnected?.(refund.id);
       return toTenderRefundView(refund);

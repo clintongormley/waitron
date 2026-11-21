@@ -1,16 +1,16 @@
 import { eq } from "drizzle-orm";
 import { appendDrawerEntry, refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
-import { centsToDecimal, deviceOrigin, type NodeId } from "@waitron/shared";
+import { centsToDecimal, readSaleOrigin, type NodeId } from "@waitron/shared";
 import { recordManualRefund } from "@waitron/payments";
-import { printerLookup, resolveDrawerAssignment } from "./receipt-print.js";
+import { printerLookup, resolveDrawerAssignment, type PrinterLookup } from "./receipt-print.js";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
 type RefundRow = typeof refunds.$inferSelect;
 type RefundCompletion = {
   beforeCompletion?: (refund: RefundRow) => Promise<void>;
   manualPaymentRef?: (refund: RefundRow) => Promise<string>;
-  openDrawer?: (refund: RefundRow) => Promise<void>;
+  openDrawer?: (refund: RefundRow, printers: PrinterLookup) => Promise<void>;
 };
 
 export async function refuseUntilRefundable(
@@ -67,8 +67,9 @@ export async function completeRefundReservation(
       .returning();
     refund = completed!;
     if (refund.method === "cash") {
-      await recordCashDrawerRefund(tx, refund);
-      await steps.openDrawer?.(refund);
+      const printers = printerLookup(tx, readSaleOrigin(refund.source, refund.deviceId));
+      await recordCashDrawerRefund(tx, refund, printers);
+      await steps.openDrawer?.(refund, printers);
     }
   }
   await deps.attendance?.(tx, {
@@ -83,9 +84,12 @@ export async function completeRefundReservation(
   return refund;
 }
 
-async function recordCashDrawerRefund(tx: Transaction, refund: RefundRow): Promise<void> {
-  if (refund.deviceId === null) return;
-  const drawer = await resolveDrawerAssignment(printerLookup(tx, deviceOrigin(refund.deviceId)));
+async function recordCashDrawerRefund(
+  tx: Transaction,
+  refund: RefundRow,
+  printers: PrinterLookup,
+): Promise<void> {
+  const drawer = await resolveDrawerAssignment(printers);
   if (drawer === undefined) return;
   await appendDrawerEntry(tx, {
     nodeId: refund.nodeId,

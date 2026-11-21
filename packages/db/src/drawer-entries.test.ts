@@ -38,6 +38,7 @@ it("sequences entries from different tills by drawer and keeps signed cash disti
     ])
     .returning();
   const paidAt = "2026-11-21T12:00:00.000Z";
+  const cardCapturedAt = "2026-11-21T11:59:00.000Z";
   const [cash, card] = await fx.db
     .insert(billPayments)
     .values([
@@ -67,7 +68,7 @@ it("sequences entries from different tills by drawer and keeps signed cash disti
         requestedBy: personId,
         source: "device",
         deviceId: second.deviceId,
-        receivedAt: paidAt,
+        receivedAt: cardCapturedAt,
       },
     ])
     .returning();
@@ -84,6 +85,7 @@ it("sequences entries from different tills by drawer and keeps signed cash disti
     await appendDrawerEntry(tx, {
       ...base,
       deviceId: second.deviceId,
+      recordedAt: cardCapturedAt,
       kind: "card_payment",
       amount: 1500,
       billPaymentId: card!.id,
@@ -99,13 +101,20 @@ it("sequences entries from different tills by drawer and keeps signed cash disti
   });
   expect(
     fx.db.all(sql`
-    select sequence, device_id as device, kind, amount from drawer_entries
+    select sequence, recorded_at as "recordedAt", device_id as device, kind, amount
+    from drawer_entries
     where printer_id = ${bar!.id} order by sequence
   `),
   ).toEqual([
-    { sequence: 1, device: first.deviceId, kind: "cash_payment", amount: 1000 },
-    { sequence: 2, device: second.deviceId, kind: "card_payment", amount: 1500 },
-    { sequence: 3, device: second.deviceId, kind: "cash_refund", amount: -200 },
+    { sequence: 1, recordedAt: paidAt, device: first.deviceId, kind: "cash_payment", amount: 1000 },
+    {
+      sequence: 2,
+      recordedAt: cardCapturedAt,
+      device: second.deviceId,
+      kind: "card_payment",
+      amount: 1500,
+    },
+    { sequence: 3, recordedAt: paidAt, device: second.deviceId, kind: "cash_refund", amount: -200 },
   ]);
   expect(
     fx.db.get(sql`select sequence from drawer_entries where printer_id = ${terrace!.id}`),
