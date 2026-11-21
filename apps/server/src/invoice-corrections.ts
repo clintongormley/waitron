@@ -57,7 +57,7 @@ import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { saleScopeInZones } from "./find-bill-transactions.js";
-import { refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { refuseFinalInvoiceFirst } from "./advance-taken-off.js";
 import { issueHeldBill } from "./bill-payments.js";
 import "./errors.js";
 
@@ -148,7 +148,7 @@ async function checkInvoiceCorrectable<T>(
     .from(saleSettlements)
     .where(eq(saleSettlements.saleId, saleId));
   if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
-  await refuseTakenOffAdvance(tx, saleId);
+  await refuseFinalInvoiceFirst(tx, backend, cfg.nodeId, saleId);
   await refuseWhileCorrectionOpen(tx, saleId);
   const refundable = await readRefundableTenders(tx, saleId);
   const pending = refundable.find((row) => row.pendingRefundId !== null);

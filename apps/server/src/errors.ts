@@ -877,12 +877,22 @@ declare module "@waitron/shared" {
     /** A payer asked for their own receipt for part of a bill set for a full invoice, which the
      * till cannot issue as an advance yet. */
     "advance.full_invoice_unsupported": { workingOrderId: string };
-    /** A refund or correction of the advance `saleId` after the invoice `finalSaleId`, numbered
-     * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice. */
+    /** A refund of the advance `saleId`, or a leg of a correction of it opened before the invoice
+     * `finalSaleId`, numbered `invoiceNumber`, took it off. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
       invoiceNumber: string;
+    };
+    /** Correct invoice on the advance `saleId` while the invoice `finalSaleId`, numbered
+     * `invoiceNumber`, that took it off can still give back `moneyLeft` for dishes at the
+     * advance's `rate`: that invoice is corrected first. */
+    "advance.final_invoice_first": {
+      saleId: string;
+      finalSaleId: string;
+      invoiceNumber: string;
+      rate: string;
+      moneyLeft: string;
     };
     /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
      * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */

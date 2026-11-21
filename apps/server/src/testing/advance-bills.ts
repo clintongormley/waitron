@@ -24,14 +24,19 @@ import { offerProducts } from "./zone-offers.js";
 import { printedLines, withoutRules } from "./decode-ticket.js";
 import { inTx, provisionBillVenue, send, type Answer, type BillVenue } from "./bill-venue.js";
 
-// Bills that take advances off their invoice (advances plan, worked examples 1, 2, 6 and 8), each
+// Bills that take advances off their invoice (advances plan, worked examples 1, 2, 6 and 8, and a 4% dish), each
 // at a table of its own, against a venue that files real Veri*Factu records.
-const DISHES: { name: string; price: string; vatClass: "reduced" | "general" }[] = [
+const DISHES: {
+  name: string;
+  price: string;
+  vatClass: "reduced" | "general" | "super_reduced";
+}[] = [
   { name: "Tasting menu", price: "120.00", vatClass: "reduced" },
   { name: "Bread roll", price: "1.05", vatClass: "reduced" },
   { name: "Salad bowl", price: "20.00", vatClass: "reduced" },
   { name: "Seafood platter", price: "30.05", vatClass: "reduced" },
   { name: "Wine case", price: "80.00", vatClass: "general" },
+  { name: "Water case", price: "20.00", vatClass: "super_reduced" },
 ];
 
 export const spanish = receiptLabelsFor("es-ES");

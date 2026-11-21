@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
   captureError,
+  drawerOpens,
   invoiceCorrections,
+  parties,
   readLiveSeriesIdTx,
   saleLines,
   sales,
   tenderRefunds,
   tenders,
+  workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -26,6 +30,9 @@ import {
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
+import { readBillEditState } from "./bill-editing.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { readOrderRevision } from "./working-order.js";
 import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
@@ -161,6 +168,42 @@ async function correctionOf(tx: Transaction, saleId: string) {
     authz: { sessionId: adminSessionId },
     clock: venue().clock,
   };
+}
+
+/** Takes the bill's line `name` off it, as the till's cancel does. */
+async function removeDish(billId: string, name: string) {
+  const ask = await inTx(venue(), async (tx) => {
+    const [line] = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, name)));
+    const [order] = await tx
+      .select({ partyId: workingOrders.partyId })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    const partyId = order!.partyId!;
+    return {
+      lineId: line!.id,
+      partyId,
+      body: {
+        expectedEdit: await readBillEditState(tx, billId),
+        expectedPartyRevision: (await tx.select().from(parties).where(eq(parties.id, partyId)))[0]!
+          .revision,
+        expectedBillRevision: await readOrderRevision(tx, billId),
+        expectedContext: await readCancellationContext(tx, partyId, line!.id),
+        submissionId: randomUUID(),
+        quantity: "1",
+        outcome: "remove_charge",
+      },
+    };
+  });
+  return send(
+    venue().app,
+    venue().cookie,
+    "POST",
+    `/api/parties/${ask.partyId}/lines/${ask.lineId}/cancel-item`,
+    ask.body,
+  );
 }
 
 function linesIn(tx: Transaction, saleId: string) {
@@ -434,8 +477,12 @@ describe("an advance once the rest's invoice has taken it off", () => {
     return { billId, advanceId, finalSaleId, ...row!, refusal };
   }
 
-  it("refuses Correct invoice on the advance's ticket, naming the rest's invoice, and files nothing", async () => {
+  it("refuses Correct invoice on the advance's ticket while the rest's invoice can give back €90 at 10%, naming it, and files nothing", async () => {
     const { advanceId, refusal } = await takenOff();
+    const first = {
+      code: "advance.final_invoice_first",
+      params: { ...refusal.params, rate: "10.00", moneyLeft: "90.00" },
+    };
     const split = [{ rate: "10.00", base: "27.27", tax: "2.73" }];
 
     for (const refused of [
@@ -449,13 +496,97 @@ describe("an advance once the rest's invoice has taken it off", () => {
       ),
     ]) {
       expect(refused.status, JSON.stringify(refused.json)).toBe(409);
-      expect(refused.json).toEqual(refusal);
+      expect(refused.json).toEqual(first);
     }
     expect(
       await inTx(venue(), (tx) =>
         tx.select().from(sales).where(eq(sales.correctsSaleId, advanceId)),
       ),
     ).toEqual([]);
+  });
+
+  it("example 1: once the rest's invoice gave back its €90, €10 back on the advance files 10% −9.09 and −0.91", async () => {
+    const { advanceId, finalSaleId } = await takenOff();
+    await correct(finalSaleId, "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    const corrective = await correct(advanceId, "10.00", [
+      { rate: "10.00", base: "9.09", tax: "0.91" },
+    ]);
+
+    expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
+  });
+
+  it("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10% −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were", async () => {
+    const billId = await seated("Tasting menu", "Salad bowl");
+    const advanceId = await advance(billId, "120.00");
+    const removed = await removeDish(billId, "Salad bowl");
+    expect(removed.status, JSON.stringify(removed.json)).toBe(200);
+    const finalSaleId = await restId(billId);
+    const restRecord = recordOf(finalSaleId);
+    expect(restRecord).toEqual([["10.00", "0.00", "0.00"]]);
+
+    const corrective = await correct(advanceId, "20.00", [
+      { rate: "10.00", base: "18.18", tax: "1.82" },
+    ]);
+
+    expect(recordOf(corrective)).toEqual([["10.00", "-18.18", "-1.82"]]);
+    expect(filedInvoicesOf(venue().db, corrective, new Date())[0]!.kind).toBe("R5");
+    const [filed] = await inTx(venue(), (tx) =>
+      tx.select().from(sales).where(eq(sales.id, corrective)),
+    );
+    expect(filed!.correctsSaleId).toBe(advanceId);
+    const opens = await inTx(venue(), (tx) =>
+      tx
+        .select({ reason: drawerOpens.reason })
+        .from(drawerOpens)
+        .innerJoin(tenderRefunds, eq(tenderRefunds.id, drawerOpens.tenderRefundId))
+        .where(eq(tenderRefunds.saleId, advanceId)),
+    );
+    expect(opens).toEqual([{ reason: "tender_refund" }]);
+    expect(await inTx(venue(), (tx) => readBillBalance(tx, billId))).toMatchObject({
+      status: "settled",
+      outstanding: "0.00",
+    });
+    expect(recordOf(finalSaleId)).toEqual(restRecord);
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select().from(sales).where(eq(sales.correctsSaleId, finalSaleId)),
+      ),
+    ).toEqual([]);
+  });
+
+  it("example 2: €20 of food back on the advance while the rest's invoice still holds €50 at 21% files 10% −18.18 and −1.82", async () => {
+    const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00");
+
+    const corrective = await correct(rest.advanceIds[0]!, "20.00", [
+      { rate: "10.00", base: "18.18", tax: "1.82" },
+    ]);
+
+    expect(recordOf(corrective)).toEqual([["10.00", "-18.18", "-1.82"]]);
+  });
+
+  it("the 4% bill: once the rest's invoice gave back its €10, it has nothing left at 10%, and €10 back on the advance files 10% −9.09 and −0.91", async () => {
+    const rest = await restOf(["Tasting menu", "Water case"], ["130.00"], "10.00");
+    const water = (await linesOf(rest.saleId)).find((line) => line.vatRate === 400)!;
+    await correct(rest.saleId, "10.00", [{ rate: "4.00", base: "9.62", tax: "0.38" }], [water.id]);
+    const lines = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/transactions/${rest.saleId}/corrections/lines`,
+    );
+    expect(lines.status, JSON.stringify(lines.json)).toBe(200);
+    expect(
+      (lines.json as { lines: { rate: string; left: string }[] }).lines
+        .filter((line) => line.rate === "10.00")
+        .map((line) => line.left),
+    ).toEqual(["0.00"]);
+
+    const corrective = await correct(rest.advanceIds[0]!, "10.00", [
+      { rate: "10.00", base: "9.09", tax: "0.91" },
+    ]);
+
+    expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
   });
 
   it("refuses a plain refund of the advance's ticket and a bill refund of its payment with the same words", async () => {
@@ -699,20 +830,15 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     expect(entries.some((line) => line.startsWith(`${spanish.total} -90,00`))).toBe(true);
   });
 
-  it("leaves Correct invoice on the advance refused, naming the credited rest's invoice", async () => {
+  it("lets Correct invoice on the advance go ahead: the credited rest's invoice has nothing left", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
     await creditWhole(rest.saleId);
 
-    const refused = await preview(rest.advanceIds[0]!, "30.00");
+    const previewed = await preview(rest.advanceIds[0]!, "30.00");
 
-    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
-    expect(refused.json).toEqual({
-      code: "advance.taken_off_final_invoice",
-      params: {
-        saleId: rest.advanceIds[0],
-        finalSaleId: rest.saleId,
-        invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
-      },
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    expect(previewed.json).toMatchObject({
+      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
     });
   });
 
