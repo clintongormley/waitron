@@ -773,7 +773,7 @@ describe("setup-app", () => {
       country: "ES",
       taxId: "B12345678",
       legalName: "Old Owner SL",
-      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid",
+      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid, Madrid",
       name: "Prepared",
       invoiceLocales: ["es-ES"],
       fiscalTerritory: "ES-common",
@@ -791,7 +791,7 @@ describe("setup-app", () => {
     const sixFields = {
       taxId: "B12345678",
       legalName: "Old Owner SL",
-      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid",
+      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid, Madrid",
       seriesCode: "OLD",
       fullSeriesCode: "OLDF",
       rectificativeSeriesCode: "OLDR",
@@ -799,7 +799,7 @@ describe("setup-app", () => {
     const typed = {
       taxId: "A58818501",
       legalName: "New Owner SL",
-      taxpayerDomicile: "Calle Nueva 2, 28002 Madrid",
+      taxpayerDomicile: "Calle Nueva 2, 28002 Madrid, Madrid",
       seriesCode: "NEW",
       fullSeriesCode: "NEWF",
       rectificativeSeriesCode: "NEWR",
@@ -848,12 +848,43 @@ describe("setup-app", () => {
       goto(el, "venue");
       await el.updateComplete;
       const venue = await screenHost(el, "venue");
+      // The old registered address is dropped: an empty line opens as the venue's address.
+      const fiscal = Object.keys(sixFields).filter((key) => key !== "taxpayerDomicile");
       expect(
-        Object.fromEntries(Object.keys(sixFields).map((key) => [key, venueValue(venue, key)])),
+        venue.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+          "[data-test=registeredSameAsVenue]",
+        )!.checked,
+      ).toBe(true);
+      expect(venue.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+      // Behind the switch, the parts hold nothing of the old taxpayer's registered address.
+      venue.shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { checked: false },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await (venue as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(
+        Object.fromEntries(
+          [
+            "registeredStreet",
+            "registeredLine2",
+            "registeredPostalCode",
+            "registeredCity",
+            "registeredProvince",
+          ].map((key) => [key, venueValue(venue, key)]),
+        ),
       ).toEqual({
+        registeredStreet: "",
+        registeredLine2: "",
+        registeredPostalCode: "",
+        registeredCity: "",
+        registeredProvince: "",
+      });
+      expect(Object.fromEntries(fiscal.map((key) => [key, venueValue(venue, key)]))).toEqual({
         taxId: "",
         legalName: "",
-        taxpayerDomicile: "",
         seriesCode: "FS",
         fullSeriesCode: "FF",
         rectificativeSeriesCode: "FR",
@@ -3893,6 +3924,36 @@ describe("assembleBody", () => {
   });
 });
 
+describe("the registered address parts in the draft", () => {
+  const registeredAddress = {
+    sameAsVenue: false,
+    street: "Calle Fiscal 8",
+    line2: "2º 1ª",
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+  };
+
+  it.each(["demo", "prepare", "live"] as const)("never sends them, in %s", (mode) => {
+    const body = assembleBody({
+      mode,
+      registeredAddress,
+      venue: { taxpayerDomicile: "Calle Fiscal 8, 2º 1ª, 28013 Madrid, Madrid" },
+    });
+    expect(body).not.toHaveProperty("registeredAddress");
+    expect(body.venue.taxpayerDomicile).toBe("Calle Fiscal 8, 2º 1ª, 28013 Madrid, Madrid");
+  });
+
+  it("drops them on a switch to or from Demo, and keeps them between Prepare and Live", async () => {
+    const el = await mountSetupApp();
+    patch(el, { mode: "prepare", registeredAddress, venue: { name: "Calle Mayor" } });
+    patch(el, { mode: "live" });
+    expect(readDraft(el).registeredAddress).toEqual(registeredAddress);
+    patch(el, { mode: "demo" });
+    expect(readDraft(el)).not.toHaveProperty("registeredAddress");
+  });
+});
+
 describe("A2 mode boundaries", () => {
   it.each(["prepare", "live"] as const)(
     "discards Demo business identity when switching to %s, keeping the operator and address",
@@ -3933,7 +3994,7 @@ describe("A2 mode boundaries", () => {
         country: "ES",
         taxId: "B12345674",
         legalName: "Deli del Sol SL",
-        taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+        taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid, Madrid",
         name: "Calle Mayor",
         addressLine1: "Calle Mayor 1",
         postalCode: "28013",

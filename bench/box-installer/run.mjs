@@ -953,7 +953,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
                   taxId: "50000000R",
                   legalName: "Harbour Restaurant Ltd",
                   name: "Harbour dining room",
-                  taxpayerDomicile: "Mayor 1, Madrid",
+                  taxpayerDomicile: "Mayor 1, 28013 Madrid, Madrid",
                   fiscalTerritory: "ES-common",
                   invoiceLocales: ["es-ES"],
                   addressLine1: "Mayor 1",

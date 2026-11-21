@@ -411,6 +411,27 @@ it.each([
   expect(result.status).toBe(400);
   expect(await result.text()).not.toContain("SECRET-SENTINEL");
 });
+it.each([
+  ["blank", "   "],
+  ["without a postcode", "Mayor 1, Madrid"],
+  ["the box's own floor and door alone", "2º 1ª"],
+  ["with a postcode outside its province", "Mayor 1, 08010 Madrid, Madrid"],
+])(
+  "refuses a claim whose registered address is %s before saving an assignment",
+  async (_label, taxpayerDomicile) => {
+    const f = await fixture();
+    expect(f.claimed.status).toBe(200);
+    await f.post("/setup-api/first-setup/abandon", {}, f.headers());
+    const refused = await f.post("/setup-api/first-setup/claim", {
+      venue: { ...request, taxpayerDomicile },
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
+    });
+    expect((await f.host.store.read())?.status).toBe("abandoned");
+  },
+);
 it("answers a staged configuration the claim cannot read with 422 setup.configuration_unreadable", async () => {
   const f = await fixture();
   vi.spyOn(f.host.owner, "claimFirstSetup").mockRejectedValue(

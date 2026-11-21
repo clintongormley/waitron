@@ -67,11 +67,17 @@ export interface ReceiptDocumentInput {
   /** The roll's width; absent on an A4 page (PDF or image), which prints the date in words. */
   paperWidth?: ReceiptPaperWidth;
   logo?: ReceiptLogoRaster | null;
-  result: Omit<TillSaleResult, keyof ReceiptPresentation | "simulatedCardPayment">;
+  result: Omit<
+    TillSaleResult,
+    keyof ReceiptPresentation | "simulatedCardPayment" | "venueAddressLine"
+  >;
   issuer: ReceiptIssuer;
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   receipt: ReceiptTrim;
   venueAddress?: readonly string[];
+  /** The venue's address joined as a registered address is, so that one naming the province
+   *  `venueAddress` leaves out still prints once. */
+  venueAddressLine?: string;
   invoiceLocale: string;
   namesLocale?: string;
   /** Marks a practice document, regardless of whether money moved. */
@@ -105,6 +111,8 @@ export interface ReceiptDocument {
    * only the drawing knows whether a picture prints.
    */
   parts: Partial<Record<ReceiptPart, ElementRange>>;
+  /** The element of an A4 full invoice's "address · Tel. … · email" line, wrapped at its " · ". */
+  contactLine?: number;
   duplicate: boolean;
   practice: boolean;
 }
@@ -130,14 +138,16 @@ function adjustmentLabel(
   return `${label.discount} ${formatter.format(percentBp / 100)}%`;
 }
 
+export const CONTACT_SEPARATOR = " · ";
+
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
-function sameAddress(lines: readonly string[], domicile: string): boolean {
+function sameAddress(lines: readonly string[], line: string, domicile: string): boolean {
   const fold = (value: string): string =>
     value
       .toLocaleLowerCase()
       .replace(/[^\p{L}\p{N}]+/gu, " ")
       .trim();
-  return fold(lines.join(", ")) === fold(domicile);
+  return [lines.join(", "), line].some((venue) => venue !== "" && fold(venue) === fold(domicile));
 }
 
 /** A letter per VAT rate, in `vatBreakdown` order; `null` when the bill has a single rate. */
@@ -157,6 +167,7 @@ export function buildReceiptDocument({
   receiptHeader,
   receipt,
   venueAddress = [],
+  venueAddressLine = "",
   surface = "thermal",
   paperWidth,
   invoiceLocale,
@@ -175,6 +186,7 @@ export function buildReceiptDocument({
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
   const parts: ReceiptDocument["parts"] = {};
+  let contactLine: number | undefined;
   const part = (name: ReceiptPart, add: () => void): void => {
     const start = elements.length;
     add();
@@ -263,11 +275,20 @@ export function buildReceiptDocument({
   text(`${label.nif}: ${issuer.nif}`);
   const venueLines = surface === "thermal" ? venueAddress : [];
   if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
-  if (phone) part("phone", () => text(`${label.phone} ${phone}`));
-  if (email) part("email", () => text(email));
-  if (!simplified && issuer.domicile) {
+  const phoneLine = phone ? `${label.phone} ${phone}` : "";
+  if (surface === "a4" && !simplified) {
+    const line = [issuer.domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
+    if (line) {
+      contactLine = elements.length;
+      text(line);
+    }
+  } else {
+    if (phoneLine) part("phone", () => text(phoneLine));
+    if (email) part("email", () => text(email));
+  }
+  if (surface === "thermal" && !simplified && issuer.domicile) {
     if (venueLines.length === 0) text(issuer.domicile);
-    else if (!sameAddress(venueLines, issuer.domicile)) {
+    else if (!sameAddress(venueLines, venueAddressLine, issuer.domicile)) {
       text(`${label.registeredAddress}: ${issuer.domicile}`);
     }
   }
@@ -599,5 +620,11 @@ export function buildReceiptDocument({
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 
-  return { elements, parts, duplicate, practice: simulated };
+  return {
+    elements,
+    parts,
+    ...(contactLine === undefined ? {} : { contactLine }),
+    duplicate,
+    practice: simulated,
+  };
 }

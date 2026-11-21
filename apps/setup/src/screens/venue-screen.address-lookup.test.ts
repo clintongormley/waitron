@@ -77,11 +77,15 @@ async function choose(
 }
 
 async function type(el: SetupVenueScreen, field: string, text: string): Promise<void> {
+  const detail = field === "registeredSameAsVenue" ? { checked: text === "on" } : { value: text };
   q(el, `[data-test=${field}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: text }, bubbles: true, composed: true }),
+    new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
+
+const sameAsVenue = (el: SetupVenueScreen) =>
+  (q(el, "[data-test=registeredSameAsVenue]") as HTMLElement & { checked: boolean }).checked;
 
 function collect(el: SetupVenueScreen): DeepPartial<ProvisionBody>[] {
   const patches: DeepPartial<ProvisionBody>[] = [];
@@ -95,7 +99,6 @@ async function fillTheRest(el: SetupVenueScreen): Promise<void> {
   for (const [key, text] of Object.entries({
     taxId: "b 1234567 4",
     legalName: "Deli del Sol SL",
-    taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     name: "Calle Mayor",
   }))
     await type(el, key, text);
@@ -155,6 +158,18 @@ describe("the venue screen's address search", () => {
     await type(el, "addressLine2", "3º B");
     await choose(el, MADRID);
     expect(value(el, "addressLine2")).toBe("3º B");
+  });
+
+  it("leaves blank later lines out, so they neither replace nor pad either line 2", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) });
+    await type(el, "addressLine2", "3º B");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", " ", ""] });
+    expect(value(el, "addressLine2")).toBe("3º B");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "", "Puerta 4"] });
+    expect(value(el, "addressLine2")).toBe("Puerta 4");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "Escalera 2"] }, "domicile-lookup");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", " "] }, "domicile-lookup");
+    expect(value(el, "registeredLine2")).toBe("Escalera 2");
   });
 
   it("replaces address line 2 with the chosen address's later lines", async () => {
@@ -229,9 +244,22 @@ describe("the venue screen's address search", () => {
       addressProvider: providerFor(MADRID),
       invalidField: "taxpayerDomicile",
     });
-    expect(q(el, "[data-test=taxpayerDomicile]")!.hasAttribute("invalid")).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(true);
     await choose(el, MADRID, "domicile-lookup");
-    expect(q(el, "[data-test=taxpayerDomicile]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
+  });
+
+  it("shows no refusal of the venue's address on the parts a chosen registered address fills", async () => {
+    const el = await mount({
+      addressProvider: providerFor(MADRID),
+      invalidField: "taxpayerDomicile",
+    });
+    expect(sameAsVenue(el)).toBe(true);
+    await choose(el, BARCELONA, "domicile-lookup");
+    expect(sameAsVenue(el)).toBe(false);
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
+    expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
   });
 
   it("refuses an address in another country, filling nothing and saying why", async () => {
@@ -266,17 +294,33 @@ describe("the venue screen's address search", () => {
     expect(patches).toEqual([]);
   });
 
-  it("fills the registered business address as one line, outside Demo only", async () => {
+  it("fills the registered business address in its parts and turns the switch off, outside Demo only", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
+    const patches = collect(el);
     const domicile = lookup(el, "domicile-lookup")!;
     expect(domicile.hidden).toBe(false);
     const tests = [...el.shadowRoot!.querySelectorAll("[data-test]")].map((n) =>
       n.getAttribute("data-test"),
     );
-    expect(tests.indexOf("domicile-lookup")).toBe(tests.indexOf("taxpayerDomicile") - 1);
-    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "3º B"] }, "domicile-lookup");
-    expect(value(el, "taxpayerDomicile")).toBe("Calle Mayor 1, 3º B, 28013 Madrid, Madrid");
+    expect(tests.indexOf("domicile-lookup")).toBe(tests.indexOf("registeredSameAsVenue") - 1);
+    expect(sameAsVenue(el)).toBe(true);
+    await choose(
+      el,
+      { ...MADRID, lines: ["Calle Mayor 1", "3º B"], administrativeAreaCode: "Madrid" },
+      "domicile-lookup",
+    );
+    expect(sameAsVenue(el)).toBe(false);
+    expect(value(el, "registeredStreet")).toBe("Calle Mayor 1");
+    expect(value(el, "registeredLine2")).toBe("3º B");
+    expect(value(el, "registeredPostalCode")).toBe("28013");
+    expect(value(el, "registeredCity")).toBe("Madrid");
+    expect(value(el, "registeredProvince")).toBe("28");
     expect(value(el, "addressLine1")).toBe("");
+    await fillTheRest(el);
+    await choose(el, BARCELONA);
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(patches[0]!.venue!.taxpayerDomicile).toBe("Calle Mayor 1, 3º B, 28013 Madrid, Madrid");
     const demo = await mount({ addressProvider: providerFor(MADRID) }, { mode: "demo" });
     expect(lookup(demo, "domicile-lookup")).toBeNull();
   });
@@ -284,7 +328,10 @@ describe("the venue screen's address search", () => {
   it("refuses a registered address in another country on its own line", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     await choose(el, { ...MADRID, countryCode: "PT" }, "domicile-lookup");
-    expect(value(el, "taxpayerDomicile")).toBe("");
+    expect(sameAsVenue(el)).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
+    for (const part of ["registeredStreet", "registeredPostalCode", "registeredCity"])
+      expect(value(el, part), part).toBe("");
     expect(lookup(el, "domicile-lookup")!.message).not.toBe("");
     expect(lookup(el)!.message).toBe("");
   });
@@ -315,7 +362,7 @@ describe("the venue screen's address search", () => {
       ["address-lookup", "addressLine2"],
       ["address-lookup", "postalCode"],
       ["address-lookup", "city"],
-      ["domicile-lookup", "taxpayerDomicile"],
+      ["domicile-lookup", "registeredStreet"],
     ] as const) {
       const answers: ((address: AddressLookupResult) => void)[] = [];
       const el = await mount({
@@ -324,15 +371,39 @@ describe("the venue screen's address search", () => {
           resolve: () => new Promise((resolve) => answers.push(resolve)),
         },
       });
+      if (which === "domicile-lookup") await type(el, "registeredSameAsVenue", "off");
       await startChoosing(el, which);
       await type(el, edited, "Typed by hand");
       answers[0]!(MADRID);
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
       expect(value(el, edited), edited).toBe("Typed by hand");
-      if (which === "address-lookup") expect(value(el, "city"), edited).not.toBe("Madrid");
+      expect(value(el, which === "address-lookup" ? "city" : "registeredCity"), edited).not.toBe(
+        "Madrid",
+      );
       cleanupWidgets();
     }
+  });
+
+  it("keeps the latest switch choice when a registered address arrives after it", async () => {
+    const answers: ((address: AddressLookupResult) => void)[] = [];
+    const el = await mount({
+      addressProvider: {
+        ...providerFor(MADRID),
+        resolve: () => new Promise((resolve) => answers.push(resolve)),
+      },
+    });
+    await type(el, "registeredSameAsVenue", "off");
+    await type(el, "registeredStreet", "Mine");
+    await startChoosing(el, "domicile-lookup");
+    await type(el, "registeredSameAsVenue", "on");
+    answers[0]!(MADRID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(sameAsVenue(el)).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
+    expect(value(el, "registeredStreet")).toBe("Mine");
+    expect(value(el, "registeredCity")).toBe("");
   });
 
   it("drops a chosen address still on its way once the person picks a province", async () => {

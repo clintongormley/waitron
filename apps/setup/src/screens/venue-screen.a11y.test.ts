@@ -67,6 +67,46 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with the registered address's switch on and its refusal above Next", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>(
+      "setup-venue-screen",
+      { draft: { mode: "prepare" }, invalidField: "taxpayerDomicile" },
+      theme,
+    );
+    const same = el.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+      "[data-test=registeredSameAsVenue]",
+    )!;
+    expect(same.checked).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+    expect(await bottomOf(el)).toBe(t("venue.error.registered_same_refused"));
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the registered address's switch off, its parts shown and one marked", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>(
+      "setup-venue-screen",
+      { draft: { mode: "prepare" }, invalidField: "taxpayerDomicile" },
+      theme,
+    );
+    el.shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    for (const part of [
+      "registeredStreet",
+      "registeredLine2",
+      "registeredPostalCode",
+      "registeredCity",
+      "registeredProvince",
+    ])
+      expect(el.shadowRoot!.querySelector(`[data-test=${part}]`), part).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-test=registeredStreet]")!.hasAttribute("invalid"),
+    ).toBe(true);
+    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with Barcelona's receipt language fixed, its reason shown and the choice disabled", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {}, theme);
     await chooseOption(el.shadowRoot!.querySelector("[data-test=province]")!, "08");

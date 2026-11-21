@@ -3,7 +3,7 @@ export const venue: ProvisionBody["venue"] = {
   country: "ES",
   taxId: "B12345674",
   legalName: "Olivo SL",
-  taxpayerDomicile: "Mayor 1, Madrid",
+  taxpayerDomicile: "Mayor 1, 28013 Madrid, Madrid",
   seriesCode: "A",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "R",

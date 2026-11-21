@@ -13,7 +13,6 @@ import {
 } from "@waitron/ui";
 import {
   findAdministrativeArea,
-  findAdministrativeAreaByPostalCode,
   receiptLanguageRules,
   resolveCountryDemoIdentity,
   resolveFiscalJurisdiction,
@@ -24,7 +23,14 @@ import {
 } from "@waitron/country";
 import {
   areaOfChosenAddress,
-  oneLineAddress,
+  canonicalRegisteredParts,
+  joinRegisteredAddress,
+  provinceOfPostalCode,
+  registeredAddressErrors,
+  registeredAddressParts,
+  registeredLineErrors,
+  type RegisteredAddressError,
+  type RegisteredAddressParts,
   VENUE_SETUP_COUNTRY_PACKS,
   getVenueSetupCountryPack,
   resolveInstalledStarterLanguages,
@@ -36,6 +42,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { countryName } from "../country-name.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -53,11 +60,22 @@ import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
 import { VENUE_SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
+/** The business's registered address, asked for in parts and sent as one line. */
+const REGISTERED_PART = {
+  registeredStreet: "street",
+  registeredLine2: "line2",
+  registeredPostalCode: "postalCode",
+  registeredCity: "city",
+  registeredProvince: "province",
+} as const satisfies Record<string, keyof RegisteredAddressParts>;
+type RegisteredField = keyof typeof REGISTERED_PART;
+const REGISTERED_FIELDS = Object.keys(REGISTERED_PART) as RegisteredField[];
+
 type TextField =
   | "country"
   | "taxId"
   | "legalName"
-  | "taxpayerDomicile"
+  | RegisteredField
   | "name"
   | "addressLine1"
   | "addressLine2"
@@ -70,15 +88,18 @@ type TextField =
   | "rectificativeSeriesCode";
 
 /**
- * Only the venue's postal address takes the browser's address autofill. Its tokens share one
- * section: without it, Chromium filled the street from one choice and the postcode and city from
- * another.
+ * Each postal address's tokens share a section of its own: without one, Chromium filled the street
+ * from one choice and the postcode and city from another.
  */
 const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   country: "off",
   taxId: "off",
   legalName: "off",
-  taxpayerDomicile: "off",
+  registeredStreet: "section-registered address-line1",
+  registeredLine2: "section-registered address-line2",
+  registeredPostalCode: "section-registered postal-code",
+  registeredCity: "section-registered address-level2",
+  registeredProvince: "section-registered address-level1",
   name: "off",
   addressLine1: "section-venue address-line1",
   addressLine2: "section-venue address-line2",
@@ -101,10 +122,12 @@ const CODE_FIELDS: ReadonlySet<TextField> = new Set([
 ]);
 
 type FormField = TextField | "invoiceLocales";
-/** A value the server can refuse that this form does not hold; its refusal is shown above Next. */
-type FieldKey = FormField | "staffLanguage";
+/** A value the server can refuse that this form does not hold as one field. `taxpayerDomicile`
+ * is the registered address's joined line. */
+type FieldKey = FormField | "staffLanguage" | "taxpayerDomicile";
+type ComparableKey =
+  TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage" | "taxpayerDomicile";
 
-/** The venue's own address, or the business's one-line registered address. */
 type AddressSearch = "address" | "domicile";
 
 const SEARCH_FILLS: Readonly<Partial<Record<TextField, AddressSearch>>> = {
@@ -113,22 +136,28 @@ const SEARCH_FILLS: Readonly<Partial<Record<TextField, AddressSearch>>> = {
   postalCode: "address",
   city: "address",
   province: "address",
-  taxpayerDomicile: "domicile",
+  registeredStreet: "domicile",
+  registeredLine2: "domicile",
+  registeredPostalCode: "domicile",
+  registeredCity: "domicile",
+  registeredProvince: "domicile",
 };
 
 interface VenueForm {
   staffLanguage?: "en" | "es";
   demoVenueNameSource: "automatic" | "custom";
   values: Record<TextField, string>;
+  sameAsVenue: boolean;
   invoiceLocales: string[];
   invoiceLocalesFollowAreaDefault: boolean;
 }
 
 /** Demo fills these itself, so its form does not show them. */
-const DEMO_HIDDEN: ReadonlySet<FormField> = new Set<FormField>([
+const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   "taxId",
   "legalName",
   "taxpayerDomicile",
+  ...REGISTERED_FIELDS,
   "invoiceLocales",
   "dayCutover",
   "seriesCode",
@@ -140,7 +169,6 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "country",
   "taxId",
   "legalName",
-  "taxpayerDomicile",
   "name",
   "addressLine1",
   "postalCode",
@@ -155,7 +183,7 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
 type HintedField =
   | "taxId"
   | "legalName"
-  | "taxpayerDomicile"
+  | RegisteredField
   | "name"
   | "addressLine1"
   | "addressLine2"
@@ -168,7 +196,11 @@ type HelpedField = Exclude<TextField, HintedField> | "name";
 const FIELD_HINT: Record<HintedField, StringKey> = {
   taxId: "venue.hint.tax_id",
   legalName: "venue.hint.legal_name",
-  taxpayerDomicile: "venue.hint.taxpayer_domicile",
+  registeredStreet: "venue.hint.address_line1",
+  registeredLine2: "venue.hint.address_line2",
+  registeredPostalCode: "venue.hint.postal_code",
+  registeredCity: "venue.hint.city",
+  registeredProvince: "venue.hint.registered_province",
   name: "venue.hint.name",
   addressLine1: "venue.hint.address_line1",
   addressLine2: "venue.hint.address_line2",
@@ -192,7 +224,11 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   country: "venue.field.country",
   taxId: "venue.field.tax_id",
   legalName: "venue.field.legal_name",
-  taxpayerDomicile: "venue.field.taxpayer_domicile",
+  registeredStreet: "venue.field.address_line1",
+  registeredLine2: "venue.field.address_line2",
+  registeredPostalCode: "venue.field.postal_code",
+  registeredCity: "venue.field.city",
+  registeredProvince: "venue.field.province",
   name: "venue.field.name",
   addressLine1: "venue.field.address_line1",
   addressLine2: "venue.field.address_line2",
@@ -204,6 +240,59 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   fullSeriesCode: "venue.field.full_series_code",
   rectificativeSeriesCode: "venue.field.rectificative_series_code",
 };
+
+function venueAddressParts(values: Record<TextField, string>): RegisteredAddressParts {
+  return {
+    street: values.addressLine1,
+    line2: values.addressLine2,
+    postalCode: values.postalCode,
+    city: values.city,
+    province: values.province,
+  };
+}
+
+/** The registered address's parts as the form holds them, trimmed. */
+function registeredParts(
+  values: Readonly<Record<RegisteredField, string>>,
+): RegisteredAddressParts {
+  return {
+    street: values.registeredStreet.trim(),
+    line2: values.registeredLine2.trim(),
+    postalCode: values.registeredPostalCode.trim(),
+    city: values.registeredCity.trim(),
+    province: values.registeredProvince.trim(),
+  };
+}
+
+function registeredValues(parts: Partial<RegisteredAddressParts>): Record<RegisteredField, string> {
+  return Object.fromEntries(
+    REGISTERED_FIELDS.map((key) => [key, parts[REGISTERED_PART[key]] ?? ""]),
+  ) as Record<RegisteredField, string>;
+}
+
+/** The one line sent as the registered address. */
+function registeredLine(
+  pack: CountryPack | undefined,
+  values: Record<TextField, string>,
+  sameAsVenue: boolean,
+): string {
+  return joinRegisteredAddress(
+    sameAsVenue ? venueAddressParts(values) : registeredParts(values),
+    pack,
+  );
+}
+
+type ProvinceOption = { value: string; label: string };
+const PROVINCE_OPTIONS = new WeakMap<CountryPack, ProvinceOption[]>();
+
+function provinceOptions(pack: CountryPack): ProvinceOption[] {
+  let options = PROVINCE_OPTIONS.get(pack);
+  if (options === undefined) {
+    options = pack.administrativeAreas.map((area) => ({ value: area.code, label: area.name }));
+    PROVINCE_OPTIONS.set(pack, options);
+  }
+  return options;
+}
 
 /** The one receipt language a venue starts with: its region's fixed one, else the country's. */
 function defaultInvoiceLocales(
@@ -237,6 +326,30 @@ export class SetupVenueScreen extends LitElement {
       h2 {
         margin: var(--wt-space-4) 0 var(--wt-space-2);
         font-size: var(--wt-font-size-lg);
+      }
+
+      fieldset.registered {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        min-inline-size: 0;
+      }
+
+      fieldset.registered legend {
+        padding: 0;
+        margin-bottom: var(--wt-space-2);
+        font-weight: var(--wt-font-weight-medium);
+      }
+
+      /* Its note says what the switch's on state means, so it sits right under it. */
+      .field.with-hint {
+        margin-bottom: 0;
+      }
+
+      .switch-hint {
+        margin: var(--wt-space-1) 0 var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       fieldset.locales {
@@ -299,7 +412,11 @@ export class SetupVenueScreen extends LitElement {
     country: "ES",
     taxId: "",
     legalName: "",
-    taxpayerDomicile: "",
+    registeredStreet: "",
+    registeredLine2: "",
+    registeredPostalCode: "",
+    registeredCity: "",
+    registeredProvince: "",
     name: "",
     addressLine1: "",
     addressLine2: "",
@@ -314,6 +431,9 @@ export class SetupVenueScreen extends LitElement {
 
   @state() private invoiceLocales: string[] = ["es-ES"];
 
+  /** While on, the registered address is the venue's own, and its parts are hidden. */
+  @state() private sameAsVenue = true;
+
   @state() private staffLanguage?: "en" | "es";
 
   readonly #feedback = new FormFeedback(this);
@@ -322,12 +442,19 @@ export class SetupVenueScreen extends LitElement {
   @state() private foreignAddress?: { readonly which: AddressSearch; readonly country: string };
 
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
-  @state() private serverInvalid?: { readonly key: FieldKey; readonly refusal: ServerField };
+  /** `line`, for `taxpayerDomicile`: the line refused, which the refusal is shown against. */
+  @state() private serverInvalid?: {
+    readonly key: FieldKey;
+    readonly refusal: ServerField;
+    readonly line?: string;
+  };
 
   #demoVenueNameSource: "automatic" | "custom" = "automatic";
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
   #errors = new Map<FieldKey, string>();
+  /** `#invalidFields()` once Next has been pressed, taken once per update. */
+  #invalid: ReadonlySet<FormField> = new Set();
   #baseline?: VenueForm;
   #scope?: DraftScope<VenueForm>;
 
@@ -347,6 +474,7 @@ export class SetupVenueScreen extends LitElement {
       staffLanguage: this.staffLanguage,
       demoVenueNameSource: this.#demoVenueNameSource,
       values: this.values,
+      sameAsVenue: this.sameAsVenue,
       invoiceLocales: this.invoiceLocales,
       invoiceLocalesFollowAreaDefault: this.#invoiceLocalesFollowAreaDefault,
     };
@@ -356,19 +484,17 @@ export class SetupVenueScreen extends LitElement {
     return { ...form, values: { ...form.values }, invoiceLocales: [...form.invoiceLocales] };
   }
 
-  #comparable(
-    form: VenueForm,
-  ): Record<TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage", string | null> {
+  #comparable(form: VenueForm): Record<ComparableKey, string | null> {
     const pack = getVenueSetupCountryPack(form.values.country);
     const area = pack && findAdministrativeArea(pack, form.values.province);
     const tax = pack?.taxIdentifier?.validate(form.values.taxId);
     const postal = pack?.postalCode?.validate(form.values.postalCode);
     const rules = pack && receiptLanguageRules(pack, area?.code);
-    const values: Record<
-      TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage",
-      string | null
-    > = {
+    const values: Record<ComparableKey, string | null> = {
       ...form.values,
+      // The registered address counts as the line it sends, so the switch and the parts compare by it.
+      ...Object.fromEntries(REGISTERED_FIELDS.map((key) => [key, null])),
+      taxpayerDomicile: registeredLine(pack, form.values, form.sameAsVenue),
       staffLanguage: form.staffLanguage ?? null,
       demoVenueNameSource: this.#demo ? form.demoVenueNameSource : null,
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
@@ -394,16 +520,13 @@ export class SetupVenueScreen extends LitElement {
       equal: (a, b) => {
         const left = this.#comparable(a);
         const right = this.#comparable(b);
-        return (
-          Object.keys(left) as (
-            TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage"
-          )[]
-        ).every((key) => left[key] === right[key]);
+        return (Object.keys(left) as ComparableKey[]).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
         this.staffLanguage = form.staffLanguage;
         this.#demoVenueNameSource = form.demoVenueNameSource;
         this.values = form.values;
+        this.sameAsVenue = form.sameAsVenue;
         this.invoiceLocales = form.invoiceLocales;
         this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
         this.#feedback.attempted = false;
@@ -424,9 +547,19 @@ export class SetupVenueScreen extends LitElement {
     if (changed.has("invalidField")) {
       const refusal =
         this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
-      this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
+      this.serverInvalid =
+        refusal === undefined
+          ? undefined
+          : {
+              key: refusal.key,
+              refusal,
+              ...(refusal.key === "taxpayerDomicile"
+                ? { line: registeredLine(this.#pack(), this.values, this.sameAsVenue) }
+                : {}),
+            };
     }
     if (changed.has("refusal")) this.#feedback.newRefusal("request");
+    this.#invalid = this.#feedback.attempted ? this.#invalidFields() : new Set();
     this.#errors = this.#collectErrors();
   }
 
@@ -440,7 +573,9 @@ export class SetupVenueScreen extends LitElement {
     // By its `name`, not its `data-test` hook, which is for tests.
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
-    >(`:is(wt-input,wt-combobox)[name=${this.serverInvalid.key}]`);
+    >(
+      `:is(wt-input,wt-combobox)[name=${this.serverInvalid.key === "taxpayerDomicile" ? "registeredStreet" : this.serverInvalid.key}]`,
+    );
     if (field === null) return;
     // Wait for the `wt-input`'s own render: until then the native input its focus is delegated to
     // does not exist, and focusing the host does nothing. The screen may be gone by then.
@@ -453,10 +588,10 @@ export class SetupVenueScreen extends LitElement {
     const venue = this.draft.venue ?? {};
     this.staffLanguage = venue.staffLanguage;
     this.values = {
+      ...this.values,
       country: venue.country ?? this.values.country,
       taxId: venue.taxId ?? this.values.taxId,
       legalName: venue.legalName ?? this.values.legalName,
-      taxpayerDomicile: venue.taxpayerDomicile ?? this.values.taxpayerDomicile,
       name: venue.name ?? this.values.name,
       addressLine1: venue.addressLine1 ?? this.values.addressLine1,
       addressLine2: venue.addressLine2 ?? this.values.addressLine2,
@@ -470,6 +605,7 @@ export class SetupVenueScreen extends LitElement {
     };
     this.#demoVenueNameSource =
       this.draft.demoVenueNameSource ?? (this.values.name === "" ? "automatic" : "custom");
+    this.#seedRegisteredAddress(venue.taxpayerDomicile ?? "");
     const pack = this.#pack();
     const area = this.#area(pack);
     const defaults = defaultInvoiceLocales(pack, area);
@@ -478,6 +614,34 @@ export class SetupVenueScreen extends LitElement {
       this.#invoiceLocalesFollowAreaDefault =
         pack !== undefined && JSON.stringify(venue.invoiceLocales) === JSON.stringify(defaults);
     }
+  }
+
+  /** The draft's own parts while they still make the saved line (so Back keeps line 2); otherwise
+   * the saved line split, with the switch on when that is empty or is the venue's address. */
+  #seedRegisteredAddress(line: string): void {
+    const pack = this.#pack();
+    const saved = line.trim();
+    const stored = this.draft.registeredAddress;
+    if (stored !== undefined) {
+      const values = registeredValues(stored);
+      const sameAsVenue = stored.sameAsVenue === true;
+      const sent = sameAsVenue
+        ? joinRegisteredAddress(venueAddressParts(this.values), pack)
+        : joinRegisteredAddress(registeredParts(values));
+      if (sent === saved) {
+        this.values = { ...this.values, ...values };
+        this.sameAsVenue = sameAsVenue;
+        return;
+      }
+    }
+    const parts =
+      pack === undefined
+        ? { street: saved, line2: "", postalCode: "", city: "", province: "" }
+        : registeredAddressParts(saved, pack);
+    this.values = { ...this.values, ...registeredValues(parts) };
+    this.sameAsVenue =
+      saved === "" ||
+      joinRegisteredAddress(parts) === joinRegisteredAddress(venueAddressParts(this.values), pack);
   }
 
   #followDemoName(pack: CountryPack | undefined, area: AdministrativeArea | undefined): void {
@@ -511,13 +675,19 @@ export class SetupVenueScreen extends LitElement {
     const value = event.detail.value;
     this.#cancelAddressSearch(SEARCH_FILLS[key]);
     if (key === "name") this.#demoVenueNameSource = "custom";
+    if (key === "registeredPostalCode") {
+      const area = provinceOfPostalCode(this.#pack(), value);
+      this.values = {
+        ...this.values,
+        registeredPostalCode: value,
+        ...(area === undefined ? {} : { registeredProvince: area.name }),
+      };
+      this.#scope?.changed();
+      return;
+    }
     if (key === "postalCode") {
       const pack = this.#pack();
-      const validation = pack?.postalCode?.validate(value);
-      const area =
-        pack !== undefined && validation?.valid === true
-          ? findAdministrativeAreaByPostalCode(pack, validation.normalized)
-          : undefined;
+      const area = provinceOfPostalCode(pack, value);
       this.values = {
         ...this.values,
         postalCode: value,
@@ -534,7 +704,7 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
-  /** So an address still on its way cannot overwrite what the person typed. */
+  /** So an address still on its way cannot overwrite what the person typed or switched. */
   #cancelAddressSearch(which: AddressSearch | undefined): void {
     if (which === undefined) return;
     this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
@@ -549,12 +719,20 @@ export class SetupVenueScreen extends LitElement {
       return;
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
+    const area = areaOfChosenAddress(pack, address);
+    const [addressLine1 = "", ...later] = address.lines;
+    const rest = later.filter((line) => line.trim() !== "");
     if (which === "domicile") {
-      this.#fill({ taxpayerDomicile: oneLineAddress(pack, address) });
+      this.sameAsVenue = false;
+      this.#fill({
+        registeredStreet: addressLine1,
+        ...(rest.length > 0 ? { registeredLine2: rest.join(", ") } : {}),
+        registeredPostalCode: address.postalCode,
+        registeredCity: address.locality,
+        ...(area === undefined ? {} : { registeredProvince: area.name }),
+      });
       return;
     }
-    const area = areaOfChosenAddress(pack, address);
-    const [addressLine1 = "", ...rest] = address.lines;
     this.#fill({
       addressLine1,
       // The person's own line 2 (a floor, a unit) stays unless the address brings one.
@@ -576,11 +754,37 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
+  #onSameAsVenue(event: CustomEvent<{ checked: boolean }>): void {
+    event.stopPropagation();
+    this.#cancelAddressSearch("domicile");
+    this.sameAsVenue = event.detail.checked;
+    this.#scope?.changed();
+  }
+
+  #onRegisteredProvince(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const pack = this.#pack();
+    if (pack === undefined) return;
+    this.#cancelAddressSearch("domicile");
+    this.values = {
+      ...this.values,
+      registeredProvince: findAdministrativeArea(pack, event.detail.value)?.name ?? "",
+    };
+    this.#scope?.changed();
+  }
+
   #onCountry(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const country = event.detail.value;
     const pack = getVenueSetupCountryPack(country);
-    this.values = { ...this.values, country, postalCode: "", province: "" };
+    this.values = {
+      ...this.values,
+      country,
+      postalCode: "",
+      province: "",
+      registeredPostalCode: "",
+      registeredProvince: "",
+    };
     this.foreignAddress = undefined;
     this.#followDemoName(pack, undefined);
     if (pack !== undefined) {
@@ -635,6 +839,11 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
+  /** Whether a field on screen carries the key's message; the rest go in the bottom message. */
+  #showsAsField(key: FieldKey): boolean {
+    return this.#shows(key) && !(key === "taxpayerDomicile" && this.sameAsVenue);
+  }
+
   #shows(key: FieldKey): boolean {
     return key === "staffLanguage" || !(this.#demo && DEMO_HIDDEN.has(key));
   }
@@ -642,16 +851,13 @@ export class SetupVenueScreen extends LitElement {
   #invalidFields(): Set<FormField> {
     const invalid = new Set<FormField>();
     for (const key of REQUIRED_TEXT_FIELDS) {
-      if (this.#demo && key === "taxpayerDomicile") continue;
       if (this.values[key].trim() === "") invalid.add(key);
     }
+    for (const key of this.#registeredErrors().keys()) invalid.add(key);
     const pack = this.#pack();
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
-    const postalArea =
-      pack !== undefined && postalValidation?.valid === true
-        ? findAdministrativeAreaByPostalCode(pack, postalValidation.normalized)
-        : undefined;
+    const postalArea = provinceOfPostalCode(pack, this.values.postalCode);
     const taxValidation = pack?.taxIdentifier?.validate(this.values.taxId);
     const jurisdiction = this.#jurisdiction(pack, area);
 
@@ -689,16 +895,63 @@ export class SetupVenueScreen extends LitElement {
         invalid.add(second);
       }
     }
+    // Last, so it sees every mark on the fields the line is joined from.
+    const unreadable = this.#unreadableCity(invalid);
+    if (unreadable !== undefined) invalid.add(unreadable);
     return invalid;
+  }
+
+  /** Checked only while the parts are shown. Without a pack the country is refused anyway. */
+  #registeredErrors(): Map<RegisteredField, RegisteredAddressError> {
+    const errors = new Map<RegisteredField, RegisteredAddressError>();
+    if (this.#demo || this.sameAsVenue) return errors;
+    const pack = this.#pack();
+    const parts = registeredParts(this.values);
+    const found =
+      pack === undefined
+        ? {
+            ...(parts.street.trim() === "" ? { street: "required" as const } : {}),
+            ...(parts.postalCode.trim() === "" ? { postalCode: "required" as const } : {}),
+            ...(parts.city.trim() === "" ? { city: "required" as const } : {}),
+          }
+        : registeredAddressErrors(parts, pack);
+    for (const key of REGISTERED_FIELDS) {
+      const error = found[REGISTERED_PART[key]];
+      if (error !== undefined) errors.set(key, error);
+    }
+    return errors;
+  }
+
+  /** The server splits the line it is sent and checks the split, where the pack has a postcode
+   * rule. Parts that pass on their own can still join into a line that splits otherwise, as when
+   * the city holds a comma; that marks the City the line was joined from. Checked once the fields
+   * it joins pass, so a field is not marked twice. */
+  #unreadableCity(invalid: ReadonlySet<FormField>): "city" | "registeredCity" | undefined {
+    if (this.#demo) return undefined;
+    const joined: readonly TextField[] = this.sameAsVenue
+      ? ["addressLine1", "addressLine2", "postalCode", "city", "province"]
+      : REGISTERED_FIELDS;
+    if (joined.some((key) => invalid.has(key))) return undefined;
+    const pack = this.#pack();
+    const line = registeredLine(pack, this.values, this.sameAsVenue);
+    if (Object.keys(registeredLineErrors(line, pack)).length === 0) return undefined;
+    return this.sameAsVenue ? "city" : "registeredCity";
   }
 
   #collectErrors(): Map<FieldKey, string> {
     const errors = new Map<FieldKey, string>();
-    if (this.#feedback.attempted) {
-      for (const key of this.#invalidFields()) errors.set(key, this.#fieldMessage(key));
-    }
-    if (this.serverInvalid !== undefined) {
-      errors.set(this.serverInvalid.key, this.serverInvalid.refusal.message);
+    for (const key of this.#invalid) errors.set(key, this.#fieldMessage(key));
+    if (
+      this.serverInvalid !== undefined &&
+      (this.serverInvalid.line === undefined ||
+        this.serverInvalid.line === registeredLine(this.#pack(), this.values, this.sameAsVenue))
+    ) {
+      errors.set(
+        this.serverInvalid.key,
+        this.serverInvalid.key === "taxpayerDomicile" && this.sameAsVenue
+          ? t("venue.error.registered_same_refused")
+          : this.serverInvalid.refusal.message,
+      );
     }
     return errors;
   }
@@ -733,12 +986,19 @@ export class SetupVenueScreen extends LitElement {
       postalValidation?.valid === true ? postalValidation.normalized : this.values.postalCode;
     const addressLine2 = this.values.addressLine2.trim() === "" ? null : this.values.addressLine2;
     const patch: DeepPartial<ProvisionBody> = {
-      ...(this.#demo ? { demoVenueNameSource: this.#demoVenueNameSource } : {}),
+      ...(this.#demo
+        ? { demoVenueNameSource: this.#demoVenueNameSource }
+        : {
+            registeredAddress: {
+              sameAsVenue: this.sameAsVenue,
+              ...canonicalRegisteredParts(registeredParts(this.values), pack),
+            },
+          }),
       venue: {
         country: selectedPack.countryCode,
         taxId: normalizedTaxId,
         legalName: this.values.legalName,
-        taxpayerDomicile: this.#demo ? null : this.values.taxpayerDomicile,
+        taxpayerDomicile: this.#demo ? null : registeredLine(pack, this.values, this.sameAsVenue),
         name: this.values.name,
         fiscalTerritory: selectedJurisdiction.id,
         invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
@@ -771,7 +1031,10 @@ export class SetupVenueScreen extends LitElement {
     if (key === "invoiceLocales") return t("venue.error.invoice_locales");
     if (this.values[key].trim() === "")
       return format("venue.enter_field", { field: t(FIELD_NOUNS[key]) });
+    if (key === "city" || key === "registeredCity") return t("venue.error.city_comma");
     if (key === "taxId") return t("venue.error.tax_id");
+    if (key === "registeredPostalCode") return t("venue.error.registered_postal_code");
+    if (key === "registeredProvince") return t("venue.error.province");
     if (key === "postalCode") return t("venue.error.postal_code");
     if (key === "province")
       return this.#jurisdiction()?.supported === false
@@ -814,7 +1077,10 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
-    const error = this.#errors.get(key) ?? "";
+    const error =
+      this.#errors.get(key) ??
+      (key === "registeredStreet" ? this.#errors.get("taxpayerDomicile") : undefined) ??
+      "";
     const demoName = this.#demo && key === "name";
     const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     const code = CODE_FIELDS.has(key);
@@ -831,12 +1097,68 @@ export class SetupVenueScreen extends LitElement {
       type=${type}
       hint=${hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}
       ?invalid=${error !== ""}
-      ?required=${key !== "addressLine2"}
+      ?required=${key !== "addressLine2" && key !== "registeredLine2" && key !== "registeredProvince"}
       error=${error}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
       >${help}</wt-input
     >`;
+  }
+
+  #registeredAddress(pack: CountryPack | undefined): TemplateResult {
+    const errors = this.#errors;
+    const hint = this.sameAsVenue ? t("venue.hint.registered_same") : "";
+    const province =
+      pack === undefined ? undefined : findAdministrativeArea(pack, this.values.registeredProvince);
+    return html`<fieldset class="registered" data-test="registered-address">
+      <legend>${t("venue.label.taxpayer_domicile")}</legend>
+      ${this.#addressSearch("domicile", pack)}
+      <wt-switch
+        class=${this.sameAsVenue ? "field with-hint" : "field"}
+        data-test="registeredSameAsVenue"
+        name="registeredSameAsVenue"
+        label=${t("venue.label.registered_same")}
+        description=${hint}
+        .checked=${this.sameAsVenue}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => this.#onSameAsVenue(event)}
+      ></wt-switch>
+      ${
+        this.sameAsVenue
+          ? html`<p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">
+              ${hint}
+            </p>`
+          : nothing
+      }
+      ${
+        this.sameAsVenue
+          ? nothing
+          : html`${this.#field(t("venue.label.address_line1"), "registeredStreet")}
+              ${this.#field(t("venue.label.address_line2"), "registeredLine2")}
+              <div class="pair">
+                ${this.#field(t("venue.label.postal_code"), "registeredPostalCode")}
+                ${this.#field(t("venue.label.city"), "registeredCity")}
+              </div>
+              ${
+                pack !== undefined && pack.administrativeAreas.length > 0
+                  ? html`<wt-combobox
+                      class="field"
+                      label=${t("venue.label.registered_province")}
+                      name="registeredProvince"
+                      search="auto"
+                      placeholder=${t("venue.select_province")}
+                      searchPlaceholder=${t("venue.combobox_search")}
+                      noResultsLabel=${t("venue.combobox_no_results")}
+                      data-test="registeredProvince"
+                      ?invalid=${errors.has("registeredProvince")}
+                      error=${errors.get("registeredProvince") ?? ""}
+                      .options=${provinceOptions(pack)}
+                      .value=${province?.code ?? ""}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onRegisteredProvince(event)}
+                    ></wt-combobox>`
+                  : this.#field(t("venue.label.registered_province"), "registeredProvince")
+              }`
+      }
+    </fieldset>`;
   }
 
   override render(): TemplateResult {
@@ -857,9 +1179,8 @@ export class SetupVenueScreen extends LitElement {
     const fixedReason =
       fixed === undefined ? "" : resolveContentText(fixed.reason, currentLocale(), "en");
     const errors = this.#errors;
-    const fieldErrors = new Set([...errors.keys()].filter((key) => this.#shows(key)));
-    const invalid =
-      this.#feedback.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
+    const fieldErrors = new Set([...errors.keys()].filter((key) => this.#showsAsField(key)));
+    const invalid = [...this.#invalid].some((key) => this.#shows(key));
     const bottom = this.#feedback.message(
       {
         request: this.#feedback.shows("request") ? this.errorMessage : undefined,
@@ -892,7 +1213,7 @@ export class SetupVenueScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onCountry(event)}
         >${this.#help("country")}</wt-combobox
       >
-      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#addressSearch("domicile", pack)}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
+      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#registeredAddress(pack)}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.venue")}</h2>`}
       ${this.#field(t("venue.label.venue_name"), "name")}
       <wt-combobox
@@ -936,10 +1257,7 @@ export class SetupVenueScreen extends LitElement {
               data-test="province"
               ?invalid=${errors.has("province")}
               error=${errors.get("province") ?? ""}
-              .options=${pack.administrativeAreas.map((candidate) => ({
-                value: candidate.code,
-                label: candidate.name,
-              }))}
+              .options=${provinceOptions(pack)}
               .value=${area?.code ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onProvince(event)}
               >${this.#help("province")}</wt-combobox

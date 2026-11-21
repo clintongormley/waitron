@@ -6,6 +6,7 @@ import type {
   WtDialog,
   WtFormActions,
   WtInput,
+  WtSwitch,
 } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -29,7 +30,16 @@ const refusals = {
   stale: { code: "venue.detail_changed", params: { field: "taxpayerDomicile" } },
   search: undefined,
   foreign: undefined,
+  same: undefined,
+  sameRefused: {
+    code: "venue.detail_invalid",
+    params: { field: "taxpayerDomicile", reason: "postcode" },
+  },
+  postcode: undefined,
 };
+
+/** The fixture venue's own address, joined as the registered address is. */
+const VENUE = "Calle Mayor 1, 28001 Madrid, Madrid";
 
 const foreign = {
   lines: ["Rua Augusta 1"],
@@ -44,7 +54,9 @@ const provider: AddressLookupProvider = {
 
 const cases = (["light", "dark"] as const).flatMap((theme) =>
   ["en-GB", "es-ES"].flatMap((locale) =>
-    (["open", "refused", "stale", "search", "foreign"] as const).map((state) => ({
+    (
+      ["open", "refused", "stale", "search", "foreign", "same", "sameRefused", "postcode"] as const
+    ).map((state) => ({
       theme,
       locale,
       state,
@@ -58,7 +70,10 @@ it.each(cases)(
     setLocale(locale);
     const api = {
       liveData: new LiveData(),
-      getVenueDetails: vi.fn(async () => venueDetailsFixture()),
+      getVenueDetails: vi.fn(async () => ({
+        ...venueDetailsFixture(),
+        ...(state === "same" ? { taxpayerDomicile: VENUE } : {}),
+      })),
       getVenueClockPreview: vi.fn(),
       patchVenueDetails: vi.fn(),
       changeTaxpayerDomicile: vi.fn().mockRejectedValue(refusals[state]),
@@ -76,9 +91,33 @@ it.each(cases)(
     await dialogHost.updateComplete;
     const dialog = dialogHost.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => dialog.open).toBe(true);
-    const input = dialog.querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+    const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
     const actions = dialog.querySelector<WtFormActions>("wt-form-actions")!;
-    if (state === "foreign") {
+    const same = dialog.querySelector<WtSwitch>("wt-switch[name=registeredSameAsVenue]")!;
+    const save = () =>
+      dialog.querySelector<HTMLElement>("wt-button[data-test=save-taxpayer-domicile]")!.click();
+    if (state === "same") {
+      expect(same.checked).toBe(true);
+      expect(dialog.querySelector("wt-input[name=registeredStreet]")).toBeNull();
+    } else if (state === "sameRefused") {
+      same.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+      );
+      await dialogHost.updateComplete;
+      save();
+      await expect.poll(() => actions.error).not.toBe("");
+      await actions.updateComplete;
+    } else if (state === "postcode") {
+      const postcode = dialog.querySelector<WtInput>("wt-input[name=registeredPostalCode]")!;
+      postcode.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "2801" }, bubbles: true, composed: true }),
+      );
+      await dialogHost.updateComplete;
+      save();
+      await expect.poll(() => postcode.error).not.toBe("");
+      await postcode.updateComplete;
+      await actions.updateComplete;
+    } else if (state === "foreign") {
       const lookup = dialog.querySelector<WtAddressLookup>("wt-address-lookup")!;
       lookup.dispatchEvent(
         new CustomEvent("wt-address-chosen", {
@@ -96,13 +135,13 @@ it.each(cases)(
     } else if (state !== "open") {
       input.dispatchEvent(
         new CustomEvent("wt-change", {
-          detail: { value: "Carrer de Mallorca 1, 08010 Barcelona" },
+          detail: { value: "Carrer de Mallorca 1" },
           bubbles: true,
           composed: true,
         }),
       );
       await dialogHost.updateComplete;
-      dialog.querySelector<HTMLElement>("wt-button[data-test=save-taxpayer-domicile]")!.click();
+      save();
       await expect.poll(() => actions.error).not.toBe("");
       if (state === "refused") await expect.poll(() => input.error).not.toBe("");
       await input.updateComplete;

@@ -1,6 +1,10 @@
 import type { ReceiptLogoRaster } from "@waitron/shared";
 import { invoiceFont } from "./invoice-font.js";
-import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
+import {
+  buildReceiptDocument,
+  CONTACT_SEPARATOR,
+  type ReceiptDocumentInput,
+} from "./receipt-document.js";
 import { qrModules } from "./qr-matrix.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { TaxTableRow } from "./receipt-tax-table.js";
@@ -78,6 +82,25 @@ function wrap(text: string, available: number, size: number): string[] {
       }
       line += character;
     }
+  }
+  if (line !== "") lines.push(line);
+  return lines;
+}
+
+/** Whole parts packed onto each line; only a part too long for a line by itself is word-wrapped. */
+function wrapParts(text: string, available: number, size: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const part of text.split(CONTACT_SEPARATOR)) {
+    const combined = line === "" ? part : `${line}${CONTACT_SEPARATOR}${part}`;
+    if (width(combined, size) <= available) {
+      line = combined;
+      continue;
+    }
+    if (line !== "") lines.push(line);
+    const wrapped = wrap(part, available, size);
+    line = wrapped.pop() ?? "";
+    lines.push(...wrapped);
   }
   if (line !== "") lines.push(line);
   return lines;
@@ -240,7 +263,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   };
   // The builder gives only the item list's first table a header (receipt-document.ts, endTable).
   let itemHeader: TableHeader | undefined;
-  for (const element of document.elements) {
+  for (const [index, element] of document.elements.entries()) {
     const previousWasRule = afterRule;
     if (element.kind !== "align") afterRule = element.kind === "rule";
     switch (element.kind) {
@@ -334,7 +357,10 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         const size = element.style?.double === true ? BODY_SIZE * 2 : BODY_SIZE;
         const bold = element.style?.bold === true;
         if (element.kind === "text") {
-          text(element.text, x, available, { size, bold, centered: alignment === "center" });
+          const style = { size, bold, centered: alignment === "center" };
+          if (index === document.contactLine)
+            textLines(wrapParts(element.text, available, size), x, style);
+          else text(element.text, x, available, style);
           break;
         }
         const captionLines = wrap(element.caption, available, size);

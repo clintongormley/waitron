@@ -311,3 +311,44 @@ describe("recipientAddressFields", () => {
     });
   });
 });
+
+describe("recipientAddressFields reading a Spanish province name", () => {
+  const spain = addresses.getCountryPack("ES")!;
+  const area = (code: string) => spain.administrativeAreas.find((each) => each.code === code)!;
+  // Names spelt with Spanish letters are read from the pack: general code is English only.
+  const corunaCity = area("15").aliases![0]!;
+
+  it.each([
+    ["Carrer Major 1", "07001", "Palma", "07"],
+    ["Calle Real 1", "15001", corunaCity, "15"],
+    ["Calle Portales 1", "26001", "Calahorra", "26"],
+    ["Calle Triana 1", "35002", "Las Palmas de Gran Canaria", "35"],
+  ])("reads the comma province after %j", (streetAddress, postalCode, locality, code) => {
+    const province = area(code).name;
+    expect(province).toContain(", ");
+    const address = `${streetAddress}, ${postalCode} ${locality}, ${province}`;
+    const split = addresses.recipientAddressFields(address, "ES");
+    expect(split).toEqual({ streetAddress, postalCode, locality, province });
+    expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
+  });
+
+  it.each([
+    ["28013", "Madrid", "28"],
+    ["15001", corunaCity, "15"],
+  ])("reads %j, with no street, as postcode, city and province", (postalCode, locality, code) => {
+    const province = area(code).name;
+    const address = `${postalCode} ${locality}, ${province}`;
+    const split = addresses.recipientAddressFields(address, "ES");
+    expect(split).toEqual({ streetAddress: "", postalCode, locality, province });
+    expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
+  });
+
+  it("splits an address of a country it does not know as before", () => {
+    expect(addresses.recipientAddressFields("1 Broadway, New York, NY", "XX")).toEqual({
+      streetAddress: "1 Broadway",
+      postalCode: "",
+      locality: "New York",
+      province: "NY",
+    });
+  });
+});

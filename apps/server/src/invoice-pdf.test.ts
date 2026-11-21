@@ -261,6 +261,33 @@ describe("A4 optional address and logo controls", () => {
   });
 });
 
+describe("A4 registered address and contact line", () => {
+  const headerLines = (input: ReceiptDocumentInput): string[] =>
+    layoutInvoicePages(input)[0]!.elements.flatMap((element) =>
+      element.kind === "text" && /Tel\.|@|domicilio/u.test(element.text) ? [element.text] : [],
+    );
+
+  it("wraps at the separators, keeping each contact whole", () => {
+    for (const phone of ["910000000", "932 000 111"])
+      expect(headerLines({ ...fixture, receipt: { ...fixture.receipt, phone } })).toEqual([
+        fixture.result.issuer!.domicile,
+        `Tel. ${phone} · venue@example.test`,
+      ]);
+  });
+
+  it("word-wraps only a part too long for a line by itself, never at a separator", () => {
+    const domicile = `${fixture.result.issuer!.domicile}, ${fixture.result.issuer!.domicile}`;
+    const lines = headerLines({
+      ...fixture,
+      result: { ...fixture.result, issuer: { ...fixture.result.issuer!, domicile } },
+    });
+    expect(lines.slice(0, -1).join(" ")).toBe(`${domicile} · Tel. 910000000`);
+    expect(lines.length).toBeGreaterThan(2);
+    expect(lines.at(-1)).toBe("venue@example.test");
+    expect(lines.filter((line) => line.startsWith("·") || line.endsWith("·"))).toEqual([]);
+  });
+});
+
 describe("A4 line above the total and space around the logo", () => {
   const LINE = 14;
   const PAGE_FOOT = INVOICE_PAGE_HEIGHT - 36;

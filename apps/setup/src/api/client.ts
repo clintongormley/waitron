@@ -1,4 +1,5 @@
 import type { RecoveryOperationBinding } from "@waitron/module/src/setup-contract.js";
+import type { RegisteredAddressParts } from "@waitron/country-packs";
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
   FirstSetupOwner,
@@ -105,8 +106,15 @@ export type SmtpTestCode = (typeof SMTP_TEST_CODES)[number];
 
 export type EmailTestResult = { accepted: true } | { accepted: false; code: SmtpTestCode };
 
+/** The registered address as the venue form holds it. Kept in the draft so Back keeps line 2, and
+ * never sent: the server takes the joined `venue.taxpayerDomicile`. */
+export interface RegisteredAddressDraft extends RegisteredAddressParts {
+  sameAsVenue: boolean;
+}
+
 export interface ProvisionBody {
   demoVenueNameSource?: "automatic" | "custom";
+  registeredAddress?: RegisteredAddressDraft;
   mode: "demo" | "prepare" | "live";
   firstSetup?: { attemptId: string; revision: number };
   configurationImport?: boolean;

@@ -42,7 +42,7 @@ import {
   type InvoiceDelivery,
 } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readReceiptAddress } from "./venue-address.js";
+import { readVenueAddressAndLine } from "./venue-address.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -212,7 +212,10 @@ async function readDevicePrinters(
 }
 
 /** The parts of a sale's receipt the venue prints today. */
-export type PrintedVenue = Pick<FormatReceiptInput, "issuer" | "receipt" | "venueAddress" | "logo">;
+export type PrintedVenue = Pick<
+  FormatReceiptInput,
+  "issuer" | "receipt" | "venueAddress" | "venueAddressLine" | "logo"
+>;
 
 /**
  * The taxpayer as issuer, and the current optional trim, address and logo of `departmentId` (none
@@ -255,13 +258,12 @@ export async function readPrintedVenue(
   const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, invoiceLocale, current);
-  const venueAddress = await readReceiptAddress(tx, {
-    printAddress: authored?.printAddress === true,
-  });
+  const { venueAddress, venueAddressLine } = await readVenueAddressAndLine(tx);
   return {
     issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
-    venueAddress,
+    venueAddress: authored?.printAddress === true ? venueAddress : [],
+    venueAddressLine,
     logo,
   };
 }

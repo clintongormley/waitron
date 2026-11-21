@@ -23,6 +23,7 @@ export async function tillReceiptPreview(
     receiptHeader: ticket.receiptHeader,
     receipt: ticket.receiptTrim,
     venueAddress: ticket.receiptSettings.printAddress ? ticket.venueAddress : [],
+    venueAddressLine: ticket.venueAddressLine,
     invoiceLocale: ticket.locale,
     namesLocale: ticket.namesLocale,
     simulated: practiceMode,

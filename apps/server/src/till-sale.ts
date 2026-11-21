@@ -168,6 +168,8 @@ export type TenderBlock =
     };
 
 export interface TillSaleResult extends ReceiptPresentation {
+  /** `venueAddressLine` of the venue read for `venueAddress`. */
+  venueAddressLine: string;
   /** The payer asked for a payment slip and none could be queued. */
   slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];

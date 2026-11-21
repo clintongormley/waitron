@@ -179,6 +179,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   }
   if (draft.mode === "demo") delete body.email;
   if (draft.mode !== "demo") delete body.demoVenueNameSource;
+  delete body.registeredAddress;
   return body as ProvisionBody;
 }
 
@@ -205,6 +206,7 @@ function switchMode(
   delete venue.invoiceLocales;
   const switched = { ...draft, venue };
   delete switched.demoVenueNameSource;
+  delete switched.registeredAddress;
   delete switched.configurationImport;
   delete switched.newTaxpayer;
   return switched;

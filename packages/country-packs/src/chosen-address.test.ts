@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areaOfChosenAddress, getCountryPack, oneLineAddress } from "./index.js";
+import { areaOfChosenAddress, getCountryPack } from "./index.js";
 
 const spain = getCountryPack("ES")!;
 const madrid = {
@@ -33,23 +33,5 @@ describe("an address chosen from the search", () => {
     expect(
       areaOfChosenAddress(spain, { ...madrid, administrativeAreaCode: "ZZ", postalCode: "x" }),
     ).toBeUndefined();
-  });
-
-  it("is written on one line as lines, postcode city, province", () => {
-    expect(oneLineAddress(spain, { ...madrid, lines: ["Calle Mayor 1", "3º B"] })).toBe(
-      "Calle Mayor 1, 3º B, 28013 Madrid, Madrid",
-    );
-  });
-
-  it("leaves out the parts it does not have", () => {
-    expect(
-      oneLineAddress(spain, {
-        lines: ["Calle Mayor 1", " "],
-        locality: "Somewhere",
-        administrativeAreaCode: "ZZ",
-        postalCode: "",
-        countryCode: "ES",
-      }),
-    ).toBe("Calle Mayor 1, Somewhere");
   });
 });

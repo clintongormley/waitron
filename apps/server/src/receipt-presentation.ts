@@ -4,7 +4,7 @@ import { payments } from "@waitron/payments";
 import { readReceiptLanguage } from "@waitron/menu";
 import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { readVenueAddress } from "./venue-address.js";
+import { readVenueAddressAndLine } from "./venue-address.js";
 import { readPresentations } from "@waitron/media";
 import { readVenueLogoName } from "./receipt-venue-logo.js";
 
@@ -41,6 +41,7 @@ export async function readReceiptPresentation(
   ReceiptPresentation & {
     simulatedCardPayment: boolean;
     receiptHeader?: { tradingName: string; printTradingName: boolean };
+    venueAddressLine: string;
   }
 > {
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
@@ -59,9 +60,9 @@ export async function readReceiptPresentation(
           header.departmentId,
           "80mm",
         );
-  let venueAddress: string[] = [];
+  let address = { venueAddress: [] as string[], venueAddressLine: "" };
   try {
-    venueAddress = await readVenueAddress(tx);
+    address = await readVenueAddressAndLine(tx);
   } catch {
     diagnostic({ operation: "readVenueAddress", code: "receipt.read_failed" });
   }
@@ -83,7 +84,7 @@ export async function readReceiptPresentation(
     simulatedCardPayment: await readSimulatedCardPayment(tx, saleId, practiceMode),
     receiptHeader: header?.departmentId == null ? undefined : header,
     receiptTrim,
-    venueAddress,
+    ...address,
     receiptSettings: { printAddress: department?.receipt.printAddress === true },
   };
 }

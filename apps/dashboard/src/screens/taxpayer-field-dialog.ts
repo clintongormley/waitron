@@ -6,23 +6,17 @@ import {
   FormFeedback,
   saveActionState,
   submitOnEnter,
-  type AddressChosenDetail,
-  type AddressLookupProvider,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
-  type WtAddressLookup,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-address-lookup.js";
-import { getCountryPack, oneLineAddress } from "@waitron/country-packs";
 import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 export interface VenueIdentityChanged {
@@ -36,10 +30,6 @@ export interface TaxpayerFieldSettings {
   /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
   dataTest: string;
   heading: StringKey;
-  label: StringKey;
-  hint?: StringKey;
-  /** Offers the address search above the field, which a chosen address fills as one line. */
-  addressSearch?: true;
   note: StringKey;
   changedElsewhere: StringKey;
   /** Reported when a save is refused after its dialog has closed. */
@@ -47,6 +37,24 @@ export interface TaxpayerFieldSettings {
   /** This field's own refusal reasons; `required` is common to every field. */
   refusals: Record<string, StringKey>;
   send(api: DashboardApi, value: string, expected: string): Promise<{ model: VenueDetailsModel }>;
+}
+
+/** A draft and the value it made then, which the draft scope compares. */
+interface Snapshot<Draft> {
+  draft: Draft;
+  value: string;
+}
+
+/** What a subclass's fields are drawn from. */
+export interface TaxpayerFieldsView<Draft> {
+  draft: Draft;
+  /** Each field's message, by its `name`. */
+  errors: Readonly<Record<string, string>>;
+  busy: boolean;
+  /** Takes what the person typed. */
+  change(draft: Draft): void;
+  /** For each field's `keydown`, so Enter presses Save. */
+  submitOnEnter(event: KeyboardEvent): void;
 }
 
 /** The server's own normalisation (`normalizeVenueText`), so a stored spelling it would accept as
@@ -59,17 +67,49 @@ function normalized(value: string): string {
  *  carrying the answered model, so the panel and the dashboard banner can show the new value.
  *  A `venue.detail_changed` refusal sends a bubbling, composed `venue-identity-stale`, so both
  *  read the stored value again. */
-export abstract class TaxpayerFieldDialog extends LitElement {
+export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   protected abstract readonly settings: TaxpayerFieldSettings;
+
+  /** What the stored value opens as. */
+  protected draftFor(stored: string): Draft {
+    return stored as Draft;
+  }
+
+  /** The value the fields make, which is sent and which the draft scope compares. */
+  protected valueFor(draft: Draft): string {
+    return draft as string;
+  }
+
+  /** The fields' own errors by field name, in the order the fields are drawn; shown once Save
+   *  is pressed. */
+  protected fieldErrors(draft: Draft): Record<string, string> {
+    return this.valueFor(draft).trim() === ""
+      ? { [this.settings.field]: t("venue_details.required") }
+      : {};
+  }
+
+  /** A `venue.detail_invalid` refusal for this field, `message`, by the field it is shown under;
+   *  focus goes to the first. */
+  protected refusalFor(_reason: string, _draft: Draft, message: string): Record<string, string> {
+    return { [this.settings.field]: message };
+  }
+
+  /** Errors kept by these names belong to no field: they are the bottom message. */
+  protected readonly unplacedErrors: ReadonlySet<string> = new Set();
+
+  /** When the dialog opens and when its draft is restored. */
+  protected reset(): void {}
+
+  /** After the person changes a field. */
+  protected typed(): void {}
+
+  protected abstract renderFields(view: TaxpayerFieldsView<Draft>): TemplateResult;
 
   static override styles = [
     baseStyles,
     css`
       :host {
         display: contents;
-      }
-      wt-address-lookup {
-        margin-block-end: var(--wt-space-3);
       }
       .note {
         margin: var(--wt-space-3) 0 0;
@@ -80,21 +120,17 @@ export abstract class TaxpayerFieldDialog extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
-  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
-  /** The business's country: the search looks there, and an address elsewhere fills nothing. */
-  @property({ attribute: false }) countryCode = "";
 
   /** The stored spelling the dialog opened with, sent as `expected`; null while it is shut. */
   @state() private opened: string | null = null;
-  @state() private value = "";
+  @state() private draft!: Draft;
   @state() private busy = false;
-  /** A refusal's sentence for the field, kept until the field changes or Save is pressed again. */
-  @state() private refusal = "";
+  /** A refusal's sentence by field name, kept until a field changes or Save is pressed again. */
+  @state() private refusal: Record<string, string> = {};
   @state() private bottom = "";
-  @state() private foreignAddress = false;
 
   readonly #feedback = new FormFeedback(this);
-  #scope?: DraftScope<string>;
+  #scope?: DraftScope<Snapshot<Draft>>;
   #leave?: LeaveCoordinator;
   #opening = 0;
 
@@ -102,29 +138,34 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     if (this.opened !== null) return;
     this.#opening += 1;
     this.opened = stored;
-    this.value = stored;
+    const draft = this.draftFor(stored);
+    this.draft = draft;
     this.busy = false;
     this.#feedback.reset();
-    this.refusal = "";
+    this.refusal = {};
     this.bottom = "";
-    this.foreignAddress = false;
-    const { coordinator, scope } = draftScopeFor<string>(this, {
+    this.reset();
+    const { coordinator, scope } = draftScopeFor<Snapshot<Draft>>(this, {
       id: {},
-      current: () => this.value,
+      current: () => this.#snapshot(this.draft),
       snapshot: (value) => value,
-      equal: (a, b) => normalized(a) === normalized(b),
+      equal: (a, b) => a.value === b.value,
       restore: (value) => {
-        this.value = value;
-        this.refusal = "";
+        this.draft = value.draft;
+        this.refusal = {};
         this.bottom = "";
-        this.foreignAddress = false;
         this.#feedback.reset();
-        this.#cancelAddressSearch();
+        this.reset();
       },
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    scope.commit(stored);
+    scope.commit(this.#snapshot(draft));
+  }
+
+  /** The value is taken when the snapshot is, as `valueFor` can read more than the draft. */
+  #snapshot(draft: Draft): Snapshot<Draft> {
+    return { draft, value: normalized(this.valueFor(draft)) };
   }
 
   /** Closes without asking. For a page that hides this dialog's host: a native modal left open
@@ -156,59 +197,28 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     !this.#scope ||
     (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) === "proceeded";
 
-  #ownError(): string {
-    return this.#feedback.attempted && this.value.trim() === "" ? t("venue_details.required") : "";
+  #ownErrors(): Record<string, string> {
+    return this.#feedback.attempted ? this.fieldErrors(this.draft) : {};
   }
 
-  #change(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    if (this.#replace(event.detail.value)) this.#cancelAddressSearch();
+  /** Whether the draft can change now: the dialog is open and no save is on its way. */
+  protected get editable(): boolean {
+    return this.opened !== null && !this.busy;
   }
 
-  #replace(value: string): boolean {
-    if (this.opened === null || this.busy) return false;
-    this.value = value;
-    this.refusal = "";
+  #change(draft: Draft): void {
+    if (this.replaceDraft(() => draft)) this.typed();
+  }
+
+  /** Replaces the draft, as a person's change does, unless it cannot change now. Any refusal
+   *  shown goes, as it was for the line the draft made. */
+  protected replaceDraft(update: (draft: Draft) => Draft): boolean {
+    if (!this.editable) return false;
+    this.draft = update(this.draft);
+    this.refusal = {};
     this.bottom = "";
     this.#scope?.changed();
     return true;
-  }
-
-  /** So an address still on its way cannot overwrite what the person typed or restored. */
-  #cancelAddressSearch(): void {
-    this.renderRoot.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
-  }
-
-  #addressChosen(event: CustomEvent<AddressChosenDetail>): void {
-    event.stopPropagation();
-    if (this.opened === null || this.busy) return;
-    const address = event.detail.address;
-    const pack = getCountryPack(this.countryCode);
-    this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
-    if (pack !== undefined && !this.foreignAddress) this.#replace(oneLineAddress(pack, address));
-  }
-
-  #addressSearch(): TemplateResult {
-    return html`<wt-address-lookup
-      name="domicile-search"
-      .provider=${this.addressProvider}
-      country-code=${this.countryCode}
-      label=${t("venue_details.address_lookup.label")}
-      placeholder=${t("venue_details.address_lookup.placeholder")}
-      no-results-label=${t("venue_details.address_lookup.no_results")}
-      unavailable-label=${t("venue_details.address_lookup.unavailable")}
-      .message=${
-        this.foreignAddress
-          ? fill("venue_details.address_lookup.other_country", {
-              country: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
-                this.countryCode,
-              )!,
-            })
-          : ""
-      }
-      ?disabled=${this.busy}
-      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#addressChosen(event)}
-    ></wt-address-lookup>`;
   }
 
   async #save(): Promise<void> {
@@ -216,20 +226,22 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     if (expected === null || this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
     this.#feedback.press();
-    this.refusal = "";
+    this.refusal = {};
     this.bottom = "";
-    if (this.#ownError()) {
-      await this.#focusField();
+    const own = Object.keys(this.#ownErrors());
+    if (own.length > 0) {
+      await this.#focusField(own[0]!);
       return;
     }
-    const value = normalized(this.value);
+    const draft = this.draft;
+    const value = normalized(this.valueFor(draft));
     const opening = this.#opening;
     const reportLateRefusal = this.lateRefusalFor?.(this.settings.notSaved);
     this.busy = true;
     try {
       const { model } = await this.settings.send(this.api, value, expected);
       const current = opening === this.#opening;
-      if (current) this.#scope?.commit(value);
+      if (current) this.#scope?.commit({ draft, value });
       // Announced even after a dismiss: the server has the new value either way.
       this.dispatchEvent(
         new CustomEvent<VenueIdentityChanged>("venue-identity-changed", {
@@ -261,8 +273,13 @@ export abstract class TaxpayerFieldDialog extends LitElement {
           required: "venue_details.required",
           ...this.settings.refusals,
         };
-        this.refusal = t(refusals[String(params.reason)] ?? "venue_details.invalid");
-        await this.#focusField();
+        const reason = String(params.reason);
+        this.refusal = this.refusalFor(
+          reason,
+          draft,
+          t(refusals[reason] ?? "venue_details.invalid"),
+        );
+        await this.#focusField(Object.keys(this.refusal)[0]!);
       } else {
         this.bottom =
           code === "venue.detail_changed" ? t(this.settings.changedElsewhere) : codeMessage(code);
@@ -270,17 +287,20 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     }
   }
 
-  async #focusField(): Promise<void> {
+  async #focusField(name: string): Promise<void> {
     await this.updateComplete;
-    this.#dialog()?.querySelector<HTMLElement>(`wt-input[name=${this.settings.field}]`)?.focus();
+    this.#dialog()
+      ?.querySelector<HTMLElement>(`:is(wt-input,wt-combobox,wt-switch)[name=${name}]`)
+      ?.focus();
   }
 
   override render(): TemplateResult {
     const open = this.opened !== null;
-    const fieldError = this.refusal || this.#ownError();
+    const own = open ? this.#ownErrors() : {};
+    const errors = { ...own, ...this.refusal };
     const bottom = this.#feedback.message(
-      { request: this.bottom, [this.settings.field]: fieldError },
-      new Set(fieldError ? [this.settings.field] : []),
+      { request: this.bottom, ...errors },
+      new Set(Object.keys(errors).filter((name) => !this.unplacedErrors.has(name))),
       t("form.fix_fields"),
     );
     const action = saveActionState(this.#scope);
@@ -298,23 +318,19 @@ export abstract class TaxpayerFieldDialog extends LitElement {
     >
       ${
         open
-          ? html`${settings.addressSearch ? this.#addressSearch() : nothing}<wt-input
-                name=${settings.field}
-                required
-                label=${t(settings.label)}
-                hint=${settings.hint === undefined ? "" : t(settings.hint)}
-                .value=${this.value}
-                .error=${fieldError}
-                ?disabled=${this.busy}
-                @keydown=${(event: KeyboardEvent) =>
+          ? html`${this.renderFields({
+                draft: this.draft,
+                errors,
+                busy: this.busy,
+                change: (draft) => this.#change(draft),
+                submitOnEnter: (event) =>
                   submitOnEnter(
                     event,
                     this.renderRoot.querySelector<HTMLElement>(
                       `[data-test=save-${settings.dataTest}]`,
                     ),
-                  )}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(event)}
-              ></wt-input>
+                  ),
+              })}
               <p class="note">${t(settings.note)}</p>`
           : nothing
       }
@@ -330,7 +346,7 @@ export abstract class TaxpayerFieldDialog extends LitElement {
         <wt-button
           data-test="save-${settings.dataTest}"
           variant=${action.variant}
-          ?disabled=${action.unchanged || this.busy || this.#ownError() !== ""}
+          ?disabled=${action.unchanged || this.busy || Object.keys(own).length > 0}
           @click=${() => void this.#save()}
           >${t("action.save")}</wt-button
         >

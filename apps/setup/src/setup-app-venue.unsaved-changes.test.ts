@@ -18,7 +18,7 @@ const initialVenue = {
   country: "ES",
   taxId: "B12345674",
   legalName: "Deli del Sol SL",
-  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid, Madrid",
   seriesCode: "FA",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
@@ -222,7 +222,7 @@ describe("setup venue unsaved changes", () => {
   it.each([
     ["taxId", "A58818501"],
     ["legalName", "New legal name"],
-    ["taxpayerDomicile", "New fiscal address"],
+    ["registeredStreet", "New fiscal address"],
     ["name", "New venue"],
     ["addressLine1", "New street"],
     ["addressLine2", "Upstairs"],
@@ -248,6 +248,22 @@ describe("setup venue unsaved changes", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("admin");
     expect((el as unknown as State).draft.venue).toEqual(initialVenue);
     expect(api.provision).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
+  });
+
+  it("turning the registered-address switch on and back off leaves without asking", async () => {
+    const { venue } = await mount();
+    const flip = async (checked: boolean) => {
+      venue
+        .shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+        );
+      await venue.updateComplete;
+    };
+    await flip(true);
+    expect(unload()).toBe(true);
+    await flip(false);
     expect(unload()).toBe(false);
   });
 

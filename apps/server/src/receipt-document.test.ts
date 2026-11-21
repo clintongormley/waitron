@@ -117,7 +117,10 @@ describe("format-neutral invoice content", () => {
   });
 
   it("exposes the saved invoice figures and names without choosing a printer or wrapping the text", () => {
-    const document = buildReceiptDocument(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const document = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      receipt: { headerSubtitle: "Gracias por su visita", footerMessage: "Hasta pronto" },
+    });
     const text = document.elements.flatMap((element) =>
       element.kind === "text" ? [element.text] : [],
     );
@@ -223,7 +226,12 @@ it.each(["thermal", "a4"] as const)(
       });
       const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
       expect(text.includes("Current address")).toBe(surface === "thermal");
-      expect(text.some((line) => line.endsWith("Filed domicile"))).toBe(domicile !== undefined);
+      if (surface === "thermal")
+        expect(text.some((line) => line.endsWith("Filed domicile"))).toBe(domicile !== undefined);
+      else
+        expect(text.includes("Filed domicile · Tel. 910000000 · venue@example.test")).toBe(
+          domicile !== undefined,
+        );
       expect(text[text.indexOf("Filed issuer") + 1]).toBe("NIF: B12345678");
       expect(text).not.toContain("Current mutable issuer");
       expect(text).not.toContain("Current mutable domicile");
@@ -309,6 +317,70 @@ describe("the top block (A497)", () => {
       t("Tel. 912 345 678"),
       t("hola@labuena.es"),
       t("Domicilio fiscal: Filed domicile"),
+      t("DUPLICADO"),
+    ]);
+  });
+
+  it("puts a full A4 invoice's registered address, phone and email on one line", () => {
+    expect(
+      topBlock(
+        buildReceiptDocument({ ...input, surface: "a4", result: FULL, invoiceLocale: "es-ES" }),
+      ),
+    ).toEqual([
+      { kind: "logo" },
+      bold("Bar La Buena"),
+      t("Desde 1952"),
+      t("Charcutería La Buena SL"),
+      t("NIF: B12345678"),
+      t("Filed domicile · Tel. 912 345 678 · hola@labuena.es"),
+      t("DUPLICADO"),
+    ]);
+  });
+
+  it("leaves out of a full A4 invoice's line the parts that are not set", () => {
+    const block = (receipt: ReceiptDocumentInput["receipt"], domicile?: string) =>
+      topBlock(
+        buildReceiptDocument({
+          ...input,
+          surface: "a4",
+          receipt,
+          duplicate: false,
+          result: {
+            ...FULL,
+            issuer: {
+              venueName: FULL.issuer.venueName,
+              nif: FULL.issuer.nif,
+              ...(domicile === undefined ? {} : { domicile }),
+            },
+          },
+          invoiceLocale: "es-ES",
+        }),
+      ).at(-1);
+    expect(block({ email: "hola@labuena.es" }, "Filed domicile")).toEqual(
+      t("Filed domicile · hola@labuena.es"),
+    );
+    expect(block({ phone: "912 345 678" })).toEqual(t("Tel. 912 345 678"));
+    expect(block({})).toEqual(t("NIF: B12345678"));
+  });
+
+  it("keeps a simplified A4 invoice's phone and email on lines of their own", () => {
+    expect(
+      topBlock(
+        buildReceiptDocument({
+          ...input,
+          surface: "a4",
+          result: SIMPLIFIED,
+          invoiceLocale: "es-ES",
+        }),
+      ),
+    ).toEqual([
+      { kind: "logo" },
+      bold("Bar La Buena"),
+      t("Desde 1952"),
+      t("Charcutería La Buena SL"),
+      t("NIF: B12345678"),
+      t("Tel. 912 345 678"),
+      t("hola@labuena.es"),
       t("DUPLICADO"),
     ]);
   });
@@ -500,6 +572,28 @@ describe("the business block, one fact per line, and ruled sections (A663)", () 
     );
     expect(text).toContain("Avinguda d'Icària 215, Bajos");
     expect(text).toContain("Domicilio fiscal: Avinguda d'Icària 217, Bajos, 08005 Barcelona");
+  });
+
+  it("prints the address once when the registered address names a province the venue's lines leave out", () => {
+    const text = buildReceiptDocument({
+      ...FULL_INVOICE_DOCUMENT_FIXTURE,
+      surface: "thermal",
+      venueAddress: ["Carrer de Mallorca 123", "08010 Barcelona"],
+      venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
+      result: {
+        ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+        issuer: {
+          venueName: "Santet SL",
+          nif: "B00000000",
+          domicile: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
+        },
+      },
+    }).elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
+    expect(text.filter((t) => /Mallorca|Barcelona/.test(t))).toEqual([
+      "Carrer de Mallorca 123",
+      "08010 Barcelona",
+    ]);
+    expect(text.some((t) => t.startsWith("Domicilio fiscal:"))).toBe(false);
   });
 
   it("prints the registered address unlabelled when it is the only one", () => {

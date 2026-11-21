@@ -1,3 +1,4 @@
+import { joinRegisteredAddress } from "@waitron/country-packs";
 import { readVenue, type Transaction } from "@waitron/db";
 import type { ReceiptConfig } from "@waitron/layouts";
 
@@ -28,6 +29,17 @@ export function addressLines(address: VenueAddress): string[] {
     .filter(Boolean);
 }
 
+/** The address on one line, joined as a registered address is, so the two can be compared. */
+export function venueAddressLine(address: VenueAddress): string {
+  return joinRegisteredAddress({
+    street: address.addressLine1 ?? "",
+    line2: address.addressLine2 ?? "",
+    postalCode: address.postalCode ?? "",
+    city: address.city ?? "",
+    province: address.province ?? "",
+  });
+}
+
 /** The address lines a receipt prints: none when its `printAddress` is `false` or there is no address. */
 export function receiptAddressLines(
   receipt: Pick<ReceiptConfig, "printAddress">,
@@ -41,6 +53,14 @@ export async function readReceiptAddress(
   receipt: Pick<ReceiptConfig, "printAddress">,
 ): Promise<string[]> {
   return receiptAddressLines(receipt, await readVenue(tx));
+}
+
+/** `readVenueAddress`'s lines and the venue's `venueAddressLine`, from one read. */
+export async function readVenueAddressAndLine(
+  tx: Transaction,
+): Promise<{ venueAddress: string[]; venueAddressLine: string }> {
+  const address = await readVenue(tx);
+  return { venueAddress: addressLines(address), venueAddressLine: venueAddressLine(address) };
 }
 
 export async function readVenueAddress(tx: Transaction): Promise<string[]> {

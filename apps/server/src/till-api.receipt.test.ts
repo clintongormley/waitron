@@ -3354,7 +3354,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 });
 
 describe("explicit F1 receipt delivery enrollment", () => {
-  async function issued() {
+  async function issued(domicile = "Calle Fiscal 8, Madrid", withDepartment = false) {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
     const printerId = await makePrinter();
     await configureReceipt({ printerId });
@@ -3363,7 +3363,10 @@ describe("explicit F1 receipt delivery enrollment", () => {
     const cookie = await login(app, cfg, supervisorId);
     const orderId = randomUUID();
     const sale = await withTransaction(suite.db, async (tx) => {
-      await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
+      await tx.update(taxpayer).set({ taxpayerDomicile: domicile });
+      const [department] = withDepartment
+        ? await tx.select({ id: departments.id }).from(departments).limit(1)
+        : [];
       const [series] = await tx
         .select()
         .from(invoiceSeries)
@@ -3404,6 +3407,16 @@ describe("explicit F1 receipt delivery enrollment", () => {
         clock,
         settlement: { kind: "deferred" },
         operatorId,
+        ...(department === undefined
+          ? {}
+          : {
+              receipt: {
+                guestCount: null,
+                departmentId: department.id,
+                tradingName: "Deli",
+                printsTradingName: false,
+              },
+            }),
       });
     });
     const post = (action: "receipt" | "reprint" | "receipt/retry") =>
@@ -3608,6 +3621,29 @@ describe("explicit F1 receipt delivery enrollment", () => {
     ).toBe(200);
     expect(await suite.db.select().from(printJobs)).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+  });
+
+  it("prints a registered address that is the venue's, province and all, once on paper", async () => {
+    const { post } = await issued("Carrer de Mallorca 123, 08010 Barcelona, Barcelona", true);
+    await seedVenueSettings(suite.db, {
+      addressLine1: "Carrer de Mallorca 123",
+      addressLine2: null,
+      postalCode: "08010",
+      city: "Barcelona",
+      province: "Barcelona",
+    });
+    for (const { id } of await suite.db.select({ id: departments.id }).from(departments))
+      await seedDepartmentReceipt(suite.db, id, {
+        operationDescription: "Venta en establecimiento",
+        printAddress: true,
+      });
+    expect((await post("receipt")).status).toBe(200);
+    const [job] = await suite.db.select({ payload: printJobs.payload }).from(printJobs);
+    const text = decodeTicket(new Uint8Array(job!.payload!));
+    expect(text).toContain("FACTURA");
+    expect(text.match(/Carrer de Mallorca 123/gu)).toHaveLength(1);
+    expect(text).toContain("08010 Barcelona");
+    expect(text).not.toContain("Domicilio fiscal:");
   });
 
   it("refuses the explicit original and queues no delivery when there is no active printer", async () => {

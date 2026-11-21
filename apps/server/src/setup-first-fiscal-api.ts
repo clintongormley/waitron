@@ -15,6 +15,8 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import { VENUE_FIELDS, type StartAgainSummary, type VenueRequest } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
+import { getVenueSetupCountryPack } from "@waitron/country-packs";
+import { registeredAddressRefusal } from "./registered-address-check.js";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { requestFromBox } from "./request-from-box.js";
@@ -431,7 +433,14 @@ export function mountSetupFirstFiscalApi(
         pin = text(admin.pin);
       if (Buffer.byteLength(password) > 1024 || Buffer.byteLength(pin) > 1024) invalid();
       const venue = parseVenue(raw, c.req.header("Accept-Language"));
-      if (!venue.taxpayerDomicile?.trim()) invalid();
+      if (
+        !venue.taxpayerDomicile?.trim() ||
+        registeredAddressRefusal(
+          venue.taxpayerDomicile,
+          getVenueSetupCountryPack(venue.country)!,
+        ) !== undefined
+      )
+        throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
       const { pinHash: _, passwordHash: __, ...normalized } = venue.admin;
       void _;
       void __;

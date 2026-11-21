@@ -1171,6 +1171,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
           ["null", null],
           ["empty", ""],
           ["blank", "   "],
+          ["without a postcode", "Calle Fiscal 8, Madrid"],
+          ["the box's own floor and door alone", "2º 1ª"],
+          ["with a postcode outside its province", "Calle Fiscal 8, 08010 Madrid, Madrid"],
         ] as const
       ).map(([label, value]) => [mode, label, makeBody, value] as const),
     ),
