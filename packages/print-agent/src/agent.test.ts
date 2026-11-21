@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgent,
-  HALTED_SELF_ENROL_INTERVAL_MS,
+  SELF_ENROL_RETRY_INTERVAL_MS,
   PAGE_RENEW_INTERVAL_MS,
   PAGE_RENEW_SETTLE_MS,
   PAGE_REPORT_GIVE_UP_MS,
@@ -458,13 +458,22 @@ describe("createAgent — phases", () => {
         ...over,
       });
 
-    it("with no token, asks its own box to vouch for it every round and never knocks at the main box", async () => {
-      const host = fakeHost({ config: ON_BOX });
+    it("with no token, asks its own box to vouch for it at once, then every 30 s while refused, and never knocks at the main box", async () => {
+      let now = 0;
+      const host = fakeHost({ config: ON_BOX, now: () => now });
       const c = followsMain();
       const agent = createAgent({ host, client: c });
-      for (let round = 0; round < 3; round += 1) await agent.runOnce();
+      await agent.runOnce();
+      expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+      for (let round = 0; round < 14; round += 1) {
+        now += 2_000;
+        await agent.runOnce();
+      }
+      expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after the refusal: still waiting
+      now += 2_000;
+      await agent.runOnce();
       expect(c.join).not.toHaveBeenCalled();
-      expect(c.enrolSelf).toHaveBeenCalledTimes(3);
+      expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
       expect(c.enrolSelf).toHaveBeenLastCalledWith(LOCAL, "kitchen-pi");
       expect(c.pullJobs).not.toHaveBeenCalled();
       expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", lastError: undefined });
@@ -1169,6 +1178,42 @@ describe("createAgent — on-node self-enrol", () => {
     expect(c.join).not.toHaveBeenCalled();
   });
 
+  it("asks its own box at once again after new settings, even while a refusal's wait runs", async () => {
+    let now = 0;
+    const host = fakeHost({ config: CONFIG, now: () => now });
+    const c = client({ join: vi.fn(async () => failR({ kind: "pairing_closed" })) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+    expect(await agent.configure({ serverUrl: A, name: "kitchen-pi" })).toBe(true);
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2);
+  });
+
+  it("on the main box, asks again on the next round when its own server did not answer at all", async () => {
+    // The agent can start before its box's server: nothing answers the first round, and the next
+    // round must self-enrol rather than knock at a server that has just come up.
+    let up = false;
+    const host = fakeHost({ config: CONFIG, now: () => 0 });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        up ? okR(primary) : failR({ kind: "unreachable", detail: "ECONNREFUSED" }),
+      ),
+      enrolSelf: vi.fn(async () =>
+        up ? okR({ token: "id.secret" }) : failR({ kind: "unreachable", detail: "ECONNREFUSED" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    up = true;
+    await agent.runOnce();
+    expect(await host.token()).toBe("id.secret");
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["its own box refuses", failR({ kind: "refused" })],
     ["nothing answers on loopback", failR({ kind: "unreachable", detail: "ECONNREFUSED" })],
@@ -1186,8 +1231,8 @@ describe("createAgent — on-node self-enrol", () => {
     expect(c.pullJobs).toHaveBeenCalledTimes(1);
   });
 
-  it(`a halted agent asks its own box at once, then at most every ${HALTED_SELF_ENROL_INTERVAL_MS / 1000} s`, async () => {
-    expect(HALTED_SELF_ENROL_INTERVAL_MS).toBe(30_000);
+  it(`a halted agent asks its own box at once, then at most every ${SELF_ENROL_RETRY_INTERVAL_MS / 1000} s`, async () => {
+    expect(SELF_ENROL_RETRY_INTERVAL_MS).toBe(30_000);
     let now = 0;
     const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
     const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })) });
