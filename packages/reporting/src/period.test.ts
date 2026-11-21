@@ -14,6 +14,7 @@ describe("validatePeriod", () => {
       { kind: "year" },
     ] as LiquidationPeriod[]) {
       expect(() => validatePeriod(226, p)).toThrow(/year/);
+      expect(() => validatePeriod(9999, p)).toThrow(/year/);
       expect(() => validatePeriod(10000, p)).toThrow(/year/);
     }
   });

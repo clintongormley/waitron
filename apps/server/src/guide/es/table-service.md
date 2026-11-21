@@ -659,7 +659,7 @@ o sin enviar sigue abierta. Una cuenta con una rectificación abierta de un pago
 ticket sigue abierta hasta que esa rectificación se termine o se descarte.
 
 Si la cuenta se emitió al terminar el día de trabajo, selecciona el día en que se abrió en
-**Ventas y recaudación**. Para los impuestos, consulta **Modelo 303 (IVA)**. Las fechas registradas
+**Ventas y recaudación**. Para los impuestos, consulta [Modelo 303 (IVA)](invoices.md#vat-return). Las fechas registradas
 en las facturas pueden situar la cuenta en otro período.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,

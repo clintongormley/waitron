@@ -616,7 +616,7 @@ open. A bill with an open correction of a payment that has its own ticket stays 
 correction is finished or discarded.
 
 To find a bill issued when the business day ended, choose the day it opened in **Sales & takings**.
-For tax reporting, use **VAT return (modelo 303)**. The dates recorded on invoices can place a
+For tax reporting, use [VAT return (modelo 303)](invoices.md#vat-return). The dates recorded on invoices can place a
 bill in a different period.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose

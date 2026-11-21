@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addDecimal, subtractDecimal } from "@waitron/shared";
-import type { SaleId } from "@waitron/shared";
+import { addDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
+import type { Decimal, SaleId } from "@waitron/shared";
 import {
+  at,
   seedNodeAndSeries,
   seedPurchaseInvoice,
   seedSale,
   seedSubstitution,
   seedVenueWithSeries,
   seedVoid,
+  TICKET,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatReturn } from "./vat-return.js";
+import { vatMovements } from "./vat-movements.js";
+import { computeVatCorrections } from "./vat-corrections.js";
 import type { LiquidationPeriod } from "./period.js";
 import type { VatReturn } from "./types.js";
 
@@ -165,12 +169,12 @@ describe("computeVatReturn", () => {
       return { replacement };
     }
 
-    it("counts it in the period of its real day, not the stamped one", async () => {
+    it("counts it in neither month: it moved to February after February ended", async () => {
       await replace(new Date("2026-03-10T10:00:00Z").toISOString(), "2026-02-28");
 
       const february = await run({ year: 2026, month: 2 });
-      expect(february.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
-      expect(february).toMatchObject({ baseTotal: "11.00", taxTotal: "1.10" });
+      expect(february.byRate).toEqual([]);
+      expect(february).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
       const march = await run({ year: 2026, month: 3 });
       expect(march.byRate).toEqual([]);
       expect(march).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
@@ -187,7 +191,7 @@ describe("computeVatReturn", () => {
       expect(april.byRate).toEqual([]);
     });
 
-    it("counts a later refund of the replacement in the refund's own period", async () => {
+    it("counts a later refund of the replacement in neither month: both are corrections of February", async () => {
       const { replacement } = await replace(
         new Date("2026-03-10T10:00:00Z").toISOString(),
         "2026-02-28",
@@ -201,13 +205,13 @@ describe("computeVatReturn", () => {
       });
 
       const february = await run({ year: 2026, month: 2 });
-      expect(february.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+      expect(february.byRate).toEqual([]);
       const march = await run({ year: 2026, month: 3 });
-      expect(march.byRate).toEqual([{ rate: "10.00", base: "-5.00", tax: "-0.50" }]);
+      expect(march.byRate).toEqual([]);
     });
   });
 
-  it("counts a sale issued on a later day in its sale day's period", async () => {
+  it("counts a sale issued after its sale day's period in neither period", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: new Date("2026-04-01T10:00:00Z").toISOString(),
@@ -217,7 +221,7 @@ describe("computeVatReturn", () => {
     });
 
     const q1 = await runPeriod({ kind: "quarter", quarter: 1 });
-    expect(q1.byRate).toEqual([{ rate: "10.00", base: "11.00", tax: "1.10" }]);
+    expect(q1.byRate).toEqual([]);
     const q2 = await runPeriod({ kind: "quarter", quarter: 2 });
     expect(q2.byRate).toEqual([]);
     expect(q2).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
@@ -234,9 +238,7 @@ describe("computeVatReturn", () => {
     expect((await run({ year: 2026, month: 8 })).byRate).toEqual([]);
   });
 
-  it("leaves a sale voided in a LATER month out of its own month and out of the void's", async () => {
-    // Held until the asesor answers docs/compliance/asesor-questions.md Q25; the day-scoped reports
-    // count such a void on its own day instead.
+  it("keeps a sale voided in a LATER month in its own month, and the void in neither month", async () => {
     const s = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: augNoonUtc,
@@ -244,7 +246,9 @@ describe("computeVatReturn", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
     await seedVoid(suite.db, { saleId: s }, new Date("2026-09-10T10:00:00Z").toISOString());
-    expect((await run({ year: 2026, month: 8 })).byRate).toEqual([]);
+    expect((await run({ year: 2026, month: 8 })).byRate).toEqual([
+      { rate: "21.00", base: "100.00", tax: "21.00" },
+    ]);
     expect((await run({ year: 2026, month: 9 })).byRate).toEqual([]);
     expect((await runPeriod({ kind: "quarter", quarter: 3 })).byRate).toEqual([]);
   });
@@ -485,13 +489,15 @@ describe("computeVatReturn — annual + period boundaries", () => {
   });
 });
 
-describe("computeVatReturn — quarter equals the sum of its months", () => {
-  it("Q2 equals the merged sum of April, May and June (exactness inherited)", async () => {
+describe("computeVatReturn — quarter equals the sum of its months when nothing is corrected after its month", () => {
+  it("Q2 equals the merged sum of April, May and June when nothing is corrected after its month (exactness inherited)", async () => {
     // A spread across Q2's three civil months at mixed rates, deliberately including cuotas the DIFFERENCE
     // method lands a céntimo off round(base × rate): two difference-method sales (20.99 / 21.01 on a 21%
     // base 100.00) and a difference-method purchase (41.99, not 42.00, on a 21% base 200.00). The quarter
     // aggregate must equal the byte-for-byte addDecimal sum of the three monthly aggregates — because
     // both sum the FILED per-invoice cuotas over the same rows, never re-rounding round(Σ base × rate).
+    // That holds only when nothing is corrected after its month: a later correction is in no month's
+    // return but can be in the quarter's.
     // Offset 0 → filed date = UTC date.
     // April sales.
     await seedSale(suite.db, venue, {
@@ -578,5 +584,269 @@ describe("computeVatReturn — quarter equals the sum of its months", () => {
     );
     expect(q2.deductible.taxTotal).toBe(sumDed);
     expect(q2.result).toBe(subtractDecimal(sumTax, sumDed));
+  });
+});
+
+describe("computeVatReturn — a period counts what belongs to it and was made by its last day", () => {
+  let nextNumber: number;
+  beforeEach(() => {
+    nextNumber = 1;
+  });
+
+  const Q1: LiquidationPeriod = { kind: "quarter", quarter: 1 };
+  const Q2: LiquidationPeriod = { kind: "quarter", quarter: 2 };
+  const TEN = [{ rate: "10.00", base: "10.00", tax: "1.00" }];
+
+  async function sale(
+    issuedDay: string,
+    opts: Partial<Omit<Parameters<typeof seedSale>[2], "invoiceNumber" | "issuedAt">> = {},
+  ): Promise<SaleId> {
+    return seedSale(suite.db, venue, {
+      total: "11.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+      ...opts,
+      invoiceNumber: nextNumber++,
+      issuedAt: at(issuedDay),
+    });
+  }
+
+  async function quarters(): Promise<[VatReturn["byRate"], VatReturn["byRate"]]> {
+    return [(await runPeriod(Q1)).byRate, (await runPeriod(Q2)).byRate];
+  }
+
+  it("A: a later correction leaves the ended quarter as it was and is not in its own quarter's return", async () => {
+    const ticket = await sale("2026-02-10");
+    expect(await quarters()).toEqual([TEN, []]);
+    await sale("2026-05-10", {
+      correctsSaleId: ticket,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    expect(await quarters()).toEqual([TEN, []]);
+  });
+
+  it("B: a replacement naming an earlier quarter leaves that quarter as it was", async () => {
+    const ticket = await sale("2026-04-01");
+    expect(await quarters()).toEqual([[], TEN]);
+    await sale("2026-05-10", {
+      correctsSaleId: ticket,
+      replacesOriginal: true,
+      supplyDay: "2026-03-31",
+    });
+    expect(await quarters()).toEqual([[], []]);
+  });
+
+  it("C: a later void leaves the ended quarter as it was", async () => {
+    const ticket = await sale("2026-02-10");
+    expect(await quarters()).toEqual([TEN, []]);
+    await seedVoid(suite.db, { saleId: ticket }, at("2026-05-10"));
+    expect(await quarters()).toEqual([TEN, []]);
+  });
+
+  it("D: a ticket issued after its quarter for a day in it leaves that quarter as it was", async () => {
+    expect(await quarters()).toEqual([[], []]);
+    await sale("2026-04-01", { supplyDay: "2026-03-31" });
+    expect(await quarters()).toEqual([[], []]);
+  });
+
+  describe("a TICKET replaced with an earlier quarter's day, then voided", () => {
+    async function replaced(): Promise<{ original: SaleId; replacement: SaleId }> {
+      const original = await sale("2026-04-01", TICKET);
+      const replacement = await sale("2026-04-10", {
+        ...TICKET,
+        correctsSaleId: original,
+        replacesOriginal: true,
+        supplyDay: "2026-03-31",
+      });
+      return { original, replacement };
+    }
+
+    async function q2Corrections() {
+      const movements = await withTransaction(suite.db, (tx) =>
+        vatMovements(tx, { year: 2026, period: Q2 }),
+      );
+      return movements
+        .filter((m) => m.madeDay >= "2026-04-01" && m.belongsDay < "2026-04-01")
+        .map((m) => [m.madeDay, m.belongsDay, m.tax]);
+    }
+
+    it("V: voiding the original changes no quarter's return and lists both steps as corrections", async () => {
+      const { original } = await replaced();
+      expect(await quarters()).toEqual([[], []]);
+      await seedVoid(suite.db, { saleId: original }, at("2026-05-10"));
+      expect(await quarters()).toEqual([[], []]);
+      expect(await q2Corrections()).toEqual([
+        ["2026-04-10", "2026-03-31", "1.10"],
+        ["2026-05-10", "2026-03-31", "-1.10"],
+      ]);
+    });
+
+    it("R: voiding the replacement changes nothing", async () => {
+      const { replacement } = await replaced();
+      expect(await quarters()).toEqual([[], []]);
+      const before = await q2Corrections();
+      await seedVoid(suite.db, { saleId: replacement }, at("2026-05-10"));
+      expect(await quarters()).toEqual([[], []]);
+      expect(await q2Corrections()).toEqual(before);
+    });
+  });
+
+  it("E: gives no line for a sale and its full corrective in the same quarter", async () => {
+    const ticket = await sale("2026-02-10");
+    await sale("2026-03-10", {
+      correctsSaleId: ticket,
+      total: "-11.00",
+      lines: [{ vatRate: "10.00", lineTotal: "-10.00" }],
+    });
+    const q1 = await runPeriod(Q1);
+    expect(q1.byRate).toEqual([]);
+    expect(q1).toMatchObject({ baseTotal: "0.00", taxTotal: "0.00" });
+  });
+
+  it("keeps a rate line whose base nets to zero while its VAT does not", async () => {
+    const ticket = await sale("2026-02-10", {
+      total: "120.99",
+      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "20.99" }],
+    });
+    await sale("2026-03-10", {
+      correctsSaleId: ticket,
+      total: "-121.00",
+      lines: [{ vatRate: "21.00", lineTotal: "-100.00" }],
+      vatBreakdown: [{ rate: "21.00", base: "-100.00", tax: "-21.00" }],
+    });
+    expect((await runPeriod(Q1)).byRate).toEqual([{ rate: "21.00", base: "0.00", tax: "-0.01" }]);
+  });
+
+  it("counts every movement of a year once: in its quarter's return or a later quarter's corrections", async () => {
+    // Ordinary invoices at two rates, one with a later correction and a correction of that.
+    const mixed = await sale("2026-01-15", {
+      total: "176.00",
+      lines: [
+        { vatRate: "21.00", lineTotal: "100.00" },
+        { vatRate: "10.00", lineTotal: "50.00" },
+      ],
+    });
+    const refund = await sale("2026-05-02", {
+      correctsSaleId: mixed,
+      total: "-24.20",
+      lines: [{ vatRate: "21.00", lineTotal: "-20.00" }],
+    });
+    await sale("2026-08-02", {
+      correctsSaleId: refund,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    // A late ticket, and a late ticket later replaced with yet another day.
+    await sale("2026-04-01", { supplyDay: "2026-03-31" });
+    const lateReplaced = await sale("2026-07-01", { supplyDay: "2026-06-30" });
+    await sale("2026-07-20", {
+      correctsSaleId: lateReplaced,
+      replacesOriginal: true,
+      supplyDay: "2026-06-29",
+    });
+    // A replacement with a day, then its original voided; a replacement without one.
+    const voidedReplaced = await sale("2026-07-01");
+    await sale("2026-07-05", {
+      correctsSaleId: voidedReplaced,
+      replacesOriginal: true,
+      supplyDay: "2026-06-30",
+    });
+    await seedVoid(suite.db, { saleId: voidedReplaced }, at("2026-11-03"));
+    const undated = await sale("2026-02-20");
+    await sale("2026-04-20", { correctsSaleId: undated, replacesOriginal: true });
+    // Voids in the same quarter and in a later one.
+    await seedVoid(suite.db, { saleId: await sale("2026-09-01") }, at("2026-09-02"));
+    await seedVoid(suite.db, { saleId: await sale("2026-09-03") }, at("2026-10-02"));
+    // A payment on account and its table's invoice, across the night the third quarter ends.
+    const advance = await sale("2026-09-30", {
+      total: "55.00",
+      lines: [{ vatRate: "10.00", lineTotal: "50.00", advanceRole: "payment_on_account" }],
+    });
+    await sale("2026-10-01", {
+      total: "55.00",
+      lines: [
+        { vatRate: "10.00", lineTotal: "100.00" },
+        { vatRate: "10.00", lineTotal: "-50.00", advanceRole: "deduction", deductsSaleId: advance },
+      ],
+    });
+    // An exchange invoice, which counts nothing.
+    const exchanged = await sale("2026-11-10");
+    const exchange = await sale("2026-11-11");
+    await seedSubstitution(suite.db, {
+      substitutionSaleId: exchange,
+      substitutedSaleId: exchanged,
+    });
+    // A December invoice corrected in January of the next year.
+    const december = await sale("2026-12-10");
+    await sale("2027-01-12", {
+      correctsSaleId: december,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+
+    const net = new Map<string, { base: Decimal; tax: Decimal }>();
+    const add = (line: { rate: string; base: string; tax: string }, sign: 1 | -1 = 1) => {
+      const now = net.get(line.rate) ?? { base: decimal("0.00"), tax: decimal("0.00") };
+      const apply = sign === 1 ? addDecimal : subtractDecimal;
+      net.set(line.rate, {
+        base: apply(now.base, decimal(line.base)),
+        tax: apply(now.tax, decimal(line.tax)),
+      });
+    };
+    const corrected: Record<string, string[][]> = {};
+    for (const [year, quarter] of [
+      [2026, 1],
+      [2026, 2],
+      [2026, 3],
+      [2026, 4],
+      [2027, 1],
+    ] as const) {
+      const period: LiquidationPeriod = { kind: "quarter", quarter };
+      if (year === 2026) for (const line of (await runPeriod(period)).byRate) add(line);
+      const corrections = await withTransaction(suite.db, (tx) =>
+        computeVatCorrections(tx, { year, period }),
+      );
+      for (const row of corrections.rows) add(row);
+      corrected[corrections.madeIn] = corrections.rows.map((row) => [
+        row.madeDay,
+        `${row.invoice.seriesCode}/${row.invoice.number}`,
+        row.kind,
+        row.belongsTo,
+        row.rate,
+        row.direction,
+        row.base,
+        row.tax,
+      ]);
+    }
+    expect(corrected).toEqual({
+      "2026-1T": [],
+      "2026-2T": [
+        ["2026-04-01", "A/4", "issued_late", "2026-1T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-05-02", "A/2", "correction", "2026-1T", "21.00", "reduction", "-20.00", "-4.20"],
+      ],
+      "2026-3T": [
+        ["2026-07-01", "A/5", "issued_late", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-07-05", "A/8", "date_moved_in", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-07-20", "A/6", "date_moved_out", "2026-2T", "10.00", "reduction", "-10.00", "-1.00"],
+        ["2026-07-20", "A/6", "date_moved_in", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-08-02", "A/3", "correction", "2026-1T", "21.00", "addition", "10.00", "2.10"],
+      ],
+      "2026-4T": [
+        ["2026-10-02", "A/12", "void", "2026-3T", "10.00", "reduction", "-10.00", "-1.00"],
+        ["2026-11-03", "A/7", "void", "2026-2T", "10.00", "reduction", "-10.00", "-1.00"],
+      ],
+      "2027-1T": [
+        ["2027-01-12", "A/18", "correction", "2026-4T", "10.00", "reduction", "-5.00", "-0.50"],
+      ],
+    });
+    const year = await withTransaction(suite.db, (tx) =>
+      vatMovements(tx, { year: 2026, period: { kind: "year" } }),
+    );
+    for (const m of year) add(m, -1);
+    for (const [rate, line] of net) {
+      expect([rate, toScale(line.base, 2), toScale(line.tax, 2)]).toEqual([rate, "0.00", "0.00"]);
+    }
+    expect(year.length).toBeGreaterThan(10);
   });
 });

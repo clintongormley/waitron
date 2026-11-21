@@ -5099,6 +5099,13 @@ export class DashboardApi {
     });
   }
 
+  downloadVatCorrections(input: { year: number; period: string }): Promise<Blob> {
+    const params = new URLSearchParams({ year: String(input.year), period: input.period });
+    return this.#request<Blob>(`/management-api/reports/corrections?${params}`, "GET", undefined, {
+      as: "blob",
+    });
+  }
+
   getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean; hasReturnedInvoices: boolean }> {
     return this.#request<{ hasEmergencyHandover: boolean; hasReturnedInvoices: boolean }>(
       "/management-api/reports/handover-warning",

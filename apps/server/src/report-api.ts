@@ -28,6 +28,7 @@ import {
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
+  computeVatCorrections,
   computeVatReturn,
   computeVatSummaryForPeriod,
   currentBusinessDay,
@@ -53,6 +54,8 @@ import {
   renderDeferredPaymentCsv,
 } from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
+import { renderCorrectionsWorkbook } from "./corrections-report.js";
+import { workbookDownloadHeaders } from "./xlsx-workbook.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
@@ -116,11 +119,11 @@ const runCategoryPrint = createErrorBoundary(
 );
 
 /**
- * 1000..9999, the bound `validatePeriod` enforces, so a screened year never reaches its
+ * 1000..9998, the bound `validatePeriod` enforces, so a screened year never reaches its
  * plain-`Error` throw; `/^\d{4}$/` would admit "0999".
  */
 function requireYear(raw: string | undefined): number {
-  if (raw === undefined || !/^[1-9]\d{3}$/.test(raw)) {
+  if (raw === undefined || !/^[1-9]\d{3}$/.test(raw) || raw === "9999") {
     throw new AppError("management.request_invalid", { field: "year" });
   }
   return Number(raw);
@@ -326,6 +329,22 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
+  app.get("/management-api/reports/corrections", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const year = requireYear(c.req.query("year"));
+      const { period } = requireLiquidationPeriod(c.req.query("period"));
+      const corrections = await gated(sessionId, REPORT_EXPORT_PERMISSION, (tx) =>
+        computeVatCorrections(tx, { year, period }),
+      );
+      return c.body(
+        await renderCorrectionsWorkbook(corrections, toLanguage(deps.venueLocale)),
+        200,
+        workbookDownloadHeaders(`corrections-${corrections.madeIn}.xlsx`),
+      );
+    }),
+  );
+
   // The overview aggregates every node for the venue's CURRENT business day.
   app.get("/management-api/reports/overview", (c) =>
     run(c, log, async () => {
@@ -473,12 +492,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         });
         return data;
       });
-      return c.body(await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)), 200, {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="accountant-${from}-${to}.xlsx"`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      });
+      return c.body(
+        await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)),
+        200,
+        workbookDownloadHeaders(`accountant-${from}-${to}.xlsx`),
+      );
     }),
   );
 

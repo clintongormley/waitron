@@ -275,7 +275,6 @@ const en = {
     "Waitron will issue a replacement corrective invoice for invoice {number} of {date}, total {total}, dated {today}.",
   "fiscal_filing.put_right.replace.undated":
     "The server cannot date a replacement now, so nothing can be sent. Check the venue's time zone in Venue settings, then choose Refresh and open this case again.",
-  "fiscal_filing.put_right.replace.period": "The VAT return counts the sale in {period}.",
   "fiscal_filing.put_right.replace.order":
     "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
   "fiscal_filing.put_right.replace.day_differs":
@@ -663,7 +662,6 @@ const es: Record<AeatCertificateKey, string> = {
     "Waitron emitirá una factura rectificativa que sustituye a la factura {number} del {date}, con un total de {total}, con fecha {today}.",
   "fiscal_filing.put_right.replace.undated":
     "El servidor no puede fechar una rectificativa ahora, así que no se puede enviar nada. Revisa la zona horaria del local en Ajustes del local, después elige Actualizar y vuelve a abrir este caso.",
-  "fiscal_filing.put_right.replace.period": "La declaración de IVA cuenta la venta en {period}.",
   "fiscal_filing.put_right.replace.order":
     "Se envía a la AEAT después de las facturas anteriores que Waitron tenga detenidas. La factura rechazada se queda como está.",
   "fiscal_filing.put_right.replace.day_differs":

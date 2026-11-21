@@ -25,7 +25,7 @@ are affected (the deli's 4%, 10% and 21%). Asked as
 adviser's answer 1.10 of 15 November; the owner's decision D4 is to build it now. A table given its
 whole meal free is not this entry: the owner's answer of 18 November (owner, 2026-11-18; the adviser
 still to confirm the details) is that it is a self-supply only
-when given in exchange for services, and that it goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals).
+when given in exchange for services, and that it goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals).
 Fiscal: the owner lands it.
 
 ## A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows
@@ -202,9 +202,12 @@ No stored fiscal row is to be rewritten.
 
 - Found by #601 (`packages/reporting`). **Owner decision 2026-09-24: a void counts on the day it
   is made, not the day of the sale** (built in #605 for the daily close's VAT, the period VAT
-  summary and top sellers). The quarterly _modelo 303_ keeps its old behaviour, pinned by a test in
-  `vat-return.test.ts`, until the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals) is built: Q25
-  (which VAT period a later annulment lands in) is settled by owner decision D12 of 2026-11-16,
+  summary and top sellers). The _modelo 303_ file counts a void made by the last day of its
+  sale's period in that period; a void made later leaves that period's file as it was and goes on
+  the corrections workbook of the period it is made in, listed against the sale's period (pinned by
+  "C: a later void leaves the ended quarter as it was" in `vat-return.test.ts` and "lists, for a
+  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). That settles Q25
+  (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
   `stableStringify` (`src/daily-close-hash.ts`) throws on a `null`, and a key holding `undefined`
@@ -901,7 +904,7 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals). Next: plans for the design's pieces A, B
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates-and-free-meals). Next: plans for the design's pieces A, B
 and C. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
@@ -945,22 +948,14 @@ Also open, from before A802:
   the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
   the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
-## A report for the accountant: corrections to filed quarters, wrong VAT rates and free meals
+## A report for the accountant: wrong VAT rates and free meals
 
 Settled by the owner's decisions D6 and D12 of 2026-11-16, after the tax adviser's answers 1.12 and
 1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13), then
-kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5, 6 and 8 of
+kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5 and 6 of
 the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. Waitron files nothing itself:
 each case goes on a report for the accountant, who decides what to file.
 
-- **Corrections to a filed quarter** (question 8: "yes"). A quarter's VAT report counts that
-  quarter's own invoices, with corrections made to them within the same quarter, and a filed
-  report never changes. Any later correction of an earlier quarter's invoice (a cancellation, a
-  corrective, a wrong date, a wrong rate, an invoice issued after its meal's quarter) is left out
-  of the current quarter, whichever way it moves the VAT, and listed by original quarter and rate,
-  reductions and additions apart. That holds when the error is found only after the next quarter
-  is filed too: "any correctives to the previous quarter should be reported in the correctives
-  report."
 - **A VAT rate set too low** (question 5). Customers' tickets stay as they are and nothing goes to
   AEAT: the law bars charging customers the difference (LIVA 89.Tres.1.º). The VAT owed is worked
   out per invoice line, treating the price charged as including the right rate, and the product's
@@ -974,9 +969,6 @@ each case goes on a report for the accountant, who decides what to file.
   Waitron, instead this should be part of some report that we make available to the accountant to
   decide what to do." So the report lists what was given free, with its reason; the owner gave
   a margin as one basis for the cost (a 30% margin makes the cost 70% of the price).
-- Today `packages/reporting/src/vat-return.ts` counts a corrective in the quarter it is issued, at
-  the original's rate, and moves a wrong-date corrective's VAT back to the real day, changing a
-  filed quarter's figures (read, not run).
 - How a wrong rate is recorded on the product waits on the design of
   [VAT rates per product](#vat-rates-per-product-eaten-in-or-taken-away-was-vat-at-line-add-m7v-a68).
 
@@ -1094,6 +1086,27 @@ the box adds by itself, and how the record reaches the tax office.
 ## Decisions and deliberate limits
 
 **The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
+
+### A VAT period counts what belongs to it and was recorded by its last day (owner, 2026-11-16 and 2026-11-19)
+
+The VAT return (modelo 303) for a month or quarter counts the sales VAT that belongs to that period
+and was recorded by its last day; a correction, void, date replacement or late ticket recorded
+later leaves it as it was and is listed on the corrections workbook of the period in which it was
+recorded, against the earlier period it belongs to. The owner's words: "a filed report never
+changes", "we use a corrections report instead of just adding the transaction to the current
+period" (D12, 2026-11-16, [adviser answers](../compliance/2026-11-15-adviser-answers.md)), and a
+period counts as filed on "The day it ends (Recommended)" (the corrections report's D1, 2026-11-19,
+relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Which way a
+correction's line points, reading a void's date in its sale's offset, and putting a corrective of an
+exchange invoice on that invoice's own date are the watcher's choices (the plan's D5, D7 and D8;
+[plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). The plan's
+movement table, which decides how each kind of record moves VAT, and the handover limit below were
+not put to the owner. Deliberate limits:
+a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
+after a handover count on their own stamps, since nothing records when they arrived; every
+replacement and the invoice it replaces are read whatever their date. The purchases side is not
+covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
+that period's return changes with it.
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 
@@ -1229,6 +1242,10 @@ tap just after midnight still files the earlier day. The owner's answers relayed
 2026-11-15 at 12:12 and 20:59 (lane L `archive/questions-to-2026-11-18.md`): "sale day" for the
 VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
+_2026-11-21: since the corrections report's PR 1, such an invoice counts in that day's period on
+the VAT return only when issued within that period; otherwise it is on the corrections list of the
+period it was issued in
+([plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md))._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
@@ -1264,6 +1281,10 @@ the same customer, with the same rectified amounts, real day and VAT period (Q37
 carried over by the plan's default 4; not confirmed by the owner). It is built but
 switched off (`FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts`) until
 adviser question S14 is answered and AEAT's test service has accepted one._
+_2026-11-21: since the corrections report's PR 1, a replacement made after its real day's period
+has ended leaves that period's VAT return as it was and is on the corrections workbook of the period
+it is made in (pinned by "B: a replacement naming an earlier quarter leaves that quarter as it was"
+in `vat-return.test.ts`)._
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

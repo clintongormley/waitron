@@ -52,6 +52,7 @@ describe("the user guides", () => {
       expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
         "show-invoices",
         "inspector-sign-in",
+        "vat-return",
       ]);
     },
   );

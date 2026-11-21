@@ -210,23 +210,11 @@ function notSubstituteClause(): SQL {
 
 /**
  * A corrective by replacement is never counted: it repeats its original's full amounts, and the
- * original carries the sale (`computeVatReturn` chooses its VAT period). A later refund of the
- * replacement is an ordinary corrective and is counted.
+ * original carries the sale. A later refund of the replacement is an ordinary corrective and is
+ * counted.
  */
 function notReplacementClause(): SQL {
   return sql`s.replaces_original = 0`;
-}
-
-/**
- * Excludes every voided sale, whenever the void was made, F3-canje substitutes and replacements.
- * Only the modelo 303 still reads voids this way, until the asesor answers
- * `docs/compliance/asesor-questions.md` Q25. Assumes the outer query aliases `sales` as `s`. No
- * leading `and`.
- */
-export function activeSalesClause(): SQL {
-  return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
-      and ${notSubstituteClause()}
-      and ${notReplacementClause()}`;
 }
 
 function saleInTradingWindow(window: WindowClause): SQL {

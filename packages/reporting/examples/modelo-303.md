@@ -26,9 +26,10 @@ You have six ordinary invoices and one correction. All amounts below are euros.
 | Two                      | 24         | 10%      | 30.00  | 3.00  |
 | One, correction of day 3 | 18         | 21%      | -5.00  | -1.05 |
 
-Call `computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 8 } })` to
-aggregate the period by the sale day stored on each invoice's replacement, else on the invoice
-itself, else by its recorded civil issue date. Its output VAT, _IVA devengado_, is:
+Call `computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 8 } })`. Its output
+VAT, _IVA devengado_, sums the VAT that belongs to August and was recorded by August 31, so a
+correction or void recorded in a later month leaves August's figures as they were. Here every
+invoice and the correction are August's:
 
 | Rate  | Base   | Tax   |
 | ----- | ------ | ----- |

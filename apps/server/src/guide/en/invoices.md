@@ -41,3 +41,23 @@ An inspector can have their own sign-in when the box's email is set up
 - They can choose **Download** beside the dates to prepare a month's invoices, each as a copy,
   with a spreadsheet of them, then **Save the file** when the notice says it is ready.
 - When the visit ends, disable their account in **Users**.
+
+## VAT return and corrections {#vat-return}
+
+**VAT return (modelo 303)** in **Reporting** prepares the file you upload to AEAT for a month or a
+quarter. Choose **Year**, **Period** and **Declaration type**, then **Download file**. Nothing is
+sent to AEAT from here.
+
+The file's sales side counts the VAT that belongs to the period and was recorded by its last day,
+so a correction, a cancellation or a late ticket recorded after the period ended never changes its
+sales figures. It appears instead in the corrections of the period it was recorded in.
+
+Before you file, also choose **Download corrections (XLSX)** for the same period and give both to
+your adviser. The workbook lists what was recorded in the period for earlier periods:
+
+- **Summary**: base and VAT for each earlier period, VAT rate, and whether it is a reduction or an
+  addition.
+- **Corrections**: one line per invoice, kind and VAT rate, with the day it was made, its kind
+  (**Correction**, **Void**, **Date moved out**, **Date moved in** or
+  **Issued after its sale's period**), its invoice number, the invoice it corrects and the period
+  it belongs to.

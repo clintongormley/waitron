@@ -7,7 +7,7 @@ import {
   compareDecimal,
   decimal,
   MONEY_SCALE,
-  subtractDecimal,
+  negateDecimal,
   toScale,
 } from "@waitron/shared";
 import {
@@ -22,24 +22,19 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
 /**
  * The shared VAT-aggregation core behind every per-rate summary. Reads the filed per-rate desglose
  * from `sales.vat_breakdown` — the cuota as filed, whichever method (direct or difference) computed
- * it — and sums base and tax per rate. `counted` selects the sales added, from `s` and any tables
- * `joined` adds; `reversed`, when given, selects voided sales (`sv` joined to `s`) whose breakdown is
- * subtracted.
- *
- * Exported for `vat-return.ts`'s modelo 303 aggregate; not in the public barrel.
+ * it — and sums base and tax per rate. `counted` selects the sales added, from `s`; `reversed`,
+ * when given, selects voided sales (`sv` joined to `s`) whose breakdown is subtracted.
  */
-export async function aggregateVatByRate(
+async function aggregateVatByRate(
   tx: Transaction,
-  scope: { nodeIds?: readonly NodeId[]; joined?: SQL; counted: SQL; reversed?: SQL },
+  scope: { nodeIds?: readonly NodeId[]; counted: SQL; reversed?: SQL },
 ): Promise<VatSummary> {
   const nodeClause = nodeScopeClause(scope.nodeIds);
   // `sales.vat_breakdown` is a JSON document whose `base` and `tax` are the decimal literals filed
   // with the invoice, not integer cents, and this engine has no exact decimal type, so the sum is
-  // taken here in Decimal arithmetic, one JSON element per row. Each element is rounded to cents
-  // (half away from zero) before it is added, and the rate is normalised the same way, so "21" and
-  // "21.00" cannot split into two lines. Nothing in this path bounds an element's width: an amount
-  // of any width is summed, and a rate of any width keys its own line, rather than either being
-  // refused.
+  // taken in Decimal arithmetic by `sumByRate`, one JSON element per row. Nothing in this path
+  // bounds an element's width: an amount of any width is summed, and a rate of any width keys its
+  // own line, rather than either being refused.
   const reversals =
     scope.reversed === undefined
       ? sql``
@@ -61,13 +56,30 @@ export async function aggregateVatByRate(
       b.value ->> 'base' as base,
       b.value ->> 'tax' as tax,
       0 as reversal
-    from sales s ${scope.joined ?? sql``}, json_each(s.vat_breakdown) b
+    from sales s, json_each(s.vat_breakdown) b
     where ${scope.counted}
       ${nodeClause}
     ${reversals}
   `,
   );
 
+  return sumByRate(
+    rows.map((r) =>
+      r.reversal === 1
+        ? { rate: r.rate, base: negateDecimal(decimal(r.base)), tax: negateDecimal(decimal(r.tax)) }
+        : r,
+    ),
+  );
+}
+
+/**
+ * Sums signed rate lines per rate, each amount rounded to cents (half away from zero) before it is
+ * added and each rate normalised the same way, so "21" and "21.00" cannot split into two lines.
+ * Lines come out in numeric rate order.
+ */
+export function sumByRate(
+  rows: readonly { rate: string; base: string; tax: string }[],
+): VatSummary {
   const byRate = new Map<string, { rate: Decimal; base: Decimal; tax: Decimal }>();
   for (const r of rows) {
     const rate = toScale(decimal(r.rate), MONEY_SCALE);
@@ -76,9 +88,8 @@ export async function aggregateVatByRate(
       line = { rate, base: decimal("0.00"), tax: decimal("0.00") };
       byRate.set(rate, line);
     }
-    const apply = r.reversal === 1 ? subtractDecimal : addDecimal;
-    line.base = apply(line.base, toScale(decimal(r.base), MONEY_SCALE));
-    line.tax = apply(line.tax, toScale(decimal(r.tax), MONEY_SCALE));
+    line.base = addDecimal(line.base, toScale(decimal(r.base), MONEY_SCALE));
+    line.tax = addDecimal(line.tax, toScale(decimal(r.tax), MONEY_SCALE));
   }
 
   // Numerically, never in text order (4.00 before 21.00), so the Map's insertion order — whichever

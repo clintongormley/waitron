@@ -23,10 +23,13 @@ export type {
   CurrentClassifier,
 } from "./category-sales.js";
 export { computeOverdueOrders } from "./overdue-orders.js";
-export { computeVatReturn, vatReturnDay } from "./vat-return.js";
+export { computeVatReturn } from "./vat-return.js";
+export { vatMovements } from "./vat-movements.js";
+export type { VatMovement, VatMovementKind } from "./vat-movements.js";
+export { computeVatCorrections } from "./vat-corrections.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
-export { parsePeriodToken } from "./period.js";
+export { parsePeriodToken, stampDate } from "./period.js";
 export type { LiquidationPeriod } from "./period.js";
 export { mapModelo303 } from "./modelo-303.js";
 export type { Modelo303 } from "./modelo-303.js";
@@ -66,6 +69,11 @@ export type {
   TopSeller,
   TopSellerVariant,
   TopSellersInput,
+  VatCorrectionDirection,
+  VatCorrectionInvoice,
+  VatCorrectionRow,
+  VatCorrections,
+  VatCorrectionSummaryLine,
   VatRateLine,
   VatReturn,
   VatReturnInput,

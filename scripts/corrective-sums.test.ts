@@ -66,18 +66,43 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "a replacement is refused after ANY earlier corrective (sale.replacement_not_first)",
   },
   {
-    file: "packages/reporting/src/vat-return.ts",
-    fragment: "left join sales repl on repl.corrects_sale_id = s.id and repl.replaces_original = 1",
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join sales o on o.id = root.corrects_sale_id",
+    lines: 1,
+    reason: "finds the original of a replacement a corrective corrects, to read its own day",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1",
+    lines: 1,
+    reason: "looks up a replaced sale's supply day, where a void of it takes its VAT off",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "join sales o on o.id = st.corrects_sale_id",
     lines: 1,
     reason:
-      "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",
+      "finds a replacement's original, to take the replacement's split off the original's own day",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "join sales c indexed by sales_corrects_idx on c.corrects_sale_id = x.id",
+    lines: 1,
+    reason:
+      "walks down from a sale to each non-replacement corrective, each read as its own movement; a replacement and its correctives are reached as starting points of their own",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join sales cor on cor.id = m.corrects_sale_id",
+    lines: 1,
+    reason: "finds the invoice a movement's invoice corrects, to name it on the corrections list",
   },
   {
     file: "apps/server/src/accountant-export.ts",
     fragment: "eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)",
     lines: 1,
     reason:
-      "looks up a replaced sale's supply day to list it in the VAT return's period; it totals nothing a sale owes",
+      "looks up a replaced sale's supply day to list the sale under that day; it totals nothing a sale owes",
   },
   {
     file: "packages/core/src/record-substitution.ts",

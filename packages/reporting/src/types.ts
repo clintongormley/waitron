@@ -1,5 +1,6 @@
 import type { CutoverChange, Decimal, DeviceId, NodeId, Source, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
+import type { VatMovementKind } from "./vat-movements.js";
 
 /** A tender method, mirroring `tenderMethod` in packages/db/src/schema/sales.ts. */
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
@@ -110,8 +111,7 @@ export interface VatReturn {
   year: number;
   /** The liquidation period (month/quarter/year). */
   period: LiquidationPeriod;
-  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections other than a replacement
-   * netted (the output side). */
+  /** Régimen-general IVA devengado per rate {rate, base, tax} (the output side). */
   byRate: VatRateLine[];
   /** Σ base imponible devengada. */
   baseTotal: Decimal;
@@ -123,10 +123,54 @@ export interface VatReturn {
   result: Decimal;
 }
 
+/** Whether a correction's rate line takes VAT off its period or adds to it. */
+export type VatCorrectionDirection = "reduction" | "addition";
+
+/** An invoice as the corrections list names it; the caller formats the number. */
+export interface VatCorrectionInvoice {
+  seriesCode: string;
+  number: number;
+  /** The filed issue date in the invoice's own offset, `"YYYY-MM-DD"`. */
+  issueDate: string;
+}
+
+/** One rate line of one movement made in the period for an earlier one. */
+export interface VatCorrectionRow {
+  madeDay: string;
+  /** An invoice made in the period for an earlier one is `"issued_late"`. */
+  kind: Exclude<VatMovementKind, "invoice">;
+  invoice: VatCorrectionInvoice;
+  /** The invoice `invoice` corrects; `null` when it corrects none. */
+  corrects: VatCorrectionInvoice | null;
+  /** The period the VAT belongs to, of the asked period's kind: `"2026-1T"`, `"2026-03"`, `"2026"`. */
+  belongsTo: string;
+  rate: Decimal;
+  base: Decimal;
+  tax: Decimal;
+  direction: VatCorrectionDirection;
+}
+
+export interface VatCorrectionSummaryLine {
+  belongsTo: string;
+  rate: Decimal;
+  direction: VatCorrectionDirection;
+  base: Decimal;
+  tax: Decimal;
+}
+
+/** The movements made in a period that belong before it: row by row, and summed. */
+export interface VatCorrections {
+  /** The asked period, named as `belongsTo` names a row's: `"2026-3T"`, `"2026-08"`. */
+  madeIn: string;
+  /** By belongs-to, then rate, reductions before additions. */
+  summary: VatCorrectionSummaryLine[];
+  rows: VatCorrectionRow[];
+}
+
 export interface VatRateLine {
   /** Percentage literal as stored, e.g. "21.00". */
   rate: Decimal;
-  /** Net taxable base at this rate (corrections other than a replacement netted). */
+  /** Net taxable base at this rate. */
   base: Decimal;
   /** Net tax at this rate (the fiscal cuota). */
   tax: Decimal;

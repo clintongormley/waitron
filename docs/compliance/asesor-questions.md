@@ -369,6 +369,9 @@ copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were a
   [Decision](../backlog/fiscal.md#a444-a-full-invoice-shows-only-the-date-it-was-created-owner-2026-11-12).
   _2026-11-15:_ an invoice issued on a later day than the sale now also carries the sale's date,
   and the VAT return counts it in that day's period.
+  _2026-11-21:_ since the corrections report, the VAT return counts it there only when it was
+  issued within that period; otherwise it is on the corrections workbook of the period it was
+  issued in.
 - **S5. Short payment and cash rounding.** Is accepting less at the till as payment in full, after
   the meal but before the ticket is issued, a discount under LIVA 78.Tres.2º, given AEAT reads
   "simultáneamente" as at devengo? On rounding a cash total up to 5 cents: do the extra cents go

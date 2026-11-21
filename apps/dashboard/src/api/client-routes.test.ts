@@ -1716,6 +1716,22 @@ it("downloads the modelo 303 file for the chosen period as an ordinary GET, byte
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x4e, 0xd1, 0x0a]);
 });
 
+it("downloads the corrections workbook for the chosen period as an ordinary GET, bytes untouched", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(new Response(new Uint8Array([0x50, 0x4b, 3, 4]), { status: 200 }));
+  const api = new DashboardApi("", fetchImpl);
+
+  const file = await api.downloadVatCorrections({ year: 2026, period: "1T" });
+
+  const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("/management-api/reports/corrections?year=2026&period=1T");
+  expect(init.method).toBe("GET");
+  expect(init.credentials).toBe("include");
+  expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
+  expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
+});
+
 it("reads current venue details and submits only the changed fields with the original snapshot", async () => {
   const model = venueDetailsFixture();
   const saved = { changed: true, model: venueDetailsFixture({ name: "New venue" }) };

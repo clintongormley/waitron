@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 
 /**
  * The modelo 303 liquidation PERIOD — a civil fiscal period, shared by the output side
@@ -30,11 +30,13 @@ export function parsePeriodToken(token: string): LiquidationPeriod | undefined {
 /**
  * A bad year/period is a caller precondition — a plain Error, thrown before any query. The year is
  * bounded to four digits because a typo year (226, 20226) would match no rows and return a
- * plausible but EMPTY period, the quiet, worse direction for a fiscal filing.
+ * plausible but EMPTY period, the quiet, worse direction for a fiscal filing. 9999 is refused too:
+ * the day after its last (`periodDays`'s `next`) is written `+010000-01`, which sorts as text before
+ * its own December, so its December, fourth quarter and year would be as empty.
  */
 export function validatePeriod(year: number, period: LiquidationPeriod): void {
-  if (!Number.isInteger(year) || year < 1000 || year > 9999) {
-    throw new Error(`reporting: year must be an integer in 1000..9999: ${JSON.stringify(year)}`);
+  if (!Number.isInteger(year) || year < 1000 || year > 9998) {
+    throw new Error(`reporting: year must be an integer in 1000..9998: ${JSON.stringify(year)}`);
   }
   switch (period.kind) {
     case "month":
@@ -71,43 +73,56 @@ function firstOfMonth(year: number, month: number): string {
 }
 
 /**
- * The half-open civil-date window `[first day of (year, firstMonth), that day + months)` as a
- * predicate on a date-valued SQL expression.
- *
- * Both sides of every comparison are a civil date in the fixed `"YYYY-MM-DD"` spelling —
- * `received_on` is stored that way, and SQLite's `date(...)`, which the output side's `filedDate`
- * uses, returns that shape — so a string comparison is a date comparison here.
+ * A period's first day and the day after its last, as `"YYYY-MM-DD"` — pure calendar dates, no DST
+ * subtlety. A quarter is the three calendar months of the trimestre; the whole year is Jan 1 → next
+ * Jan 1.
  */
-function civilDateWindow(dateExpr: SQL, year: number, firstMonth: number, months: number): SQL {
-  const lower = firstOfMonth(year, firstMonth);
-  const upper = firstOfMonth(year, firstMonth + months);
-  return sql`${dateExpr} >= ${lower} and ${dateExpr} < ${upper}`;
+export function periodDays(
+  year: number,
+  period: LiquidationPeriod,
+): { first: string; next: string } {
+  const [firstMonth, months] = ((): [number, number] => {
+    switch (period.kind) {
+      case "month":
+        return [period.month, 1];
+      case "quarter":
+        // Q1→1, Q2→4, Q3→7, Q4→10
+        return [3 * (period.quarter - 1) + 1, 3];
+      case "year":
+        return [1, 12];
+      /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than
+         returning an undefined bound that would silently widen or empty the fiscal aggregate
+         (mirrors validatePeriod's guard above). */
+      default: {
+        const exhaustive: never = period;
+        throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
+      }
+      /* v8 ignore stop */
+    }
+  })();
+  return { first: firstOfMonth(year, firstMonth), next: firstOfMonth(year, firstMonth + months) };
 }
 
 /**
- * The half-open civil-date bound `[firstDay, upper)` on a date-valued SQL expression for a
- * `LiquidationPeriod` — pure calendar dates, no DST subtlety. The input side passes
- * `received_on`. A quarter is the three calendar months of the trimestre; the whole year is Jan 1 →
- * next Jan 1. Because it is a wider range over the SAME rows, a quarter/year total is exactly the
- * sum of its constituent months (decimal addition is associative) — exactness inherited, never
- * re-derived.
+ * The civil date `"YYYY-MM-DD"` of a stored stamp in a UTC offset of whole minutes, the spelling
+ * `periodDateFilter` compares against. The explicit sign is for a reader: SQLite reads an unsigned
+ * modifier as positive.
+ */
+export function stampDate(stamp: SQLWrapper, offsetMinutes: SQLWrapper): SQL<string> {
+  return sql<string>`date(${stamp}, printf('%+d minutes', ${offsetMinutes}))`;
+}
+
+/**
+ * The half-open civil-date bound `[first, next)` of `periodDays` on a date-valued SQL expression.
+ * The input side passes `received_on`. A quarter's filter selects exactly the rows of its three
+ * months' filters. The output side's return is not such a filter: a month's return leaves out what
+ * was made after it ends.
+ *
+ * Both sides of every comparison are a civil date in the fixed `"YYYY-MM-DD"` spelling —
+ * `received_on` is stored that way, and SQLite's `date(...)` returns that shape — so a string
+ * comparison is a date comparison here.
  */
 export function periodDateFilter(dateExpr: SQL, year: number, period: LiquidationPeriod): SQL {
-  switch (period.kind) {
-    case "month":
-      return civilDateWindow(dateExpr, year, period.month, 1);
-    case "quarter":
-      // Q1→1, Q2→4, Q3→7, Q4→10
-      return civilDateWindow(dateExpr, year, 3 * (period.quarter - 1) + 1, 3);
-    case "year":
-      return civilDateWindow(dateExpr, year, 1, 12);
-    /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than returning
-       an undefined SQL bound that would silently widen or empty the fiscal aggregate (mirrors
-       validatePeriod's guard above). */
-    default: {
-      const exhaustive: never = period;
-      throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
-    }
-    /* v8 ignore stop */
-  }
+  const { first, next } = periodDays(year, period);
+  return sql`${dateExpr} >= ${first} and ${dateExpr} < ${next}`;
 }

@@ -25,7 +25,6 @@ import {
   codeMessage,
   codeOf,
   currentLocale,
-  dateTimeFormat,
   formatIsoMinute,
   subscribeLocale,
   t as tableText,
@@ -81,15 +80,6 @@ const STATES: readonly EnvioState[] = [
 const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
-
-/** The month a `YYYY-MM-DD` day falls in, as "October 2026". */
-function vatPeriod(day: string): string {
-  return dateTimeFormat(currentLocale(), {
-    timeZone: "UTC",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(`${day}T00:00:00Z`));
-}
 
 function field(label: string, value: string | TemplateResult | null, test?: string) {
   return value === null || value === ""
@@ -951,7 +941,6 @@ export class FiscalFilingScreen extends LitElement {
     const { record } = found;
     const error = this.#dayError(problem);
     const today = this.#serverDay();
-    const chosen = this.operationDate !== "" && problem === "";
     const invoice = {
       number: record.numSerieFactura,
       date: calendarDay(record.fechaExpedicionFactura),
@@ -993,13 +982,6 @@ export class FiscalFilingScreen extends LitElement {
                   ...invoice,
                   today: calendarDay(today),
                 })}
-                ${
-                  chosen
-                    ? t("fiscal_filing.put_right.replace.period", {
-                        period: vatPeriod(this.operationDate),
-                      })
-                    : nothing
-                }
               </p>
               <p>${t("fiscal_filing.put_right.replace.order")}</p>
             </div>`
