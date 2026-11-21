@@ -1613,7 +1613,7 @@ export const en = {
     "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro":
-    "Keep this pack locked away, off the box. The backup encryption key opens encrypted copies. The server key authorises restore or takeover. A new pack can hold the backup encryption key and point to the earlier pack that holds the server key.",
+    "Keep this pack locked away, off the box. It can hold the emergency-start code, restore codes and keys. The backup encryption key opens encrypted copies. The server key authorises restore or takeover.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
@@ -2454,9 +2454,9 @@ export const en = {
   "backup.destination.title": "Where to save backups",
   "backup.destination.label": "Backup folder",
   "backup.destination.folder_help":
-    "Enter a full path the box can access. A copy on this disk is lost if the disk fails.",
+    "Enter a full path. Copies in the example folder are lost if this box’s disk fails.",
   "backup.destination.bucket_help":
-    "Keep a copy off the box. Enter the bucket name, region, access key ID and secret access key from your S3 provider. Add a custom endpoint or folder prefix if needed.",
+    "Keep a copy off the box. Enter the bucket name, region, access key ID and secret access key from your S3 provider. Add an endpoint or a folder inside the bucket if needed.",
   "backup.destination.cloud_help": "Uses this box’s Waitron Cloud connection.",
   "backup.destination.bucket": "Bucket",
   "backup.destination.bucket_none": "No bucket",
@@ -2486,11 +2486,11 @@ export const en = {
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
   "backup.key.title": "Backup encryption key",
   "backup.key.existing":
-    "Backups will use the backup encryption key this box already has. If you set up the bucket copy, it is the key inside your recovery pack. To change it, turn backups on, then use “Change the backup encryption key”.",
+    "Backups will use the backup encryption key this box already has. A recovery pack made for your bucket copy carries this key in its restore code. To change it, turn backups on, then use “Change the backup encryption key”.",
   "backup.key.too_short":
     "The backup encryption key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
-    "Save this key now. It opens encrypted backups. Keep the server key from setup too. You need it to authorise restore or takeover.",
+    "Save this key now. It opens encrypted backups. Keep the pack that holds your server key too. You need it to authorise restore or takeover.",
   "backup.key.copy": "Copy",
   "backup.key.download": "Download key file",
   "backup.key.paste_label": "Your own backup encryption key",
@@ -4561,7 +4561,7 @@ export const en = {
   "box_status.restart_help": "Use it when an alert says to. Tills stop selling until it is back.",
   "box_status.restart_help_guide": "More about restarting the box",
   "box_status.fillers":
-    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, recovery keys and saved backups.",
+    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, server key, backup encryption key and saved backups.",
   "box_status.checks_unavailable":
     "Some checks could not be made, so this page may not show every problem.",
   "box_status.other_alerts": "{count} other alerts",
@@ -6219,7 +6219,7 @@ export const es: Record<StringKey, string> = {
     "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
-    "Guarda este paquete bajo llave, fuera del servidor. La clave de cifrado de copias abre las copias cifradas. La clave del servidor autoriza la restauración o el traspaso a otro servidor. Un paquete nuevo puede contener la clave de cifrado de copias e indicar qué paquete anterior guarda la clave del servidor.",
+    "Guarda este paquete bajo llave, fuera del servidor. Puede contener el código de inicio de emergencia, los códigos de restauración y las claves. La clave de cifrado de copias abre las copias cifradas. La clave del servidor autoriza la restauración o el traspaso a otro servidor.",
   "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en este servidor.",
   "recovery_pack.up_to_date":
     "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
@@ -7083,9 +7083,9 @@ export const es: Record<StringKey, string> = {
   "backup.destination.title": "Dónde guardar las copias",
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.folder_help":
-    "Escribe una ruta completa a la que pueda acceder el servidor. Si falla este disco, perderás la copia guardada en él.",
+    "Escribe una ruta completa. Si falla el disco del servidor, perderás las copias guardadas en la carpeta de ejemplo.",
   "backup.destination.bucket_help":
-    "Guarda una copia fuera del servidor. Introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor S3. Si hace falta, añade una dirección personalizada o un prefijo de carpeta.",
+    "Guarda una copia fuera del servidor. Introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor S3. Si hace falta, añade un endpoint o una carpeta dentro del bucket.",
   "backup.destination.cloud_help": "Usa la conexión de este servidor con Waitron Cloud.",
   "backup.destination.bucket": "Bucket",
   "backup.destination.bucket_none": "Sin bucket",
@@ -7117,11 +7117,11 @@ export const es: Record<StringKey, string> = {
     "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de cifrado de copias",
   "backup.key.existing":
-    "Las copias usarán la clave de cifrado de copias que este servidor ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu paquete de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de cifrado de copias».",
+    "Las copias usarán la clave de cifrado de copias que este servidor ya tiene. Un paquete de recuperación hecho para tu copia en el bucket lleva esta clave dentro del código de restauración. Para cambiarla, activa las copias y después usa «Cambiar la clave de cifrado de copias».",
   "backup.key.too_short":
     "La clave de cifrado de copias que tiene este servidor es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
-    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también la clave del servidor que recibiste al configurarlo. La necesitas para autorizar la restauración o el traspaso a otro servidor.",
+    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también el paquete que contiene tu clave del servidor. La necesitas para autorizar la restauración o el traspaso a otro servidor.",
   "backup.key.copy": "Copiar",
   "backup.key.download": "Descargar archivo de clave",
   "backup.key.paste_label": "Tu propia clave de cifrado de copias",
@@ -9227,7 +9227,7 @@ export const es: Record<StringKey, string> = {
     "Úsalo cuando una alerta lo indique. Las cajas no pueden vender hasta que vuelva.",
   "box_status.restart_help_guide": "Más sobre reiniciar el servidor",
   "box_status.fillers":
-    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
+    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, la clave del servidor, la clave de cifrado de copias y las copias guardadas.",
   "box_status.checks_unavailable":
     "Algunas comprobaciones no se han podido hacer, así que esta página puede no mostrar todos los problemas.",
   "box_status.other_alerts": "{count} avisos más",

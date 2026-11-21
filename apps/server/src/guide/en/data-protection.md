@@ -231,8 +231,8 @@ payroll run by your accountant. Two facts apply to every entry, so they are not 
 one:
 
 - Waitron does not encrypt the database on the box's disk. For the continuous bucket copy, it
-  sends your storage provider a separate encryption key derived from your recovery key. Scheduled
-  backups are encrypted with the recovery key. The box keeps these keys, so access to the box
+  sends your storage provider a separate encryption key derived from your backup encryption key. Scheduled
+  backups are encrypted with the backup encryption key. The box keeps these keys, so access to the box
   can expose the copies too.
 - The copy in your bucket holds the whole database, so your backup storage provider receives
   everything below. Whether any data goes to a third country depends on the providers you chose, and
@@ -407,9 +407,9 @@ own, can also make scheduled backups, and can export your setup to start another
   the bucket copy or the scheduled backups leaves what is already stored, so delete it at your
   provider, or from the folder, when you no longer need it. Anything else: _set with your adviser_.
 - Security: Waitron asks your storage provider to encrypt the bucket copy with a key derived from
-  your recovery key. The provider receives the database and the encryption key. The passwords and
+  your backup encryption key. The provider receives the database and the encryption key. The passwords and
   keys Waitron keeps for your providers are also encrypted inside the database. Each scheduled
-  backup is encrypted with the recovery key, which
+  backup is encrypted with the backup encryption key, which
   the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
@@ -454,9 +454,9 @@ Third, the people affected. When the incident is likely to result in a high risk
 freedoms, you tell them without undue delay, in clear and plain language. One of the cases where
 this is not needed is when the affected data was protected in a way that makes it unintelligible to
 anyone not allowed to see it, such as encryption. Whether that holds when the key may have been
-exposed too, as with a scheduled backup when the recovery key was lost as well, or a configuration
+exposed too, as with a scheduled backup when the backup encryption key was lost as well, or a configuration
 export whose passphrase may have leaked, is a question for your adviser. Include the bucket copy
-in that assessment: its encryption key is derived from the recovery key, and your storage provider
+in that assessment: its encryption key is derived from the backup encryption key, and your storage provider
 receives the database and that key. The AEPD's
 Comunica-Brecha RGPD tool helps you decide whether to tell the people affected.
 
@@ -527,7 +527,7 @@ its hash. The box uses the passwords and keys it keeps for your providers, such 
 server's, without anyone typing a key, so treat those as exposed too and change them at each
 provider, your bucket's access keys included. Among them are the certificate the box uses to send
 invoice records to the Tax Agency and its passphrase, so ask your adviser how to replace it. The box
-also keeps the recovery key, which opens your scheduled backups. The key that protects two-factor
+also keeps the backup encryption key, which opens your scheduled backups. The key that protects two-factor
 secrets is on the box too, so choose **Reset login** for each person who uses two-factor sign-in.
 Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
@@ -535,17 +535,17 @@ settings**, chooses **Disable** beside **Authenticator app**, and sets it up aga
 **A lost recovery pack.** The pack made during first setup holds only the server key, which a
 recovery needs alongside access to a copy; to replace it, see the end of this section. A pack made
 on **Backups** after you set up the bucket copy holds your bucket's access
-key and secret and the recovery key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
+key and secret and the backup encryption key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
 each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
-app**, and sets it up again. The recovery key also opens your scheduled backups,
+app**, and sets it up again. The backup encryption key also opens your scheduled backups,
 wherever that person can reach them. Revoke the old access keys at your bucket provider, which
 Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. Scheduled
 backups to a bucket keep their own keys, which **Change bucket** does not change: if they used the
 old keys, also choose **Change destination or schedule**, enter the new keys in **Access key ID**
-and **Secret access key**, and choose **Save changes**. A new recovery key does not change the passwords and keys for your other providers,
+and **Secret access key**, and choose **Save changes**. A new backup encryption key does not change the passwords and keys for your other providers,
 so change those at each provider too. While scheduled backups are on, **Backups** also offers
-**Change the recovery key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
+**Change the backup encryption key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
 pack. Scheduled backups made before the change and the whole older bucket copy still need the
 old key. Keep the matching recovery pack for any older copy you may need to restore. A pack can also
 hold the server key. To replace it, make a new pack with **Also make a new server key** ticked: new backups use the new key, and older backups still need the old one.

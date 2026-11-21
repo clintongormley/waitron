@@ -297,7 +297,9 @@ describe("backup-screen", () => {
     expect(api.mintBackupKey).not.toHaveBeenCalled();
     expect(q(el, "[data-test=minted-key]")).toBeNull();
     expect(q(el, "[data-test=saved-it]")).toBeNull();
-    expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toBe(t("backup.key.existing"));
+    expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toContain(
+      "Un paquete de recuperación hecho para tu copia en el bucket lleva esta clave dentro del código de restauración.",
+    );
     expect(q(el, "[data-test=short-key]")).toBeNull();
     expect((q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");

@@ -191,7 +191,7 @@ This page cannot remove other files or move your data to a larger disk.
 When the bell says **Backup not made**, open **Box status** and check **Disk space**. Use **Free**
 if it is available, or leave without pressing it to skip cleanup. Freeing space does not start a
 backup. If the cleanup is not enough, **Free** cannot remove other files for you; keep your
-database, recovery keys and saved backups.
+database, server key, backup encryption key and saved backups.
 
 ## When the box is out of space {#out-of-space}
 

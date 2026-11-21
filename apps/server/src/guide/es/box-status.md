@@ -184,7 +184,7 @@ no se cuentan.
 
 Los tamaños bajo **Espacio en disco** muestran qué está llenando el disco. En **Copias de
 seguridad**, puedes elegir cuántas copias conservar. Sal sin cambiar los ajustes para parar.
-Conserva la base de datos, las claves de recuperación y las copias guardadas.
+Conserva la base de datos, la clave del servidor, la clave de cifrado de copias y las copias guardadas.
 
 Antes de cada copia de seguridad, si falta espacio en el disco, el servidor puede borrar sus copias
 más antiguas de ese disco para hacer sitio. Nunca borra la copia más reciente de una carpeta, una
@@ -209,7 +209,7 @@ Esta página no puede borrar otros archivos ni trasladar tus datos a un disco ma
 Si la campana dice **Copia no hecha**, abre **Estado del servidor** y revisa **Espacio en disco**.
 Pulsa **Liberar** si está disponible, o sal sin pulsarlo para no hacer la limpieza. Liberar espacio
 no inicia una copia. Si no basta, **Liberar** no puede borrar otros archivos por ti; conserva la
-base de datos, las claves de recuperación y las copias guardadas.
+base de datos, la clave del servidor, la clave de cifrado de copias y las copias guardadas.
 
 ## Cuando el servidor no tiene espacio {#out-of-space}
 
