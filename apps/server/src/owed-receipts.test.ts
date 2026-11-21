@@ -384,7 +384,7 @@ describe("startFreshRounds", () => {
     await leftAlone(saleId, later);
   });
 
-  it.each(["printer.deleted", "printer.unpaired", "print_job.moved"])(
+  it.each(["printer.deleted", "print_job.moved"])(
     "never resends an original ended by %s",
     async (lastError) => {
       const { saleId, printerId } = await issued();

@@ -6,7 +6,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { endMovedPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import { endDeletedPrinterJobs } from "./printer-delete-jobs.js";
 import { createPrinter } from "./printers.js";
-import { claimPrintJobs, endUnpairedPrinterJobs, reportPrintJob } from "./runtime.js";
+import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const start = Date.parse("2026-11-18T12:00:00.000Z");
@@ -96,17 +96,6 @@ it("treats a retry stamped more than 60 seconds ahead as due after a backward cl
   expect(await claim()).toEqual([]);
   vi.setSystemTime(start - 55_001);
   expect(await claim()).toEqual([id]);
-});
-
-it("ends a waiting retry when its printer is unpaired", async () => {
-  const id = await failFirstAttempt();
-  expect(await claim()).toEqual([]);
-  expect(
-    await withTransaction(suite.db, (tx) => endUnpairedPrinterJobs(tx, agentId, [address])),
-  ).toEqual([id]);
-  expect(state(id)).toEqual({ status: "failed", attempts: 5, next_attempt_at: null });
-  vi.setSystemTime(start + 5_000);
-  expect(await claim()).toEqual([]);
 });
 
 it("clears a waiting retry when its document is moved to another printer", async () => {

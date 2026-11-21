@@ -39,7 +39,7 @@ import {
   PAYMENTS_MIGRATIONS,
   type ReaderStatus,
 } from "@waitron/payments";
-import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED, resendPrintJob } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, resendPrintJob } from "@waitron/printing";
 import {
   awaitingCertAlertSource,
   backupAlertSource,
@@ -1152,29 +1152,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     });
     expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
-    ]);
-  });
-
-  it("does not count a job ended because its printer was unpaired, and still counts an ordinary stuck job beside it", async () => {
-    await seedFixtureVenue();
-    const printerId = await seedPrinter({ name: "Bar printer" });
-    await seedJob({
-      printerId,
-      createdAt: minsAgo(10),
-      status: "failed",
-      attempts: MAX_DELIVERY_ATTEMPTS,
-      lastError: PRINTER_UNPAIRED,
-    });
-    expect(await readAlerts()).toEqual([]);
-
-    // No last_error at all: a filter that compares it with `<>` alone would drop this job too.
-    await seedJob({ printerId, createdAt: minsAgo(3) });
-    expect(await readAlerts()).toMatchObject([
-      {
-        code: "printer.jobs_waiting",
-        params: { printer: "Bar printer", count: 1 },
-        since: minsAgo(3),
-      },
     ]);
   });
 

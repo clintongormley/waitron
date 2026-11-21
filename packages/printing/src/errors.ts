@@ -25,10 +25,6 @@ declare module "@waitron/shared" {
     "printer.jobs_waiting": { printer: string; count: number };
     /** A queue-only reason: no fresh visible report names this USB/Bluetooth printer. */
     "printer.not_visible": Record<string, never>;
-    /** A print job ended because its Bluetooth printer was unpaired; it may already have printed, if
-     * the agent had sent it and its report was lost. Not thrown; stored as the job's `last_error` by
-     * `endUnpairedPrinterJobs`. */
-    "printer.unpaired": Record<string, never>;
     /** A print job ended because its printer was deleted; it may already have printed, if an
      * agent had sent it before the delete. Not thrown; stored as the job's `last_error` by
      * `endDeletedPrinterJobs`. */

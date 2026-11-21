@@ -190,9 +190,9 @@ the real box.
 
 ## Bluetooth at the box
 
-A first real pairing, and an Unpair, through the dashboard and the
-agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has
-yet paired or unpaired a real printer through the dashboard. `waitron.sh install` switches
+Repeat pairing through the dashboard and check that **Delete** clears the real printer's
+pairing under the shipped AppArmor profile with bluetoothd's `autopair` plugin off. The owner
+paired a real printer through the dashboard on 20 November. `waitron.sh install` switches
 `autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
 Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
 tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
@@ -220,10 +220,8 @@ not measured on the box.
 It needs the fixed image on the box first: run
 `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
 `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-and where the printer falls among them; then unpair the printer with Waitron's Unpair, which also
-switches it off, since Add a printer lists a paired Bluetooth device unless its agent's `info`
-reading says it is not a printer, and a switched-on printer's device, whether or not a scan marked
-it (A404); restart the print agent (`docker compose restart print-agent`) and wait a minute, so neither
+and where the printer falls among them. Choose **Delete** in Waitron and confirm that the box
+has unpaired the printer. Restart the print agent (`docker compose restart print-agent`) and wait a minute, so neither
 the agent nor the server holds an earlier reading of the printer; open Add a printer repeatedly, record on which scan it is first listed
 without Show all devices, and look for `bluetooth info failed` lines in
 `docker compose logs print-agent`.
@@ -389,9 +387,8 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#nobody-has-yet-typed-a-real-printers-address-into-check-a-known-address)
 - **The setup-page link is unproven on the box.**
   [Detail](printers.md#the-setup-page-link-is-unproven-on-the-box)
-- **Bluetooth at the box.** A first real pairing, and an Unpair, through the dashboard and the
-  agent, under the shipped AppArmor profile with bluetoothd's `autopair` plugin off — nobody has yet
-  paired or unpaired a real printer through the dashboard.
+- **Bluetooth at the box.** Repeat pairing through the dashboard and check that **Delete**
+  clears the real printer's pairing under the shipped AppArmor profile.
   [Detail](printers.md#bluetooth-at-the-box)
 - **Printing over RFCOMM from INSIDE the print-agent container (A140).**
   [Detail](printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
@@ -461,9 +458,10 @@ Hardware and inbox checks to complete in the owner session.
 - **Bluetooth command limits (watcher, 2026-11-16 03:02).** One pending operation per agent;
   exact retries keep their ID and deadline. Channel discovery caches a successful lookup, including
   an inconclusive answer's channel-1 fallback; a failed send drops it for the next job. The server
-  remembers only the last eight expired Unpair IDs across all agents, until accepted or evicted.
-  After eviction or a server restart, a late Unpair cannot switch the printer off. Jobs also remain
-  waiting for a printer unpaired outside Waitron; delete it to end its waiting jobs.
+  remembers only the last eight expired unpair command IDs across all agents, until accepted or
+  evicted. A late result can clear the discovery pairing report while that command is remembered.
+  **Delete** ends waiting jobs immediately. If a printer was unpaired outside Waitron, delete
+  it to end its waiting jobs.
   [Plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**

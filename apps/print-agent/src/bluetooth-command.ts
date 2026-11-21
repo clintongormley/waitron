@@ -161,6 +161,8 @@ export function pairWithBluetoothctl(
         finish(fail("the printer stopped waiting for the PIN", "pin_too_slow"), "quit");
       else if (name === "org.bluez.Error.AuthenticationFailed" && pinWritten)
         finish(fail("wrong PIN", "wrong_pin"), "quit");
+      else if (name === "org.bluez.Error.AuthenticationFailed")
+        finish(fail(`pairing failed: ${name}`, "pairing_refused"), "quit");
       else if (name === "org.bluez.Error.ConnectionAttemptFailed")
         finish(fail("printer is off or out of range", "out_of_range"), "quit");
       else if (DBUS_ERROR_NAME.test(name)) finish(fail(`pairing failed: ${name}`), "quit");

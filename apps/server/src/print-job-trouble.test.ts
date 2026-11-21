@@ -14,7 +14,7 @@ import {
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
-import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { printersInTrouble, printersInTroubleQuery } from "./print-job-trouble.js";
 
@@ -130,18 +130,12 @@ describe("printersInTrouble", () => {
     expect(await read()).toMatchObject([{ id, count: 1, oldest: minsAgo(3) }]);
   });
 
-  it("names nothing for a young job, a drawer pulse, a job an Unpair ended, or a switched-off printer", async () => {
+  it("names nothing for a young job, a drawer pulse, or a switched-off printer", async () => {
     await prepareVenue();
     const bar = await seedPrinter({ name: "Bar" });
     const off = await seedPrinter({ name: "Kitchen", active: false });
     await seedJob({ printerId: bar, createdAt: minsAgo(1) });
     await seedJob({ printerId: bar, createdAt: minsAgo(10), kind: "drawer" });
-    await seedJob({
-      printerId: bar,
-      createdAt: minsAgo(10),
-      status: "failed",
-      lastError: PRINTER_UNPAIRED,
-    });
     await seedJob({ printerId: off, createdAt: minsAgo(10) });
 
     expect(await read()).toEqual([]);

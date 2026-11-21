@@ -64,8 +64,8 @@ unpaired Bluetooth printer, enter the PIN from its manual, then complete the add
 Use **Show all devices** if the scan result is hidden by the printer filter.
 
 **Pair** on an already active printer pairs it again without adding a registration.
-Use **Unpair** to remove the Bluetooth pairing. Do not infer that a successful unpair
-removed every other route through which an agent can serve that printer.
+Use **Delete** to remove the Bluetooth printer and ask its boxes to unpair. If Waitron says
+a box may still be paired, make sure the box is on and wait for any Bluetooth request to finish. Then add the printer and choose **Delete** again.
 
 See the [printer screen](../../apps/dashboard/src/screens/printers-screen.ts),
 [printer API](../../apps/server/src/print-api.ts) and the

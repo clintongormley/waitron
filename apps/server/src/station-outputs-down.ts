@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lt, min, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, min, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   deviceProfiles,
@@ -16,7 +16,6 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble, printedOrResent, UNPRINTED_STATUSES } from "./print-job-trouble.js";
 import { compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
@@ -82,7 +81,6 @@ export function stationPrintersDownQuery(
         eq(printers.active, true),
         inArray(printJobs.status, UNPRINTED_STATUSES),
         printJobInTrouble(now),
-        or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
         sql`not exists (select 1 from ${printJobs} as ${laterDocument} indexed by print_jobs_pull_idx
         where ${laterDocument.printerId} = ${printJobs.printerId}
         and ${laterDocument.kind} = 'document'

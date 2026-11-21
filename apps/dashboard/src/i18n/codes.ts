@@ -377,10 +377,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This print agent has not found that Bluetooth device recently. Scan for printers, then try again.",
     es: "Este agente de impresión no ha encontrado ese dispositivo Bluetooth recientemente. Pulsa Buscar impresoras e inténtalo de nuevo.",
   },
-  "printer.bluetooth_not_paired": {
-    en: "This print agent no longer reports that Bluetooth device as paired.",
-    es: "Este agente de impresión ya no indica que ese dispositivo Bluetooth esté emparejado.",
-  },
   "printer.not_visible": {
     en: "No print agent currently sees this printer. Check the printer connection and print agent.",
     es: "Ningún agente de impresión ve esta impresora ahora. Comprueba la conexión de la impresora y el agente.",
@@ -392,10 +388,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "print_job.drawer_outcome_unknown": {
     en: "No result was reported. The drawer may have opened. This command will not be retried.",
     es: "No se recibió el resultado. El cajón puede haberse abierto. Esta orden no se volverá a intentar.",
-  },
-  "printer.unpaired": {
-    en: "The printer was unpaired, so this job will not be retried.",
-    es: "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
   },
   "printer.deleted": {
     en: "The printer was deleted, so this job will not be retried.",

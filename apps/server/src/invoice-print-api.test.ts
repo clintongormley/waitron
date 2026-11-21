@@ -28,8 +28,6 @@ import {
   resendPrintJob,
   reportPrintJob,
   runAgentOnce,
-  endDeletedPrinterJobs,
-  endUnpairedPrinterJobs,
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
 } from "@waitron/printing";
@@ -49,11 +47,7 @@ import {
   invoiceDeliveryClaimsDue,
 } from "./invoice-delivery.js";
 import { clearOldPrintPayloads } from "./housekeeping.js";
-import {
-  claimInvoicePrintJobs,
-  endInvoicePrintDeliveries,
-  resendInvoicePrintJob,
-} from "./invoice-print.js";
+import { claimInvoicePrintJobs, resendInvoicePrintJob } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -245,7 +239,6 @@ async function setup(bluetooth = false) {
     job,
     delivery,
     agentId: agent!.id,
-    otherId: other!.id,
     otherToken: `${other!.id}.${secret}`,
     token,
     client,
@@ -1130,20 +1123,6 @@ async function bluetoothPull(
   expect(response.status).toBe(200);
   return (await response.json()) as { jobs: { id: string; invoiceClaim?: InvoicePrintClaim }[] };
 }
-async function forget(
-  ctx: Awaited<ReturnType<typeof setup>>,
-  command: Awaited<ReturnType<typeof manager>>,
-) {
-  const response = await command(`/management-api/print-agents/${ctx.agentId}/bluetooth/forget`, {
-    address: MAC,
-  });
-  expect(response.status).toBe(202);
-  const { command: queued } = (await response.json()) as { command: { id: string } };
-  return bluetoothPull(ctx, {
-    bluetoothOutcomes: [{ id: queued.id, ok: true }],
-    pairedBluetooth: [],
-  });
-}
 async function emailRetry(ctx: Awaited<ReturnType<typeof setup>>) {
   return withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, ctx.sale.saleId, {
@@ -1172,47 +1151,6 @@ describe("invoice receipt terminal Bluetooth endings", () => {
       expiredAt: null,
     });
     expect(await ctx.jobRow()).toMatchObject({ status: "printing", lastError: null });
-  });
-
-  it("accepts authenticated late success after unpairing before a retry and makes the next delivery a duplicate", async () => {
-    const ctx = await setup(true);
-    const command = await manager(ctx);
-    const pulled = await bluetoothPull(ctx, {
-      visible: [{ transport: "bluetooth", localKey: MAC }],
-    });
-    const claim = pulled.jobs[0]!.invoiceClaim!;
-    await forget(ctx, command);
-    expect(await ctx.row()).toMatchObject({ status: "unknown" });
-    expect(
-      (await ctx.result({ status: "done", invoiceClaim: { ...claim, token: randomUUID() } }))
-        .status,
-    ).toBe(204);
-    expect(await ctx.row()).toMatchObject({ status: "unknown", reportedAt: null });
-    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
-    expect(await ctx.row()).toMatchObject({
-      status: "sent",
-      reportedOutcome: "sent",
-      completedAt: ctx.now().toISOString(),
-      failureCode: null,
-    });
-    expect(await ctx.jobRow()).toMatchObject({ status: "done", lastError: null });
-    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
-  });
-
-  it("keeps a completed invoice unchanged when the printer is later unpaired", async () => {
-    const ctx = await setup(true);
-    const command = await manager(ctx);
-    const pulled = await bluetoothPull(ctx, {
-      visible: [{ transport: "bluetooth", localKey: MAC }],
-    });
-    expect(
-      (await ctx.result({ status: "done", invoiceClaim: pulled.jobs[0]!.invoiceClaim })).status,
-    ).toBe(204);
-    const completed = await ctx.row();
-    await forget(ctx, command);
-    expect(await ctx.row()).toEqual(completed);
-    expect(await ctx.jobRow()).toMatchObject({ status: "done" });
-    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
   });
 
   it("releases an invoice after a Bluetooth send fails and leaves it ended after recovery", async () => {
@@ -1280,157 +1218,17 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     ).toEqual([]);
     expect(await ctx.row()).toMatchObject({ status: "failed" });
   });
-
-  it("releases a queued invoice after confirmed unpairing and does not print it on reactivation", async () => {
-    const ctx = await setup(true);
-    const command = await manager(ctx);
-    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
-    expect((await forget(ctx, command)).jobs).toEqual([]);
-    expect(await ctx.jobRow()).toMatchObject({
-      status: "failed",
-      lastError: "printer.unpaired",
-      attempts: MAX_DELIVERY_ATTEMPTS,
-    });
-    expect(await ctx.row()).toMatchObject({
-      status: "failed",
-      failureCode: "transport_failed",
-      expiredAt: null,
-    });
-    expect(
-      (
-        await command("/management-api/printers", {
-          name: "Receipt",
-          transport: "bluetooth",
-          localKey: MAC,
-        })
-      ).status,
-    ).toBe(201);
-    expect(
-      (await suite.db.select().from(printers).where(eq(printers.id, ctx.printer.id)))[0],
-    ).toMatchObject({ active: true });
-    expect(
-      (await bluetoothPull(ctx, { visible: [{ transport: "bluetooth", localKey: MAC }] })).jobs,
-    ).toEqual([]);
-    expect(await emailRetry(ctx)).toMatchObject({ designation: "original" });
-  });
-
-  it("keeps a claimed invoice unknown after unpairing and fences its late success behind a newer attempt", async () => {
-    const ctx = await setup(true);
-    const command = await manager(ctx);
-    const pulled = await bluetoothPull(ctx, {
-      visible: [{ transport: "bluetooth", localKey: MAC }],
-    });
-    expect(pulled.jobs).toHaveLength(1);
-    const claim = pulled.jobs[0]!.invoiceClaim!;
-    expect(claim).toBeDefined();
-    const tokenHash = (await ctx.jobRow()).claimTokenHash;
-    await forget(ctx, command);
-    expect(await ctx.row()).toMatchObject({
-      status: "unknown",
-      failureCode: "transport_failed",
-      expiredAt: ctx.now().toISOString(),
-    });
-    expect(await ctx.jobRow()).toMatchObject({ claimTokenHash: tokenHash });
-    const retry = await emailRetry(ctx);
-    expect(retry).toMatchObject({ designation: "original" });
-    expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
-    expect(await ctx.row()).toMatchObject({
-      status: "unknown",
-      reportedOutcome: "sent",
-      completedAt: null,
-    });
-    expect(
-      (
-        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry.id))
-      )[0],
-    ).toMatchObject({ status: "queued", designation: "original" });
-    expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
-  });
-
-  it("keeps the original agent's late report as history when another agent confirmed unpairing", async () => {
-    const ctx = await setup(true);
-    const [job] = (
-      await bluetoothPull(ctx, {
-        visible: [{ transport: "bluetooth", localKey: MAC }],
-      })
-    ).jobs;
-    await suite.db
-      .update(printJobs)
-      .set({ claimedAt: new Date(ctx.now().getTime() - 61_000).toISOString() })
-      .where(eq(printJobs.id, ctx.job.jobId));
-    await withTransaction(suite.db, async (tx) => {
-      const ended = await endUnpairedPrinterJobs(tx, ctx.otherId, [MAC]);
-      expect(ended).toEqual([ctx.job.jobId]);
-      await endInvoicePrintDeliveries(tx, ended, ctx.now());
-    });
-    const retry = await emailRetry(ctx);
-    expect((await ctx.result({ status: "done", invoiceClaim: job!.invoiceClaim })).status).toBe(
-      204,
-    );
-    expect(await ctx.row()).toMatchObject({ status: "unknown", reportedOutcome: "sent" });
-    expect(await ctx.jobRow()).toMatchObject({ status: "failed", lastError: "printer.unpaired" });
-    expect(
-      (
-        await suite.db.select().from(invoiceDeliveries).where(eq(invoiceDeliveries.id, retry.id))
-      )[0],
-    ).toMatchObject({ status: "queued", designation: "original", generation: 2 });
-  });
-
-  it("reconciles a receipt when its agent confirms printing after another agent unpaired it", async () => {
-    const ctx = await setup(true);
-    const [job] = (
-      await bluetoothPull(ctx, {
-        visible: [{ transport: "bluetooth", localKey: MAC }],
-      })
-    ).jobs;
-    const claimedAt = new Date(ctx.now().getTime() - 61_000).toISOString();
-    await suite.db.update(printJobs).set({ claimedAt }).where(eq(printJobs.id, ctx.job.jobId));
-    await withTransaction(suite.db, async (tx) => {
-      const ended = await endUnpairedPrinterJobs(tx, ctx.otherId, [MAC]);
-      expect(ended).toEqual([ctx.job.jobId]);
-      await endInvoicePrintDeliveries(tx, ended, ctx.now());
-    });
-    expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "transport_failed" });
-    expect((await ctx.result({ status: "done", invoiceClaim: job!.invoiceClaim })).status).toBe(
-      204,
-    );
-    expect(await ctx.row()).toMatchObject({
-      status: "sent",
-      reportedOutcome: "sent",
-      failureCode: null,
-    });
-    expect(await ctx.jobRow()).toMatchObject({
-      status: "done",
-      lastError: null,
-      claimedBy: ctx.agentId,
-      claimedAt,
-    });
-    expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
-  });
 });
 
-/** The printer delete's job and receipt endings and its tombstone write, in one transaction. */
 async function deletePrinterNow(
   ctx: Awaited<ReturnType<typeof setup>>,
-  printerId = ctx.printer.id,
+  command: Awaited<ReturnType<typeof manager>>,
 ) {
-  await withTransaction(suite.db, async (tx) => {
-    const live = await tx.execute<{ print_job_id: string }>(sql`
-      select d.print_job_id from invoice_deliveries d
-      join print_jobs j on j.id = d.print_job_id
-      where j.printer_id = ${printerId} and d.medium = 'receipt'
-        and d.status in ('queued', 'sending')`);
-    await endDeletedPrinterJobs(tx, printerId);
-    await endInvoicePrintDeliveries(
-      tx,
-      live.rows.map((row) => row.print_job_id),
-      ctx.now(),
-    );
-    await tx
-      .update(printers)
-      .set({ active: false, deletedAt: ctx.now().toISOString() })
-      .where(eq(printers.id, printerId));
-  });
+  const deleted = await command(`/management-api/printers/${ctx.printer.id}`, undefined, "DELETE");
+  expect(deleted.status).toBe(200);
+  return (await deleted.json()) as {
+    bluetoothUnpair?: { commands: { command: { id: string } }[] };
+  };
 }
 
 const DELETED_JOB = {
@@ -1451,7 +1249,7 @@ describe("invoice receipt printer deletion", () => {
       const ctx = await setup();
       const claim = (await ctx.pull())[0]!.invoiceClaim!;
       const tokenHash = (await ctx.jobRow()).claimTokenHash;
-      await deletePrinterNow(ctx);
+      await deletePrinterNow(ctx, await manager(ctx));
       const endedJob = await ctx.jobRow();
       expect(endedJob).toMatchObject({
         ...DELETED_JOB,
@@ -1515,9 +1313,11 @@ describe("invoice receipt printer deletion", () => {
     },
   );
 
-  it("fails a queued receipt with its job, and nothing claims it", async () => {
-    const ctx = await setup();
-    await deletePrinterNow(ctx);
+  it("ends a waiting receipt immediately, and nothing claims it when the Bluetooth printer returns", async () => {
+    const ctx = await setup(true);
+    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
+    const command = await manager(ctx);
+    const { bluetoothUnpair } = await deletePrinterNow(ctx, command);
     expect(await ctx.row()).toMatchObject({
       status: "failed",
       failureCode: "transport_failed",
@@ -1528,8 +1328,26 @@ describe("invoice receipt printer deletion", () => {
       claimedBy: null,
       claimTokenHash: null,
     });
-    ctx.advance(1000);
-    expect(await ctx.pull()).toEqual([]);
+    const removal = bluetoothUnpair!.commands[0]!.command;
+    expect(
+      (
+        await bluetoothPull(ctx, {
+          pairedBluetooth: [],
+          bluetoothOutcomes: [{ id: removal.id, ok: true }],
+        })
+      ).jobs,
+    ).toEqual([]);
+    await bluetoothPull(ctx);
+    const restored = await command("/management-api/printers", {
+      name: "Receipt",
+      transport: "bluetooth",
+      localKey: MAC,
+    });
+    expect(restored.status).toBe(201);
+    expect(await restored.json()).toMatchObject({ id: ctx.printer.id });
+    expect(
+      (await bluetoothPull(ctx, { visible: [{ transport: "bluetooth", localKey: MAC }] })).jobs,
+    ).toEqual([]);
     expect(await ctx.row()).toMatchObject({ status: "failed" });
     expect(await emailRetry(ctx)).toMatchObject({ designation: "original", status: "queued" });
   });
@@ -1540,7 +1358,7 @@ describe("invoice receipt printer deletion", () => {
     expect((await ctx.result({ status: "done", invoiceClaim: claim })).status).toBe(204);
     const sent = await ctx.row();
     const job = await ctx.jobRow();
-    await deletePrinterNow(ctx);
+    await deletePrinterNow(ctx, await manager(ctx));
     expect(await ctx.row()).toEqual(sent);
     expect(await ctx.jobRow()).toEqual(job);
     expect(await emailRetry(ctx)).toMatchObject({ designation: "duplicate" });
@@ -1554,10 +1372,10 @@ describe("invoice receipt printer deletion", () => {
         const claim = (await ctx.pull())[0]!.invoiceClaim!;
         await ctx.result({ status: "done", invoiceClaim: claim });
       }
-      await deletePrinterNow(ctx);
+      const command = await manager(ctx);
+      await deletePrinterNow(ctx, command);
       const jobs = await suite.db.select().from(printJobs);
       const deliveries = await suite.db.select().from(invoiceDeliveries);
-      const command = await manager(ctx);
 
       const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
 
@@ -1572,7 +1390,8 @@ describe("invoice receipt printer deletion", () => {
 
   it("rolls back the claim expiry a refused resend of a deleted printer's receipt ran first", async () => {
     const ctx = await setup();
-    await deletePrinterNow(ctx);
+    const command = await manager(ctx);
+    await deletePrinterNow(ctx, command);
     // A receipt sent long enough ago that the resend's expiry pass would end it.
     const stale = new Date(ctx.now().getTime() - 120_000).toISOString();
     await suite.db
@@ -1585,7 +1404,6 @@ describe("invoice receipt printer deletion", () => {
       .where(eq(invoiceDeliveries.id, ctx.delivery.id));
     const before = await suite.db.select().from(invoiceDeliveries);
     const jobs = await suite.db.select().from(printJobs);
-    const command = await manager(ctx);
 
     const response = await command(`/management-api/print-jobs/${ctx.job.jobId}/resend`, {});
 
@@ -1595,41 +1413,6 @@ describe("invoice receipt printer deletion", () => {
     // The control: the same expiry, committed on its own, does end it.
     await withTransaction(suite.db, (tx) => expireInvoiceDeliveryClaims(tx, ctx.now()));
     expect(await ctx.row()).toMatchObject({ status: "unknown", failureCode: "timeout" });
-  });
-
-  it("switches off only the live printer when a deleted printer's Bluetooth address is unpaired", async () => {
-    const ctx = await setup(true);
-    const command = await manager(ctx);
-    await deletePrinterNow(ctx);
-    expect((await bluetoothPull(ctx)).jobs).toEqual([]);
-    const [tombstone] = await suite.db
-      .select()
-      .from(printers)
-      .where(eq(printers.id, ctx.printer.id));
-    const [replacement] = await suite.db
-      .insert(printers)
-      .values({
-        ...tombstone!,
-        id: randomUUID(),
-        name: "Receipt again",
-        active: true,
-        deletedAt: null,
-      })
-      .returning({ id: printers.id });
-    // Fails the pull on any write to the deleted row, so a same-value write shows too.
-    await suite.db.execute(sql`create trigger test_tombstone_written before update on printers
-      when old.deleted_at is not null begin select raise(abort, 'tombstone_written'); end`);
-    try {
-      await forget(ctx, command);
-    } finally {
-      await suite.db.execute(sql`drop trigger test_tombstone_written`);
-    }
-    expect(
-      (await suite.db.select().from(printers).where(eq(printers.id, ctx.printer.id)))[0],
-    ).toEqual(tombstone);
-    expect(
-      (await suite.db.select().from(printers).where(eq(printers.id, replacement!.id)))[0],
-    ).toMatchObject({ active: false, deletedAt: null });
   });
 });
 

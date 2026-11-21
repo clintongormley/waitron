@@ -9,7 +9,6 @@ import {
   PRINT_JOB_LEASE_MS,
   PULL_BATCH_LIMIT,
   claimPrintJobs,
-  endUnpairedPrinterJobs,
   reportPrintJob,
 } from "./runtime.js";
 import {
@@ -256,9 +255,8 @@ describe("a deleted printer's late work", () => {
     expect((await rows([seeded!.id]))[seeded!.id]).toMatchObject({ status: "queued" });
   });
 
-  it("leaves a deleted Bluetooth printer's jobs alone when its address is reported unpaired", async () => {
+  it("leaves a deleted Bluetooth printer's jobs alone when a replacement is deleted", async () => {
     await setup();
-    const agent = await seedAgent("Box");
     const oldPrinter = await printer(MAC, "bluetooth");
     await deletePrinterRow(oldPrinter);
     const [seeded] = await suite.db
@@ -274,10 +272,10 @@ describe("a deleted printer's late work", () => {
       .returning({ id: printers.id });
     const before = await rows([seeded!.id]);
 
-    const unpaired = await job(live!.id);
-    expect(
-      await withTransaction(suite.db, (tx) => endUnpairedPrinterJobs(tx, agent, [MAC])),
-    ).toEqual([unpaired]);
+    const ending = await job(live!.id);
+    expect(await withTransaction(suite.db, (tx) => endDeletedPrinterJobs(tx, live!.id))).toEqual([
+      ending,
+    ]);
     expect(await rows([seeded!.id])).toEqual(before);
   });
 });

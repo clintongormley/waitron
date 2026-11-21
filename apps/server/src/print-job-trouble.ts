@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, isNull, lt, max, min, ne, not, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, max, min, not, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import {
@@ -10,7 +10,7 @@ import {
   stationPrinterPairs,
   type Transaction,
 } from "@waitron/db";
-import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { kitchenJobsNotWaiting } from "./kitchen-print.js";
 
 /** A document job older than this that has not printed counts as in trouble. */
@@ -132,8 +132,8 @@ export interface PrinterInTrouble {
 const ticketId = sql<string | null>`case when ${reprintCanStandIn} then ${printJobs.id} end`;
 
 /**
- * The troubled jobs of every active printer ({@link printJobInTrouble}), less those an Unpair
- * ended, in one pass: per printer, one row with a null `ticketId` totalling the jobs no Reprint can
+ * The troubled jobs of every active printer ({@link printJobInTrouble}), in one pass: per printer,
+ * one row with a null `ticketId` totalling the jobs no Reprint can
  * stand in for ({@link reprintCanStandIn}), and one row for each job one can, named by `ticketId`.
  */
 export function printersInTroubleQuery(tx: Transaction, now: Date) {
@@ -163,8 +163,6 @@ export function printersInTroubleQuery(tx: Transaction, now: Date) {
           // Lets the index search skip printed jobs.
           inArray(printJobs.status, UNPRINTED_STATUSES),
           printJobInTrouble(now),
-          // Ended on purpose by an Unpair, not a fault to fix.
-          or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
         ),
       )
       .groupBy(printers.id, printers.name, ticketId)

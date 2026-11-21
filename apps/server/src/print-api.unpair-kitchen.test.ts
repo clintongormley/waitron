@@ -7,7 +7,7 @@ import { kitchenPrintJobs, kitchenStations, parties, printJobs } from "@waitron/
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
-import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED, createPrinter } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED, createPrinter } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -23,12 +23,10 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// A kitchen ticket ended by a Bluetooth unpairing, read back through the groups read's printing
-// problems; what counts as a problem is pinned in `print-problems.test.ts`.
 const MAC = "5A:4A:45:D4:FB:BB";
 
 let venue: BillVenue;
-let stationId: string;
+let printerId: string;
 let managerCookie: string;
 let printApi: Hono;
 
@@ -38,21 +36,20 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    stationId = await inTx(venue, async (tx) => {
+    await inTx(venue, async (tx) => {
       const [station] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
-      const { id: printerId } = await createPrinter(tx, {
+      ({ id: printerId } = await createPrinter(tx, {
         name: "Kitchen",
         transport: "bluetooth",
         localKey: MAC,
-      });
+      }));
       await attachPrinterToStation(tx, {
         stationId: station!.id,
         printerId,
       });
-      return station!.id;
     });
     const session = await inTx(venue, (tx) =>
       startManagementSession(tx, { method: "password", personId: venue.adminId }),
@@ -78,7 +75,7 @@ useVenueDb({
 });
 
 async function printApiCall(
-  method: "GET" | "POST",
+  method: "DELETE" | "POST",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string },
 ): Promise<Response> {
@@ -92,8 +89,8 @@ async function printApiCall(
   });
 }
 
-/** An accepted agent reporting the kitchen printer paired, with an Unpair for it queued. */
-async function agentUnpairingTheKitchenPrinter(): Promise<{ token: string; commandId: string }> {
+/** An accepted agent reporting the kitchen printer paired. */
+async function agentPairedToTheKitchenPrinter(): Promise<void> {
   const knock = await printApiCall("POST", "/print-api/agent/join", { body: { name: "Box" } });
   expect(knock.status).toBe(201);
   const { token, verificationNumber } = (await knock.json()) as {
@@ -112,14 +109,6 @@ async function agentUnpairingTheKitchenPrinter(): Promise<{ token: string; comma
     body: { pairedBluetooth: [{ localKey: MAC }] },
   });
   expect(paired.status).toBe(200);
-  const queued = await printApiCall(
-    "POST",
-    `/management-api/print-agents/${agentId}/bluetooth/forget`,
-    { cookie: managerCookie, body: { address: MAC } },
-  );
-  expect(queued.status).toBe(202);
-  const { command } = (await queued.json()) as { command: { id: string } };
-  return { token, commandId: command.id };
 }
 
 /** A seated table with one fired group of Octopus, whose kitchen ticket waits for the printer. */
@@ -186,9 +175,9 @@ describe("a kitchen ticket reprinted on another printer", () => {
   });
 });
 
-describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
-  it("shows as the table's printing problem", async () => {
-    const { token, commandId } = await agentUnpairingTheKitchenPrinter();
+describe("a kitchen ticket ended by deleting a Bluetooth printer", () => {
+  it("ends the ticket and removes the old station printer from the table's printing problems", async () => {
+    await agentPairedToTheKitchenPrinter();
     const table = await tableWithWaitingTicket();
     const before = await send(
       venue.app,
@@ -198,19 +187,26 @@ describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
     );
     expect((before.json as { printProblems?: unknown }).printProblems).toEqual([]);
 
-    const reported = await printApiCall("POST", "/print-api/agent/jobs", {
-      bearer: token,
-      body: { bluetoothOutcomes: [{ id: commandId, ok: true }] },
+    const deleted = await printApiCall("DELETE", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
     });
-    expect(reported.status).toBe(200);
+    expect(deleted.status).toBe(200);
 
     const [job] = await inTx(venue, (tx) =>
       tx
-        .select({ lastError: printJobs.lastError, createdAt: printJobs.createdAt })
+        .select({
+          status: printJobs.status,
+          attempts: printJobs.attempts,
+          lastError: printJobs.lastError,
+        })
         .from(printJobs)
         .where(eq(printJobs.id, table.jobId)),
     );
-    expect(job!.lastError).toBe(PRINTER_UNPAIRED);
+    expect(job).toEqual({
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      lastError: PRINTER_DELETED,
+    });
     const answer = await send(
       venue.app,
       venue.cookie,
@@ -218,14 +214,7 @@ describe("a kitchen ticket ended by a Bluetooth unpairing", () => {
       `/api/parties/${table.partyId}/groups`,
     );
     expect(answer.status).toBe(200);
-    expect((answer.json as { printProblems?: unknown }).printProblems).toEqual([
-      {
-        workingOrderId: table.tabId,
-        stationId,
-        stationName: expect.any(String),
-        since: job!.createdAt,
-      },
-    ]);
+    expect((answer.json as { printProblems?: unknown }).printProblems).toEqual([]);
   });
 });
 

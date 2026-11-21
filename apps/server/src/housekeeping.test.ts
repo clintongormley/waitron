@@ -553,7 +553,6 @@ describe("print payload housekeeping", () => {
       [{ status: "failed", attempts: 4 }, 3],
       [{ status: "failed", attempts: 5 }, 3],
       [{ status: "failed", attempts: 5, lastError: "print_job.moved" }, 3],
-      [{ status: "failed", attempts: 5, lastError: "printer.unpaired" }, 3],
       [{ status: "failed", attempts: 5, lastError: "printer.deleted" }, 0],
       [{ status: "failed", kind: "drawer", attempts: 1 }, 0],
     ] as const;

@@ -1317,6 +1317,7 @@ export interface PrinterAddressProbe {
  * here because the dashboard does not import that package. */
 export type BluetoothFailureReason =
   | "wrong_pin"
+  | "pairing_refused"
   | "pin_needed"
   | "pin_too_slow"
   | "unsupported_method"
@@ -1336,6 +1337,13 @@ export interface BluetoothCommandStatus {
   reason?: BluetoothFailureReason;
   /** Pending only: how long until the server drops the command unanswered. */
   expiresInMs?: number;
+}
+
+export interface PrinterDeleteResult extends DeleteImpact {
+  bluetoothUnpair?: {
+    commands: { agentId: string; agentName: string; command: BluetoothCommandStatus }[];
+    warnings: { agentName: string | null }[];
+  };
 }
 
 export type OfficePrinterReport = { port: number; resourcePath: string } & (
@@ -4583,17 +4591,6 @@ export class DashboardApi {
     );
   }
 
-  forgetBluetoothPairing(
-    agentId: string,
-    address: string,
-  ): Promise<{ command: BluetoothCommandStatus }> {
-    return this.#request<{ command: BluetoothCommandStatus }>(
-      `/management-api/print-agents/${agentId}/bluetooth/forget`,
-      "POST",
-      { address },
-    );
-  }
-
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
   }
@@ -4602,7 +4599,7 @@ export class DashboardApi {
     return this.#request(`/management-api/printers/${id}/delete-impact`, "GET");
   }
 
-  deletePrinter(id: string): Promise<DeleteImpact> {
+  deletePrinter(id: string): Promise<PrinterDeleteResult> {
     return this.#request(`/management-api/printers/${id}`, "DELETE");
   }
 

@@ -235,12 +235,13 @@ describe("pairWithBluetoothctl — outcomes", () => {
     expect(child.input.slice(-2)).toStrictEqual(["quit\n", END]);
   });
 
-  it("does not call AuthenticationFailed a wrong PIN when no PIN was ever asked for", async () => {
+  it("names a pairing refusal when AuthenticationFailed arrives without a PIN prompt", async () => {
     const { child, result } = registered("1234");
     child.say(event("Failed to pair: org.bluez.Error.AuthenticationFailed"));
     await expect(result).resolves.toStrictEqual({
       ok: false,
       error: "pairing failed: org.bluez.Error.AuthenticationFailed",
+      reason: "pairing_refused",
     });
   });
 

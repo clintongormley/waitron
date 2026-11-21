@@ -1159,7 +1159,8 @@ Delete keeps identity, name, calibration and history, while clearing live assign
 pending work. With no active endpoint match, Add restores an inactive undeleted match, otherwise the latest deleted
 match, using transport/local key, network host/port or cloud-poll id. Active local-key duplicates
 still refuse; active network/cloud matches still insert. A recognised restoration skips naming and
-calibration. System-unpaired printers stay listed. Guards: `packages/printing/src/printers.test.ts`
+calibration. Deleting a Bluetooth printer asks each box that reports it paired to unpair it after
+the delete commits. A printer unpaired outside Waitron stays listed. Guards: `packages/printing/src/printers.test.ts`
 (matching/settings), `apps/server/src/printer-delete.db.test.ts` and
 `printer-delete-history.test.ts` (assignments/history), `apps/server/src/print-api.test.ts`
 (discovery and routes), `apps/dashboard/src/screens/printers-screen.test.ts` (staff controls).

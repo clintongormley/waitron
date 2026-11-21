@@ -191,8 +191,8 @@ describe("a refusal, should a printer ever answer one", () => {
     expect(copy.refusal({ code: "printer.not_found", params: {}, targets: [] })).toBe(
       "That printer no longer exists",
     );
-    expect(copy.refusal({ code: "printer.unpaired", params: {}, targets: [ana] })).toBe(
-      "The printer was unpaired, so this job will not be retried: Handheld Ana",
+    expect(copy.refusal({ code: "printer.deleted", params: {}, targets: [ana] })).toBe(
+      "The printer was deleted, so this job will not be retried: Handheld Ana",
     );
   });
 });

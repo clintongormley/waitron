@@ -246,7 +246,7 @@ export async function endInvoicePrintDeliveries(
   now = new Date(),
 ): Promise<void> {
   if (jobIds.length === 0) return;
-  // A handed-out payload may have printed even when its agent later reports an unpairing.
+  // A handed-out payload may already have reached the printer.
   await tx
     .update(invoiceDeliveries)
     .set({

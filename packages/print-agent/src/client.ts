@@ -38,6 +38,7 @@ export interface BluetoothCommand {
  * for its log. A failure the agent cannot name carries none. */
 export const BLUETOOTH_FAILURE_REASONS = [
   "wrong_pin",
+  "pairing_refused",
   "pin_needed",
   "pin_too_slow",
   "unsupported_method",

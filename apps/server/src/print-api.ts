@@ -9,7 +9,10 @@ import { formatEquipmentLabel } from "./equipment-label.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
 import { pagePrinterHold, readSendingPagePrinters } from "./invoice-delivery-status.js";
-import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
+import {
+  createPrinterBluetoothCommands,
+  type BluetoothCommandStatus,
+} from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
@@ -38,7 +41,6 @@ import {
 import {
   canResendPrintJob,
   createPrinter,
-  endUnpairedPrinterJobs,
   enqueuePrintJob,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
@@ -73,7 +75,6 @@ import {
   assertPrintPayload,
   claimInvoicePrintJobs,
   reportInvoicePrintJob,
-  endInvoicePrintDeliveries,
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
 import { requireAgent } from "./print-agent-session.js";
@@ -155,7 +156,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "printer.probe_busy": 429,
   "printer.bluetooth_command_busy": 429,
   "printer.bluetooth_not_discovered": 400,
-  "printer.bluetooth_not_paired": 400,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
   "invoice_delivery.active": 409,
@@ -501,7 +501,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     lastSeenAt: number;
     /** Only a scan sets this, and only it authorizes Pair. */
     scannedAt?: number;
-    /** Only a paired report sets this, and only it authorizes Forget. */
+    /** Only a paired report sets this and qualifies the box for unpairing on Delete. */
     pairedAt?: number;
     /** Only a visible report sets this: the agent can print to the device. */
     visibleAt?: number;
@@ -811,9 +811,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
   // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
   // when that report is older than the window or, being held in memory, lost to a server restart.
-  // A reported succeeded Unpair switches that Bluetooth printer off first and ends its waiting jobs
-  // (`endUnpairedPrinterJobs`), while the server still holds the command (`COMMAND_TTL_MS`), unless
-  // another box reported it visible within `DISCOVERED_TTL_MS`.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       if (deps.stopping?.aborted) return c.body(null, 503);
@@ -849,8 +846,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       );
 
       const now = Date.now();
-      // A succeeded unpairing ends this agent's earlier paired report, so the device is no longer
-      // listed as paired nor offered Forget; one this same pull still lists as paired is stamped below.
+      // A successful unpair clears the earlier pairing report. A report in this pull is newer.
       for (const address of unpaired) {
         const key = keyOf(agentId, "bluetooth", address);
         const prior = discovered.get(key);
@@ -953,43 +949,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             );
         }
-        // Read here rather than before the transaction, so a report another agent recorded while
-        // this pull waited for the write lock counts.
-        const printableElsewhere = (): Set<string | undefined> => {
-          const checkedAt = Date.now();
-          return new Set(
-            [...discovered.values()]
-              .filter(
-                (e) =>
-                  e.agentId !== agentId &&
-                  e.transport === "bluetooth" &&
-                  isFresh(e.visibleAt, checkedAt),
-              )
-              .map((e) => e.localKey),
-          );
-        };
-        // An unpaired printer is switched off and its waiting jobs ended before the claim, so this
-        // pull hands out none of them and a later Add does not print them; one another box
-        // can still print to is left alone.
-        if (unpaired.length > 0) {
-          const elsewhere = printableElsewhere();
-          const addresses = unpaired.filter((address) => !elsewhere.has(address));
-          if (addresses.length > 0) {
-            await tx
-              .update(printers)
-              .set({ active: false })
-              .where(
-                and(
-                  isReceiptPrinter(),
-                  eq(printers.transport, "bluetooth"),
-                  inArray(printers.localKey, addresses),
-                  isNull(printers.deletedAt),
-                ),
-              );
-            const ended = await endUnpairedPrinterJobs(tx, agentId, addresses);
-            await endInvoicePrintDeliveries(tx, ended, deps.now?.());
-          }
-        }
         return claimInvoicePrintJobs(
           tx,
           agentId,
@@ -999,9 +958,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           deps.now?.(),
         );
       });
-      // Settled only once the switch-off has committed, so an agent resends an outcome whose pull
-      // failed, and before this reply's commands are read, so a command stops in the reply to the
-      // pull that carried its outcome.
       bluetoothCommands.accept(agentId, bluetoothOutcomes);
       claimed = await waitForJobs(agentId, visibleKeys, claimed, wait, c.req.raw.signal);
       // `servers` lets the agent follow the primary across a failover, as the till's pull does.
@@ -1139,9 +1095,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // Fresh is the discovered list's own window, `isListed`: a report too old to keep a row listed no
-  // longer authorizes a command. Pair needs this agent's Bluetooth scan; Forget needs this
-  // agent's pairing report.
+  // The same discovery window governs the scan for Pair and the pairing report for Delete.
   app.post("/management-api/print-agents/:id/bluetooth/pair", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1158,24 +1112,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           throw new AppError("printer.bluetooth_not_discovered", { address });
         }
         return bluetoothCommands.enqueue(agentId, "pair", address, pin);
-      });
-      wakePulls(agentId);
-      return c.json({ command }, 202);
-    }),
-  );
-
-  app.post("/management-api/print-agents/:id/bluetooth/forget", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const agentId = requireUuidParam(c.req.param("id"), "PrintAgentId");
-      const body = await readJsonBody<{ address?: unknown }>(c);
-      const address = requireBluetoothAddress(body.address);
-      const command = await gated(sessionId, async (tx) => {
-        await requireAgentRow(tx, agentId);
-        if (!reportedFresh(agentId, address, "pairedAt")) {
-          throw new AppError("printer.bluetooth_not_paired", { address });
-        }
-        return bluetoothCommands.enqueue(agentId, "forget", address);
       });
       wakePulls(agentId);
       return c.json({ command }, 202);
@@ -1415,6 +1351,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         ) {
           throw new AppError("printer.office_printer", {});
         }
+        if (input.transport === "bluetooth" && input.localKey !== undefined)
+          bluetoothCommands.refuseWhileForgetting(input.localKey);
         return createPrinter(tx, input);
       });
       return c.json(created, 201);
@@ -1532,7 +1470,48 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, id, deps.now?.())));
+      const { impact, address, agents } = await gated(sessionId, async (tx) => {
+        const [printer] = await tx
+          .select({ localKey: printers.localKey })
+          .from(printers)
+          .where(and(isReceiptPrinter(), eq(printers.id, id), eq(printers.transport, "bluetooth")));
+        const impact = await deletePrinter(tx, id, deps.now?.());
+        const address = printer?.localKey ?? null;
+        const agents =
+          address === null
+            ? []
+            : await tx
+                .select({
+                  id: printAgents.id,
+                  name: printAgents.name,
+                  active: printAgents.active,
+                })
+                .from(printAgents);
+        return { impact, address, agents };
+      });
+      if (address === null) return c.json(impact);
+
+      const commands: { agentId: string; agentName: string; command: BluetoothCommandStatus }[] =
+        [];
+      const warnings: { agentName: string | null }[] = [];
+      for (const { id: agentId, name: agentName, active } of agents) {
+        if (!reportedFresh(agentId, address, "pairedAt")) continue;
+        if (!active) {
+          warnings.push({ agentName });
+          continue;
+        }
+        try {
+          const command = bluetoothCommands.enqueue(agentId, "forget", address);
+          commands.push({ agentId, agentName, command });
+          wakePulls(agentId);
+        } catch (error) {
+          if (!(error instanceof AppError) || error.code !== "printer.bluetooth_command_busy")
+            throw error;
+          warnings.push({ agentName });
+        }
+      }
+      if (commands.length === 0 && warnings.length === 0) warnings.push({ agentName: null });
+      return c.json({ ...impact, bluetoothUnpair: { commands, warnings } });
     }),
   );
 
