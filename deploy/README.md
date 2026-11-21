@@ -576,9 +576,10 @@ sudo systemctl enable --now waitron-upgrade.timer
 sudo journalctl -u waitron-upgrade.service
 ```
 
-The service checks every half hour from 03:00 up to 05:00 in the venue's saved time zone, while the
-Waitron app service is running. You can turn the timer off with
-`sudo systemctl disable --now waitron-upgrade.timer`.
+The timer wakes every half hour. While Waitron is running, it checks for offers within the saved
+hours. In **System → Box status → Automatic upgrades**, set the hours in the venue’s local time.
+The default is 03:00–05:00. Pausing installation keeps the saved hours and offer checks. Clearing
+both hours stops offered installs and returns offer checks to 03:00–05:00.
 
 A box built from a recipe that includes the timer can use it straight away. If you first upgrade
 from a numbered release whose installer predates the timer, that upgrade brings in the new
@@ -586,10 +587,27 @@ installer. The next checked upgrade to a release that includes the timer brings 
 If you install a release that predates the timer, checks pause until the box runs a release with
 timer support again.
 
+#### Recover the overnight upgrade settings
+
+Check the saved settings from the box console:
+
+```bash
+sudo bash /opt/waitron-host/waitron.sh check-upgrade-window
+```
+
+If the command says `the saved upgrade settings are unreadable`, stop the timer with
+`sudo systemctl stop waitron-upgrade.timer`.
+The file is `/opt/waitron.upgrade-settings.json` on a default installation. If you kept an intact
+copy, restore it there. Otherwise move the unreadable file aside.
+The box uses the defaults in the absence of that file. Reopen **Automatic upgrades**, set your
+intended hours or pause, and save before restarting the timer with
+`sudo systemctl start waitron-upgrade.timer`.
+
 #### Rehearsing an offered install
 
-On a numbered standalone test box, run the retained installer from 03:00 through 04:30 in
-the venue’s time zone.
+On a numbered standalone test box, allow installation in **Automatic upgrades**. Run the
+retained installer during the saved window and leave at least 30 minutes before the end for it to
+start applying the upgrade.
 
 ```bash
 sudo bash /opt/waitron-host/waitron.sh install-offered-upgrade

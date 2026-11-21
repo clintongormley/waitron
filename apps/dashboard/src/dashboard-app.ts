@@ -3605,6 +3605,7 @@ export class DashboardApp extends LitElement {
           .canOpen=${this.#canOpenScreen}
           .canCheckClock=${this.#sessionPermissions.includes("system.box_admin")}
           .canRestart=${this.#sessionPermissions.includes("system.manage")}
+          .canManageUpgrades=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}
           @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
             e.stopPropagation();

@@ -22,6 +22,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
+import "./upgrade-settings-dialog.js";
 import { wifiRequestError } from "./box-wifi-dialog.js";
 import { boxStatusRows, ssidName, networkOutcome, type PartRow } from "./box-status-rows.js";
 
@@ -213,6 +214,7 @@ export class BoxStatusScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
       }
       .box-network,
+      .box-upgrades,
       .box-restart {
         margin: 0 0 var(--wt-space-4);
       }
@@ -255,6 +257,7 @@ export class BoxStatusScreen extends LitElement {
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
   @property({ attribute: false }) canCheckClock = false;
   @property({ attribute: false }) canRestart = false;
+  @property({ attribute: false }) canManageUpgrades = false;
 
   @state() private networkAccepted = false;
   #networkEpoch = 0;
@@ -1171,8 +1174,27 @@ export class BoxStatusScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
-      ${this.#renderError()} ${this.#renderBody()} ${this.#renderNetwork()} ${this.#renderRestart()}
-      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderForgetDialog()}
+      ${this.#renderError()} ${this.#renderBody()}
+      ${
+        this.canManageUpgrades
+          ? html`<div class="box-upgrades">
+              <wt-button
+                variant="secondary"
+                data-test="automatic-upgrades"
+                @click=${(event: Event) =>
+                  this.renderRoot
+                    .querySelector("dashboard-upgrade-settings-dialog")
+                    ?.show(event.currentTarget as HTMLElement)}
+                >${t("box_status.upgrade_settings.title")}</wt-button
+              >
+              <dashboard-upgrade-settings-dialog
+                .api=${this.api}
+              ></dashboard-upgrade-settings-dialog>
+            </div>`
+          : nothing
+      }
+      ${this.#renderNetwork()} ${this.#renderRestart()} ${this.#renderClockCheckDialog()}
+      ${this.#renderRestartDialog()} ${this.#renderForgetDialog()}
       <dashboard-box-wifi-dialog
         .api=${this.api}
         .blocked=${this.#networkBusy()}
