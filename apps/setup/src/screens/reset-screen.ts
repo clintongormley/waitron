@@ -39,7 +39,6 @@ export class SetupResetScreen extends LitElement {
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
   @property({ attribute: false }) outcome?: ResetScreenOutcome;
 
-  /** The main box's Servers page, from the address typed in this tab; unset when not known. */
   @property({ attribute: false }) serversUrl?: string;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);

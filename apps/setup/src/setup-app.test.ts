@@ -2017,6 +2017,34 @@ describe("setup-app", () => {
       .toBe("https://main.example:8443/servers");
   });
 
+  it("forgets the tab's join once Finish joining succeeds, keeping the done screen's Servers link", async () => {
+    const el = await mountSetupApp(stubApi());
+    await finishJoining(el, "https://main.example:8443");
+    await flush(el);
+    const done = await screenHost(el, "done");
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+    await expect
+      .poll(
+        () =>
+          done.shadowRoot!.querySelector<HTMLAnchorElement>(
+            "[data-test=task-label] [data-test=servers-link]",
+          )?.href,
+      )
+      .toBe("https://main.example:8443/servers");
+  });
+
+  it("keeps the tab's join when Finish joining is refused, so it can be tried again", async () => {
+    const finishJoin = vi
+      .fn()
+      .mockRejectedValue({ code: "mirror.vault_not_empty", params: {}, status: 409 });
+    const el = await mountSetupApp(stubApi({ finishJoin }));
+    await finishJoining(el);
+    await joinScreen(el);
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBe(JOIN_HANDLE);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
+  });
+
   it("posts nothing when the main box approves the join until Finish joining is chosen", async () => {
     const api = stubApi();
     sessionStorage.setItem(JOIN_HANDLE_KEY, JOIN_HANDLE);
@@ -2639,6 +2667,48 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     expect(resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("forgets the tab's join once the reset succeeds", async () => {
+    const el = await offerReset(stubApi({ finishJoin: incomplete() }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBeNull();
+  });
+
+  it("sends no handle when Join is chosen again after a reset", async () => {
+    const api = stubApi({ finishJoin: incomplete() });
+    const el = await offerReset(api);
+    await openReset(el);
+    await submitReset(el);
+    vi.mocked(api.joinState).mockClear();
+    goto(el, "connect");
+    await el.updateComplete;
+    const connect = await joinScreen(el);
+    expect(api.joinState).toHaveBeenCalledExactlyOnceWith(undefined);
+    connect
+      .shadowRoot!.querySelector("[data-test=primaryUrl]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: MAIN }, bubbles: true, composed: true }),
+      );
+    await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    connect.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await vi.waitFor(() => expect(api.startJoin).toHaveBeenCalledOnce());
+    expect(api.startJoin).toHaveBeenCalledExactlyOnceWith(MAIN, undefined);
+  });
+
+  it("keeps the tab's join when the reset is refused", async () => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.reset_unavailable", params: {}, status: 409 });
+    const el = await offerReset(stubApi({ finishJoin: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(resetIncompleteAdopt).toHaveBeenCalledOnce();
+    expect(sessionStorage.getItem(JOIN_HANDLE_KEY)).toBe(JOIN_HANDLE);
+    expect(sessionStorage.getItem(JOIN_PRIMARY_KEY)).toBe(MAIN);
   });
 
   it("keeps reset-requested inside the wizard", async () => {
@@ -5687,8 +5757,8 @@ describe("an answer that arrives after the element is detached", () => {
   ])("writes nothing for $name", async ({ method, fire, settle, unchanged }) => {
     const pending = deferred();
     const el = await mountSetupApp(stubApi({ [method]: vi.fn().mockReturnValue(pending.promise) }));
-    // Finish joining is chosen on the join screen, which `finishJoining` opens.
-    if (method !== "finishJoin") goto(el, "live-source");
+    goto(el, "live-source");
+    await flush(el);
     await fire(el);
     await el.updateComplete;
     el.remove();

@@ -1099,7 +1099,6 @@ export class SetupApp extends LitElement {
    */
   @state() private mirrorJoin = false;
 
-  /** The main box's Servers page, from the address typed in this tab to join or to reset. */
   @state() private primaryServersUrl?: string;
 
   /** `undefined` while a request is in flight, which the provisioning screen shows as such. */
@@ -2118,10 +2117,13 @@ export class SetupApp extends LitElement {
   #onJoinHandle(event: CustomEvent<{ handle?: string }>): void {
     event.stopPropagation();
     const { handle } = event.detail;
-    if (handle === undefined) {
-      sessionStorage.removeItem(JOIN_HANDLE_KEY);
-      sessionStorage.removeItem(JOIN_PRIMARY_KEY);
-    } else sessionStorage.setItem(JOIN_HANDLE_KEY, handle);
+    if (handle === undefined) this.#forgetJoin();
+    else sessionStorage.setItem(JOIN_HANDLE_KEY, handle);
+  }
+
+  #forgetJoin(): void {
+    sessionStorage.removeItem(JOIN_HANDLE_KEY);
+    sessionStorage.removeItem(JOIN_PRIMARY_KEY);
   }
 
   async #onJoinFinishRequested(event: Event): Promise<void> {
@@ -2132,10 +2134,12 @@ export class SetupApp extends LitElement {
     this.screen = "provisioning";
     try {
       const outcome = await this.api.finishJoin(this.#joinValue(JOIN_HANDLE_KEY));
+      const serversUrl = this.#joinServersUrl();
+      this.#forgetJoin();
       if (!this.isConnected) return;
       this.breakGlassSecret = outcome.breakGlassSecret;
       this.breakGlassKeyName = outcome.breakGlassKeyName;
-      this.primaryServersUrl = this.#joinServersUrl();
+      this.primaryServersUrl = serversUrl;
       this.mirrorJoin = true;
       this.screen = "done";
     } catch (error) {
@@ -2607,6 +2611,7 @@ export class SetupApp extends LitElement {
     this.resetError = undefined;
     try {
       await this.api.resetIncompleteAdopt();
+      this.#forgetJoin();
       if (!current()) return;
       this.resetOutcome = { kind: "resetting", message: say("shell.reset.resetting") };
     } catch (error) {
