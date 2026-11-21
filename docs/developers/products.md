@@ -58,8 +58,8 @@ Product and single-variant saves scan the active names in the same parent scope 
 Configuration imports compare names directly too, grouping products separately from each
 product's variants (`validateMenuConfiguration`, `packages/menu/src/configuration-transfer.ts`).
 An import refuses an `active` value other than 0 or 1, a category or product name that is not
-text, or a product, category or section colour other than null or lowercase `#rrggbb`, with
-`setup.request_invalid` naming the column.
+text, a product, category or section colour other than null or lowercase `#rrggbb`, or a variant
+that stores its own category or colour, with `setup.request_invalid` naming the column.
 
 You store one allergen declaration. Saving sorts cereal and nut kinds and removes repeats;
 `null` means you have not reviewed it, while `{}` means you reviewed it and declared none.

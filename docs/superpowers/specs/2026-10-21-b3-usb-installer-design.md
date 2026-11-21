@@ -1313,6 +1313,8 @@ Only the settings in this inventory travel; it is not a copy of all application 
   printer kinds **inactive**, gives agents unusable tokens, and clears page printers' agent id
   (`:741-747`). Review mappings, reconnect/re-enrol agents and printers, then enable them; staying
   on the same hardware does not retain their venue credentials.
+  _2026-11-21: the export no longer carries print agents or a printer's agent id; the importing box
+  enrols its own agent (branch fix/a-import-checks)._
 - Product name keys, dining-table clearing state and short-name keys are omitted; import rebuilds
   the product/table keys through the modules' `afterImport` hooks
   (`packages/db/src/configuration-transfer.ts:74`, `:83`, `:112`,
