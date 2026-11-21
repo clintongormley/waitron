@@ -500,7 +500,7 @@ describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
     expect(row!.splits).not.toEqual([]);
   });
 
-  it("records the free extra's split when comping part of a dish", async () => {
+  it("records the free extra's split without a reduction row on a partial comp", async () => {
     const { menuItemId, pizzaExtras } = await inTx(venue, async (tx) => {
       const [pizza] = await tx
         .select({ categoryId: products.categoryId })
