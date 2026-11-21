@@ -250,6 +250,8 @@ describe("setup-connect-screen: Start again", () => {
 
 describe("setup-connect-screen: the main box's join limits", () => {
   it("fills in the limits the main box sends, in Spanish too", async () => {
+    expect(es["connect.refusal.join_full_listed"]).toContain("{max}");
+    expect(es["connect.refusal.join_full_recent"]).toContain("{minutes}");
     setLocale("es-ES");
     const api = stubApi();
     api.startJoin
@@ -265,12 +267,14 @@ describe("setup-connect-screen: the main box's join limits", () => {
     await type(el, MAIN);
     await press(el, "join");
     await vi.waitFor(async () =>
-      expect(await bottomOf(el)).toMatch(/^Ya hay otros 4 servidores pidiendo unirse/),
+      expect(await bottomOf(el)).toBe(es["connect.refusal.join_full_listed"].replace("{max}", "4")),
     );
     await press(el, "join");
-    await vi.waitFor(async () =>
-      expect(await bottomOf(el)).toMatch(/ha recibido 7 solicitudes .* los últimos 20 minutos/),
-    );
+    const recent = es["connect.refusal.join_full_recent"]
+      .replace("{max}", "7")
+      .replace("{minutes}", "20")
+      .replace("{retryAt}", localTime("2026-11-21T10:15:00.000Z")!);
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(recent));
   });
 });
 
