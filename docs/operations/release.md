@@ -7,8 +7,8 @@ software: a statement, in Spanish, that this version meets the Veri\*Factu rules
 signature. Each version's text is committed as
 `packages/fiscal-verifactu/declarations/v<version>.md`, and a release is cut by the owner, or by a
 lane on the owner's instruction, in two commands: `pnpm release prepare` writes that file and opens a pull request for it,
-and `pnpm release tag` puts the version's name (a git tag, `v1.0.0`) on `main` once that pull
-request has landed.
+and `pnpm release tag` puts the version's name (a git tag, `v1.0.0`) on the release branch tip once that pull
+request has landed. Use `main` for new releases and a protected maintenance branch for an older release line.
 
 ## No release can be cut yet
 
@@ -25,9 +25,8 @@ spare-server sentence only if the version can do them, and deletes the line.
 
 Never push a `v*` tag by hand (`git tag v1.0.0 && git push origin v1.0.0`). The two commands check
 what they can before the tag exists, and a tag pushed by hand skips those checks. CI then refuses to
-publish a tag that is not on a commit of `main`, whose name or annotation does not match a
-release version, whose declaration file is missing, still carries a blocker line or disagrees with the
-code, or whose version is already published.
+publish a tag unless its commit qualifies through `main` or a protected maintenance branch. It
+also checks the tag name and annotation, the declaration and the registry before publishing.
 
 ## Set up signing before the first signed release
 
@@ -154,8 +153,8 @@ gh pr create --base main --title "Release 1.0.0" --body 'Adds packages/fiscal-ve
 
 ## 5. Land the pull request
 
-The release pull request that `pnpm release prepare` opened goes through `/finish-branch` like any
-branch, on the light review path when it touches no risk trigger, and lands only after that, never
+For a release on `main`, the pull request that `pnpm release prepare` opened goes through
+`/finish-branch` like any branch, on the light review path when it touches no risk trigger, and lands only after that, never
 on green CI alone. The reason: the review seat that runs the change runs on every branch (the
 owner's standing rule), a generated declaration file is no exception, and the declaration is the
 legal document the producer signs. Source: the watcher's decision of 2026-11-11 15:53, in lane A's
@@ -187,11 +186,11 @@ and its annotation is “Waitron prerelease 1.3.0-rc.1”. You can use `-alpha.N
 `-rc.N`. Each number can be zero. Leave off any leading zeroes and keep the full version within
 50 characters.
 
-Versions increase in a single order. Compare the three version numbers first. For the same
+On `main`, each version must be above every published version. Compare the three version numbers first. For the same
 three numbers, alpha comes before beta, then release candidates, then stable. Within each
 suffix, the largest sequence number comes last. After `1.3.0-rc.1` you can prepare
 `1.3.0-rc.2` or `1.3.0`. A `1.2.1` patch is below that candidate and the command refuses it.
-If you abandon a prepared version before tagging it, remove its declaration from `main`
+If you abandon a prepared version before tagging it, remove its declaration from the target branch
 through a pull request before preparing the next one. Once tagged, keep the tag and its
 declaration fixed. CI checks that the annotation agrees with the version and passes the
 prerelease flag to the GitHub Release and signed release file.
@@ -206,6 +205,37 @@ stops, the command deletes the tag it made on your machine. Fix what the push's 
 repeat your tag command with the same version. If that run says `1.0.0 is already released`, the tag reached
 GitHub before the push stopped: go on to step 7. Never push with `--no-verify`.
 
+## Cut a release on an older line
+
+Before creating the first maintenance branch, the repository owner adds an **active branch
+ruleset** targeting `refs/heads/maintenance/*`. Use these settings:
+
+- Restrict creations and deletions, and block force pushes.
+- Require a pull request before merging. Allow squash and rebase merges, dismiss stale approvals,
+  and require all conversations to be resolved, as on `main`.
+- Require the `ci` status check and require branches to be up to date before merging.
+- Let the repository administrator bypass the creation restriction to create the branch at the
+  older release tag. Use pull requests for later changes, including the declaration.
+
+You can read the active rules for a branch before creating it with
+`gh api 'repos/{owner}/{repo}/rules/branches/maintenance%2F1.x'`. GitHub composes all applicable
+active rules. [GitHub branch rules API](https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch)
+
+For example, the administrator creates `maintenance/1.x` at `v1.2.0`. Land your fix there,
+and carry it forward by hand to each newer line that needs it. If the older release predates this
+tooling, backport the release commands and CI to the maintenance branch before using them.
+
+Start `release/1.2.1` at the current `origin/maintenance/1.x` tip. Run
+`pnpm release prepare 1.2.1 --base maintenance/1.x --place "<town>"`, and land the declaration
+pull request against `maintenance/1.x` after review and green CI. Keep that review and the
+pull request based on the maintenance branch. Switch to that branch, update it to the remote tip, and
+run `pnpm release tag 1.2.1`. Both commands require that the branch contain the latest stable
+release below the version you are preparing. Tag also requires a green push run for that exact
+tip. You can cut a new minor from that line the same way.
+
+Keep the branch and its original tag so GitHub can still publish the version if a job needs a
+retry. If you need to retry a release from earlier main, use its existing tag and run.
+
 ## 7. Watch the tag's CI run
 
 ```sh
@@ -217,7 +247,9 @@ Pick the run whose branch is `v1.0.0`. It runs every check, as the nightly run d
 two jobs make the release:
 
 1. **`publish`** waits for the whole run to be green. It requires a tag named `v` followed by the full version,
-   with the matching annotation from step 6 and a direct pointer to a commit on `main`. It then builds the
+   with the matching annotation from step 6 and a direct pointer to a qualifying commit. The commit
+   must contain no other release tag for the same or a higher version and be on `main` or on a protected maintenance
+   branch that forked from `main` at a lower release tag. It then builds the
    image with the version stamped in. The build renders the version's declaration into
    `/app/declaration/` and fails if the committed `declarations/v1.0.0.md` is missing, carries a
    blocker line or disagrees with the code. It runs `check-release 1.0.0` inside the built image,
@@ -227,7 +259,8 @@ two jobs make the release:
    it, and attaches them to the GitHub Release `v1.0.0` as `waitron-1.0.0-declaration.pdf` and
    `waitron-1.0.0-declaration.txt`, making the Release if there is none. Because the files come
    out of the published image, they are the same bytes every box running that image serves.
-   For a version with a prerelease suffix, this job creates a GitHub prerelease and leaves Latest alone.
+   For a version with a prerelease suffix, this job creates a GitHub prerelease. A prerelease or
+   maintenance release leaves GitHub's Latest slot alone.
    When signing is configured, it also attaches `waitron-release.json`. The signed
    payload names the release, its prerelease flag, the source commit and the app, print agent and
    tunnel image digests.
@@ -253,7 +286,7 @@ key changed between attempts. Re-run only the failed job because `publish` refus
 to push a version the registry already holds. For a signing setup error, restore a
 secret matching one of the keys in the tagged commit before retrying. If the tag
 lacks two valid, distinct public keys, cut a new numbered release after you
-correct the keys on main.
+correct the keys on the release branch.
 
 If the existing GitHub Release has a different prerelease flag, check the tag's annotation and
 the signed file if one exists. If the two disagree, preserve the signed file and cut a new

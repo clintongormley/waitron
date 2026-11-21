@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { runInNewContext } from "node:vm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -4260,14 +4260,13 @@ describe("the lint and root-guards jobs", () => {
     }
   });
 
-  // scripts/released-declarations.mjs compares each declaration with its release tag, and fails
-  // on a checkout holding no tags at all.
-  it("fetch the tags in both of root-guards' checkout attempts", () => {
+  it("fetch full tagged history in both root-guards checkout attempts", () => {
     const checkouts = workflowSteps(job("root-guards").body.join("\n")).filter((step) =>
       step.uses?.startsWith("actions/checkout@"),
     );
     expect(checkouts).toHaveLength(2);
-    for (const step of checkouts) expect(step.with["fetch-tags"], step.step).toBe("true");
+    for (const step of checkouts)
+      expect(step.with, step.step).toMatchObject({ "fetch-depth": "0", filter: "blob:none" });
   });
 
   it("leave lint running exactly lint and the format check", () => {
@@ -4335,8 +4334,10 @@ describe("the lint and root-guards jobs", () => {
 });
 
 describe("pinned CI checkouts", () => {
-  it("tests the PR head itself in every CI checkout and admits PR events only for main", () => {
-    expect(lines.join("\n")).toMatch(/\n {2}pull_request:\n {4}branches: \[main\]/);
+  it("tests the PR head itself and admits main and maintenance branch events", () => {
+    const branches = '    branches: [main, "maintenance/*"]';
+    for (const event of ["push", "pull_request"])
+      expect(lines[lines.indexOf(`  ${event}:`) + 1], event).toBe(branches);
     let count = 0;
     for (const { id, body } of jobs) {
       for (let i = 0; i < body.length; i++) {
@@ -5675,8 +5676,8 @@ function checkoutAttempts(text) {
  * `# comment`.
  */
 describe("the workflows' checkouts", () => {
-  it("uses full history, without old file contents, only for change classification and sign-off", () => {
-    const historyReaders = ["ci.yml:changes"];
+  it("uses full Git history with on-demand blobs only in jobs that need ancestry", () => {
+    const historyReaders = ["ci.yml:changes", "ci.yml:root-guards", "ci.yml:publish"];
     const checkouts = workflowFiles.flatMap((name) =>
       jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) =>
         workflowSteps(lines.join("\n"))
@@ -7439,7 +7440,7 @@ describe("the publish job carries the producer's settings into the image", () =>
   });
 });
 
-const RELEASE_ON_MAIN_STEP = "Read the release tag and check its commit is on main";
+const RELEASE_SOURCE_STEP = "Read the release tag and check its source branch";
 const RELEASE_CHECK_STEP = "Check the release inside the built image";
 const RELEASE_UNPUBLISHED_STEP = "Refuse a release version the registry already holds";
 const AGENT_PUSH_STEP = "Publish the print-agent image to GHCR";
@@ -7552,32 +7553,38 @@ describe("the publish job on a release tag", () => {
       );
   });
 
-  describe("the step refusing a tag that is not on main", () => {
-    const step = () => publishStepNamed(RELEASE_ON_MAIN_STEP);
+  describe("the release source step", () => {
+    const step = () => publishStepNamed(RELEASE_SOURCE_STEP);
 
     it("runs on a release tag only, before the first build, bounded as a checkout is", () => {
       expect(step().step).toContain(ON_A_RELEASE_TAG);
-      expect(at(RELEASE_ON_MAIN_STEP)).toBeGreaterThan(-1);
-      expect(at(RELEASE_ON_MAIN_STEP)).toBeLessThan(steps.indexOf(builds[0]));
+      expect(at(RELEASE_SOURCE_STEP)).toBeGreaterThan(-1);
+      expect(at(RELEASE_SOURCE_STEP)).toBeLessThan(steps.indexOf(builds[0]));
       expect(step().step.some((line) => /^ {8}timeout-minutes: [1-9]\d*$/.test(line))).toBe(true);
       expect(step().envOf("GIT_HTTP_LOW_SPEED_LIMIT")).toMatch(/^[1-9]\d*$/);
       expect(step().envOf("GIT_HTTP_LOW_SPEED_TIME")).toMatch(/^[1-9]\d*$/);
       expect(step().script).toMatch(/timeout \d+ git fetch /);
-      expect(step().script).toContain('git merge-base --is-ancestor "$GITHUB_SHA" origin/main');
-      // A shallow fetch answered "not an ancestor" for a tag behind main's tip.
-      expect(step().text).not.toMatch(/--depth|--shallow/);
     });
 
-    // Real git with a one-commit checkout. A local lightweight tag makes the fetch replace it
-    // with the remote annotation.
     describe("against a real repository", () => {
-      const bin = stubBin("release-on-main-bin-", { timeout: TIMEOUT_STUB });
+      const bin = stubBin("release-source-bin-", {
+        timeout: TIMEOUT_STUB,
+        gh: `#!/usr/bin/env bash
+[ "$1 $2" = 'api repos/{owner}/{repo}/rules/branches/maintenance%2F1.x?per_page=100' ] || exit 1
+printf '%s\n' "$2" >> "$STUB_DIR/rules.calls"
+if [ "$RULES_MODE" = retry ] && [ "$(wc -l < "$STUB_DIR/rules.calls")" -eq 1 ]; then exit 1; fi
+if [ "$RULES_MODE" = unavailable ]; then exit 1; fi
+if [ "$RULES_MODE" = empty ]; then echo '[]'; exit 0; fi
+echo '[{"type":"creation"},{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request"},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"ci"}]}}]'
+`,
+      });
       const root = mkdtempSync(join(tmpdir(), "release-on-main-"));
       afterAll(() => rmSync(root, { recursive: true, force: true }));
       const gitEnv = {
         PATH: process.env.PATH,
         HOME: root,
         GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_AUTHOR_NAME: "Example",
         GIT_AUTHOR_EMAIL: "example@example.invalid",
         GIT_COMMITTER_NAME: "Example",
@@ -7598,7 +7605,11 @@ describe("the publish job on a release tag", () => {
       git(origin, "checkout", "-q", "-b", "side", tagged);
       git(origin, "commit", "-q", "--allow-empty", "-m", "off main");
       const offMain = git(origin, "rev-parse", "HEAD");
+      git(origin, "branch", "maintenance/1.x", offMain);
+      git(origin, "checkout", "-q", "maintenance/1.x");
+      git(origin, "commit", "-q", "--allow-empty", "-m", "advanced branch tip");
       git(origin, "checkout", "-q", "main");
+      git(origin, "tag", "v1.2.0", tagged);
       git(origin, "tag", "-a", "v1.2.3", tagged, "-m", "Waitron 1.2.3");
       git(origin, "tag", "-a", "v1.2.4-rc.1", tagged, "-m", "Waitron prerelease 1.2.4-rc.1");
       git(origin, "tag", "-a", "v1.2.4", tagged, "-m", "Waitron prerelease 1.2.4");
@@ -7609,18 +7620,29 @@ describe("the publish job on a release tag", () => {
       git(origin, "tag", "-a", "v1.2.8", tagged, "-m", "Waitron 1.2.8", "-m", "Extra text");
       git(origin, "tag", "-a", "v1.2.9", "v1.2.3", "-m", "Waitron 1.2.9");
 
-      const run = (sha, tag = "v1.2.3") => {
+      const run = (sha, tag = "v1.2.3", { rules = "empty", shallow = false } = {}) => {
         const dir = mkdtempSync(join(root, "run-"));
+        const remote = join(dir, "remote");
         const work = join(dir, "work");
+        git(root, "clone", "-q", "--bare", "--shared", "--no-tags", origin, remote);
+        git(remote, "fetch", "-q", "--no-tags", origin, "tag", "v1.2.0", "tag", tag);
         const output = join(dir, "output");
         mkdirSync(work);
         writeFileSync(output, "");
         git(work, "init", "-q");
-        git(work, "remote", "add", "origin", `file://${origin}`);
-        git(work, "fetch", "-q", "--no-tags", "--depth", "1", "origin", sha);
+        git(work, "remote", "add", "origin", `file://${remote}`);
+        git(work, "fetch", "-q", "--no-tags", ...(shallow ? ["--depth", "1"] : []), "origin", sha);
         git(work, "checkout", "-q", "--detach", sha);
         git(work, "tag", tag, sha);
-        expect(git(work, "rev-parse", "--is-shallow-repository")).toBe("true");
+        for (const file of [
+          "release/release-source.mjs",
+          "box/release-list.mjs",
+          "box/upgrades/contracts.mjs",
+          "is-main-script.mjs",
+        ]) {
+          mkdirSync(dirname(join(work, "scripts", file)), { recursive: true });
+          writeFileSync(join(work, "scripts", file), readFileSync(join(repoRoot, "scripts", file)));
+        }
         const result = spawnSync("bash", ["-c", step().script], {
           cwd: work,
           encoding: "utf8",
@@ -7633,27 +7655,49 @@ describe("the publish job on a release tag", () => {
             GITHUB_REF_NAME: tag,
             GITHUB_OUTPUT: output,
             STUB_DIR: dir,
+            RULES_MODE: rules,
           },
         });
         return {
           ...result,
           timeoutArgs: readFileSync(join(dir, "timeout.args"), "utf8"),
+          rulesCalls: existsSync(join(dir, "rules.calls"))
+            ? readFileSync(join(dir, "rules.calls"), "utf8").trim().split("\n").length
+            : 0,
           output: readFileSync(output, "utf8"),
         };
       };
 
-      it("passes a tag on a commit of main behind its tip, in a one-commit-deep checkout", () => {
+      it("admits a tag still held by a protected branch after a failed rules request", () => {
+        const result = run(offMain, "v1.2.5", { rules: "retry" });
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.rulesCalls).toBe(2);
+        expect(result.output).toContain("release_maintenance=true\n");
+      });
+
+      it("refuses a shallow history even with a protected maintenance branch", () => {
+        const result = run(offMain, "v1.2.5", { rules: "protected", shallow: true });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("full Git history");
+        expect(result.output).toBe("");
+      });
+
+      it("passes a tag on a commit of main behind its tip", () => {
         const result = run(tagged);
         expect(result.status, result.stderr).toBe(0);
         expect(result.timeoutArgs).toMatch(/^\d+ git fetch /);
       });
 
-      it("refuses a tag on a commit main does not hold, naming the tag", () => {
-        const result = run(offMain, "v1.2.5");
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain("v1.2.5");
-        expect(result.stderr).toContain("not a commit of main");
-      });
+      it.each(["empty", "unavailable"])(
+        "refuses a tag without branch protection evidence (%s)",
+        (rules) => {
+          const result = run(offMain, "v1.2.5", { rules });
+          expect(result.status).toBe(1);
+          expect(result.stderr).toContain("v1.2.5");
+          expect(result.stderr).toContain("not on main or a protected maintenance branch");
+          expect(result.output).toBe("");
+        },
+      );
 
       it.each([
         ["v1.2.3", "false"],

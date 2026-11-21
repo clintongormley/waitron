@@ -154,6 +154,35 @@ describe("releasedDeclarationProblems", () => {
     ]);
   });
 
+  it("keeps declarations on their release line and checks copies carried forward", () => {
+    const repo = repository({ "v1.0.0.md": "one\n" });
+    tag(repo, "v1.0.0");
+    git(repo, "branch", "maintenance/1.x");
+    commit(repo, { "v2.0.0.md": "main\n" }, "second major");
+    tag(repo, "v2.0.0");
+    git(repo, "checkout", "maintenance/1.x");
+    commit(repo, { "v1.0.1.md": "maintenance\n" }, "maintenance fix");
+    tag(repo, "v1.0.1");
+    expect(releasedDeclarationProblems(repo)).toEqual([]);
+    git(repo, "checkout", "main");
+    expect(releasedDeclarationProblems(repo)).toEqual([]);
+    commit(repo, { "v1.0.1.md": "changed copy\n" }, "copy with changes");
+    expect(releasedDeclarationProblems(repo)).toContain(
+      `${FOLDER}/v1.0.1.md differs from its release v1.0.1`,
+    );
+  });
+
+  it("refuses to judge branch reachability in a shallow checkout with a release tag", () => {
+    const repo = repository({ "v1.0.0.md": "released\n" });
+    tag(repo, "v1.0.0");
+    const checkout = mkdtempSync(join(tmpdir(), "declarations-shallow-"));
+    scratch.push(checkout);
+    git(checkout, "clone", "--depth", "1", `file://${repo}`, ".");
+    expect(releasedDeclarationProblems(checkout)).toEqual([
+      "Release declarations require a checkout with full Git history",
+    ]);
+  });
+
   it("finds nothing wrong in this repository", () => {
     expect(releasedDeclarationProblems(ROOT)).toEqual([]);
   });

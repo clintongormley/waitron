@@ -31,7 +31,7 @@ tag="v$version"
 release_flags=(--verify-tag)
 case "${RELEASE_PRERELEASE-}" in
   true) release_flags+=(--prerelease --latest=false) ;;
-  false) ;;
+  false) if [ "${RELEASE_MAINTENANCE-}" = "true" ]; then release_flags+=(--latest=false); fi ;;
   *)
     echo "RELEASE_PRERELEASE must be true or false" >&2
     exit 2
