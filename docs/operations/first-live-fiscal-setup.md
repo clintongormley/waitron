@@ -38,14 +38,12 @@ makes the series"). When the box's time service is not synchronised and only thi
 agrees, the page shows the server's time and this device's above **Proceed**, with "The server could
 not check its time over the internet. Check that both times below are right before you press
 Proceed."; check both, because pressing **Proceed** confirms them (the same file's "when only this
-device agrees, the step shows both times above Proceed, and Proceed confirms them"). The invoice
-series is the code at the start of every invoice number. The tick
+device agrees, the step shows both times above Proceed, and Proceed confirms them"). The tick
 alone asks for nothing (the same file's "with the tick and the clocks agreeing, nothing asks for the
 series until Proceed"), and **Proceed** stays disabled until the tick is given (the same file's
 "Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
-the page shows "When you press Proceed, Waitron creates this box's invoice series." with an example of what
-an invoice series is (the same file's "without the tick nothing asks for the series, and the page
-says Proceed starts it"). A missing second clock found when the page opens is explained at once, as
+the page shows "Waitron will start this box's invoice series." (the same file's "without the tick nothing asks for the series, and the page
+says Waitron will start the series"). A missing second clock found when the page opens is explained at once, as
 in the list below (the same file's "%s found on load is explained, with no failure"); clocks that
 differ are explained only after **Proceed** (the same file's "%s found on load show no clock step
 until Proceed, then explain it with no failure"). Beside **Edit these details** the page has one main button; what it reads in each
@@ -72,7 +70,9 @@ is lost if setup restarts without saving it. **Edit these details** sends nothin
 the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
 (`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are
-made the page shows "We've created these invoice series:", explains the recovery pack and offers
+made the page shows "We've created these invoice series:", lists each series with what it is for
+(for example "A-0CSQW — Standard"; `first-hour.browser.test.ts`, "%s labels say invoice series, list each code with
+what it is for and never the bare name"), explains the recovery pack and offers
 **Download recovery pack**, which makes the pack and starts the download.
 
 After **Proceed** the page carries on by itself through its waits. It stops for a press only when it

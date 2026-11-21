@@ -5,8 +5,6 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
 import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
 import { FISCAL_SETUP } from "@waitron/fiscal-verifactu/setup";
-import { isMinuteIdentity } from "../hour-identity.js";
-import { seriesMatchBases } from "../allocation-identity.js";
 const instant = Date.parse("2026-10-18T12:30:00Z");
 const clock = {
   usable: ["box", "browser", "internet"].map((source) => ({
@@ -600,8 +598,7 @@ it("a recorded wait the load's preview shows only after the tick changed does no
     vi.useRealTimers();
   }
 });
-const SERIES_LINE =
-  "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.";
+const SERIES_LINE = "Waitron will start this box's invoice series.";
 const seriesLine = (el: LitElement) =>
   el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.trim();
 it("with the clocks agreeing, ticking the details and pressing Proceed makes the series", async () => {
@@ -620,7 +617,7 @@ it("with the clocks agreeing, ticking the details and pressing Proceed makes the
     vi.useRealTimers();
   }
 });
-it("without the tick nothing asks for the series, and the page says Proceed starts it", async () => {
+it("without the tick nothing asks for the series, and the page says Waitron will start the series", async () => {
   fakeClock();
   try {
     const { el, calls } = await mount({ preview: { status: "preview", identity: "0CSQW" } });
@@ -655,7 +652,7 @@ it("with the tick and the clocks agreeing, nothing asks for the series until Pro
     vi.useRealTimers();
   }
 });
-it("the page says what Proceed does only while the button reads Proceed, not during the wait after it", async () => {
+it("the page says Waitron will start the series only while the button reads Proceed, not during the wait after it", async () => {
   const answers: unknown[] = [
     { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
     selected,
@@ -1292,6 +1289,34 @@ it.each([
     ...selected,
     input: { allocation: { installationIdentity: "0CSQW", series: [{ purpose: "full" }] } },
   },
+  {
+    ...selected,
+    input: { allocation: { installationIdentity: "0CSQW", series: [{ code: "A-0CSQW" }] } },
+  },
+  {
+    ...selected,
+    input: {
+      allocation: { installationIdentity: "0CSQW", series: [{ code: "A-0CSQW", purpose: "" }] },
+    },
+  },
+  {
+    ...selected,
+    input: {
+      allocation: {
+        installationIdentity: "0CSQW",
+        series: [{ code: "A-0CSQW", purpose: "heading" }],
+      },
+    },
+  },
+  {
+    ...selected,
+    input: {
+      allocation: {
+        installationIdentity: "0CSQW",
+        series: [{ code: "A-0CSQW", purpose: "invoice" }],
+      },
+    },
+  },
   { status: "waiting", targetMs: instant + 0.5, remainingMs: 1000 },
   { status: "waiting", targetMs: instant, remainingMs: -1 },
   { status: "waiting", targetMs: instant, remainingMs: Infinity },
@@ -1702,15 +1727,17 @@ it.each([
     "en",
     "We've created these invoice series:",
     "Waitron cannot create invoice series for this date: it is outside the range the series codes cover.",
+    ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"],
   ],
   [
     "es",
     "Hemos creado estas series de facturas:",
     "Waitron no puede crear series de facturas para esta fecha: está fuera del rango que cubren los códigos de serie.",
+    ["A-0CSQW — Simplificada", "FF-0CSQW — Factura completa", "R-0CSQW — Rectificativa"],
   ],
 ] as const)(
-  "%s labels say invoice series, list the codes and never the bare name",
-  async (locale, chosen, range) => {
+  "%s labels say invoice series, list each code with what it is for and never the bare name",
+  async (locale, chosen, range, listed) => {
     const { el } = await mount({ locale });
     await ready(el);
     await proceed(el);
@@ -1719,11 +1746,7 @@ it.each([
     );
     const result = el.shadowRoot!.querySelector("[data-test=selected-hour]")!;
     expect(result.querySelector("h2")?.textContent?.trim()).toBe(chosen);
-    expect([...result.querySelectorAll("li")].map((li) => li.textContent?.trim())).toEqual([
-      "A-0CSQW",
-      "FF-0CSQW",
-      "R-0CSQW",
-    ]);
+    expect([...result.querySelectorAll("li")].map((li) => li.textContent?.trim())).toEqual(listed);
     expect(text(el).replaceAll(/[A-Z]+-0CSQW/g, "")).not.toContain("0CSQW");
     const blocked = await mount({ locale, decision: { ...clock, rangeBlocked: true } });
     await vi.waitFor(() => expect(text(blocked.el)).toContain(range));
@@ -1928,9 +1951,7 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
     dt.textContent!.trim(),
   );
   expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
-  expect(series).toBe(
-    "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
-  );
+  expect(series).toBe("Waitron creará las series de facturas de este servidor.");
 });
 const differ = (el: LitElement) => vi.waitFor(() => expect(text(el)).toContain(DIFFER));
 const failed = (el: LitElement) =>
@@ -2309,30 +2330,6 @@ it("a taken minute's countdown says the code was used and makes the series at ze
     vi.useRealTimers();
   }
 });
-it.each([
-  ["en", /in (\S+)\/(\d+) the series is (\S+)\.$/],
-  ["es", /en (\S+)\/(\d+) la serie es (\S+)\.$/],
-] as const)(
-  "the %s series line's example is an invoice number in the traced format",
-  async (locale, example) => {
-    const { el } = await mount({ locale });
-    await shows(el, "series-line");
-    const [, series, number, named] = seriesLine(el)!.match(example)!;
-    // An invoice number is the series code, "/", then the number (`formatInvoiceNumber`,
-    // packages/core/src/record-sale.ts), and a series code is the base code, "-", then the name.
-    expect(series).toBe(named);
-    expect(Number(number)).toBeGreaterThan(0);
-    const dash = series!.lastIndexOf("-");
-    const base = series!.slice(0, dash),
-      name = series!.slice(dash + 1);
-    expect(isMinuteIdentity(name)).toBe(true);
-    expect(
-      seriesMatchBases([{ code: series, purpose: "standard" }], name, [
-        { code: base, purpose: "standard" },
-      ]),
-    ).toBe(true);
-  },
-);
 it.each([
   [
     "en",

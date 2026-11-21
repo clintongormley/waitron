@@ -1,3 +1,4 @@
+export const seriesPurposes = ["standard", "full", "rectificative"] as const;
 export const fiscalSetupStrings = {
   en: {
     heading: "First fiscal identity",

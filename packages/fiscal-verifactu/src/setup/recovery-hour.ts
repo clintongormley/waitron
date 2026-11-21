@@ -27,7 +27,7 @@ import {
   focusNewScreen,
   regionName,
 } from "./check-venue.js";
-import { fiscalSetupStrings } from "./strings.js";
+import { fiscalSetupStrings, seriesPurposes } from "./strings.js";
 
 type RecoveryContext = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotion"]>>[0] & {
@@ -70,11 +70,10 @@ interface Draft {
   detailsCorrect: boolean;
 }
 const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false, detailsCorrect: false });
-const purposes = ["standard", "full", "rectificative"] as const;
 interface Selected {
   status: "selected";
   identity: string;
-  input: { allocation: { series: { code: string; purpose: (typeof purposes)[number] }[] } };
+  input: { allocation: { series: { code: string; purpose: (typeof seriesPurposes)[number] }[] } };
 }
 const strings = {
   en: {
@@ -435,7 +434,7 @@ export class RecoveryHourEntry extends LitElement {
               record(series) &&
               typeof series.code === "string" &&
               series.code !== "" &&
-              purposes.some((purpose) => purpose === series.purpose),
+              seriesPurposes.some((purpose) => purpose === series.purpose),
           )
         )
           throw new Error("invalid selection");
