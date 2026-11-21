@@ -131,6 +131,17 @@ async function importAllocation(el: FirstFiscalScreen) {
 it("keeps both outside custody routes explicit and contains no secret or key-generation control", async () => {
   const { el, calls } = await mount();
   expect(el.shadowRoot!.textContent).toContain("Production");
+  const size = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.fontSize = `var(${token})`;
+    el.shadowRoot!.append(probe);
+    const value = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return value;
+  };
+  const heading = el.shadowRoot!.querySelector("h2");
+  expect(heading).not.toBeNull();
+  expect(getComputedStyle(heading!).fontSize).toBe(size("--wt-font-size-lg"));
   expect(el.shadowRoot!.querySelector("[data-test=new]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=existing]")).not.toBeNull();
   expect(

@@ -98,6 +98,9 @@ export class FirstFiscalScreen extends LitElement {
       :host {
         display: block;
       }
+      h2 {
+        font-size: var(--wt-font-size-lg);
+      }
       section {
         margin-block: var(--wt-space-4);
       }

@@ -114,6 +114,9 @@ export class FirstSetupHour extends LitElement {
         display: block;
         overflow-wrap: anywhere;
       }
+      h2 {
+        font-size: var(--wt-font-size-lg);
+      }
       fieldset {
         border: var(--wt-field-line-width) solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
