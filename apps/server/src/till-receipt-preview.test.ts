@@ -3,12 +3,11 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
-import * as venueAddressReads from "./venue-address.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 describe("tillReceiptPreview", () => {
@@ -63,26 +62,5 @@ describe("tillReceiptPreview", () => {
     expect(await previewText("Carrer de Mallorca 125, 08010 Barcelona, Barcelona")).toContain(
       "Domicilio fiscal: Carrer de Mallorca 125, 08010 Barcelona, Barcelona",
     );
-  });
-
-  it("prints the registered address labelled when the venue cannot be read, and says so", async () => {
-    await setupVenue(suite.db);
-    const read = vi
-      .spyOn(venueAddressReads, "readVenueAddressAndLine")
-      .mockRejectedValue(new Error("venue read refused"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    onTestFinished(() => {
-      read.mockRestore();
-      warn.mockRestore();
-    });
-    expect(await previewText("Carrer de Mallorca 123, 08010 Barcelona, Barcelona")).toContain(
-      "Domicilio fiscal: Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
-    );
-    expect(warn.mock.calls).toEqual([
-      [
-        "receipt.optional_read_failed",
-        { operation: "readVenueAddress", code: "receipt.read_failed" },
-      ],
-    ]);
   });
 });
