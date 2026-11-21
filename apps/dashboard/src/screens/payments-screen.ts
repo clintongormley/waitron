@@ -66,14 +66,8 @@ export const readerSettingFields = [
   { name: "prints-own-slip-automatically", labelKey: "payments.prints_own_slip_automatically" },
 ] as const;
 
-/** The section's own wording for a refused check; any other code reads its shared message. */
 function paymentRefusalText(error: unknown): string {
   const code = codeOf(error);
-  if (code === "payment.outcome_unknown") {
-    const reason = (error as { params?: { reason?: unknown } }).params?.reason;
-    if (reason === "unreachable") return t("payments.stuck.unknown_unreachable");
-    if (reason === "ambiguous") return t("payments.stuck.unknown_ambiguous");
-  }
   if (code === "reader.provider_disconnected") return t("payments.stuck.provider_disconnected");
   if (code === "server.internal") return t("payments.partial.failed");
   return codeMessage(code);

@@ -194,6 +194,39 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
   });
 
+  it("asks the provider once and disables other checks while a check is running", async () => {
+    let finishCheck!: (value: { outcome: "not_charged" }) => void;
+    const pending = new Promise<{ outcome: "not_charged" }>((resolve) => {
+      finishCheck = resolve;
+    });
+    const api = stubApi({
+      listStuckBillPayments: vi
+        .fn()
+        .mockResolvedValue([
+          PAYMENT,
+          { ...PAYMENT, billPaymentId: "bp-2", workingOrderId: "wo-2", orderNumber: 13 },
+        ]),
+      resolveStuckBillPayment: vi.fn().mockReturnValueOnce(pending),
+    });
+    const el = await mount(api);
+    q(el, "[data-test=check-bill-payment-bp-1]")!.click();
+    await flush(el);
+    const confirm = q(el, "[data-test=confirm-bill-check]")!;
+    confirm.click();
+    confirm.click();
+    await flush(el);
+    const otherCheck = q(el, "[data-test=check-bill-payment-bp-2]")!;
+    expect(otherCheck.hasAttribute("disabled")).toBe(true);
+    otherCheck.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-check-dialog]")).toBeNull();
+
+    finishCheck({ outcome: "not_charged" });
+    await flush(el);
+    expect(api.resolveStuckBillPayment).toHaveBeenCalledExactlyOnceWith("bp-1");
+    expect(otherCheck.hasAttribute("disabled")).toBe(false);
+  });
+
   it("names an order label holding a replacement pattern as written in the check and record windows", async () => {
     const el = await mount(
       stubApi({

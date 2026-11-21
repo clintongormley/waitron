@@ -3370,10 +3370,6 @@ export const en = {
     "Payment fully refunded. You can continue with the order once its other payments are resolved.",
   "payments.partial.unconfirmed":
     "The provider could not confirm a full refund. The payment stays held. Check its refunds at the provider and try again.",
-  "payments.stuck.unknown_unreachable":
-    "Could not reach the card provider; the order stays locked. Try again in a minute.",
-  "payments.stuck.unknown_ambiguous":
-    "The card provider's answer is unclear; the order stays locked. Check the payment in the provider's dashboard.",
   "payments.stuck.provider_disconnected":
     "This card provider is no longer connected. Connect it again, then check the payment.",
   "payments.partial.failed":
@@ -8035,10 +8031,6 @@ export const es: Record<StringKey, string> = {
     "Pago devuelto por completo. Puedes continuar con el pedido cuando se hayan resuelto sus demás pagos.",
   "payments.partial.unconfirmed":
     "El proveedor no ha podido confirmar una devolución completa. El pago sigue retenido. Comprueba sus devoluciones en el proveedor e inténtalo de nuevo.",
-  "payments.stuck.unknown_unreachable":
-    "No se pudo contactar con el proveedor de pagos; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
-  "payments.stuck.unknown_ambiguous":
-    "La respuesta del proveedor de pagos no es clara; el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",
   "payments.stuck.provider_disconnected":
     "Este proveedor de pagos ya no está conectado. Vuelve a conectarlo y consulta de nuevo el cobro.",
   "payments.partial.failed":
