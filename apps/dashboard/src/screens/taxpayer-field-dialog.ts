@@ -30,7 +30,6 @@ export interface TaxpayerFieldSettings {
   /** Names the dialog's `data-test` hooks: `<dataTest>-dialog`, `save-<dataTest>`, `cancel-<dataTest>`. */
   dataTest: string;
   heading: StringKey;
-  label: StringKey;
   note: StringKey;
   changedElsewhere: StringKey;
   /** Reported when a save is refused after its dialog has closed. */
