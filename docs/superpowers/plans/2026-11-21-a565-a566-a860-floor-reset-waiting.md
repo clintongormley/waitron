@@ -1,44 +1,48 @@
 # A565, A566 and A860 floor reset waits
 
 After a reset, staff can still find an ordinary table with food on its way at the
-same place. Members of a split group keep their places while a member has an open
-delivery order, even before anything goes to the kitchen. Once the reason clears,
-the existing catch-up completes the reset or asks staff to mark a physical move.
-The Lane H watcher assigned these outcomes on 21 November at 20:43, after A594.
+same place. A split group also waits for an open delivery order at a member, even
+before anything goes to the kitchen. When the hold clears, the existing catch-up
+applies the reset or asks staff to mark a physical move. This is the Lane H queue
+ask assigned by the watcher on 21 November at 20:43 after A594. Build awaits the
+watcher's clearance of that scope.
 
 - [ ] **Ordinary tables.** In `apps/server/src/floor-today-store.test.ts`, use a paid
-  Paella delivery and reset a table whose saved place changes or disappears. Assert
-  that its current place and order link survive and its reset row stays pending.
-  Collect the order and run catch-up. A new place is marked for moving and a removed
-  table goes away. Watch the layout and pending assertions fail on main's code.
-  Then expand the existing batched `foodComingTo` read in `catchUpPass` to zone tables
-  and feed its result into waiting for both live rows and groups. In
-  `floor-reset-plan.ts`, give the food hold its own flag so it keeps the row pending
-  without seeding an off-floor table. Keep `tablesTied` for removals after a hold ends.
-- [ ] **Split groups.** Extend the same suite's `longTable` and `delivery(tableId, false)`
-  fixture. Assert the order is open with no kitchen ticket, keep the split geometry
-  and order link through reset, then abandon the order and check catch-up and the
-  final group after Mark moved. Watch the old reset reform the group too early.
-  In `delivery-release.ts` and `floor-today-store.ts`, batch the open delivery order
-  check by pending saved-group member and add it to `waitingTogether` alongside the
-  existing holds. Department transfer acceptance can assign such an order even
-  after a table was marked for moving
-  (`packages/venue-service/src/department-transfers.ts`, `acceptDepartmentTransfer`).
-  Extend the existing Mark moved refusal test and `floor-today-mark-moved.ts` to
-  report that member using the same open-order check. Add `table.open_delivery_order`
-  to server errors, till status mapping and English and Spanish till messages. Staff
-  can finish the open order before marking the tables moved.
-- [ ] **Automatic placement.** In `apps/server/src/floor-catch-up.test.ts`, pair the
-  SQL `catchUpDue` result with the resulting map and pending rows. Use the existing
-  taken-off, Needs moving and saved-position controls, and add an off-map pending
-  member whose new place overlaps a moving member of the same saved group.
-  Confirm each relevant exclusion with a failing deletion control in a disposable
-  checkout. Keep the existing `reset-row-moves.test.ts` geometry checks. Leave the
-  SQL as a conservative preview and extend it only if a placement check shows it
-  can miss progress. Manual placement keeps its existing overlap rules.
-- [ ] Run the three floor suites above, the error-code guards and the lane's unchanged
-  fiscal and published-menu gates. Update the floor rules in `conventions-data.md`
-  and both table-service guides, remove the closed backlog bundle and add a dated
-  pointer to the A803 plan.
+  Paella delivery and reset a table whose saved place changes or disappears. Check
+  that its place and order link survive and its reset row stays pending. Collect
+  the order and check that catch-up marks the move or removes the table. Food at
+  one member also holds today's merge together. Extend the existing saved-group
+  food case for a plain table becoming a member if its assertions need it.
+- [ ] **Split groups.** In the same suite, use `longTable` and `delivery(tableId, false)`.
+  Check the order is open with no kitchen ticket, the split geometry and link
+  survive reset, and abandoning it allows catch-up and Mark moved to reform the
+  group. Use `department-transfer-api.test.ts`'s receiving desk fixture for a real
+  acceptance onto a member after the group is marked. Check Mark moved refuses
+  with that member's id and preserves the marked group.
+- [ ] Watch the two reset cases and the refusal case fail before changing code.
+  Reuse the batched delivery lookup in `delivery-release.ts` and `catchUpPass`
+  (`floor-today-store.ts`). Match `foodOnItsWay()` for the zone, or
+  `status = 'open'` at a member of a pending saved group. Feed that set through
+  `waitingTogether` and remove its separate food argument. A delivery hold in
+  `floor-reset-plan.ts` leaves the row pending and keeps an off-floor table off.
+  Keep the existing removal rule for unpaid orders. Update its test fixture in
+  `floor-reset-plan.test.ts`. Like a seated party, these waits can leave a zone
+  eligible for a catch-up read while the hold lasts.
+- [ ] In `floor-today-mark-moved.ts`, reuse the open-order lookup for actual members of
+  pending saved groups reached by the action, including a member already placed.
+  After the existing food, party, clearing and module refusals, report
+  `table.open_delivery_order` before the generic needs-moving answer. Register it
+  in server `errors.ts` and the `till-api.ts` status map, and in till
+  `till-app.ts` and `i18n/codes.ts` with EN/ES wording to finish the open order first.
+- [ ] **Automatic placement.** In `apps/server/src/floor-catch-up.test.ts`, assert
+  `catchUpDue` before the floor read and map and pending rows after it. Pair
+  existing taken-off and saved-position cases with a sole Needs moving blocker
+  (`sixBehindEight`, move 8 away) and a pending sibling overlapping its moving
+  saved-group member before marking. Confirm the expected failure when deleting
+  each exclusion in a disposable copy. Record each deletion and assertion in the
+  build receipt. Keep the geometry tests and the existing manual overlap rules.
+- [ ] Run the four floor suites, the transfer suite, error-code guards, and unchanged
+  fiscal and published-menu gates. Update `conventions-data.md`, both table-service
+  guides and the backlog, and add a dated pointer to the A803 plan.
 
-Expected size is about 45 production lines and 110 test lines added, plus docs.
+Expected size is about 55 production lines and 150 test lines added, plus docs.
