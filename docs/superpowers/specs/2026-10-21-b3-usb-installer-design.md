@@ -1278,6 +1278,8 @@ explanation (`packages/provisioning/src/configuration-transfer.ts:286-327`).
 | Staffing: roles, assignments and planning rows | `staff_roles`, `person_staff_roles`, `staffing_days`, `staffing_blocks` | `packages/staffing/src/configuration-transfer.ts:3-11`; `packages/composition/src/modules.ts:383` |
 | No transferred tables: scheduler, credentials, fiscal-verifactu, fiscal-none, bookings | Each declares `kind: "none"` | `packages/composition/src/modules.ts:271`, `:285`, `:313`, `:327`, `:346` |
 
+_2026-11-21: `print_agents` no longer travels (branch fix/a-import-checks); see the omissions below._
+
 **Venue defaults travel separately:** country, tax id, legal name, taxpayer domicile; location name,
 receipt languages, operation description, fiscal territory, address, time zone, current business-day
 start, fire control and default catalogue; and the three current series codes. The query reads
@@ -1313,6 +1315,8 @@ Only the settings in this inventory travel; it is not a copy of all application 
   printer kinds **inactive**, gives agents unusable tokens, and clears page printers' agent id
   (`:741-747`). Review mappings, reconnect/re-enrol agents and printers, then enable them; staying
   on the same hardware does not retain their venue credentials.
+  _2026-11-21: the export no longer carries print agents or a printer's agent id; the importing box
+  enrols its own agent (branch fix/a-import-checks)._
 - Product name keys, dining-table clearing state and short-name keys are omitted; import rebuilds
   the product/table keys through the modules' `afterImport` hooks
   (`packages/db/src/configuration-transfer.ts:74`, `:83`, `:112`,

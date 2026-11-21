@@ -226,6 +226,7 @@ const importMenus = {
     { id: "lunch-root", owner_menu_id: "lunch", role: "menu_root" },
     { id: "lunch-home", owner_menu_id: "lunch", role: "home_layout", internal_name: "Home" },
     { id: "daily-root", owner_menu_id: "daily", role: "menu_root" },
+    { id: "daily-home", owner_menu_id: "daily", role: "home_layout", internal_name: "Home" },
   ],
 };
 

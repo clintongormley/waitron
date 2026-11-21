@@ -122,6 +122,7 @@ it("refuses a configuration format newer than this box's as newer software", () 
 it.each([
   {},
   { version: 2 },
+  { ...configurationBundle(), version: 54 },
   { ...configurationBundle(), version: 47 },
   { ...configurationBundle(), version: 46 },
   { ...configurationBundle(), version: 45 },

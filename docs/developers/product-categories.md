@@ -374,7 +374,8 @@ each per menu. The six display columns live on `menus`: `handheld_columns`, `han
 `handheld_order`, `till_columns`, `till_tiles` and `till_order`. They have required defaults and
 CHECKs for their ranges and choices. A save checks them with `homeDisplayProblem` first so it can
 name the field. A configuration import refuses an invalid value with `setup.request_invalid`
-and a field such as `menus.till_columns`.
+and a field such as `menus.till_columns`. It also refuses a menu that does not own exactly one root section
+and one Home section, with the field `sections.owner_menu_id`.
 
 **What a till is served.** A till reads the Device Home Page from each menu's live version, not
 from the working state. Both offers routes (`GET /api/default-service-zone/offers` and

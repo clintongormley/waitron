@@ -287,20 +287,11 @@ it("omits the source operator's dependent rows while preserving another person's
   }
 });
 
-it("imports printers disabled with fresh agent credentials and no page-printer agent binding", async () => {
+it("imports printers disabled", async () => {
   await seed();
   const bundle = configurationBundle();
   bundle.modules = { "synthetic-transfer": 1 };
   bundle.tables = {
-    print_agents: [
-      {
-        id: "source-agent",
-        name: "Source worker",
-        token_hash: "synthetic-source-token",
-        active: true,
-        enrolled_at: now.toISOString(),
-      },
-    ],
     printers: [
       {
         id: "source-receipt",
@@ -326,23 +317,13 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
         media: "iso_a4_210x297mm",
         resolution_dpi: 300,
         active: true,
-        agent_id: "source-agent",
       },
     ],
   };
-  const module = transfer([{ name: "print_agents" }, { name: "printers" }]);
+  const module = transfer([{ name: "printers" }]);
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, bundle, [module], bundle.modules),
   );
-  expect(
-    (await suite.db.execute(sql`select id, token_hash, active from print_agents`)).rows,
-  ).toEqual([
-    {
-      id: expect.any(String),
-      token_hash: expect.stringMatching(/^disabled-import:/),
-      active: 0,
-    },
-  ]);
   expect(
     (await suite.db.execute(sql`select name, active from printers where kind = 'receipt'`)).rows,
   ).toEqual([{ name: "Receipt printer", active: 0 }]);

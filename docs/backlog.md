@@ -511,8 +511,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home preview rendering** (size M). [Detail](backlog/menu.md#menu-home-preview-rendering)
 
-- **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 5, size S). Holds A1074. [Detail](backlog/menu.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
-
 - **Translate all: notice, release and Cloud followups** (bundle of 3, size M). [Detail](backlog/menu.md#bundle-translate-all-followups)
 
 - **Translate all: shared collect-page test vectors.** Nothing compares the fake Cloud's paging
@@ -1592,7 +1590,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
   reviewed every file and answered every question (2026-11-04). **Approved by the owner, 2026-11-04, and the top priority: it runs before more code is built on the old tables.**
-  Lane A runs it, once A1018's current slice ends. Until A760's squash lands, slices in progress finish and no lane starts new work that adds or changes tables; work that touches no tables carries on. Slice 0's protection list is built ([how to use it](developers/testing-guide.md#the-protection-list)); so is its bench ([how to use it](developers/testing-guide.md#the-bench)). [A760's squash into eight sets](superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) has landed; the shared-table work is under way. 246 tables become 145, or 144 once A1323 removes
+  Lane A runs it, once A1018's current slice ends. Slice 0's protection list is built ([how to use it](developers/testing-guide.md#the-protection-list)); so is its bench ([how to use it](developers/testing-guide.md#the-bench)). [A760's squash into eight sets](superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) has landed; the shared-table work is under way. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`; 111 environment variables become 51. The SMTP sender now lives in the mail
   settings document; the connection URL stays sealed.
   Privacy details now live in venue settings, and legal-name and credential changes keep activity history.

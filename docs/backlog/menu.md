@@ -432,11 +432,6 @@ Left by W109 (#1320, #1322); the decisions are in
 Spanish venue with no known province, is settled (owner, 2026-10-17: Spanish stays enabled
 everywhere; entered customer text is optional).
 
-## Loose ends left by A380 (#1385)
-
-- A configuration import stores a fixed folder name as given, spaces included, where a save
-  through the dialog or the route trims it. A name of spaces only shows as no name either way.
-
 ## Translate all: an Edit translations dialog left open anywhere clears the "Translations ready" notice
 
 The dialog's live reload reads the suggestions, and that read marks the run opened
@@ -450,13 +445,6 @@ whether it should change.
 (`packages/menu/src/categories.ts`, above `listCategories`). **Next action:** measure it
 before anyone widens category authoring to more concurrent editors. Left open by product
 categories (#340, [API and integration guide](../developers/product-categories.md)).
-
-## Loose ends left by A347 (#1392)
-
-- An imported bundle may carry priced menu rows for a product no menu reaches, and adding the
-  product back to a menu revives those prices (found in A347's review, believed to predate it).
-  Options: run `syncMenuOffers` over every menu after an import, or refuse priced rows no menu
-  reaches.
 
 ## The combined end-to-end journey has not been walked
 
@@ -524,29 +512,6 @@ The remaining storage, input-validation and shared-form limits.
   arrangement, trails and indexing are shared. Extracting presentation needs adapters for till
   ordering and dashboard shortcut editing.
   [Detail](menu.md#each-menu-has-one-device-home-page-w93-1287-left-open)
-
-## Bundle: After A760 moves the bundle format: An import checks rows as a save does
-
-5 entries, size S.
-
-- **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
-  spaces included, where a save through the dialog or the route trims it.
-  [Detail](menu.md#loose-ends-left-by-a380-1385)
-- **Loose ends left by A347 (#1392).** An imported bundle may carry priced menu rows for a product
-  no menu reaches, and adding the product back to a menu revives those prices (found in A347's
-  review, believed to predate it).
-  [Detail](menu.md#loose-ends-left-by-a347-1392)
-- **A configuration import copies `products` rows as they are** — left open by A209 (#1090):
-  (`select *` in `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER`
-  in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
-  category that the effective category and the editor's read then ignore.
-- **A1074. A configuration import does not range-check a department's reminder minutes**, so a
-  file could store a negative number or 999; only the department save refuses them. Left open
-  by A756 PR 4's review (#2020).
-- **The configuration export stops carrying `print_agents`** (`packages/db/src/configuration-transfer.ts`; watcher's choice, 2026-11-17 00:50,
-  waiting for the A1308 hold): an imported agent can only be the old box's, which never connects;
-  Add an agent offers it back and it then reads Never. Printing is unaffected. Evidence: lane B's
-  `imported-print-agent-evidence/notes.md` (IMPORTED-PRINT-AGENT, 2026-11-17).
 
 ## Bundle: Tabs selected visible
 
