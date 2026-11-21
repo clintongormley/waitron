@@ -1283,6 +1283,12 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   is available, but real inbox delivery still needs the joint test.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
 
+- **A venue's own mail server always wins; Cloud sends only when there is none (owner,
+  2026-11-21).** On a paid Cloud plan, Cloud sends every email the box would send, as the venue's
+  own domain or a Waitron address; free accounts get only account emails from Cloud. Today a
+  paired test Cloud takes invitations, resets and email changes ahead of a saved mail server
+  (`apps/server/src/mail-sender.ts`, the `accountDelivery` choice), so that order flips. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
+
 - **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
   review, 2026-10-22) — OPEN.**
   [Detail](backlog/box.md#the-setup-wizards-email-test-connects-wherever-an-unauthenticated-caller-points-it-a987-review-2026-10-22--open)
