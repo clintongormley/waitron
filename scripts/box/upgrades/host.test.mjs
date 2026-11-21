@@ -1,9 +1,9 @@
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
@@ -19,11 +19,33 @@ import {
 } from "../../../packages/db/src/index.js";
 import { NODE_MIGRATIONS, setNodeModeTx } from "../../../packages/node-db/src/index.js";
 import { PAYMENTS_MIGRATIONS } from "../../../packages/payments/src/migrations.js";
-import { applyUpgrade } from "./transaction.mjs";
+import { payments } from "../../../packages/payments/src/schema/payments.js";
+import { runUpgradeCli } from "./cli.mjs";
+import { offerTrustFixture } from "./offers.test-support.mjs";
+
+async function mountVenue(suite, boxDirectory) {
+  const path = join(boxDirectory, "state", "venue", "venue.db");
+  await mkdir(dirname(path));
+  await suite.db.archiveTo(path);
+  return path;
+}
 
 describe("quiet before an offered upgrade", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
   const now = Date.parse("2026-11-21T03:45:00.000Z");
+
+  async function clockAndZone() {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => vi.useRealTimers());
+    vi.setSystemTime(now);
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+        doc: { timeZone: "UTC" },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+  }
 
   it.each([
     ["open", "2026-11-20T19:00:00.000Z", false],
@@ -33,9 +55,7 @@ describe("quiet before an offered upgrade", () => {
     ["abandoned", "2026-11-21T03:35:00.000Z", true],
   ])("checks %s orders opened at %s", async (status, openedAt, quiet) => {
     const box = await imageFixture({ onlineTrial: "pass", prepare: false });
-    const state = join(box.root, "state");
-    await mkdir(join(state, "venue"));
-    await writeFile(join(state, "trading.env"), "WAITRON_NODE_ID=one\n");
+    await clockAndZone();
     await suite.db.insert(workingOrders).values({
       source: "dashboard",
       orderNumber: 1,
@@ -43,59 +63,116 @@ describe("quiet before an offered upgrade", () => {
       openedAt,
       dining: "eat_in",
     });
-    await suite.db.archiveTo(join(state, "venue", "venue.db"));
-    const check = checkInstalledUpgradeQuiet(box.root, box.run, now);
-    if (quiet) await expect(check).resolves.toBeUndefined();
-    else await expect(check).rejects.toThrow("venue has recent or unresolved trading activity");
+    await mountVenue(suite, box.root);
+    if (quiet) await expect(checkInstalledUpgradeQuiet(box.root, box.run)).resolves.toBeUndefined();
+    else
+      expect(await runUpgradeCli(["check-offered-upgrade", box.root], { run: box.run })).toEqual({
+        status: "deferred",
+        reason: "venue has recent or unresolved trading activity",
+      });
   });
 
-  it.each([true, false])(
-    "checks stopped trading only on the first stop (late order: %s)",
-    async (lateOrder) => {
-      const box = await imageFixture({ prepare: false, beforeAutomaticStop: async () => {} });
-      const venue = join(box.root, "state", "venue");
-      await mkdir(venue);
-      const writeOrder = async () => {
+  it.each([
+    [
+      "settled order during shutdown",
+      "deferred-at-stop",
+      "venue has recent or unresolved trading activity",
+    ],
+    ["pause during preparation", "deferred", "offer-changed"],
+    ["stopped app", "deferred-at-stop", "app already stopped; no upgrade copy permitted"],
+    ["missing app", "deferred-at-stop", "app already stopped; no upgrade copy permitted"],
+  ])("the installed Apply command defers for a %s", async (scenario, status, reason) => {
+    const paused = scenario === "pause during preparation";
+    const box = await imageFixture({ prepare: false, beforeAutomaticStop: async () => {} });
+    await clockAndZone();
+    const dbPath = await mountVenue(suite, box.root);
+    await writeFile(join(box.root, "state", "trading.env"), "WAITRON_NODE_ID=one\n");
+
+    const { link, offer } = await offerTrustFixture(box.root, "one");
+    const run = async (file, args, ...rest) => {
+      if (file === "prepare-fixture")
+        return { stdout: JSON.stringify({ compose: JSON.stringify(box.candidate) }) };
+      if (file === "curl") return { stdout: offer(1, paused ? "none" : "1.2.3") };
+      if (scenario === "stopped app" && args[0] === "inspect" && args.length === 2)
+        return { stdout: '[{"State":{"Running":false}}]' };
+      if (
+        scenario === "missing app" &&
+        args.includes("ps") &&
+        args.includes("-a") &&
+        args.at(-1) === "app"
+      )
+        return { stdout: "" };
+      if (scenario === "settled order during shutdown" && args[0] === "stop") {
         await suite.db.insert(workingOrders).values({
           source: "dashboard",
           orderNumber: 1,
+          status: "settled",
           dining: "eat_in",
+          openedAt: "2026-11-20T19:00:00.000Z",
+          settledAt: "2026-11-21T03:44:59.000Z",
         });
-        await rm(join(venue, "venue.db"));
-        await suite.db.archiveTo(join(venue, "venue.db"));
-      };
-      await suite.db.archiveTo(join(venue, "venue.db"));
-      if (lateOrder) {
-        const stop = box.f.host.stop;
-        box.f.host.stop = async () => {
-          await writeOrder();
-          await stop();
-        };
-        expect(
-          await applyUpgrade({
-            directory: box.directory,
-            paths: box.f.paths,
-            mode: "automatic",
-            host: box.f.host,
-          }),
-        ).toMatchObject({
-          target: "old",
-          copied: false,
-          failure: "venue has recent or unresolved trading activity",
-        });
-      } else {
-        await mkdir(box.directory);
-        const images = await box.f.host.prepareImages();
-        try {
-          await box.f.host.stop();
-          await writeOrder();
-          await expect(box.f.host.stop()).resolves.toBeUndefined();
-        } finally {
-          await box.f.host.resume(images.old);
-        }
+        await rm(dbPath);
+        await suite.db.archiveTo(dbPath);
       }
-    },
-  );
+      return box.run(file, args, ...rest);
+    };
+    const result = await runUpgradeCli(
+      ["apply-offered-upgrade", box.root, "1.2.2", "1.2.3", link, "prepare-fixture"],
+      { run },
+    );
+    expect(result).toEqual({ status, reason });
+    expect(await readdir(box.root + ".upgrades")).toEqual([]);
+  });
+
+  it("defers for a card payment without an open order", async () => {
+    const box = await imageFixture({ onlineTrial: "pass", prepare: false });
+    const old = "2026-11-20T19:00:00.000Z";
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({
+        source: "dashboard",
+        orderNumber: 1,
+        status: "settled",
+        openedAt: old,
+        settledAt: old,
+        dining: "eat_in",
+      })
+      .returning({ id: workingOrders.id });
+    await suite.db.insert(payments).values({
+      workingOrderId: order.id,
+      source: "operator_script",
+      provider: "sumup",
+      paymentRef: "held-checkout",
+      amount: 100,
+      state: "initiated",
+      createdAt: old,
+      updatedAt: old,
+    });
+    await mountVenue(suite, box.root);
+    await expect(checkInstalledUpgradeQuiet(box.root, box.run, now)).rejects.toThrow(
+      "venue has recent or unresolved trading activity",
+    );
+  });
+
+  it("allows a rollback stop even if trading changed after the first stop", async () => {
+    const box = await imageFixture({ prepare: false, beforeAutomaticStop: async () => {} });
+    const path = await mountVenue(suite, box.root);
+    await mkdir(box.directory);
+    const images = await box.f.host.prepareImages();
+    try {
+      await box.f.host.stop();
+      await suite.db.insert(workingOrders).values({
+        source: "dashboard",
+        orderNumber: 1,
+        dining: "eat_in",
+      });
+      await rm(path);
+      await suite.db.archiveTo(path);
+      await expect(box.f.host.stop()).resolves.toBeUndefined();
+    } finally {
+      await box.f.host.resume(images.old);
+    }
+  });
 });
 
 describe("an offered upgrade on a venue without the payments tables", () => {
@@ -103,8 +180,6 @@ describe("an offered upgrade on a venue without the payments tables", () => {
 
   it.each([false, true])("checks the saved Payments setting (%s)", async (payments) => {
     const box = await imageFixture({ onlineTrial: "pass", prepare: false });
-    const state = join(box.root, "state");
-    await mkdir(join(state, "venue"));
     await suite.db.insert(settings).values({
       module: "modules",
       version: 1,
@@ -112,7 +187,7 @@ describe("an offered upgrade on a venue without the payments tables", () => {
       doc: { modules: { payments } },
       updatedAt: "2026-11-20T18:00:00.000Z",
     });
-    await suite.db.archiveTo(join(state, "venue", "venue.db"));
+    await mountVenue(suite, box.root);
     const check = checkInstalledUpgradeQuiet(box.root, box.run);
     if (payments) await expect(check).rejects.toThrow("payment data is unavailable");
     else await expect(check).resolves.toBeUndefined();
@@ -215,14 +290,6 @@ it("requires a completed app shutdown before stopping every remaining writer inc
     "10",
   ]);
   expect(f.calls[receipt]).toContain("--timestamps");
-});
-
-it("defers an offered install when the app has already stopped", async () => {
-  const f = dockerFixture({ running: false });
-  await expect(
-    stopUpgradeWriters({ run: f.run, compose: ["compose"], requireRunning: true }),
-  ).rejects.toThrow("app already stopped");
-  expect(f.calls.some((args) => args.includes("stop"))).toBe(false);
 });
 
 it.each([

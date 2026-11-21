@@ -247,8 +247,8 @@ se pone al día sola cuando vuelve el servidor.
 
 Los encargados y administradores pueden reiniciar el servidor.
 
-Durante una actualización nocturna supervisada, Waitron puede reiniciarse brevemente con la
-versión anterior si llega un pedido o un cobro mientras se detiene.
+Si llega un pedido o un cobro mientras Waitron se detiene para una actualización nocturna
+supervisada, espera a que vuelva a arrancar con la versión anterior.
 
 ## Pon la hora desde tu propio dispositivo {#clock-own-device}
 

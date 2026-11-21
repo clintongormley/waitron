@@ -228,8 +228,8 @@ back.
 
 Managers and Admins can restart the box.
 
-During a supervised overnight upgrade, Waitron may restart briefly on the old version if an
-order or payment arrives as it shuts down.
+If an order or payment arrives as Waitron shuts down during a supervised overnight upgrade,
+give it time to reopen on the old version.
 
 ## Set the clock from your own device {#clock-own-device}
 

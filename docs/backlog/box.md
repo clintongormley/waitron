@@ -179,8 +179,8 @@ on a numbered standalone box in the quiet window. The timer still checks offers.
 activation, rehearse the installed command and measure the 04:30 cutoff on the physical box. The
 new release’s stopped-data check reads the old release’s database. Keep that read working if any
 of the trading columns change, or offered installs will defer.
-A timer enabled by hand stays enabled through driver refreshes. The install slice or step 7
-decides what happens to those boxes when `waitron-upgrade.service` starts installing.
+A timer enabled by hand stays enabled through driver refreshes. Step 7 still needs to decide
+what happens to those boxes when `waitron-upgrade.service` starts installing.
 
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the

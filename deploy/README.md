@@ -595,15 +595,15 @@ the venue’s time zone.
 sudo bash /opt/waitron-host/waitron.sh install-offered-upgrade
 ```
 
-The installer checks the signed offer and waits for ten minutes without trading activity.
+The installer checks the signed offer and requires ten minutes without trading activity.
 An open order or unresolved payment or refund puts off the attempt. The installer checks the
 offer again after the migration trial. If trading resumes during shutdown, the old version
 reopens before Waitron copies any data. If the candidate fails its checks, Waitron restores the
 old version automatically.
 
-Read the JSON result for `none`, `deferred`, `deferred-at-stop`, `rolled-back` or `upgraded`.
-The result includes an explanation for a deferred or rolled-back attempt. The overnight timer
-continues to check offers.
+The JSON result says `none`, `deferred`, `deferred-at-stop`, `rolled-back` or `upgraded`.
+A deferral or rollback includes a reason. If the installer cannot prepare or complete an
+attempt, it prints an error. The overnight timer continues to check offers.
 
 ### Trying a branch before it merges
 

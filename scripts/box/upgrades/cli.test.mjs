@@ -6,8 +6,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, URL } from "node:url";
-import { createHash, generateKeyPairSync } from "node:crypto";
-import { signUpgradeOffer } from "../release-list.mjs";
+import { createHash } from "node:crypto";
+import { offerTrustFixture } from "./offers.test-support.mjs";
 import { recheckOfferedUpgrade, runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
 
 async function fixture() {
@@ -35,6 +35,10 @@ it("reports the retained manual refusal read-only, including from the installed 
     throw new Error("status must not call Docker");
   };
   expect(await runUpgradeCli(["status", f.box], { run: forbidden })).toEqual(marker);
+  expect(await runUpgradeCli(["apply-offered-upgrade", f.box], { run: forbidden })).toEqual({
+    status: "deferred",
+    reason: "upgrade-pending",
+  });
   const invoked = await promisify(execFile)(process.execPath, [
     new URL("./cli.mjs", import.meta.url).pathname,
     "status",
@@ -162,35 +166,9 @@ const deferred = (reason) => ({ status: "deferred", reason });
 async function offerFixture() {
   const { root, box } = await fixture();
   const state = join(root, "state");
-  const trust = join(root, "trust generation #1");
-  const link = join(root, "release-trust");
+  const { trust, link, offer } = await offerTrustFixture(root, "box-one");
   await fs.mkdir(state);
   await fs.writeFile(join(state, "trading.env"), 'WAITRON_NODE_ID="box-one"\n');
-  await fs.mkdir(join(trust, "upgrades"), { recursive: true });
-  await fs.copyFile(
-    new URL("../release-list.mjs", import.meta.url),
-    join(trust, "release-list.mjs"),
-  );
-  await fs.copyFile(
-    new URL("./contracts.mjs", import.meta.url),
-    join(trust, "upgrades/contracts.mjs"),
-  );
-  await fs.symlink(trust, link);
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const current = generateKeyPairSync("ed25519").publicKey;
-  await fs.writeFile(join(trust, "current.pem"), current.export({ type: "spki", format: "pem" }));
-  await fs.writeFile(join(trust, "spare.pem"), publicKey.export({ type: "spki", format: "pem" }));
-  const offer = (serial, target) =>
-    signUpgradeOffer(
-      {
-        format: 1,
-        kind: "offer",
-        serial,
-        default: "none",
-        entries: [{ condition: { installations: ["box-one"] }, target }],
-      },
-      privateKey.export({ type: "pkcs8", format: "pem" }),
-    );
   const run = async (command, args) => {
     if (command === "docker" && args.includes("config"))
       return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
