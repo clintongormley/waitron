@@ -1225,7 +1225,7 @@ export async function issueIfFullyPaid(
 
 /**
  * {@link issueIfFullyPaid} for a bill whose money has already moved but whose invoice was held
- * back, issued as {@link completeBillPayment} would have issued it for the bill's latest received
+ * back, issued as recovery's completion would have issued it for the bill's latest received
  * payment that paid no advance: under that payment's device and person, dated by the latest
  * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance.
  */
@@ -1237,7 +1237,8 @@ export async function issueHeldBill(
   operatorId: string,
 ): Promise<TillSaleResult | null> {
   const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
-  // Oldest first, so of two received in the same millisecond the later-written one wins.
+  // Rows come in creation order (createdAt, then rowid), so of two received in the same
+  // millisecond the later-created one wins.
   const completing = rows
     .filter((row) => row.state === "received" && !advanced.has(row.id))
     .reduce<PaymentRow | undefined>(

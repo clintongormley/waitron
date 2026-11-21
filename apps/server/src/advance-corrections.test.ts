@@ -788,4 +788,70 @@ describe("the rest's invoice Discard issues after a card paid the bill off", () 
     );
     expect(correction).toEqual({ endedBy: venue().adminId });
   });
+
+  it("of two payments that paid no advance, is recorded under the later one's till and person", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const earlier = await send(
+      venue().app,
+      adminCookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "20.00",
+        method: "cash",
+        tendered: "20.00",
+        applied: "20.00",
+        tip: "0.00",
+      },
+    );
+    expect(earlier.status, JSON.stringify(earlier.json)).toBe(200);
+    const release = venue().card.holdNextCollect();
+    const calls = venue().card.collectCalls.length;
+    const paying = send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "70.00",
+        method: "card",
+        entry: "reader",
+        applied: "70.00",
+        tip: "0.00",
+      },
+    );
+    await vi.waitFor(() => expect(venue().card.collectCalls.length).toBe(calls + 1));
+    const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    release();
+    expect((await paying).status).toBe(200);
+
+    const discarded = await send(
+      venue().app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      { override: supervisor() },
+    );
+
+    expect(discarded, JSON.stringify(discarded.json)).toMatchObject({
+      status: 200,
+      json: { state: "discarded" },
+    });
+    const [rest] = await inTx(venue(), (tx) =>
+      tx
+        .select({ deviceId: sales.deviceId, operatorId: sales.operatorId })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(venue().device2Id).not.toBe(venue().deviceId);
+    expect(venue().adminId).not.toBe(venue().operatorId);
+    expect(rest).toEqual({ deviceId: venue().deviceId, operatorId: venue().operatorId });
+  });
 });
