@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -27,7 +27,7 @@ import {
   seriesId as brandSeriesId,
   sumDecimals,
 } from "@waitron/shared";
-import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedInvoicesOf, refuseRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -514,6 +514,85 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ]);
 
     expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
+  });
+
+  /** Gives `amount` of the rest's invoice's cash back by a plain refund, filing no corrective. */
+  async function refundRest(finalSaleId: string, amount: string) {
+    const [tender] = await inTx(venue(), (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, finalSaleId)),
+    );
+    const refunded = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/transactions/${finalSaleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: amount,
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: supervisor(),
+      },
+    );
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select().from(sales).where(eq(sales.correctsSaleId, finalSaleId)),
+      ),
+    ).toEqual([]);
+  }
+
+  it("example 1: once a plain refund gave back the rest's whole €90, the advance's preview goes ahead while the rest's 10% dish still shows €90 left", async () => {
+    const { advanceId, finalSaleId } = await takenOff();
+    await refundRest(finalSaleId, "90.00");
+
+    const lines = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/transactions/${finalSaleId}/corrections/lines`,
+    );
+    expect(lines.status, JSON.stringify(lines.json)).toBe(200);
+    expect(lines.json).toMatchObject({
+      lines: [expect.objectContaining({ rate: "10.00", left: "90.00" })],
+      moneyRefundable: "0.00",
+    });
+    const previewed = await preview(advanceId, "30.00");
+
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    expect(previewed.json).toMatchObject({
+      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+    });
+  });
+
+  it("example 1: after a plain refund of €50 of the rest's €90, Correct invoice on the advance is refused with €40 left", async () => {
+    const { advanceId, finalSaleId, refusal } = await takenOff();
+    await refundRest(finalSaleId, "50.00");
+
+    const refused = await preview(advanceId, "30.00");
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual({
+      code: "advance.final_invoice_first",
+      params: { ...refusal.params, rate: "10.00", moneyLeft: "40.00" },
+    });
+  });
+
+  it("a rest's invoice AEAT refused: Correct invoice on the advance answers that invoice's refusal", async () => {
+    const { advanceId, finalSaleId } = await takenOff();
+    const [row] = venue().db.all<{ id: string }>(
+      sql`select id from registros_facturacion where sale_id = ${finalSaleId}`,
+    );
+    await refuseRecord(venue().db, row!.id, "1100");
+
+    const refused = await preview(advanceId, "30.00");
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual({
+      code: "sale.correction_not_admitted",
+      params: { reason: "filing_refused" },
+    });
   });
 
   it("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10% −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were", async () => {

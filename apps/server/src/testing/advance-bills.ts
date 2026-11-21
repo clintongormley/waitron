@@ -24,8 +24,8 @@ import { offerProducts } from "./zone-offers.js";
 import { printedLines, withoutRules } from "./decode-ticket.js";
 import { inTx, provisionBillVenue, send, type Answer, type BillVenue } from "./bill-venue.js";
 
-// Bills that take advances off their invoice (advances plan, worked examples 1, 2, 6 and 8, and a 4% dish), each
-// at a table of its own, against a venue that files real Veri*Factu records.
+// Bills that take advances off their invoice (advances plan, worked examples 1, 2, 6 and 8, and a
+// 4% dish), each at a table of its own, against a venue that files real Veri*Factu records.
 const DISHES: {
   name: string;
   price: string;

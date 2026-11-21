@@ -1,7 +1,7 @@
 import "./errors.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { invoiceCorrections, invoiceSeries, saleLines, sales, type Transaction } from "@waitron/db";
-import { formatInvoiceNumber, readCorrectableLines } from "@waitron/core";
+import { correctionTargetFor, formatInvoiceNumber, readCorrectableLines } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   AppError,
@@ -70,6 +70,7 @@ export async function refuseTakenOffSinceOpened(
     .select({ openedAt: invoiceCorrections.createdAt })
     .from(invoiceCorrections)
     .where(eq(invoiceCorrections.id, correctionId));
+  // Stored times, so weaker than its name if the clock was stepped back between the two.
   if (correction !== undefined && Date.parse(correction.openedAt) >= Date.parse(final.issuedAt))
     return;
   throw new AppError("advance.taken_off_final_invoice", takenOffParams(saleId, final));
@@ -89,10 +90,18 @@ export async function refuseFinalInvoiceFirst(
 ): Promise<void> {
   const final = await readTakingInvoice(tx, saleId);
   if (final === undefined) return;
+  // Corrections of a replaced invoice name the replacement's copies of its lines.
+  const target = await correctionTargetFor(tx, brandSaleId(final.id));
+  const deductions = (
+    await tx
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(and(eq(saleLines.saleId, target), eq(saleLines.deductsSaleId, saleId)))
+  ).map((line) => line.id);
   const [credit] = await tx
     .select({ id: saleLines.id })
     .from(saleLines)
-    .where(eq(saleLines.correctsLineId, final.deductionLineId))
+    .where(inArray(saleLines.correctsLineId, [final.deductionLineId, ...deductions]))
     .limit(1);
   if (credit !== undefined) return;
   const [own] = await tx
