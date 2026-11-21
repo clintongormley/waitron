@@ -17,6 +17,7 @@ import {
   billPayments,
   insertInChunks,
   invoiceCorrectionRefunds,
+  invoiceCorrections,
   isUniqueViolation,
   sales,
   tenderRefunds,
@@ -837,9 +838,10 @@ async function readBillFigures(
   return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
-/** The applied money the completed `tender_refunds` of Correct invoice gave back from the tenders
- * of these payments that paid no advance; an advance's own are already out of what is left of it.
- * A plain refund leaves the invoice, so the bill's total, as it was, and is left in. */
+/** The applied money the completed `tender_refunds` of filed Correct invoices gave back from the
+ * tenders of these payments that paid no advance; an advance's own are already out of what is left
+ * of it. Until a correction files, and for a plain refund, the bill's total is as it was, so those
+ * are left in. */
 async function givenBackAfterSettling(
   tx: Transaction,
   held: readonly PaymentMoney[],
@@ -855,7 +857,17 @@ async function givenBackAfterSettling(
       invoiceCorrectionRefunds,
       eq(invoiceCorrectionRefunds.tenderRefundId, tenderRefunds.id),
     )
-    .where(and(inArray(tenders.billPaymentId, ids), eq(tenderRefunds.state, "completed")));
+    .innerJoin(
+      invoiceCorrections,
+      eq(invoiceCorrections.id, invoiceCorrectionRefunds.invoiceCorrectionId),
+    )
+    .where(
+      and(
+        inArray(tenders.billPaymentId, ids),
+        eq(tenderRefunds.state, "completed"),
+        eq(invoiceCorrections.state, "filed"),
+      ),
+    );
   return rawCentsToDecimal(row!.cents);
 }
 
