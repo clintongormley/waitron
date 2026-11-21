@@ -3,6 +3,7 @@ import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -10,6 +11,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -204,6 +206,42 @@ it("answers only the bounded last offered upgrade from the configured box direct
   expect(answer(sb, "upgrade.status other-file")).toEqual({ ok: false, reason: "unknown_request" });
   writeFileSync(file, "x".repeat(4096));
   expect(answer(sb, "upgrade.status")).toEqual({ ok: false, reason: "host_failed" });
+});
+
+it("uses the configured retained driver and takes a separate lock only for saves", () => {
+  const sb = sandbox({ WB_FLOCK_RC: "1" });
+  const host = join(sb.dir, "custom host");
+  sb.env.WAITRON_HOST_DIR = host;
+  sb.env.WAITRON_DIR = join(sb.dir, "custom box");
+  const bin = join(host, "node-v26.7.0/bin");
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(process.execPath, join(bin, "node"));
+  const driver = join(host, "box/upgrades");
+  mkdirSync(driver, { recursive: true });
+  for (const file of ["cli.mjs", "host.mjs", "transaction.mjs", "copy.mjs", "candidate.mjs"]) {
+    copyFileSync(join(HERE, "box/upgrades", file), join(driver, file));
+  }
+  expect(answer(sb, "upgrade.settings")).toEqual({
+    ok: true,
+    result: { version: 1, revision: 0, automatic: true, start: "03:00", end: "05:00" },
+  });
+  expect(sb.calls()).toEqual([]);
+  expect(answer(sb, "upgrade.settings other-file")).toEqual({
+    ok: false,
+    reason: "unknown_request",
+  });
+  const save = 'upgrade.settings.set {"revision":0,"automatic":false,"start":null,"end":null}';
+  expect(answer(sb, save)).toEqual({ ok: false, reason: "busy" });
+  expect(sb.calls()).toContainEqual(["flock", "-n", "9"]);
+  expect(existsSync(sb.env.WAITRON_DIR + ".upgrade-settings.lock")).toBe(true);
+  expect(existsSync(sb.env.WAITRON_DIR + ".upgrade.lock")).toBe(false);
+  expect(existsSync(sb.env.WAITRON_DIR + ".upgrade-settings.json")).toBe(false);
+  sb.env.WB_FLOCK_RC = "0";
+  expect(answer(sb, save)).toEqual({
+    ok: true,
+    result: { version: 1, revision: 1, automatic: false, start: null, end: null },
+  });
+  expect(answer(sb, "upgrade.settings")).toMatchObject({ result: { revision: 1 } });
 });
 
 describe("waitron-box.sh clock.status", () => {

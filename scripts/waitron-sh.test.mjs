@@ -479,6 +479,9 @@ case "$2" in
   check-offered-upgrade)
     test "$(cat "$6")" = 'signed fixture' || exit 90
     printf '{"status":"offered","version":"1.2.3"}\n'; exit 0 ;;
+  read-upgrade-settings)
+    [ "\${WT_LEGACY_SETTINGS_DRIVER:-0}" = 0 ] || exit 1
+    printf '{"ok":true,"result":{"version":1,"revision":0,"automatic":true,"start":"03:00","end":"05:00"}}\n'; exit 0 ;;
   apply-offered-upgrade)
     printf '{"status":"upgraded"}\n'; exit 0 ;;
   apply)
@@ -1600,7 +1603,7 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
-  it.each(["offered", "older driver", "newer installed release"])(
+  it.each(["offered", "older driver", "driver without settings", "newer installed release"])(
     "checks %s before Apply",
     (scenario) => {
       const sb = sandbox({ systemd: true });
@@ -1620,6 +1623,7 @@ describe("waitron.sh install of a release", () => {
         WT_INSTALLED_RELEASE_REF: "v1.2.2",
         WT_RELEASE_AFTER_OFFER: scenario === "newer installed release" ? "v1.2.4" : "",
         WT_SELF_SCRIPT: driver,
+        WT_LEGACY_SETTINGS_DRIVER: scenario === "driver without settings" ? "1" : "0",
       });
       const calls = loggedCalls(sb);
       const check = calls.findIndex((call) => call.includes("cli.mjs check-offered-upgrade"));
@@ -1629,9 +1633,19 @@ describe("waitron.sh install of a release", () => {
       expect(check).toBeGreaterThan(calls.indexOf("flock -n 9"));
       expect(calls.indexOf("flock -n 9")).toBeGreaterThanOrEqual(0);
       expect(sourceFetch).toBeGreaterThan(check);
+      if (scenario !== "older driver") {
+        const probe = calls.findIndex((call) => /\/cli\.mjs read-upgrade-settings /.test(call));
+        expect(probe).toBeGreaterThan(sourceFetch);
+        expect(calls[probe]).not.toContain("/box/upgrades/");
+      }
       if (scenario === "older driver") {
         expect(result.status).toBe(1);
         expect(result.stderr).toContain("cannot apply an offered upgrade");
+        expect(calls.some((call) => call.startsWith("bootstrap "))).toBe(false);
+      } else if (scenario === "driver without settings") {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("cannot read the saved upgrade settings");
+        expect(calls.some((call) => call.includes("cli.mjs apply-offered-upgrade"))).toBe(false);
         expect(calls.some((call) => call.startsWith("bootstrap "))).toBe(false);
       } else if (scenario === "newer installed release") {
         expect(result.status).toBe(1);

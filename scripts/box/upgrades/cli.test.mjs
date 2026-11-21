@@ -184,6 +184,17 @@ async function offerFixture() {
   return { box, check, link, offer, run, state, trust, record: `${box}.upgrade-offer.json` };
 }
 
+async function installVenueZone(state) {
+  await fs.mkdir(join(state, "venue"));
+  const database = new DatabaseSync(join(state, "venue/venue.db"));
+  try {
+    database.exec(`create table settings (module text, version integer, doc text);
+      insert into settings values ('business_day', 1, '{"timeZone":"Europe/Madrid"}');`);
+  } finally {
+    database.close();
+  }
+}
+
 it.each([
   ["none", "03:29:00", "offer-changed"],
   ["1.2.4", "03:29:00", "offer-changed"],
@@ -193,14 +204,7 @@ it.each([
   const f = await offerFixture();
   await f.check(f.offer(4, "1.2.3"));
   await fs.mkdir(join(`${f.box}.upgrades`, "preparing"), { recursive: true });
-  await fs.mkdir(join(f.state, "venue"));
-  const database = new DatabaseSync(join(f.state, "venue/venue.db"));
-  try {
-    database.exec(`create table settings (module text, version integer, doc text);
-      insert into settings values ('business_day', 1, '{"timeZone":"Europe/Madrid"}');`);
-  } finally {
-    database.close();
-  }
+  await installVenueZone(f.state);
   vi.useFakeTimers({ toFake: ["Date"] });
   onTestFinished(() => vi.useRealTimers());
   vi.setSystemTime(new Date(`2026-11-21T${time}Z`));
@@ -214,6 +218,36 @@ it.each([
     digest: createHash("sha256").update(bytes).digest("hex"),
   });
 });
+
+it.each([
+  [false, "03:00", "05:00", "automatic upgrades are paused"],
+  [true, null, null, "automatic upgrade hours are cleared"],
+])(
+  "rechecks saved settings while an offered release is being prepared (%s, %s–%s)",
+  async (automatic, start, end, reason) => {
+    const f = await offerFixture();
+    await fs.mkdir(join(`${f.box}.upgrades`, "preparing"), { recursive: true });
+    await installVenueZone(f.state);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => vi.useRealTimers());
+    vi.setSystemTime(new Date("2026-11-21T02:30:00Z"));
+    const run = (command, args) =>
+      command === "curl" ? { stdout: f.offer(5, "1.2.3") } : f.run(command, args);
+    const recheck = () => recheckOfferedUpgrade(f.box, "1.2.3-rc.1", "1.2.3", f.link, run);
+    await expect(recheck()).resolves.toBeUndefined();
+    await fs.writeFile(
+      `${f.box}.upgrade-settings.json`,
+      JSON.stringify({
+        version: 1,
+        revision: 1,
+        automatic,
+        start,
+        end,
+      }),
+    );
+    await expect(recheck()).rejects.toThrow(reason);
+  },
+);
 
 it("checks the installed box's signed offer and remembers a newer pause across calls", async () => {
   const f = await offerFixture();
@@ -368,4 +402,116 @@ it("admits only the venue-local window and skips a missing, invalid or unreadabl
   expect(await check()).toBe(1);
   expect(stderr.write).toHaveBeenLastCalledWith(expect.stringContaining("could not read"));
   expect(stdout.write).not.toHaveBeenCalled();
+});
+
+it("saves editable hours, rejects a stale edit and reads the cleared window after restart", async () => {
+  const { box } = await fixture();
+  const read = () => runUpgradeCli(["read-upgrade-settings", box]);
+  const save = (revision, automatic, start, end) =>
+    runUpgradeCli([
+      "save-upgrade-settings",
+      box,
+      JSON.stringify({ revision, automatic, start, end }),
+    ]);
+  expect(await read()).toEqual({
+    ok: true,
+    result: { version: 1, revision: 0, automatic: true, start: "03:00", end: "05:00" },
+  });
+  expect(await save(0, false, "23:30", "00:30")).toEqual({
+    ok: true,
+    result: { version: 1, revision: 1, automatic: false, start: "23:30", end: "00:30" },
+  });
+  expect(await save(1, true, "23:30", "00:29")).toEqual({ ok: false, reason: "settings_invalid" });
+  expect(await save(1, true, "23:30", null)).toEqual({ ok: false, reason: "settings_invalid" });
+  expect(await save(0, true, null, null)).toEqual({ ok: false, reason: "settings_stale" });
+  expect(await read()).toMatchObject({ result: { revision: 1, automatic: false, start: "23:30" } });
+  const cleared = {
+    ok: true,
+    result: { version: 1, revision: 2, automatic: true, start: null, end: null },
+  };
+  expect(await save(1, true, null, null)).toEqual(cleared);
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    new URL("./cli.mjs", import.meta.url).pathname,
+    "read-upgrade-settings",
+    box,
+  ]);
+  expect(JSON.parse(stdout)).toEqual(cleared);
+});
+
+it.each([
+  ["no edit", []],
+  ["malformed JSON", ["{"]],
+  ["an invalid revision", ['{"revision":"0","automatic":true,"start":null,"end":null}']],
+])("refuses a settings save with %s without creating a file", async (_label, edit) => {
+  const { box } = await fixture();
+  expect(await runUpgradeCli(["save-upgrade-settings", box, ...edit])).toEqual({
+    ok: false,
+    reason: "settings_invalid",
+  });
+  await expect(fs.stat(`${box}.upgrade-settings.json`)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each([
+  '{"version":',
+  '{"version":2,"revision":0,"automatic":true,"start":"03:00","end":"05:00"}',
+])("leaves unreadable settings in place (%s)", async (bytes) => {
+  const { box } = await fixture();
+  const file = `${box}.upgrade-settings.json`;
+  await fs.writeFile(file, bytes);
+  const window = runUpgradeCli(["check-upgrade-window", box], {
+    run: async () => {
+      throw new Error("unexpected venue lookup");
+    },
+  });
+  await expect(window).rejects.toThrow("the saved upgrade settings are unreadable");
+  const stdout = { write: vi.fn() };
+  const stderr = { write: vi.fn() };
+  expect(await runUpgradeCliMain(["read-upgrade-settings", box], { stdout, stderr })).toBe(1);
+  expect(stdout.write).toHaveBeenCalledExactlyOnceWith('{"ok":false,"reason":"host_failed"}\n');
+  expect(
+    await runUpgradeCli([
+      "save-upgrade-settings",
+      box,
+      '{"revision":0,"automatic":true,"start":"03:00","end":"05:00"}',
+    ]),
+  ).toEqual({ ok: false, reason: "host_failed" });
+  expect(await fs.readFile(file, "utf8")).toBe(bytes);
+});
+
+it.each([
+  ["23:30", "01:30", "2026-10-29T22:29:59Z", false],
+  ["23:30", "01:30", "2026-10-29T22:30:00Z", true],
+  ["23:30", "01:30", "2026-10-30T00:29:59Z", true],
+  ["23:30", "01:30", "2026-10-30T00:30:00Z", false],
+  ["23:30", "01:30", "2026-12-31T23:50:00Z", true],
+  ["23:30", "01:30", "2028-02-29T00:00:00Z", true],
+  ["01:30", "04:00", "2026-03-29T01:30:00Z", true],
+  ["01:30", "04:00", "2026-10-25T02:30:00Z", true],
+  ["02:30", "05:00", "2026-03-29T02:00:00Z", false],
+  ["01:00", "02:30", "2026-03-29T00:30:00Z", false],
+  ["02:30", "05:00", "2026-10-25T03:00:00Z", false],
+  ["01:00", "02:30", "2026-10-25T00:00:00Z", false],
+  ["23:00", "02:30", "2026-03-28T23:30:00Z", false],
+  ["23:00", "02:30", "2026-10-24T23:30:00Z", false],
+  [null, null, "2026-11-21T02:30:00Z", true],
+  [null, null, "2026-11-21T01:30:00Z", false],
+])("checks offers with saved hours %s–%s at %s", async (start, end, time, allowed) => {
+  const f = await offerFixture();
+  await installVenueZone(f.state);
+  await fs.writeFile(
+    `${f.box}.upgrade-settings.json`,
+    JSON.stringify({
+      version: 1,
+      revision: 1,
+      automatic: false,
+      start,
+      end,
+    }),
+  );
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date(time));
+  const check = runUpgradeCli(["check-upgrade-window", f.box], { run: f.run });
+  if (allowed) await expect(check).resolves.toBeUndefined();
+  else await expect(check).rejects.toThrow("outside");
 });

@@ -17,6 +17,11 @@ import {
   type clockCorrection,
 } from "./clock-correction.js";
 import { displayNameOf, type BoxHealth } from "./box-health.js";
+import {
+  upgradeSettingsEdit,
+  type BoxHostClient,
+  type UpgradeSettingsAnswer,
+} from "./box-host-client.js";
 import { clockChallenges } from "./clock-challenges.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import "./errors.js";
@@ -29,6 +34,7 @@ import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 export interface BoxHealthApiDeps {
   db: Database;
   readHealth: () => Promise<BoxHealth>;
+  upgradeSettings?: Pick<BoxHostClient, "readUpgradeSettings" | "saveUpgradeSettings">;
   freeSpace: (personId: string) => Promise<FreedSpace>;
   /** Stops this server process; Docker starts it again. */
   restart: () => void;
@@ -61,6 +67,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "clock.unusable": 409,
   "management.request_invalid": 400,
   "alert.not_found": 404,
+  "upgrade.settings_stale": 409,
+  "upgrade.settings_busy": 409,
+  "upgrade.settings_unavailable": 503,
 };
 
 /** When a full disk refuses the transaction (its last-seen stamp or its change-log drain), the same
@@ -125,6 +134,20 @@ export async function requiredNameOf(tx: Transaction, personId: string): Promise
   return name;
 }
 
+function upgradeSettingsResponse(c: Context, answer: UpgradeSettingsAnswer | undefined) {
+  if (answer?.ok) return c.json(answer.settings, 200);
+  switch (answer?.reason) {
+    case "invalid":
+      throw new AppError("management.request_invalid", { field: "settings" });
+    case "stale":
+      throw new AppError("upgrade.settings_stale", {});
+    case "busy":
+      throw new AppError("upgrade.settings_busy", {});
+    default:
+      throw new AppError("upgrade.settings_unavailable", {});
+  }
+}
+
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -149,6 +172,21 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       log("info", "box.restart_requested", { personId });
       restartAfterResponse(outgoing, deps.restart, log);
       return c.json({}, 202);
+    }),
+  );
+  const settingsRun = createErrorBoundary(STATUS, "upgrade-settings.failed");
+  app.get("/api/box/upgrade-settings", (c) =>
+    settingsRun(c, log, async () => {
+      await authorizeSystemManager(deps.db, c);
+      return upgradeSettingsResponse(c, await deps.upgradeSettings?.readUpgradeSettings?.());
+    }),
+  );
+  app.post("/api/box/upgrade-settings", (c) =>
+    settingsRun(c, log, async () => {
+      await authorizeSystemManager(deps.db, c);
+      const edit = upgradeSettingsEdit(await readRawJsonBody<unknown>(c));
+      if (edit === null) throw new AppError("management.request_invalid", { field: "settings" });
+      return upgradeSettingsResponse(c, await deps.upgradeSettings?.saveUpgradeSettings?.(edit));
     }),
   );
   const clockSet = deps.clockSet;

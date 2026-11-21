@@ -25,6 +25,9 @@ import type { FreedSpace } from "./free-space-now.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 import { systemClock } from "./till-backend.js";
 import { writeRefusingDb } from "./testing/write-refusing-db.js";
+import type { UpgradeSettingsAnswer } from "./box-host-client.js";
+import { readOnlyGate } from "./read-only-gate.js";
+import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -62,10 +65,18 @@ beforeEach(async () => {
   supervisor = await seedPerson("supervisor", "Simon");
 });
 
-function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => HEALTH) {
+function mount(
+  db: Database,
+  readHealth: () => Promise<BoxHealth> = async () => HEALTH,
+  posture = { mirror: false, fenced: false },
+) {
   const deps = {
     db,
     readHealth: vi.fn(readHealth),
+    upgradeSettings: {
+      readUpgradeSettings: vi.fn<() => Promise<UpgradeSettingsAnswer>>(),
+      saveUpgradeSettings: vi.fn<() => Promise<UpgradeSettingsAnswer>>(),
+    },
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
     restart: vi.fn<() => void>(),
     venue: { language: "en" as const },
@@ -81,6 +92,13 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     },
   };
   const app = new Hono();
+  app.use(
+    "*",
+    readOnlyGate(
+      () => posture.mirror || posture.fenced,
+      (c) => isReadOnlyExempt(c.req, posture),
+    ),
+  );
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -466,3 +484,82 @@ it.each(["clock-challenge", "clock-set", "clock-confirm"])(
     });
   },
 );
+
+describe("overnight upgrade settings", () => {
+  const path = "/api/box/upgrade-settings";
+  const edit = { revision: 2, automatic: false, start: "01:00", end: "07:30" };
+  const save = (app: Hono, cookie: string) =>
+    app.request(path, { method: "POST", headers: { cookie }, body: JSON.stringify(edit) });
+
+  it("lets a manager read the saved window and save a change", async () => {
+    const { app, deps } = mount(suite.db);
+    const current = {
+      version: 1,
+      revision: 2,
+      automatic: true,
+      start: "03:00",
+      end: "05:00",
+    } as const;
+    const saved = { ...edit, version: 1, revision: 3 } as const;
+    deps.upgradeSettings.readUpgradeSettings.mockResolvedValue({ ok: true, settings: current });
+    deps.upgradeSettings.saveUpgradeSettings.mockResolvedValue({ ok: true, settings: saved });
+    const get = await app.request(path, { headers: { cookie: manager.cookie } });
+    expect(get.status).toBe(200);
+    expect(await get.json()).toEqual(current);
+    const post = await save(app, manager.cookie);
+    expect(post.status).toBe(200);
+    expect(await post.json()).toEqual(saved);
+    expect(deps.upgradeSettings.saveUpgradeSettings).toHaveBeenCalledExactlyOnceWith(edit);
+  });
+
+  it("refuses reads and writes without system.manage before contacting the host", async () => {
+    const { app, deps } = mount(suite.db);
+    for (const response of [
+      await app.request(path, { headers: { cookie: supervisor.cookie } }),
+      await save(app, supervisor.cookie),
+    ]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    }
+    expect(deps.upgradeSettings.readUpgradeSettings).not.toHaveBeenCalled();
+    expect(deps.upgradeSettings.saveUpgradeSettings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { mirror: true, fenced: false },
+    { mirror: false, fenced: true },
+  ])("refuses to save on a read-only box %j", async (posture) => {
+    const { app, deps } = mount(suite.db, undefined, posture);
+    const response = await save(app, manager.cookie);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "node.read_only" } });
+    expect(deps.upgradeSettings.saveUpgradeSettings).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["stale", 409, "upgrade.settings_stale"],
+    ["busy", 409, "upgrade.settings_busy"],
+    ["unavailable", 503, "upgrade.settings_unavailable"],
+    ["invalid", 400, "management.request_invalid"],
+  ] as const)("reports a %s host refusal", async (reason, status, code) => {
+    const { app, deps } = mount(suite.db);
+    deps.upgradeSettings.saveUpgradeSettings.mockResolvedValue({ ok: false, reason });
+    const response = await save(app, manager.cookie);
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ error: { code } });
+  });
+
+  it("bounds the settings sent to the host", async () => {
+    const { app, deps } = mount(suite.db);
+    const response = await app.request(path, {
+      method: "POST",
+      headers: { cookie: manager.cookie },
+      body: JSON.stringify({ ...edit, start: "0".repeat(700) }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    expect(deps.upgradeSettings.saveUpgradeSettings).not.toHaveBeenCalled();
+  });
+});
