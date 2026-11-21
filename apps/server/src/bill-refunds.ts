@@ -294,11 +294,18 @@ export async function refundBillPayment(
           });
           const refund = await completeRefundReservation(tx, deps, reading, reserved, {
             manualPaymentRef: async () => provided!.paymentRef,
-            openDrawer: (done) =>
-              enqueueRefundDrawer(tx, cfg, done.id, operator.personId, {
-                authorizedBy: approver.authorizedBy,
-                viaOverride: approver.viaOverride,
-              }),
+            openDrawer: (done, printers) =>
+              enqueueRefundDrawer(
+                tx,
+                cfg,
+                done.id,
+                operator.personId,
+                {
+                  authorizedBy: approver.authorizedBy,
+                  viaOverride: approver.viaOverride,
+                },
+                printers,
+              ),
           });
           if (refund.state === "completed")
             return { kind: "done" as const, result: await resultOf(tx, refund, workingOrderId) };

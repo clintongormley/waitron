@@ -1,15 +1,16 @@
 import { eq } from "drizzle-orm";
-import { refunds, type Transaction } from "@waitron/db";
+import { appendDrawerEntry, refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
-import { centsToDecimal, type NodeId } from "@waitron/shared";
+import { centsToDecimal, readSaleOrigin, type NodeId } from "@waitron/shared";
 import { recordManualRefund } from "@waitron/payments";
+import { printerLookup, resolveDrawerAssignment, type PrinterLookup } from "./receipt-print.js";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
 type RefundRow = typeof refunds.$inferSelect;
 type RefundCompletion = {
   beforeCompletion?: (refund: RefundRow) => Promise<void>;
   manualPaymentRef?: (refund: RefundRow) => Promise<string>;
-  openDrawer?: (refund: RefundRow) => Promise<void>;
+  openDrawer?: (refund: RefundRow, printers: PrinterLookup) => Promise<void>;
 };
 
 export async function refuseUntilRefundable(
@@ -65,7 +66,11 @@ export async function completeRefundReservation(
       .where(eq(refunds.id, refund.id))
       .returning();
     refund = completed!;
-    if (refund.method === "cash") await steps.openDrawer?.(refund);
+    if (refund.method === "cash") {
+      const printers = printerLookup(tx, readSaleOrigin(refund.source, refund.deviceId));
+      await recordCashDrawerRefund(tx, refund, printers);
+      await steps.openDrawer?.(refund, printers);
+    }
   }
   await deps.attendance?.(tx, {
     source: "refund",
@@ -77,4 +82,23 @@ export async function completeRefundReservation(
     outcome: refund.state === "completed" ? "qualified" : "pending",
   });
   return refund;
+}
+
+async function recordCashDrawerRefund(
+  tx: Transaction,
+  refund: RefundRow,
+  printers: PrinterLookup,
+): Promise<void> {
+  const drawer = await resolveDrawerAssignment(printers);
+  if (drawer === undefined) return;
+  await appendDrawerEntry(tx, {
+    nodeId: refund.nodeId,
+    printerId: drawer.id,
+    deviceId: refund.deviceId,
+    personId: refund.requestedBy,
+    recordedAt: refund.completedAt!,
+    kind: "cash_refund",
+    amount: -(refund.appliedAmount + refund.tipAmount),
+    refundId: refund.id,
+  });
 }

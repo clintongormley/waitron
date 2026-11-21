@@ -61,7 +61,11 @@ export interface DevicePrinter extends EscSetting {
   opensDrawer: boolean;
 }
 
-export type PrinterLookup = ((role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>) & {
+export type PrinterLookup = ((
+  role: ProfilePrinterRole,
+  /** Drawer recording can use an inactive assignment while print jobs use the lookup's default. */
+  includeSwitchedOff?: boolean,
+) => Promise<DevicePrinter | undefined>) & {
   /** It also resolves switched-off printers, so a job may be queued on the one it returns. */
   readonly whileSwitchedOff?: boolean;
 };
@@ -75,10 +79,11 @@ export function printerLookup(
   origin: Origin,
   { whileSwitchedOff = false }: { whileSwitchedOff?: boolean } = {},
 ): PrinterLookup {
-  let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
-  const lookup = async (role: ProfilePrinterRole) => {
-    read ??= readDevicePrinters(tx, origin, whileSwitchedOff);
-    return (await read).get(role);
+  let read: ReturnType<typeof readDevicePrinters> | undefined;
+  const lookup = async (role: ProfilePrinterRole, includeSwitchedOff = whileSwitchedOff) => {
+    read ??= readDevicePrinters(tx, origin);
+    const assigned = (await read).get(role);
+    return assigned?.active || includeSwitchedOff ? assigned?.printer : undefined;
   };
   return Object.assign(lookup, { whileSwitchedOff });
 }
@@ -100,10 +105,20 @@ export async function deviceMayPrintReceipts(q: Transaction, deviceId: string): 
  * The device's drawer printer when it may open that drawer: its profile allows the drawer and the
  * printer has one. Otherwise `undefined`, and the automatic paths open nothing.
  */
-async function drawerPrinter(printers: PrinterLookup): Promise<DevicePrinter | undefined> {
-  const printer = await printers("cash_drawer");
+async function drawerPrinter(
+  printers: PrinterLookup,
+  includeSwitchedOff?: boolean,
+): Promise<DevicePrinter | undefined> {
+  const printer = await printers("cash_drawer", includeSwitchedOff);
   if (printer === undefined || !printer.opensDrawer || !printer.hasCashDrawer) return undefined;
   return printer;
+}
+
+/** Cash can be put in or taken out by hand while the assigned printer is switched off. */
+export function resolveDrawerAssignment(
+  printers: PrinterLookup,
+): Promise<DevicePrinter | undefined> {
+  return drawerPrinter(printers, true);
 }
 
 /** The device has a drawer it may open, by the same resolution the drawer paths use. */
@@ -166,8 +181,7 @@ export async function resolveInvoicePrinter(
 async function readDevicePrinters(
   tx: Transaction,
   origin: Origin,
-  whileSwitchedOff: boolean,
-): Promise<Map<ProfilePrinterRole, DevicePrinter>> {
+): Promise<Map<ProfilePrinterRole, { active: boolean; printer: DevicePrinter }>> {
   if (origin.source !== "device") return new Map();
   const roles = await readPrinterRoles(tx, origin.deviceId);
   const ids = roles.flatMap((role) => (role.resolvedId === null ? [] : [role.resolvedId]));
@@ -176,6 +190,7 @@ async function readDevicePrinters(
     .select({
       id: printers.id,
       hasCashDrawer: printers.hasCashDrawer,
+      active: printers.active,
       ...receiptRollColumns,
       formFactor: deviceProfiles.formFactor,
       capabilities: deviceProfiles.capabilities,
@@ -184,22 +199,21 @@ async function readDevicePrinters(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .innerJoin(
       printers,
-      and(
-        isReceiptPrinter(),
-        inArray(printers.id, ids),
-        whileSwitchedOff ? isNull(printers.deletedAt) : eq(printers.active, true),
-      ),
+      and(isReceiptPrinter(), inArray(printers.id, ids), isNull(printers.deletedAt)),
     )
     .where(eq(devices.id, origin.deviceId));
   const byId = new Map(
-    rows.map(({ formFactor, capabilities, ...printer }) => [
+    rows.map(({ active, formFactor, capabilities, ...printer }) => [
       printer.id,
       {
-        ...printer,
-        opensDrawer: profileAllows(
-          { formFactor, capabilities: capabilities as string[] },
-          "open-cash-drawer",
-        ),
+        active,
+        printer: {
+          ...printer,
+          opensDrawer: profileAllows(
+            { formFactor, capabilities: capabilities as string[] },
+            "open-cash-drawer",
+          ),
+        },
       },
     ]),
   );
@@ -809,9 +823,10 @@ export async function enqueueRefundDrawer(
   refundId: string,
   operatorId: string,
   authorization: { authorizedBy: string; viaOverride: boolean },
+  printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
   if (cfg.origin.source !== "device") return;
-  const printer = await drawerPrinter(printerLookup(tx, cfg.origin));
+  const printer = await drawerPrinter(printers);
   if (printer === undefined) return;
   const [refund] = await tx
     .update(refunds)

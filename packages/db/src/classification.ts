@@ -59,6 +59,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "who requested an invoice's PDF from the dashboard, and when; an audit row is never corrected",
   ),
   classify("ticket_items", "ledger", LEDGER),
+  appendOnly("drawer_entries", "ledger", "cash and card movements recorded against a drawer"),
   classify("drawer_opens", "ledger", LEDGER),
   appendOnly("daily_closes", "ledger", LEDGER),
   classify(

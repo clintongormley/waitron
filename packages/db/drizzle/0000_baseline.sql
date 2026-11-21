@@ -1086,6 +1086,43 @@ CREATE TABLE `ticket_item_moves` (
 );
 --> statement-breakpoint
 CREATE INDEX `ticket_item_moves_line_idx` ON `ticket_item_moves` (`working_order_line_id`);--> statement-breakpoint
+CREATE TABLE `drawer_entries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`printer_id` text NOT NULL,
+	`node_id` text NOT NULL,
+	`sequence` integer NOT NULL,
+	`recorded_at` text NOT NULL,
+	`person_id` text NOT NULL,
+	`device_id` text,
+	`kind` text NOT NULL,
+	`amount` integer NOT NULL,
+	`bill_payment_id` text,
+	`refund_id` text,
+	`first_count_id` text,
+	`facts` text,
+	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`first_count_id`) REFERENCES `drawer_entries`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "drawer_entries_kind_ck" CHECK("drawer_entries"."kind" in ('cash_payment', 'card_payment', 'cash_refund', 'cash_in', 'cash_out', 'count', 'recount', 'finish')),
+	CONSTRAINT "drawer_entries_target_ck" CHECK(
+      ("drawer_entries"."bill_payment_id" is not null) = ("drawer_entries"."kind" in ('cash_payment', 'card_payment'))
+      and ("drawer_entries"."refund_id" is not null) = ("drawer_entries"."kind" = 'cash_refund')
+      and ("drawer_entries"."first_count_id" is not null) = ("drawer_entries"."kind" in ('recount', 'finish'))
+    ),
+	CONSTRAINT "drawer_entries_amount_ck" CHECK(
+      typeof("drawer_entries"."amount") = 'integer'
+      and ("drawer_entries"."kind" not in ('cash_payment', 'card_payment', 'cash_in') or "drawer_entries"."amount" > 0)
+      and ("drawer_entries"."kind" not in ('cash_refund', 'cash_out') or "drawer_entries"."amount" < 0)
+    )
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `drawer_entries_printer_sequence_key` ON `drawer_entries` (`printer_id`,`sequence`);--> statement-breakpoint
+CREATE UNIQUE INDEX `drawer_entries_bill_payment_key` ON `drawer_entries` (`bill_payment_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `drawer_entries_refund_key` ON `drawer_entries` (`refund_id`);--> statement-breakpoint
 CREATE TABLE `drawer_opens` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_id` text,

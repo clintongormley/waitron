@@ -471,7 +471,8 @@ last close. It takes in A239, so the two are built together, and A240 can land a
 [implementation plan](../superpowers/plans/2026-11-21-a1325-close-a-drawer.md) replaces `daily_closes`
 and builds on the completed refund flow (#3971). Sales and the daily email keep each figure on its
 existing reporting date, including later writes dated to that day. A saved drawer close keeps its
-count and withdrawal, and later cash movement belongs to the next close.
+count and withdrawal, and later cash movement belongs to the next close. The next slice uses the
+recorded drawer movements to save and resume a count.
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
