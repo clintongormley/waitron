@@ -1238,8 +1238,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   and enable overnight checks by hand for rehearsal. The supervised install command applies an
   offer during the quiet window and rolls back a failed candidate. Box status shows the latest
   completed offered install or rollback. Still open are the first signed publication, first live
-  offer, physical test-box upgrade, automatic timer installation, rollback email and pairs. After the
-  first venue come the Cloud release check, password-checked go-back, proof-of-close and
+  offer, physical test-box upgrade, timer settings, automatic timer activation and paired upgrades.
+  After the first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry
   on an existing box (driver/bootstrap, non-recipe service/Docker drop-ins, host refresh and

@@ -85,7 +85,8 @@ Cuando no pasa nada, cada fila dice:
   hasta que quedan libres unos 24 MB y el servidor ha vuelto a apartar los 8 MB.
 
 Consulta **Última actualización ofrecida** para ver cuándo terminó el intento y si el servidor
-instaló la versión ofrecida o volvió a la anterior.
+instaló la versión ofrecida o volvió a la anterior. Si recibes un correo sobre una actualización revertida,
+abre **Sistema → Estado del servidor** y consulta esta fila.
 
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
 el servidor los reintenta solo o el encargado tiene que resolver alguno. También dice **Sin enviar desde**

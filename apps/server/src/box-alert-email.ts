@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import {
   cancelMail,
@@ -14,6 +14,7 @@ import {
 import { codeOf } from "@waitron/server-kit";
 import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import type { LastOfferedUpgrade } from "./box-host-client.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
 import { fillTemplate } from "./fill-template.js";
@@ -23,6 +24,7 @@ import {
   BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
   CLOCK_CORRECTED_EMAIL_WORDS,
+  UPGRADE_ROLLBACK_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
 import { receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
@@ -59,10 +61,26 @@ export interface EmailedIncident {
  * `backup.staging_space_low` that one of its checks sees. */
 export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
 
-export type BoxAlertCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;
+const UPGRADE_ROLLBACK_EMAIL_CODE = "upgrade.rolled_back";
+
+export type BoxAlertCode =
+  | BoxEmailCode
+  | IncidentEmailCode
+  | typeof BACKUP_REFUSED_EMAIL_CODE
+  | typeof UPGRADE_ROLLBACK_EMAIL_CODE;
 type EmailCode = BoxAlertCode;
 export const boxAlertMailKey = (episodeId: string, personId: string) =>
   `alert:${episodeId}:${personId}`;
+
+export function transientBoxAlertMail() {
+  return and(
+    eq(outgoingMail.kind, "box_alert"),
+    isNull(outgoingMail.subjectId),
+    inArray(outgoingMail.status, ["pending", "rejected"]),
+    isNull(outgoingMail.finishedAt),
+    sql`json_extract(${outgoingMail.params}, '$.code') is not ${UPGRADE_ROLLBACK_EMAIL_CODE}`,
+  );
+}
 
 /** Each time placeholder and the param holding the offset it is written in. */
 const TIME_PLACEHOLDERS = {
@@ -102,6 +120,15 @@ function wordsFor(
       values: {
         needed: formatBytes(params?.["neededBytes"], language),
         available: formatBytes(params?.["availableBytes"], language),
+      },
+    };
+  }
+  if (code === UPGRADE_ROLLBACK_EMAIL_CODE) {
+    return {
+      ...UPGRADE_ROLLBACK_EMAIL_WORDS[language],
+      values: {
+        fromVersion: String(params?.["fromVersion"] ?? ""),
+        toVersion: String(params?.["toVersion"] ?? ""),
       },
     };
   }
@@ -198,6 +225,7 @@ export async function readBoxEmailContext(
 interface Episode {
   readonly id: string;
   readonly incidentId?: string;
+  readonly notAfter?: Date;
   readonly queuedFor: Set<string>;
   readonly code: EmailCode;
   /** The module that gave the notice; absent for the disk's episodes and the alerts'. */
@@ -228,6 +256,7 @@ export function createBoxEmailDuty(deps: {
   emailedIncidents: () => Promise<readonly EmailedIncident[]>;
   /** The backup run's memory of its last stop. */
   backupStopped: () => BackupOutcomeHolder["runStopped"];
+  lastOfferedUpgrade?: () => Promise<LastOfferedUpgrade | null>;
   context: () => Promise<BoxEmailContext>;
   send: TextEmailSender;
   isPrimary: () => boolean;
@@ -241,18 +270,22 @@ export function createBoxEmailDuty(deps: {
   function begin(
     key: string,
     code: EmailCode,
-    owner?: string,
-    params?: Readonly<Record<string, unknown>>,
-    incident?: true,
+    {
+      owner,
+      params,
+      incident,
+      notAfter,
+    }: Pick<Episode, "owner" | "params" | "incident" | "notAfter"> = {},
   ): Episode {
     let episode = episodes.get(key);
     if (episode === undefined) {
       episode = {
-        id: incident
-          ? key
-          : code === BACKUP_REFUSED_EMAIL_CODE
-            ? `${code}:${deps.backupStopped()!.since}`
-            : newId(),
+        id:
+          incident || code === UPGRADE_ROLLBACK_EMAIL_CODE
+            ? key
+            : code === BACKUP_REFUSED_EMAIL_CODE
+              ? `${code}:${deps.backupStopped()!.since}`
+              : newId(),
         ...(incident ? { incidentId: key.slice("incident:".length) } : {}),
         queuedFor: new Set(),
         code,
@@ -260,6 +293,7 @@ export function createBoxEmailDuty(deps: {
         ...(incident === undefined ? {} : { incident }),
         ...(incident && code === "clock.corrected" ? { untilSent: true as const } : {}),
         ...(params === undefined ? {} : { params }),
+        ...(notAfter === undefined ? {} : { notAfter }),
         sentTo: new Set(),
         said: new Set(),
         logged: new Map(),
@@ -346,10 +380,25 @@ export function createBoxEmailDuty(deps: {
       refusedSince = refusal?.since;
       if (refusal) {
         due.push({
-          episode: begin(BACKUP_REFUSED_EMAIL_CODE, BACKUP_REFUSED_EMAIL_CODE, undefined, {
-            ...refusal.sizes,
+          episode: begin(BACKUP_REFUSED_EMAIL_CODE, BACKUP_REFUSED_EMAIL_CODE, {
+            params: { ...refusal.sizes },
           }),
         });
+      }
+      const upgrade = await deps.lastOfferedUpgrade?.();
+      if (stopped) return;
+      let rollbackKey: string | undefined;
+      if (upgrade?.status === "rolled-back") {
+        const notAfter = new Date(Date.parse(upgrade.finishedAt) + MAIL_LIFETIME_MS.box_alert);
+        if (notAfter > deps.now()) {
+          rollbackKey = `${UPGRADE_ROLLBACK_EMAIL_CODE}:${upgrade.attemptId}`;
+          due.push({
+            episode: begin(rollbackKey, UPGRADE_ROLLBACK_EMAIL_CODE, {
+              params: { fromVersion: upgrade.fromVersion, toVersion: upgrade.toVersion },
+              notAfter,
+            }),
+          });
+        }
       }
       const notices = await deps.moduleNotices();
       if (stopped) return;
@@ -358,7 +407,7 @@ export function createBoxEmailDuty(deps: {
         if (!isBoxEmailCode(notice.code)) continue;
         if ((STORAGE_EMAIL_CODES as readonly string[]).includes(notice.code)) continue;
         const key = `module:${notice.owner}:${notice.key}`;
-        begin(key, notice.code, notice.owner, notice.params);
+        begin(key, notice.code, { owner: notice.owner, params: notice.params });
         moduleSeen.add(key);
       }
       const open = await deps.emailedIncidents();
@@ -366,7 +415,7 @@ export function createBoxEmailDuty(deps: {
       const incidentSeen = new Set<string>();
       for (const incident of open) {
         const key = `incident:${incident.id}`;
-        begin(key, incident.code, undefined, incident.params, true);
+        begin(key, incident.code, { params: incident.params, incident: true });
         incidentSeen.add(key);
       }
       for (const [key, episode] of episodes) {
@@ -375,6 +424,10 @@ export function createBoxEmailDuty(deps: {
           if (incidentSeen.has(key)) due.push({ episode });
           else if (episode.untilSent && episode.queuedFor.size === 0) due.push({ episode, key });
           else episodes.delete(key);
+          continue;
+        }
+        if (episode.code === UPGRADE_ROLLBACK_EMAIL_CODE && key !== rollbackKey) {
+          episodes.delete(key);
           continue;
         }
         if (episode.owner === undefined) continue;
@@ -390,6 +443,7 @@ export function createBoxEmailDuty(deps: {
           ([key, episode]) =>
             episode.incidentId === undefined &&
             key !== "storage.disk_full" &&
+            episode.code !== UPGRADE_ROLLBACK_EMAIL_CODE &&
             episodes.get(key) !== episode,
         )
         .map(([, episode]) => episode);
@@ -434,14 +488,7 @@ export function createBoxEmailDuty(deps: {
             const leftovers = await tx
               .select({ key: outgoingMail.dedupeKey })
               .from(outgoingMail)
-              .where(
-                and(
-                  eq(outgoingMail.kind, "box_alert"),
-                  isNull(outgoingMail.subjectId),
-                  inArray(outgoingMail.status, ["pending", "rejected"]),
-                  isNull(outgoingMail.finishedAt),
-                ),
-              );
+              .where(transientBoxAlertMail());
             for (const row of leftovers) await cancelMail(tx, row.key, now);
           }
           for (const episode of ended)
@@ -451,6 +498,9 @@ export function createBoxEmailDuty(deps: {
             await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
           for (const pair of additions) {
             const { episode, personId } = pair;
+            const notAfter =
+              episode.notAfter ?? new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert);
+            if (notAfter <= now) continue;
             await enqueueMail(tx, {
               kind: "box_alert",
               dedupeKey: boxAlertMailKey(episode.id, personId),
@@ -461,7 +511,7 @@ export function createBoxEmailDuty(deps: {
                 wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
               },
               now,
-              notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
+              notAfter,
             });
             queued.push(pair);
           }
@@ -489,7 +539,7 @@ export function createBoxEmailDuty(deps: {
     },
     remember: (incident) => {
       if (incident.code !== "clock.corrected") return;
-      begin(`incident:${incident.id}`, incident.code, undefined, incident.params, true);
+      begin(`incident:${incident.id}`, incident.code, { params: incident.params, incident: true });
     },
   };
 }

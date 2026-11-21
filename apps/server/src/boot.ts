@@ -64,7 +64,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import {
   installChangeFeed,
@@ -294,6 +294,7 @@ import {
   readOpenEmailedIncidents,
   createBoxEmailDuty,
   boxAlertMailJob,
+  transientBoxAlertMail,
 } from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -3174,14 +3175,7 @@ async function bootServer(
         const rows = await tx
           .select({ id: outgoingMail.id })
           .from(outgoingMail)
-          .where(
-            and(
-              eq(outgoingMail.kind, "box_alert"),
-              isNull(outgoingMail.subjectId),
-              inArray(outgoingMail.status, ["pending", "rejected"]),
-              isNull(outgoingMail.finishedAt),
-            ),
-          );
+          .where(transientBoxAlertMail());
         for (const row of rows) previousEpisodeMailIds.add(row.id);
         await abandonMailClaims(tx, owners, now());
       }
@@ -3877,6 +3871,9 @@ async function bootServer(
     reading.settle(read.unavailable);
     return read;
   };
+  const upgradeResultCache = createTtlCache<LastOfferedUpgrade | null>({ ttlMs: 60_000, now });
+  const readLastOfferedUpgrade = () =>
+    upgradeResultCache.get("result", async () => (await hostClient.lastOfferedUpgrade?.()) ?? null);
   const boxEmails = createBoxEmailDuty({
     db,
     now,
@@ -3885,6 +3882,7 @@ async function bootServer(
     moduleNotices: readModuleNotices,
     emailedIncidents: () => readOpenEmailedIncidents(db),
     backupStopped: () => backupOutcomes.runStopped,
+    lastOfferedUpgrade: () => readLastOfferedUpgrade().catch(() => null),
     context: () =>
       readBoxEmailContext(db, {
         ring,
@@ -4065,7 +4063,6 @@ async function bootServer(
     backupDirs: localBackupDirs,
   };
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
-  const upgradeResultCache = createTtlCache<LastOfferedUpgrade | null>({ ttlMs: 60_000, now });
   const pageNoticeLog = createStaffNoticeLog(log);
   const pageNoticeSources = deviceNoticeSources(
     { disk: diskFull, space: freeSpace },
@@ -4098,11 +4095,7 @@ async function bootServer(
           authorityClock: authorityClock.read,
           startClock: startClockWaits,
           timeHealth: readTimeHealth,
-          lastOfferedUpgrade: () =>
-            upgradeResultCache.get(
-              "result",
-              async () => (await hostClient.lastOfferedUpgrade?.()) ?? null,
-            ),
+          lastOfferedUpgrade: readLastOfferedUpgrade,
           disk: diskFull,
           space: freeSpace,
           usage: () =>
