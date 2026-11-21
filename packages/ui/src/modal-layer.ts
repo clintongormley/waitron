@@ -51,7 +51,8 @@ function drawnByOpenModal(dialog: HTMLDialogElement): boolean {
 }
 
 /** Whether an open popover or modal dialog that `node` is not drawn inside is in front of it,
- * manual popovers included: they are menus drawn in front. The dialogs of tracked windows are left
+ * manual popovers included whatever their order: in the till they are the language and theme
+ * menus, and which of them a later window covers is not tracked. The dialogs of tracked windows are left
  * out, since `underModal` knows which of those is latest and an earlier one is not in front. */
 export function surfaceOutside(node: Node): boolean {
   outer: for (const surface of openSurfaces(document)) {

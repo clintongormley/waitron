@@ -51,8 +51,8 @@ interface PadKey {
 /**
  * Deliberately PRESENTATIONAL: it knows nothing of money, weight or PINs. Each key press emits
  * `wt-change` with the string that key produces; the parent holds the value and passes it back down.
- * Enter and Escape on a keyboard, while this pad is in front, emit `pad-enter` and `pad-escape` for
- * the parent to answer.
+ * Enter and Escape on a keyboard reach this pad as `pad-enter` and `pad-escape` when `routeKey`
+ * (`state/pad-keys.ts`) gives them to it, for the parent to answer.
  */
 @customElement("till-numeric-pad")
 export class TillNumericPad extends LitElement implements PadKeyTarget {

@@ -2234,7 +2234,8 @@ Pinned by `apps/till/src/till-app-handheld-pay.test.ts`: the
 open-time read under "till-app: paying a table from a handheld" and "a presented bill on a
 handheld", the 5-second read under "till-app: a card the reader has not answered, on a handheld".
 Neither read counts as activity for the idle logout: the till notes activity only from a
-`pointerdown` on the app or a `keydown` anywhere on the page (`#onInteraction`,
+`pointerdown` on the app or a `keydown` that reaches the document (one a component stops does
+not count) (`#onInteraction`,
 `apps/till/src/till-app.ts`). Pinned by
 two cases under "the sheet's automatic re-reads never keep the till signed in" in the same file:
 "the 5-second re-reads of a pending card run on, and the till still logs out on time" and "the

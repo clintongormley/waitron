@@ -95,6 +95,11 @@ only if a device shows it is needed.
 
 ### Task 2: What a key means, and what is in front
 
+> **As built (2026-11-21, finish-branch review):** a held key's repeats are dropped in `routeKey`
+> (`apps/till/src/state/pad-keys.ts`) after the same ownership checks, not by `padInputFor`;
+> `surfaceOutside` leaves out the dialogs of windows `modal-layer.ts` tracks, whose order
+> `underModal` decides; `inInertTree` lives in `packages/ui/src/tabbable.ts`.
+
 **Files:**
 - Modify: `packages/ui/src/modal-layer.ts`; move `composedContains`, `composedParent` (as used by
   it) and `openSurfaces` there from `packages/ui/src/components/wt-dialog.ts:17-34`, which then

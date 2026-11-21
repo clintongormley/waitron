@@ -263,7 +263,7 @@ test("an open popup outside the later tracked window is still in front of what i
   expect(surfaceOutside(box(host))).toBe(true);
 });
 
-test("an open popup drawn inside an earlier tracked window's component is in front", () => {
+test("an open popup drawn inside an earlier tracked window's component still counts, though the later window covers it", () => {
   const earlier = trackedWindow(1);
   openPopover(earlier.host.shadowRoot!);
   const { host } = trackedWindow(2);
