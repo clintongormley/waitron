@@ -1681,11 +1681,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The new box's request could not be read, so nothing was sent. Choose Start again on the new box.",
     es: "No se ha podido leer la solicitud del servidor nuevo, así que no se ha enviado nada. Elige Empezar de nuevo en el servidor nuevo.",
   },
-  // Setting up a venue (`provision.ts`) and joining as a spare (`adopt.ts`) both record whether it
-  // is a trial or the real venue; the development demo seed (`scripts/dev-setup.ts`) does not.
+  // Setting up a venue (`apps/server/src/provision.ts`) and joining as a spare
+  // (`apps/server/src/adopt.ts`) both record whether it is a preparation or the real venue; the
+  // development demo seed (`apps/server/scripts/dev-setup.ts`) does not.
   "mirror.not_provisioned": {
-    en: "This box does not record whether this venue is a trial or the real one, so it cannot be copied to a spare. Nothing was changed. On a venue set up through its setup page, this is a fault in Waitron.",
-    es: "Este servidor no tiene registrado si este local es de prueba o el real, así que no se puede copiar a un servidor de reserva. No se ha cambiado nada. En un local configurado desde su página de configuración, es un fallo de Waitron.",
+    en: "This box does not record whether this venue is a preparation venue or the real one, so it cannot be copied to a spare. Nothing was changed. This is a fault in Waitron.",
+    es: "Este servidor no tiene registrado si este local es de preparación o el real, así que no se puede copiar a un servidor de reserva. No se ha cambiado nada. Es un fallo de Waitron.",
   },
   "module.config_invalid": {
     en: "A module's settings on this box could not be read, so this could not be done. Nothing was changed.",

@@ -533,7 +533,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.not_provisioned" },
-    "This box does not record whether this venue is a trial or the real one, so it cannot be copied to a spare. Nothing was changed. On a venue set up through its setup page, this is a fault in Waitron.",
+    "This box does not record whether this venue is a preparation venue or the real one, so it cannot be copied to a spare. Nothing was changed. This is a fault in Waitron.",
   ],
   [
     "approve",
