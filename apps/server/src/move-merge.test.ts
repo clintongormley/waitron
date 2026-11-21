@@ -798,18 +798,20 @@ describe("when a MOVED slip prints: a table or a place name lost (§3)", () => {
     expect((await printedBy(grill)).slice(before)).toEqual([]);
   });
 
-  it("a bill moved between two tables of the group Terraza names each side's table in brackets (row 12b)", async () => {
+  it("a bill moved between two parties in the group Terraza names each side's table in brackets (row 12b)", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger"]);
     const table77 = await v.table("Mesa 77");
     const table78 = await v.table("Mesa 78");
     const { partyId, tabId } = await seat(v, table77);
-    // Seating a grouped table seats the whole group, so the group forms after the party sits.
+    const receiver = await seat(v, table78);
+    // Seat both parties first so the fixture can put them at separate tables in one group.
     await group(v, "Terraza", [table77, table78]);
     await order(v, tabId, "Paella", "Burger");
     const second = await split(v, partyId, tabId, [2]);
     const before = (await printedBy(grill)).length;
     const expectedPartyRevision = await revisionOf(v, partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, receiver.partyId);
 
     await inTx(v, (tx) =>
       moveBill(
@@ -817,7 +819,12 @@ describe("when a MOVED slip prints: a table or a place name lost (§3)", () => {
         v.cfg,
         second,
         { tableId: table78 },
-        { operatorId: OPERATOR, expectedPartyRevision },
+        {
+          operatorId: OPERATOR,
+          expectedPartyRevision,
+          otherPartyId: receiver.partyId,
+          expectedOtherPartyRevision,
+        },
       ),
     );
 
