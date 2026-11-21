@@ -1,5 +1,5 @@
 import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
-import { saleVatDay, validatedRangeWindow } from "@waitron/reporting";
+import { saleVatDay, stampDate, validatedRangeWindow } from "@waitron/reporting";
 import { readVenueClock } from "@waitron/db";
 import { and, asc, between, eq, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -145,8 +145,8 @@ export async function listAccountantExport(
   const original = alias(sales, "original_invoice");
   const originalSeries = alias(invoiceSeries, "original_series");
   const replacement = alias(sales, "replacement_invoice");
-  const civilDate = sql<string>`date(${sales.issuedAt}, printf('%+d minutes', ${sales.issuedOffsetMinutes}))`;
-  // The day the sale's VAT belongs to now: a replacement goes with the original it repeats.
+  const civilDate = stampDate(sales.issuedAt, sales.issuedOffsetMinutes);
+  // The day the workbook lists the sale under: a replacement goes with the original it repeats.
   const periodDay = sql<string>`case when ${sales.replacesOriginal} = 1
     then ${saleVatDay({
       replacementSupplyDay: sales.supplyDay,

@@ -29,7 +29,7 @@ export type { VatMovement, VatMovementKind } from "./vat-movements.js";
 export { computeVatCorrections } from "./vat-corrections.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
-export { parsePeriodToken } from "./period.js";
+export { parsePeriodToken, stampDate } from "./period.js";
 export type { LiquidationPeriod } from "./period.js";
 export { mapModelo303 } from "./modelo-303.js";
 export type { Modelo303 } from "./modelo-303.js";

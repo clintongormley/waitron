@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { SQL } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 
 /**
  * The modelo 303 liquidation PERIOD — a civil fiscal period, shared by the output side
@@ -99,6 +99,15 @@ export function periodDays(
     }
   })();
   return { first: firstOfMonth(year, firstMonth), next: firstOfMonth(year, firstMonth + months) };
+}
+
+/**
+ * The civil date `"YYYY-MM-DD"` of a stored stamp in a UTC offset of whole minutes, the spelling
+ * `periodDateFilter` compares against. The explicit sign is for a reader: SQLite reads an unsigned
+ * modifier as positive.
+ */
+export function stampDate(stamp: SQLWrapper, offsetMinutes: SQLWrapper): SQL<string> {
+  return sql<string>`date(${stamp}, printf('%+d minutes', ${offsetMinutes}))`;
 }
 
 /**

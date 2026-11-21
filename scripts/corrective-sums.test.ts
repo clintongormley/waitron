@@ -85,11 +85,24 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
       "finds a replacement's original, to take the replacement's split off the original's own day",
   },
   {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "join sales c indexed by sales_corrects_idx on c.corrects_sale_id = x.id",
+    lines: 1,
+    reason:
+      "walks down from a sale to each corrective below it, to read its own movement; it sums nothing",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join sales cor on cor.id = m.corrects_sale_id",
+    lines: 1,
+    reason: "finds the invoice a movement's invoice corrects, to name it on the corrections list",
+  },
+  {
     file: "apps/server/src/accountant-export.ts",
     fragment: "eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)",
     lines: 1,
     reason:
-      "looks up a replaced sale's supply day to list it in the period its VAT belongs to; it totals nothing a sale owes",
+      "looks up a replaced sale's supply day to list the sale under that day; it totals nothing a sale owes",
   },
   {
     file: "packages/core/src/record-substitution.ts",

@@ -3,13 +3,14 @@ import type { Transaction } from "@waitron/db";
 import { isZeroDecimal, subtractDecimal } from "@waitron/shared";
 import { sumByRate } from "./vat-summary.js";
 import { computeInputVat } from "./input-vat.js";
-import { periodDays, validatePeriod } from "./period.js";
+import { periodDays, stampDate, validatePeriod } from "./period.js";
 import type { VatReturn, VatReturnInput } from "./types.js";
 import { vatMovements } from "./vat-movements.js";
 
 /**
- * The civil date `"YYYY-MM-DD"` a sale's VAT belongs to now: the `supply_day` of the replacement
- * that repeats it, else its own `supply_day`, else its filed issue date.
+ * The civil date `"YYYY-MM-DD"` the accountant workbook lists a sale under: the `supply_day` of the
+ * replacement that repeats it, else its own `supply_day`, else its filed issue date. Where a sale's
+ * VAT counts in a return is `vatMovements`'s rule, not this.
  */
 export function saleVatDay(sale: {
   replacementSupplyDay: SQLWrapper;
@@ -17,10 +18,7 @@ export function saleVatDay(sale: {
   issuedAt: SQLWrapper;
   issuedOffsetMinutes: SQLWrapper;
 }): SQL<string> {
-  // `date(stamp, '<n> minutes')` reads the stored stamp as the instant it names and renders the
-  // shifted civil date as `"YYYY-MM-DD"`, the shape `periodDateFilter` compares against. The explicit
-  // sign is for a reader: SQLite reads an unsigned modifier as positive.
-  const filedDate = sql`date(${sale.issuedAt}, printf('%+d minutes', ${sale.issuedOffsetMinutes}))`;
+  const filedDate = stampDate(sale.issuedAt, sale.issuedOffsetMinutes);
   return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 

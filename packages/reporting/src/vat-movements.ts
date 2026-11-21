@@ -9,8 +9,9 @@ import {
   toScale,
 } from "@waitron/shared";
 import type { Decimal, SaleId } from "@waitron/shared";
-import { periodDateFilter, periodDays, validatePeriod } from "./period.js";
+import { periodDateFilter, periodDays, stampDate, validatePeriod } from "./period.js";
 import type { LiquidationPeriod } from "./period.js";
+import type { VatCorrectionInvoice } from "./types.js";
 
 /**
  * `invoice` is an ordinary invoice whose own day and issue date fall in one period of the asked
@@ -31,10 +32,15 @@ export interface VatMovement {
   correctedSaleId: SaleId | null;
 }
 
-/** The filed issue date of `sales` row `alias`, as `saleVatDay` reads it. */
+/** A movement with the invoice that made it and the invoice that invoice corrects. */
+export interface InvoicedVatMovement extends VatMovement {
+  invoice: VatCorrectionInvoice;
+  corrects: VatCorrectionInvoice | null;
+}
+
+/** The filed issue date of `sales` row `alias`. */
 function issueDay(alias: string): SQL {
-  const s = sql.raw(alias);
-  return sql`date(${s}.issued_at, printf('%+d minutes', ${s}.issued_offset_minutes))`;
+  return stampDate(sql.raw(`${alias}.issued_at`), sql.raw(`${alias}.issued_offset_minutes`));
 }
 
 /** An ordinary invoice's own day: its `supply_day`, else its issue date. */
@@ -43,10 +49,10 @@ function ownDay(alias: string): SQL {
 }
 
 /**
- * Bounds on the stored stamp of a sale whose civil date lies in the period, as `"YYYY-MM-DD"`
- * strings that compare with a stamp: `from` is the day before the first day and `before` the day
- * after the last day plus one. `sales_issued_offset_ck` keeps an offset within ±840 minutes, so a
- * stamp is never more than a day from its civil date.
+ * Bounds on a stored stamp whose civil date lies in the period, as `"YYYY-MM-DD"` strings that
+ * compare with a stamp: `from` is the day before the first day and `before` the day after the last
+ * day plus one. `sales_issued_offset_ck` keeps an offset within ±840 minutes, so a stamp is never
+ * more than a day from its civil date; a void's date is read in its sale's offset.
  */
 function stampBounds(year: number, period: LiquidationPeriod): { from: string; before: string } {
   const { first, next } = periodDays(year, period);
@@ -55,54 +61,83 @@ function stampBounds(year: number, period: LiquidationPeriod): { from: string; b
   return { from: shift(first, -1), before: shift(next, 1) };
 }
 
-/**
- * Every VAT movement that belongs to the period or was made in it, one row per rate line of the
- * movement's `vat_breakdown`. The rule: `docs/backlog/fiscal.md` → "A VAT period counts what
- * belongs to it and was recorded by its last day".
- */
-export async function vatMovements(
-  tx: Transaction,
-  input: { year: number; period: LiquidationPeriod },
-): Promise<VatMovement[]> {
+type MovementRow = {
+  rate: string;
+  base: string;
+  tax: string;
+  sign: number;
+  made_day: string;
+  belongs_day: string;
+  kind: VatMovementKind;
+  sale_id: string;
+  corrected_sale_id: string | null;
+};
+
+type InvoicedMovementRow = MovementRow & {
+  series_code: string;
+  number: number;
+  issue_date: string;
+  corrected_series_code: string | null;
+  corrected_number: number | null;
+  corrected_issue_date: string | null;
+};
+
+function movementQuery(input: { year: number; period: LiquidationPeriod }, invoices: boolean): SQL {
   validatePeriod(input.year, input.period);
   const inPeriod = (day: SQL): SQL => periodDateFilter(day, input.year, input.period);
-  // Only an ordinary invoice is bounded by date: its supply day, when kept, is earlier than its
-  // issue day from the same clock reading (`record-sale.ts`), so it belongs no later than it was
-  // made, even on a wrong clock. One with no supply day belongs on its issue date. Correctives and
-  // voids are read whole, since a clock put back can stamp them before the sale they change.
+  const { first, next } = periodDays(input.year, input.period);
   const bound = stampBounds(input.year, input.period);
 
-  // `starts`: the ordinary invoices that can reach the period, every corrective and every voided
-  // sale. `chain` walks each up through the
-  // correctives it corrects to the invoice whose day they take: an ordinary invoice (its own day)
-  // or a replacement (its `supply_day`, else its original's own day). `placed`: each ordinary
-  // invoice and non-replacement corrective, with the day its VAT first belongs to and the day it
-  // belongs to now (an ordinary invoice's replacement's `supply_day`, voided or not, moves it).
-  // `sales_one_replacement_uq` admits at most one replacement per sale, so the joins add no rows.
-  const { rows } = await tx.execute<{
-    rate: string;
-    base: string;
-    tax: string;
-    sign: number;
-    made_day: string;
-    belongs_day: string;
-    kind: VatMovementKind;
-    sale_id: string;
-    corrected_sale_id: string | null;
-  }>(sql`
+  // `seeds`: every sale stamped where its date can lie in the period, every sale whose void is
+  // stamped so, every replacement (its `supply_day` can name any day) and the invoice it replaces,
+  // and each ordinary invoice issued after the period for a supply day in it (`record-sale.ts`
+  // keeps a supply day only when it is earlier than the issue day, so no ordinary invoice stamped
+  // before the period belongs to it). `starts` adds the non-replacement correctives below each
+  // seed, at any depth: a clock put back can stamp a corrective or void of the period's invoice
+  // long before it, so they are reached from the invoice, never by their own stamps. A corrective
+  // of a replacement is reached from the replacement.
+  //
+  // `chain` walks each start up through the correctives it corrects to the invoice whose day they
+  // take: an ordinary invoice (its own day) or a replacement (its `supply_day`, else its original's
+  // own day). `placed`: each ordinary invoice and non-replacement corrective, with the day its VAT
+  // first belongs to and the day it belongs to now (an ordinary invoice's replacement's
+  // `supply_day`, voided or not, moves it). `sales_one_replacement_uq` admits at most one
+  // replacement per sale, so the joins add no rows. A box gathers no planner statistics, so the
+  // indexes are named.
+  const invoiceColumns = invoices
+    ? sql`, ser.code as series_code, inv.invoice_number as number, ${issueDay("inv")} as issue_date,
+        cser.code as corrected_series_code, cor.invoice_number as corrected_number,
+        ${issueDay("cor")} as corrected_issue_date`
+    : sql``;
+  const invoiceJoins = invoices
+    ? sql`join sales inv on inv.id = m.sale_id
+        join invoice_series ser on ser.id = inv.series_id
+        left join sales cor on cor.id = m.corrects_sale_id
+        left join invoice_series cser on cser.id = cor.series_id`
+    : sql``;
+  return sql`
     with recursive
-    starts(id) as (
+    seeds(id) as (
       select s.id from sales s indexed by sales_issued_idx
       where s.issued_at >= ${bound.from} and s.issued_at < ${bound.before}
-        and s.corrects_sale_id is null
       union
       select s.id from sales s indexed by sales_issued_idx
-      where s.issued_at >= ${bound.before} and s.supply_day is not null
-        and s.corrects_sale_id is null
+      where s.issued_at >= ${bound.before} and s.corrects_sale_id is null
+        and s.supply_day >= ${first} and s.supply_day < ${next}
       union
-      select s.id from sales s indexed by sales_corrects_idx where s.corrects_sale_id is not null
+      select r.id from sales r indexed by sales_one_replacement_uq where r.replaces_original = 1
       union
-      select sv.sale_id from sale_voids sv
+      select r.corrects_sale_id from sales r indexed by sales_one_replacement_uq
+      where r.replaces_original = 1
+      union
+      select sv.sale_id from sale_voids sv indexed by sale_voids_voided_at_idx
+      where sv.voided_at >= ${bound.from} and sv.voided_at < ${bound.before}
+    ),
+    starts(id) as (
+      select id from seeds
+      union
+      select c.id from starts x join sales c indexed by sales_corrects_idx on c.corrects_sale_id = x.id
+      where c.replaces_original = 0
     ),
     chain(start_id, cur_id) as (
       select id, id from starts
@@ -147,10 +182,9 @@ export async function vatMovements(
       where st.replaces_original = 1 and st.supply_day is not null
       union all
       select st.id, st.corrects_sale_id, st.issued_at, 'void', 4, -1,
-        date(sv.voided_at, printf('%+d minutes', st.issued_offset_minutes)), p.now_day,
-        st.vat_breakdown
-      from sale_voids sv
-      join sales st on st.id = sv.sale_id join placed p on p.id = st.id
+        ${stampDate(sql`sv.voided_at`, sql`st.issued_offset_minutes`)}, p.now_day, st.vat_breakdown
+      from placed p cross join sales st on st.id = p.id
+      cross join sale_voids sv indexed by sale_voids_sale_id_key on sv.sale_id = st.id
     )
     select
       b.value ->> 'rate' as rate,
@@ -167,25 +201,62 @@ export async function vatMovements(
       end as kind,
       m.sale_id,
       m.corrects_sale_id as corrected_sale_id
-    from m, json_each(m.vat_breakdown) b
+      ${invoiceColumns}
+    from m join json_each(m.vat_breakdown) b
+    ${invoiceJoins}
     where (${inPeriod(sql`m.made_day`)}) or (${inPeriod(sql`m.belongs_day`)})
     order by m.made_day, m.issued_at, m.sale_id, m.branch, cast(b.value ->> 'rate' as real)
-  `);
+  `;
+}
 
-  return rows.map((r) => {
-    const signed = (value: string): Decimal => {
-      const scaled = toScale(decimal(value), MONEY_SCALE);
-      return r.sign < 0 ? negateDecimal(scaled) : scaled;
-    };
-    return {
-      rate: toScale(decimal(r.rate), MONEY_SCALE),
-      base: signed(r.base),
-      tax: signed(r.tax),
-      madeDay: r.made_day,
-      belongsDay: r.belongs_day,
-      kind: r.kind,
-      saleId: brandSaleId(r.sale_id),
-      correctedSaleId: r.corrected_sale_id === null ? null : brandSaleId(r.corrected_sale_id),
-    };
-  });
+function toMovement(r: MovementRow): VatMovement {
+  const signed = (value: string): Decimal => {
+    const scaled = toScale(decimal(value), MONEY_SCALE);
+    return r.sign < 0 ? negateDecimal(scaled) : scaled;
+  };
+  return {
+    rate: toScale(decimal(r.rate), MONEY_SCALE),
+    base: signed(r.base),
+    tax: signed(r.tax),
+    madeDay: r.made_day,
+    belongsDay: r.belongs_day,
+    kind: r.kind,
+    saleId: brandSaleId(r.sale_id),
+    correctedSaleId: r.corrected_sale_id === null ? null : brandSaleId(r.corrected_sale_id),
+  };
+}
+
+/**
+ * Every VAT movement that belongs to the period or was made in it, one row per rate line of the
+ * movement's `vat_breakdown`. The rule: `docs/backlog/fiscal.md` → "A VAT period counts what
+ * belongs to it and was recorded by its last day".
+ */
+export async function vatMovements(
+  tx: Transaction,
+  input: { year: number; period: LiquidationPeriod },
+): Promise<VatMovement[]> {
+  const { rows } = await tx.execute<MovementRow>(movementQuery(input, false));
+  return rows.map(toMovement);
+}
+
+/** `vatMovements`, each with its invoice and the invoice that one corrects. */
+export async function invoicedVatMovements(
+  tx: Transaction,
+  input: { year: number; period: LiquidationPeriod },
+): Promise<InvoicedVatMovement[]> {
+  const { rows } = await tx.execute<InvoicedMovementRow>(movementQuery(input, true));
+  return rows.map((r) => ({
+    ...toMovement(r),
+    invoice: { seriesCode: r.series_code, number: r.number, issueDate: r.issue_date },
+    corrects:
+      r.corrected_series_code === null ||
+      r.corrected_number === null ||
+      r.corrected_issue_date === null
+        ? null
+        : {
+            seriesCode: r.corrected_series_code,
+            number: r.corrected_number,
+            issueDate: r.corrected_issue_date,
+          },
+  }));
 }
