@@ -4,6 +4,7 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   type DraftScope,
 } from "@waitron/ui";
@@ -46,6 +47,7 @@ export interface ResetScreenOutcome {
 export class SetupResetScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     errorStyles,
     statusStyles,

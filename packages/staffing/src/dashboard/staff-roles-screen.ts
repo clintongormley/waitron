@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
@@ -41,6 +41,7 @@ type Deletion = {
 export class StaffRolesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

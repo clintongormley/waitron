@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -540,6 +541,7 @@ function warnings({ replyMismatches, recordWarnings, total }: FilingWarnings): T
 export class FiscalFilingScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

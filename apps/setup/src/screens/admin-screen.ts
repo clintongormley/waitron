@@ -4,6 +4,7 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   type DraftScope,
 } from "@waitron/ui";
@@ -74,6 +75,7 @@ const FIELD_TEXT: Record<AdminField, FieldText> = {
 export class SetupAdminScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     actionsStyles,
     introStyles,

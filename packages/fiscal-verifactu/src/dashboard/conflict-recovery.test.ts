@@ -1,6 +1,7 @@
 import { active, input, committed, prepared } from "../../test/conflict-browser-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "lit";
+import { applyTokens } from "@waitron/ui";
 import {
   createRequest,
   currentLocale,
@@ -48,9 +49,19 @@ it("opens key-only recovery without a session or disclosing conflicts before key
     updateComplete: Promise<boolean>;
   };
   await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
-    "Recover from an invoice identity conflict",
-  );
+  applyTokens(screen.parentElement!);
+  const title = screen.shadowRoot!.querySelector("h1");
+  expect(title).not.toBeNull();
+  const size = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.fontSize = `var(${token})`;
+    screen.shadowRoot!.append(probe);
+    const value = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return value;
+  };
+  expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
+  expect(title!.textContent).toBe("Recover from an invoice identity conflict");
   const input = screen.shadowRoot!.querySelector("wt-input[name=recoveryKey]")!;
   await (input as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
   const native = input.shadowRoot!.querySelector("input")!;

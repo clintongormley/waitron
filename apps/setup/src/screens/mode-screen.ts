@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
@@ -19,6 +19,7 @@ export class SetupModeScreen extends LitElement {
   static override styles = [
     helpLinkStyles,
     baseStyles,
+    pageTitleStyles,
     actionsStyles,
     introStyles,
     css`

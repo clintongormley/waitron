@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  pageTitleStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -23,6 +29,7 @@ import {
 export class SetupLiveSourceScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     actionsStyles,
     css`
@@ -32,6 +39,9 @@ export class SetupLiveSourceScreen extends LitElement {
       .choices {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
       }
     `,
   ];

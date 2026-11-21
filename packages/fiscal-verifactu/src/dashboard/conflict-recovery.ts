@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   focusFirstInvalid,
   draftScopeFor,
   LeaveController,
@@ -34,6 +35,7 @@ import { checkVenueStyles } from "../setup/check-venue.js";
 export class ConflictRecovery extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     checkVenueStyles,
     css`
       :host {
@@ -48,7 +50,6 @@ export class ConflictRecovery extends LitElement {
         max-width: var(--wt-modal-standard-width);
       }
       h1 {
-        font-size: var(--wt-font-size-xl);
         margin: 0;
       }
       h2 {

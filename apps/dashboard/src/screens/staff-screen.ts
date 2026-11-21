@@ -2,7 +2,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
-import { baseStyles, TableRequestController } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, TableRequestController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -28,6 +28,7 @@ import type {
 export class StaffScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -46,7 +47,6 @@ export class StaffScreen extends LitElement {
       }
       .title {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       .error {

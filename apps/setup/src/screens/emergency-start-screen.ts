@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, FormFeedback, submitOnEnter } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, FormFeedback, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -31,6 +31,7 @@ type Field = "email" | "password" | "code";
 export class EmergencyStartScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     helpLinkStyles,
     css`
@@ -39,9 +40,6 @@ export class EmergencyStartScreen extends LitElement {
         max-width: var(--wt-form-max-width);
         margin: auto;
         padding: var(--wt-space-6);
-      }
-      h1 {
-        font-size: var(--wt-font-size-xl);
       }
       p {
         overflow-wrap: anywhere;

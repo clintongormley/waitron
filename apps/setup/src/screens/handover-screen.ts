@@ -15,7 +15,7 @@ import {
   startAuthentication,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, focusFirstInvalid } from "@waitron/ui";
 import {
   SetupApi,
   type HandoverStatus,
@@ -71,6 +71,7 @@ class PasskeyNotUsed extends Error {}
 export class SetupHandoverScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -86,7 +87,6 @@ export class SetupHandoverScreen extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
       h1 {
-        font-size: var(--wt-font-size-xl);
         margin-top: 0;
       }
       .statements label {

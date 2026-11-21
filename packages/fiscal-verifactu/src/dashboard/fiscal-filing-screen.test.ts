@@ -1,6 +1,7 @@
 import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "lit";
+import { applyTokens } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
 import {
   codeMessage,
@@ -143,6 +144,18 @@ describe("vf-fiscal-filing-screen", () => {
     );
     expect(text(screen, "[data-test=held-without-case]")).toContain("7");
     expect(screen.shadowRoot!.querySelector("[data-test=filing-off]")).toBeNull();
+    applyTokens(screen.parentElement!);
+    const title = screen.shadowRoot!.querySelector("h1");
+    expect(title).not.toBeNull();
+    const size = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.fontSize = `var(${token})`;
+      screen.shadowRoot!.append(probe);
+      const value = getComputedStyle(probe).fontSize;
+      probe.remove();
+      return value;
+    };
+    expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
   });
 
   it("leaves out the held-with-no-case line at 0, and says when nothing is sent", async () => {

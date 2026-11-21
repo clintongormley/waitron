@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   FormFeedback,
   baseStyles,
+  pageTitleStyles,
   bottomMessage,
   focusFirstInvalid,
   leaveCoordinatorFor,
@@ -53,6 +54,7 @@ export type BucketField =
 export class SetupRestoreBucketScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,

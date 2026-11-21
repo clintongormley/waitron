@@ -1012,7 +1012,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   add the countdown and make the limit required. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
-- **One session with real phones and password managers** (bundle of 13, 3 go-live, 7 important, size M, needs the real hardware; includes profile-name updates in password managers, field-focus verification and the remaining typography audit). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
+- **One session with real phones and password managers** (bundle of 13, 3 go-live, 7 important, size M, needs the real hardware; includes profile-name updates in password managers and field-focus verification). [Detail](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 
 - **What C38 left as it was (a generated display name is the first given name and first surname,
   #827, owner decision 2026-09-28).**

@@ -153,6 +153,14 @@ async function mount(
     },
   };
 }
+function size(el: LitElement, token: string) {
+  const probe = document.createElement("span");
+  probe.style.fontSize = `var(${token})`;
+  el.shadowRoot!.append(probe);
+  const value = getComputedStyle(probe).fontSize;
+  probe.remove();
+  return value;
+}
 const button = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test="${name}"]`)!;
 async function ready(el: LitElement) {
@@ -222,6 +230,9 @@ it("automatically compares clocks and shows combined country, place and zone, wi
   expect(el.shadowRoot!.textContent).toContain("Madrid");
   expect(el.shadowRoot!.textContent).toContain("Europe/Madrid");
   expect(el.shadowRoot!.textContent).not.toContain("14:30");
+  const heading = el.shadowRoot!.querySelector("h2");
+  expect(heading?.textContent).toBe("Check this venue");
+  expect(getComputedStyle(heading!).fontSize).toBe(size(el, "--wt-font-size-lg"));
   expect(el.shadowRoot!.querySelector("wt-disclosure")).toBeNull();
   expect(calls[0]).toEqual({ action: "prepare", value: { action: "clock-challenge" } });
   expect(calls[1]).toMatchObject({
@@ -270,6 +281,9 @@ it("requires the scope confirmation then imports only selected server input", as
   for (const code of ["A-0CSQW", "FF-0CSQW", "R-0CSQW"])
     expect(el.shadowRoot!.textContent).toContain(code);
   expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull();
+  const chosen = el.shadowRoot!.querySelector("[data-test=selected-hour] h2");
+  expect(chosen).not.toBeNull();
+  expect(getComputedStyle(chosen!).fontSize).toBe(size(el, "--wt-font-size-lg"));
 });
 it("asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock", async () => {
   const { el } = await mount();

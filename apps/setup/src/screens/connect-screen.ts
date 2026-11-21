@@ -5,6 +5,7 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   type DraftScope,
 } from "@waitron/ui";
@@ -88,6 +89,7 @@ const FIELD_TEXT: Record<ConnectField, FieldText> = {
 export class SetupConnectScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     actionsStyles,
     helpLinkStyles,

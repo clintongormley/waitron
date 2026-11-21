@@ -4813,11 +4813,12 @@ the normal, expected treatment there.
 | Field label | `--wt-font-size-sm`, normal weight, muted   | "Name"                                                                                                                                                                                                                      |
 | Field value | `--wt-font-size-md`, bold                   | "Clinton Gormley"                                                                                                                                                                                                           |
 
-For a dashboard or module page with an `<h1>`, import `pageTitleStyles` from `@waitron/ui`
+For a dashboard, module or setup page with an `<h1>`, import `pageTitleStyles` from `@waitron/ui`
 and put it after `baseStyles` in the screen's static styles. Keep local margins and wrapping;
-leave the title's size to the shared rule. Modal headings keep the LG role.
-`scripts/page-title-styles.test.ts` checks literal H1 templates and local CSS in dashboard/module
-screens, excluding fiscal-verifactu, staff, staff roles and the floor-plan editor modal. It reads
+leave the title's size to the shared rule. Modal headings keep the LG role, and so do setup's
+`<h2>` section headings, each sized `--wt-font-size-lg` by the component that draws it; no guard checks them.
+`scripts/page-title-styles.test.ts` checks literal H1 templates and local CSS in dashboard, module
+and setup screens, excluding only the floor-plan editor modal. It reads
 text per file, assuming one heading-owning component; it does not resolve complex selectors,
 dynamically built headings, imported styles or the full CSS cascade.
 

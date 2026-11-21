@@ -48,6 +48,21 @@ describe("SetupConfigurationPreviewScreen", () => {
     expect(reconnectLine(el)).toBe("Printers");
     expect(el.shadowRoot!.textContent).not.toMatch(/\bcore\b|identity|persons|print_agents/);
     expect(el.shadowRoot!.textContent).toContain("Sales and fiscal records are not copied.");
+    const size = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.fontSize = `var(${token})`;
+      el.shadowRoot!.append(probe);
+      const value = getComputedStyle(probe).fontSize;
+      probe.remove();
+      return value;
+    };
+    const title = el.shadowRoot!.querySelector("h1");
+    expect(title).not.toBeNull();
+    expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
+    const sections = el.shadowRoot!.querySelectorAll("h2");
+    expect(sections.length).toBeGreaterThan(0);
+    for (const heading of sections)
+      expect(getComputedStyle(heading).fontSize).toBe(size("--wt-font-size-lg"));
   });
 
   it("shows a part this page has no words for by the name the server sent", async () => {
