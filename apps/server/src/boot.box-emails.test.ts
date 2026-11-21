@@ -44,7 +44,7 @@ import { freePorts } from "./testing/free-ports.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { loadKeyRing } from "@waitron/credentials";
-import type { LastOfferedUpgrade } from "./box-host-client.js";
+import { boxHostClient, type LastOfferedUpgrade } from "./box-host-client.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 useTestProducer();
@@ -828,7 +828,7 @@ describe("the running server's notice and email checks", () => {
       expect(holder.sent).toEqual([
         expect.objectContaining({
           recipient: "owner@example.test",
-          subject: expect.stringContaining("Actualización"),
+          subject: expect.stringContaining("ha revertido una actualización"),
           text: expect.stringMatching(/1\.3\.0.*1\.2\.0.*Estado del servidor/s),
         }),
       ]);
@@ -839,7 +839,7 @@ describe("the running server's notice and email checks", () => {
     }
   });
 
-  it("sends a saved rollback email after restart even if the host has no result", async () => {
+  it("sends a saved rollback email after restart while the host socket is unavailable", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
     holder.pauseMail = true;
@@ -861,7 +861,11 @@ describe("the running server's notice and email checks", () => {
     );
     try {
       await bootServer(booted, venue, undefined, undefined, {
-        boxHost: { ...synchronisedBoxHost(), lastOfferedUpgrade: async () => null },
+        boxHost: {
+          ...synchronisedBoxHost(),
+          lastOfferedUpgrade: () =>
+            boxHostClient({ socketPath: join(booted.scratch!, "box.sock") }).lastOfferedUpgrade(),
+        },
       });
       await tick();
       const pass = () =>

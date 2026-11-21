@@ -3882,7 +3882,7 @@ async function bootServer(
     moduleNotices: readModuleNotices,
     emailedIncidents: () => readOpenEmailedIncidents(db),
     backupStopped: () => backupOutcomes.runStopped,
-    lastOfferedUpgrade: () => readLastOfferedUpgrade().catch(() => null),
+    lastOfferedUpgrade: readLastOfferedUpgrade,
     context: () =>
       readBoxEmailContext(db, {
         ring,

@@ -1216,7 +1216,9 @@ describe("offered rollback email queue", () => {
     const d = duty({ startedAt });
     d.state.lastOfferedUpgrade = result;
     await d.check();
+    await d.check();
     expect(await d.rows()).toEqual([]);
+    expect(d.context).not.toHaveBeenCalled();
   });
 
   it("still queues a disk warning if a rollback reaches its deadline before the write", async () => {

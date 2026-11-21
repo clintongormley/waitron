@@ -107,7 +107,7 @@ export const UPGRADE_ROLLBACK_EMAIL_WORDS = {
     text: "The upgrade to {toVersion} did not complete. The box is back on {fromVersion}. Open System → Box status to review the result.",
   },
   es: {
-    subject: "{venue}: Actualización revertida",
+    subject: "{venue}: el servidor ha revertido una actualización",
     text: "La actualización a {toVersion} no se completó. El servidor ha vuelto a la versión {fromVersion}. Abre Sistema → Estado del servidor para consultar el resultado.",
   },
-} as const;
+} as const satisfies Record<"en" | "es", { subject: string; text: string }>;
