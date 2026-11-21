@@ -68,11 +68,10 @@ afterEach(async () => {
 });
 async function fixture(
   sendEmailTest?: SetupDeps["sendEmailTest"],
-  extra: Partial<SetupDeps> = {},
+  { claimOnMount = true, ...extra }: Partial<SetupDeps> & { claimOnMount?: boolean } = {},
   grantClock?: () => number,
   staffLanguage?: unknown,
   setBoxClock?: Parameters<typeof createFirstSetupModuleHost>[0]["setBoxClock"],
-  claimOnMount = true,
 ) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
@@ -274,38 +273,30 @@ it.each([false, true])(
     const origin = "https://box.test";
     const tab = randomUUID();
     const session = randomBytes(32).toString("base64url");
-    const f = await fixture(
-      undefined,
-      {
-        environment: "preproduction",
-        devMode: true,
-        cloudSignIn: {
-          origin,
-          connection: {
-            setupSignInAvailable: async () => true,
-            setupAddressLookup: async () => ({ available: false }),
-            startSignIn: async () => ({}),
-            returnSignIn: async () => {},
-            publishSetupSignIn: async () => {},
-            readSetupAdmin: async (binding) => {
-              expect(binding).toEqual({ kind: "setup", tab, session });
-              if (!saved) throw new AppError("cloud.request_unavailable", {});
-              return saved;
-            },
-            clearSetupAdmin: async () => {
-              saved = undefined;
-            },
+    const f = await fixture(undefined, {
+      claimOnMount: false,
+      environment: "preproduction",
+      devMode: true,
+      cloudSignIn: {
+        origin,
+        connection: {
+          setupSignInAvailable: async () => true,
+          setupAddressLookup: async () => ({ available: false }),
+          startSignIn: async () => ({}),
+          returnSignIn: async () => {},
+          publishSetupSignIn: async () => {},
+          readSetupAdmin: async (binding) => {
+            expect(binding).toEqual({ kind: "setup", tab, session });
+            return saved!;
+          },
+          clearSetupAdmin: async () => {
+            saved = undefined;
           },
         },
       },
-      undefined,
-      undefined,
-      undefined,
-      false,
-    );
+    });
     const socket = new TLSSocket(new Socket());
     try {
-      const env = { incoming: { socket } };
       const password = replace ? "Replacement password" : PASSWORD;
       const pin = replace ? "7469" : request.admin.pin;
       const claim = await f.post(
@@ -321,7 +312,7 @@ it.each([false, true])(
           cookie: "__Host-waitron-setup-cloud=" + session,
           "X-Waitron-Setup-Cloud-Tab": tab,
         },
-        env,
+        { incoming: { socket } },
       );
       expect(claim.status).toBe(200);
       const { state, capability } = await claim.json();

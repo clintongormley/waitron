@@ -1625,6 +1625,7 @@ export class SetupApp extends LitElement {
     this.#afterFirstOwner();
   }
   #acceptFirstIdentity(): void {
+    this.#cloudAdminTab = undefined;
     const state = this.#firstSession!.state!;
     this.draft = {
       ...this.draft,
