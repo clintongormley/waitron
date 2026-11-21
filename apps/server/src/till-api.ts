@@ -77,15 +77,8 @@ import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { DiskFullState } from "./disk-full-state.js";
-import {
-  payWorkingOrderIntegrated,
-  readSettledTicket,
-  reprintSale,
-  printSaleReceipt,
-} from "./till-sale.js";
+import { readSettledTicket, reprintSale, printSaleReceipt } from "./till-sale.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
-import type { IntegratedPayRequest } from "./till-sale.js";
-import { readGuestCountChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
   confirmReceiptHandover,
@@ -210,13 +203,8 @@ import {
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
-import { issueIfFullyPaid, readBillBalance } from "./bill-payments.js";
-import {
-  asObject,
-  mountBillPaymentsApi,
-  optionalMoney,
-  submissionIdOf,
-} from "./bill-payments-api.js";
+import { issueIfFullyPaid, readBillBalance, type CounterPaymentBasket } from "./bill-payments.js";
+import { asObject, mountBillPaymentsApi, submissionIdOf } from "./bill-payments-api.js";
 import { listPrintProblems, reprintOrderTickets } from "./kitchen-print.js";
 import {
   canonicaliseUuid,
@@ -236,7 +224,6 @@ import {
   assertDeviceCapability,
   assertProfileAction,
   assertDeviceStillProven,
-  assertTakesTender,
   requireDeviceProof,
   tryReadDevice,
   type DeviceBinding,
@@ -1315,7 +1302,6 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "DELETE /api/session",
   "PUT /api/session/locale",
   // Refused inside, after their replay checks, the one place a resend is told from a new sale.
-  "POST /api/pay",
   "POST /api/working-orders/:id/payments",
   // Save nothing of their own; a refused send-preview would hide the kitchen send's own refusal.
   "POST /api/dead-ends/sale",
@@ -1750,7 +1736,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const body = await readJsonBody<{
         step: "pay" | "place" | "edit";
-        lines: (IntegratedPayRequest["lines"][number] & { workingOrderLineId?: string })[];
+        lines: (CounterPaymentBasket["lines"][number] & { workingOrderLineId?: string })[];
         zoneId?: string;
         workingOrderId?: string;
       }>(c);
@@ -1859,91 +1845,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         };
       });
       return c.json(answer);
-    }),
-  );
-
-  // A payment outcome (declined, network unavailable) is neither a client nor a server fault, so it
-  // answers 200 with the outcome as data, even a decline. A late send's manager PIN holds its turn
-  // for the whole card payment, which runs inside the pay; only another override for the same
-  // manager on this device, which is busy with the payment, waits for it.
-  app.post("/api/pay", (c) =>
-    runBodyCourse(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "payment.take" });
-      const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const device = session.device;
-      assertTakesTender(device, "reader-card");
-      assertProfileAction(device, "take-orders");
-      await assertRequestDevice(deps, c, session);
-      const body = await readJsonBody<IntegratedPayRequest>(c);
-      // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
-      requireUuidParam(body.id, "WorkingOrderId");
-      optionalMoney(body.tip, "tip");
-      if (body.printCardSlip !== undefined && typeof body.printCardSlip !== "boolean")
-        throw new AppError("management.request_invalid", { field: "printCardSlip" });
-      if (
-        body.simulationOutcome !== undefined &&
-        (deps.cardProvider?.provider !== "simulator" ||
-          (body.simulationOutcome !== "captured" &&
-            body.simulationOutcome !== "declined" &&
-            body.simulationOutcome !== "attempting"))
-      ) {
-        throw new AppError("management.request_invalid", { field: "simulationOutcome" });
-      }
-      if (body.zoneId !== undefined) {
-        requireUuidParam(body.zoneId, "ServiceZoneId");
-      }
-      if (body.receiptLanguage !== undefined) {
-        requireString(body.receiptLanguage, "receiptLanguage");
-      }
-      const guestCount = readGuestCountChoice(body.guestCount);
-      const lateSend = parseLateSend(body.lateSend);
-      const dining = requireDining(body.dining);
-      const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
-      await gateZones(
-        deps,
-        session,
-        named(zoneId !== undefined && { zoneId }, { orderId: body.id }),
-      );
-      if (body.readerId !== undefined) {
-        requireUuidParam(body.readerId, "CardReaderId");
-      }
-      // Resolved after the capability firewall so its refusal keeps its status.
-      const saleCfg = sendingCfg(cfg, c, device);
-
-      const { provider, reader } = await resolveCardCollector(deps, device.deviceId, body.readerId);
-      const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-        payWorkingOrderIntegrated(
-          {
-            db: deps.db,
-            backend: deps.backend,
-            admission: deps.admission,
-            clock: deps.clock,
-            provider,
-            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
-            deviceProfileId: device.deviceProfileId,
-            log,
-            attendance: deps.attendance,
-            disk: deps.disk,
-            sayCardChargedNotRecorded: true,
-          },
-          saleCfg,
-          { ...body, zoneId, guestCount, lateSend: late, dining },
-          { personId, sessionId: session.sessionId },
-        ),
-      );
-      if (
-        outcome.outcome === "declined" ||
-        outcome.outcome === "timeout" ||
-        outcome.outcome === "network_unavailable"
-      ) {
-        log("warn", "payment.collection_failed", {
-          requestId: c.get("requestId"),
-          orderId: body.id,
-          outcome: outcome.outcome,
-        });
-      }
-      return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
   );
 

@@ -201,8 +201,6 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/service-zones/${id}/products/${id}/availability`),
   ["GET", `/api/device/stations/${id}/today`, "prepare-orders", forbidden("prepare-orders")],
   preparing("PUT", `/api/device/stations/${id}/today`),
-  ordering("POST", "/api/pay"),
-  ["POST", "/api/pay", "integrated-card-payment", forbidden("pay"), {}],
   ordering("POST", "/api/working-orders"),
   ordering("PUT", `/api/working-orders/${id}`),
   ordering("DELETE", `/api/working-orders/${id}`),
@@ -1153,7 +1151,6 @@ describe("a shared kitchen display", () => {
     const order = await counterOrder(v, "Caña");
     for (const [path, body] of [
       ["/api/working-orders", { dining: "eat_in", id: randomUUID(), lines: [] }],
-      ["/api/pay", { dining: "eat_in" }],
       [`/api/working-orders/${order}/payments`, cash],
       ["/api/drawer/open", {}],
     ] as const) {

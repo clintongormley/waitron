@@ -1,4 +1,3 @@
-import { SimulatorPaymentProvider } from "@waitron/payments";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
@@ -16,102 +15,20 @@ import { deploymentEnvironment } from "./config.js";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { TradingAdmission } from "./trading-admission.js";
-import { billShare, payCounterBasket, takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { billShare, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
-import { payWorkingOrderIntegratedOrchestration as readerPay } from "./testing/whole-payment-fixture.js";
+import { takeReaderPaymentWithRecovery } from "./testing/bill-payment-fixture.js";
 import {
   parkOrder,
   priceForIssuance,
   issueUnpaidInvoice,
   markOrderPlaced,
 } from "./working-order.js";
-import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { decimal } from "@waitron/shared";
-import type { PaymentResult } from "@waitron/payments";
-import { toPayOutcome } from "./till-sale.js";
-import type { TillSaleResult } from "./till-sale.js";
-
-// The orchestrator calls `toPayOutcome` only for non-captured states, so this is the one place its
-// `captured` arm runs.
-
-const TICKET: TillSaleResult = {
-  simulatedCardPayment: false,
-  receiptTrim: {},
-  venueAddress: [],
-  receiptSettings: { printAddress: false },
-  locale: "es-ES",
-  orderLabel: null,
-  orderNumber: 1,
-  invoiceNumber: "A/1",
-  issuedAt: "2026-08-06T10:00:00.000Z",
-  total: "1.50",
-  vatBreakdown: [{ rate: "21.00", base: "1.24", tax: "0.26" }],
-  lines: [{ descriptions: { "es-ES": "Café" }, quantity: "1", gross: "1.50" }],
-  tender: { method: "cash", change: "0.00" },
-  qr: "https://example.test/verify",
-};
-
-function result(state: PaymentResult["state"]): PaymentResult {
-  return {
-    provider: "stripe",
-    paymentRef: "ref-1",
-    state,
-    amount: decimal("1.50"),
-    settledAt: state === "captured" ? new Date() : null,
-  };
-}
-
-describe("toPayOutcome", () => {
-  it("captured → { outcome: 'captured', ticket }", () => {
-    expect(toPayOutcome(result("captured"), TICKET)).toEqual({
-      outcome: "captured",
-      ticket: TICKET,
-    });
-  });
-
-  it("network_unavailable → { outcome: 'network_unavailable' } (nothing filed, retryable)", () => {
-    expect(toPayOutcome(result("network_unavailable"), null)).toEqual({
-      outcome: "network_unavailable",
-    });
-  });
-
-  it("failed → { outcome: 'declined' }", () => {
-    expect(toPayOutcome(result("failed"), null)).toEqual({ outcome: "declined" });
-  });
-
-  it("maps an attempting result to the timeout arm", () => {
-    expect(toPayOutcome(result("attempting"), null)).toEqual({ outcome: "timeout" });
-  });
-});
-
-describe("staff-only card failure metadata", () => {
-  it("carries the provider reason on a decline", () => {
-    expect(
-      toPayOutcome({ ...result("failed"), failureReason: "insufficient_funds" }, null),
-    ).toEqual({ outcome: "declined", failureReason: "insufficient_funds" });
-  });
-  it.each([
-    "attempting",
-    "network_unavailable",
-    "captured",
-    "initiated",
-    "voided",
-    "refunded",
-    "partially_refunded",
-  ] as const)("never attaches a stale decline reason to %s", (state) => {
-    const out = toPayOutcome(
-      { ...result(state), failureReason: "lost_card" },
-      state === "captured" ? TICKET : null,
-    );
-    expect(out).not.toHaveProperty("failureReason");
-  });
-});
 
 describe("saved-zone payment transactions", () => {
   let zoneVenue: BillVenue;
   let zoneOffer: string;
-  let freeOffer: string;
   const zoneDb = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
@@ -142,7 +59,6 @@ describe("saved-zone payment transactions", () => {
         productIds: products.map((p) => p.id),
       });
       zoneOffer = offers.offerFor(products[0]!.id);
-      freeOffer = offers.offerFor(products[1]!.id);
     });
   });
   afterEach(() => {
@@ -284,296 +200,21 @@ describe("saved-zone payment transactions", () => {
     expect(paid).not.toHaveProperty("invoiceType");
     expect(replay).toEqual(paid);
   });
-  describe("whole-order saved-zone issuance", () => {
-    it.each(["walk-up", "held", "placed", "free"] as const)(
-      "dates %s in Madrid while the source clock reports UTC",
-      async (kind) => {
-        const { clock } = zoneClock();
-        const deps = zoneDeps(clock);
-        const req = zoneRequest(kind === "free" ? freeOffer : zoneOffer);
-        if (kind === "held") await zoneHeld(req);
-        if (kind === "placed") await zonePlaced(req, clock, false);
-        const out = await readerPay(deps, zoneVenue.cfg, req);
-        expect(out.outcome).toBe("captured");
-        expect(await issueFacts(req.id)).toEqual([nightFacts]);
-        expect(deps.provider.collectCalls).toHaveLength(kind === "free" ? 0 : 1);
-      },
+  async function readerPay(
+    deps: ReturnType<typeof zoneDeps>,
+    req: ReturnType<typeof zoneRequest>,
+    issued: boolean,
+  ) {
+    return takeReaderPaymentWithRecovery(
+      deps,
+      zoneVenue.cfg,
+      req.id,
+      billShare("card", "2.50", { entry: "reader", submissionId: req.id }),
+      await zoneOperator(),
+      issued ? undefined : { lines: req.lines },
     );
-    it.each(["cash", "card"] as const)(
-      "dates an immediate %s invoice from the payment reading across Madrid midnight",
-      async (method) => {
-        const beforeMidnight = "2026-10-14T21:59:59.900Z";
-        const { clock, now, set } = zoneClock("2026-10-14T22:00:00.100Z");
-        const afterMidnight = clock.now();
-        set(beforeMidnight);
-        const paymentReading = clock.now();
-        now.mockClear().mockReturnValue(afterMidnight).mockReturnValueOnce(paymentReading);
-        const personId = zoneVenue.operatorId;
-        const sessionId = await openTillSession(zoneDb.db, {
-          personId,
-          deviceId: zoneVenue.cfg.origin.deviceId,
-        });
-        const { id, lines } = zoneRequest();
+  }
 
-        await payCounterBasket(
-          zoneDeps(clock),
-          zoneVenue.cfg,
-          { personId, sessionId },
-          id,
-          { lines },
-          method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
-          randomUUID(),
-        );
-
-        expect(await issueFacts(id)).toEqual([
-          {
-            issued_at: beforeMidnight,
-            issued_offset_minutes: 120,
-            fecha_expedicion_factura: "2026-10-14",
-            fecha_hora_huso_gen_registro: "2026-10-14T23:59:59+02:00",
-          },
-        ]);
-        expect(zoneDb.db.all(sql`select settled_at from working_orders where id = ${id}`)).toEqual([
-          { settled_at: beforeMidnight },
-        ]);
-        expect(now).toHaveBeenCalledTimes(1);
-      },
-    );
-    it.each(["cash", "card", "reader"] as const)(
-      "collects an already-issued invoice with %s without redating or issuing again",
-      async (method) => {
-        const source = zoneClock();
-        const deps = zoneDeps(source.clock);
-        const req = zoneRequest();
-        await zonePlaced(req, source.clock, true);
-        const before = await issueFacts(req.id);
-        source.set("2026-10-25T02:30:00.000Z");
-        if (method === "reader") await readerPay(deps, zoneVenue.cfg, req);
-        else
-          await takeBillPayment(
-            deps,
-            zoneVenue.cfg,
-            req.id,
-            billShare(method, "2.50"),
-            await zoneOperator(),
-          );
-        expect(before).toEqual([nightFacts]);
-        expect(await issueFacts(req.id)).toEqual(before);
-      },
-    );
-    for (const state of ["unchecked", "missing", "invalid", "restart_required"] as const) {
-      it.each(["cash", "card", "reader", "collection"] as const)(
-        `${state} refuses %s before any economic write`,
-        async (method) => {
-          const source = zoneClock();
-          const admission = new TradingAdmission();
-          if (state === "restart_required") admission.requireRestart();
-          else if (state !== "unchecked") admission.repairOnly(state);
-          const deps = zoneDeps(source.clock, admission);
-          const req = zoneRequest();
-          if (method === "collection") await zonePlaced(req, source.clock, true);
-          const operator = method === "reader" ? undefined : await zoneOperator();
-          const before = economicSnapshot();
-          const run =
-            method === "reader"
-              ? readerPay(deps, zoneVenue.cfg, req)
-              : method === "collection"
-                ? takeBillPayment(deps, zoneVenue.cfg, req.id, billShare("cash", "2.50"), operator!)
-                : payCounterBasket(
-                    deps,
-                    zoneVenue.cfg,
-                    operator!,
-                    req.id,
-                    { lines: req.lines },
-                    method === "cash" ? { method, tendered: "2.50" } : { method, entry: "manual" },
-                    randomUUID(),
-                  );
-          await expect(run).rejects.toMatchObject({
-            code: "venue.time_zone_not_ready",
-            params: { reason: state },
-          });
-          expect(deps.provider.collectCalls).toHaveLength(0);
-          expect(economicSnapshot()).toEqual(before);
-        },
-      );
-    }
-    it.each(["name", "instant", "formatter"] as const)(
-      "refuses a bad %s before asking a reader or storing the order",
-      async (fault) => {
-        const source = zoneClock();
-        const deps = zoneDeps(source.clock);
-        const req = zoneRequest();
-        const original = zoneDb.db.all<{ time_zone: string }>(
-          sql`select json_extract(doc, '$.timeZone') as time_zone from settings where module = 'business_day'`,
-        )[0]!.time_zone;
-        if (fault === "name")
-          await zoneDb.db.run(
-            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
-          );
-        if (fault === "instant") source.set("invalid");
-        if (fault === "formatter")
-          vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(() => {
-            throw new Error("formatter stopped");
-          });
-        const before = economicSnapshot();
-        try {
-          const paying = readerPay(deps, zoneVenue.cfg, req);
-          if (fault === "formatter") await expect(paying).rejects.toThrow("formatter stopped");
-          else
-            await expect(paying).rejects.toMatchObject({
-              code:
-                fault === "name" ? "venue.time_zone_invalid" : "venue.time_zone_conversion_failed",
-            });
-          expect(deps.provider.collectCalls).toHaveLength(0);
-          expect(economicSnapshot()).toEqual(before);
-          expect(deps.admission.snapshot()).toEqual({ state: "ready" });
-        } finally {
-          vi.restoreAllMocks();
-          await zoneDb.db.run(
-            sql`update settings set doc = json_set(doc, '$.timeZone', ${original}) where module = 'business_day'`,
-          );
-        }
-      },
-    );
-    it.each([
-      [
-        "midnight",
-        "2026-10-14T21:59:59.000Z",
-        "2026-10-14T22:00:01.000Z",
-        120,
-        "2026-10-15",
-        "2026-10-15T00:00:01+02:00",
-      ],
-      [
-        "spring",
-        "2026-03-29T00:59:59.000Z",
-        "2026-03-29T01:00:01.000Z",
-        120,
-        "2026-03-29",
-        "2026-03-29T03:00:01+02:00",
-      ],
-      [
-        "autumn",
-        "2026-10-25T00:59:59.000Z",
-        "2026-10-25T01:00:01.000Z",
-        60,
-        "2026-10-25",
-        "2026-10-25T02:00:01+01:00",
-      ],
-    ] as const)(
-      "reads a fresh issue offset after a capture held across %s",
-      async (_label, start, end, offset, day, literal) => {
-        vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date(start));
-        const source = zoneClock(start);
-        const deps = zoneDeps(source.clock);
-        const req = zoneRequest();
-        const collect = deps.provider.collect.bind(deps.provider);
-        let captured!: () => void;
-        const seen = new Promise<void>((r) => {
-          captured = r;
-        });
-        let release!: () => void;
-        const reply = new Promise<void>((r) => {
-          release = r;
-        });
-        vi.spyOn(deps.provider, "collect").mockImplementation(async (params) => {
-          const answer = await collect(params);
-          captured();
-          await reply;
-          return answer;
-        });
-        const paying = readerPay(deps, zoneVenue.cfg, req);
-        try {
-          await seen;
-          const capture = zoneDb.db.all<Record<string, unknown>>(
-            sql`select * from payments where working_order_id = ${req.id}`,
-          );
-          const model = await withTransaction(zoneDb.db, (tx) => readVenueDetails(tx));
-          await expect(
-            withTransaction(zoneDb.db, (tx) =>
-              writeVenueDetails(tx, {
-                expected: model.details,
-                changes: { timeZone: "Atlantic/Canary" },
-              }),
-            ),
-          ).rejects.toMatchObject({
-            code: "venue.detail_locked",
-            params: { field: "timeZone", reason: "orders" },
-          });
-          source.set(end);
-          release();
-          const out = await paying;
-          expect(out.outcome).toBe("captured");
-          expect(await issueFacts(req.id)).toEqual([
-            {
-              issued_at: end,
-              issued_offset_minutes: offset,
-              fecha_expedicion_factura: day,
-              fecha_hora_huso_gen_registro: literal,
-            },
-          ]);
-          expect(source.now).toHaveBeenCalledTimes(2);
-          expect(deps.provider.collectCalls).toHaveLength(1);
-          const after = zoneDb.db.all<Record<string, unknown>>(
-            sql`select * from payments where working_order_id = ${req.id}`,
-          );
-          expect(after).toEqual(
-            capture.map((row) => ({
-              ...row,
-              sale_id: (after[0] as Record<string, unknown>).sale_id,
-            })),
-          );
-          expect(
-            zoneDb.db.all(
-              sql`select amount, settled_at from payments where working_order_id = ${req.id}`,
-            ),
-          ).toEqual([{ amount: 250, settled_at: start }]);
-        } finally {
-          release();
-          await paying.catch(() => {});
-        }
-      },
-    );
-    it.each([false, true])("recovers a persisted capture (simulator=%s)", async (simulated) => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-10-14T21:59:00.000Z"));
-      const source = zoneClock();
-      const deps = zoneDeps(source.clock);
-      const req = zoneRequest();
-      const provider = simulated ? new SimulatorPaymentProvider(zoneDb.db) : deps.provider;
-      const capture = provider.collect.bind(provider);
-      const collect = vi.spyOn(provider, "collect");
-      if (simulated) {
-        collect.mockImplementationOnce(async (params) => {
-          await capture(params);
-          throw new Error("process stopped");
-        });
-      } else deps.provider.crashNextCollect("captured");
-      const recoveryDeps = { ...deps, provider };
-      const cfg = { ...zoneVenue.cfg, practiceMode: true };
-      await expect(readerPay(recoveryDeps, cfg, req)).rejects.toThrow("process stopped");
-      const before = zoneDb.db.all<Record<string, unknown>>(
-        sql`select * from payments where working_order_id = ${req.id}`,
-      );
-      expect(await issueFacts(req.id)).toEqual([]);
-      const out = await readerPay(recoveryDeps, cfg, req);
-      expect(out.outcome).toBe("captured");
-      if (out.outcome === "captured") expect(out.ticket.simulatedCardPayment).toBe(simulated);
-      const replay = await readerPay(recoveryDeps, cfg, req);
-      expect(replay.outcome).toBe("captured");
-      if (replay.outcome === "captured") expect(replay.ticket.simulatedCardPayment).toBe(simulated);
-      expect(await issueFacts(req.id)).toEqual([nightFacts]);
-      expect(collect).toHaveBeenCalledTimes(1);
-      if (!simulated) expect(deps.provider.collectCalls).toHaveLength(1);
-      const after = zoneDb.db.all<Record<string, unknown>>(
-        sql`select * from payments where working_order_id = ${req.id}`,
-      );
-      expect(after).toEqual(
-        before.map((row) => ({ ...row, sale_id: (after[0] as Record<string, unknown>).sale_id })),
-      );
-    });
-  });
   it.each([false, true])(
     "closed admission retains a completed capture for later finalization (issued=%s)",
     async (issued) => {
@@ -596,7 +237,7 @@ describe("saved-zone payment transactions", () => {
         await reply;
         return answer;
       });
-      const paying = readerPay(deps, zoneVenue.cfg, req);
+      const paying = readerPay(deps, req, issued);
       const rejected = expect(paying).rejects.toMatchObject({
         code: "venue.time_zone_not_ready",
         params: { reason: "restart_required" },
@@ -609,14 +250,14 @@ describe("saved-zone payment transactions", () => {
         await rejected;
         expect(economicSnapshot()).toEqual(before);
         expect(deps.provider.collectCalls).toHaveLength(1);
-        await expect(readerPay(deps, zoneVenue.cfg, req)).rejects.toMatchObject({
+        await expect(readerPay(deps, req, issued)).rejects.toMatchObject({
           code: "venue.time_zone_not_ready",
         });
         expect(economicSnapshot()).toEqual(before);
         expect(deps.provider.collectCalls).toHaveLength(1);
         deps.admission.admit();
-        const out = await readerPay(deps, zoneVenue.cfg, req);
-        expect(out.outcome).toBe("captured");
+        const out = await readerPay(deps, req, issued);
+        expect(out.outcome).toBe("received");
         expect(deps.provider.collectCalls).toHaveLength(1);
         expect(await issueFacts(req.id)).toHaveLength(1);
         const saved = economicSnapshot();
@@ -627,9 +268,9 @@ describe("saved-zone payment transactions", () => {
             throw new Error("saved replay read the issue clock");
           },
         };
-        await expect(
-          readerPay({ ...deps, clock: unreadable }, zoneVenue.cfg, req),
-        ).resolves.toMatchObject({ outcome: "captured" });
+        await expect(readerPay({ ...deps, clock: unreadable }, req, issued)).resolves.toMatchObject(
+          { outcome: "received" },
+        );
         expect(economicSnapshot()).toEqual(saved);
       } finally {
         release();
@@ -645,21 +286,17 @@ describe("saved-zone payment transactions", () => {
       const req = zoneRequest();
       if (issued) await zonePlaced(req, source.clock, true);
       deps.provider.crashNextCollect("captured");
-      await expect(readerPay(deps, zoneVenue.cfg, req)).rejects.toThrow("process stopped");
+      await expect(readerPay(deps, req, issued)).rejects.toThrow("process stopped");
       const before = economicSnapshot();
       const original = zoneDb.db.withWriteLock.bind(zoneDb.db);
-      let transactions = 0;
-      const boundary = vi.spyOn(zoneDb.db, "withWriteLock").mockImplementation((body) => {
-        transactions += 1;
-        if (transactions === 2)
-          return original(async () => {
-            deps.admission.requireRestart();
-            return body();
-          });
-        return original(body);
-      });
+      const boundary = vi.spyOn(zoneDb.db, "withWriteLock").mockImplementationOnce((body) =>
+        original(async () => {
+          deps.admission.requireRestart();
+          return body();
+        }),
+      );
       try {
-        await expect(readerPay(deps, zoneVenue.cfg, req)).rejects.toMatchObject({
+        await expect(readerPay(deps, req, issued)).rejects.toMatchObject({
           code: "venue.time_zone_not_ready",
         });
         expect(economicSnapshot()).toEqual(before);
@@ -668,7 +305,7 @@ describe("saved-zone payment transactions", () => {
         boundary.mockRestore();
       }
       deps.admission.admit();
-      await readerPay(deps, zoneVenue.cfg, req);
+      await readerPay(deps, req, issued);
       expect(deps.provider.collectCalls).toHaveLength(1);
       expect(await issueFacts(req.id)).toEqual([nightFacts]);
     },

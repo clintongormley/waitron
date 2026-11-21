@@ -107,7 +107,7 @@ export async function recordUnpaidDeparture(
   const issued = (await readIssuedSales(tx, [req.billId])).get(req.billId);
   if (issued === undefined && (await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
     throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
-  await refuseBillPaymentInFlight(deps.db, tx, req.billId, bill.status);
+  await refuseBillPaymentInFlight(tx, req.billId, bill.status);
 
   let saleId = issued?.saleId;
   let due = issued?.amountDue;

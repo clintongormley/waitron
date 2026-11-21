@@ -2899,6 +2899,11 @@ for (const locale of ["en", "es"] as const) {
       delete phases[phase]!.media_image_data;
       delete phases[phase]!.media_image_blobs;
       delete phases[phase]!.media_image_edits;
+      const retainedOrders = expected[phase].tables.working_orders!;
+      retainedOrders.columns = retainedOrders.columns.filter(
+        (column) => column.name !== "payment_attempt_at",
+      );
+      for (const row of Object.values(retainedOrders.rows)) delete row.payment_attempt_at;
       phases[phase] = byName(phases[phase]!);
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

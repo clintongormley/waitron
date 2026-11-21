@@ -103,7 +103,7 @@ export async function endMeal(
         throw new AppError("meal_end.already_issued", { workingOrderId: req.billId });
       if (!billOwes(bill))
         throw new AppError("bill.nothing_outstanding", { workingOrderId: req.billId });
-      await refuseBillPaymentInFlight(deps.db, tx, req.billId, bill.status);
+      await refuseBillPaymentInFlight(tx, req.billId, bill.status);
       const printers = printerLookup(tx, cfg.origin);
       const paper = needsPaper(bill);
       if (paper) assertProfileAction(device, "print-receipt", "receipt");

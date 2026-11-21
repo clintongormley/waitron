@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
@@ -329,9 +330,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
 
   it("refuses order.payment_in_flight while the check is being paid by card, leaving its lines on it", async () => {
     const { app, tabA, checkId, cookie, ticket } = await splitSentLine();
-    suite.db.run(
-      sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${checkId}`,
-    );
+    await seedPendingCardPayment(suite.db, checkId);
 
     const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",

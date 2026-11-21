@@ -12,15 +12,12 @@ import { orderDraftLines, orderDrafts, workingOrderLines, workingOrders } from "
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { insertCapturedPayment } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import {
   paySavedBillInCash,
   previewBillPayment,
   type BillPaymentAsk,
 } from "./testing/bill-payment-fixture.js";
-import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import {
   inTx,
@@ -44,20 +41,6 @@ useVenueDb({
 });
 
 describe("payment reservations and previously received money", () => {
-  it("refuses a new whole payment through /api/pay", async () => {
-    const billId = await tabWith(venue, "Tarta");
-    await unsent(billId);
-    const calls = venue.card.collectCalls.length;
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: billId,
-      lines: [],
-    });
-    expect(paid.status).toBe(409);
-    expect(paid.json).toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
-    expect(venue.card.collectCalls.length).toBe(calls);
-  });
-
   it.each(["cash", "card"] as const)("refuses a new placed-bill %s collection", async (method) => {
     const billId = await tabWith(venue, "Tarta");
     await unsent(billId);
@@ -103,63 +86,34 @@ describe("payment reservations and previously received money", () => {
     },
   );
 
-  it("completes an already captured whole payment with a later stored draft, without collecting again", async () => {
-    const billId = await tabWith(venue, "Tarta");
-    await unsent(billId);
-    await inTx(venue, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: billId,
-        provider: venue.card.provider,
-        paymentRef: randomUUID(),
-        amount: decimal("18.00"),
-        settledAt: new Date(),
-      }),
-    );
+  it("refuses draft save while a reader reservation runs", async () => {
+    const p = await seatedWith(venue, "Tarta");
+    const release = venue.card.holdNextCollect();
     const calls = venue.card.collectCalls.length;
-    const result = await payWorkingOrderIntegratedOrchestration(
-      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-      venue.cfg,
-      { id: billId, lines: [] },
+    const pending = send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${p.tabId}/payments`,
+      {
+        kind: "contribution",
+        amount: "5.00",
+        method: "card",
+        entry: "reader",
+        applied: "5.00",
+        tip: "0.00",
+        submissionId: randomUUID(),
+      },
     );
-    expect(result).toMatchObject({ outcome: "captured", ticket: { total: "18.00" } });
-    expect(venue.card.collectCalls.length).toBe(calls);
-    expect(fiscalRecordCount(venue, billId)).toBe(1);
+    try {
+      await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+      await expect(unsent(p.tabId)).rejects.toMatchObject({ code: "order.payment_in_flight" });
+    } finally {
+      release();
+      const paid = await pending;
+      expect(paid.status).toBe(200);
+    }
   });
-
-  it.each(["bill", "whole"] as const)(
-    "refuses draft save while a %s reader reservation runs",
-    async (kind) => {
-      const p = await seatedWith(venue, "Tarta");
-      const release = venue.card.holdNextCollect();
-      const calls = venue.card.collectCalls.length;
-      const pending =
-        kind === "bill"
-          ? send(venue.app, venue.cookie, "POST", `/api/working-orders/${p.tabId}/payments`, {
-              kind: "contribution",
-              amount: "5.00",
-              method: "card",
-              entry: "reader",
-              applied: "5.00",
-              tip: "0.00",
-              submissionId: randomUUID(),
-            })
-          : send(venue.app, venue.cookie, "POST", "/api/pay", {
-              dining: "eat_in",
-              id: p.tabId,
-              lines: [],
-            });
-      try {
-        await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
-        await expect(unsent(p.tabId)).rejects.toMatchObject({ code: "order.payment_in_flight" });
-      } finally {
-        release();
-        const paid = await pending;
-        expect(paid.status).toBe(200);
-      }
-    },
-  );
 
   it("defers automatic issuance until the last draft is removed", async () => {
     const billId = await tabWith(venue, "Tarta");
@@ -427,26 +381,6 @@ describe("unsent dishes block new payments on their own bill", () => {
       });
     }
   }
-
-  it("refuses a new integrated whole payment before asking the reader", async () => {
-    const billId = await tabWith(venue, "Tarta");
-    await unsent(billId);
-    const calls = venue.card.collectCalls.length;
-    await expect(
-      payWorkingOrderIntegratedOrchestration(
-        { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-        venue.cfg,
-        {
-          id: billId,
-          lines: [],
-        },
-      ),
-    ).rejects.toMatchObject({ code: "bill.unsent_dishes", params: { billId } });
-    expect(venue.card.collectCalls.length).toBe(calls);
-    const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
-    expect(bill!.paymentAttemptAt).toBeNull();
-    expect(fiscalRecordCount(venue, billId)).toBe(0);
-  });
 
   it.each(["open empty", "submitted", "discarded", "another bill"] as const)(
     "allows a payment when the only draft is %s",

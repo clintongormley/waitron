@@ -1,3 +1,5 @@
+import { realSleep, runLoop, type LoopDeps } from "./loop.js";
+import type { TradingAdmission } from "./trading-admission.js";
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { refundsPaused } from "./bill-refunds.js";
 import { eq, sql } from "drizzle-orm";
@@ -306,4 +308,22 @@ async function settlePendingBillRefunds(
 function lookupDue(refund: RefundRow, lastLookup: number | undefined, now: number): boolean {
   if (refund.sentAt === null || lastLookup === undefined || lastLookup > now) return true;
   return now - lastLookup >= refundLookupGapMs(now - Date.parse(refund.sentAt));
+}
+
+export function runPendingCardLoop(
+  deps: Pick<LoopDeps, "pass" | "now" | "signal" | "log"> & {
+    admission: TradingAdmission;
+    sleep?: LoopDeps["sleep"];
+  },
+): Promise<void> {
+  return runLoop({
+    ...deps,
+    pass: async (now) => {
+      deps.admission.require();
+      return deps.pass(now);
+    },
+    sleep: deps.sleep ?? realSleep,
+    minTickMs: 5000,
+    maxTickMs: 60_000,
+  });
 }

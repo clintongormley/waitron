@@ -1897,26 +1897,6 @@ describe("the single-payment routes on a bill whose only card payment was refund
     expect(linked).toEqual([{ state: "refunded", linked: 1 }]);
   });
 
-  it("refuses a card pay of the whole bill at the reader", async () => {
-    const billId = await bill("Octopus", "Croquettes");
-    const card = await pay(billId, "card", "20.00");
-    await refund(billId, card.id, { applied: "20.00" });
-    const calls = venue.card.collectCalls.length;
-
-    const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: billId,
-      lines: [],
-    });
-
-    expect(paid).toEqual({
-      status: 409,
-      json: { code: "bill.payments_received", params: { workingOrderId: billId } },
-    });
-    expect(venue.card.collectCalls).toHaveLength(calls);
-    expect(fiscalRecordCount(venue, billId)).toBe(0);
-  });
-
   it("refuses placing the bill", async () => {
     const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");

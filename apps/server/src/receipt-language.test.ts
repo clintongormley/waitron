@@ -73,6 +73,7 @@ import {
 import { REASONS } from "./testing/adjustment-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { completeBillPayment } from "./bill-payments.js";
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import {
   BASIC_ACTIONS,
   seedSessionDevice,
@@ -1393,12 +1394,7 @@ describe("the receipt language staff choose is saved on the order", () => {
   it("refuses while a payment of the order is in flight", async () => {
     const venue = await choosingVenue();
     const billId = await tabWith(venue, "Tarta");
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: new Date().toISOString() })
-        .where(eq(workingOrders.id, billId)),
-    );
+    await inTx(venue, (tx) => seedPendingCardPayment(tx, billId));
     const before = await orderRow(venue, billId);
 
     expect(await choose(venue, billId, { revision: before.revision, language: "es-ES" })).toEqual({

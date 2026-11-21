@@ -31,6 +31,7 @@ import {
 import { inTx, seatedWith, send, tendersOfBill, type Answer } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { cashPayment } from "./testing/bill-venue.js";
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import {
   RECIPIENT,
   refusal,
@@ -335,12 +336,7 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
 
   it("a bill whose card payment is still being taken", async () => {
     const billId = await t.counterOrder("open");
-    await inTx(t.venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: new Date().toISOString() })
-        .where(eq(workingOrders.id, billId)),
-    );
+    await inTx(t.venue, (tx) => seedPendingCardPayment(tx, billId));
 
     const error = await refusedWithNothingWritten(async () =>
       t.close(await counterRequest(billId)),

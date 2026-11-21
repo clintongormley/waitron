@@ -12,7 +12,6 @@ import {
   readActivityForSubject,
   persons,
   billPayments,
-  workingOrders,
   devices,
   deviceProfiles,
   nowIso,
@@ -3176,81 +3175,60 @@ describe("reader delete", () => {
 });
 
 describe("manager-ended practice uncertainty", () => {
-  it.each(["whole", "bill"] as const)(
-    "ends a %s practice attempt after a restart without a mounted simulator",
-    async (kind) => {
-      const venue = await seedVenueWithStaff();
-      const deviceId = await seedDevice();
-      const order = await seedWorkingOrder(suite.db, { source: "device", deviceId });
-      await suite.db
-        .update(workingOrders)
-        .set({ paymentAttemptAt: "2026-11-10T10:00:00Z" })
-        .where(eq(workingOrders.id, order.id));
-      let billPaymentId: string | undefined;
-      if (kind === "bill") {
-        const [bill] = await suite.db
-          .insert(billPayments)
-          .values({
-            workingOrderId: order.id,
-            submissionId: randomUUID(),
-            fingerprint: "practice",
-            kind: "contribution",
-            method: "card",
-            applied: 1000,
-            state: "pending",
-            requestedBy: await seedPerson(suite.db),
-            source: "device",
-            deviceId,
-          })
-          .returning({ id: billPayments.id });
-        billPaymentId = bill!.id;
-      }
-      const simulator = new SimulatorPaymentProvider(suite.db);
-      const attempt = await simulator.collect({
-        origin: deviceOrigin(deviceId),
-        nodeId: brandNodeId(venue.nodeId),
-        workingOrderId: brandWorkingOrderId(order.id),
-        amount: decimal("10.00"),
-        simulationOutcome: "attempting",
-        ...(billPaymentId === undefined ? {} : { billPaymentId }),
-      });
-      const [payment] = await suite.db
-        .select()
-        .from(payments)
-        .where(eq(payments.paymentRef, attempt.paymentRef));
-      const path =
-        kind === "whole"
-          ? `/management-api/payments/stuck/${payment!.id}/resolve`
-          : `/management-api/payments/bill-payments/${billPaymentId}/resolve`;
-      const app = mountApp(venue, []);
-      const denied = await send(app, "POST", path, { cookie: venue.staffCookie });
-      expect(denied.status).toBe(403);
-      expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-      expect(
-        (await suite.db.select().from(payments).where(eq(payments.id, payment!.id)))[0]!.state,
-      ).toBe("attempting");
-      const resolved = await send(app, "POST", path, { cookie: venue.managerCookie });
-      expect({ status: resolved.status, body: await resolved.json() }).toMatchObject({
-        status: 200,
-        body: { outcome: "not_charged" },
-      });
-      expect(
-        (await suite.db.select().from(payments).where(eq(payments.id, payment!.id)))[0]!.state,
-      ).toBe("failed");
-      if (kind === "whole") {
-        expect(
-          (await suite.db.select().from(workingOrders).where(eq(workingOrders.id, order.id)))[0]!
-            .paymentAttemptAt,
-        ).toBeNull();
-      } else {
-        expect(
-          (
-            await suite.db.select().from(billPayments).where(eq(billPayments.id, billPaymentId!))
-          )[0]!.state,
-        ).toBe("failed");
-      }
-    },
-  );
+  it("ends a bill practice attempt after a restart without a mounted simulator", async () => {
+    const venue = await seedVenueWithStaff();
+    const deviceId = await seedDevice();
+    const order = await seedWorkingOrder(suite.db, { source: "device", deviceId });
+    const [bill] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order.id,
+        submissionId: randomUUID(),
+        fingerprint: "practice",
+        kind: "contribution",
+        method: "card",
+        applied: 1000,
+        state: "pending",
+        requestedBy: await seedPerson(suite.db),
+        source: "device",
+        deviceId,
+      })
+      .returning({ id: billPayments.id });
+    const simulator = new SimulatorPaymentProvider(suite.db);
+    const attempt = await simulator.collect({
+      origin: deviceOrigin(deviceId),
+      nodeId: brandNodeId(venue.nodeId),
+      workingOrderId: brandWorkingOrderId(order.id),
+      amount: decimal("10.00"),
+      simulationOutcome: "attempting",
+      billPaymentId: bill!.id,
+    });
+    const [payment] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.paymentRef, attempt.paymentRef));
+    const path = `/management-api/payments/bill-payments/${bill!.id}/resolve`;
+    const app = mountApp(venue, []);
+    const denied = await send(app, "POST", path, { cookie: venue.staffCookie });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(
+      (await suite.db.select().from(payments).where(eq(payments.id, payment!.id)))[0]!.state,
+    ).toBe("attempting");
+    const resolved = await send(app, "POST", path, { cookie: venue.managerCookie });
+    expect({ status: resolved.status, body: await resolved.json() }).toMatchObject({
+      status: 200,
+      body: { outcome: "not_charged" },
+    });
+    expect(
+      (await suite.db.select().from(payments).where(eq(payments.id, payment!.id)))[0]!.state,
+    ).toBe("failed");
+    const [resolvedBill] = await suite.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.id, bill!.id));
+    expect(resolvedBill!.state).toBe("failed");
+  });
 });
 
 describe("provider On/Off", () => {

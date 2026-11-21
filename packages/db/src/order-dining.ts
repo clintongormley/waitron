@@ -6,8 +6,8 @@ type DiningLock = "sent" | "paid";
 /**
  * Why an order's way of selling can no longer change, or `null` while it still can: `"sent"` once
  * the order has left `open`, a line has been sent or has a kitchen ticket item (a later course's
- * dishes get ticket items before `sent_at`); `"paid"` once a payment attempt has started, a payment
- * is pending or received, or a sale exists. The questions `working_orders_dining_fixed`
+ * dishes get ticket items before `sent_at`); `"paid"` once a payment is pending or received,
+ * or a sale exists. The questions `working_orders_dining_fixed`
  * (`triggers/core.sql`) asks, kept in step with it by `order-dining.test.ts`. When both apply,
  * `"sent"` is answered.
  */
@@ -40,8 +40,7 @@ export async function ordersDiningLocked(
         )
       ) as sent,
       (
-        o.payment_attempt_at is not null
-        or exists (
+        exists (
           select 1 from bill_payments p
           where p.working_order_id = o.id and p.state in ('pending', 'received')
         )

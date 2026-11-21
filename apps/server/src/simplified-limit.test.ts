@@ -117,8 +117,8 @@ function count(table: string, where = sql`1 = 1`): number {
 }
 
 function orderRow(id: string) {
-  return venue.db.all<{ status: string; revision: number; payment_attempt_at: string | null }>(
-    sql`select status, revision, payment_attempt_at from working_orders where id = ${id}`,
+  return venue.db.all<{ status: string; revision: number }>(
+    sql`select status, revision from working_orders where id = ${id}`,
   )[0];
 }
 
@@ -300,8 +300,8 @@ describe("a counter sale", () => {
   it.each([
     ["bill cash", false],
     ["bill cash", true],
-    ["/api/pay", false],
-    ["/api/pay", true],
+    ["bill reader", false],
+    ["bill reader", true],
   ] as const)(
     "refuses zero-total F1 at %s with stored choice %s without filing or charging",
     async (path, stored) => {
@@ -332,15 +332,16 @@ describe("a counter sale", () => {
         zoneId: counter.zoneId,
         ...(stored ? {} : { invoiceType: "F1", recipient }),
       };
-      const answer =
+      const tender =
         path === "bill cash"
-          ? await payCounter(
-              id,
-              basket.lines,
-              { method: "cash", tendered: "0.00" },
-              stored ? {} : { invoiceType: "F1", recipient },
-            )
-          : await send(limited, venue.cookie, "POST", path, { id, ...basket, dining: "eat_in" });
+          ? ({ method: "cash", tendered: "0.00" } as const)
+          : ({ method: "card", entry: "reader" } as const);
+      const answer = await payCounter(
+        id,
+        basket.lines,
+        tender,
+        stored ? {} : { invoiceType: "F1", recipient },
+      );
 
       expect(answer).toEqual({
         status: 409,
@@ -490,31 +491,6 @@ describe("a counter sale", () => {
 });
 
 describe("a card on the integrated reader", () => {
-  it("does not charge an existing open order that explicitly requests F1", async () => {
-    const id = await parked(venue.app, counter, { Mitad: 1 });
-    const before = written();
-
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Cliente SL",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
-      },
-    });
-
-    expect(answer).toEqual({
-      status: 409,
-      json: { code: "sale.full_invoice_unavailable", params: {} },
-    });
-    expect(written()).toEqual(before);
-    expect(orderRow(id)!.payment_attempt_at).toBeNull();
-  });
-
   it("does not ask the reader to file an explicit walk-up F1 request as F2", async () => {
     const before = written();
     const id = randomUUID();
@@ -552,18 +528,13 @@ describe("a card on the integrated reader", () => {
       where id = ${id}`);
     const before = written();
 
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-    });
+    const answer = await payCounter(id, [], { method: "card", entry: "reader" });
 
     expect(answer).toEqual({
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },
     });
     expect(written()).toEqual(before);
-    expect(orderRow(id)!.payment_attempt_at).toBeNull();
   });
 
   it("is refused for a walk-up basket over the limit before the reader is asked", async () => {
@@ -577,21 +548,6 @@ describe("a card on the integrated reader", () => {
     expect(answer.json.code).toBe(REFUSED.code);
     expect(written()).toEqual(before);
     expect(orderRow(id)).toBeUndefined();
-  });
-
-  it("is refused for an open bill over the limit before the reader is asked, leaving no mark", async () => {
-    const { tabId } = await seated(venue.app, { Lote: 1, Céntimo: 1 });
-    const before = written();
-    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id: tabId,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
-      lines: [],
-    });
-    expect(answer.status).toBe(409);
-    expect(answer.json.code).toBe(REFUSED.code);
-    expect(written()).toEqual(before);
-    expect(orderRow(tabId)!.payment_attempt_at).toBeNull();
   });
 });
 
@@ -996,11 +952,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },
     });
-    const card = await send(limited, venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: [],
-    });
+    const card = await payCounter(id, [], { method: "card", entry: "reader" });
     expect(card).toEqual({
       status: 409,
       json: { code: "sale.full_invoice_unavailable", params: {} },

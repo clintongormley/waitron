@@ -80,13 +80,6 @@ const SET_UPS: SetUp[] = [
     locked: "sent",
   },
   {
-    name: "a payment attempt started",
-    arrange: (tx, { orderId }) =>
-      tx.update(workingOrders).set({ paymentAttemptAt: AT }).where(eq(workingOrders.id, orderId)),
-    refusal: DINING_FIXED_REFUSAL,
-    locked: "paid",
-  },
-  {
     name: "a pending payment",
     arrange: payment("pending"),
     refusal: DINING_FIXED_REFUSAL,
@@ -259,10 +252,7 @@ describe("an order's way of selling, once the kitchen has it or money is taken",
         .update(workingOrderLines)
         .set({ sentAt: AT })
         .where(eq(workingOrderLines.id, sent.lineId));
-      await tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: AT })
-        .where(eq(workingOrders.id, paid.orderId));
+      await payment("pending")(tx, paid);
     });
     const locks = await inTx((tx) =>
       ordersDiningLocked(tx, [free.orderId, sent.orderId, paid.orderId, "no-such-order"]),

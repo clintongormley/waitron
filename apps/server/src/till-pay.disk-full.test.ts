@@ -6,8 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { insertCapturedPayment } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createDiskFullState, watchForDiskFull, type DiskFullState } from "./disk-full-state.js";
 import {
@@ -21,7 +20,6 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
-import type { Logger } from "./logger.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -66,21 +64,25 @@ const lines = (count: number) =>
   Array.from({ length: count }, () => ({ menuItemId: counter.offerFor(dishId), quantity: "1" }));
 
 function walkUpPay(disk: DiskFullState, id = randomUUID()) {
-  return send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
+  return send(venue.appWith({ disk }), venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    id,
-    lines: lines(1),
-    zoneId: counter.zoneId,
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    basket: { lines: lines(1), zoneId: counter.zoneId },
   });
 }
 
 function payAgain(disk: DiskFullState, id: string) {
-  return send(venue.appWith({ disk }), venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: [],
-    zoneId: counter.zoneId,
-  });
+  return send(
+    venue.appWith({ disk }),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${id}/payments`,
+    billShare("card", "10.00", { entry: "reader", submissionId: id }),
+  );
 }
 
 const collects = () => venue.card.collectCalls.length;
@@ -92,9 +94,9 @@ function count(table: string, column: string, id: string): number {
   return row!.n;
 }
 
-function orderRow(id: string): { status: string; attemptAt: string | null } {
-  const [row] = venue.db.all<{ status: string; attemptAt: string | null }>(
-    sql`select status, payment_attempt_at as attemptAt from working_orders where id = ${id}`,
+function orderRow(id: string): { status: string; revision: number } {
+  const [row] = venue.db.all<{ status: string; revision: number }>(
+    sql`select status, revision from working_orders where id = ${id}`,
   );
   return row!;
 }
@@ -124,7 +126,7 @@ async function openOrder(): Promise<string> {
   return id;
 }
 
-describe("POST /api/pay while the full-disk stop holds", () => {
+describe("a reader bill payment while the full-disk stop holds", () => {
   it("refuses a walk-up card sale while a refused write is noted, and never asks the reader", async () => {
     const disk = diskState({ bytes: 0 });
     disk.noteRefused();
@@ -147,7 +149,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     const answer = await walkUpPay(disk);
 
     expect(answer.status).toBe(200);
-    expect(answer.json.outcome).toBe("captured");
+    expect(answer.json.outcome).toBe("received");
     expect(collects()).toBe(before + 1);
   });
 
@@ -165,7 +167,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     free.bytes = FULL_DISK_BYTES;
     const answer = await walkUpPay(disk);
     expect(answer.status).toBe(200);
-    expect(answer.json.outcome).toBe("captured");
+    expect(answer.json.outcome).toBe("received");
     expect(collects()).toBe(before + 1);
     expect(disk.since()).toBeNull();
   });
@@ -193,45 +195,14 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     const answer = await payAgain(diskState({ bytes: 0 }), id);
 
     expect(answer.status).toBe(200);
-    expect(answer.json.outcome).toBe("captured");
+    expect(answer.json.outcome).toBe("received");
     expect(collects()).toBe(before + 1);
-  });
-
-  it("logs the refusal with the order it refused", async () => {
-    const entries: { level: string; event: string; fields: Record<string, unknown> }[] = [];
-    const log: Logger = (level, event, fields) => {
-      entries.push({ level, event, fields: fields ?? {} });
-    };
-    const disk = diskState({ bytes: 0 });
-    disk.noteRefused();
-    const id = randomUUID();
-
-    const answer = await send(venue.appWith({ disk, log }), venue.cookie, "POST", "/api/pay", {
-      dining: "eat_in",
-      id,
-      lines: lines(1),
-      zoneId: counter.zoneId,
-    });
-
-    expect(answer.status).toBe(507);
-    expect(entries.filter((entry) => entry.event === "storage.disk_full_stop_refused")).toEqual([
-      { level: "warn", event: "storage.disk_full_stop_refused", fields: { workingOrderId: id } },
-    ]);
   });
 
   it("files a card already charged while the stop holds, without asking the reader again", async () => {
     const id = await openOrder();
-    await withTransaction(venue.db, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: id,
-        provider: "fake",
-        paymentRef: `fake-${randomUUID()}`,
-        amount: decimal("10.00"),
-        settledAt: new Date(),
-      }),
-    );
+    venue.card.crashNextCollect("captured");
+    expect((await payAgain(diskState({ bytes: FULL_DISK_BYTES }), id)).status).toBe(500);
     const disk = diskState({ bytes: 0 });
     disk.noteRefused();
     const before = collects();
@@ -239,7 +210,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     const answer = await payAgain(disk, id);
 
     expect(answer.status).toBe(200);
-    expect(answer.json.outcome).toBe("captured");
+    expect(answer.json.outcome).toBe("received");
     expect(disk.since()).not.toBeNull();
     expect(collects()).toBe(before);
     expect(count("sales", "working_order_id", id)).toBe(1);
@@ -293,49 +264,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
       await queuedBody();
 
       expect(answer.status).toBe(200);
-      expect(answer.json.outcome).toBe("captured");
-      expect(collects()).toBe(before + 1);
-    });
-  });
-
-  describe("a refusal noted after the first transaction", () => {
-    function scriptedState(notedFromCall: number): DiskFullState & { calls: () => number } {
-      let calls = 0;
-      return {
-        noteRefused: () => {},
-        noted: () => {
-          calls += 1;
-          return calls >= notedFromCall;
-        },
-        since: () => null,
-        full: () => Promise.resolve(false),
-        calls: () => calls,
-      };
-    }
-
-    it("refuses before the reader when a refusal is noted after the first transaction, and releases the order", async () => {
-      const id = await openOrder();
-      const disk = scriptedState(2);
-      const before = collects();
-
-      const answer = await payAgain(disk, id);
-
-      expect(answer.status).toBe(507);
-      expect(answer.json.code).toBe("storage.disk_full");
-      expect(collects()).toBe(before);
-      expect(disk.calls()).toBe(2);
-      expect(orderRow(id)).toEqual({ status: "open", attemptAt: null });
-    });
-
-    it("asks the reader when nothing is noted after the first transaction", async () => {
-      const id = await openOrder();
-      const disk = scriptedState(Number.POSITIVE_INFINITY);
-      const before = collects();
-
-      const answer = await payAgain(disk, id);
-
-      expect(answer.status).toBe(200);
-      expect(answer.json.outcome).toBe("captured");
+      expect(answer.json.outcome).toBe("received");
       expect(collects()).toBe(before + 1);
     });
   });
@@ -389,7 +318,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
       const retryId = randomUUID();
       const answer = await walkUpPay(disk, retryId);
       expect(answer.status).toBe(200);
-      expect(answer.json.outcome).toBe("captured");
+      expect(answer.json.outcome).toBe("received");
       expect(collects()).toBe(before + 1);
       expect(count("sales", "working_order_id", retryId)).toBe(1);
     } finally {

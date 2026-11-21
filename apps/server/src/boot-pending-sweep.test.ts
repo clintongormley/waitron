@@ -9,9 +9,7 @@ import {
   connectedCardProviderSweep,
   sweepOwners,
   pendingCardPass,
-  withAutomaticCardRecovery,
   withPendingSweep,
-  withStalePaymentRelease,
 } from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
@@ -43,19 +41,12 @@ describe("pendingCardPass", () => {
         {
           sweepProviders: async () => [
             fakeProvider("stripe", async () => {
+              ran.push("sweep");
               if (signalled) controller.abort();
               return empty;
             }),
           ],
           owners: () => OWNERS,
-          recover: async () => {
-            ran.push("recover");
-            return { filed: 0, errors: [] };
-          },
-          release: async () => {
-            ran.push("release");
-            return 0;
-          },
           settle: async (signal) => {
             ran.push("settle");
             settledWith = signal;
@@ -75,77 +66,10 @@ describe("pendingCardPass", () => {
         controller.signal,
       );
       expect(await pass(new Date())).toEqual(REPORT);
-      expect(ran).toEqual(signalled ? [] : ["recover", "release", "settle"]);
+      expect(ran).toEqual(signalled ? ["sweep"] : ["sweep", "settle"]);
       if (!signalled) expect(settledWith).toBe(controller.signal);
     },
   );
-});
-
-describe("automatic recovery in the pending-card pass", () => {
-  it("recovers after the sweep and before releasing stale marks", async () => {
-    const order: string[] = [];
-    const log = vi.fn();
-    const pass = withStalePaymentRelease(
-      withAutomaticCardRecovery(
-        async () => {
-          order.push("sweep");
-          return REPORT;
-        },
-        async () => {
-          order.push("recover");
-          return { filed: 1, errors: [] };
-        },
-        () => "primary",
-        log,
-      ),
-      async () => {
-        order.push("release");
-        return 0;
-      },
-      log,
-    );
-    expect(await pass(new Date())).toBe(REPORT);
-    expect(order).toEqual(["sweep", "recover", "release"]);
-    expect(log).toHaveBeenCalledWith("info", "payment.automatic_recovery", { filed: 1 });
-  });
-
-  it("leaves nonprimary filing alone and reads the role again each pass", async () => {
-    let role: "primary" | "secondary" = "secondary";
-    const recover = vi.fn(async () => ({ filed: 0, errors: [] }));
-    const pass = withAutomaticCardRecovery(
-      async () => REPORT,
-      recover,
-      () => role,
-      () => {},
-    );
-    expect(await pass(new Date())).toBe(REPORT);
-    expect(recover).not.toHaveBeenCalled();
-    role = "primary";
-    expect(await pass(new Date())).toBe(REPORT);
-    expect(recover).toHaveBeenCalledTimes(1);
-  });
-
-  it("logs each retained error and contains a failed recovery without replacing the report", async () => {
-    const log = vi.fn();
-    const recover = vi
-      .fn(async () => ({ filed: 0, errors: [{ paymentId: "p1", error: "filing refused" }] }))
-      .mockRejectedValueOnce(new Error("read refused"));
-    const pass = withAutomaticCardRecovery(
-      async () => REPORT,
-      recover,
-      () => "primary",
-      log,
-    );
-    expect(await pass(new Date())).toBe(REPORT);
-    expect(log).toHaveBeenCalledWith("warn", "payment.automatic_recovery_failed", {
-      error: "Error: read refused",
-    });
-    expect(await pass(new Date())).toBe(REPORT);
-    expect(log).toHaveBeenCalledWith("warn", "payment.automatic_recovery_failed", {
-      paymentId: "p1",
-      error: "filing refused",
-    });
-  });
 });
 
 /** `withPendingSweep` reads only `provider` and `resolvePending`. */
@@ -495,54 +419,5 @@ describe("connectedCardProviderSweep", () => {
 
     expect(gets).toEqual([]);
     expect(providers).toEqual([simulator]);
-  });
-});
-
-describe("withStalePaymentRelease", () => {
-  it("releases in-flight marks after the inner pass, logs how many, and returns the inner report", async () => {
-    const now = new Date("2026-09-26T12:00:00.000Z");
-    const order: string[] = [];
-    const inner = vi.fn(async () => {
-      order.push("pass");
-      return REPORT;
-    });
-    const release = vi.fn(async () => {
-      order.push("release");
-      return 2;
-    });
-    const log = vi.fn();
-
-    expect(await withStalePaymentRelease(inner, release, log)(now)).toBe(REPORT);
-
-    expect(inner).toHaveBeenCalledWith(now);
-    expect(order).toEqual(["pass", "release"]);
-    expect(log).toHaveBeenCalledWith("info", "payment_attempt.released", { released: 2 });
-  });
-
-  it("logs nothing when there was nothing to release", async () => {
-    const log = vi.fn();
-
-    await withStalePaymentRelease(
-      async () => REPORT,
-      async () => 0,
-      log,
-    )(new Date());
-
-    expect(log).not.toHaveBeenCalled();
-  });
-
-  it("a failed release is logged and never breaks the pass", async () => {
-    const log = vi.fn();
-
-    const report = await withStalePaymentRelease(
-      async () => REPORT,
-      () => Promise.reject(new Error("disk I/O error")),
-      log,
-    )(new Date());
-
-    expect(report).toBe(REPORT);
-    expect(log).toHaveBeenCalledWith("warn", "payment_attempt.release_failed", {
-      error: "Error: disk I/O error",
-    });
   });
 });

@@ -92,7 +92,7 @@ async function prohibitOperationalCalls() {
     vi.spyOn(drain, "drain").mockImplementation(forbidden),
     vi.spyOn(host, "startServer").mockImplementation(forbidden),
     vi.spyOn(host, "startLandingListener").mockImplementation(forbidden),
-    vi.spyOn(host, "withAutomaticCardRecovery").mockImplementation(forbidden),
+    vi.spyOn(host, "withPendingBillPayments").mockImplementation(forbidden),
     vi.spyOn(host, "withPendingSweep").mockImplementation(forbidden),
     vi.spyOn(host, "withPendingBillPayments").mockImplementation(forbidden),
     vi.spyOn(first, "activateFirstFiscal").mockImplementation(forbidden),

@@ -110,7 +110,6 @@ export const workingOrders = table(
     invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
     // Null means the venue's receipt language.
     receiptLocale: label("receipt_locale"),
-    paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
     billNumber: count("bill_number"),

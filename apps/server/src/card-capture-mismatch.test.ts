@@ -7,7 +7,6 @@ import {
   sales,
   ticketItems,
   withTransaction,
-  workingOrders,
   workingOrderLines,
 } from "@waitron/db";
 import { currentIncidentsOf, recordCorrection } from "@waitron/core";
@@ -212,8 +211,6 @@ it.each([
         }),
       );
     expect((await report()).cash).toMatchObject({ tenderTotal: actualMoney, tipTotal: "0.00" });
-    const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
-    expect(order!.paymentAttemptAt).toBeNull();
     actual = 100;
     const rest = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),

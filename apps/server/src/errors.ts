@@ -507,7 +507,6 @@ declare module "@waitron/shared" {
     "payment.provider_in_use": { activeReaders: number; readerNames?: string[] };
     "payment.provider_disabled": { providerId: string };
     "payment.not_stuck": { paymentId: string };
-    "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
     "payment.outcome_unknown": {
       paymentId: string;
@@ -599,23 +598,7 @@ declare module "@waitron/shared" {
       field: "taxId" | "legalName" | "address" | "identifierType" | "identifierCountryCode";
     };
     "invoice.choice_locked": Record<string, never>;
-    /**
-     * A write reached an OPEN order a card payment is in flight on: an integrated payment between
-     * pricing and filing (`working_orders.payment_attempt_at` is set), or a pending card payment
-     * towards the bill. The payment settles what it was asked for, so what the order charges is not
-     * changed under it. Also a cancel of any PLACED order with a card payment: one its provider
-     * has not resolved, or one captured or accepted offline that no sale records yet
-     * (`ordersWithUnfiledPayment`); or a cancel of any placed order while an integrated card
-     * collection of it runs in this process (`paymentAttemptIsLive`). Also, while such a payment or
-     * collection exists (`refusePlacedPaymentInFlight`): a collect of a placed order, an unpaid
-     * departure recorded for its party, a payment of it or its preview in the bill's payment window
-     * (where a card taken for a part payment is not counted; its reservation is, as on an open bill,
-     * and refuses a payment with this code when it covers all that is left), and a card payment
-     * (`/api/pay`) of it other
-     * than one that files a card already charged, invoice or none; and setting the invoice choice or
-     * receipt language of a placed order with no invoice yet. The caller waits for the payment to
-     * settle or fail.
-     */
+    /** Editing or closing a bill must wait while its card payment can still settle. */
     "order.payment_in_flight": { workingOrderId: string };
     /**
      * Declared by `@waitron/venue-service` too, with the same params. When an order opens: a request

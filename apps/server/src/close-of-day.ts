@@ -92,7 +92,7 @@ export async function issueBillAtClose(
   await deps.backend.refuseUntilRecordable(tx, reading);
   let invoice: PricedInvoice;
   try {
-    await refuseBillPaymentInFlight(deps.db, tx, billId, bill.status);
+    await refuseBillPaymentInFlight(tx, billId, bill.status);
     // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
     if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
       return { kind: "left_open", reason: "dish_not_made" };

@@ -25,7 +25,7 @@ import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import { readSettledTicket } from "./testing/whole-payment-fixture.js";
+import { readSettledTicket } from "./till-sale.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";

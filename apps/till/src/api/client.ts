@@ -266,8 +266,8 @@ export interface TillCourse {
 }
 
 /**
- * One ACTIVE card reader as the boot payload carries it; `id` is what `POST /api/pay`'s `readerId`
- * names. The practice simulator has one virtual reader in Demo or Preparation.
+ * An active card reader from the boot payload. Bill payment requests name it in `readerId`.
+ * The practice simulator has one virtual reader in Demo or Preparation.
  */
 export interface TillActiveReader {
   id: string;
@@ -2153,11 +2153,7 @@ export interface PassReleaseResult {
   releasedTicketItemIds: string[];
 }
 
-/**
- * `POST /api/pay` outcome. Unlike {@link TillSaleResult}'s throw-or-ticket shape, a decline, stall or
- * offline refusal is DATA, never a thrown `{ code }` — nothing may block a sale on anything but the
- * sale itself (CLAUDE.md §5) — so the caller branches on `outcome` instead of catching.
- */
+/** The till's Pay result, mapped from the bill payment response. */
 export type PayOutcome = (
   | { outcome: "captured"; ticket: TillSaleResult }
   | { outcome: "partial"; balance: BillBalance; slipPaymentId?: string }

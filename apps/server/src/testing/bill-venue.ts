@@ -9,7 +9,6 @@ import {
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
-import { observedWholePaymentBody } from "./whole-payment-fixture.js";
 import { getBillBalance, observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -409,15 +408,7 @@ export async function send(
   const payload =
     database === undefined
       ? body
-      : observedWholePaymentBody(
-          database,
-          path,
-          await observedClosingBody(
-            database,
-            path,
-            await observedPaymentBody(database, path, body),
-          ),
-        );
+      : await observedClosingBody(database, path, await observedPaymentBody(database, path, body));
   const res = await app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie, ...headers },

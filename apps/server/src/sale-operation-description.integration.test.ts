@@ -28,7 +28,6 @@ import { venueModuleConfig } from "./provision.js";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { loginWithPin } from "@waitron/identity";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import { payWorkingOrderIntegratedOrchestration as payIntegrated } from "./testing/whole-payment-fixture.js";
 import { createOpenOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
@@ -369,7 +368,7 @@ it("a description cleared during capture leaves payment recovery pending, then r
   expect(charged).toHaveBeenCalledTimes(1);
 });
 
-it("a concurrent winner is replayed even when its department description is subsequently cleared", async () => {
+it("replays a card receipt after its department description is cleared", async () => {
   const id = await tabWith(venue, "Caña");
   await placeOrder(
     { ...deps(), admission: testTradingAdmission() },
@@ -378,30 +377,14 @@ it("a concurrent winner is replayed even when its department description is subs
     venue.operatorId,
   );
   const provider = new SimulatorPaymentProvider(venue.db);
-  const collect = provider.collect.bind(provider);
-  let winningFacts: ReturnType<typeof facts> | undefined;
-  const charged = vi.spyOn(provider, "collect").mockImplementationOnce(async (input) => {
-    const result = await collect(input);
-    await payIntegrated(
-      { admission: testTradingAdmission(), ...deps(), provider },
-      venue.cfg,
-      { id, lines: [] },
-      venue.operatorId,
-    );
-    winningFacts = facts();
-    await authored();
-    return result;
-  });
-  const result = await payIntegrated(
-    { admission: testTradingAdmission(), ...deps(), provider },
-    venue.cfg,
-    {
-      id,
-      lines: [],
-      simulationOutcome: "captured",
-    },
-  );
-  expect(result.outcome).toBe("captured");
+  const charged = vi.spyOn(provider, "collect");
+  const filing = { admission: testTradingAdmission(), ...deps(), provider };
+  const pay = () => payOnReader(id, filing);
+  const first = await pay();
+  expect(first.outcome).toBe("received");
+  const winningFacts = facts();
+  await authored();
+  expect(await pay()).toEqual(first);
   expect(charged).toHaveBeenCalledTimes(1);
   expect(records(id)).toEqual([{ description: "Dining meals" }]);
   expect(facts()).toEqual(winningFacts);

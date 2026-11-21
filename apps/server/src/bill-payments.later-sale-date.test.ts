@@ -3,10 +3,10 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
-import { insertCapturedPayment, payments, recordRefund } from "@waitron/payments";
+import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { payments, recordRefund } from "@waitron/payments";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import {
   provisionBillVenue,
   send,
@@ -106,68 +106,11 @@ describe("a bill payment completed on a later day files the day it was accepted"
     expect(record.operationDate).toBe("2026-03-14");
   });
 
-  it("files 14 March when a manager retains a part-refunded card taken at 23:50, its bill payment written at 09:10", async () => {
-    const venue = await provisionBillVenue(suite.db);
-    const billId = await tabWith(venue, "Croquettes");
-    const paymentRef = randomUUID();
-    await withTransaction(venue.db, async (tx) => {
-      await insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: brandWorkingOrderId(billId),
-        provider: venue.card.provider,
-        paymentRef,
-        amount: decimal("11.00"),
-        externalRef: "partial-txn",
-        settledAt: new Date(ACCEPTED),
-      });
-      await recordRefund(tx, {
-        provider: venue.card.provider,
-        paymentRef,
-        amount: decimal("1.00"),
-        providerRefundRef: "first",
-      });
-      await liftPaymentGuard(tx, () =>
-        tx.update(payments).set({ createdAt: ACCEPTED }).where(eq(payments.paymentRef, paymentRef)),
-      );
-      await tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: ACCEPTED })
-        .where(eq(workingOrders.id, billId));
-    });
-    Object.assign(venue.card, {
-      lookupCompletedRefunds: async () => ({
-        kind: "known" as const,
-        processorRef: "partial-txn",
-        captured: decimal("11.00"),
-        refunds: [{ providerRefundRef: "first", amount: decimal("1.00") }],
-      }),
-    });
-    const [payment] = await venue.db
-      .select({ id: payments.id })
-      .from(payments)
-      .where(eq(payments.paymentRef, paymentRef));
-    const post = await management(venue, COMPLETED);
-
-    const retained = await post(`/management-api/payments/partial-refunds/${payment!.id}/retain`, {
-      remaining: "10.00",
-      applied: "10.00",
-      tip: "0.00",
-    });
-
-    expect(retained.status).toBe(200);
-    expect(await statusOf(venue, billId)).toBe("settled");
-    const { supplyDay, ticket, record } = await filedFor(venue, billId);
-    expect(supplyDay).toBe("2026-03-14");
-    expect(ticket.saleDay).toBe("2026-03-14");
-    expect(record.operationDate).toBe("2026-03-14");
-  });
-
-  it("files 14 March when a manager retains a part-refunded card whose bill payment was pending", async () => {
+  it.each([ACCEPTED, COMPLETED])("dates a retained card with bill row at %s", async (bill) => {
     const venue = await provisionBillVenue(suite.db);
     const billId = await tabWith(venue, "Croquettes");
     const { billPaymentId, paymentId } = await capturedPending(venue, billId, 1000, {
-      bill: ACCEPTED,
+      bill,
       card: ACCEPTED,
     });
     await withTransaction(venue.db, async (tx) => {

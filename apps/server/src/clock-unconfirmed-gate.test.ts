@@ -22,7 +22,6 @@ import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   failAttempting,
-  insertAttempting,
   insertInitiated,
   recordHold,
   type CardProviderContribution,
@@ -289,9 +288,7 @@ function moneyState() {
     refundSends: venue.card.refundCalls.length,
     lookups: venue.card.lookupCalls.length,
     abandonedAsks: venue.card.abandonedAttemptCalls.length,
-    orders: venue.db.all(
-      sql`select id, status, revision, payment_attempt_at from working_orders order by id`,
-    ),
+    orders: venue.db.all(sql`select id, status, revision from working_orders order by id`),
     parties: venue.db.all(sql`select id, state, revision from parties order by id`),
     billPaymentStates: venue.db.all(sql`select id, state from bill_payments order by id`),
     providerPayments: venue.db.all(sql`select id, state from payments order by id`),
@@ -958,35 +955,6 @@ const NOT_CHARGED = { outcome: "failed", cancelledAtProvider: true } as const;
 
 // Each row builds its own payment, hold or refund, so rows never share one.
 const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
-  "a stuck card payment's resolve": async () => {
-    const orderId = await tabWith(venue, threeEuroDish());
-    await withTransaction(venue.db, async (tx) => {
-      await insertAttempting(tx, {
-        origin: deviceOrigin(venue.deviceId),
-        workingOrderId: brandWorkingOrderId(orderId),
-        nodeId: venue.cfg.nodeId,
-        provider: "fake",
-        paymentRef: randomUUID(),
-        amount: decimal("3.00"),
-      });
-      await tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: venue.clock.now().instant.toISOString() })
-        .where(eq(workingOrders.id, orderId));
-    });
-    const [stuck] = venue.db.all<{ id: string }>(
-      sql`select id from payments where working_order_id = ${orderId}`,
-    );
-    return {
-      send: async (app) => {
-        venue.card.scriptAbandonedAttempt(NOT_CHARGED);
-        const answer = await manager(app, `/management-api/payments/stuck/${stuck!.id}/resolve`);
-        venue.card.scriptAbandonedAttempt({ outcome: "unknown", reason: "unreachable" });
-        return answer;
-      },
-      grows: ["abandonedAsks"],
-    };
-  },
   "a stuck bill payment's resolve": async () => {
     const { id } = await stalledBillPayment("10.00");
     return {

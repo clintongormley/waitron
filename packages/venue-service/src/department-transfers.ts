@@ -361,8 +361,6 @@ export async function acceptDepartmentTransfer(
   const context = await getOrderServiceContext(tx, tab.id);
   if (context.departmentId !== request.sourceDepartmentId)
     throw new AppError("department_transfer.not_allowed", {});
-  if (tab.paymentAttemptAt !== null)
-    throw new AppError("order.payment_in_flight", { workingOrderId: tab.id });
   const [payment] = await tx
     .select({ id: billPayments.id })
     .from(billPayments)

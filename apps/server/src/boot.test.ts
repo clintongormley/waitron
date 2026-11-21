@@ -3036,47 +3036,6 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // A previous run died while a card was paying this order: P1 marked it and nothing else was
-  // written. No attempt of this process and no payment stands behind the mark, so the loop's
-  // release clears it after the first pass, and the order takes changes again.
-  it("clears a card-payment mark a previous run left with no payment behind it, on its first pass", async () => {
-    const port = await freePort();
-    const orderId = randomUUID();
-    await seedWorkingOrder(sharedDb, {
-      id: orderId,
-
-      deviceId: null,
-      orderNumber: 990_001,
-      paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
-    });
-
-    try {
-      const server = await withCapturedStdout(async (lines) => {
-        enableDebugForNextBoot();
-        const started = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "production",
-        });
-        await waitForEvent(lines, "loop.sleeping");
-        return started;
-      });
-      try {
-        const [row] = await sharedDb
-          .select({ mark: workingOrders.paymentAttemptAt })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, orderId));
-        expect(row).toEqual({ mark: null });
-      } finally {
-        await server.close();
-      }
-    } finally {
-      await sharedDb.delete(workingOrders).where(eq(workingOrders.id, orderId));
-    }
-  }, 60_000);
-
   // A previous run died between a card bill payment's P1 and its reader: the payment is pending and
   // no provider row names it. Nothing in this process drives it, so the first pass fails it.
   it("fails a card bill payment a previous run left with no provider row, on its first pass", async () => {

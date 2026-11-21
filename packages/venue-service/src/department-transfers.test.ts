@@ -1018,7 +1018,6 @@ describe("departmental tab transfers", () => {
   });
 
   it.each([
-    "payment_mark",
     "partial_card",
     "closed",
     "sender_changed",
@@ -1035,11 +1034,6 @@ describe("departmental tab transfers", () => {
       let zoneId = v.bz;
       let actor = receiver(v);
       await withTransaction(suite.db, async (tx) => {
-        if (kind === "payment_mark")
-          await tx
-            .update(workingOrders)
-            .set({ paymentAttemptAt: new Date().toISOString() })
-            .where(eq(workingOrders.id, v.tab));
         if (kind === "partial_card")
           await tx.insert(billPayments).values({
             workingOrderId: v.tab,
@@ -1095,7 +1089,7 @@ describe("departmental tab transfers", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, v.tab));
       const code =
-        kind === "payment_mark" || kind === "partial_card"
+        kind === "partial_card"
           ? "order.payment_in_flight"
           : kind === "closed"
             ? "department_transfer.tab_unavailable"

@@ -1,3 +1,4 @@
+import { readBillTenderLines } from "./receipt-payments.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -88,12 +89,7 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import {
-  readBillTenderLines,
-  readSettledTicket,
-  printSaleReceipt,
-  reprintSale,
-} from "./testing/whole-payment-fixture.js";
+import { readSettledTicket, printSaleReceipt, reprintSale } from "./till-sale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { moveOrderLines } from "./working-order.js";
 import "./errors.js";

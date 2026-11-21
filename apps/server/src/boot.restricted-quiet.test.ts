@@ -89,8 +89,8 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
   };
 });
 
-vi.mock("./pending-card-recovery.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
   return {
     ...actual,
     runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {

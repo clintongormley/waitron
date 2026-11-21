@@ -423,7 +423,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/payments-api.clock-behind.test.ts",
   "apps/server/src/payments-api.stuck.test.ts",
   "apps/server/src/payments-api.test.ts",
-  "apps/server/src/pending-card-recovery.test.ts",
   "apps/server/src/placed-order-one-payment.test.ts",
   "apps/server/src/print-api.test.ts",
   "apps/server/src/print-job-preview.test.ts",

@@ -2375,7 +2375,7 @@ function settlingErrorOf(
           : (settleRefusalOf(error) ?? "sale.error");
 }
 
-/** `POST /api/pay` names its reader refusal `pay`; a profile that takes no orders is `take-orders`. */
+/** Bill payments use `pay` for a reader capability refusal. */
 function isReaderRefusal(error: unknown): boolean {
   const refused = error as { code?: string; action?: unknown } | undefined;
   return refused?.code === "device.forbidden_action" && refused.action === "pay";

@@ -1,3 +1,4 @@
+import { settleFromProviderRow } from "../bill-payments-loop.js";
 import { randomUUID } from "node:crypto";
 import {
   billPayments,
@@ -99,6 +100,41 @@ export async function takeReaderBillPayment(
   operator: Parameters<typeof reader>[4],
 ) {
   return reader(deps, cfg, billId, await observed(deps.db, billId, request), operator);
+}
+
+export async function takeReaderPaymentWithRecovery(
+  deps: Parameters<typeof reader>[0],
+  cfg: Parameters<typeof reader>[1],
+  billId: string,
+  request: BillPaymentRequest,
+  operator: Parameters<typeof reader>[4],
+  basket?: CounterPaymentBasket,
+) {
+  const ask =
+    basket === undefined
+      ? await observed(deps.db, billId, request)
+      : { ...request, expectedEdit: request.expectedEdit ?? null };
+  return reader(
+    {
+      ...deps,
+      settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
+        const result = await settleFromProviderRow(
+          tx,
+          { ...deps, cfg },
+          paymentId,
+          now,
+          print,
+          guestCount,
+        );
+        return result.settled === "received" ? result.invoice : null;
+      },
+    },
+    cfg,
+    billId,
+    ask,
+    operator,
+    basket,
+  );
 }
 
 export function observedPaymentSender(

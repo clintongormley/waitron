@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import * as lineServiceState from "./line-service-state.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
@@ -26,6 +27,7 @@ import {
   parties,
   workingOrderLines,
   workingOrders,
+  billPayments,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1121,15 +1123,16 @@ describe("the line-editing routes act as the session's operator", () => {
   });
 });
 
-/** What a bill-level write would move: the bill's revision, and the card payment's mark on it. */
+/** What a bill-level write would move: the bill's revision, and the card payment state. */
 async function billOf(tabId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx
       .select({
         revision: workingOrders.revision,
-        paymentAttemptAt: workingOrders.paymentAttemptAt,
+        paymentState: billPayments.state,
       })
       .from(workingOrders)
+      .leftJoin(billPayments, eq(billPayments.workingOrderId, workingOrders.id))
       .where(eq(workingOrders.id, tabId)),
   );
   return row!;
@@ -1407,12 +1410,7 @@ describe("the served routes while a card payment runs on the bill", () => {
       expectedPartyRevision: await revisionOf(party.partyId),
       items: [{ lineId, quantity: "1" }],
     });
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: new Date().toISOString() })
-        .where(eq(workingOrders.id, party.tabId)),
-    );
+    const paymentId = await inTx(venue, (tx) => seedPendingCardPayment(tx, party.tabId));
     try {
       const bill = await billOf(party.tabId);
       const base = `/api/parties/${party.partyId}`;
@@ -1443,9 +1441,9 @@ describe("the served routes while a card payment runs on the bill", () => {
     } finally {
       await inTx(venue, (tx) =>
         tx
-          .update(workingOrders)
-          .set({ paymentAttemptAt: null })
-          .where(eq(workingOrders.id, party.tabId)),
+          .update(billPayments)
+          .set({ state: "failed", failedAt: new Date().toISOString() })
+          .where(eq(billPayments.id, paymentId)),
       );
     }
   });

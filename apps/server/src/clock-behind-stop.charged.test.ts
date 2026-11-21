@@ -315,20 +315,6 @@ it.each(["counter", "bill"] as const)(
       expect(paid.status).toBe(200);
       expect(paid.json.outcome).toBe("received");
     } else {
-      const wholeOrderRetry = await send(
-        venue.appAt(reader.clock),
-        venue.cookie,
-        "POST",
-        "/api/pay",
-        {
-          dining: "eat_in",
-          id,
-          lines: [],
-          zoneId: counter.zoneId,
-        },
-      );
-      expect(wholeOrderRetry.status).toBe(409);
-      expect(wholeOrderRetry.json.code).toBe("clock.unusable");
       await settlePendingBillPayments({
         admission: testTradingAdmission(),
         db: venue.db,

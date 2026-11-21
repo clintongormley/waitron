@@ -67,7 +67,7 @@ import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/share
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { receiptQr, readSettledTicket } from "./testing/whole-payment-fixture.js";
+import { receiptQr, readSettledTicket } from "./till-sale.js";
 import { createOpenOrder, getHeldOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";

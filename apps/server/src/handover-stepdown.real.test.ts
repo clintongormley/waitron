@@ -54,8 +54,8 @@ vi.mock("./start-peer-check.js", async (importOriginal) => ({
 
 // The pending-card loop sleeps at most 50 ms between passes, so a loop nobody stopped sweeps again
 // inside the window the test holds open after the stepdown.
-vi.mock("./pending-card-recovery.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
   return {
     ...actual,
     runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {

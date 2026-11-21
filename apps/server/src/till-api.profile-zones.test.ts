@@ -129,7 +129,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/menu-state?zoneId                             | query zone; or start   | refuses GET /api/menu-state?zoneId                   |
  * | GET  /api/invoice-delivery-options                      | query order; query zone, for a bill not saved yet only | refuses GET /api/invoice-delivery-options (order), (zone); a bill not saved yet: "reads the device's invoice printer for a bill not saved yet"; a saved bill ignores the zone: "reads a saved bill's invoice options whatever zone the till sends with it" |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
- * | POST /api/pay                                           | body zone; body order  | refuses POST /api/pay (zone), (order)                |
  * | POST /api/working-orders                                | body zone; body order  | refuses POST /api/working-orders (zone), (order)     |
  * | GET  /api/working-orders                                | list, by order zone    | "lists only the profile's zones, tables and orders"  |
  * | GET  /api/working-orders/:id                            | order                  | refuses GET /api/working-orders/:id                  |
@@ -241,7 +240,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * `kitchen_screen.zone_not_allowed`.
  *
  * Where the check runs: first inside the route's own transaction, except where the route's work
- * runs in a helper that opens its own transaction — `/api/pay`, POST
+ * runs in a helper that opens its own transaction — POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
  * `/invoice-choice`, `/receipt-language`, `/place`, `/collect`, `/cancel`, `/split-after-print`,
  * `/api/sales/:id/receipt`, `/reprint` and the four bill-payment routes — where it reads just
@@ -590,20 +589,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     () => "/api/dead-ends/sale",
     (x) => ({ step: "edit", lines: [], workingOrderId: x.deliOrder }),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/pay (zone)",
-    "POST",
-    () => "/api/pay",
-    (x) => ({ dining: "eat_in", id: randomUUID(), lines: saleLines(x), zoneId: x.deliCounter }),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/pay (order)",
-    "POST",
-    () => "/api/pay",
-    (x) => ({ dining: "eat_in", id: x.deliOrder, lines: [] }),
     deliOrderZone,
   ],
   [

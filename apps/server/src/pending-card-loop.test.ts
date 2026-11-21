@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import * as recovery from "./pending-card-recovery.js";
+import * as recovery from "./bill-payments-loop.js";
 import { TradingAdmission } from "./trading-admission.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 

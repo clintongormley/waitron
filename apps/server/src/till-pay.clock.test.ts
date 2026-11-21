@@ -1,3 +1,4 @@
+import { billShare } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -47,21 +48,31 @@ function clockAt(iso: string): TrustedClock {
 const dish = () => [{ menuItemId: counter.offerFor(productId), quantity: "1" }];
 
 function cardSale(iso: string, id: string) {
-  return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: dish(),
-    zoneId: counter.zoneId,
-  });
+  return send(
+    venue.appAt(clockAt(iso)),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${id}/payments`,
+    {
+      dining: "eat_in",
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      basket: { lines: dish(), zoneId: counter.zoneId },
+    },
+  );
 }
 
 function payStored(iso: string, id: string) {
-  return send(venue.appAt(clockAt(iso)), venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: [],
-    zoneId: counter.zoneId,
-  });
+  return send(
+    venue.appAt(clockAt(iso)),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${id}/payments`,
+    billShare("card", "10.00", { entry: "reader" }),
+  );
 }
 
 const collects = () => venue.card.collectCalls.length;
@@ -89,7 +100,7 @@ it("refuses a walk-up card sale under a clock in 2001, naming the clock, before 
   expect(rows("payments", "working_order_id", id)).toBe(0);
 });
 
-it("refuses a stored open order under a clock in 2001 before the reader, and leaves no attempt mark", async () => {
+it("refuses a stored open order under a clock in 2001 before the reader, and leaves no payment", async () => {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, { id, lines: dish(), zoneId: counter.zoneId });
   const before = collects();
@@ -102,11 +113,10 @@ it("refuses a stored open order under a clock in 2001 before the reader, and lea
     params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
   });
   expect(collects()).toBe(before);
-  expect(
-    venue.db.all(
-      sql`select status, payment_attempt_at as attemptAt from working_orders where id = ${id}`,
-    ),
-  ).toEqual([{ status: "open", attemptAt: null }]);
+  expect(venue.db.all(sql`select status from working_orders where id = ${id}`)).toEqual([
+    { status: "open" },
+  ]);
+  expect(rows("bill_payments", "working_order_id", id)).toBe(0);
 });
 
 it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 local on 28-10-2024", async () => {
@@ -124,7 +134,7 @@ it("refuses at 23:59:59.999 local on 27-10-2024, and asks the reader at 00:00 lo
   const sold = await cardSale("2024-10-27T23:00:00.000Z", randomUUID());
 
   expect(sold.status).toBe(200);
-  expect(sold.json.outcome).toBe("captured");
+  expect(sold.json.outcome).toBe("received");
   expect(collects()).toBe(before + 1);
 });
 
@@ -135,9 +145,9 @@ it("replays a settled card sale under a clock in 2001 without asking the reader"
   expect(first.status).toBe(200);
   const before = collects();
 
-  const replay = await payStored("2001-01-01T11:00:00.000Z", id);
+  const replay = await cardSale("2001-01-01T11:00:00.000Z", id);
 
   expect(replay.status).toBe(200);
-  expect(replay.json.outcome).toBe("captured");
+  expect(replay.json.outcome).toBe("received");
   expect(collects()).toBe(before);
 });

@@ -302,7 +302,6 @@ function seed(connection) {
     workingOrder("wo-settled", "settled"),
     workingOrder("wo-settled-extra", "settled"),
     workingOrder("wo-settled-revision", "settled"),
-    workingOrder("wo-settled-payment", "settled"),
     workingOrder("wo-settled-party", "settled"),
     workingOrder("wo-settled-reopen", "settled"),
     workingOrder("wo-flip", "open"),
@@ -697,16 +696,6 @@ describe("working_orders_enforce_transition", () => {
       ),
     ).toBe(TRANSITION_REFUSAL);
   });
-
-  it("refuses the handover stamp when a card payment attempt is marked with it", () => {
-    expect(
-      refusalFor(
-        connection,
-        `update working_orders set collected_at = '${STAMP}', payment_attempt_at = '${STAMP}' ` +
-          `where id = 'wo-settled-payment'`,
-      ),
-    ).toBe(TRANSITION_REFUSAL);
-  });
 });
 
 describe("working_orders_dining_fixed", () => {
@@ -756,7 +745,7 @@ const FROZEN_PLACED_ORDER_COLUMNS = connection
 describe("working_orders_enforce_transition's exception for a presented bill", () => {
   it("reads the table's columns, so the per-column cases below are not vacuous", () => {
     expect(FROZEN_PLACED_ORDER_COLUMNS).toEqual(
-      expect.arrayContaining(["id", "label", "payment_attempt_at", "settled_at"]),
+      expect.arrayContaining(["id", "label", "settled_at"]),
     );
   });
 
@@ -790,17 +779,11 @@ describe("working_orders_enforce_transition's exception for a presented bill", (
     ).toBeUndefined();
   });
 
-  it("refuses a presented bill's label, or its payment attempt, changed alone", () => {
+  it("refuses a presented bill's label changed alone", () => {
     expect(
       refusalFor(
         connection,
         `update working_orders set label = 'Mesa 9' where id = 'wo-moves-frozen'`,
-      ),
-    ).toBe(TRANSITION_REFUSAL);
-    expect(
-      refusalFor(
-        connection,
-        `update working_orders set payment_attempt_at = '${STAMP}' where id = 'wo-moves-frozen'`,
       ),
     ).toBe(TRANSITION_REFUSAL);
   });

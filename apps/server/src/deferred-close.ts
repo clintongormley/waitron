@@ -49,7 +49,8 @@ import {
   type PricedInvoice,
   priceForIssuance,
   readInvoiceNumbers,
-  refusePaymentInFlight,
+  refuseRefundInProgress,
+  refusePendingPartPayment,
   refuseUnavailableFullInvoice,
 } from "./working-order.js";
 import "./errors.js";
@@ -129,10 +130,11 @@ export async function closeBillDeferredTx(
     expectedEdit: request.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, billId);
+  await refusePendingPartPayment(tx, [billId], "any");
   if ((await billsHoldingMoney(tx, [billId], { besidesAdvances: true })).has(billId))
     throw ineligible("prior_payment");
-  await refusePaymentInFlight(tx, [billId]);
-  await refusePlacedPaymentInFlight(deps.db, tx, [billId]);
+  await refuseRefundInProgress(tx, [billId]);
+  await refusePlacedPaymentInFlight(tx, [billId]);
 
   const [issued] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
   if (issued !== undefined) {
