@@ -1015,8 +1015,8 @@ address outside that domain gets a cookie for that name or address only.
 `WAITRON_ENV` is deliberately NOT in this file. The wizard decides whether a box is a demo or a live
 one and writes that into the `state` volume, so "`production` must be typed out" keeps its one home:
 the wizard, not a file on the box. A box that joins another as its spare takes the main box's
-environment the same way; if `WAITRON_ENV` is set on the joining box, it must match the main box's,
-or the join is refused.
+environment the same way; if `WAITRON_ENV` is set on the joining box, the environment it names
+(`dev` names preproduction) must match the main box's, or the join is refused.
 
 ## Building and running the image locally
 
