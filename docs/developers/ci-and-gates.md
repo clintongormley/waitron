@@ -1066,6 +1066,21 @@ instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.te
 `src/theme/sources.test.ts` the same way, and `src/theme/*.sweep.test.ts` so a theme mutant does
 not rerun the sweeps. Only `packages/shared` was checked.
 
+### A browser command left by a stopped run used to act in the next run
+
+Stryker stops a mutant's test run at its first failing test. A browser test cut off there can leave
+a Playwright click still waiting for its element, and `@vitest/browser-playwright@4.1.12` found the
+test page by `[data-vitest="true"]` each time it retried, a marker every run's page carries. The
+leftover click then landed in the next mutant's run and failed a test that mutant had nothing to do
+with, so ui's score moved from night to night: 18 → 19 November, 4 popover-fallback mutants changed
+outcome; 19 → 20, 2; 20 → 21, 4, with the same tests run against each mutant every night.
+`patches/@vitest__browser-playwright@4.1.12.patch` binds each command to the test frame present when
+it starts (`page.frame("vitest-iframe")`), so a leftover command fails on its removed frame.
+Measured 2026-11-21 with two test files run in one browser, the first starting a click on a button
+that does not exist yet and failing, the second drawing that button and counting clicks: unpatched,
+the second file saw the click in 2 of 4 runs; patched, in none of 6. Vitest 5.1.1 still finds the
+page with the frame locator (`dist/index.js:1454`), so a move to Vitest 5 re-checks this.
+
 ### Shared mutation work is split across four whole-file shards
 
 A slow runner can use the whole ten-minute job budget while still making progress. On

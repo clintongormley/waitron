@@ -1,0 +1,14 @@
+diff --git a/dist/index.js b/dist/index.js
+index f690b4d092a93d8a5fc5da4450eb24135a73c929..7ab23ecae2e56d865fcd1efa42f5f63aea68e64e 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1132,7 +1132,8 @@ class PlaywrightBrowserProvider {
+ 				});
+ 			},
+ 			get iframe() {
+-				return page.frameLocator("[data-vitest=\"true\"]");
++				// Bound to the test frame present when the command starts, so a command left by a cancelled run (a Stryker bail) fails on its removed frame instead of acting in the next run's; 5.1.1 still uses the frame locator, so re-check on a move to Vitest 5.
++				return page.frame("vitest-iframe") ?? page.frameLocator("[data-vitest=\"true\"]");
+ 			}
+ 		};
+ 	}
