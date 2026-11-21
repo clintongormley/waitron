@@ -50,6 +50,13 @@ async function mount() {
     },
   };
 }
+it("checks receipt phone numbers using the signed-in venue country", async () => {
+  const { editor, fetchImpl } = await mountReceiptTab({ venueCountry: "ES" });
+  await editReceipt(editor, "phone", "512 345 678");
+  await userEvent.click(page.elementLocator(receiptSave(editor)));
+  expect(receiptField(editor, "phone").error).toContain("country code");
+  expect(fetchImpl.mock.calls.some(([, request]) => request.method === "PUT")).toBe(false);
+});
 it("the host-supplied editor reads the initial model actively and its live refresh passively", async () => {
   const { el, fetchImpl, liveData, activity } = await mount();
   await expect

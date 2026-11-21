@@ -951,21 +951,18 @@ describe("your profile", () => {
     expect(displayName()).toBe("Grace Byron");
   });
 
-  it.each(["12345", "512 345 678"])(
-    "blocks telephone %s beside the profile field",
-    async (phone) => {
-      const { el, api } = await mount();
-      el.venueCountry = "ES";
-      await editDetails(el);
-      input(el, "telephone", phone);
-      await click(el, "save");
-      expect(api.saveProfile).not.toHaveBeenCalled();
-      expect(
-        el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=telephone]")!
-          .error,
-      ).toBe(codeMessage("person.telephone_invalid"));
-    },
-  );
+  it.each(["12345", "512 345 678"])("blocks profile telephone %s", async (phone) => {
+    const { el, api } = await mount();
+    el.venueCountry = "ES";
+    await editDetails(el);
+    input(el, "telephone", phone);
+    await click(el, "save");
+    expect(api.saveProfile).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=telephone]")!
+        .error,
+    ).toBe(codeMessage("person.telephone_invalid"));
+  });
 
   it("shows the already-registered message when the device holds a passkey, without verifying", async () => {
     const { el, api } = await mount();
@@ -1211,6 +1208,21 @@ describe("your profile — validation, refusals and the remaining actions", () =
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-combobox[name=locale]")!
         .value,
     ).toBe("es-ES");
+  });
+
+  it("keeps the old telephone when editing the display name", async () => {
+    const profile = await apiStub().getProfile();
+    const telephone = "512 345 678";
+    const { el, api } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, telephone }),
+    });
+    el.venueCountry = "ES";
+    await editDetails(el);
+    input(el, "displayName", "Ada Lovelace");
+    await click(el, "save");
+    expect(api.saveProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Ada Lovelace", telephone }),
+    );
   });
 
   it("sends a cleared telephone as null", async () => {

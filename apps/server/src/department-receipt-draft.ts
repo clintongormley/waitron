@@ -41,12 +41,13 @@ export async function checkedDepartmentReceiptWrite(
     options.allowEmptyDescription,
   );
   const phone = checked.receipt.phone;
-  if (
-    phone !== undefined &&
-    phone !== current.phone &&
-    !isValidVenueTelephone(phone, (await readTaxpayer(tx))?.country)
-  )
-    throw new AppError("receipt.invalid", { reason: "invalid_phone", field: "phone" });
+  if (phone !== undefined) {
+    if (current.phone !== undefined && phone.trim() === current.phone.trim()) {
+      checked.receipt.phone = current.phone;
+    } else if (!isValidVenueTelephone(phone, (await readTaxpayer(tx))?.country)) {
+      throw new AppError("receipt.invalid", { reason: "invalid_phone", field: "phone" });
+    }
+  }
   return { input: checked, scope };
 }
 

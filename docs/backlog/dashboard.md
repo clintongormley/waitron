@@ -97,8 +97,8 @@ Not observed in a real password manager — the tests replace the browser's meth
 
 ## Some typed fields still need validation
 
-Review other typed fields in the dashboard for useful checks. The tax identifier belongs to the
-fiscal module.
+Review typed dashboard fields beyond email and telephone for useful checks. Keep tax-identifier
+validation in the fiscal module.
 
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 

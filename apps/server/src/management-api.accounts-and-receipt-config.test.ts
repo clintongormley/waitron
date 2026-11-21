@@ -2571,11 +2571,11 @@ describe("independent department receipt routes", () => {
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
     const phone = "512 345 678";
-    await seedDepartmentReceipt(suite.db, id, { phone });
+    await seedDepartmentReceipt(suite.db, id, { phone: phone + " " });
     const receipt = { phone, email: "bar@example.com" };
     expect((await putTrim(app, cookie, departmentReceiptPath(id), { receipt })).status).toBe(204);
     const saved = await app.request(departmentReceiptPath(id), { headers: { cookie } });
-    expect(await saved.json()).toMatchObject({ receipt });
+    expect(await saved.json()).toMatchObject({ receipt: { ...receipt, phone: phone + " " } });
   });
 
   it.each([false, true])(

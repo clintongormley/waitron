@@ -483,6 +483,7 @@ describe("venue telephone validation", () => {
     ["512 345 678", "ES", false],
     ["+34 512 345 678", "ES", false],
     ["00 34 512 345 678", "ES", false],
+    ["+00 34 512 345 678", "ES", false],
     ["600 123 456", "ES", true],
     ["+34 612-345-678", "ES", true],
     ["0034 612-345-678", "ES", true],

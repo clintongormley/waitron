@@ -66,6 +66,7 @@ export async function mountReceiptApp(
     departments?: { id: string; name: string; active?: boolean }[];
     zones?: Zone[];
     locale?: string;
+    venueCountry?: string;
     theme?: Theme;
     respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
   } = {},
@@ -93,6 +94,7 @@ export async function mountReceiptApp(
         email: null,
         locale: options.locale ?? "en-GB",
         venueLocale: "en-GB",
+        venueCountry: options.venueCountry,
         sessionDefault: "en-GB",
         venueName: "Casa SL",
         permissions,

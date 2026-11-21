@@ -93,6 +93,7 @@ authenticator, enter its current code for each sign-in change; a recovery code c
 You can set a password with **Add** if you normally sign in with a passkey.
 
 You can also change your name, display name, phone and language, and link Google in **Security** where it is available.
+Start a foreign phone number with `+` and its country code.
 
 To confirm a new email address, enter the code sent there. If email is not set up, use the email status’s settings link or **Sign in as an administrator** action; then return to your own account, re-enter the new address in **Your details** and save. If the code does not arrive within a few minutes, re-enter the new address and save: only the newest code works.
 

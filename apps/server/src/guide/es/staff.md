@@ -100,6 +100,7 @@ no lo sustituye. Puedes crear una contraseña con **Añadir** si normalmente acc
 passkey.
 
 También puedes cambiar tu nombre, nombre visible, teléfono e idioma, y vincular Google en **Seguridad** si está disponible.
+Si el teléfono es extranjero, empieza con `+` y el prefijo del país.
 
 Para confirmar una nueva dirección, introduce el código que llegue a ella. Si el correo no está configurado, usa el enlace a Correo o **Iniciar sesión como administrador** que ofrece el resultado; después vuelve a tu cuenta, introduce de nuevo la dirección en **Tus datos** y guarda. Si el código no llega en unos minutos, vuelve a introducir la nueva dirección y guarda: solo funciona el código más reciente.
 

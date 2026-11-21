@@ -894,7 +894,7 @@ export const en = {
   "receipts.email": "Email",
   "receipts.email_hint": "e.g. hello@yourvenue.com",
   "receipts.invalid_phone":
-    "Enter a valid phone number. Include the country code for foreign numbers.",
+    "Enter a valid phone number. Start foreign numbers with + and the country code.",
   "receipts.invalid_email": "Enter an email address such as name@example.com.",
   "receipts.invalid_logo": "Choose an image from the library.",
   "receipts.logo_not_found": "This image is no longer in the library. Choose another.",
@@ -5504,7 +5504,7 @@ export const es: Record<StringKey, string> = {
   "receipts.email": "Correo electrónico",
   "receipts.email_hint": "p. ej., hola@tulocal.es",
   "receipts.invalid_phone":
-    "Introduce un teléfono válido. Incluye el prefijo del país para números extranjeros.",
+    "Introduce un teléfono válido. Empieza los números extranjeros con + y el prefijo del país.",
   "receipts.invalid_email": "Introduce un correo electrónico como nombre@ejemplo.com.",
   "receipts.invalid_logo": "Elige una imagen de la biblioteca.",
   "receipts.logo_not_found": "Esta imagen ya no está en la biblioteca. Elige otra.",

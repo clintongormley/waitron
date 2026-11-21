@@ -74,7 +74,7 @@ export function isValidVenueTelephone(value: string, country: string | undefined
   const rule = country === undefined ? undefined : getCountryPack(country)?.telephone;
   if (rule === undefined) return true;
 
-  const internationalDigits = value.replace(/[ ().-]/g, "").match(/^(?:\+|00)(\d+)/)?.[1];
+  const internationalDigits = value.replace(/[ ().-]/g, "").match(/^(?:\+|00)([1-9]\d*)/)?.[1];
   if (internationalDigits !== undefined && !internationalDigits.startsWith(rule.callingCode))
     return true;
   return rule.validate(value).valid;
