@@ -2706,8 +2706,8 @@ because it still moves under the pointer (watcher clearance, 2026-11-16).
 The floor map keeps the table edge and uses a solid inner ring for overdue, a dotted outer ring
 for forgotten, and a dashed outer ring for time to fire. The forgotten ring stays visible on the
 map with reduced motion, even on a table too small for a caption. Gaps separate the outer state
-mark, dashed selection and solid keyboard focus. Till zone tabs and their overflow buttons use
-the contrast palette's highlight fill and text for forgotten under reduced motion.
+mark, dashed selection and solid keyboard focus. With reduced motion, a dotted edge marks a
+forgotten till zone on its tab and overflow button.
 
 The sibling `*.forced-colors.test.ts` files turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
 which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks

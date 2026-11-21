@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { elementPixels, emulateForcedColours } from "@waitron/ui/src/test-helpers.js";
 import type { TableSignal } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -372,8 +372,9 @@ describe("till-floor-screen: zone tabs", () => {
   });
 
   it.each(["light", "dark"] as const)(
-    "distinguishes the still forgotten tab in %s forced colours",
+    "paints a dotted edge on the still forgotten tab in %s forced colours",
     async (theme) => {
+      await commands.emulateColorScheme(theme);
       await emulateForcedColours("active");
       try {
         const { el } = await mountWidget<TillFloorScreen>(
@@ -390,14 +391,19 @@ describe("till-floor-screen: zone tabs", () => {
           },
           theme,
         );
-        const fill = async (id: string) => {
+        const edgeColours = async (id: string) => {
           const button = buttonOf(el, id);
-          const box = button.getBoundingClientRect();
-          return (await elementPixels(button))(box.left + 8, box.top + 8);
+          const { left, top, width } = button.getBoundingClientRect();
+          const at = await elementPixels(button);
+          return new Set(
+            Array.from({ length: 16 }, (_, i) => String(at(left + width / 2 - 8 + i, top + 1.5))),
+          );
         };
-        expect(await fill("z2")).not.toEqual(await fill("z3"));
+        expect((await edgeColours("z2")).size).toBeGreaterThan(1);
+        expect((await edgeColours("z3")).size).toBe(1);
       } finally {
         await emulateForcedColours(null);
+        await commands.emulateColorScheme(null);
       }
     },
   );

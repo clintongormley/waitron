@@ -518,8 +518,7 @@ export class TillFloorScreen extends LitElement {
       @media (forced-colors: active) {
         .zone-tab.filled-forgotten wt-button::part(button),
         [data-tabs-edge].filled-forgotten {
-          background: Highlight;
-          color: HighlightText;
+          border: calc(var(--wt-space-1) / 2) dotted CanvasText;
         }
       }
 
