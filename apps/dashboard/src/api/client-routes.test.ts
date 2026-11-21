@@ -1820,6 +1820,7 @@ it("previews a dated business-day start passively and writes with the loaded rev
     },
     conflicts: [],
     conflictCount: 0,
+    unlistedCount: 0,
     backupDeadlines: { archive: null, cloud: null },
   };
   const result = { changed: true, model: venueDetailsFixture() };

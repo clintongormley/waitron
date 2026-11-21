@@ -471,14 +471,7 @@ export class BusinessDayStartEditor extends LitElement {
   }
   #conflictLines(preview: BusinessDayStartPreview): { lines: string[]; count: number } {
     const lines = [...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))];
-    // The server counts conflicts with the season set aside and lists only the first few; what it
-    // counted beyond the list is added to the lines shown.
-    const listed = new Set(
-      preview.conflicts.map((conflict) =>
-        JSON.stringify({ ...conflict, seasonId: undefined, seasonName: undefined }),
-      ),
-    ).size;
-    return { lines, count: lines.length + Math.max(0, preview.conflictCount - listed) };
+    return { lines, count: lines.length + preview.unlistedCount };
   }
   override render() {
     const model = this.model;
@@ -572,6 +565,15 @@ export class BusinessDayStartEditor extends LitElement {
                                   </p>
                                   <ul data-test="conflict-rows">
                                     ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
+                                    ${
+                                      preview.unlistedCount > 0
+                                        ? html`<li data-test="conflicts-more">
+                                            ${fill("business_day.conflicts_more", {
+                                              count: String(preview.unlistedCount),
+                                            })}
+                                          </li>`
+                                        : nothing
+                                    }
                                   </ul>`
                               : nothing
                           }

@@ -51,6 +51,7 @@ const preview = (conflicts: BusinessDayStartPreview["conflicts"]): BusinessDaySt
   },
   conflicts,
   conflictCount: conflicts.length,
+  unlistedCount: 0,
   backupDeadlines: { archive: null, cloud: null },
 });
 

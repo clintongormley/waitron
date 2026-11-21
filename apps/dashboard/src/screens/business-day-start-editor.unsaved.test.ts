@@ -39,6 +39,7 @@ const preview: BusinessDayStartPreview = {
   },
   conflicts: [],
   conflictCount: 0,
+  unlistedCount: 0,
   backupDeadlines: { archive: null, cloud: null },
 };
 class StartLeaveApp extends LitElement {

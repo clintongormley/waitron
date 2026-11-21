@@ -238,6 +238,7 @@ export interface BusinessDayStartPreview {
     reason: "range" | "endpoint_day" | "all_day" | "transition_strip" | "overlap" | "kept_open";
   }[];
   conflictCount: number;
+  unlistedCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];
 }
 import type {

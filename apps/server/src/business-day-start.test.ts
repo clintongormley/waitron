@@ -198,6 +198,7 @@ describe("dated route protection", () => {
       },
       conflicts: [],
       conflictCount: 0,
+      unlistedCount: 0,
     });
     expect(await clockRows()).toEqual({ changes: [], settings: [{ revision: 1 }] });
     const save = await request("PUT", "/business-day-start", proposal());
@@ -778,6 +779,28 @@ describe("dated start schedule refusal", () => {
       error: { code: "venue.business_day_hours_conflict", params: { conflictCount: 14 } },
     });
     expect(await clockRows()).toEqual(saved);
+  });
+  it("says how many clashing ranges it left off a capped list", async () => {
+    for (const name of ["Late service", "Bar", "Terrace"])
+      await authorRange("05:00", "05:00", { name });
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "1" });
+    const preview = await request("GET", `/business-day-start/preview?${query}`);
+    expect(preview.status).toBe(200);
+    const body = (await preview.json()) as {
+      conflictCount: number;
+      unlistedCount: number;
+      conflicts: unknown[];
+    };
+    expect(body).toMatchObject({ conflictCount: 21, unlistedCount: 1 });
+    expect(body.conflicts).toHaveLength(20);
+    const response = await request("PUT", "/business-day-start", proposal());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "venue.business_day_hours_conflict",
+        params: { conflictCount: 21, unlistedCount: 1 },
+      },
+    });
   });
 });
 

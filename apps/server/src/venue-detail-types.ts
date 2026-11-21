@@ -86,5 +86,6 @@ export interface BusinessDayStartPreview {
   effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
   conflicts: readonly unknown[];
   conflictCount: number;
+  unlistedCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];
 }

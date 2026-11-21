@@ -23,11 +23,13 @@ declare module "@waitron/shared" {
       timeZone: string;
       conflicts: BusinessDayClockConflict[];
       conflictCount: number;
+      unlistedCount: number;
     };
     "hours.clock_changed": Record<string, never>;
     "venue.business_day_hours_conflict": {
       conflicts: BusinessDayClockConflict[];
       conflictCount: number;
+      unlistedCount: number;
     };
     "department.name_taken": { name: string };
     "department_transfer.settings_invalid": {

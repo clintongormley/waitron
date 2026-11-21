@@ -459,7 +459,7 @@ describe("business-day schedule compatibility", () => {
     await fixture(Array.from({ length: 24 }, () => range("05:00", "05:00")));
     await expect(check("07:00")).rejects.toMatchObject({
       code: "venue.business_day_hours_conflict",
-      params: { conflictCount: 24, conflicts: expect.any(Array) },
+      params: { conflictCount: 24, unlistedCount: 4, conflicts: expect.any(Array) },
     });
     try {
       await check("07:00");
@@ -1970,7 +1970,11 @@ it.each([false, true])(
         reason: "range",
         ...(zone ? { zoneId: v.zoneId } : { periodId: v.periodId }),
       });
-    expect(result.once).toEqual({ conflictCount: 1, conflicts: [conflict(result.winter)] });
+    expect(result.once).toEqual({
+      conflictCount: 1,
+      unlistedCount: 0,
+      conflicts: [conflict(result.winter)],
+    });
     expect(result.twice.conflictCount).toBe(1);
     expect(result.twice.conflicts).toHaveLength(2);
     expect(result.twice.conflicts).toEqual(
@@ -2085,6 +2089,7 @@ it("counts a range painted in every season once, so a capped list still names ev
     };
   });
   expect(result.conflicts.conflictCount).toBe(14);
+  expect(result.conflicts.unlistedCount).toBe(0);
   expect(new Set(result.conflicts.conflicts.map((c) => c.departmentId))).toEqual(
     new Set([v.departmentId, result.secondId]),
   );
@@ -2109,6 +2114,7 @@ describe("clock compatibility reads special-day paint", () => {
     ]);
     expect(await conflicts("03:00")).toEqual({
       conflictCount: 1,
+      unlistedCount: 0,
       conflicts: [
         {
           departmentId: v.departmentId,
@@ -2125,7 +2131,7 @@ describe("clock compatibility reads special-day paint", () => {
         },
       ],
     });
-    expect(await conflicts("07:00")).toEqual({ conflictCount: 0, conflicts: [] });
+    expect(await conflicts("07:00")).toEqual({ conflictCount: 0, unlistedCount: 0, conflicts: [] });
   });
 
   it("reports a Closed painted range the new changeover cuts through, with no period", async () => {
@@ -2186,7 +2192,7 @@ describe("clock compatibility reads special-day paint", () => {
     await specialDay(v, "2026-10-20", [
       { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
     ]);
-    expect(await conflicts("03:00")).toEqual({ conflictCount: 0, conflicts: [] });
+    expect(await conflicts("03:00")).toEqual({ conflictCount: 0, unlistedCount: 0, conflicts: [] });
   });
 
   it("reads the special days' dates", async () => {
@@ -2342,6 +2348,7 @@ it("lists the same conflicts for many yearly special days", async () => {
     ].join(" | "),
   );
   expect(result.conflictCount).toBe(153);
+  expect(result.unlistedCount).toBe(133);
   expect(lines).toEqual([
     "Department 0 | Season 0 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
     "Department 0 | Season 1 | 6 | Dinner 0 | 21:00-03:30 | 1 | transition_strip",
