@@ -14,13 +14,14 @@ import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identit
 import { withOperationAuthority } from "@waitron/module";
 import {
   JOIN_CANCEL_LABEL,
-  JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
   JOIN_PROTOCOL,
   JOIN_REVEAL_LABEL,
-  helloMessageFields,
+  pollMessageFields,
   revealAnswerFields,
+  revealMessageFields,
   signJoinMessage,
+  verifyJoinHello,
   verifyJoinMessage,
 } from "./box-join-code.js";
 import {
@@ -224,17 +225,7 @@ export function mountBoxJoinApi(
       if (body.protocol !== JOIN_PROTOCOL) throw invalid();
       const { hello, at, signature } = parseHello(body);
       const address = listedSource(c, hello.addresses);
-      if (
-        !verifyJoinMessage(
-          JOIN_HELLO_LABEL,
-          "",
-          0,
-          helloMessageFields(hello, at),
-          signature,
-          hello.newPublicKey,
-        )
-      )
-        throw invalid();
+      if (!verifyJoinHello(hello, at, signature, hello.newPublicKey)) throw invalid();
       const limited = requests.admitHello(address);
       if (limited !== null) throw full(limited);
       const mainAt = now();
@@ -275,7 +266,7 @@ export function mountBoxJoinApi(
       let newNonce: Buffer = Buffer.alloc(0);
       const { requestId, seq, held } = await signedRequest(c, JOIN_REVEAL_LABEL, (body) => {
         newNonce = nonceOf(body.newNonce);
-        return [newNonce];
+        return revealMessageFields(newNonce);
       });
       // The store signs only a first reveal, so a repeat needs no key unsealed.
       const key = held.revealed ? undefined : await privateKey();
@@ -311,7 +302,7 @@ export function mountBoxJoinApi(
       const { requestId, seq } = await signedRequest(c, JOIN_POLL_LABEL, (body) => {
         if (!isTime(body.at)) throw invalid();
         at = body.at;
-        return [Buffer.from(String(at))];
+        return pollMessageFields(at);
       });
       const answer = requests.poll({ requestId, seq, at: new Date(at).toISOString() });
       if ("refused" in answer) throw storeRefusal(answer.refused);

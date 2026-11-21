@@ -162,9 +162,39 @@ function helloFields(hello: JoinHelloFields): Buffer[] {
   ];
 }
 
-/** What the new box signs in its hello, with request id `""` and seq 0. */
-export function helloMessageFields(hello: JoinHelloFields, at: number): Buffer[] {
+function helloMessageFields(hello: JoinHelloFields, at: number): Buffer[] {
   return [Buffer.from(String(JOIN_PROTOCOL)), ...helloFields(hello), Buffer.from(String(at))];
+}
+
+/** The hello is signed before any request exists, so it carries request id `""` and seq 0. */
+export function signJoinHello(hello: JoinHelloFields, at: number, privateKeyB64: string): string {
+  return signJoinMessage(JOIN_HELLO_LABEL, "", 0, helloMessageFields(hello, at), privateKeyB64);
+}
+
+export function verifyJoinHello(
+  hello: JoinHelloFields,
+  at: number,
+  signatureB64: string,
+  publicKeyB64: string,
+): boolean {
+  return verifyJoinMessage(
+    JOIN_HELLO_LABEL,
+    "",
+    0,
+    helloMessageFields(hello, at),
+    signatureB64,
+    publicKeyB64,
+  );
+}
+
+/** What the new box signs in its reveal, under the request id and seq. */
+export function revealMessageFields(newNonce: Buffer): Buffer[] {
+  return [newNonce];
+}
+
+/** What the new box signs in a poll, under the request id and seq. */
+export function pollMessageFields(at: number): Buffer[] {
+  return [Buffer.from(String(at))];
 }
 
 /** What the main box signs in its reveal answer, under the reveal's request id and seq. */

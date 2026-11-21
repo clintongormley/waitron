@@ -29,7 +29,8 @@ export interface MainIdentity {
   publicKey: string;
 }
 
-export type JoinLimit = "address" | "network" | "listed" | "recent";
+export const JOIN_LIMITS = ["address", "network", "listed", "recent"] as const;
+export type JoinLimit = (typeof JOIN_LIMITS)[number];
 export type JoinEndReason =
   "wrong_code" | "dismissed" | "replaced" | "cancelled" | "code_taken" | "invalid";
 

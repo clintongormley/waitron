@@ -98,6 +98,31 @@ describe("the new box's join attempt", () => {
     return view.choices;
   }
 
+  /** An exchange that holds every hello until `release` is called. */
+  function holdingHello() {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const holding: typeof boxExchange = async (url, options) => {
+      if (url.pathname.endsWith("/hello")) await held;
+      return exchange(url, options);
+    };
+    return { holding, release };
+  }
+
+  /** Advances fake time until `promise` settles, letting the main box's real work run between. */
+  async function settled<T>(promise: Promise<T>): Promise<T> {
+    let done = false;
+    void promise.then(
+      () => (done = true),
+      () => (done = true),
+    );
+    while (!done) {
+      await new Promise((resolve) => setImmediate(resolve));
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    return promise;
+  }
+
   it("says hello, reveals, shows the code with its addresses, and polls until approved", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
@@ -152,7 +177,6 @@ describe("the new box's join attempt", () => {
         return { mainNonce: mainNonce.toString("base64"), signature: resign(mainNonce) };
       },
     ],
-    ["is not a reveal answer", (): Partial<RevealAnswer> => ({})],
   ])("ends and cancels the attempt when the reveal answer %s", async (_name, tamper) => {
     const mainPrivateKey = await readNodeIdentityKey(suite.node, RING, mainNodeId);
     const tampering: typeof boxExchange = async (url, options) => {
@@ -184,10 +208,11 @@ describe("the new box's join attempt", () => {
   });
 
   it("sends a lost reveal again with the same nonce and seq", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let lost = 0;
     lose = (path) => path.endsWith("/reveal") && ++lost <= 2;
     const attempt = createBoxJoinAttempt(deps());
-    const shown = await attempt.start(MAIN_URL);
+    const shown = await settled(attempt.start(MAIN_URL));
 
     expect(paths()).toEqual(["hello", "reveal", "reveal", "reveal"]);
     const reveals = sent.slice(1).map((s) => s.body);
@@ -197,23 +222,37 @@ describe("the new box's join attempt", () => {
     expect(listedChoices()).toContain(shown.code);
   });
 
-  it("fails after three reveals go unanswered, sending a cancel whose answer is lost too", async () => {
+  it("starts each reveal try three seconds after the last began, then fails and cancels", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const silentAfterHello: typeof boxExchange = async (url, options) => {
-      const answer = await exchange(url, options);
-      if (url.pathname.endsWith("/hello")) return answer;
-      return new Promise((_resolve, reject) =>
-        options.signal.addEventListener("abort", () => reject(new Error("timed out"))),
-      );
+    let reached = () => {};
+    const firstReveal = new Promise<void>((resolve) => (reached = resolve));
+    let reveals = 0;
+    // The first reveal is never answered; every later message fails at once.
+    const lossy: typeof boxExchange = async (url, options) => {
+      if (url.pathname.endsWith("/hello")) return exchange(url, options);
+      sent.push({ path: url.pathname, body: JSON.parse(options.body!) });
+      if (url.pathname.endsWith("/reveal") && ++reveals === 1) {
+        reached();
+        return new Promise((_resolve, reject) =>
+          options.signal.addEventListener("abort", () => reject(new Error("timed out"))),
+        );
+      }
+      throw new Error("connection reset");
     };
-    const attempt = createBoxJoinAttempt(deps({ exchange: silentAfterHello }));
+    const attempt = createBoxJoinAttempt(deps({ exchange: lossy }));
+    let outcome: unknown;
+    const started = attempt.start(MAIN_URL).catch((error: unknown) => (outcome = error));
+    await firstReveal;
 
-    const started = attempt.start(MAIN_URL).catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(4 * 3_000);
-    expect(await started).toMatchObject({ code: "mirror.bundle_fetch_failed" });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(paths()).toEqual(["hello", "reveal", "reveal"]);
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(paths()).toEqual(["hello", "reveal", "reveal"]);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    await started;
     expect(paths()).toEqual(["hello", "reveal", "reveal", "reveal", "cancel"]);
-    expect(sent[4]!.status).toBe(200);
-    expect(requests.listed()).toEqual([]);
+    expect(outcome).toMatchObject({ code: "mirror.bundle_fetch_failed" });
     expect(attempt.current()).toBeNull();
   });
 
@@ -239,83 +278,72 @@ describe("the new box's join attempt", () => {
     expect(attempt.current()).toBeNull();
   });
 
-  it.each([
+  const refusal = (code: string, params: object = {}) => ({ error: { code, params } });
+  const failed = { code: "mirror.bundle_fetch_failed", params: {} };
+  const answer = {
+    requestId: "r",
+    mainNodeId: "m",
+    mainPublicKey: "k",
+    commitment: "c",
+    expiresAt: "2026-11-21T10:15:00.000Z",
+  };
+  const T1 = "2026-11-21T10:00:00.000Z";
+  const T2 = "2026-11-21T11:00:00.000Z";
+
+  it.each<[string, number, unknown, { code: string; params: object }]>([
     [
       "a bare refusal, without its parameters",
       409,
-      { error: { code: "mirror.join_address_mismatch", params: { from: "x" } } },
+      refusal("mirror.join_address_mismatch", { from: "x" }),
       { code: "mirror.join_address_mismatch", params: {} },
     ],
     [
-      "the clocks' times",
+      "the hello's shape refusal",
+      400,
+      refusal("mirror.standby_invalid"),
+      { code: "mirror.standby_invalid", params: {} },
+    ],
+    [
+      "the clocks' two times alone",
       409,
-      {
-        error: {
-          code: "mirror.clocks_apart",
-          params: {
-            primaryAt: "2026-11-21T10:00:00.000Z",
-            standbyAt: "2026-11-21T11:00:00.000Z",
-            note: "x",
-          },
-        },
-      },
-      {
-        code: "mirror.clocks_apart",
-        params: { primaryAt: "2026-11-21T10:00:00.000Z", standbyAt: "2026-11-21T11:00:00.000Z" },
-      },
+      refusal("mirror.clocks_apart", { primaryAt: T1, standbyAt: T2, note: "x" }),
+      { code: "mirror.clocks_apart", params: { primaryAt: T1, standbyAt: T2 } },
     ],
     [
       "a limit and when it frees",
       429,
-      {
-        error: {
-          code: "mirror.join_full",
-          params: { limit: "address", retryAt: "2026-11-21T10:01:00.000Z" },
-        },
-      },
-      {
-        code: "mirror.join_full",
-        params: { limit: "address", retryAt: "2026-11-21T10:01:00.000Z" },
-      },
+      refusal("mirror.join_full", { limit: "address", retryAt: T2 }),
+      { code: "mirror.join_full", params: { limit: "address", retryAt: T2 } },
     ],
     [
       "no limit it does not know",
       429,
-      {
-        error: {
-          code: "mirror.join_full",
-          params: { limit: "elsewhere", retryAt: "2026-11-21T10:01:00.000Z" },
-        },
-      },
-      { code: "mirror.bundle_fetch_failed", params: {} },
+      refusal("mirror.join_full", { limit: "elsewhere", retryAt: T2 }),
+      failed,
     ],
+    ["no code it does not relay", 500, refusal("mirror.join_failed"), failed],
+    ["nothing for an answer that is not JSON", 502, "Bad gateway", failed],
     [
-      "no code it does not relay",
-      500,
-      { error: { code: "mirror.join_failed", params: {} } },
-      { code: "mirror.bundle_fetch_failed", params: {} },
-    ],
-    [
-      "nothing for an answer that is not JSON",
-      502,
-      "Bad gateway",
-      { code: "mirror.bundle_fetch_failed", params: {} },
-    ],
-    [
-      "nothing for a hello answer that is not one",
+      "nothing for a hello answer with a field that is not text",
       200,
-      { requestId: 1 },
-      { code: "mirror.bundle_fetch_failed", params: {} },
+      { ...answer, requestId: 1 },
+      failed,
     ],
-  ])("relays from the main box's hello answer %s", async (_name, status, body, refusal) => {
+    [
+      "nothing for a hello answer whose expiry is not a time",
+      200,
+      { ...answer, expiresAt: "soon" },
+      failed,
+    ],
+  ])("relays from the main box's hello answer %s", async (_name, status, body, relayed) => {
     const answering: typeof boxExchange = async () => ({
       status,
       text: typeof body === "string" ? body : JSON.stringify(body),
     });
     const attempt = createBoxJoinAttempt(deps({ exchange: answering }));
     const thrown = await attempt.start(MAIN_URL).catch((error: unknown) => error);
-    expect(thrown).toMatchObject(refusal);
-    expect((thrown as { params: object }).params).toEqual(refusal.params);
+    expect(thrown).toMatchObject(relayed);
+    expect((thrown as { params: object }).params).toEqual(relayed.params);
   });
 
   it("relays a refused reveal and keeps no attempt", async () => {
@@ -349,6 +377,34 @@ describe("the new box's join attempt", () => {
 
     expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
     expect(sent[3]!.status).toBe(200);
+    expect(requests.listed()).toEqual([]);
+    expect(attempt.current()).toBeNull();
+  });
+
+  it("refuses to start while a start runs or an attempt waits", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { holding, release } = holdingHello();
+    const attempt = createBoxJoinAttempt(deps({ exchange: holding }));
+    const first = attempt.start(MAIN_URL);
+
+    await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
+    release();
+    await first;
+    await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
+    expect(paths()).toEqual(["hello", "reveal"]);
+  });
+
+  it("ends a start that a cancel arrived during, once the main box has listed it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { holding, release } = holdingHello();
+    const attempt = createBoxJoinAttempt(deps({ exchange: holding }));
+    const started = attempt.start(MAIN_URL);
+    const cancelled = attempt.cancel();
+    release();
+    await Promise.all([started, cancelled]);
+
+    expect(paths()).toEqual(["hello", "reveal", "cancel"]);
+    expect(sent[2]!.status).toBe(200);
     expect(requests.listed()).toEqual([]);
     expect(attempt.current()).toBeNull();
   });

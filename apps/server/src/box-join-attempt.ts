@@ -5,19 +5,21 @@ import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { AppError, type ErrorCode } from "@waitron/shared";
 import {
   JOIN_CANCEL_LABEL,
-  JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
   JOIN_PROTOCOL,
   JOIN_REVEAL_LABEL,
   commitmentMatches,
-  helloMessageFields,
   joinCode,
+  pollMessageFields,
   revealAnswerFields,
+  revealMessageFields,
+  signJoinHello,
   signJoinMessage,
   verifyJoinMessage,
   type JoinField,
   type JoinHelloFields,
 } from "./box-join-code.js";
+import { JOIN_LIMITS } from "./box-join-requests.js";
 import type { LockedJoinBundle } from "./box-join-seal.js";
 import { ownContactUrl } from "./box-name.js";
 import { boxExchange, fetchPrimaryCertificate, isIsoTime } from "./mirror-bundle-fetch.js";
@@ -27,7 +29,8 @@ import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identi
 
 const POLL_EVERY_MS = 2_000;
 const REVEAL_TRIES = 3;
-// Three tries fit in the ten seconds the person waits for a code.
+// Each reveal try starts one slot after the last began and is cut off at its slot's end, so three
+// end within the ten seconds the person waits for a code.
 const TRY_LIMIT_MS = 3_000;
 
 const RELAYED_BARE = [
@@ -36,8 +39,8 @@ const RELAYED_BARE = [
   "mirror.join_code_taken",
   "mirror.join_not_found",
   "mirror.join_invalid",
+  "mirror.standby_invalid",
 ] as const satisfies readonly ErrorCode[];
-const LIMITS = ["address", "network", "listed", "recent"] as const;
 
 export interface BoxJoinAttemptDeps {
   /** Its `ownContactUrl` is sent as this box's contact address, as adopt does. */
@@ -93,10 +96,16 @@ function refusalOf(text: string): AppError {
   if (bare !== undefined) return new AppError(bare, {});
   if (code === "mirror.clocks_apart" && isIsoTime(params.primaryAt) && isIsoTime(params.standbyAt))
     return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
-  const limit = LIMITS.find((l) => l === params.limit);
+  const limit = JOIN_LIMITS.find((l) => l === params.limit);
   if (code === "mirror.join_full" && limit !== undefined && isIsoTime(params.retryAt))
     return new AppError(code, { limit, retryAt: params.retryAt });
   return fetchFailed();
+}
+
+function slot(ms: number): { ended: Promise<void>; clear: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const ended = new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)));
+  return { ended, clear: () => clearTimeout(timer) };
 }
 
 function strings<K extends string>(value: unknown, keys: readonly K[]): Record<K, string> | null {
@@ -113,6 +122,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
   const ownAddresses =
     deps.addresses ?? (() => ownInterfaceAddresses().filter((a) => !isLoopbackHost(a)));
   let current: Attempt | null = null;
+  let starting: Promise<unknown> | null = null;
 
   async function send(
     to: Pick<Attempt, "base" | "trust">,
@@ -162,7 +172,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     let answer: unknown;
     try {
       const sent = await send(attempt, "poll", {
-        ...signed(attempt, JOIN_POLL_LABEL, [Buffer.from(String(at))]),
+        ...signed(attempt, JOIN_POLL_LABEL, pollMessageFields(at)),
         at,
       });
       answer = jsonOf(sent.text);
@@ -182,7 +192,9 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     attempt.timer.unref();
   }
 
+  /** A cancel during a start waits for it, so the request the main box lists is the one ended. */
   async function cancel(): Promise<void> {
+    await starting?.catch(() => {});
     const attempt = current;
     if (attempt === null) return;
     current = null;
@@ -192,7 +204,17 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
 
   /** Hello and reveal; answers the code to show, or throws the refusal. */
   async function start(primaryUrl: string) {
-    await cancel();
+    if (current !== null || starting !== null) throw new AppError("mirror.join_waiting", {});
+    const opening = open(primaryUrl);
+    starting = opening;
+    try {
+      return await opening;
+    } finally {
+      starting = null;
+    }
+  }
+
+  async function open(primaryUrl: string) {
     const base = assertSafePrimaryUrl(primaryUrl);
     const certificate = await fetchPrimaryCertificate(primaryUrl);
     const trust = certificate === null ? {} : { ca: certificate.pem, rejectUnauthorized: true };
@@ -222,13 +244,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
         protocol: JOIN_PROTOCOL,
         ...hello,
         at,
-        signature: signJoinMessage(
-          JOIN_HELLO_LABEL,
-          "",
-          0,
-          helloMessageFields(hello, at),
-          identity.privateKey,
-        ),
+        signature: signJoinHello(hello, at, identity.privateKey),
       });
     } catch {
       throw fetchFailed();
@@ -241,7 +257,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       "commitment",
       "expiresAt",
     ]);
-    if (answered === null) throw fetchFailed();
+    if (answered === null || !isIsoTime(answered.expiresAt)) throw fetchFailed();
 
     const attempt: Attempt = {
       base,
@@ -260,11 +276,12 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const newNonce = randomBytes(32);
     // Every try is the same message, so the main box answers a repeat with its stored answer.
     const reveal = {
-      ...signed(attempt, JOIN_REVEAL_LABEL, [newNonce]),
+      ...signed(attempt, JOIN_REVEAL_LABEL, revealMessageFields(newNonce)),
       newNonce: newNonce.toString("base64"),
     };
     let revealAnswer: { status: number; text: string } | undefined;
     for (let tries = 1; revealAnswer === undefined; tries++) {
+      const trying = slot(TRY_LIMIT_MS);
       try {
         revealAnswer = await send(attempt, "reveal", reveal);
       } catch {
@@ -272,6 +289,9 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
           await sendCancel(attempt);
           throw fetchFailed();
         }
+        await trying.ended;
+      } finally {
+        trying.clear();
       }
     }
     if (revealAnswer.status !== 200) throw refusalOf(revealAnswer.text);

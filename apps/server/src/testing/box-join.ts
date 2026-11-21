@@ -7,11 +7,12 @@ import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   JOIN_CANCEL_LABEL,
-  JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
-  helloMessageFields,
   joinCode,
+  pollMessageFields,
+  revealMessageFields,
+  signJoinHello,
   signJoinMessage,
   type JoinField,
 } from "../box-join-code.js";
@@ -97,7 +98,7 @@ export function helloBody(
 ): Record<string, unknown> {
   let signature = "";
   try {
-    signature = signedBy(box, JOIN_HELLO_LABEL, "", 0, helloMessageFields(box.hello, at));
+    signature = signJoinHello(box.hello, at, box.identity.privateKey);
   } catch {
     // A field that cannot be signed goes unsigned, for the route's own shape check to answer.
   }
@@ -109,7 +110,7 @@ export function revealBody(box: JoiningBox, requestId: string): Record<string, u
     requestId,
     seq: 1,
     newNonce: box.newNonce.toString("base64"),
-    signature: signedBy(box, JOIN_REVEAL_LABEL, requestId, 1, [box.newNonce]),
+    signature: signedBy(box, JOIN_REVEAL_LABEL, requestId, 1, revealMessageFields(box.newNonce)),
   };
 }
 
@@ -185,7 +186,7 @@ export async function pollJoin(app: Hono, listed: ListedJoin, at = Date.now()): 
       requestId,
       seq: box.seq,
       at,
-      signature: signedBy(box, JOIN_POLL_LABEL, requestId, box.seq, [Buffer.from(String(at))]),
+      signature: signedBy(box, JOIN_POLL_LABEL, requestId, box.seq, pollMessageFields(at)),
     },
     box.address,
   );

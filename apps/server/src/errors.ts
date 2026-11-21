@@ -5,6 +5,7 @@ import type { Dining } from "@waitron/shared";
 import type { VerifyFailure } from "@waitron/membership";
 import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
+import type { JoinLimit } from "./box-join-requests.js";
 import type { CancellationContext } from "./line-cancel-context.js";
 import type { BillEditState } from "./order-drafts.js";
 import type { UnservedDish } from "./finish-party-service.js";
@@ -1576,7 +1577,7 @@ declare module "@waitron/shared" {
      */
     "mirror.join_invalid": Record<string, never>;
     /** A join limit was reached; `retryAt` is when it frees, as an ISO time on the main box's clock. */
-    "mirror.join_full": { limit: "address" | "network" | "listed" | "recent"; retryAt: string };
+    "mirror.join_full": { limit: JoinLimit; retryAt: string };
     /** A reveal's code equals one a listed request shows; the request ended and no nonce was sent. */
     "mirror.join_code_taken": Record<string, never>;
     /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */
@@ -1587,6 +1588,8 @@ declare module "@waitron/shared" {
     "mirror.join_in_progress": Record<string, never>;
     /** The request ended while its copy was built, after the chart had listed the spare. */
     "mirror.join_stopped_after_listing": Record<string, never>;
+    /** This box already has a join attempt, or is starting one; it must be cancelled first. */
+    "mirror.join_waiting": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;
