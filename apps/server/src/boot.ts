@@ -953,16 +953,20 @@ export function startLandingListener(
   ) {
     return undefined;
   }
-  const reach = buildReachInfo({
-    hostname: BOX_HOSTNAME,
-    port: config.httpPort,
-    secure: true,
-    listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
-  });
+  const reachNow = () =>
+    buildReachInfo({
+      hostname: BOX_HOSTNAME,
+      port: config.httpPort,
+      secure: true,
+      listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
+    });
   const app = buildLandingApp({
     stateDir: config.stateDir,
-    reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
-    httpsUrl: reach.hostnameUrl,
+    reachUrls: () => {
+      const reach = reachNow();
+      return [reach.hostnameUrl, ...reach.ipUrls];
+    },
+    httpsUrl: reachNow().hostnameUrl,
     log,
     connection: config.connection,
     landingPort: config.landingPort,

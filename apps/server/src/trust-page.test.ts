@@ -241,6 +241,28 @@ describe("a page opened while another box answers waitron.local", () => {
     );
   });
 
+  it("sends the lead line's link where Continue goes, naming the address", () => {
+    const html = renderTrustPage({
+      ...base,
+      httpsUrl: "https://waitron.local:8080/till/",
+      reachUrls: ["https://waitron.local:8080", "https://192.168.1.50:8080"],
+      ownAddress: "https://192.168.1.50:8080",
+    });
+    expect(html).toContain(
+      'open this address (<a href="https://192.168.1.50:8080/till/">https://192.168.1.50:8080</a>)',
+    );
+  });
+
+  it("makes the certificate a choice only after the lead line", () => {
+    const SENTENCE =
+      "install the Waitron secure certificate before entering passwords and sensitive information into this website:";
+    const led = renderTrustPage({ ...base, ownAddress: "https://192.168.1.50" });
+    expect(led).toContain(`warning once.</p>\n<p>Otherwise, you need to ${SENTENCE}</p>`);
+    const plain = renderTrustPage(base);
+    expect(plain).toContain(`<p>You need to ${SENTENCE}</p>`);
+    expect(plain).not.toContain("Otherwise");
+  });
+
   it("escapes the address it leads with", () => {
     const html = renderTrustPage({ ...base, ownAddress: 'https://x"<y' });
     expect(html).toContain('href="https://x&quot;&lt;y"');

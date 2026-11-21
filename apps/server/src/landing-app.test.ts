@@ -127,6 +127,29 @@ describe("landing app", () => {
       expect(html).toContain('<a class="button" href="https://192.168.1.20:8080/till/">Continue');
     });
 
+    it("reads the box's addresses again for each page view", async () => {
+      const dir = stateDirWithCa();
+      try {
+        let addresses = ["https://waitron.local:8080", "https://192.168.1.20:8080"];
+        const app = buildLandingApp({
+          stateDir: dir,
+          reachUrls: () => addresses,
+          httpsUrl: "https://waitron.local:8080",
+          venueNameState: () => "other-box-answers",
+          log,
+        });
+        const first = await (await app.request("http://waitron.local/")).text();
+        expect(first).toContain('<a class="button" href="https://192.168.1.20:8080">Continue');
+        addresses = ["https://waitron.local:8080", "https://192.168.1.21:8080"];
+        const second = await (await app.request("http://waitron.local/setup/trust")).text();
+        expect(second).toContain('<a class="button" href="https://192.168.1.21:8080">Continue');
+        expect(second).toMatch(/<ul><li><a href="https:\/\/192\.168\.1\.21:8080">/);
+        expect(second).not.toContain("192.168.1.20");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it.each(["no-other-box", "not-asked", "ask-failed"] as const)(
       "is today's page when the state is %s",
       async (state) => {

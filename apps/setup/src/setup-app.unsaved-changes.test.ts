@@ -484,6 +484,24 @@ describe("setup mode leaves the root draft", () => {
     expect(unload()).toBe(true);
   });
 
+  it("leaving the connection screen invalidates its Join question before restoring root values", async () => {
+    const { el } = await modeDraft();
+    goto(el, "connection");
+    await expect.poll(() => (el as unknown as State).screen).toBe("connection");
+    const connection = el.shadowRoot!.querySelector("setup-connection-screen")!;
+    await connection.updateComplete;
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await expect.poll(() => warning(el).open).toBe(true);
+    Object.assign(el, { screen: "mode" });
+    await el.updateComplete;
+    expect(connection.isConnected).toBe(false);
+    await expect.poll(() => warning(el).open).toBe(false);
+    await choose(el, "discard");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect(unload()).toBe(true);
+  });
+
   it("replacing the mode screen invalidates its question before restoring root values", async () => {
     const { el, modeScreen } = await modeDraft();
     modeChoice(modeScreen, "choose-demo");

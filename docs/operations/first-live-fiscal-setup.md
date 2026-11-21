@@ -240,8 +240,7 @@ Then you choose the backup." After the box restarts, **Reconnect** opens "Join o
 existing restaurant", where the [ordinary restore](hour-recovery.md) takes an archive, bucket or
 supported Cloud copy, as on a new box. After Start again, **Reconnect** opens "Set up this Waitron
 server" instead. A reload before Reconnect forgets which was chosen and opens the page's first
-screen; if that asks "Is this page secure?", press **Continue to setup**, then choose **Join or
-recover**.
+screen; if that asks "Is this page secure?", choose **Join or recover** there.
 Secure-connection repair is available:
 choose **Set up secure connection** on the repair page and follow the
 [connection repair procedure](../../apps/server/README.md#repairing-the-secure-connection).

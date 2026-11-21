@@ -85,8 +85,8 @@ was sold.") and choose **Recover from backup** again. The box deletes the failed
 Start again does, and restarts. Press **Reconnect**: the page opens "Join or recover an existing
 restaurant". Choose the copy there, then follow [Check the selected copy](#check-the-selected-copy)
 above and [Make the new invoice series](#make-the-new-invoice-series) below. If the page is reloaded before
-Reconnect, it opens its first screen; if that asks "Is this page secure?", press **Continue to
-setup**, then choose **Join or recover**.
+Reconnect, it opens its first screen; if that asks "Is this page secure?", choose **Join or recover**
+there.
 
 Recover from backup is not offered where Start again is not, including when the setup's own record
 cannot be read. The bilingual

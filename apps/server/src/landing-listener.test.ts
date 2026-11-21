@@ -118,6 +118,37 @@ describe("startLandingListener", () => {
     }
   });
 
+  it("names the box's current addresses on each page view", async () => {
+    const stateDir = await stateDirWithLeaf();
+    const held = await retainHttpListener();
+    const port = held.port;
+    const adoption = adoptRetainedListeners([held]);
+    let handle: ReturnType<typeof startLandingListener>;
+    const pageAt = (): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const req = httpGet({ hostname: "127.0.0.1", port, path: "/" }, (r) => {
+          let data = "";
+          r.on("data", (chunk) => (data += String(chunk)));
+          r.on("end", () => resolve(data));
+        });
+        req.on("error", reject);
+      });
+    try {
+      const config = configFor({ landingPort: port, stateDir, boxAddresses: ["192.168.1.20"] });
+      handle = startLandingListener(config, noopLog);
+      await adoption.bound;
+      expect(await pageAt()).toContain('href="https://192.168.1.20:8080"');
+      config.boxAddresses = ["192.168.1.21"];
+      const later = await pageAt();
+      expect(later).toContain('href="https://192.168.1.21:8080"');
+      expect(later).not.toContain("192.168.1.20");
+    } finally {
+      adoption.restore();
+      await handle?.close();
+      if (held.server.listening) await held.close();
+    }
+  });
+
   // The non-fatal bind-failure path: a landing-listener 'error' logs `landing.listen_failed` at warn
   // and is SWALLOWED — no throw, no process.exit — and the box (here the first listener) keeps serving.
   // A real EADDRINUSE: a second `startLandingListener` on the SAME port fails to bind.

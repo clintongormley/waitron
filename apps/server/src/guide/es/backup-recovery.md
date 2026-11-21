@@ -84,8 +84,7 @@ sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o co
 Si la reparación sigue fallando, detente aquí. Esta página no puede reparar todos los archivos
 de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
 por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
-dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
-contraseñas, claves de cifrado de copias y claves del servidor solo cuando HTTPS se abra sin avisos.
+dispositivo bloquea la instalación del certificado, usa uno del local que la permita.
 
 Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 

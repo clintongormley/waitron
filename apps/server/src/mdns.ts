@@ -187,7 +187,8 @@ export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch 
       });
       state = heardOthers ? "other-box-answers" : "no-other-box";
     } catch {
-      state = "ask-failed";
+      // A failed ask is no evidence that the other box has gone.
+      if (state !== "other-box-answers") state = "ask-failed";
     }
     if (stopped) return;
     timer = setTimeout(

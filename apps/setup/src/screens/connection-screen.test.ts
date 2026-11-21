@@ -143,7 +143,7 @@ describe("setup-connection-screen: joining or recovering", () => {
     expect(join.getAttribute("slot")).toBe("secondary");
     expect(join.getAttribute("variant")).toBe("secondary");
     expect(text(q(el, "[data-test=join-hint]")!)).toBe(
-      "Joining or recovering uses your restaurant's certificate, not this one.",
+      "Joining or recovering doesn't need the certificate.",
     );
   });
 
@@ -176,7 +176,7 @@ describe("setup-connection-screen: joining or recovering", () => {
     const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
     expect(text(q(el, "[data-test=join]")!)).toBe("Unirse o recuperar");
     expect(text(q(el, "[data-test=join-hint]")!)).toBe(
-      "Para unirse o recuperar se usa el certificado de tu restaurante, no este.",
+      "Para unirse o recuperar no hace falta el certificado.",
     );
   });
 });

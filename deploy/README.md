@@ -197,7 +197,11 @@ and browsers, and walks through removing any old certificate first and fully qui
 Below that address it prints the box's own addresses at the same path, one line each, for example
 `http://192.168.1.20/setup/trust`, under the words "If this venue already has a Waitron box,
 waitron.local reaches that box instead. Use this box's own address:". Use one when the name does not
-resolve, or when the venue already has a Waitron box. They are the addresses of the network
+resolve, or when the venue already has a Waitron box. To join or recover, you do not need to install this box's certificate:
+open its `https://` address (the guide's **Continue to Waitron** link), accept the browser's warning
+once and choose **Join or recover**. When another box answers waitron.local, the guide leads with
+this box's own address. The
+box's own addresses are the addresses of the network
 connection carrying the box's default route; when there is no default route, or that connection
 has no address, they are every address except loopback and those on connections whose names start
 `docker`, `br-`, `veth`, `virbr`, `cni`, `flannel` or `cali`. When the box's addresses cannot be
@@ -207,7 +211,8 @@ A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve
 certificate downloads at matching paths, but HTTPS can still show a certificate warning. Use the
 browser's option to visit the local HTTP site if offered, or transfer the certificate from another
 device that can reach the box. Opening the wizard directly also offers certificate help before you
-enter setup details. Its Continue button checks communication with the box, not installed trust.
+enter setup details. Its Continue to setup and Join or recover buttons check communication with the
+box, not installed trust.
 Once a box has joined as a spare, its plain-HTTP listener answers only the box itself while the
 server runs (the recovery page's listener still answers the network); from another device, use the
 spare's `https://` address.

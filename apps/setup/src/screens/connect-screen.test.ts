@@ -540,7 +540,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(text(servers)).toBe("your primary server's Servers page");
     expect(servers.getAttribute("href")).toBe("https://waitron.local/servers");
     expect(servers.getAttribute("target")).toBe("_blank");
-    expect(servers.getAttribute("rel")).toBe("noopener");
+    expect(servers.getAttribute("rel")).toBe("noopener noreferrer");
     expect(q(el, "[data-test=password]")).toBeNull();
     expect(q(el, "[data-test=connect]")).toBeNull();
     expect(events).toEqual([]);
@@ -881,6 +881,15 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await pressed(el, "continue");
     await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(q(el, "[data-test=servers-link]")).toBeNull();
+    expect(q(el, "[data-test=compare] a")).toBeNull();
+    expect(text(q(el, "[data-test=compare]")!)).toContain("your primary server's Servers page");
+  });
+
+  it("draws no link for a web address the browser cannot read", async () => {
+    const { el } = await mount();
+    await type(el, "primaryUrl", "https://waitron.local:65536");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(q(el, "[data-test=compare] a")).toBeNull();
     expect(text(q(el, "[data-test=compare]")!)).toContain("your primary server's Servers page");
   });

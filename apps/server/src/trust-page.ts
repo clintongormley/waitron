@@ -103,7 +103,7 @@ export function renderTrustPage(input: TrustPageInput): string {
     ? ownAddress + input.httpsUrl.slice(new URL(input.httpsUrl).origin.length)
     : input.httpsUrl;
   const lead = ownAddress
-    ? `<p>Adding a spare? You don't need this server's certificate: open this address (<a href="${escapeHtml(ownAddress)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
+    ? `<p>Adding a spare? You don't need this server's certificate: open this address (<a href="${escapeHtml(httpsUrl)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
     : "";
   const urlItems = reachUrls
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
@@ -156,7 +156,7 @@ code, a { overflow-wrap: anywhere; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <h1>Connect <span class="accent">securely</span> to this Waitron server</h1>
-${lead}<p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
+${lead}<p>${lead ? "Otherwise, you" : "You"} need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
 ${steps}
 <section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
 <p>Open Waitron with the link below, then check the address bar of the page it opens. If that still

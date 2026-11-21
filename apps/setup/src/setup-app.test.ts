@@ -4140,10 +4140,60 @@ describe("connection checks", () => {
     expect(firstSetupStatus).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
-    goto(el, "mode");
+  });
+
+  it.each(["continue", "join"])(
+    "%s on a server whose first setup another page holds resumes it on the first-owner screen",
+    async (button) => {
+      let claimed = false;
+      const { api } = wizardApi({
+        claimed: false,
+        intercept: (path, _body, headers) =>
+          claimed && path.endsWith("/first-setup/status") && !headers.has("X-Waitron-Setup-Owner")
+            ? Response.json({ claimed: true })
+            : undefined,
+      });
+      const el = await mountSetupApp(api);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=screen-mode]"))
+        .not.toBeNull();
+      goto(el, "connection");
+      await el.updateComplete;
+      claimed = true;
+      const connection = await screenHost(el, "connection");
+      connection.shadowRoot!.querySelector<HTMLElement>(`[data-test=${button}]`)!.click();
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=screen-first-owner]"))
+        .not.toBeNull();
+      const owner = el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-first-owner]")!;
+      await expect
+        .poll(
+          () =>
+            (owner.querySelector("[data-test=start-again]") as { disabled?: boolean } | null)
+              ?.disabled,
+        )
+        .toBe(false);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
+    },
+  );
+
+  it("Join or recover then Back still offers the certificate help for a new setup", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
+        firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    const connection = await screenHost(el, "connection");
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await flush(el);
+    await flush(el);
+    const role = await screenHost(el, "role");
+    role.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await flush(el);
     const mode = await screenHost(el, "mode");
-    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).toBeNull();
+    expect(mode.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
   });
 
   it("Join or recover stays on the connection screen with the reason when the server does not answer", async () => {

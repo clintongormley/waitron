@@ -78,7 +78,7 @@ a repair. **Stop** ends this attempt; you can close the tab or check again. If r
 failing, stop here. This page cannot repair every saved certificate layout or replace a separately
 installed certificate. For a separately installed certificate, check the server’s HTTPS address
 and stop if it shows a warning. If your device blocks certificate installation, use a venue
-device that allows it. Enter passwords, backup encryption keys and server keys only after HTTPS opens without warnings.
+device that allows it.
 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.

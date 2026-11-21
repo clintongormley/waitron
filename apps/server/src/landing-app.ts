@@ -13,8 +13,13 @@ export interface LandingDeps {
   connectionHostnames?: string[];
   /** The persisted state dir (config.stateDir); the CA lives at `<stateDir>/tls/ca.crt`. */
   stateDir: string;
-  /** The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4. */
-  reachUrls: string[];
+  /**
+   * The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4.
+   * A function is asked again for each trust page view and each time the connection page checks or
+   * repairs the certificate's addresses. That page's allowed origins, its address list and its
+   * Continue link stay those at startup.
+   */
+  reachUrls: string[] | (() => string[]);
   /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
@@ -35,15 +40,17 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     return app;
   }
 
-  const known = deps.reachUrls.length ? deps.reachUrls : [deps.httpsUrl];
-  const ipUrls = deps.reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
+  const reachUrlsNow = (): string[] =>
+    typeof deps.reachUrls === "function" ? deps.reachUrls() : deps.reachUrls;
+  const startUrls = reachUrlsNow();
+  const known = startUrls.length ? startUrls : [deps.httpsUrl];
   mountConnectionBootstrap(
     app,
     {
       stateDir: deps.stateDir,
       hostnames: deps.connectionHostnames ?? [new URL(deps.httpsUrl).hostname],
       listIpv4: () =>
-        known
+        reachUrlsNow()
           .map((url) => new URL(url).hostname)
           .filter((host) => /^\d+\.\d+\.\d+\.\d+$/.test(host)),
       now: () => new Date(),
@@ -66,8 +73,10 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     );
 
   app.on("GET", ["/", "/setup/trust"], async (c) => {
+    const reachUrls = reachUrlsNow();
+    const ipUrls = reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
     const html = renderTrustPage({
-      reachUrls: deps.reachUrls,
+      reachUrls,
       caAvailable: await caExists(),
       caDownloadPath: CA_DOWNLOAD_PATH,
       httpsUrl:

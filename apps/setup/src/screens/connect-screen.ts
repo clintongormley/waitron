@@ -50,8 +50,15 @@ function originOf(typed: string): string {
 
 /** The dashboard's Servers screen on the main box, or nothing for an address that is not a URL. */
 function serversPageOf(typed: string): string | undefined {
-  const origin = originOf(typed);
-  return /^https?:\/\//.test(origin) ? `${origin}/servers` : undefined;
+  let url: URL;
+  try {
+    url = new URL(typed);
+  } catch {
+    return undefined;
+  }
+  return url.protocol === "http:" || url.protocol === "https:"
+    ? `${url.origin}/servers`
+    : undefined;
 }
 
 interface FieldText {
@@ -460,15 +467,19 @@ export class SetupConnectScreen extends LitElement {
         const fingerprint = breakAfterColons(this.certificate?.fingerprint256 ?? "");
         const servers = serversPageOf(this.values.primaryUrl.trim());
         return html`<p data-test="compare">
-            ${t("connect.compare.open")}
+            ${t("connect.compare.intro_before")}
             ${
               servers
-                ? html`<a data-test="servers-link" href=${servers} target="_blank" rel="noopener"
-                    >${t("connect.compare.servers_link")}</a
+                ? html`<a
+                    data-test="servers-link"
+                    href=${servers}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >${t("connect.compare.intro_link")}</a
                   >`
-                : t("connect.compare.servers_link")
+                : t("connect.compare.intro_link")
             }
-            ${t("connect.compare.rest")}
+            ${t("connect.compare.intro_after")}
           </p>
           <p class="fingerprint-label">${t("connect.compare.label")}</p>
           <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;

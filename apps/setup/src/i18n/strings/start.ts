@@ -55,7 +55,7 @@ export const startEn = {
   "connection.checking": "Checking connection…",
   "connection.continue": "Continue to setup",
   "connection.join": "Join or recover",
-  "connection.join_hint": "Joining or recovering uses your restaurant's certificate, not this one.",
+  "connection.join_hint": "Joining or recovering doesn't need the certificate.",
 
   "role.heading": "Join or recover an existing restaurant",
   "role.intro":
@@ -96,9 +96,9 @@ export const startEn = {
   "connect.continue": "Continue",
   "connect.certificate_failed":
     "Couldn't read the primary server's certificate. Check the address and that the primary server is on, then try again.",
-  "connect.compare.open": "Open",
-  "connect.compare.servers_link": "your primary server's Servers page",
-  "connect.compare.rest":
+  "connect.compare.intro_before": "Open",
+  "connect.compare.intro_link": "your primary server's Servers page",
+  "connect.compare.intro_after":
     "on a device already signed in to it. The public certificate fingerprint shown there must match this one.",
   "connect.compare.label": "Public certificate fingerprint",
   "connect.compare.matches": "It matches",
@@ -237,8 +237,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connection.checking": "Comprobando la conexión…",
   "connection.continue": "Continuar con la configuración",
   "connection.join": "Unirse o recuperar",
-  "connection.join_hint":
-    "Para unirse o recuperar se usa el certificado de tu restaurante, no este.",
+  "connection.join_hint": "Para unirse o recuperar no hace falta el certificado.",
 
   "role.heading": "Unirse a un restaurante existente o recuperarlo",
   "role.intro":
@@ -279,9 +278,9 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.continue": "Continuar",
   "connect.certificate_failed":
     "No se ha podido leer el certificado del servidor principal. Revisa la dirección y que el servidor principal esté encendido, e inténtalo de nuevo.",
-  "connect.compare.open": "Abre",
-  "connect.compare.servers_link": "la página Servidores de tu servidor principal",
-  "connect.compare.rest":
+  "connect.compare.intro_before": "Abre",
+  "connect.compare.intro_link": "la página Servidores de tu servidor principal",
+  "connect.compare.intro_after":
     "en un dispositivo que ya tenga la sesión iniciada en él. La huella del certificado público que aparece allí debe coincidir con esta.",
   "connect.compare.label": "Huella del certificado público",
   "connect.compare.matches": "Coincide",
