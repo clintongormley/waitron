@@ -12,7 +12,7 @@ import type {
   VatCorrectionSummaryLine,
   VatReturnInput,
 } from "./types.js";
-import { vatMovements } from "./vat-movements.js";
+import { vatMovements, type VatMovement } from "./vat-movements.js";
 
 /** The period of `kind` holding `day` (`"YYYY-MM-DD"`): `"2026-1T"`, `"2026-03"` or `"2026"`. */
 function periodLabel(day: string, kind: LiquidationPeriod["kind"]): string {
@@ -46,7 +46,8 @@ export async function computeVatCorrections(
   validatePeriod(input.year, input.period);
   const { first, next } = periodDays(input.year, input.period);
   const movements = (await vatMovements(tx, input)).filter(
-    (m) =>
+    (m): m is VatMovement & { kind: VatCorrectionRow["kind"] } =>
+      m.kind !== "invoice" &&
       m.madeDay >= first &&
       m.madeDay < next &&
       m.belongsDay < first &&

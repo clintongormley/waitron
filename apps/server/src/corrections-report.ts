@@ -1,9 +1,7 @@
 import { formatInvoiceNumber } from "@waitron/core";
-import type { VatCorrections, VatMovementKind } from "@waitron/reporting";
+import type { VatCorrections } from "@waitron/reporting";
 import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
 import { numeric, renderWorkbook, type Cell } from "./xlsx-workbook.js";
-
-type CorrectionKind = Exclude<VatMovementKind, "invoice">;
 
 /** `madeIn` names the asked period as the rows' `belongsTo` names theirs: `"2026-3T"`, `"2026-08"`. */
 export function renderCorrectionsWorkbook(
@@ -25,7 +23,7 @@ export function renderCorrectionsWorkbook(
         ]);
   const rows: Cell[][] = corrections.rows.map((row) => [
     row.madeDay,
-    words.kinds[row.kind as CorrectionKind],
+    words.kinds[row.kind],
     formatInvoiceNumber(row.invoice.seriesCode, row.invoice.number),
     row.corrects === null
       ? null

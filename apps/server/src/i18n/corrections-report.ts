@@ -53,7 +53,7 @@ export const CORRECTIONS_REPORT_WORDS = {
       "IVA (EUR)",
     ],
     rowColumns: [
-      "Fecha",
+      "Fecha en que se hizo",
       "Tipo",
       "Número de factura",
       "Número de la factura que corrige",

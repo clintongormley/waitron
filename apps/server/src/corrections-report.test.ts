@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import type { VatCorrections } from "@waitron/reporting";
 import { decimal } from "@waitron/shared";
 import { renderCorrectionsWorkbook } from "./corrections-report.js";
+import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
+
+function xmlText(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("'", "&apos;")
+    .replaceAll('"', "&quot;");
+}
 
 function row(xml: string, number: number): string[] {
   const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
@@ -92,6 +102,9 @@ describe("corrections workbook", () => {
         new RegExp(`<sheet name="${summaryName}"[^>]*/><sheet name="${rowsName}"`),
       );
       expect(row(summary, 1)).toHaveLength(6);
+      expect(row(summary, 1)).toEqual(
+        CORRECTIONS_REPORT_WORDS[language].summaryColumns.map(xmlText),
+      );
       expect(row(summary, 2)).toEqual(["2026-2T", "2026-1T", "10.00", addition, "11.00", "1.10"]);
       expect(row(summary, 3)).toEqual([
         "2026-2T",
@@ -102,6 +115,8 @@ describe("corrections workbook", () => {
         "-2.10",
       ]);
       expect(row(rows, 1)).toHaveLength(10);
+      expect(row(rows, 1)).toEqual(CORRECTIONS_REPORT_WORDS[language].rowColumns.map(xmlText));
+      expect(row(rows, 1)[0]).toBe(language === "en" ? "Made on" : "Fecha en que se hizo");
       expect(row(rows, 2)).toEqual([
         "2026-04-01",
         late,

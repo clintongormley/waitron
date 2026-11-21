@@ -138,8 +138,8 @@ export interface VatCorrectionInvoice {
 /** One rate line of one movement made in the period for an earlier one. */
 export interface VatCorrectionRow {
   madeDay: string;
-  /** Never `"invoice"`: an invoice made in the period for an earlier one is `"issued_late"`. */
-  kind: VatMovementKind;
+  /** An invoice made in the period for an earlier one is `"issued_late"`. */
+  kind: Exclude<VatMovementKind, "invoice">;
   invoice: VatCorrectionInvoice;
   /** The invoice `invoice` corrects; `null` when it corrects none. */
   corrects: VatCorrectionInvoice | null;
