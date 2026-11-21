@@ -37,7 +37,7 @@ import {
   sumDecimals,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedInvoicesOf, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
 import { listAccountantExport } from "./accountant-export.js";
@@ -630,9 +630,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
   function countRows() {
     return inTx(venue(), async (tx) => ({
       sales: (await tx.select({ id: sales.id }).from(sales)).length,
-      records: venue().db.all<{ n: number }>(
-        sql`select count(*) as n from registros_facturacion`,
-      )[0]!.n,
+      records: (await tx.select({ id: invoiceRecords.id }).from(invoiceRecords)).length,
     }));
   }
 
