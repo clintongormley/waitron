@@ -219,6 +219,11 @@ export class SetupAdminScreen extends LitElement {
 
   #field(key: AdminField, invalid: boolean, type = "text"): TemplateResult {
     const text = FIELD_TEXT[key];
+    const hint = this.#required(key)
+      ? text.hint
+      : key === "password"
+        ? "admin.password.held_hint"
+        : "admin.pin.held_hint";
     const fieldPurpose = {
       firstNames: { name: "given-name", autocomplete: "given-name" },
       lastNames: { name: "family-name", autocomplete: "family-name" },
@@ -231,7 +236,7 @@ export class SetupAdminScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
       label=${t(text.label)}
-      hint=${t(text.hint)}
+      hint=${t(hint)}
       data-test=${key}
       name=${fieldPurpose.name}
       autocomplete=${fieldPurpose.autocomplete}

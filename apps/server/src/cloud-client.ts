@@ -888,11 +888,10 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         return held.admin;
       });
     },
-    async clearSetupAdmin(binding: CloudSignInBinding) {
+    async clearSetupAdmin() {
       return run(async () => {
         const state = await readState();
         if (state?.version !== 4 || !state.setupAdmin) return;
-        if (!sameBinding(state.setupAdmin, binding)) return;
         delete state.setupAdmin;
         await writeState(state);
       });
@@ -912,18 +911,18 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if (setup && prepareAdmin) {
           const held = await liveSetupAdmin(state);
           if (
-            (held && !sameBinding(held, binding)) ||
-            (attempt &&
-              Date.parse(attempt.expiresAt) > Date.now() &&
-              !sameBinding(attempt, binding))
+            attempt &&
+            Date.parse(attempt.expiresAt) > Date.now() &&
+            !sameBinding(attempt, binding)
           )
             throw new AppError("cloud.binding_conflict", {});
+          const previous = held && sameBinding(held, binding) ? held.admin : undefined;
           state.setupAdmin = {
             kind: "setup",
             tab: binding.tab,
             session: hashSessionToken(binding.session),
             expiresAt: Date.now() + 43_800_000,
-            admin: prepareAdmin(held?.admin),
+            admin: prepareAdmin(previous),
           };
           await authorize();
           await writeState(state);

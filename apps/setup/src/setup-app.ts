@@ -2071,6 +2071,10 @@ export class SetupApp extends LitElement {
       case "setup.request_invalid":
       case "venue.detail_invalid": {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
+        if (this.#cloudPrepareTab && (field === "admin.password" || field === "admin.pin")) {
+          this.#reenterCloudAdmin();
+          return;
+        }
         // The same list the venue form marks and explains from, so a path can never route back to a
         // form that has nothing to say about it.
         if (field !== undefined && Object.hasOwn(VENUE_SERVER_FIELDS, field)) {

@@ -231,6 +231,11 @@ it("opens Admin before Cloud sign-in in Prepare and keeps the administrator afte
           cloudSignInAvailable: true,
         });
       if (path === "/setup-api/cloud/sign-in/start") return Response.json({});
+      if (path === "/setup-api/provision")
+        return Response.json(
+          { error: { code: "cloud.request_unavailable", params: {} } },
+          { status: 409 },
+        );
       if (path === route) return Response.json({ available: false });
     },
   });
@@ -266,7 +271,7 @@ it("opens Admin before Cloud sign-in in Prepare and keeps the administrator afte
     "waitron-setup-cloud-return",
     JSON.stringify({
       mode: "prepare",
-      locale: "es",
+      locale: "es-ES",
       admin: adminDisplay,
     }),
   );
@@ -275,17 +280,45 @@ it("opens Admin before Cloud sign-in in Prepare and keeps the administrator afte
   mount();
   await click("cloud-sign-in", "skip");
   await expect.poll(() => screen("venue")).not.toBeNull();
-  expect(currentLocale()).toBe("es");
+  expect(currentLocale()).toBe("es-ES");
   await click("venue", "back");
   await expect.poll(() => screen("admin")).not.toBeNull();
   const field = (name: string) =>
     screen("admin")!.shadowRoot!.querySelector(`[data-test=${name}]`) as HTMLElement & {
       value: string;
       required: boolean;
+      hint: string;
     };
   expect(field("email").value).toBe(venue.admin.email);
   expect(field("password").value).toBe("");
   expect(field("password").required).toBe(false);
   expect(field("pin").value).toBe("");
   expect(field("pin").required).toBe(false);
+  expect(field("password").hint).toBe("Déjala en blanco para conservar tu contraseña.");
+  expect(field("pin").hint).toBe("Déjalo en blanco para conservar tu PIN.");
+
+  await click("admin", "next");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  dispatchSetupPatch(screen("venue")!, { venue: { name: "El Olivo" } });
+  dispatchSetupGoto(screen("venue")!, "review");
+  await expect.poll(() => screen("review")).not.toBeNull();
+  dispatchProvisionRequested(screen("review")!);
+  await expect.poll(() => screen("admin")).not.toBeNull();
+  expect(field("password").required).toBe(true);
+  expect(field("pin").required).toBe(true);
+  expect(screen("admin")!.shadowRoot!.querySelector("wt-form-actions")?.error).toContain(
+    "Vuelve a introducir la contraseña y el PIN",
+  );
+  for (const name of ["password", "pin"] as const)
+    field(name).dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: venue.admin[name] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await click("admin", "next");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  const venueName = screen("venue")!.shadowRoot!.querySelector("[data-test=name]");
+  expect(venueName).toHaveProperty("value", "El Olivo");
 });

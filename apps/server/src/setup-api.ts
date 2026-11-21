@@ -1121,7 +1121,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
-      setTimeout(() => requestRestart(), 0);
       if (key === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
       return c.json({
@@ -1148,16 +1147,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             ? setupCloudBinding(c, cloudSignIn)
             : undefined;
         const binding = usesHeldAdmin ? prepareBinding : undefined;
-        if (usesHeldAdmin && !binding) throw new AppError("cloud.request_unavailable", {});
         if (binding) requestHash.update(binding.tab).update(binding.session);
         const hash = requestHash.digest("hex");
         const clearHeldAdmin = async () => {
-          if (prepareBinding)
-            await cloudSignIn!.connection
-              .clearSetupAdmin(prepareBinding)
-              .catch((error: unknown) => {
-                log("warn", "cloud.refresh_failed", { errorCode: codeOf(error) });
-              });
+          if (deps.environment === "preproduction")
+            await cloudSignIn?.connection.clearSetupAdmin().catch((error: unknown) => {
+              log("warn", "setup.cloud_admin_clear_failed", { errorCode: codeOf(error) });
+            });
         };
         const existing = binding ? await deps.operations?.read() : undefined;
         if (
@@ -1197,6 +1193,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             return c.json(operation.data as { provisioned: true; restarting: true });
           const result = await execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
           await clearHeldAdmin();
+          setTimeout(() => requestRestart(), 0);
           return result;
         };
         const response =

@@ -542,6 +542,16 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect(start.status).toBe(200);
       const cookie = start.headers.get("set-cookie")!.split(";")[0]!;
       const headers = { ...origin, cookie };
+      const otherTab = randomUUID();
+      const other = await post("start", { tab: otherTab, prepare: true, admin }, headers);
+      expect(await other.json()).toMatchObject({ error: { code: "cloud.binding_conflict" } });
+      const startedState = readFileSync(statePath, "utf8");
+      const expiredAttempt = JSON.parse(startedState);
+      expiredAttempt.attempt.expiresAt = new Date(0).toISOString();
+      writeFileSync(statePath, JSON.stringify(expiredAttempt));
+      const replacement = await post("start", { tab: otherTab, prepare: true, admin }, headers);
+      expect(replacement.status).toBe(200);
+      writeFileSync(statePath, startedState);
       const url = new URL((await start.json()).authorizationUrl);
       const cancel = await post(
         "return",
@@ -554,16 +564,26 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         headers,
       );
       expect(await cancel.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
-      const other = await post("start", { tab: randomUUID(), prepare: true, admin }, headers);
-      expect(await other.json()).toMatchObject({ error: { code: "cloud.binding_conflict" } });
-      expect(f.requests).toHaveLength(1);
+      const unbound = await post("start", { tab: otherTab, prepare: true }, headers);
+      expect(await unbound.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
+      expect(f.requests).toHaveLength(2);
 
       const body = {
         ...prepareBody(),
         venue: { ...venue, admin: { ...admin, password: "", pin: "" } },
       };
       const provisionHeaders = { ...headers, "x-waitron-setup-cloud-tab": tab };
+      const wrongTabHeaders = { ...headers, "x-waitron-setup-cloud-tab": otherTab };
+      const otherSave = await postProvision(app, body, wrongTabHeaders);
+      expect(await otherSave.json()).toMatchObject({
+        error: { code: "cloud.request_unavailable" },
+      });
       const beforeExpiry = readFileSync(statePath, "utf8");
+      const manual = new Hono();
+      mountSetup(manual, { ...makeDeps().deps, cloudSignIn }, noopLog);
+      expect((await postProvision(manual, prepareBody())).status).toBe(200);
+      expect(JSON.parse(readFileSync(statePath, "utf8"))).not.toHaveProperty("setupAdmin");
+      writeFileSync(statePath, beforeExpiry);
       const expiredDraft = JSON.parse(beforeExpiry);
       expiredDraft.setupAdmin.expiresAt = Date.now() - 1;
       writeFileSync(statePath, JSON.stringify(expiredDraft));
@@ -571,8 +591,39 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect(await refused.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
       expect(JSON.parse(readFileSync(statePath, "utf8"))).not.toHaveProperty("setupAdmin");
       writeFileSync(statePath, beforeExpiry);
-      const provision = await postProvision(app, body, provisionHeaders);
+      deps.persistTrading.mockRejectedValueOnce(new Error("box stopped during publication"));
+      expect((await postProvision(app, body, provisionHeaders)).status).toBe(500);
+      const unfinished = JSON.parse(readFileSync(statePath, "utf8"));
+      unfinished.setupAdmin.expiresAt = Date.now() - 1;
+      writeFileSync(statePath, JSON.stringify(unfinished));
+
+      const resumed = new Hono();
+      const resume = makeDeps({ operations: createSetupOperationStore(f.stateDir) });
+      let restartingWhileHoldingAdmin = false;
+      mountSetup(
+        resumed,
+        {
+          ...resume.deps,
+          cloudSignIn: {
+            ...cloudSignIn,
+            connection: {
+              ...connection,
+              clearSetupAdmin: async () => {
+                await tick();
+                restartingWhileHoldingAdmin = resume.requestRestart.mock.calls.length > 0;
+                await connection.clearSetupAdmin();
+              },
+            },
+          },
+        },
+        noopLog,
+      );
+      const provision = await postProvision(resumed, body, provisionHeaders);
       expect(await provision.json()).toMatchObject({ provisioned: true });
+      expect(resume.provision).not.toHaveBeenCalled();
+      await tick();
+      expect(resume.requestRestart).toHaveBeenCalledOnce();
+      expect(restartingWhileHoldingAdmin).toBe(false);
       const administrator = deps.provisionRequests[0]!.venue.admin;
       expect(await verifyPassword("correct-horse-battery", administrator.passwordHash)).toBe(true);
       expect(await verifyPin("1357", administrator.pinHash)).toBe(true);
@@ -581,6 +632,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const restarted = new Hono();
       const next = makeDeps({ operations: createSetupOperationStore(f.stateDir) });
       mountSetup(restarted, { ...next.deps, cloudSignIn }, noopLog);
+      expect((await postProvision(restarted, body, wrongTabHeaders)).status).toBe(409);
       const replay = await postProvision(restarted, body, provisionHeaders);
       expect(await replay.json()).toMatchObject({ provisioned: true });
       expect(next.provision).not.toHaveBeenCalled();
@@ -588,6 +640,18 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       socket.destroy();
       await f.close();
     }
+  });
+
+  it("refuses a blank Prepare password beside its field without a Cloud binding", async () => {
+    const app = new Hono();
+    mountSetup(app, makeDeps().deps, noopLog);
+    const body = prepareBody();
+    asRec(asRec(body.venue).admin).password = "";
+    const refusal = await postProvision(app, body);
+    expect(refusal.status).toBe(400);
+    expect(await refusal.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "admin.password" } },
+    });
   });
 
   it("runs an explicit fiscal test and refuses activation when its bound evidence is absent", async () => {
