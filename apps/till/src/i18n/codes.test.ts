@@ -1156,6 +1156,23 @@ it("points a correction short of money to Refund a payment on the payments on ac
     );
 });
 
+it("reads a money parameter that is not an amount as money left, never as nothing left", () => {
+  const advances = { advanceInvoiceNumbers: ["A/12"] };
+  for (const moneyLeft of ["", "none", "0,00", 0])
+    expect(codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft })).toBe(
+      codeMessage("invoice_correction.money_short", "en", advances),
+    );
+  expect(
+    codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft: "0.0" }),
+  ).toBe(codeMessage("invoice_correction.money_short", "en", { ...advances, moneyLeft: "0.00" }));
+  expect(
+    codeMessage("advance.taken_off_final_invoice", "en", {
+      invoiceNumber: "A/45",
+      finalMoneyLeft: "none",
+    }),
+  ).toBe(codeMessage("advance.taken_off_final_invoice", "en", { invoiceNumber: "A/45" }));
+});
+
 it.each([
   [
     "en",

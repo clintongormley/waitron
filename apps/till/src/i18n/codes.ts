@@ -1,4 +1,4 @@
-import { PORTIONS_AT_ONCE } from "@waitron/shared";
+import { decimal, isZeroDecimal, PORTIONS_AT_ONCE } from "@waitron/shared";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -1228,9 +1228,14 @@ function takenOffMessage(
   });
 }
 
-/** Whether `value` is a money amount of nothing, as the server writes one ("0.00"). */
+/** Whether `value` is a money amount of nothing; false for anything that is not an amount. */
 function isZeroMoney(value: unknown): boolean {
-  return typeof value === "string" && /^0+(\.0+)?$/.test(value);
+  if (typeof value !== "string") return false;
+  try {
+    return isZeroDecimal(decimal(value));
+  } catch {
+    return false;
+  }
 }
 
 function moneyShortMessage(
