@@ -44,9 +44,14 @@ export async function computeVatCorrections(
   input: VatReturnInput,
 ): Promise<VatCorrections> {
   validatePeriod(input.year, input.period);
-  const { first } = periodDays(input.year, input.period);
-  // `vatMovements` returns a movement belonging before the period only when it was made in it.
-  const movements = (await vatMovements(tx, input)).filter((m) => m.belongsDay < first);
+  const { first, next } = periodDays(input.year, input.period);
+  const movements = (await vatMovements(tx, input)).filter(
+    (m) =>
+      m.madeDay >= first &&
+      m.madeDay < next &&
+      m.belongsDay < first &&
+      !(isZeroDecimal(m.base) && isZeroDecimal(m.tax)),
+  );
 
   const ids = [
     ...new Set(
@@ -55,6 +60,7 @@ export async function computeVatCorrections(
       ),
     ),
   ];
+  if (ids.length === 0) return { summary: [], rows: [] };
   // One bound value however many invoices the period lists.
   const { rows: found } = await tx.execute<{
     id: string;

@@ -197,6 +197,27 @@ describe("computeVatCorrections", () => {
     expect((await corrections(Q2)).rows.map((r) => r.direction)).toEqual(["reduction"]);
   });
 
+  it("leaves out a rate line whose base and VAT are both zero", async () => {
+    const original = await sale("2026-03-10");
+    await sale("2026-05-05", {
+      correctsSaleId: original,
+      total: "-1.10",
+      lines: [
+        { vatRate: "10.00", lineTotal: "-1.00" },
+        { vatRate: "21.00", lineTotal: "0.00" },
+      ],
+      vatBreakdown: [
+        { rate: "10.00", base: "-1.00", tax: "-0.10" },
+        { rate: "21.00", base: "0.00", tax: "0.00" },
+      ],
+    });
+    const result = await corrections(Q2);
+    expect(result.rows.map((r) => [r.rate, r.direction])).toEqual([["10.00", "reduction"]]);
+    expect(result.summary).toEqual([
+      { belongsTo: "2026-1T", rate: "10.00", direction: "reduction", base: "-1.00", tax: "-0.10" },
+    ]);
+  });
+
   it("lists a cross-month correction for the month it was made in, not for its quarter", async () => {
     const april = await sale("2026-04-10");
     await sale("2026-05-05", {
