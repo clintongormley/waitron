@@ -1223,6 +1223,38 @@ export async function issueIfFullyPaid(
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
 }
 
+/**
+ * {@link issueIfFullyPaid} for a bill whose money has already moved but whose invoice was held
+ * back, issued as {@link completeBillPayment} would have issued it for the bill's latest received
+ * payment that paid no advance: under that payment's device and person, dated by the latest
+ * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance.
+ */
+export async function issueHeldBill(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  operatorId: string,
+): Promise<TillSaleResult | null> {
+  const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
+  // Oldest first, so of two received in the same millisecond the later-written one wins.
+  const completing = rows
+    .filter((row) => row.state === "received" && !advanced.has(row.id))
+    .reduce<PaymentRow | undefined>(
+      (latest, row) =>
+        latest === undefined || row.receivedAt! >= latest.receivedAt! ? row : latest,
+      undefined,
+    );
+  return issueIfFullyPaid(
+    tx,
+    deps,
+    completing === undefined ? cfg : { ...cfg, origin: storedDeviceOrigin(completing) },
+    workingOrderId,
+    completing?.requestedBy ?? operatorId,
+    { moneyMoved: true, datedByLatestAcceptance: true },
+  );
+}
+
 interface ItemsDue {
   due: Decimal;
   rows: { lineId: string; quantity: number; amount: number }[];

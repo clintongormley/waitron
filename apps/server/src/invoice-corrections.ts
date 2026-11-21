@@ -58,7 +58,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { saleScopeInZones } from "./find-bill-transactions.js";
 import { refuseTakenOffAdvance } from "./advance-taken-off.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueHeldBill } from "./bill-payments.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -488,8 +488,9 @@ export async function closeInvoiceCorrection(
 
 /**
  * When `saleId` is an advance, issues its bill's invoice if the bill is paid off: a payment taken
- * while the advance's correction was open issued none, and its money has already moved. Filing
- * needs no such step: it raises what the bill owes by the money given back.
+ * while the advance's correction was open issued none, and its money has already moved, so the
+ * invoice is issued as that payment's completion would have issued it ({@link issueHeldBill}).
+ * Filing needs no such step: it raises what the bill owes by the money given back.
  */
 async function issueAdvanceBill(
   tx: Transaction,
@@ -503,7 +504,7 @@ async function issueAdvanceBill(
     .from(billAdvances)
     .where(eq(billAdvances.advanceSaleId, saleId));
   if (advance === undefined) return;
-  await issueIfFullyPaid(tx, deps, cfg, advance.workingOrderId, operatorId, { moneyMoved: true });
+  await issueHeldBill(tx, deps, cfg, advance.workingOrderId, operatorId);
 }
 
 /** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -730,5 +730,62 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
         tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, rest.saleId)),
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe("the rest's invoice Discard issues after a card paid the bill off", () => {
+  it("is recorded under the till and person that took the card, and the correction under whoever discarded it", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const release = venue().card.holdNextCollect();
+    const calls = venue().card.collectCalls.length;
+    const paying = send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "90.00",
+        method: "card",
+        entry: "reader",
+        applied: "90.00",
+        tip: "0.00",
+      },
+    );
+    await vi.waitFor(() => expect(venue().card.collectCalls.length).toBe(calls + 1));
+    const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    release();
+    expect((await paying).status).toBe(200);
+
+    const discarded = await send(
+      venue().app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      { override: supervisor() },
+    );
+
+    expect(discarded, JSON.stringify(discarded.json)).toMatchObject({
+      status: 200,
+      json: { state: "discarded" },
+    });
+    const [rest] = await inTx(venue(), (tx) =>
+      tx
+        .select({ deviceId: sales.deviceId, operatorId: sales.operatorId })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId)),
+    );
+    expect(rest).toEqual({ deviceId: venue().deviceId, operatorId: venue().operatorId });
+    const [correction] = await inTx(venue(), (tx) =>
+      tx
+        .select({ endedBy: invoiceCorrections.endedBy })
+        .from(invoiceCorrections)
+        .where(eq(invoiceCorrections.id, correctionId)),
+    );
+    expect(correction).toEqual({ endedBy: venue().adminId });
   });
 });
