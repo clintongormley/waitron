@@ -39,7 +39,8 @@ interface Step {
   at: Date;
 }
 
-export type Successor = { kind: "id"; id: string } | { kind: "host"; host: string; main: boolean };
+export type Successor =
+  { kind: "id"; id: string } | { kind: "host"; host: string; main: boolean; contactUrl: string };
 
 interface RestrictedView {
   returnState: ReturnState;
@@ -87,21 +88,25 @@ export async function readBoxAddresses(
 export async function readSuccessor(
   deps: Pick<RestrictedPageDeps, "venue" | "node" | "nodeId">,
   successorNodeId: string,
+  held?: { readonly operationId: string | null } | null,
 ): Promise<Successor> {
   const entry = (await readNodeMembership(deps.venue))?.body.nodes.find(
     (node) => node.nodeId === successorNodeId,
   );
   const host = entry === undefined ? undefined : webHost(entry.contactUrl);
   if (host === undefined || entry === undefined) return { kind: "id", id: successorNodeId };
-  if (entry.standing === "serving-primary") return { kind: "host", host, main: true };
-  if (entry.standing !== "serving-secondary") return { kind: "host", host, main: false };
-  const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
+  const { contactUrl } = entry;
+  if (entry.standing === "serving-primary") return { kind: "host", host, main: true, contactUrl };
+  if (entry.standing !== "serving-secondary")
+    return { kind: "host", host, main: false, contactUrl };
+  const restriction =
+    held === undefined ? await readHandoverRestriction(deps.node, deps.nodeId) : held;
   const confirmed =
     restriction !== null &&
     (
       await readHandoverEvents(deps.node, deps.nodeId, restriction.operationId, "return_confirmed")
     ).some((event) => event.detail.destinationNodeId === successorNodeId);
-  return { kind: "host", host, main: confirmed };
+  return { kind: "host", host, main: confirmed, contactUrl };
 }
 
 /** The successor as HTML: its address in bold, then its role where it is known to be main. */
@@ -111,7 +116,6 @@ export function successorText(successor: Successor, locale: SupportedLocale): st
   return `<strong>${escapeHtml(successor.host)}</strong>${role}`;
 }
 
-/** A link's address, or none when reading it fails: the page stands without its links. */
 async function linkOrNone<T>(
   deps: RestrictedPageDeps,
   requestId: string,
@@ -154,20 +158,15 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     steps.push(...events);
   }
   // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
-  const found = await linkOrNone(
+  const successor = (await linkOrNone(
     deps,
     requestId,
     "restricted_page.successor_link_failed",
-    async () => ({
-      successor: await readSuccessor(deps, restriction.successorNodeId),
-      url: (await readNodeMembership(deps.venue))?.body.nodes.find(
-        (entry) => entry.nodeId === restriction.successorNodeId,
-      )?.contactUrl,
-    }),
-  );
+    () => readSuccessor(deps, restriction.successorNodeId, restriction),
+  )) ?? { kind: "id", id: restriction.successorNodeId };
   return {
-    successorUrl: found?.url,
-    successor: found?.successor ?? { kind: "id", id: restriction.successorNodeId },
+    successorUrl: successor.kind === "host" ? successor.contactUrl : undefined,
+    successor,
     steps,
     // Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and
     // this box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
