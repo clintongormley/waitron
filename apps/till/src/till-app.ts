@@ -257,7 +257,6 @@ import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
   BillPayConfirmDetail,
-  BillReaderStopStatus,
   TillBillPayDialog,
   PayLine,
   PayRefusal,
@@ -266,6 +265,7 @@ import type {
   PayWay,
   RefundNotice,
 } from "./widgets/bill-pay-dialog.js";
+import type { ReaderStopControl } from "./widgets/card-waiting.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/tender-refund-dialog.js";
 import "./widgets/invoice-correction-dialog.js";
@@ -514,6 +514,7 @@ import type {
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
+  CardOutcome,
   CollectCardDetail,
   ConfirmPaymentDetail,
   ParkOrderDetail,
@@ -1614,11 +1615,9 @@ interface PendingReread {
   out: boolean;
 }
 
-interface BillReaderStop {
+interface BillReaderStop extends Omit<ReaderStopControl, "request"> {
   submissionId: string;
-  signal: AbortSignal;
-  status: BillReaderStopStatus;
-  refusal?: PayRefusal;
+  signal?: AbortSignal;
   answer?: Promise<BillReaderStopOutcome>;
 }
 
@@ -4527,12 +4526,62 @@ export class TillApp extends LitElement {
    * {@link #onPayWaitingOrder}; a no-op once it has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
   #adjustOpening = false;
-  readonly #cardOutcomes = new Map<
-    string,
-    { outcome: Exclude<PayOutcome, { outcome: "captured" | "partial" }>; detail: CollectCardDetail }
-  >();
+  #directReaderStop?: BillReaderStop &
+    ReaderStopControl & { billId: string; dialogId?: number; visible: () => boolean };
 
-  private get cardOutcome(): Exclude<PayOutcome, { outcome: "captured" | "partial" }> | undefined {
+  #directReaderControl(billId: string, dialogId?: number): ReaderStopControl | undefined {
+    const stop = this.#directReaderStop;
+    return stop?.billId === billId && stop.dialogId === dialogId && stop.visible()
+      ? { ...stop }
+      : undefined;
+  }
+
+  async #payDirectReader(
+    req: Parameters<TillApi["pay"]>[0],
+    here: () => boolean,
+    dialogId?: number,
+  ): Promise<PayOutcome & { noPaymentTaken?: true }> {
+    const api = this.api;
+    if (this.#cardReader() !== "sumup_cloud") return api.pay(req);
+    const session = this.#operatorSession;
+    const sameSession = () => api === this.api && session === this.#operatorSession;
+    let stop: BillReaderStop | undefined;
+    try {
+      const out = await api.pay(req, {
+        onSubmission: (submissionId) => {
+          if (!sameSession()) return;
+          const live = {
+            billId: req.id,
+            dialogId,
+            submissionId,
+            status: "ready" as const,
+            visible: () => sameSession() && here(),
+            request: () => {
+              if (this.#directReaderStop === live && live.visible())
+                void this.#requestReaderStop(api, req.id, live);
+            },
+          };
+          stop = this.#directReaderStop = live;
+          this.requestUpdate();
+        },
+      });
+      if (
+        (out.outcome === "declined" || out.outcome === "network_unavailable") &&
+        (stop?.status === "requested" || stop?.status === "sending")
+      )
+        return { ...out, noPaymentTaken: true };
+      return out;
+    } finally {
+      if (stop !== undefined && this.#directReaderStop === stop) {
+        this.#directReaderStop = undefined;
+        this.requestUpdate();
+      }
+    }
+  }
+
+  readonly #cardOutcomes = new Map<string, { outcome: CardOutcome; detail: CollectCardDetail }>();
+
+  private get cardOutcome(): CardOutcome | undefined {
     return this.#cardOutcomes.get(this.#store.id)?.outcome;
   }
 
@@ -7937,27 +7986,30 @@ export class TillApp extends LitElement {
       if (edit !== undefined) edit.revision = this.#store.revision;
       reachedFiscal = true;
       const language = this.#chosenReceiptLanguage(id);
-      const out: PayOutcome = await this.#withReaderPayment(
+      const out = await this.#withReaderPayment(
         true,
         () =>
-          this.api.pay({
-            expectedEdit: this.#counterExpectedEdit(id),
-            id,
-            lines: placed ? [] : basket,
-            ...(placed || edit === undefined ? {} : { edit }),
-            dining: this.#store.dining,
-            ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
-            ...(placed ? {} : choice?.invoice),
-            ...(language === undefined ? {} : { receiptLanguage: language }),
-            ...(detail.tip ? { tip: detail.tip } : {}),
-            ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
-            ...(detail.simulationOutcome === undefined
-              ? {}
-              : { simulationOutcome: detail.simulationOutcome }),
-            // Omitted, the server uses the paying device's chosen reader, else its profile's default.
-            ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
-            ...(lateSend === undefined ? {} : { lateSend }),
-          }),
+          this.#payDirectReader(
+            {
+              expectedEdit: this.#counterExpectedEdit(id),
+              id,
+              lines: placed ? [] : basket,
+              ...(placed || edit === undefined ? {} : { edit }),
+              dining: this.#store.dining,
+              ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+              ...(placed ? {} : choice?.invoice),
+              ...(language === undefined ? {} : { receiptLanguage: language }),
+              ...(detail.tip ? { tip: detail.tip } : {}),
+              ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
+              ...(detail.simulationOutcome === undefined
+                ? {}
+                : { simulationOutcome: detail.simulationOutcome }),
+              // Omitted, the server uses the paying device's chosen reader, else its profile's default.
+              ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
+              ...(lateSend === undefined ? {} : { lateSend }),
+            },
+            () => id === this.#store.id,
+          ),
         id,
       );
       this.#saleSendEnded(id);
@@ -13086,6 +13138,7 @@ export class TillApp extends LitElement {
       .equipmentSaving=${this.payEquipmentSaving}
       .equipmentErrors=${this.payEquipmentErrors}
       .busy=${this.submitting}
+      .readerStop=${this.#directReaderControl(open.billId, open.id)}
       .refusal=${open.refusal}
       .confirmation=${this.#unansweredWholePayments.get(open.billId)}
       .canPayInParts=${canPayInParts}
@@ -22095,27 +22148,29 @@ export class TillApp extends LitElement {
       const out = await this.#withReaderPayment(
         true,
         () =>
-          api
-            .pay({
+          this.#payDirectReader(
+            {
               expectedEdit,
               id: billId,
               lines: [],
               dining: this.#tableBillDining(billId),
               ...(readerId === undefined ? {} : { readerId }),
               ...(guestCount === undefined ? {} : { guestCount }),
-            })
-            .then(
-              (answer) => {
-                this.#saleSendEnded(billId);
-                if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
-                return answer;
-              },
-              (error: unknown) => {
-                unknown = this.#saleSendEnded(billId, error);
-                if (isNetworkFailure(error)) this.#unknownCardOutcome.add(billId);
-                throw error;
-              },
-            ),
+            },
+            () => !left() && this.#presentedNow(id) !== null,
+            id,
+          ).then(
+            (answer) => {
+              this.#saleSendEnded(billId);
+              if (answer.outcome === "timeout") this.#unknownCardOutcome.add(billId);
+              return answer;
+            },
+            (error: unknown) => {
+              unknown = this.#saleSendEnded(billId, error);
+              if (isNetworkFailure(error)) this.#unknownCardOutcome.add(billId);
+              throw error;
+            },
+          ),
         billId,
       );
       if (left()) return;
@@ -22142,7 +22197,12 @@ export class TillApp extends LitElement {
         });
         return;
       }
-      this.#showPresentedRefusal(id, { code: PRESENTED_CARD_REFUSALS[out.outcome] });
+      this.#showPresentedRefusal(
+        id,
+        out.noPaymentTaken
+          ? { code: "payment_failed", text: t("bill_pay.no_payment_taken") }
+          : { code: PRESENTED_CARD_REFUSALS[out.outcome] },
+      );
     } catch (error) {
       if (left()) return;
       paidMeanwhile = isPaymentsReceived(error);
@@ -22758,19 +22818,24 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #onBillPayStop(): Promise<void> {
+  #onBillPayStop(): void {
     const open = this.billPaying;
     if (open === null) return;
     const send = this.#paymentsOut.get(open.billId);
     if (send?.dialogId !== open.id || send.readerStop === undefined) return;
-    const stop = send.readerStop;
+    void this.#requestReaderStop(this.api, open.billId, send.readerStop);
+  }
+
+  async #requestReaderStop(api: TillApi, billId: string, stop: BillReaderStop): Promise<void> {
     if (stop.status === "sending" || stop.status === "requested" || stop.status === "unknown")
       return;
     stop.status = "sending";
     stop.refusal = undefined;
     this.requestUpdate();
-    stop.answer = this.api
-      .cancelBillReaderPayment(open.billId, stop.submissionId, { signal: stop.signal })
+    stop.answer = api
+      .cancelBillReaderPayment(billId, stop.submissionId, {
+        signal: stop.signal ?? AbortSignal.timeout(TABLE_REQUEST_LIMIT_MS),
+      })
       .then(
         ({ outcome }) => outcome,
         (error: unknown): BillReaderStopOutcome => {
@@ -23836,6 +23901,7 @@ export class TillApp extends LitElement {
         .canEditKitchenNote=${this.capabilities.includes("take-orders")}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
+        .readerStop=${this.#directReaderControl(this.#store.id)}
         .cardRetryDetail=${this.cardRetryDetail}
         .cardAttemptsOver=${this.cardAttemptsOver}
         .activeReaders=${this.#payReaders()}

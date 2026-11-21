@@ -26497,6 +26497,62 @@ describe("A767 card outcome belongs to its order", () => {
           }
         });
 
+  it("stops the Counter reader payment and keeps the basket to take payment again", async () => {
+    let resolve!: (outcome: PayOutcome) => void;
+    const promise = new Promise<PayOutcome>((settle) => {
+      resolve = settle;
+    });
+    const pay = vi.fn((_req, options?: { onSubmission(id: string): void }) => {
+      options?.onSubmission("counter-submission");
+      return promise;
+    });
+    const cancel = vi.fn().mockResolvedValue({ outcome: "requested" });
+    const saved = await stubApi().retrieveWorkingOrder("wo-1");
+    const { el } = await mountApp({
+      retrievePlacedOrder: vi.fn().mockResolvedValue(saved),
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        cardProvider: "sumup_cloud",
+        capabilities: ["print-receipt", "integrated-card-payment"],
+      }),
+      pay,
+      cancelBillReaderPayment: cancel,
+    });
+    const c = await toCounter(el);
+    emit(c, "pay-waiting-order", { id: "wo-1" });
+    await expect.poll(() => tenderPay(el).stage).toBe("collect");
+    await flush(el);
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    const panel = () => tenderPay(el).shadowRoot!;
+    const stop = () => panel().querySelector<HTMLElement>("[data-pay-cancel-reader]");
+    try {
+      await expect.poll(stop).not.toBeNull();
+      emit(c, "retrieve-order", { id: "wo-2" });
+      await expect.poll(() => c.store.id).toBe("wo-2");
+      expect(stop()).toBeNull();
+      const localCancel = panel().querySelector<HTMLElement>(".collecting + .actions .cancel");
+      expect(localCancel).not.toBeNull();
+      localCancel!.click();
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await expect.poll(() => c.store.id).toBe("wo-1");
+      await expect.poll(stop).not.toBeNull();
+      await userEvent.click(stop()!.shadowRoot!.querySelector("button")!);
+      expect(cancel.mock.calls[0]?.slice(0, 2)).toEqual(["wo-1", "counter-submission"]);
+      await expect
+        .poll(() => panel().querySelector("[data-pay-stop-status]")?.textContent)
+        .toContain(t("bill_pay.stop_requested"));
+      expect(panel().querySelector(".collecting")?.textContent).not.toContain(t("card.collecting"));
+    } finally {
+      resolve({ outcome: "declined" });
+      await flush(el);
+    }
+    expect(panel().querySelector(".card-outcome")?.textContent).toContain(
+      t("bill_pay.no_payment_taken"),
+    );
+    expect(panel().querySelector(".retry")).not.toBeNull();
+    expect(c.store.lines[0]?.quantity).toBe("2");
+  });
+
   it("stores a late decline for its own order while another order is open", async () => {
     let decline!: (outcome: PayOutcome) => void;
     const pay = vi.fn(

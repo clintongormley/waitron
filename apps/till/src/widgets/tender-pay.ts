@@ -1,3 +1,4 @@
+import { readerStopControl, readerStopPending, type ReaderStopControl } from "./card-waiting.js";
 import {
   outsideCardFields,
   outsideCardValues,
@@ -99,7 +100,9 @@ export interface CollectCardDetail extends ReceiptGuestsDetail {
 export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
-export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" | "partial" }>;
+export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" | "partial" }> & {
+  noPaymentTaken?: true;
+};
 
 const KEEP_CARD_REASONS = new Set(["lost_card", "stolen_card", "pickup_card"]);
 const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
@@ -319,6 +322,7 @@ export class TillTenderPay extends LitElement {
   @property({ type: Boolean }) takesCash = true;
   @property({ type: Boolean }) takesManualCard = false;
   @property({ attribute: false }) cardOutcome?: CardOutcome;
+  @property({ attribute: false }) readerStop?: ReaderStopControl;
   @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   /** Bumped by the app when no card attempt is still running, after any retry and any
    * kitchen-station question an attempt asks, whether or not it produced a {@link cardOutcome}. */
@@ -949,7 +953,8 @@ export class TillTenderPay extends LitElement {
     if (this.view === "paying") return this.#renderPaying();
     if (this.view === "holding") return nothing;
     if (this.view === "card") return this.#renderCard();
-    if (this.view === "collecting") return this.#renderCollecting();
+    if (this.view === "collecting" || this.readerStop !== undefined)
+      return this.#renderCollecting();
     if (this.view === "card_outcome") return this.#renderCardOutcome();
     return this.#renderIdle();
   }
@@ -1274,12 +1279,20 @@ export class TillTenderPay extends LitElement {
   #renderCollecting() {
     return html`
       <div class="summary collecting">
-        <p class="prompt">${t("card.collecting")}</p>
+        ${readerStopPending(this.readerStop?.status) ? nothing : html`<p class="prompt">${t("card.collecting")}</p>`}
       </div>
       <div class="actions">
-        <wt-button class="cancel" variant="secondary" @click=${() => this.#requestCancel()}>
-          ${t("card.cancel")}
-        </wt-button>
+        ${
+          this.readerStop !== undefined
+            ? readerStopControl(this.readerStop)
+            : html`<wt-button
+                class="cancel"
+                variant="secondary"
+                @click=${() => this.#requestCancel()}
+              >
+                ${t("card.cancel")}
+              </wt-button>`
+        }
       </div>
     `;
   }
@@ -1289,10 +1302,11 @@ export class TillTenderPay extends LitElement {
     const reason =
       this.cardOutcome?.outcome === "declined" ? this.cardOutcome.failureReason : undefined;
     const keepCard = KEEP_CARD_REASONS.has(reason ?? "");
-    const message =
-      this.cardOutcome?.outcome === "timeout" ||
-      this.cardOutcome?.outcome === "network_unavailable" ||
-      reason === "reader_unavailable"
+    const message = this.cardOutcome?.noPaymentTaken
+      ? t("bill_pay.no_payment_taken")
+      : this.cardOutcome?.outcome === "timeout" ||
+          this.cardOutcome?.outcome === "network_unavailable" ||
+          reason === "reader_unavailable"
         ? t("card.no_answer")
         : keepCard
           ? t("card.keep_card")

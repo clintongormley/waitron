@@ -5,7 +5,7 @@ import {
   outsideCardStyles,
   outsideCardSummary,
 } from "./outside-card.js";
-import type { BillReaderStopOutcome, OutsideCardDetails } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/client.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -43,7 +43,14 @@ import {
   readerButtonLabel,
   type SheetView,
 } from "./pay-equipment.js";
-import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
+import {
+  cardWaitingView,
+  readerStopControl,
+  readerStopPending,
+  sentCard,
+  type BillReaderStopStatus,
+  type SentCard,
+} from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
@@ -200,8 +207,6 @@ function refusalField(
 }
 
 const PEOPLE = /^[1-9]\d{0,2}$/;
-
-export type BillReaderStopStatus = BillReaderStopOutcome | "ready" | "sending";
 
 /**
  * Takes part of a bill: chosen items, an amount, or an equal share among the people still to pay,
@@ -1227,37 +1232,16 @@ export class TillBillPayDialog extends LitElement {
     </wt-dialog>`;
   }
 
-  get #readerStopPending(): boolean {
-    return (
-      this.readerStop === "sending" ||
-      this.readerStop === "requested" ||
-      this.readerStop === "unknown"
-    );
-  }
-
   #readerStopControl(): TemplateResult | typeof nothing {
-    const status = this.readerStop;
-    if (status === null) return nothing;
-    const refusal = this.readerStopRefusal;
-    return html`<div>
-      <wt-button
-        data-pay-cancel-reader
-        variant="secondary"
-        .loading=${status === "sending"}
-        .disabled=${this.#readerStopPending}
-        @click=${() => this.dispatchEvent(new CustomEvent("bill-pay-stop"))}
-        >${t("bill_pay.cancel_reader")}</wt-button
-      >
-      <p class="muted" role="status" data-pay-stop-status>
-        ${
-          refusal !== null
-            ? refusalText(refusal, { billPayment: true })
-            : status === "ready" || status === "sending"
-              ? ""
-              : t(`bill_pay.stop_${status}`)
-        }
-      </p>
-    </div>`;
+    return readerStopControl(
+      this.readerStop === null
+        ? undefined
+        : {
+            status: this.readerStop,
+            refusal: this.readerStopRefusal ?? undefined,
+            request: () => this.dispatchEvent(new CustomEvent("bill-pay-stop")),
+          },
+    );
   }
 
   #heading(): string {
@@ -1271,7 +1255,7 @@ export class TillBillPayDialog extends LitElement {
   #cardWaiting(): SheetView | null {
     if (!this.handheld || !this.busy || this.confirmationLocked || this.#sent === null) return null;
     return {
-      body: cardWaitingView(this.#sent, this.notice, !this.#readerStopPending),
+      body: cardWaitingView(this.#sent, this.notice, !readerStopPending(this.readerStop)),
       actions: nothing,
     };
   }
@@ -2262,7 +2246,7 @@ export class TillBillPayDialog extends LitElement {
       }
       ${ownReceiptAsked ? this.#ownReceiptChoice() : nothing}
       ${
-        this.busy && asked.card?.entry === "reader" && !this.#readerStopPending
+        this.busy && asked.card?.entry === "reader" && !readerStopPending(this.readerStop)
           ? html`<p class="muted" role="status" data-pay-collecting>${t("card.collecting")}</p>`
           : nothing
       }

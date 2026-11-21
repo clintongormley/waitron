@@ -28,7 +28,14 @@ import {
   readerButtonLabel,
   type SheetView,
 } from "./pay-equipment.js";
-import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
+import {
+  cardWaitingView,
+  readerStopControl,
+  readerStopPending,
+  sentCard,
+  type ReaderStopControl,
+  type SentCard,
+} from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import type { RetainedTender } from "./tender-pay.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
@@ -218,6 +225,7 @@ export class TillPresentedPayDialog extends LitElement {
   /** The row's QR has put the camera in place of the form. */
   @state() private scanning = false;
   #rowWanted = false;
+  @property({ attribute: false }) readerStop?: ReaderStopControl;
   /** The card payment out on a reader. */
   #sent: SentCard | null = null;
   #leave?: LeaveCoordinator;
@@ -453,7 +461,11 @@ export class TillPresentedPayDialog extends LitElement {
     if (this.confirmation !== undefined) return this.#locked(this.confirmation);
     if (this.scanning) return payScanView(this, () => (this.scanning = false), this.notice);
     if (this.busy && this.#sent !== null)
-      return { body: cardWaitingView(this.#sent, this.notice), actions: nothing };
+      return {
+        body: html`${cardWaitingView(this.#sent, this.notice, !readerStopPending(this.readerStop?.status))}
+        ${readerStopControl(this.readerStop)}`,
+        actions: nothing,
+      };
     return this.#form();
   }
 

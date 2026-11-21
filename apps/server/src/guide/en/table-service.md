@@ -901,8 +901,9 @@ panel shows that same amount and reader, with elapsed waiting time. Complete the
 that reader and wait for the result. A spinning phone is not proof that the card failed.
 
 If the guest changes their mind while the SumUp reader waits for their card, choose
-**Cancel payment** in this window. Wait for **No payment was taken** before trying another
-payment. If the card was charged, the till shows the payment as taken.
+**Cancel payment** in this window, at Counter or in Pay for a presented table bill. Wait for
+the till to confirm no payment was taken before trying again. If the card was charged, the till
+shows the payment as taken.
 
 **Continue with the next guest.** After a part payment, check **Still to pay**. On a phone, press
 **Take the next** to continue; an equal split also shows which share is next. Check the remaining

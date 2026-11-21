@@ -18,6 +18,7 @@ import type {
   EquipmentChange,
   EquipmentItem,
   PartyBill,
+  PayOutcome,
   RoleEquipment,
   StaffNotice,
   TillApi,
@@ -431,6 +432,64 @@ describe("a presented bill on a handheld", () => {
     expect(dialog(el)).toBeNull();
     expect(stubs.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
   });
+
+  it.each([
+    ["requested", "declined"],
+    ["requested", "captured"],
+    ["refused", "declined"],
+    ["sending", "declined"],
+  ] as const)(
+    "keeps presented Pay open for the result after stop %s, then shows %s",
+    async (stopOutcome, outcome) => {
+      let resolve!: (outcome: PayOutcome) => void;
+      const promise = new Promise<PayOutcome>((settle) => {
+        resolve = settle;
+      });
+      const pay = vi.fn((_req, options?: { onSubmission(id: string): void }) => {
+        options?.onSubmission("table-submission");
+        return promise;
+      });
+      const cancel = vi.fn().mockResolvedValue({ outcome: "requested" });
+      if (stopOutcome === "refused")
+        cancel.mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
+      if (stopOutcome === "sending") cancel.mockReturnValueOnce(new Promise(() => {}));
+      const { el } = await openPresented({ pay, cancelBillReaderPayment: cancel });
+      await takeOnReader(el);
+      const stop = () => inPresented(el, "[data-pay-cancel-reader]");
+      try {
+        await expect.poll(stop).not.toBeNull();
+        await userEvent.click(stop()!.shadowRoot!.querySelector("button")!);
+        await expect
+          .poll(() => cancel.mock.calls[0]?.slice(0, 2))
+          .toEqual(["wo-4", "table-submission"]);
+        if (stopOutcome === "sending") expect(stop()).toHaveProperty("disabled", true);
+        else
+          await expect
+            .poll(() => text(inPresented(el, "[data-pay-stop-status]")))
+            .toContain(
+              stopOutcome === "requested"
+                ? t("bill_pay.stop_requested")
+                : codeMessage("reader.not_held"),
+            );
+        expect(presented(el)!.busy).toBe(true);
+      } finally {
+        resolve(outcome === "captured" ? { outcome, ticket: ticket() } : { outcome });
+        await flush(el);
+      }
+      if (outcome === "captured") {
+        expect(presented(el)).toBeNull();
+        expect(documentChoice(el)).not.toBeNull();
+      } else {
+        expect(presented(el)!.busy).toBe(false);
+        expect(stop()).toBeNull();
+        expect(await sheetMessage(el)).toBe(
+          t(stopOutcome === "refused" ? "bill_pay.card_declined" : "bill_pay.no_payment_taken"),
+        );
+        expect(inPresented(el, "[data-presented-pay-take]")).toHaveProperty("disabled", false);
+      }
+      expect(pay).toHaveBeenCalledOnce();
+    },
+  );
 
   it("warns about a slip failure after a presented reader payment", async () => {
     const { el } = await openPresented({

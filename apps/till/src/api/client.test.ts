@@ -455,6 +455,33 @@ describe("TillApi", () => {
     });
   });
 
+  it("reports the actual reader submission before both POSTs when retrying an unanswered payment", async () => {
+    const onSubmission = vi.fn();
+    const beforePosts: string[] = [];
+    const fetchStub = vi.fn(() => {
+      beforePosts.push(onSubmission.mock.lastCall?.[0]);
+      onSubmission.mockClear();
+      return Promise.reject(new TypeError("Failed to fetch"));
+    });
+    const api = new TillApi("", fetchStub);
+    const pay = () =>
+      api.pay(
+        {
+          id: "wo1",
+          lines: [{ menuItemId: "mi-p", quantity: "2" }],
+          expectedEdit: null,
+          dining: "eat_in",
+        },
+        { onSubmission },
+      );
+    await expect(pay()).rejects.toThrow("Failed to fetch");
+    await expect(pay()).rejects.toThrow("Failed to fetch");
+    const [first, retry] = postedBodies(fetchStub);
+    expect(first!.submissionId).toEqual(expect.any(String));
+    expect(retry!.submissionId).toBe(first!.submissionId);
+    expect(beforePosts).toEqual([first!.submissionId, retry!.submissionId]);
+  });
+
   it("sends a walk-up reader payment with its tip and returns the captured ticket", async () => {
     const ticket = {
       orderLabel: null,

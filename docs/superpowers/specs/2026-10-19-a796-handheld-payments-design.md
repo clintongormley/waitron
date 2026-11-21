@@ -755,6 +755,8 @@ are given.
 9. **No Cancel while the card is at the reader**: no route cancels a card at a real reader today (the
    only cancel route, `POST /api/demo-reader/cancel`, is the simulator's pretend reader, mounted only
    for it, `till-api.ts:1178`, `:1220`).
+   **2026-11-21:** [Cancel a waiting card payment](../plans/2026-11-21-cancel-waiting-card-payment.md)
+   adds **Cancel payment** for a waiting SumUp reader in shared Pay, Counter and presented table Pay.
 10. **"Cobrar al siguiente"** after a share, keeping the way chosen.
 11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen
     (2026-11-06, A1236: not while other bills are still to pay; see §10's item 10). Service

@@ -967,8 +967,9 @@ tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no 
 cobro haya fallado.
 
 Si el cliente cambia de idea mientras el lector SumUp espera la tarjeta, pulsa **Cancelar cobro**
-en esta ventana. Espera a que el terminal indique **No se ha cobrado nada** antes de volver a
-cobrar. Si ya se ha cobrado la tarjeta, el terminal muestra el cobro como realizado.
+en esta ventana, en Mostrador o al cobrar una cuenta presentada. Espera a que el terminal confirme
+que no se ha cobrado nada antes de volver a cobrar. Si ya se ha cobrado la tarjeta, el terminal
+muestra el cobro como realizado.
 
 **Sigue con el siguiente comensal.** Tras un pago parcial, comprueba **Queda por pagar**. En un
 teléfono, pulsa **Cobrar al siguiente** para continuar; un reparto igual también indica qué parte
