@@ -25,6 +25,7 @@ import {
   type FiledInvoice,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readFindBill } from "./find-bill-bills.js";
 import type { BillPaymentRequest } from "./bill-payments.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { endMeal } from "./meal-end.js";
@@ -397,6 +398,36 @@ describe("the rest's invoice takes the advances off", () => {
     const after = await payments();
     expect(after).toMatchObject({ received: "30.00", outstanding: "90.00" });
     expect(after.payments[0]).toMatchObject({ left: "30.00", givenBack: "20.00" });
+  });
+
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: Find bills' paid figure does not move", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await printTheBill(bill);
+    const found = () => inTx(venue, (tx) => readFindBill(tx, bill.billId));
+    const before = await found();
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
+    );
+
+    const given = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advanceId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(before).toMatchObject({ paid: "30.00" });
+    expect(await found()).toMatchObject({ paid: before.paid, stillOwed: before.stillOwed });
   });
 
   it("example 1 by Print the bill, €50 paid on it: Refund a payment of the advance is refused, saying the receipt is not fully paid, and once it is, refused as on any paid receipt", async () => {
