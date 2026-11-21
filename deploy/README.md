@@ -549,9 +549,11 @@ If a manual upgrade is held, resolve it before checking again.
 
 The box remembers the newest verified offer, including a pause, in
 `/opt/waitron.upgrade-offer.json`. Keep this file on the host so the box can reject older offers.
-If the check reports `offer-state-unreadable`, restore the latest intact copy of the file.
-If you lose the file, the box starts with the first verified offer it reads. A fresh-identity
-restore or a full reset can change which rollout group matches this box.
+If the check reports `offer-state-unreadable`, it keeps deferring until it can read the file again.
+Restore the latest intact copy if you have one. Otherwise, move the unreadable file aside before
+checking again. The box then starts with the first verified offer it reads and loses its earlier
+replay history. A fresh-identity restore or a full reset can change which rollout group matches
+this box.
 
 ### Trying a branch before it merges
 

@@ -37,8 +37,9 @@ a signed file for rollout groups (Lane F queue, A950-LATER).
    Box ID read failures belong in `host.test.mjs`. Group, signature and 16 KiB boundary
    tests stay in `scripts/box/release-list.test.mjs`. `scripts/waitron-sh.test.mjs` pins
    version lookup, busy lock and held-attempt refusals and the empty-output fallback.
-   Run the actual boot lock step during a held download to pin the ordering. Run those files with `pnpm exec vitest run`. Update `deploy/README.md` and
-   `docs/backlog/box.md`, including that a lost state file loses replay history.
+   Run the actual boot lock step during a held download to pin the ordering. Run those files
+   with `pnpm exec vitest run`. Update `deploy/README.md` and `docs/backlog/box.md`, including
+   that a lost state file loses replay history.
 
 For the rehearsal, seed the driver and selector from the recipe or main, then take a checked
 manual install of a numbered release carrying this command. The nightly window, quiet admission,
