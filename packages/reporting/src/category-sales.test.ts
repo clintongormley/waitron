@@ -762,7 +762,7 @@ describe("computeCategorySales at time of sale", () => {
     ]);
   });
 
-  it("category sales count example 1's dishes once and leave out the advance's line and the deduction line", async () => {
+  it("category sales count example 1's dishes once and count the advance's line and the deduction line under payments on account, netting to 0.00", async () => {
     // Example 1: €120 of food at 10%; Ana's €30 advance ticket A/12 (27.27 + 2.73) at 21:30, and
     // the rest's ticket at 23:00 taking A/12 off.
     const advance = await sellLines(suite.db, venue, at("2026-08-04", "19:30"), [
@@ -783,6 +783,14 @@ describe("computeCategorySales at time of sale", () => {
         net: "109.09",
         direct: "120.00/109.09/1",
       },
+      {
+        path: "(payments_on_account)",
+        id: "payments_on_account",
+        depth: 0,
+        gross: "0.00",
+        net: "0.00",
+        direct: "0.00/0.00/2",
+      },
     ]);
     expect(report).toMatchObject({
       gross: "120.00",
@@ -791,6 +799,73 @@ describe("computeCategorySales at time of sale", () => {
       linesWithoutGross: 0,
     });
   });
+
+  it.each(["at_time_of_sale", "current"] as const)(
+    "counts an advance, its corrective and its deduction under payments on account, whatever they record, in %s mode",
+    async (mode) => {
+      // €10 of a €30 advance given back before the table's invoice, which takes off the €20 left.
+      const advance = await sellLines(suite.db, venue, at("2026-08-04", "19:30"), [
+        {
+          id: "advance-line",
+          net: "27.27",
+          gross: "30.00",
+          advanceRole: "payment_on_account",
+          cls: classified(chain(DRINKS)),
+          productId: "product-drinks",
+          category: "Tapas",
+        },
+      ]);
+      await sellLines(
+        suite.db,
+        venue,
+        at("2026-08-04", "20:00"),
+        [
+          {
+            net: "-9.09",
+            gross: "-10.00",
+            advanceRole: "payment_on_account",
+            correctsLineId: "advance-line",
+          },
+        ],
+        advance,
+      );
+      await sellLines(suite.db, venue, at("2026-08-04", "21:00"), [
+        {
+          net: "109.09",
+          gross: "120.00",
+          cls: classified(chain(DRINKS)),
+          productId: "product-dish",
+        },
+        { net: "-18.18", gross: "-20.00", advanceRole: "deduction", deductsSaleId: advance },
+      ]);
+
+      const classifier: CurrentClassifier = async () =>
+        new Map([
+          ["product-dish", classified(chain(DRINKS))],
+          ["product-drinks", classified(chain(SOFTS))],
+        ]);
+      const report = await run({ mode }, classifier);
+      expect(rows(report.tree)).toEqual([
+        {
+          path: "Drinks",
+          id: "cat-drinks",
+          depth: 0,
+          gross: "120.00",
+          net: "109.09",
+          direct: "120.00/109.09/1",
+        },
+        {
+          path: "(payments_on_account)",
+          id: "payments_on_account",
+          depth: 0,
+          gross: "0.00",
+          net: "0.00",
+          direct: "0.00/0.00/3",
+        },
+      ]);
+      expect([report.gross, report.net]).toEqual(["120.00", "109.09"]);
+    },
+  );
 
   it("counts only the node asked for, and every node when none is", async () => {
     const other = await seedNodeAndSeries(suite.db);

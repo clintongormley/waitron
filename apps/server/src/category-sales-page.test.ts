@@ -323,6 +323,26 @@ describe("formatCategorySalesPage", () => {
     expect(es.join("\n")).not.toContain("Directamente en No registrada");
   });
 
+  it("names Payments on account, in English and in Spanish", () => {
+    const report = sampleReport({
+      tree: [
+        node({
+          kind: "payments_on_account",
+          id: "payments_on_account",
+          gross: "-10.00",
+          net: "-9.09",
+          direct: { gross: "-10.00", net: "-9.09", lines: 3 },
+        }),
+      ],
+    });
+    expect(lineFor(page({ report }), "Payments on account")).toMatch(
+      /^Payments on account +-€10\.00 +-€9\.09$/,
+    );
+    expect(lineFor(page({ report, locale: "es-ES" }), "Pagos a cuenta")).toMatch(
+      /^Pagos a cuenta +-10,00 € +-9,09 €$/,
+    );
+  });
+
   it("prints the total and no label section, in English and in Spanish", () => {
     const lines = page();
     expect(lineFor(lines, "Total")).toMatch(/^Total +€17\.71 +€23\.00$/);
