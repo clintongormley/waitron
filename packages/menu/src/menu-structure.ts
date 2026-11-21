@@ -222,6 +222,9 @@ export async function reachableMenuItem(
   return reachableProducts(graph, rootSectionId).includes(row.productId) ? row : undefined;
 }
 
+/** An insert, update or delete not yet run, which can be asked for the rows it writes. */
+type Writing = PromiseLike<unknown> & { returning(): PromiseLike<readonly unknown[]> };
+
 /**
  * Brings each menu's `menu_items` rows in line with what its structure reaches: a row for every
  * product reached, active or not, and every other row of the menu reset to "starts fresh" — no menu
@@ -254,15 +257,19 @@ export async function syncMenuOffers(
       heldBefore === undefined
         ? reached
         : reached.filter((productId) => !heldBefore.has(productId));
+    // Only a sync without `before` reads how many rows it wrote, so only it asks for them back.
     let rowsWritten = 0;
+    const write = async (statement: Writing): Promise<void> => {
+      if (before === undefined) rowsWritten += (await statement.returning()).length;
+      else await statement;
+    };
     for (const batch of batches(adding))
-      rowsWritten += (
-        await tx
+      await write(
+        tx
           .insert(menuItems)
           .values(batch.map((productId) => ({ menuId, productId })))
-          .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] })
-          .returning({ id: menuItems.id })
-      ).length;
+          .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] }),
+      );
     const stale =
       heldBefore === undefined
         ? await rowsNotHeld(tx, menuId, held)
@@ -273,32 +280,26 @@ export async function syncMenuOffers(
           );
     for (const batch of batches(stale)) {
       if (setMenu) {
-        rowsWritten += (
-          await tx
+        await write(
+          tx
             .delete(setMenuVariantExclusions)
-            .where(inArray(setMenuVariantExclusions.menuItemId, batch))
-            .returning({ id: setMenuVariantExclusions.menuItemId })
-        ).length;
-        rowsWritten += (
-          await tx
-            .delete(setMenuDishCourses)
-            .where(inArray(setMenuDishCourses.menuItemId, batch))
-            .returning({ id: setMenuDishCourses.menuItemId })
-        ).length;
+            .where(inArray(setMenuVariantExclusions.menuItemId, batch)),
+        );
+        await write(
+          tx.delete(setMenuDishCourses).where(inArray(setMenuDishCourses.menuItemId, batch)),
+        );
       }
-      rowsWritten += (
-        await tx
+      await write(
+        tx
           .delete(menuItemVariantOverrides)
-          .where(inArray(menuItemVariantOverrides.menuItemId, batch))
-          .returning({ id: menuItemVariantOverrides.menuItemId })
-      ).length;
-      rowsWritten += (
-        await tx
+          .where(inArray(menuItemVariantOverrides.menuItemId, batch)),
+      );
+      await write(
+        tx
           .update(menuItems)
           .set({ grossPrice: null })
-          .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice)))
-          .returning({ id: menuItems.id })
-      ).length;
+          .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice))),
+      );
     }
     if (setMenu) {
       if (adding.length > 0) setMenuAdditions.set(menuId, adding);
