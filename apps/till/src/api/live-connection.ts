@@ -95,6 +95,7 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "bill_payments",
     "bill_payment_refunds",
     "tenders",
+    "tender_refunds",
     "sales",
     "invoice_series",
     "sale_substitutions",

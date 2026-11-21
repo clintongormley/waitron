@@ -210,3 +210,7 @@ it("subscribes the menu to saved device zone changes", () => {
 it("follows changes to a bill's recorded set-menu copies", () => {
   expect(TILL_LIVE_TYPES.billDraft).toContain("bill_set_menu_copies");
 });
+
+it("follows a tip given back from an advance's tender, which the Pay window's tip left reads", () => {
+  expect(TILL_LIVE_TYPES.billDraft).toContain("tender_refunds");
+});
