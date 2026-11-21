@@ -23,6 +23,7 @@ import {
   orderGroups,
   parties,
   printJobs,
+  products,
   saleLines,
   sales,
   ticketItems,
@@ -39,7 +40,15 @@ import {
   updateAdjustmentReason,
   type AdjustmentAction,
 } from "@waitron/adjustments";
-import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/menu";
+import {
+  createExtraList,
+  createProduct,
+  localToday,
+  rateLines,
+  writeProductModifiers,
+  type GrossLines,
+  type VatClass,
+} from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
@@ -484,6 +493,51 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     expect(row).toMatchObject({ lineId: pizza, action: "comp", quantity: 1000 });
     expect(row!.splits).not.toEqual([]);
     expect(row!.compedExtras).toEqual([]);
+  });
+
+  it("records the free extra's split when comping part of a dish", async () => {
+    const { menuItemId, pizzaExtras } = await inTx(venue, async (tx) => {
+      const [pizza] = await tx
+        .select({ categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.name, "Pizza"));
+      const product = await createProduct(tx, {
+        categoryId: pizza!.categoryId,
+        name: "Pizza with free olives",
+        pricingUnit: "each",
+        unitPrice: "12.00",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Free toppings",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 2,
+          active: true,
+          items: [{ productId: venue.olivesId, maxQuantity: 2, preselected: false, price: "0.00" }],
+        },
+        venue.venueLocale,
+      );
+      await writeProductModifiers(tx, product.id, [{ kind: "extras", id: list.id }]);
+      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      return { menuItemId: offers.offerFor(product.id), pizzaExtras: list.id };
+    });
+    const { billId } = await billWith({ ...venue, item: () => menuItemId, pizzaExtras }, [
+      { name: "Pizza with free olives", quantity: "2", olives: 1 },
+    ]);
+    const target = await todayLine(venue, billId, 1);
+    const freeExtra = (await rowsOf(venue, billId)).find(
+      (row) => row.parentLineId === target.lineId,
+    );
+    expect(freeExtra).toMatchObject({ unitPriceGross: "0.00" });
+
+    await adjust(billId, { ...target, action: "comp", quantity: "1" });
+
+    const [row] = await recordedOn(billId);
+    expect(row!.splits).toContainEqual({ from: freeExtra!.id, to: expect.any(String) });
   });
 
   it("records none on a comp of the extras row on its own", async () => {
