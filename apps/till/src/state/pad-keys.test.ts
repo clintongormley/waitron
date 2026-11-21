@@ -29,24 +29,23 @@ describe.each(["decimal", "pin"] as const)("on a %s pad", (mode) => {
     });
   });
 
-  test("Backspace deletes, also while held down", () => {
+  test("Backspace deletes", () => {
     expect(padInputFor(keydown({ key: "Backspace" }), mode)).toEqual({
       kind: "key",
       key: "backspace",
     });
-    expect(padInputFor(keydown({ key: "Backspace", repeat: true }), mode)).toEqual({
+  });
+
+  test("a held key means what its first press means", () => {
+    expect(padInputFor(keydown({ key: "5", repeat: true }), mode)).toEqual({
       kind: "key",
-      key: "backspace",
+      key: "5",
     });
+    expect(padInputFor(keydown({ key: "Enter", repeat: true }), mode)).toEqual({ kind: "enter" });
   });
 
-  test("a held digit types only once", () => {
-    expect(padInputFor(keydown({ key: "5", repeat: true }), mode)).toBeNull();
-  });
-
-  test("Enter presses, but not while held down", () => {
+  test("Enter presses", () => {
     expect(padInputFor(keydown({ key: "Enter" }), mode)).toEqual({ kind: "enter" });
-    expect(padInputFor(keydown({ key: "Enter", repeat: true }), mode)).toBeNull();
   });
 
   test("Escape backs out", () => {

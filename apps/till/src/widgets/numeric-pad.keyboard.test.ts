@@ -180,6 +180,22 @@ describe("a keyboard on the number pad", () => {
     expect(seen.enters).toBe(1);
   });
 
+  it("holding Enter after tapping a pad key fires pad-enter once and types nothing", async () => {
+    const { pad, seen } = await mountPad();
+    await userEvent.click(keyOf(pad, "7"));
+    await userEvent.keyboard("{Enter>3/}");
+    expect(seen.values).toEqual(["7"]);
+    expect(seen.enters).toBe(1);
+  });
+
+  it("holding Escape after tapping a pad key fires pad-escape once and types nothing", async () => {
+    const { pad, seen } = await mountPad();
+    await userEvent.click(keyOf(pad, "7"));
+    await userEvent.keyboard("{Escape>3/}");
+    expect(seen.values).toEqual(["7"]);
+    expect(seen.escapes).toBe(1);
+  });
+
   it("Enter while a button in the pad's own screen has focus is left to that button", async () => {
     const root = pageHost().attachShadow({ mode: "open" });
     const pad = newPad();

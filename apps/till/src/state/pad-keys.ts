@@ -11,12 +11,12 @@ export type PadInput = { kind: "key"; key: string } | { kind: "enter" } | { kind
 const digits = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
 
 /** What a key press means to a number pad, or `null` when it means nothing there. Shift is not
- * checked: a French keyboard needs it to type a digit. */
+ * checked: a French keyboard needs it to type a digit. A held key means the same as its first
+ * press; `routeKey` decides what its repeats do. */
 export function padInputFor(event: KeyboardEvent, mode: "decimal" | "pin"): PadInput | null {
   if (event.ctrlKey || event.metaKey || event.altKey || belongsToComposition(event)) return null;
   const { key } = event;
   if (key === "Backspace") return { kind: "key", key: "backspace" };
-  if (event.repeat) return null;
   if (digits.has(key)) return { kind: "key", key };
   if (key === "Enter") return { kind: "enter" };
   if (key === "Escape") return { kind: "escape" };
@@ -103,6 +103,8 @@ function routeKey(event: KeyboardEvent): void {
   if (input.kind === "enter" && enterBelongsToFocus(pad, path)) return;
   // A pad under a window was passed over above, so this pad is inside it: the window closes itself.
   if (input.kind === "escape" && modalOpen()) return;
+  // A held key's repeats are still the pad's, so a held Enter does not press the focused pad key.
   event.preventDefault();
+  if (event.repeat && !(input.kind === "key" && input.key === "backspace")) return;
   pad.receiveKey(input, event);
 }
