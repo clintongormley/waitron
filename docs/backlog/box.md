@@ -42,6 +42,9 @@ history, policy, version ordering or backward compatibility, not additional elap
 **2026-11-17, jr8:** the backup scheduler is now `createBackupSchedule` in the same source file;
 the table retains the earlier loop name and its clock rule.
 
+**2026-11-21, os13:** the card refund resend check below now lives in
+`resolve` in `apps/server/src/tender-refund-sends.ts`, for both bill and receipt refunds.
+
 These files from the source snapshot remain open. A persisted date, ordering invariant or calendar
 rule is not made process-relative by replacing its clock read. Later slices must choose their
 scope and preserve the rules shown here before proposing any conversion.
