@@ -30,6 +30,7 @@ export function nextPadValue(value: string, key: string): string {
  */
 export function nextPinValue(value: string, key: string): string {
   if (key === "backspace") return value.slice(0, -1);
+  if (key === "clear") return "";
   if (key === ".") return value;
   return value + key;
 }
@@ -102,7 +103,7 @@ export class TillNumericPad extends LitElement {
         { key: "7", glyph: "7" },
         { key: "8", glyph: "8" },
         { key: "9", glyph: "9" },
-        { key: "", glyph: "" },
+        { key: "clear", glyph: t("pad.clear") },
         { key: "0", glyph: "0" },
         { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
       ];
@@ -130,8 +131,6 @@ export class TillNumericPad extends LitElement {
   }
 
   #renderKey({ key, glyph, label }: PadKey) {
-    // The pin layout's spacer: it keeps `0` centred where the calculator layout has `.`.
-    if (key === "") return html`<div class="key" aria-hidden="true"></div>`;
     const content = label
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`
       : glyph;
