@@ -11,7 +11,8 @@ from recorded ids. Indicate when a drawer lacks an assigned till so a manager ca
 
 Add `apps/server/src/drawer-close-ticket.ts` using the configured receipt layout and document queue.
 Include the date interval, drawer, actor, cash sales and refunds, cash in/out, expected, counted,
-difference, bank withdrawal, cash left and card total. When cash moved during counting, say so.
+difference, bank withdrawal, cash left and **Card payments taken** before later refunds.
+When cash moved during counting, say so.
 Print on a selected active receipt printer, including for a drawer that has been deleted.
 
 Add `apps/dashboard/src/widgets/drawer-close-history.ts` to `screens/dashboard-sales-screen.ts`.
