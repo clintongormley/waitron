@@ -16,6 +16,7 @@ export const clockChangeConflict = {
       },
     ],
     conflictCount: 1,
+    unlistedCount: 0,
   },
 };
 

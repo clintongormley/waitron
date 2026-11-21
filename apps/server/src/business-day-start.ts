@@ -152,13 +152,14 @@ export async function previewBusinessDayStart(
   await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
   let conflictCount = 0;
+  let unlistedCount = 0;
   try {
     // Measured from the start in force, not from a waiting change this Save replaces.
     await VENUE_SERVICE.assertBusinessDayClockChange(tx, plan.before, plan.candidate, effectiveDay);
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== "venue.business_day_hours_conflict")
       throw error;
-    ({ conflicts, conflictCount } = error.params);
+    ({ conflicts, conflictCount, unlistedCount } = error.params);
   }
   return {
     revision: model.revision,
@@ -166,6 +167,7 @@ export async function previewBusinessDayStart(
     effectiveDay: view(plan.candidate, effectiveDay),
     conflicts,
     conflictCount,
+    unlistedCount,
     backupDeadlines: { archive: null, cloud: null },
   };
 }

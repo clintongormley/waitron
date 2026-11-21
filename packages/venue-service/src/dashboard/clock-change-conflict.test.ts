@@ -20,6 +20,7 @@ const conflict = (
       { departmentId: "d1", ...names, startsAt: "21:00", endsAt: "02:45", rangeIndex: 0, reason },
     ],
     conflictCount: 1,
+    unlistedCount: 0,
   },
 });
 

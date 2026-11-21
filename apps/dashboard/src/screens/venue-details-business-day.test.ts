@@ -179,6 +179,7 @@ it("a real child save closes before the parent refresh fails and cannot submit t
       },
       conflicts: [],
       conflictCount: 0,
+      unlistedCount: 0,
       backupDeadlines: { archive: null, cloud: null },
     }),
     putBusinessDayStart: async () => {

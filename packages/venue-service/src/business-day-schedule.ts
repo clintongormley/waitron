@@ -51,7 +51,11 @@ export async function businessDayClockConflicts(
   before: BusinessDayClock,
   candidate: BusinessDayClock,
   effectiveBusinessDay: string,
-): Promise<{ conflicts: BusinessDayClockConflict[]; conflictCount: number }> {
+): Promise<{
+  conflicts: BusinessDayClockConflict[];
+  conflictCount: number;
+  unlistedCount: number;
+}> {
   const seasonPeriods = await tx
     .select({
       departmentId: sql<string>`${openingHours.departmentId}`,
@@ -222,7 +226,7 @@ export async function businessDayClockConflicts(
         ownership(endsAt, oldCutover, true) !== ownership(endsAt, newCutover, true)
       )
         reason = "endpoint_day";
-      else if (inStrip(minutes(startsAt)) || inStrip(minutes(endsAt))) reason = "transition_strip";
+      else if (inStrip(minutes(endsAt))) reason = "transition_strip";
       const seasonName = seasonById.get(p.seasonId)?.name;
       if (reason !== null)
         conflicts.push({
@@ -256,6 +260,7 @@ export async function businessDayClockConflicts(
   return {
     conflicts: conflicts.filter((_, index) => listed.has(keys[index]!)),
     conflictCount: ranges.length,
+    unlistedCount: ranges.length - listed.size,
   };
 }
 /** A keep-open saved for the night before the change runs under the old changeover. */
@@ -302,6 +307,7 @@ export async function assertBusinessDayClockChange(
     throw new AppError("venue.business_day_hours_conflict", {
       conflicts: [...result.conflicts, ...keptOpen],
       conflictCount,
+      unlistedCount: result.unlistedCount,
     });
 }
 export async function assertBusinessDayScheduleWrite(

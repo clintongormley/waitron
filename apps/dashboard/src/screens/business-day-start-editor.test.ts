@@ -66,6 +66,7 @@ export const preview = (revision = 4): BusinessDayStartPreview => ({
   },
   conflicts: [],
   conflictCount: 0,
+  unlistedCount: 0,
   backupDeadlines: { archive: null, cloud: null },
 });
 const q = <T extends HTMLElement = HTMLElement>(el: Editor, sel: string) =>
@@ -291,6 +292,7 @@ it("shows identifying conflict rows with localized reasons while keeping the tot
     previewBusinessDayStart: async () => ({
       ...preview(),
       conflictCount: 23,
+      unlistedCount: 22,
       conflicts: [
         {
           departmentId: "dept",
@@ -442,9 +444,15 @@ const seasonConflict = (seasonName: string | undefined, rangeIndex = 0) => ({
 async function conflictLines(
   conflicts: BusinessDayStartPreview["conflicts"],
   conflictCount: number,
-): Promise<{ lines: (string | null)[]; count: string | undefined }> {
+  unlistedCount = 0,
+): Promise<{ lines: (string | null)[]; count: string | undefined; more: string | undefined }> {
   const { el } = await rig({
-    previewBusinessDayStart: async () => ({ ...preview(), conflicts, conflictCount }),
+    previewBusinessDayStart: async () => ({
+      ...preview(),
+      conflicts,
+      conflictCount,
+      unlistedCount,
+    }),
   });
   await click(el, "change");
   await change(el, "dayCutover", "03:00");
@@ -453,6 +461,7 @@ async function conflictLines(
       (line) => line.textContent,
     ),
     count: q(el, "[data-test=conflicts]")?.textContent?.replace(/\s+/g, " ").trim(),
+    more: text(q(el, "[data-test=conflicts-more]")),
   };
 }
 
@@ -499,6 +508,45 @@ it("counts the distinct lines it shows", async () => {
   expect(twoSeasons.count).toBe(
     "Opening hours that clash with the new start: 2. Review opening hours",
   );
+});
+
+it.each([
+  ["en-GB", "and 4 more"],
+  ["es-ES", "y 4 más"],
+])("ends a capped list with how many ranges the server left off (%s)", async (locale, more) => {
+  setLocale(locale);
+  const { lines } = await conflictLines([seasonConflict("Winter")], 5, 4);
+  expect(lines).toHaveLength(2);
+  expect(lines.at(-1)?.trim()).toBe(more);
+});
+
+it("adds no closing line when the server listed every range", async () => {
+  setLocale("en-GB");
+  const { lines, more } = await conflictLines([seasonConflict("Winter")], 1, 0);
+  expect(lines).toHaveLength(1);
+  expect(more).toBeUndefined();
+});
+
+it("counts the lines shown plus the ranges the server left off, not the server's total", async () => {
+  setLocale("en-GB");
+  const { count } = await conflictLines([seasonConflict("Winter"), seasonConflict("Autumn")], 9, 1);
+  expect(count).toBe("Opening hours that clash with the new start: 3. Review opening hours");
+});
+
+it("puts the ranges the server left off straight after the listed ranges, before a zone kept open", async () => {
+  setLocale("en-GB");
+  const { lines, count } = await conflictLines(
+    [seasonConflict("Winter"), seasonConflict("Autumn"), keptOpen],
+    8,
+    5,
+  );
+  expect(lines.map((line) => line?.replace(/\s+/g, " ").trim())).toEqual([
+    "Winter: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
+    "Autumn: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
+    "and 5 more",
+    "Restaurant · Terrace · Kept open until 04:30 tonight",
+  ]);
+  expect(count).toBe("Opening hours that clash with the new start: 8. Review opening hours");
 });
 
 const cardRows = (el: Editor) =>
@@ -658,6 +706,7 @@ const changeoverPreview = (
   },
   conflicts,
   conflictCount: conflicts.length,
+  unlistedCount: 0,
   backupDeadlines: { archive: null, cloud: null },
 });
 const tonight: BusinessDayStartPreview["previousDay"] = {
@@ -821,6 +870,7 @@ const octoberPreview = (): BusinessDayStartPreview => ({
   },
   conflicts: [],
   conflictCount: 0,
+  unlistedCount: 0,
   backupDeadlines: { archive: null, cloud: null },
 });
 it("saves for the changeover a ready 05:00 → 03:00 preview showed, with no acknowledgement", async () => {

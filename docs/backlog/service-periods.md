@@ -34,14 +34,6 @@ login behaviour; decide the future schema/contract and test it separately.
 Nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
 read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
-## The Business day start dialog repeats the server's conflict-counting rule
-
-The Business day start dialog works out its conflict count by repeating the server's rule for
-counting a conflict once whatever its season (`#conflictLines`,
-`apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
-would make the dialog miscount without any test noticing. The server could return how many conflicts
-it left off its list instead, which adds a field to the shared preview type.
-
 ## The special-day-then-season rule is written out in several places
 
 With named days gone (A506-5), the rule "special day, then season" is still written out in
@@ -75,12 +67,6 @@ code, not run again here.
 - **A863.** A clash sentence names a range by its period, zone or department and its times only
   (`clockChangeConflictText`, `packages/venue-service/src/dashboard/clock-change-conflict.ts`), so
   a range in another department or on another weekday reads as if it were the one being edited.
-- **A864, the clash list.** `businessDayClockConflicts`
-  (`packages/venue-service/src/business-day-schedule.ts`) keeps the first 20 distinct ranges with
-  the season set aside, then returns every conflict row for those ranges, one per season the range
-  is painted in; `conflictCount` counts distinct ranges. The dialog shows each row as its own line
-  and adds what was counted beyond the list to the count (`#conflictLines`,
-  `apps/dashboard/src/screens/business-day-start-editor.ts`), with no "and N more" line.
 - **A865, the clash order.** One implementer saw the order between departments vary from run to
   run, and a review traced the order of one special day's dates to their random row ids.
   Reported by A788's implementers, not reproduced since.
@@ -155,17 +141,12 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Business-day start checks after A760
 
-4 entries, size L.
+2 entries, size L.
 
 - **Loose ends left by A788 (the business-day start changes at the next changeover).**
   [Detail](service-periods.md#loose-ends-left-by-a788)
-- **Loose ends left by A506-3 (#1591).**
-  [Detail](service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
 - **Loose ends left by A506-4 (#1597).**
   [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
-- **The start-time part of the business-day check's `transition_strip` reason never decides it**
-  (`inStrip(minutes(startsAt))`, `business-day-schedule.ts`): `endpoint_day` wins first.
-  Delete it or give it a case that needs it — left open by A789 slice 1, #1948.
 
 ## Decisions and deliberate limits
 

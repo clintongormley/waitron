@@ -584,7 +584,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **Business-day start checks after A760** (bundle of 4, 1 important, size L). [Detail](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
+- **Business-day start checks after A760** (bundle of 2, 1 important, size L). [Detail](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
