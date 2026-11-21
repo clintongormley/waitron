@@ -161,17 +161,52 @@ describe("the setup page's join routes", () => {
     },
   );
 
-  it("counts a start that a cancel arrived during as replaced", async () => {
+  it("refuses a cancel or start without the handle for as long as a start runs", async () => {
     const release = fake.hold();
     const starting = start();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.attempt.start).toHaveBeenCalledOnce();
-    const cancelling = cancel();
+    vi.advanceTimersByTime(60_000);
+    const refused = [cancel(), start()];
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.attempt.cancel).not.toHaveBeenCalled();
+    expect(fake.attempt.start).toHaveBeenCalledOnce();
     release();
+    expect(await Promise.all((await Promise.all(refused)).map(refusal))).toEqual([
+      { status: 409, code: "mirror.join_in_use" },
+      { status: 409, code: "mirror.join_in_use" },
+    ]);
     const { handle } = (await (await starting).json()) as { handle: string };
+    expect((await cancel(handle)).status).toBe(204);
+    expect(fake.attempt.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("leaves the previous handle current when a start fails", async () => {
+    const handle = await started();
+    fake.set({ state: "ended", reason: "dismissed" });
+    fake.attempt.start.mockRejectedValueOnce(new AppError("mirror.join_waiting", {}));
+    expect(await refusal(await start(handle))).toEqual({
+      status: 409,
+      code: "mirror.join_waiting",
+    });
+    expect(await read(handle)).toEqual({ state: "ended", reason: "dismissed" });
+    expect((await cancel(handle)).status).toBe(204);
+    expect(fake.attempt.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("answers none to the holding tab while its own cancel is under way", async () => {
+    const handle = await started();
+    let finish = () => {};
+    fake.attempt.cancel.mockImplementationOnce(async () => {
+      fake.set(null);
+      await new Promise<void>((resolve) => (finish = resolve));
+    });
+    const cancelling = cancel(handle);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.attempt.cancel).toHaveBeenCalledOnce();
+    expect(await read(handle)).toEqual({ state: "none" });
+    finish();
     expect((await cancelling).status).toBe(204);
-    expect(await read(handle)).toEqual({ state: "replaced" });
-    expect((await start()).status).toBe(200);
   });
 
   it("cancels with the current handle while its tab is live", async () => {

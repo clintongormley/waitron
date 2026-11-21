@@ -168,7 +168,6 @@ export interface SetupDeps {
     req: AdoptRequest,
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
-  /** This process's one join attempt, shared by the join routes and adopt. */
   joinAttempt?: BoxJoinAttempt;
   /** Reads the main box's authority certificate; `fetchPrimaryCertificate` when absent. */
   readPrimaryCertificate?: (primaryUrl: string) => ReturnType<typeof fetchPrimaryCertificate>;
@@ -1267,8 +1266,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }),
   );
 
-  // The handle keeps the code, and adopt's server key, on the page that started the join. Only its
-  // hash is kept.
+  // The handle keeps the code on the page that started the join. Only its hash is kept.
   let joinHolder: { handleHash: Buffer; readAt: number } | null = null;
   const handleHash = (handle: string) => createHash("sha256").update(handle).digest();
   const holderOf = (c: Context) => {
@@ -1302,7 +1300,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const holder = holderOf(c);
       if (holder !== null) {
         holder.readAt = performance.now();
-        return c.json(state);
+        return c.json(state ?? { state: "none" });
       }
       if (!isUnset(c.req.header("x-waitron-join-handle"))) return c.json({ state: "replaced" });
       return c.json({ state: state === null ? "none" : "elsewhere" });
@@ -1321,9 +1319,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const body = await readJsonBody<{ primaryUrl?: unknown }>(c);
       const primaryUrl = asString(body.primaryUrl, "primaryUrl");
       refuseJoinInUse(c);
-      const shown = await joinAttempt.start(primaryUrl);
+      const previous = joinHolder;
       const handle = randomBytes(32).toString("base64url");
-      joinHolder = { handleHash: handleHash(handle), readAt: performance.now() };
+      // Live for as long as the start runs; its answer counts as the tab's first read.
+      const holder = { handleHash: handleHash(handle), readAt: Number.POSITIVE_INFINITY };
+      joinHolder = holder;
+      const shown = await joinAttempt.start(primaryUrl).catch((error: unknown) => {
+        joinHolder = previous;
+        throw error;
+      });
+      holder.readAt = performance.now();
       return c.json({ ...shown, handle });
     });
   });
