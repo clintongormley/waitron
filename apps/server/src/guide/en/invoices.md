@@ -50,14 +50,14 @@ sent to AEAT from here.
 
 The file's sales side counts the VAT that belongs to the period and was recorded by its last day,
 so a correction, a cancellation or a late ticket recorded after the period ended never changes its
-file. It appears instead in the corrections of the period it was recorded in.
+sales figures. It appears instead in the corrections of the period it was recorded in.
 
 Before you file, also choose **Download corrections (XLSX)** for the same period and give both to
 your adviser. The workbook lists what was recorded in the period for earlier periods:
 
 - **Summary**: base and VAT for each earlier period, VAT rate, and whether it is a reduction or an
   addition.
-- **Corrections**: one line per invoice and VAT rate, with the day it was made, its kind
+- **Corrections**: one line per change and VAT rate, with the day it was made, its kind
   (**Correction**, **Void**, **Date moved out**, **Date moved in** or
   **Issued after its sale's period**), its invoice number, the invoice it corrects and the period
   it belongs to.

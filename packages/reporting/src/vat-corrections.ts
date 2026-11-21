@@ -27,7 +27,7 @@ function periodLabel(day: string, kind: LiquidationPeriod["kind"]): string {
   }
 }
 
-/** D5: by the sign of the base, or of the VAT when the base is zero. */
+/** By the sign of the base, or of the VAT when the base is zero. */
 function directionOf(base: Decimal, tax: Decimal): VatCorrectionDirection {
   const sign = isZeroDecimal(base)
     ? compareDecimal(tax, decimal("0"))

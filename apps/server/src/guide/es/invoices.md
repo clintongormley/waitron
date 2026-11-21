@@ -49,7 +49,7 @@ trimestre. Elige **Ejercicio**, **Periodo** y **Tipo de declaración** y despué
 
 La parte de ventas del fichero cuenta el IVA que corresponde al periodo y se registró hasta su
 último día, así que una rectificación, una anulación o un ticket tardío registrados después de
-terminar el periodo nunca cambian su fichero. Aparecen en cambio en las correcciones del periodo en
+terminar el periodo nunca cambian sus ventas. Aparecen en cambio en las correcciones del periodo en
 que se registraron.
 
 Antes de presentarlo, elige también **Descargar correcciones (XLSX)** para el mismo periodo y
@@ -58,7 +58,7 @@ anteriores:
 
 - **Resumen**: base imponible e IVA de cada periodo anterior, tipo de IVA y si es una reducción o
   un aumento.
-- **Correcciones**: una línea por factura y tipo de IVA, con la fecha en que se hizo, su tipo
+- **Correcciones**: una línea por cambio y tipo de IVA, con la fecha en que se hizo, su tipo
   (**Rectificativa**, **Anulación**, **Fecha trasladada (salida)**,
   **Fecha trasladada (entrada)** o **Emitida después del periodo de su venta**), su número de
   factura, la factura que corrige y el periodo al que corresponde.

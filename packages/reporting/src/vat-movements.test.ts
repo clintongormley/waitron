@@ -294,7 +294,7 @@ describe("vatMovements", () => {
       ]);
     });
 
-    it("reads the void's day in the voided sale's offset (D7)", async () => {
+    it("reads the void's day in the voided sale's offset", async () => {
       const id = await seedSale(suite.db, venue, {
         ...TICKET,
         invoiceNumber: 1,
@@ -360,7 +360,7 @@ describe("vatMovements", () => {
     expect((await movements(Q2)).map((m) => [m.kind, m.saleId])).toEqual([["invoice", ticket]]);
   });
 
-  it("puts a corrective of an exchange invoice on the exchange invoice's own day (D8)", async () => {
+  it("puts a corrective of an exchange invoice on the exchange invoice's own day", async () => {
     const ticket = await sale("2026-03-30");
     const exchange = await sale("2026-04-02");
     await seedSubstitution(suite.db, { substitutionSaleId: exchange, substitutedSaleId: ticket });

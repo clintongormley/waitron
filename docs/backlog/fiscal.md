@@ -205,8 +205,8 @@ No stored fiscal row is to be rewritten.
   summary and top sellers). The _modelo 303_ file counts a void made by the last day of its
   sale's period in that period; a void made later leaves that period's file as it was and goes on
   the corrections workbook of the period it is made in, listed against the sale's period (pinned by
-  "C: a later void leaves the ended quarter as it was" in `vat-return.test.ts` and the void cases
-  in `vat-corrections.test.ts`). That settles Q25
+  "C: a later void leaves the ended quarter as it was" in `vat-return.test.ts` and "lists, for a
+  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). That settles Q25
   (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
@@ -952,7 +952,7 @@ Also open, from before A802:
 
 Settled by the owner's decisions D6 and D12 of 2026-11-16, after the tax adviser's answers 1.12 and
 1.13 ([what they change](../compliance/2026-11-15-adviser-answers.md), Parts B6 and B13), then
-kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5, 6 and 8 of
+kept and widened by the owner's answers of 18 November (owner, 2026-11-18, questions 5 and 6 of
 the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. Waitron files nothing itself:
 each case goes on a report for the accountant, who decides what to file.
 
@@ -1084,6 +1084,23 @@ what is recorded and by whom, how a person adds an incident the box cannot see (
 the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
+
+### A VAT period counts what belongs to it and was recorded by its last day
+
+The VAT return (modelo 303) for a month or quarter counts the sales VAT that belongs to that period
+and was recorded by its last day; a correction, void, date replacement or late ticket recorded
+later leaves it as it was and is listed on the corrections workbook of the period in which it was
+recorded, against the earlier period it belongs to. The owner's words: "a filed report never
+changes", "we use a corrections report instead of just adding the transaction to the current
+period" (D12, 2026-11-16, [adviser answers](../compliance/2026-11-15-adviser-answers.md)), and a
+period counts as filed on "The day it ends (Recommended)" (D1, 2026-11-19, relayed by the watcher in
+lane L `questions.md`). How each kind of record moves VAT (the movement table) and D5–D11 and D13 are
+the watcher's choices, not the owner's
+([plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). Deliberate limits:
+a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
+after a handover count on their own stamps, since nothing records when they arrived; correctives and
+voids are read from every year. The purchases side is not covered: a supplier invoice's date can
+still be edited.
 
 **The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
 
@@ -1260,6 +1277,10 @@ the same customer, with the same rectified amounts, real day and VAT period (Q37
 carried over by the plan's default 4; not confirmed by the owner). It is built but
 switched off (`FULL_INVOICE_REPLACEMENT_ON` in `packages/fiscal-verifactu/src/put-right.ts`) until
 adviser question S14 is answered and AEAT's test service has accepted one._
+_2026-11-21: since the corrections report's PR 1, a replacement made after its real day's period
+has ended leaves that period's VAT return as it was and is on the corrections workbook of the period
+it is made in (pinned by "B: a replacement naming an earlier quarter leaves that quarter as it was"
+in `vat-return.test.ts`)._
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 

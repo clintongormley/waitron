@@ -116,7 +116,7 @@ describe("computeVatCorrections", () => {
     });
   });
 
-  it("splits a late table's invoice by the sign of each rate line's base (D5)", async () => {
+  it("splits a late table's invoice by the sign of each rate line's base", async () => {
     // The advance taken off left the 10% line negative.
     const advance = await sale("2026-03-20", {
       total: "33.00",

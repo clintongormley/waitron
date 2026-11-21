@@ -103,8 +103,7 @@ export const sales = table(
     // one it corrects, rather than a change to it.
     replacesOriginal: flag("replaces_original").notNull().default(false),
     // The day the sale really happened, when earlier than the invoice's issue day: on an
-    // ordinary sale or a replacement, never on a corrective by differences. The VAT return counts
-    // the sale in this day's period.
+    // ordinary sale or a replacement, never on a corrective by differences.
     supplyDay: day("supply_day"),
     // The recipient of a full invoice, NULL when the sale names none. Kept here as well as in the
     // fiscal record because it is a reprint/Z-report fact. Mirrors `Counterparty`

@@ -57,8 +57,8 @@ function stampBounds(year: number, period: LiquidationPeriod): { from: string; b
 
 /**
  * Every VAT movement that belongs to the period or was made in it, one row per rate line of the
- * movement's `vat_breakdown`. The movement rules are the table in
- * `docs/superpowers/plans/2026-11-19-adviser-corrections-report.md` → Design.
+ * movement's `vat_breakdown`. The rule: `docs/backlog/fiscal.md` → "A VAT period counts what
+ * belongs to it and was recorded by its last day".
  */
 export async function vatMovements(
   tx: Transaction,

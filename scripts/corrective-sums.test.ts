@@ -89,7 +89,7 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     fragment: "eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)",
     lines: 1,
     reason:
-      "looks up a replaced sale's supply day to list it in the VAT return's period; it totals nothing a sale owes",
+      "looks up a replaced sale's supply day to list it in the period its VAT belongs to; it totals nothing a sale owes",
   },
   {
     file: "packages/core/src/record-substitution.ts",

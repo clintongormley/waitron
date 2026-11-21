@@ -111,8 +111,7 @@ export interface VatReturn {
   year: number;
   /** The liquidation period (month/quarter/year). */
   period: LiquidationPeriod;
-  /** Régimen-general IVA devengado per rate {rate, base, tax}, corrections other than a replacement
-   * netted (the output side). */
+  /** Régimen-general IVA devengado per rate {rate, base, tax} (the output side). */
   byRate: VatRateLine[];
   /** Σ base imponible devengada. */
   baseTotal: Decimal;
@@ -124,7 +123,7 @@ export interface VatReturn {
   result: Decimal;
 }
 
-/** Whether a correction's rate line takes VAT off its period or adds to it (D5). */
+/** Whether a correction's rate line takes VAT off its period or adds to it. */
 export type VatCorrectionDirection = "reduction" | "addition";
 
 /** An invoice as the corrections list names it; the caller formats the number. */
