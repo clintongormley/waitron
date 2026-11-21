@@ -6,6 +6,7 @@
 **Status: for the watcher's clearance, then the owner's (a fiscal change).** Nothing is built. Branch
 `feat/advance-refund-after-final`, worktree
 `~/workspace/worktrees/waitron-feat-advance-refund-after-final`, from `main` at `3e6eaf02b4`.
+Revised after fresh read 1 (`~/waitron-campaign-l/receipts/advance-refund-plan-read-1.md`).
 
 **Words used here.** An **advance** is a part payment whose payer asked for a receipt of their own:
 Waitron issues them a ticket worded «Pago a cuenta» ("payment on account"), at 10% VAT. A **ticket**
@@ -18,201 +19,267 @@ and files the corrective.
 
 ## Outcome
 
-Once a table's invoice has taken an advance off, staff can still give that guest money back through
-the till: **Correct invoice** on the guest's own «Pago a cuenta» ticket, opened from **Find a bill**
-or from **Refund** on that payment, gives the money back (cash with its own drawer opening, or card)
-and files an R5 of that ticket. This covers a €0.00 table's invoice, where the advances paid for
-everything, and dishes sent back after the table's invoice for more than it carries. The table's
-invoice is never altered; money paid on it still comes back through Correct invoice on it.
+Once a table's invoice has taken an advance off, staff can still give the guests money back through
+the till. Money the table's invoice can still give back comes back through **Correct invoice** on
+it, at each dish's own VAT rate, as today. What it cannot give back (all of it, on a €0.00 table's
+invoice; the rest, when dishes go back for more than it carries) comes back through **Correct
+invoice** on the guest's own «Pago a cuenta» ticket, opened from **Find a bill** or from **Refund** on
+that payment: cash with its own drawer opening, or card. The table's invoice is never altered by it.
 
-**The answer to the first question.** The money goes back as a corrective of the guest's own
-«Pago a cuenta» ticket, naming that ticket, exactly as Waitron already does before the table's
-invoice exists. The table's invoice is left alone, because it declared only what was left after the
-advance (down to €0.00) and holds none of the advance's money, so a corrective of it cannot give that
-money back.
+**The answer to the first question.** Money goes back first by a corrective of the table's invoice,
+for whatever money and dishes it still holds; only what it cannot give back is a corrective (R5) of
+the guest's own «Pago a cuenta» ticket, naming that ticket, as Waitron already files it before the
+table's invoice exists. The adviser has not said which invoice to correct in this case, so this is
+the recommended default, with a third way (one corrective naming both tickets) put to the adviser.
 
 ## What happens today
 
-Receipts are marked **RUN** (a throwaway Vitest file in `apps/server/src/` through the real till
+Receipts are marked **RUN** (throwaway Vitest files in `apps/server/src/` through the real till
 routes with `useVenueDb`, run as `pnpm exec vitest run src/<file>` in `apps/server` with
-`TESTCONTAINERS_RYUK_DISABLED=true`, 6 and then 5 tests passed, files deleted before this commit) or
-**READ** (`file:line`).
+`TESTCONTAINERS_RYUK_DISABLED=true`, every run's tests passed, files deleted before each commit) or
+**READ** (`file:line`). "Refusal off" means the run replaced `refuseTakenOffAdvance` with a no-op
+through `vi.mock`, in the test file only.
 
 - **Before the table's invoice, an advance is corrected by an R5 of its own ticket. RUN.** A €30
-  cash advance on a €120 bill filed an F2 (an ordinary ticket record) of €30, 10% base 27.27, VAT
-  2.73, described «Pago a cuenta — consumo en mesa …». Correct invoice for €10 in cash filed an R5
-  numbered in the corrective series (`R/1`), "by differences" (`TipoRectificativa` `I`), 10% −9.09
-  and −0.91, whose `FacturasRectificadas` (the field naming the corrected invoice) named the
-  advance's `A/1`. It wrote one completed cash refund on the advance's own payment and one
-  `drawer_opens` row, reason `tender_refund` (the cash leg's drawer job,
-  `apps/server/src/invoice-correction-cash.ts:141`, READ). The bill then owed €100.
+  cash advance filed an F2 (an ordinary ticket record) of €30, 10% 27.27 and 2.73, described
+  «Pago a cuenta — consumo en mesa …». Correct invoice for €10 in cash filed an R5 in the corrective
+  series (`R/1`), "by differences" (`TipoRectificativa` `I`), 10% −9.09 and −0.91, whose
+  `FacturasRectificadas` (the field naming the corrected invoice) named the advance. It wrote one
+  completed cash refund on the advance's own payment and one `drawer_opens` row, reason
+  `tender_refund` (`apps/server/src/invoice-correction-cash.ts:141`, READ).
 - **The table's invoice records the advance only on its printed lines. RUN.** Example 1 (€120, €30
-  advance, €90 paid): its record is an F2 of €90.00, 10% 81.82 and 8.18, with no field naming the
-  advance. Its stored lines are the dish (base 109.09, gross 120.00) and one deduction line (base
-  −27.27, gross −30.00) whose `deducts_sale_id` is the advance. Its only payment is the €90; the €30
-  stays on the advance's ticket.
-- **After the table's invoice, nothing gives advance money back. RUN.** With the €30 advance taken
-  off, Correct invoice on the advance's ticket (preview, open, lines) answers 409
-  `advance.taken_off_final_invoice` (refused at `apps/server/src/invoice-corrections.ts:151`, from
-  `apps/server/src/advance-taken-off.ts:13-27`, READ). A €0.00 table's invoice (€140 bill, €120
-  advance, €20 dish removed) has nothing to give back: its lines route shows `left` 0.00 and
-  `moneyRefundable` 0.00, and a €20 preview is refused `sale.correction_amount_invalid`. When €100 of
-  dishes go back on example 1, the table's invoice takes at most its €90 (a €100 preview is refused
-  `sale.correction_amount_invalid`; €90 files), and the other €10 on the advance is refused with the
-  same code. The till's **Refund** opens Correct invoice on an advance only while the bill is not
-  printed (`apps/till/src/till-app.ts:23130`, READ); afterwards it sends a bill refund, which the
-  server refuses (`apps/server/src/bill-refunds.ts:689`, READ).
-- **Dishes cancelled before the table's invoice cannot leave the advances above the bill. RUN.** On
-  a €140 bill with a €130 advance, removing the €20 dish is refused 409 `bill.received_exceeds_total`,
-  excess 10.00 (`apps/server/src/bill-payments.ts:553`, READ), and nothing is issued. Giving the €10
-  back first through Correct invoice on the advance (allowed before the table's invoice) and then
-  removing the dish issues a €0.00 table's invoice, F2 10% 0.00 and 0.00. So `advance.exceeds_bill`
-  (`apps/server/src/advance-deduction.ts:89-91`, READ) was not reached by the cancel route; the
-  advances plan says piece 1 cannot reach it (ruling L4,
-  `docs/superpowers/plans/2026-11-19-adviser-advances.md:142`, READ). I did not try every route that
-  changes a bill. This plan leaves that check as it is: it stays piece 4's.
-- **With the refusal switched off, the existing path does the right thing. RUN** (the same throwaway
-  file, with `refuseTakenOffAdvance` replaced by a no-op through `vi.mock`, test-only). On the €0.00
-  table's invoice, €20 back on the advance in cash filed an R5 of 10% −18.18 and −1.82 naming the
-  advance, queued a drawer opening, left the bill `settled` with nothing owed, and left the table's
-  record untouched. On example 1 with the table's invoice corrected by its €90, €10 more on the
-  advance filed 10% −9.09 and −0.91. With only the €30 advance given back, the table's invoice could
-  still be corrected by its €90 (preview 200), so no more than the €120 paid can come back. A
-  hand-keyed card advance's €30 came back by its card leg, filed 10% −27.27 and −2.73, and queued no
-  drawer opening. One oddity, not investigated: after the €90 and €10 corrections the bill's
-  payments route answered `total` 20.00 and `received` 110.00; I did not check whether a bill
-  without advances shows the same after Correct invoice.
+  advance, €90 paid): an F2 of €90.00, 10% 81.82 and 8.18, with no field naming the advance; stored
+  lines are the dish and one deduction line (base −27.27, gross −30.00) naming the advance. Its only
+  payment is the €90.
+- **After the table's invoice, nothing gives advance money back. RUN.** Correct invoice on the
+  advance answers 409 `advance.taken_off_final_invoice` (`apps/server/src/invoice-corrections.ts:151`,
+  from `apps/server/src/advance-taken-off.ts:13-27`, READ). A €0.00 table's invoice has `left` and
+  `moneyRefundable` 0.00, and a €20 preview on it is refused `sale.correction_amount_invalid`. With
+  €100 of dishes back on example 1, the table's invoice takes its €90 and the other €10 is refused.
+  The till's **Refund** opens Correct invoice on an advance only while the bill is not printed
+  (`apps/till/src/till-app.ts:23130`, READ); afterwards it sends a bill refund, which the server
+  refuses (`apps/server/src/bill-refunds.ts:689`, READ).
+- **Dishes cancelled before the table's invoice cannot leave the advances above the bill. RUN.**
+  Removing a €20 dish from a €140 bill holding a €130 advance is refused 409
+  `bill.received_exceeds_total`, excess 10.00 (`apps/server/src/bill-payments.ts:553`, READ). Giving
+  the €10 back first on the advance, then removing the dish, issues a €0.00 table's invoice. So the
+  cancel route did not reach `advance.exceeds_bill` (`apps/server/src/advance-deduction.ts:89-91`);
+  the advances plan says piece 1 cannot reach it (ruling L4,
+  `docs/superpowers/plans/2026-11-19-adviser-advances.md:142`). I did not try every route that
+  changes a bill. That check stays piece 4's.
+- **With the refusal off, the existing path files and moves money correctly. RUN.** €0.00 table's
+  invoice, €20 cash back on the advance: R5 10% −18.18 and −1.82 naming the advance, a drawer
+  opening, the bill still `settled` and owing nothing, the table's record untouched. Example 1 with
+  €90 back on the table's invoice, then €10 on the advance: 10% −9.09 and −0.91. A hand-keyed card
+  advance came back by its card leg (10% −27.27 and −2.73) with no drawer opening.
+- **Mixed rates, refusal off. RUN.** Reader's example: €120 menu at 10% and €20 at 4%, a €130
+  advance, €10 paid at the end. The advance filed 10% 118.18 and 11.82; the table's invoice 10%
+  −9.09 and −0.91 beside 4% 19.23 and 0.77. The 4% dish goes back: the table's invoice gives back
+  its €10 (4% −9.62 and −0.38) and the advance €10 (10% −9.09 and −0.91). VAT over the four records
+  is €10.39; the €120 menu kept owes €10.91, so **€0.52 is under-declared**. In example 2 (€20 food
+  at 10%, €80 wine at 21%, €50 advance) the wine going back declares €4.29 of VAT on the €20 food,
+  whose own VAT is €1.82: **€2.47 over-declared** (worked out by hand from figures the reader's run
+  confirmed, and `apps/server/src/advance-corrections.test.ts:311`).
+- **The dish reports leave an advance's corrective out. RUN.** Example 1, €90 back on the table's
+  invoice and then €10 on the advance (refusal off): the VAT summary shows €20.00 (10% 18.18 and
+  1.82), but category sales shows €30.00 gross (27.27 net) and top sellers the menu at 27.27. Both
+  reports keep only lines with no advance role (`packages/reporting/src/category-sales.ts:209`,
+  `:218`; `packages/reporting/src/top-sellers.ts:72`, `:80`), and a corrective copies its line's
+  role (`packages/core/src/correction-history.ts:386`), all READ.
+- **A settled bill's `received` ignores Correct invoice refunds, with or without advances. RUN.**
+  Control, no advance: €120 paid, €90 back by Correct invoice → the payments route answers `total`
+  30.00, `received` 120.00. `moneyOf` nets only bill refunds, and an advance by what is left of it
+  (`apps/server/src/bill-payments.ts:317-330`, READ), so an advance's corrective lowers `received`
+  (example 1 above: 110.00) and this change does not make the gap worse.
+- **A wholly credited table's invoice. RUN** (refusal off). After a whole credit of example 1's
+  table's invoice, its lines route answers `sale.correction_history_unusable`, and a €30 preview on
+  the advance answers 200 (10% 27.27 and 2.73). The advance's line carries the role
+  `payment_on_account`.
+- **Waitron's copy of AEAT's checks does not look at which invoice a corrective names. RUN.** The
+  advance's R5 passed `validate` as filed, with a second ticket added to `FacturasRectificadas`, and
+  with that field removed. The run says nothing about whether AEAT accepts two tickets.
 
 **What the adviser has said (READ).** Answer 1.5: a price reduction made after the ticket is issued
 "will, where applicable, require" a corrective invoice
 (`docs/compliance/2026-11-15-adviser-answers.md:483-484`). Answer 1.7: "A real sale that was paid and
 then refunded gets a **corrective** instead, given to the customer and kept linked to the evidence
-of the refund" (`:227-229`). On advances, question 12 of the 19 November sheet proposes, for a
-company's advance worth more than its meal, "a corrective taking €200 off the advance's invoice"
-when the difference becomes a tip, and lists giving back the €200 as one of the agreed outcomes
-without saying which invoice it corrects (`docs/compliance/2026-11-19-adviser-meeting.md:270`). That
-question was added after the meeting and has no answer on file (`:455-468`). So the adviser has said
-a refund needs a corrective, but **not which invoice is corrected once the table's invoice has taken
-the advance off**. That is adviser question A1 below.
+of the refund" (`:227-229`). Question 12 of the 19 November sheet proposes "a corrective taking €200
+off the advance's invoice" when a company's surplus becomes a tip, and lists giving back the €200
+without saying which invoice it corrects (`docs/compliance/2026-11-19-adviser-meeting.md:270`); it
+was added after the meeting and has no answer on file (`:455-468`). The invoicing regulation allows
+one corrective for several invoices: art. 15.4, «Se podrá efectuar la rectificación de varias
+facturas en un único documento de rectificación, siempre que se identifiquen todas las facturas
+rectificadas» (several invoices may be corrected in one corrective, as long as it names them all;
+`docs/compliance/research/2026-10-09-vat-and-corrections.md:302-303`). So which invoice is corrected
+here is **not settled**: adviser questions A1 and A2.
 
 ## Design
 
-1. **Server.** Drop the taken-off refusal from Correct invoice
-   (`invoice-corrections.ts:151`) and from a correction's refund legs
-   (`apps/server/src/tender-refund-reservation.ts:216`). A plain or bill refund of an advance's money
-   keeps its own refusal, `tender.refund_of_advance` or `bill.refund_of_advance`, which names the
-   advance's ticket and Correct invoice on it (`advance-taken-off.ts:37-50` loses its first step).
-   Delete `refuseTakenOffAdvance` and the code `advance.taken_off_final_invoice`
-   (`apps/server/src/errors.ts:880-886`, the two doc comments at `:973-975` and `:989-991`, and
-   `apps/server/src/till-api.ts:666`). `advance.correction_open` stays: before the table's invoice,
-   an open correction of an advance still holds that invoice back.
-2. **Till.** **Refund** on an advance's payment opens Correct invoice on its ticket whether or not the
-   bill is printed (remove `open.printed !== true` at `till-app.ts:23130`). The two refund-of-advance
-   messages lose "While the table's bill is still open" (`apps/till/src/i18n/codes.ts:656-663`); the
-   `advance.taken_off_final_invoice` wording (`:664-667`, `:1135`) goes. No new window.
-3. **Not touched:** the invoice builders (`recordSale`, `recordCorrection`, `recordSubstitution`),
-   the chain, invoice numbering, the table's invoice and its deduction lines, `advance.exceeds_bill`.
-   The corrective is filed by `recordCorrection` unchanged, in the existing corrective series.
+1. **Table's invoice first (server).** In the checks Correct invoice runs before preview, open and
+   its lines (`checkInvoiceCorrectable`, `invoice-corrections.ts:137-163`), replace the taken-off
+   refusal: once a table's invoice has taken the advance off, refuse `advance.final_invoice_first`
+   (`saleId`, `finalSaleId`, `invoiceNumber`, `moneyLeft`) while that invoice still has both money to
+   give back and a dish left to correct, as its own lines route reports them. A table's invoice with
+   a whole credit has nothing left: its lines route answers `sale.correction_history_unusable` (RUN,
+   below), so the check reads the whole credit first rather than calling that route. Otherwise the
+   advance's corrective goes ahead, filed by `recordCorrection` unchanged.
+2. **Rates below the advance's (server; owner O2).** Under O2's default, also refuse
+   `advance.rate_below_advance` (`saleId`, `finalSaleId`, `invoiceNumber`, `rate`) when the table's
+   invoice holds a dish at a rate below the advance's own.
+3. **A correction opened before the table's invoice (server).** Keep `advance.taken_off_final_invoice`
+   only on a correction's refund legs (`apps/server/src/tender-refund-reservation.ts:216`), narrowed
+   to a correction opened before the table's invoice was issued; rewrite the comment at `:214-215`.
+   `advance.correction_open` stays: it still makes the table's invoice take off the advance as
+   corrected.
+4. **Plain refunds (server).** A plain or bill refund of an advance's money keeps
+   `tender.refund_of_advance` or `bill.refund_of_advance`, naming the advance's ticket
+   (`advance-taken-off.ts:37-50` loses its first step). This is the lane's choice; the watcher may
+   overrule it.
+5. **Category sales (`packages/reporting`; owner O3).** Under O3's default, an advance's corrective
+   issued after a table's invoice took the advance off counts in category sales under the existing
+   **Not recorded** row (`apps/dashboard/src/i18n/strings.ts:3047`); top sellers stays as it is.
+6. **Till.** **Refund** on an advance's payment opens Correct invoice on its ticket whether or not the
+   bill is printed (remove `open.printed !== true` at `till-app.ts:23130`; rewrite the comment at
+   `:23136-23137`). Words for the two new codes, EN and ES:
+   - `advance.final_invoice_first`: "The table's receipt{invoiceNumber} can still give back
+     {moneyLeft}. Use Correct invoice on that receipt first: it gives the money back at each dish's
+     own VAT rate. Once it has nothing left to give back, correct this payment on account for the
+     rest." / "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft}. Usa primero
+     Rectificar factura en ese ticket: devuelve el dinero con el tipo de IVA de cada plato. Cuando ya
+     no quede nada por devolver, rectifica este pago a cuenta por el resto."
+   - `advance.rate_below_advance`: "This bill has a dish at {rate}% VAT, below this payment on
+     account's rate, so the till cannot yet give this money back after the table's
+     receipt{invoiceNumber}: how to record it is with the tax adviser. Nothing has been given back."
+     / "Esta cuenta tiene un plato al {rate} % de IVA, por debajo del tipo de este pago a cuenta, así
+     que la caja aún no puede devolver este dinero después del ticket de la mesa{invoiceNumber}: cómo
+     registrarlo está consultado con el asesor fiscal. No se ha devuelto nada."
+   - `advance.taken_off_final_invoice`, now only for a correction opened before the table's receipt:
+     "This correction was opened before the table's receipt{invoiceNumber} took this payment on
+     account off. Choose Discard, then open Correct invoice on this ticket again." / "Esta
+     rectificación se abrió antes de que el ticket de la mesa{invoiceNumber} descontara este pago a
+     cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket."
+   - The two refund-of-advance messages (`apps/till/src/i18n/codes.ts:656-663`) lose "While the
+     table's bill is still open" and say "that gives the money back, and while the bill is open
+     takes it off the bill" instead of "that gives the money back and takes it off the bill".
+7. **Not touched:** `recordSale`, `recordCorrection`, `recordSubstitution`, the chain, invoice
+   numbering, the table's invoice and its deduction lines, `advance.exceeds_bill`.
 
 ## Decisions
 
-- **Owner O1 (fiscal approval).** After the table's invoice, money paid on an advance comes back as
-  an R5 of the advance's own ticket, filed as before that invoice. Recommended: yes. It replaces the
-  14:26 rule, by your 22:40 words: "I think we have to allow a refund". The 22:40 words are on file
-  only in the watcher's brief; `~/waitron-campaign-l/questions.md` does not hold them (searched).
-- **Owner O2 and adviser A2: mixed VAT rates.** An advance is at 10%. When wine at 21% is sent back
-  for more than the table's invoice carries at 21%, the rest comes off the advance at 10%. Example 2
-  (€20 food at 10%, €80 wine at 21%, €50 advance, €50 paid at the end; worked out by hand, Task 1
-  pins it): all the wine goes back; the table's invoice gives back its €50 (21% −41.32 and −8.68,
-  as `apps/server/src/advance-corrections.test.ts:311` files today) and the advance €30 (10% −27.27
-  and −2.73). Over the four records, the venue then declares €4.29 of VAT on the €20 it kept, where
-  the food's own VAT is €1.82. The venue pays more VAT, never less. **Recommended: accept it.** The
-  alternative would let a corrective of the table's invoice go below what it carries, which changes
-  `recordCorrection` (an invoice builder). Cost if wrong: €2.47 of VAT overpaid in this example, and
-  only on bills that mix rates and give back more than the table's invoice holds.
-- **Adviser A1.** *"Once the table's ticket has taken off Ana's €30 advance (ticket A/12), the
-  guests get money back: for example, dishes are sent back for more than the table's ticket
-  carries, or the advances paid for the whole meal and the table's ticket came to €0.00. We plan to
-  issue a corrective (R5) of A/12, by the amount given back, naming A/12, and leave the table's
-  ticket as issued. Is that right, or should the table's ticket be corrected?"* Recommended default:
-  the R5 of A/12, built now. Cost if wrong: records cannot be withdrawn, so R5s already filed stay
-  in the chain naming A/12. At a single rate they declare the same VAT as a corrective of the
-  table's ticket would. The other way needs a corrective that takes the table's ticket below zero,
-  which `recordCorrection` refuses today (RUN above: `sale.correction_amount_invalid`), so it would
-  be an invoice-builder change for the owner.
-- **Watcher W1.** No pointer from the table's invoice to its advances inside Correct invoice.
-  Recommended: none; the guide sends staff to the guest's ticket in Find a bill. Cost if wrong:
-  staff with a €0.00 receipt look in the wrong place first; a pointer is a small till change later.
-- **Watcher W2.** The two cases that write an open correction into the database to reach a state no
-  route reaches (`advance-corrections.test.ts:564`, `:582`) are deleted with the guard they test,
-  not rewritten. Recommended: delete.
+- **Owner O1 (fiscal approval).** Table's invoice first; the rest as an R5 of the advance's own
+  ticket. Recommended: yes. It replaces the 14:26 rule, by the owner's words recorded at
+  `~/waitron-campaign-l/queue.md:79` (2026-11-20 ~22:40): "I think we have to allow a refund". The
+  advances plan offered this shape ("refuse it once the table's invoice exists, except for what the
+  table's invoice cannot take", `docs/superpowers/plans/2026-11-19-adviser-advances.md:408-409`).
+- **Owner O2: an advance's corrective when the bill mixes rates.** Only money the table's invoice
+  cannot give back comes off the advance, at the advance's 10%. When the dish that went back was at
+  a higher rate, the venue declares too much VAT (example 2: €2.47 over); when it was at a lower
+  rate, too little (the 4% example: €0.52 under). Choose:
+  - **(i) Recommended:** refuse the advance's corrective on a bill holding a dish below the advance's
+    rate until the adviser answers A2 (`advance.rate_below_advance`). Cost: on such a bill, money
+    beyond what the table's invoice holds has no way back through the till until then. Bills
+    holding only 10% and higher rates go ahead, over-declaring at worst.
+  - **(ii)** allow it on every bill. Cost: a few cents to euros of VAT under-declared per such
+    refund, in records that cannot be withdrawn; the accountant would put it right in the return.
+  - The exact alternative is one corrective naming both tickets at the dishes' own rates (A1, third
+    way), which changes `recordCorrection`, an invoice builder: not in this plan.
+- **Owner O3: category sales.** Recommended: count an advance's corrective issued after the table's
+  invoice under **Not recorded**, so the report adds up to the VAT summary; top sellers counts
+  dishes and stays. Alternative: leave both, and category sales shows the amount given back more
+  than takings on such bills (example 1: €30.00 against €20.00).
+- **Adviser A1 and A2.** *"Once the table's ticket has taken off Ana's €30 advance (ticket A/12), the
+  guests get money back for more than the table's ticket can give back: dishes are sent back, or the
+  advances paid for the whole meal and the table's ticket came to €0.00. We plan to give back what
+  the table's ticket holds by a corrective of it, and the rest by a corrective (R5) of A/12 at A/12's
+  10%. Is that right? Or should one corrective name both tickets (art. 15.4) and carry the returned
+  dishes' own rates? When the dishes sent back were at 4% or 21%, may the part taken off A/12 stay
+  at 10%?"* Recommended default until answered: Design 1 and 2. Cost if the adviser wants one
+  corrective naming both: the R5s filed meanwhile stay in the chain; at a single rate they declare
+  the same VAT; building the joint corrective is an invoice-builder change for the owner, and AEAT's
+  acceptance of two named tickets is untested (RUN above).
+- **Watcher W1.** No pointer from the table's invoice to its advances in Correct invoice; the new
+  `advance.final_invoice_first` wording names the table's receipt the other way round. Recommended:
+  none.
+- **Watcher W2: the settled bill's `received` figure.** It predates advances (control RUN) and this
+  change does not make it worse. Recommended: under the loose-ends rule, one line in the PR thread,
+  not fixed here.
 
 ## Changed test checks
 
-Reason for every row: the owner, 2026-11-20 ~22:40, "refusing over payment only partly works. what
-if ordered items are cancelled after part payment? you could still get into the same situation. I
-think we have to allow a refund".
+Reason for every row: the owner, 2026-11-20 ~22:40 (`~/waitron-campaign-l/queue.md:79`): "refusing
+over payment only partly works. what if ordered items are cancelled after part payment? you could
+still get into the same situation. I think we have to allow a refund".
 
 | Test | Before | After |
 | --- | --- | --- |
-| `apps/server/src/advance-corrections.test.ts:437` | Correct invoice on the advance refused `advance.taken_off_final_invoice`, nothing filed | it gives back €30 in cash and files an R5, 10% −27.27 and −2.73, naming the advance; the table's record unchanged |
-| `apps/server/src/advance-corrections.test.ts:461` | plain and bill refunds of the advance refused `advance.taken_off_final_invoice` | refused `tender.refund_of_advance` and `bill.refund_of_advance`, naming the advance's ticket; no refund written |
-| `apps/server/src/advance-corrections.test.ts:564`, `:582` (helpers `:486-562`) | a correction written open in the database had its cash or card leg refused | deleted (W2) |
-| `apps/server/src/advance-corrections.test.ts:702` | after a whole credit of the table's invoice, Correct invoice on the advance refused | it files the advance's R5 |
+| `apps/server/src/advance-corrections.test.ts:437` | Correct invoice on the advance refused `advance.taken_off_final_invoice`, nothing filed | refused `advance.final_invoice_first`, naming the table's invoice and its €90.00 left; nothing filed |
+| `apps/server/src/advance-corrections.test.ts:461` (lane's choice) | plain and bill refunds refused `advance.taken_off_final_invoice` | refused `tender.refund_of_advance` and `bill.refund_of_advance`, naming the advance's ticket; no refund written |
+| `apps/server/src/advance-corrections.test.ts:702` | after a whole credit of the table's invoice, Correct invoice on the advance refused | its preview answers 200, 10% 27.27 and 2.73 (RUN with the refusal off): the credited invoice has nothing left |
 | `apps/till/src/till-app-bill-payments.test.ts:8118` | Refund on a printed bill's advance sent a bill refund and showed the taken-off refusal | it opens Correct invoice on the advance's ticket and sends no bill refund |
-| `apps/till/src/i18n/codes.test.ts:1033` | refund-of-advance wording says "While the table's bill is still open" | the wording without it, EN and ES |
-| `apps/till/src/i18n/codes.test.ts:1055` | the taken-off wording, EN and ES | deleted with the code |
+| `apps/till/src/i18n/codes.test.ts:1033` | refund-of-advance wording with "While the table's bill is still open" | Design 6's wording, EN and ES |
+| `apps/till/src/i18n/codes.test.ts:1055` | the taken-off wording sending staff to the table's receipt | Design 6's wording for a correction opened before the table's receipt |
+
+`advance-corrections.test.ts:564` and `:582` stay unchanged: Design 3 keeps what they check.
 
 ## Tasks
 
 Each task leaves `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts` unedited, and touches no invoice builder, the
 chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run <file>`, `pnpm
---filter @waitron/till exec vitest run <file>`.
+--filter @waitron/till exec vitest run <file>`, `pnpm --filter @waitron/reporting exec vitest run
+<file>`.
 
-- [ ] **Task 1: Correct invoice on an advance after the table's invoice (server).** Failing first,
-  in `apps/server/src/advance-corrections.test.ts`: (a) the €0.00 case, €20 cash back on the
-  advance files 10% −18.18 and −1.82 naming it, a `drawer_opens` row with reason `tender_refund`,
-  the bill still `settled` and owing 0.00, the table's record unchanged; (b) example 1 with €100
-  sent back, €90 on the table's invoice then €10 on the advance (10% −9.09 and −0.91); (c) example 2
-  as in O2; (d) a hand-keyed card advance given back by its card leg, no drawer row; (e) a reader
-  card advance given back through the fake provider, following
-  `apps/server/src/invoice-correction-cards.test.ts`. Each fails today with
-  `advance.taken_off_final_invoice`. Then remove the refusal at `invoice-corrections.ts:151` and
-  `tender-refund-reservation.ts:216`, and apply the rows for `:437`, `:564`, `:582`, `:702`.
-- [ ] **Task 2: plain refunds keep their own refusal; the code goes (server).** Failing first: row
-  `:461`. Then remove the first step of `refuseAdvanceRefund`, delete `refuseTakenOffAdvance` and the
-  code at the sites in Design 1. Also run `scripts/errors-reachable.test.ts` from the root
-  (`pnpm exec vitest run scripts/errors-reachable.test.ts`).
-- [ ] **Task 3: the till (till).** Failing first: row `till-app-bill-payments.test.ts:8118`, then the
-  `codes.test.ts` rows. Then Design 2.
-- [ ] **Task 4: guides and docs.** The staff guide's "While the bill has no invoice, **Refund** …"
+- [ ] **Task 1a: the advance's corrective after the table's invoice (server).** Failing first, in
+  `apps/server/src/advance-corrections.test.ts`: (a) €0.00 table's invoice, €20 cash back on the
+  advance files 10% −18.18 and −1.82 naming it, one `drawer_opens` row `tender_refund`, bill
+  `settled` owing 0.00, table's record unchanged; (b) example 1 while the table's invoice holds €90:
+  refused `advance.final_invoice_first` with `moneyLeft` 90.00 (row `:437`); after €90 back on it,
+  €10 on the advance files 10% −9.09 and −0.91; (c) example 2: €50 back at 21% on the table's
+  invoice, then €30 on the advance files 10% −27.27 and −2.73; (d) the 4% bill, once its table's
+  invoice has given back its €10: refused `advance.rate_below_advance` with `rate` 4.00 under O2 (i),
+  or 10% −9.09 and −0.91 under O2 (ii); (e) row `:702`. Then Design 1, 2 and 3, the codes in
+  `apps/server/src/errors.ts` and `apps/server/src/till-api.ts` beside `:666` (409). Run `:564` and `:582`
+  unchanged.
+- [ ] **Task 1b: category sales (reporting).** Failing first, in `apps/server/src/advance-corrections.test.ts`
+  (the reports need the till's routes): example 1 with €90 back on the table's invoice and €10 on the
+  advance gives category sales €20.00 gross, the −€10.00 under Not recorded, top sellers unchanged at
+  27.27 net (fails today with €30.00). Then Design 5 in `packages/reporting/src/category-sales.ts`, with
+  a unit case in its own test file. Skip if O3 takes the alternative; then the case pins €30.00 and
+  27.27.
+- [ ] **Task 2: card legs and plain refunds (server).** Failing first: a hand-keyed card advance and
+  a reader card advance (fake provider, following `apps/server/src/invoice-correction-cards.test.ts`)
+  given back after a €0.00 table's invoice, no drawer row; row `:461`. Then Design 4. Run
+  `pnpm exec vitest run scripts/errors-reachable.test.ts` from the root.
+- [ ] **Task 3: the till.** Failing first: row `till-app-bill-payments.test.ts:8118`, the
+  `codes.test.ts` rows and cases for the two new codes' words. Then Design 6.
+- [ ] **Task 4: guides and docs.** The guide's "While the bill has no invoice, **Refund** …"
   (`apps/server/src/guide/en/table-service.md:220-221`, `apps/server/src/guide/es/table-service.md:235-236`)
-  becomes: Refund beside a payment that has its own ticket opens Correct invoice on that ticket, and
-  once the table's receipt has taken it off, the guest's own ticket in Find a bill gives back what
-  they paid on account. Then run `pnpm --filter @waitron/server exec vitest run
-  src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts`. Replace the
-  14:26 sentences in `docs/backlog/fiscal.md:97-102` with the new rule and add question A1 to the
-  adviser sheet's question 12 (EN and ES). Add a dated pointer to this plan beside the 14:26 answer in
-  `docs/superpowers/plans/2026-11-19-adviser-advances.md:411-418` and `:239-241`, rewriting neither.
+  becomes: Refund beside a payment that has its own ticket opens Correct invoice on that ticket; once
+  the table's receipt has taken it off, money comes back first through Correct invoice on the table's
+  receipt, and what it cannot give back through the guest's own ticket. Run `pnpm --filter
+  @waitron/server exec vitest run src/guide-content.test.ts` and `pnpm exec vitest run
+  scripts/guide-links.test.ts`. Rewrite `docs/backlog/fiscal.md:97-114` for the new rule and
+  `advance.correction_open`'s reason (it keeps the table's invoice from taking off an advance whose
+  correction is still open). Add A1 and A2 to the adviser sheet's question 12, EN and ES. Add dated
+  pointers to this plan beside the 14:26 answer in `docs/superpowers/plans/2026-11-19-adviser-advances.md:239-241`
+  and `:411-418`, rewriting neither.
 
 ## Guards to run
 
 `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad.test.ts` (unedited, must
 pass), `apps/server/src/advance-final.test.ts`, `advance-money.test.ts`, `bill-advances.test.ts`,
-`advance-corrections.later-sale-date.test.ts`, `invoice-correction-cards.test.ts`,
-`scripts/errors-reachable.test.ts`, `scripts/corrective-sums.test.ts`, and the guide guards in
-Task 4.
+`advance-corrections.later-sale-date.test.ts`, `invoice-correction-cards.test.ts`, the whole of
+`packages/reporting` (`pnpm --filter @waitron/reporting test`), `scripts/errors-reachable.test.ts`,
+`scripts/corrective-sums.test.ts`, and the guide guards in Task 4.
 
 ## Risks
 
-- **The adviser answers A1 the other way.** Then the R5s filed in the meantime stay, as costed in A1.
-- **Piece 1b (full-invoice advances) is not built.** An advance is always a ticket today
-  (`advance.full_invoice_unsupported`, `errors.ts:877-879`), so every corrective here is an R5. Once
-  1b lands, giving back a full-invoice advance needs piece 3's correctives of full invoices.
-- **A staff member gives back an advance after the table's invoice for a reason that is not a price
-  cut.** The R5 still records the money given back, as any Correct invoice does. The advances
-  plan recommended this shape before the 14:26 answer refused it (its Q1, `:397-410`).
-- **The settled bill's `received` figure after corrections** (the oddity above) is unexplained.
-  Task 1's case (b) asserts only status and what is owed; whoever finds the cause fixes it in this PR
-  if it is in the advance code.
+- **Table's invoice first sends money to whoever paid it.** When Ana alone is owed money and Bob
+  paid the table's invoice by card, the first refund goes to Bob's card or the cash drawer, through
+  that invoice's own steps. This is the cost of Design 1.
+- **The adviser answers A1 or A2 the other way.** The R5s filed meanwhile stay, as costed above.
+- **Piece 1b (full-invoice advances) is not built.** Every advance is a ticket today
+  (`advance.full_invoice_unsupported`, `errors.ts:877-879`), so every corrective here is an R5; once
+  1b lands, a full-invoice advance needs piece 3's correctives of full invoices.
+- **A refund that is not a price cut** (a mistaken payment, say) is still recorded as a corrective,
+  as any Correct invoice is.
