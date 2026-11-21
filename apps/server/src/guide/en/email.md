@@ -19,8 +19,9 @@ Mail sent through your saved server and the test on this page use your venue nam
 the sender address. If the page says the saved sender address is not valid, choose
 **Change mail server** and correct **Sender address** before testing again.
 
-Before completing Prepare or Live setup, enter your mail server settings and send an accepted
-test to the administrator address. Development setup can skip this step. If you use your own mail server, saving it
+During Prepare or Live setup, enter your mail server settings and send a test to the administrator
+address. You can skip the mail server in development or when you [choose Cloud for staff email
+during test setup](email.md#cloud-staff-email). If you use your own mail server, saving it
 sends invitations and password-reset links to real inboxes. This page shows invoice email status:
 development boxes keep invoice email locally even when account email uses a saved server or Cloud.
 
@@ -39,21 +40,24 @@ You can also receive that report after a box restart. After a closure spanning s
 ## Choose staff email during test setup {#cloud-staff-email}
 
 In Prepare on a test box, sign in to Waitron Cloud and tick **Send staff email through Waitron
-Cloud** on the email step. Test your own mail server before continuing. **Provision this server**
-sends your choice to Cloud. Once the box restarts and connects, Cloud can send staff invitations,
-password resets and email changes. Your mail server still sends invoices and notices.
+Cloud** on the email step. Leave the mail server blank and continue, or enter and test your own
+server. Once the box restarts and connects, Cloud can send staff invitations, password-reset links
+and email-change codes.
 
-If setup says it could not confirm Cloud staff email, your mail server settings were saved. If
-your sign-in expired, finish [connecting the test box](servers.md#setup-cloud-sign-in) from
-**System → Cloud services**. Staff email uses [Cloud](email.md#cloud-account-email) when its relay
-is enabled.
+Add a mail server in **System → Email** to offer customer email on the till and dashboard and
+send the daily report, other staff notices, and the security notice to the old address when a
+staff member changes their email.
+
+If setup says it could not confirm Cloud staff email, go to **System → Cloud services** to finish
+[connecting the test box](servers.md#setup-cloud-sign-in), or set up your mail server in
+**System → Email**.
 
 ## Account email through test Cloud {#cloud-account-email}
 
 When you pair your box with the test Cloud and enable its email relay, invitations,
 password-reset links and email-change codes use Cloud, including in Demo. Check the recipient's
 real inbox rather than Demo's Email inbox. Keep a mail server configured for receipts and other
-notices, and for completing Prepare or Live setup.
+notices.
 
 Cloud account links lead back to your box. Open them on a network that can reach it. Cloud's
 invitation does not list your roles or include the venue's optional privacy link. If an email

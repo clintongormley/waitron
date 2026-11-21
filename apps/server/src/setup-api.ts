@@ -974,16 +974,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       )
         throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;
-      if (
-        (mode === "prepare" || mode === "live") &&
-        deps.devMode !== true &&
-        rawEmail === undefined
-      ) {
-        throw new AppError("setup.email_required", { field: "email" });
-      }
-      if (mode === "demo" && rawEmail !== undefined) invalidRequest("email");
-      const email =
-        rawEmail === undefined ? undefined : parseEmailSettings(asObject(rawEmail, "email"));
       if (rawStaffEmail !== undefined && typeof rawStaffEmail !== "boolean")
         invalidRequest("cloudStaffEmail");
       const staffEmail =
@@ -992,6 +982,17 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         deps.devMode !== true &&
         environment === "preproduction" &&
         !request.configurationImport;
+      if (
+        (mode === "prepare" || mode === "live") &&
+        deps.devMode !== true &&
+        !staffEmail &&
+        rawEmail === undefined
+      ) {
+        throw new AppError("setup.email_required", { field: "email" });
+      }
+      if (mode === "demo" && rawEmail !== undefined) invalidRequest("email");
+      const email =
+        rawEmail === undefined ? undefined : parseEmailSettings(asObject(rawEmail, "email"));
       if (environment === "production") {
         if (deps.assertFiscalReady === undefined) {
           throw new AppError("setup.fiscal_test_required", { module: contribution.id });

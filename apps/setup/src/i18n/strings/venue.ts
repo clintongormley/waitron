@@ -7,9 +7,11 @@ export const venueEn = {
   "email.heading": "Set up email",
   "email.cloud_staff_email": "Send staff email through Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud sends staff invitations, password resets and email changes. Your mail server sends invoices and notices.",
+    "Cloud sends staff invitations, password resets and email-change codes. Choose Cloud to continue with your mail server details blank.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
+  "email.intro_optional":
+    "To add your own mail server, enter its settings and send a test message to {recipient}.",
   "email.server.label": "Mail server",
   "email.server.hint": "smtp.example.com",
   "email.server.error": "Enter a mail server hostname.",
@@ -274,9 +276,11 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.heading": "Configura el correo electrónico",
   "email.cloud_staff_email": "Enviar el correo del personal a través de Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud envía invitaciones al personal, restablecimientos de contraseña y cambios de correo. Tu servidor de correo envía las facturas y los avisos.",
+    "Cloud envía invitaciones al personal, enlaces para restablecer contraseñas y códigos de cambio de correo. Elige Cloud para continuar sin rellenar los datos de tu servidor de correo.",
   "email.intro":
     "Envía un mensaje de prueba a {recipient} antes de continuar. Usa los ajustes de tu proveedor de correo.",
+  "email.intro_optional":
+    "Para añadir tu propio servidor de correo, introduce sus ajustes y envía un mensaje de prueba a {recipient}.",
   "email.server.label": "Servidor de correo",
   "email.server.hint": "smtp.example.com",
   "email.server.error": "Introduce el nombre del servidor de correo.",

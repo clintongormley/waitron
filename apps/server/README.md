@@ -520,10 +520,12 @@ recorded names, while the terminal lists the names from the current seed. To reb
 practice data with the current names, run `wa-wt reset demo <worktree-name>` (Claude, for its own
 copy: `wa-wt reset own demo <worktree-name>`).
 
-For a new Prepare or Live venue outside development, the setup wizard asks for the mail server settings and sends a
-test message to your administrator address. Continue becomes available when the server accepts a
-test of the current settings. Final setup seals the connection URL in the credential vault and
-saves the sender address in the mail settings document.
+For a new Prepare or Live venue outside development, the setup wizard asks for the mail server
+settings and sends a test message to your administrator address. Continue becomes available when
+the server accepts a test of the current settings. In Prepare on a configured test box, you can
+choose Cloud staff email and leave the mail server blank. When you enter a mail server, final
+setup seals the connection URL in the credential vault and saves the sender address in the mail
+settings document.
 
 Ordinary outgoing SMTP mail and the Settings test use the venue name as the sender display name,
 keeping the configured mailbox. Settings shows the saved From value so you can repair it when

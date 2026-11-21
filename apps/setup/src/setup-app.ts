@@ -1240,6 +1240,8 @@ export class SetupApp extends LitElement {
       switchMode(this.draft, mode),
       event.detail.patch,
     ) as DeepPartial<ProvisionBody>;
+    if (Object.hasOwn(event.detail.patch, "email") && event.detail.patch.email === undefined)
+      delete this.draft.email;
     const status = this.fiscalTestStatus;
     if (!sameDraftValue(fiscalTestInputs(before, status), fiscalTestInputs(this.draft, status))) {
       this.#invalidateFiscalTest();

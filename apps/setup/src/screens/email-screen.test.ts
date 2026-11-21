@@ -82,6 +82,39 @@ describe("wizard Email step", () => {
     expect(patch.mock.calls[0]![0].detail.patch).toEqual({ email, cloudStaffEmail: true });
   });
 
+  it("continues with Cloud email selected and no mail server", async () => {
+    const runEmailTest = vi.fn();
+    const { el, host } = await mountWidget<SetupEmailScreen>("setup-email-screen", {
+      adminEmail: "admin@example.com",
+      mode: "prepare",
+      cloudStaffEmailAvailable: true,
+      api: { runEmailTest },
+    });
+    const patch = vi.fn();
+    const goto = vi.fn();
+    host.addEventListener("setup-patch", patch);
+    host.addEventListener("setup-goto", goto);
+    expect(button(el, "next").disabled).toBe(true);
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>('input[name="cloud-staff-email"]')!,
+    );
+    expect(button(el, "next").disabled).toBe(false);
+    expect(button(el, "test").disabled).toBe(true);
+    for (const field of ["server", "port", "encryption", "from"])
+      expect(el.shadowRoot!.querySelector(`[data-test=${field}]`)!.hasAttribute("required")).toBe(
+        false,
+      );
+    expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+
+    button(el, "next").click();
+    expect(patch.mock.calls[0]![0].detail.patch).toStrictEqual({
+      email: undefined,
+      cloudStaffEmail: true,
+    });
+    expect(goto.mock.calls[0]![0].detail.screen).toBe("review");
+    expect(runEmailTest).not.toHaveBeenCalled();
+  });
+
   it("keeps a previous choice while the availability check is unanswered", async () => {
     const { el, host } = await mountWidget<SetupEmailScreen>("setup-email-screen", {
       email,
