@@ -1063,6 +1063,26 @@ describe("the registered business address in parts", () => {
     expect(q(el, "[data-test=registered-same-hint]")!.textContent!.trim()).not.toBe("");
   });
 
+  it("shows the switch's note only while it is on, close under the switch and apart from what follows", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare" },
+    });
+    const hint = () => q(el, "[data-test=registered-same-hint]");
+    const toggle = sameSwitch(el).getBoundingClientRect();
+    const note = hint()!.getBoundingClientRect();
+    const next = hint()!.closest("fieldset")!.nextElementSibling!.getBoundingClientRect();
+    const space2 = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+    expect(space2).toBeGreaterThan(0);
+    expect(note.top - toggle.bottom).toBeLessThanOrEqual(space2);
+    expect(next.top - note.bottom).toBeGreaterThan(space2);
+    expect(sameSwitch(el).getAttribute("description")).toBe(t("venue.hint.registered_same"));
+    await type(el, "registeredSameAsVenue", "off");
+    expect(hint()).toBeNull();
+    expect(sameSwitch(el).getAttribute("description")).toBe("");
+    const street = q(el, "[data-test=registeredStreet]")!.getBoundingClientRect();
+    expect(street.top - sameSwitch(el).getBoundingClientRect().bottom).toBeGreaterThan(0);
+  });
+
   it("sends the venue's own address joined while the switch is on", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "prepare" },

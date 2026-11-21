@@ -128,7 +128,13 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   static override styles = [
     ...TaxpayerFieldDialog.styles,
     css`
+      /* A steady width, so the window does not narrow when the switch hides the parts. */
       .fields {
+        width: min(
+          var(--wt-form-max-width),
+          calc(var(--wt-dialog-max-width) - 2 * var(--wt-space-5))
+        );
+        max-width: 100%;
         display: grid;
         gap: var(--wt-space-3);
       }
@@ -140,11 +146,16 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
       .pair > * {
         min-width: 0;
       }
+      @media (max-width: 48rem) {
+        .pair {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
       wt-address-lookup {
         margin-block-end: var(--wt-space-3);
       }
       .switch-hint {
-        margin: calc(-1 * var(--wt-space-2)) 0 0;
+        margin: calc(-1 * var(--wt-space-2)) 0 var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }

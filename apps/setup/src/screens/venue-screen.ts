@@ -340,6 +340,11 @@ export class SetupVenueScreen extends LitElement {
         font-weight: var(--wt-font-weight-medium);
       }
 
+      /* Its note says what the switch's on state means, so it sits right under it. */
+      .field.with-hint {
+        margin-bottom: 0;
+      }
+
       .switch-hint {
         margin: var(--wt-space-1) 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
@@ -1124,14 +1129,14 @@ export class SetupVenueScreen extends LitElement {
 
   #registeredAddress(pack: CountryPack | undefined): TemplateResult {
     const errors = this.#errors;
-    const hint = t("venue.hint.registered_same");
+    const hint = this.sameAsVenue ? t("venue.hint.registered_same") : "";
     const province =
       pack === undefined ? undefined : findAdministrativeArea(pack, this.values.registeredProvince);
     return html`<fieldset class="registered" data-test="registered-address">
       <legend>${t("venue.label.taxpayer_domicile")}</legend>
       ${this.#addressSearch("domicile", pack)}
       <wt-switch
-        class="field"
+        class=${this.sameAsVenue ? "field with-hint" : "field"}
         data-test="registeredSameAsVenue"
         name="registeredSameAsVenue"
         label=${t("venue.label.registered_same")}
@@ -1139,7 +1144,13 @@ export class SetupVenueScreen extends LitElement {
         .checked=${this.sameAsVenue}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => this.#onSameAsVenue(event)}
       ></wt-switch>
-      <p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">${hint}</p>
+      ${
+        this.sameAsVenue
+          ? html`<p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">
+              ${hint}
+            </p>`
+          : nothing
+      }
       ${
         this.sameAsVenue
           ? nothing
