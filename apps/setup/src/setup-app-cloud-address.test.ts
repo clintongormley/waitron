@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import type { WtAddressLookup } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
 import { venue, wizardApi } from "../test/first-setup-browser.js";
+import { es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { dispatchProvisionRequested, dispatchSetupGoto, dispatchSetupPatch } from "./events.js";
 import { SetupApp } from "./setup-app.js";
@@ -294,8 +295,8 @@ it("opens Admin before Cloud sign-in in Prepare and keeps the administrator afte
   expect(field("password").required).toBe(false);
   expect(field("pin").value).toBe("");
   expect(field("pin").required).toBe(false);
-  expect(field("password").hint).toBe("Déjala en blanco para conservar tu contraseña.");
-  expect(field("pin").hint).toBe("Déjalo en blanco para conservar tu PIN.");
+  expect(field("password").hint).toBe(es["admin.password.held_hint"]);
+  expect(field("pin").hint).toBe(es["admin.pin.held_hint"]);
 
   await click("admin", "next");
   await expect.poll(() => screen("venue")).not.toBeNull();
@@ -307,7 +308,7 @@ it("opens Admin before Cloud sign-in in Prepare and keeps the administrator afte
   expect(field("password").required).toBe(true);
   expect(field("pin").required).toBe(true);
   expect(screen("admin")!.shadowRoot!.querySelector("wt-form-actions")?.error).toContain(
-    "Vuelve a introducir la contraseña y el PIN",
+    es["admin.cloud_expired"],
   );
   for (const name of ["password", "pin"] as const)
     field(name).dispatchEvent(
