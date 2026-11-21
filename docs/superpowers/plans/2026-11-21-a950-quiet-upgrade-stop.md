@@ -39,6 +39,10 @@ at 09:58 in Lane F’s questions.md and the final scope and size at 10:02.
    or incomplete shutdown check. An old target with a copy reports rolled back. A candidate
    target reports upgraded. Manual installs retain Restore/Keep.
 
+**21 November, step 7:** [Box status](2026-11-21-a950-upgrade-status.md) now shares the console's
+outcome. A partial copy failure followed by a healthy reopening of the previous release is
+`rolled-back`. A stop refused before copying still reports `deferred-at-stop`.
+
 **Tests first.** `host.test.mjs` uses migrated fixtures via `useVenueDb` for quiet, busy and late
 activity, and proves the rollback stop skips the quiet check. `cli.test.mjs` checks the final
 recheck’s saved pause or newer serial, different version, time cutoff and current attempt folder.

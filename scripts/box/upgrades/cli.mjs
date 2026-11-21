@@ -13,7 +13,13 @@ import {
   installedVenueTimeZone,
   recoverInstalledUpgrade,
 } from "./host.mjs";
-import { applyUpgrade, upgradeStatus, writeFileDurable } from "./transaction.mjs";
+import {
+  applyUpgrade,
+  offeredUpgradeOutcome,
+  upgradeResultPath,
+  upgradeStatus,
+  writeFileDurable,
+} from "./transaction.mjs";
 import { checkUpgradeCandidate, removeUpgradeCheckContainers } from "./candidate.mjs";
 
 const execute = promisify(execFile);
@@ -297,10 +303,16 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
         paths: candidate.paths,
         mode: automatic ? "automatic" : "manual",
         host: candidate.host,
+        ...(automatic
+          ? {
+              versions: { fromVersion: installedVersion, toVersion: target },
+              resultPath: upgradeResultPath(boxDirectory),
+            }
+          : {}),
       });
       if (!automatic) return marker;
-      if (marker.target === "candidate") return { status: "upgraded" };
-      return { status: marker.copied ? "rolled-back" : "deferred-at-stop", reason: marker.failure };
+      const status = offeredUpgradeOutcome(marker);
+      return status === "upgraded" ? { status } : { status, reason: marker.failure };
     } catch (error) {
       if (error instanceof OfferedUpgradeDeferred) return deferred(error.message);
       throw error;

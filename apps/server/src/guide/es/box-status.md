@@ -84,6 +84,9 @@ Cuando no pasa nada, cada fila dice:
   lleno, lo que ya no necesita. Tras un arranque que usó ese espacio, los terminales siguen parados
   hasta que quedan libres unos 24 MB y el servidor ha vuelto a apartar los 8 MB.
 
+Consulta **Última actualización ofrecida** para ver cuándo terminó el intento y si el servidor
+instaló la versión ofrecida o volvió a la anterior.
+
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
 el servidor los reintenta solo o el encargado tiene que resolver alguno. También dice **Sin enviar desde**
 y cuándo se hizo el más antiguo.

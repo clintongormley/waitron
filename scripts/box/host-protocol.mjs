@@ -24,6 +24,7 @@ export const SHELL_VERBS = Object.freeze([
   "clock.set",
   "clock.sync-on",
   "clock.retry",
+  "upgrade.status",
 ]);
 export const HOST_LINE_MAX = 4096;
 /** Bytes, with the newline: the client reads no more. */

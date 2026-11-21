@@ -1238,9 +1238,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   Automatic offers take stable releases. You can
   [check the signed offer](../deploy/README.md#checking-the-signed-upgrade-offer) on a numbered box
   and enable overnight checks by hand for rehearsal. The supervised install command applies an
-  offer during the quiet window and rolls back a failed candidate. Still open are the first
-  signed publication, first live offer, physical test-box upgrade, automatic timer installation,
-  status/email and pairs. After the
+  offer during the quiet window and rolls back a failed candidate. Box status shows the latest
+  completed offered install or rollback. Still open are the first signed publication, first live
+  offer, physical test-box upgrade, automatic timer installation, rollback email and pairs. After the
   first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry

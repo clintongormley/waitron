@@ -130,6 +130,40 @@ describe("quiet before an offered upgrade", () => {
     expect(await readdir(box.root + ".upgrades")).toEqual([]);
   });
 
+  it("reports a partial offered copy as a rollback with both installed and offered versions", async () => {
+    const box = await imageFixture({ prepare: false, beforeAutomaticStop: async () => {} });
+    await clockAndZone();
+    await mountVenue(suite, box.root);
+    await writeFile(join(box.root, "state", "trading.env"), "WAITRON_NODE_ID=one\n");
+    const { link, offer } = await offerTrustFixture(box.root, "one");
+    const resultPath = box.root + ".upgrade-result.json";
+    onTestFinished(() => rm(resultPath, { force: true }));
+
+    let stopped = false;
+    const run = async (file, args, ...rest) => {
+      if (file === "prepare-fixture")
+        return { stdout: JSON.stringify({ compose: JSON.stringify(box.candidate) }) };
+      if (file === "curl") return { stdout: offer(1, "1.2.3") };
+      if (args[0] === "stop" && !stopped) {
+        stopped = true;
+        await box.fs.rmdir(join(box.root, "print_agent"));
+      }
+      return box.run(file, args, ...rest);
+    };
+
+    const result = await runUpgradeCli(
+      ["apply-offered-upgrade", box.root, "1.2.2", "1.2.3", link, "prepare-fixture"],
+      { run },
+    );
+
+    expect(result.status).toBe("rolled-back");
+    expect(JSON.parse(await box.fs.readFile(resultPath, "utf8"))).toMatchObject({
+      status: result.status,
+      fromVersion: "1.2.2",
+      toVersion: "1.2.3",
+    });
+  });
+
   it("defers for a card payment without an open order", async () => {
     const box = await imageFixture({ onlineTrial: "pass", prepare: false });
     const old = "2026-11-20T19:00:00.000Z";
@@ -1100,6 +1134,7 @@ it("routes Apply through the host controller and retains a refused copy sale", a
     run,
   });
   expect(result).toMatchObject({ phase: "awaiting-choice", copied: true, failure: "sale refused" });
+  expect(result).not.toHaveProperty("versions");
   const directory = f.join(`${f.root}.upgrades`, (await f.fs.readdir(`${f.root}.upgrades`))[0]);
   expect(await f.fs.readFile(f.join(directory, "copies/0/retained"), "utf8")).toBe("intact source");
 });

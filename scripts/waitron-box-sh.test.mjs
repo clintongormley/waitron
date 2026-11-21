@@ -187,6 +187,25 @@ const touchesClock = (calls) =>
 const OK_TARGET = "1793425531250";
 const REQUESTER = '{"source":"aeat","incident":12}';
 
+it("answers only the bounded last offered upgrade from the configured box directory", () => {
+  const sb = sandbox();
+  sb.env.WAITRON_DIR = join(sb.dir, "custom box");
+  const file = sb.env.WAITRON_DIR + ".upgrade-result.json";
+  expect(answer(sb, "upgrade.status")).toEqual({ ok: true, result: null });
+  const result = {
+    attemptId: "attempt-1",
+    finishedAt: "2026-11-21T03:45:00.000Z",
+    fromVersion: "1.2.2",
+    toVersion: "1.2.3",
+    status: "rolled-back",
+  };
+  writeFileSync(file, JSON.stringify(result) + "\n");
+  expect(answer(sb, "upgrade.status")).toEqual({ ok: true, result });
+  expect(answer(sb, "upgrade.status other-file")).toEqual({ ok: false, reason: "unknown_request" });
+  writeFileSync(file, "x".repeat(4096));
+  expect(answer(sb, "upgrade.status")).toEqual({ ok: false, reason: "host_failed" });
+});
+
 describe("waitron-box.sh clock.status", () => {
   it("answers the time service's state, its unit, whether it is synchronised and when it last was", () => {
     const sb = sandbox({ WB_SYNC: "yes" });

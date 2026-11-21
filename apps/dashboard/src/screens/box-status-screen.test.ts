@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
@@ -155,6 +155,73 @@ function deferred<T>() {
 }
 
 describe("dashboard-box-status-screen", () => {
+  it.each([
+    ["en", "upgraded", "Last offered upgrade", "Upgraded from 1.2.2 to 1.2.3"],
+    [
+      "en",
+      "rolled-back",
+      "Last offered upgrade",
+      "Reopened version 1.2.2. The offer was for 1.2.3.",
+    ],
+    [
+      "es",
+      "rolled-back",
+      "Última actualización ofrecida",
+      "Volvió a la versión 1.2.2. La versión ofrecida era la 1.2.3.",
+    ],
+  ] as const)("shows the finished upgrade in %s after %s", async (locale, status, label, line) => {
+    setLocale(locale);
+    const finishedAt = "2026-11-21T03:45:00.000Z";
+    const { el } = await mount(
+      stubApi(
+        {},
+        health({
+          lastOfferedUpgrade: {
+            attemptId: "attempt-1",
+            finishedAt,
+            fromVersion: "1.2.2",
+            toVersion: "1.2.3",
+            status,
+          },
+        }),
+      ),
+    );
+    const row = q(el, "[data-test=row-upgrade]");
+    expect(text(row?.querySelector(".name") ?? null)).toBe(label);
+    expect(text(row?.querySelector(".line") ?? null)).toBe(line);
+    expect(text(row?.querySelector(".detail") ?? null)).toBe(formatIsoMinute(finishedAt));
+    expect(row?.querySelector(".dot")).toBeNull();
+  });
+
+  it("wraps a long release version inside the upgrade row on a phone", async () => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(previous.width, previous.height));
+    const toVersion = "9".repeat(46) + ".0.0";
+    const { el } = await mount(
+      stubApi(
+        {},
+        health({
+          lastOfferedUpgrade: {
+            attemptId: "attempt-1",
+            finishedAt: "2026-11-21T03:45:00.000Z",
+            fromVersion: "1.2.2",
+            toVersion,
+            status: "upgraded",
+          },
+        }),
+      ),
+    );
+    const line = q(el, "[data-test=row-upgrade] .line")!;
+    expect(text(line)).toContain(toVersion);
+    expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth);
+  });
+
+  it("omits upgrade history when the box has no offered result", async () => {
+    const { el } = await mount(stubApi());
+    expect(q(el, "[data-test=row-upgrade]")).toBeNull();
+  });
+
   it("shows the spare copy limit and receives freshness through the passive page refresh", async () => {
     const spare = {
       peerNodeId: "spare",

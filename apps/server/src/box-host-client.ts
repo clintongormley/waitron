@@ -1,4 +1,5 @@
 import { createConnection } from "node:net";
+import { isReleaseVersion } from "@waitron/shared";
 import {
   formatHostRequest,
   HOST_REPLY_MAX,
@@ -8,7 +9,7 @@ import { isUnset } from "./env-value.js";
 
 /**
  * The server's side of the box's host service: one request line to the host's socket, one JSON
- * line back. `boxHostClient()` asks the clock requests (`deploy/box/waitron-box.sh`);
+ * line back. `boxHostClient()` sends the fixed requests (`deploy/box/waitron-box.sh`);
  * `boxHostRequests()` asks the host's other requests, writing and reading each line by the rules
  * of `scripts/box/host-protocol.mjs`. Every failure answers `available: false`, never a throw: a
  * box without the service (a laptop, Docker Desktop, a host without systemd) answers every request
@@ -35,7 +36,16 @@ export type ClockSetAnswer =
 export type TimeServiceOnAnswer =
   | { available: false; reason: Unavailable; refusal?: string; detail?: string }
   | { available: true };
+export interface LastOfferedUpgrade {
+  attemptId: string;
+  finishedAt: string;
+  fromVersion: string;
+  toVersion: string;
+  status: "upgraded" | "rolled-back";
+}
+
 export interface BoxHostClient {
+  lastOfferedUpgrade?(): Promise<LastOfferedUpgrade | null>;
   clockStatus(): Promise<ClockServiceStatus>;
   /** Switches the host's automatic time back on (`clock.sync-on`); test fakes may leave it out. */
   timeServiceOn?(): Promise<TimeServiceOnAnswer>;
@@ -184,6 +194,35 @@ export function boxHostClient(
         synchronised,
         lastSyncAt: lastSyncAt === null ? null : new Date(lastSyncAt).toISOString(),
       };
+    },
+    async lastOfferedUpgrade() {
+      const response = await exchange(
+        socketPath,
+        "upgrade.status",
+        deps.statusMs ?? DEFAULT_STATUS_MS,
+      );
+      if (!response.ok) return null;
+      const value = response.reply.result;
+      if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+      const { attemptId, finishedAt, fromVersion, toVersion, status } = value as Record<
+        string,
+        unknown
+      >;
+      if (
+        typeof attemptId !== "string" ||
+        !/^[a-zA-Z0-9-]{1,64}$/.test(attemptId) ||
+        typeof finishedAt !== "string" ||
+        !Number.isFinite(Date.parse(finishedAt)) ||
+        new Date(finishedAt).toISOString() !== finishedAt ||
+        typeof fromVersion !== "string" ||
+        !isReleaseVersion(fromVersion) ||
+        typeof toVersion !== "string" ||
+        !isReleaseVersion(toVersion) ||
+        toVersion.includes("-") ||
+        (status !== "upgraded" && status !== "rolled-back")
+      )
+        return null;
+      return { attemptId, finishedAt, fromVersion, toVersion, status };
     },
     async setClock({ targetMs, requester }) {
       // The host takes printable ASCII only, so a letter beyond it travels as a JSON escape.
