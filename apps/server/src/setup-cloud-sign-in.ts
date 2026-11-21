@@ -148,7 +148,8 @@ export async function recordSetupCloudPublication(
   deps: SetupCloudSignIn | undefined,
   cfg: TradingConfig,
   log: Logger,
-): Promise<void> {
+  staffEmail?: true,
+): Promise<boolean | undefined> {
   if (
     !deps ||
     cfg.environment !== "preproduction" ||
@@ -162,7 +163,11 @@ export async function recordSetupCloudPublication(
   const session = sessionFrom(c);
   if (!session || !cloudSignInId(tab)) return;
   try {
-    await deps.connection.publishSetupSignIn({ kind: "setup", tab, session }, cfg.nodeId);
+    return await deps.connection.publishSetupSignIn(
+      { kind: "setup", tab, session },
+      cfg.nodeId,
+      ...(staffEmail ? ([staffEmail] as const) : []),
+    );
   } catch (error) {
     log("warn", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }

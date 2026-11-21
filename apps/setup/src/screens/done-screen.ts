@@ -206,6 +206,7 @@ export class SetupDoneScreen extends LitElement {
   @property({ attribute: false }) recoveryPackPdf?: string;
   #recoveryPackUrl?: string;
 
+  @property({ type: Boolean }) cloudStaffEmailUnavailable = false;
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
   /** Which restore ran, if one did: each re-issues the server's certificate for this machine's
@@ -707,6 +708,19 @@ export class SetupDoneScreen extends LitElement {
           : html`<div class="mode">${modePill(this.onboardingIntent, "mode-indicator")}</div>`
       }
       <p class="intro" data-test="status" role="status">${t(this.#statusKey())}</p>
+      ${
+        this.cloudStaffEmailUnavailable
+          ? html`<p class="status" data-test="cloud-staff-email-unavailable" role="status">
+              ${t("done.cloud_staff_email_unavailable")}
+              <a
+                href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/email#cloud-staff-email`}
+                target="_blank"
+                rel="noopener"
+                >${t("done.cloud_staff_email_help")}</a
+              >
+            </p>`
+          : nothing
+      }
       ${this.#clockStep()}
       <div class="choices" data-test="links">
         ${this.startFailed ? this.#serverLink() : this.#appLinks()}

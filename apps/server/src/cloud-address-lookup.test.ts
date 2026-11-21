@@ -43,13 +43,32 @@ async function addressFixture() {
   let holdRenewal = false;
   const cloud = await cloudFixture(async (values, _saved, req, res, sent) => {
     calls.push(values);
+    if (req.url === "/api/pairing/email-grant") {
+      res.end(
+        JSON.stringify({
+          emailRelay: {
+            version: 1,
+            grant: {
+              id: randomUUID(),
+              revision: 1,
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+              enabled: true,
+            },
+          },
+        }),
+      );
+      return;
+    }
     expect(req.url).toBe("/api/installations/" + values[2]);
     expect(req.headers.origin).toBeUndefined();
     expect(Object.keys(sent).sort()).toEqual(["payload", "signature"]);
     expect(values[3]).toBe(cloud.installationId);
     if (values[2] === "renew") {
       renewalRequested.resolve();
-      if (holdRenewal) await releaseRenewal.promise;
+      if (holdRenewal) {
+        holdRenewal = false;
+        await releaseRenewal.promise;
+      }
       const now = Date.now();
       const until = now + 3600000;
       const payload = Buffer.from(
@@ -122,6 +141,8 @@ async function addressFixture() {
     verifier: randomBytes(32).toString("base64url"),
     expiresAt: new Date(Date.now() + 600_000).toISOString(),
     provisionalRegistration: registration,
+    emailRelayEnabled: undefined as true | undefined,
+    publishedNodeId: undefined as string | undefined,
   };
   const save = (patch: Partial<typeof attempt>) =>
     writeFile(
@@ -170,8 +191,8 @@ async function addressFixture() {
       holdRenewal = true;
       return { requested: renewalRequested.promise, release: releaseRenewal.resolve };
     },
-    publish: (nodeId: string) =>
-      connection.publishSetupSignIn({ kind: "setup", tab, session }, nodeId),
+    publish: (nodeId: string, staffEmail?: true) =>
+      connection.publishSetupSignIn({ kind: "setup", tab, session }, nodeId, staffEmail),
     post: (operation: object, headers: Record<string, string> = {}, signal?: AbortSignal) =>
       app.request(
         route,
@@ -248,6 +269,34 @@ it("records the saved venue while a search still waits for Cloud to renew its le
   }
 });
 
+it("confirms checked staff email while an address search waits for its own lease", async () => {
+  const f = await addressFixture();
+  const held = f.holdRenewal();
+  const lookup = f.post({
+    kind: "suggest",
+    workflowId: f.workflowId,
+    query: "Calle Mayor",
+    language: "es",
+  });
+  try {
+    await held.requested;
+    const nodeId = randomUUID();
+    expect(await f.publish(nodeId, true)).toBe(true);
+    expect(JSON.parse(await readFile(f.file, "utf8")).attempt).toMatchObject({
+      publishedNodeId: nodeId,
+      emailRelayEnabled: true,
+    });
+    held.release();
+    expect((await lookup).status).toBe(409);
+    expect(f.calls.map((call) => call[2])).toEqual(["renew", "renew", "configuration"]);
+    expect(f.calls[1]?.[4]).not.toBe(f.calls[0]?.[4]);
+  } finally {
+    held.release();
+    await lookup;
+    await f.close();
+  }
+}, 15_000);
+
 it("keeps manual entry for a Cloud refusal and never calls Cloud for another setup binding", async () => {
   const f = await addressFixture();
   try {
@@ -266,6 +315,14 @@ it("keeps manual entry for a Cloud refusal and never calls Cloud for another set
     expect(await (await f.post({ kind: "available" })).json()).toEqual({ available: false });
     expect((await f.post(suggest)).status).toBe(409);
     expect(f.calls).toEqual([]);
+    await f.save({
+      provisionalRegistration: undefined,
+      publishedNodeId: randomUUID(),
+      emailRelayEnabled: true,
+    });
+    const invalid = await f.post({ kind: "available" });
+    expect(invalid.status).toBe(409);
+    expect(await invalid.json()).toEqual({ error: { code: "cloud.state_invalid", params: {} } });
 
     await f.save({});
     const cancelled = await f.post(suggest, {}, AbortSignal.abort());

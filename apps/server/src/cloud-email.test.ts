@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
-import { sendCloudEmail } from "./cloud-email.js";
+import { requestSetupCloudEmailGrant, sendCloudEmail } from "./cloud-email.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
 
 const grant = () => ({
@@ -428,3 +428,51 @@ it("ends queued Cloud delivery within the mail claim even without a caller stop"
     await f.close();
   }
 }, 45000);
+
+it.each([
+  { status: 200, code: undefined, expected: true, exchanges: ["grant"] },
+  { status: 0, code: undefined, expected: true, exchanges: ["grant", "configuration"] },
+  { status: 400, code: "pairing_unavailable", expected: false, exchanges: ["grant"] },
+  { status: 401, code: "invalid_proof", expected: false, exchanges: ["grant"] },
+  { status: 403, code: "relay_disabled", expected: false, exchanges: ["grant"] },
+  { status: 403, code: "grant_unavailable", expected: false, exchanges: ["grant"] },
+  { status: 409, code: "grant_conflict", expected: false, exchanges: ["grant"] },
+])(
+  "handles setup staff email consent with Cloud reply $status $code",
+  async ({ status, code, expected, exchanges }) => {
+    const requestId = "a826821a-36c3-4b94-b15c-b09ab11cf54d";
+    const hint = { version: 1, grant: grant() };
+    const f = await installationFixture(undefined, {
+      emailConfiguration: true,
+      setupEmail: async (values, saved, req, res, sent) => {
+        expect(values.slice(1, 4)).toEqual([f.options.origin, "configuration", f.installationId]);
+        expect(values[6]).toBe(
+          JSON.stringify((saved as unknown as SavedCloudState).lifecycle!.lease),
+        );
+        expect(values[7]).toBe(
+          '{"purpose":"waitron-cloud-setup-email-consent-v1","requestId":"a826821a-36c3-4b94-b15c-b09ab11cf54d","consent":true,"consentVersion":"local-v1"}',
+        );
+        expect(Object.keys(sent).sort()).toEqual(["payload", "signature"]);
+        expect(req.headers).not.toHaveProperty("origin");
+        expect(req.headers).not.toHaveProperty("cookie");
+        if (status === 0) req.socket.destroy();
+        else {
+          res.writeHead(status);
+          res.end(JSON.stringify(code ? { error: code } : { emailRelay: hint }));
+        }
+      },
+    });
+    try {
+      f.patch({ emailRelay: hint });
+      await f.client.emailRelay();
+      const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
+      f.requests.length = 0;
+      expect(await requestSetupCloudEmailGrant(saved, requestId)).toBe(expected);
+      expect(
+        f.requests.map((values) => (String(values[7]).includes("consent") ? "grant" : values[2])),
+      ).toEqual(exchanges);
+    } finally {
+      await f.close();
+    }
+  },
+);

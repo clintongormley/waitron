@@ -56,6 +56,9 @@ describe.each(["light", "dark"] as const)("Email step in %s", (theme) => {
       "setup-email-screen",
       {
         email: state === "invalid" ? undefined : email,
+        mode: "prepare",
+        cloudStaffEmailAvailable: true,
+        cloudStaffEmail: state === "accepted",
         adminEmail: "admin@example.com",
         api: { runEmailTest },
       },
@@ -86,7 +89,7 @@ describe.each(["light", "dark"] as const)("Email step in %s", (theme) => {
           expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(width);
           if (import.meta.env.VITE_A231Q_VISUAL === "1")
             await page.screenshot({
-              path: `__screenshots__/a231q-email-${state}-${theme}-${locale}-${width}.png`,
+              path: `__screenshots__/staff-email-${state}-${theme}-${locale}-${width}.png`,
             });
         }
       }

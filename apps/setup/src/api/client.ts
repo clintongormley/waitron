@@ -124,6 +124,7 @@ export interface ProvisionBody {
   /** Omitted, not `null`, when no certificate is expected: the server refuses any value it is sent. */
   aeatCert?: AeatCertDraft;
   email?: EmailSettingsDraft;
+  cloudStaffEmail?: boolean;
 }
 
 export interface ProvisionResult {
@@ -133,6 +134,7 @@ export interface ProvisionResult {
   breakGlassSecret?: string;
   breakGlassKeyName?: string;
   breakGlassKeyInBackups?: true;
+  cloudStaffEmailUnavailable?: true;
 }
 
 export interface AdoptBody {

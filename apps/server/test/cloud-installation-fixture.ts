@@ -9,6 +9,7 @@ export async function installationFixture(
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
     email?: MachineHandler;
+    setupEmail?: MachineHandler;
     emailConfiguration?: true;
     managementOrigin?: string;
     environment?: "test" | "production";
@@ -102,6 +103,10 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("backup-") && capture) {
       await capture(values, saved, req, res, sent);
+      return;
+    }
+    if (req.url === "/api/pairing/email-grant" && options.setupEmail) {
+      await options.setupEmail(values, saved, req, res, sent);
       return;
     }
     if (String(values[2]).startsWith("email-") && options.email) {

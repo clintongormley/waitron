@@ -950,6 +950,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     const execute = async (
       payload: Awaited<ReturnType<typeof parseProvisionPayload>>,
       rawEmail: unknown,
+      rawStaffEmail: unknown,
       keyOutput:
         | {
             node: NodeDatabase;
@@ -983,6 +984,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (mode === "demo" && rawEmail !== undefined) invalidRequest("email");
       const email =
         rawEmail === undefined ? undefined : parseEmailSettings(asObject(rawEmail, "email"));
+      if (rawStaffEmail !== undefined && typeof rawStaffEmail !== "boolean")
+        invalidRequest("cloudStaffEmail");
+      const staffEmail =
+        rawStaffEmail === true &&
+        mode === "prepare" &&
+        deps.devMode !== true &&
+        environment === "preproduction" &&
+        !request.configurationImport;
       if (environment === "production") {
         if (deps.assertFiscalReady === undefined) {
           throw new AppError("setup.fiscal_test_required", { module: contribution.id });
@@ -1039,6 +1048,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       }
 
       let key: { secret: string; name: string; recoveryPackPdf?: string } | undefined;
+      let cloudStaffEmailUnavailable = operation?.data.cloudStaffEmailUnavailable === true;
       if (!setupPhaseReached(operation, "publishing")) {
         if (keyOutput !== undefined) {
           const handles = { venue: db, node: keyOutput.node };
@@ -1067,15 +1077,24 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           onboardingIntent: mode,
         };
         await persistTrading(trading);
-        if (!request.configurationImport)
-          await recordSetupCloudPublication(c, cloudSignIn, trading, log);
+        if (!request.configurationImport) {
+          const enabled = await recordSetupCloudPublication(
+            c,
+            cloudSignIn,
+            trading,
+            log,
+            staffEmail || undefined,
+          );
+          cloudStaffEmailUnavailable = staffEmail && enabled !== true;
+        }
         await deps.clearConfiguration?.();
-        await operation?.advance("publishing");
+        await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
 
       const publicResult = {
         provisioned: true,
         restarting: true,
+        ...(cloudStaffEmailUnavailable && { cloudStaffEmailUnavailable: true }),
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
@@ -1102,14 +1121,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           deps.devMode === true,
           c.req.header("Accept-Language"),
         );
-        const rawEmail = (parsed as Record<string, unknown>).email;
+        const { email: rawEmail, cloudStaffEmail } = parsed as Record<string, unknown>;
         const recoveryModule =
           payload.mode === "prepare" && deps.environment !== "production"
             ? ALL_MODULES.find((module) => module.fiscal === payload.contribution)
             : undefined;
         const formatServerKey = recoveryModule?.backup?.formatServerKey;
         const node = deps.node;
-        let keyOutput: Parameters<typeof execute>[2];
+        let keyOutput: Parameters<typeof execute>[3];
         if (recoveryModule !== undefined && formatServerKey !== undefined) {
           if (!isSecure(c)) throw new AppError("setup.connection_insecure", {});
           if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
@@ -1118,12 +1137,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         }
         const response =
           deps.operations === undefined
-            ? await execute(payload, rawEmail, keyOutput)
+            ? await execute(payload, rawEmail, cloudStaffEmail, keyOutput)
             : await runOperation(c.req.raw, "provision", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { provisioned: true; restarting: true });
                 }
-                return execute(payload, rawEmail, keyOutput, operation);
+                return execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
               });
         succeeded = response.ok;
         return response;

@@ -695,6 +695,54 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
   });
 
+  it("continues Prepare with local mail when the bound Cloud choice is refused", async () => {
+    const app = new Hono();
+    const { deps, calls } = makeDeps({ devMode: false });
+    const tab = randomUUID();
+    const session = randomBytes(32).toString("base64url");
+    const publishSetupSignIn = vi.fn(async () => {
+      expect(calls.at(-1)).toBe("persistTrading");
+      return false;
+    });
+    mountSetup(
+      app,
+      {
+        ...deps,
+        cloudSignIn: {
+          origin: "https://box.test",
+          connection: {
+            setupAddressLookup: async () => ({ available: false }),
+            setupSignInAvailable: async () => true,
+            startSignIn: async () => ({}),
+            returnSignIn: async () => {},
+            publishSetupSignIn,
+          },
+        },
+      },
+      noopLog,
+    );
+    const result = await postProvision(
+      app,
+      { ...prepareBody(), cloudStaffEmail: true },
+      {
+        origin: "https://box.test",
+        cookie: "__Host-waitron-setup-cloud=" + session,
+        "x-waitron-setup-cloud-tab": tab,
+      },
+    );
+    expect(result.status).toBe(200);
+    expect(publishSetupSignIn).toHaveBeenCalledExactlyOnceWith(
+      { kind: "setup", tab, session },
+      NODE_ID,
+      true,
+    );
+    expect(await result.json()).toMatchObject({
+      provisioned: true,
+      cloudStaffEmailUnavailable: true,
+    });
+    await tick();
+  });
+
   it("provisions Prepare in preproduction and persists the distinct preparation intent", async () => {
     const app = new Hono();
     const { deps, provisionRequests, persistTrading, calls } = makeDeps();

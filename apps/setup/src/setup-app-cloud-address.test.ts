@@ -3,6 +3,7 @@ import type { WtAddressLookup } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { dispatchProvisionRequested, dispatchSetupGoto, dispatchSetupPatch } from "./events.js";
 import { SetupApp } from "./setup-app.js";
 
 const route = "/setup-api/cloud/sign-in/address-lookup";
@@ -140,3 +141,52 @@ it.each(["missing", "partial"])(
     ]);
   },
 );
+
+it("shows the mail-server fallback after a checked Prepare request completes", async () => {
+  sessionStorage.setItem(
+    "waitron-setup-cloud-return",
+    JSON.stringify({ mode: "prepare", locale: "en" }),
+  );
+  sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
+  sessionStorage.setItem("waitron-setup-cloud-tab", tab);
+  const { api, requests } = wizardApi({
+    intercept: (path) => {
+      if (path === "/setup-api/status")
+        return Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          needs: ["venue"],
+          cloudSignInAvailable: true,
+        });
+      if (path === route) return Response.json({ available: true });
+      if (path === "/setup-api/provision")
+        return Response.json({
+          provisioned: true,
+          restarting: true,
+          cloudStaffEmailUnavailable: true,
+        });
+    },
+  });
+  app = new SetupApp();
+  app.api = api;
+  document.body.append(app);
+  const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
+  await expect.poll(() => screen("admin")).not.toBeNull();
+  dispatchSetupGoto(screen("admin")!, "email");
+  await expect
+    .poll(() => screen("email")?.shadowRoot?.querySelector('input[name="cloud-staff-email"]'))
+    .toBeInstanceOf(HTMLInputElement);
+  dispatchSetupPatch(screen("email")!, { cloudStaffEmail: true });
+  dispatchSetupGoto(screen("email")!, "review");
+  await expect.poll(() => screen("review")).not.toBeNull();
+  dispatchProvisionRequested(screen("review")!);
+  const notice = () =>
+    screen("done")?.shadowRoot?.querySelector('[data-test="cloud-staff-email-unavailable"]');
+  await expect.poll(() => notice()?.textContent).toContain("Your mail server settings were saved");
+  expect(notice()?.querySelector("a")?.getAttribute("href")).toBe(
+    "/help/en/email#cloud-staff-email",
+  );
+  expect(requests.find(({ path }) => path === "/setup-api/provision")?.body).toMatchObject({
+    cloudStaffEmail: true,
+  });
+});

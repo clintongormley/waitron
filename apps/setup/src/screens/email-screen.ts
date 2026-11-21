@@ -4,7 +4,7 @@ import {
   baseStyles,
   pageTitleStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   type DraftScope,
 } from "@waitron/ui";
@@ -27,6 +27,7 @@ import { fieldStyles, introStyles, pairStyles } from "../form-styles.js";
 type Field = keyof EmailSettingsDraft;
 const fields = ["server", "port", "encryption", "user", "password", "from"] as const;
 type Values = Record<Field, string>;
+type EmailDraft = Values & { staffEmail: boolean };
 
 @customElement("setup-email-screen")
 export class SetupEmailScreen extends LitElement {
@@ -40,6 +41,20 @@ export class SetupEmailScreen extends LitElement {
       :host {
         display: block;
       }
+      .cloud-choice {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-block-size: var(--wt-tap-min);
+        cursor: pointer;
+      }
+      .cloud-choice input {
+        accent-color: var(--wt-color-primary);
+        margin: 0;
+      }
+      .cloud-detail {
+        margin: 0 0 var(--wt-space-4);
+      }
       .success {
         color: var(--wt-color-success);
       }
@@ -47,6 +62,8 @@ export class SetupEmailScreen extends LitElement {
   ];
   @property({ attribute: false }) email?: EmailSettingsDraft;
   @property() errorMessage?: string;
+  @property({ attribute: false }) cloudStaffEmailAvailable?: boolean;
+  @property({ type: Boolean }) cloudStaffEmail = false;
   @property() adminEmail = "";
   @property() mode: "live" | "prepare" = "live";
   @property() backScreen: "venue" | "fiscal-test" = "venue";
@@ -59,8 +76,9 @@ export class SetupEmailScreen extends LitElement {
     password: "",
     from: "",
   };
+  @state() private staffEmail = false;
   @state() private passwordVisible = false;
-  @state() private attempted = false;
+  #feedback = new FormFeedback(this);
   @state() private running = false;
   @state() private outcome?: "accepted" | "failed" | SmtpTestCode;
   @state() private refusedField?: Field;
@@ -68,8 +86,8 @@ export class SetupEmailScreen extends LitElement {
   #generation = 0;
   #revision = 0;
   #accepted?: { revision: number; recipient: string };
-  #baseline?: Values;
-  #scope?: DraftScope<Values>;
+  #baseline?: EmailDraft;
+  #scope?: DraftScope<EmailDraft>;
 
   constructor() {
     super();
@@ -88,22 +106,25 @@ export class SetupEmailScreen extends LitElement {
     super.disconnectedCallback();
   }
   override willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has("errorMessage")) this.#feedback.newRefusal("form");
     if (changed.has("adminEmail") || changed.has("mode")) this.#invalidate();
     if (!this.#seeded) {
       this.#seeded = true;
       if (this.email) this.values = { ...this.email, port: String(this.email.port) };
-      this.#baseline = { ...this.values };
+      this.staffEmail = this.cloudStaffEmail;
+      this.#baseline = { ...this.values, staffEmail: this.staffEmail };
     }
     if (this.isConnected && !this.#scope) {
       this.#scope = draftScopeFor(this, {
         id: this,
-        current: () => this.values,
+        current: () => ({ ...this.values, staffEmail: this.staffEmail }),
         snapshot: (value) => ({ ...value }),
-        equal: (a, b) => fields.every((key) => a[key] === b[key]),
-        restore: (value) => {
-          this.values = value;
+        equal: (a, b) => a.staffEmail === b.staffEmail && fields.every((key) => a[key] === b[key]),
+        restore: ({ staffEmail, ...values }) => {
+          this.values = values;
+          this.staffEmail = staffEmail;
           this.#invalidate();
-          this.attempted = false;
+          this.#feedback.reset();
         },
       }).scope;
       this.#scope.commit(this.#baseline!);
@@ -144,14 +165,12 @@ export class SetupEmailScreen extends LitElement {
   }
   async #test(): Promise<void> {
     if (this.running || !this.isConnected) return;
-    this.attempted = true;
-    this.errorMessage = undefined;
+    this.#feedback.press("form");
     this.#accepted = undefined;
     this.outcome = undefined;
     this.refusedField = undefined;
     if (this.#errors().size) {
-      await this.updateComplete;
-      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = ++this.#generation,
@@ -208,8 +227,13 @@ export class SetupEmailScreen extends LitElement {
   }
   #next(): void {
     if (!this.isConnected || !this.#canContinue()) return;
-    dispatchSetupPatch(this, { email: this.#settings() });
-    this.#baseline = { ...this.values };
+    dispatchSetupPatch(this, {
+      email: this.#settings(),
+      ...((this.cloudStaffEmailAvailable || this.cloudStaffEmail) && {
+        cloudStaffEmail: this.cloudStaffEmailAvailable !== false && this.staffEmail,
+      }),
+    });
+    this.#baseline = { ...this.values, staffEmail: this.staffEmail };
     this.#scope?.commit(this.#baseline);
     dispatchSetupGoto(this, "review");
   }
@@ -251,15 +275,38 @@ export class SetupEmailScreen extends LitElement {
     </wt-input>`;
   }
   override render(): TemplateResult {
-    const errors = this.attempted ? this.#errors() : new Set<Field>();
+    const errors = this.#feedback.attempted ? this.#errors() : new Set<Field>();
     const error =
       errors.size || this.refusedField
         ? t("email.fix_fields")
         : this.outcome && this.outcome !== "accepted"
           ? t(this.outcome === "failed" ? "email.failed" : this.outcome)
-          : (this.errorMessage ?? "");
+          : this.#feedback.shows("form")
+            ? (this.errorMessage ?? "")
+            : "";
     return html`<h1>${t("email.heading")}</h1>
       <p class="intro">${format("email.intro", { recipient: this.adminEmail })}</p>
+      ${
+        this.cloudStaffEmailAvailable
+          ? html`<label class="cloud-choice" for="cloud-staff-email">
+                <input
+                  id="cloud-staff-email"
+                  name="cloud-staff-email"
+                  type="checkbox"
+                  aria-describedby="cloud-staff-email-detail"
+                  .checked=${this.staffEmail}
+                  @change=${(event: Event) => {
+                    this.staffEmail = (event.currentTarget as HTMLInputElement).checked;
+                    this.#scope?.changed();
+                  }}
+                />
+                ${t("email.cloud_staff_email")}
+              </label>
+              <p class="cloud-detail" id="cloud-staff-email-detail">
+                ${t("email.cloud_staff_email_detail")}
+              </p>`
+          : nothing
+      }
       ${this.#field("server", errors)}
       <div class="pair">
         ${this.#field("port", errors)}
@@ -300,7 +347,7 @@ export class SetupEmailScreen extends LitElement {
         >
         <wt-button
           slot="secondary"
-          variant=${this.attempted || !this.#errors().size ? "primary" : "secondary"}
+          variant=${this.#feedback.attempted || !this.#errors().size ? "primary" : "secondary"}
           data-test="test"
           ?disabled=${this.running || errors.size > 0}
           @click=${() => void this.#test()}

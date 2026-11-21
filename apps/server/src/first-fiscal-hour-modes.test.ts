@@ -183,6 +183,7 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
   const persistTrading = vi.fn<NonNullable<SetupDeps["persistTrading"]>>(async () => {});
   const publishSetupSignIn = vi.fn(async () => {
     expect(persistTrading).toHaveBeenCalledOnce();
+    return undefined;
   });
   const app = mount({
     persistTrading,
