@@ -47,6 +47,7 @@ const RELAYED_BARE = [
   "mirror.join_not_found",
   "mirror.join_invalid",
   "mirror.standby_invalid",
+  "mirror.join_approving",
 ] as const satisfies readonly ErrorCode[];
 
 export interface BoxJoinAttemptDeps {
@@ -184,12 +185,17 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     };
   }
 
-  /** Best effort: a main box that never hears it ends the request by itself. */
-  async function sendCancel(attempt: Attempt): Promise<void> {
+  /**
+   * Best effort: a main box that never hears it ends the request by itself. True when the main box
+   * refused it because it is approving the request, which then goes on.
+   */
+  async function sendCancel(attempt: Attempt): Promise<boolean> {
     try {
-      await send(attempt, "cancel", signed(attempt, JOIN_CANCEL_LABEL, []));
+      const answer = await send(attempt, "cancel", signed(attempt, JOIN_CANCEL_LABEL, []));
+      return answer.status === 409 && refusalOf(answer.text).code === "mirror.join_approving";
     } catch {
       // Unreachable or lost: nothing more to do.
+      return false;
     }
   }
 
@@ -227,9 +233,9 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     const answer = sent === undefined ? undefined : jsonOf(sent.text);
     if (isRecord(answer) && answer.state === "approved" && isLocked(answer.locked)) {
       const bundle = collect(attempt, answer.locked);
+      // No cancel: the main box has approved, so it would refuse one.
       if (bundle === null) {
         attempt.state = { state: "failed", error: "mirror.join_invalid" };
-        await sendCancel(attempt);
         return;
       }
       attempt.bundle = bundle;
@@ -260,7 +266,13 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     if (attempt === null) return;
     current = null;
     clearTimeout(attempt.timer);
-    await sendCancel(attempt);
+    if (!(await sendCancel(attempt))) return;
+    // The main box is approving: keep following it, unless another attempt has begun meanwhile.
+    if (current === null) {
+      current = attempt;
+      schedulePoll(attempt);
+    }
+    throw new AppError("mirror.join_approving", {});
   }
 
   /** Hello and reveal; answers the code to show, or throws the refusal. Replaces an attempt that

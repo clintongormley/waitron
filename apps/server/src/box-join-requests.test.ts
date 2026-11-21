@@ -440,3 +440,33 @@ describe("changes to the list", () => {
     expect(changed).toHaveBeenCalledTimes(8);
   });
 });
+
+describe("stopping a request while it is approved", () => {
+  it("refuses a cancel while the copy is built or once approved, and a Dismiss while it is built", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    const code = codeOf(id, "10.0.0.1");
+    store.approve.begin(id, code);
+    expect(store.cancel({ requestId: id, seq: 2 })).toEqual({ refused: "approving" });
+    expect(store.dismiss(id)).toEqual({ refused: "in_progress" });
+    expect(store.approve.finish(id, locked("a"))).toBe(true);
+    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ refused: "approving" });
+    expect(store.poll({ requestId: id, seq: 4, at: iso(0) })).toEqual({
+      state: "approved",
+      locked: locked("a"),
+    });
+  });
+
+  it("takes a cancel again once a failed build has left the request waiting", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    store.approve.begin(id, codeOf(id, "10.0.0.1"));
+    expect(store.cancel({ requestId: id, seq: 2 })).toEqual({ refused: "approving" });
+    store.approve.abandon(id);
+    expect(store.cancel({ requestId: id, seq: 3 })).toEqual({ cancelled: true });
+    expect(store.poll({ requestId: id, seq: 4, at: iso(0) })).toEqual({
+      state: "ended",
+      reason: "cancelled",
+    });
+  });
+});

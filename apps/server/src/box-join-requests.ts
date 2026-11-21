@@ -362,10 +362,13 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     cancel(input: {
       requestId: string;
       seq: number;
-    }): { cancelled: true } | JoinNotFound | JoinInvalid {
+    }): { cancelled: true } | JoinNotFound | JoinInvalid | { refused: "approving" } {
       const r = held(input.requestId);
       if (!r) return { refused: "not_found" };
       if (!acceptSeq(r, input.seq)) return { refused: "invalid" };
+      // Once a right tap has begun, the approval decides: a cancel answered here never leaves the
+      // chart listing a box that stopped asking.
+      if (r.phase === "building" || r.phase === "approved") return { refused: "approving" };
       if (r.phase !== "ended") end(r, "cancelled", steadyNow());
       return { cancelled: true };
     },
@@ -418,9 +421,10 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       };
     },
 
-    dismiss(requestId: string): { dismissed: true } | JoinNotFound {
+    dismiss(requestId: string): { dismissed: true } | JoinNotFound | { refused: "in_progress" } {
       const r = held(requestId);
       if (!r || !isListed(r)) return { refused: "not_found" };
+      if (r.phase === "building") return { refused: "in_progress" };
       end(r, "dismissed", steadyNow());
       freePlace(r.id);
       return { dismissed: true };

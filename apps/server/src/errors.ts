@@ -1574,8 +1574,16 @@ declare module "@waitron/shared" {
     "mirror.join_not_found": Record<string, never>;
     /** A person tapped a code that is not the new box's; the request ended and nothing was sent. */
     "mirror.join_wrong_code": Record<string, never>;
-    /** A right tap arrived while an earlier one was still preparing the new box's copy. */
+    /**
+     * A right tap, or a Dismiss, arrived while an earlier tap was still preparing the new box's
+     * copy.
+     */
     "mirror.join_in_progress": Record<string, never>;
+    /**
+     * The new box's cancel arrived while the main box was approving the request or had approved
+     * it; the request goes on, and the new box keeps waiting for the answer.
+     */
+    "mirror.join_approving": Record<string, never>;
     /** The request ended while its copy was built, after the chart had listed the spare. */
     "mirror.join_stopped_after_listing": Record<string, never>;
     /** This box already has a join attempt, or is starting one; it must be cancelled first. */

@@ -284,7 +284,7 @@ describe("the new box's join attempt", () => {
       "names another main box",
       async () => ({ bundle: await bundleFor({ designated: { nodeId: "other-main" } }) }),
     ],
-  ])("ends and cancels the attempt when the approved answer %s", async (_name, make) => {
+  ])("ends the attempt when the approved answer %s", async (_name, make) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const attempt = createBoxJoinAttempt(deps());
     const shown = await attempt.start(MAIN_URL);
@@ -295,8 +295,7 @@ describe("the new box's join attempt", () => {
     expect(attempt.current()).toEqual({ state: "failed", error: "mirror.join_invalid" });
     expect(attempt.joined()).toBeNull();
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
-    expect(sent[3]!.status).toBe(200);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
   });
 
   it.each<[string, (requestId: string) => void, unknown]>([
@@ -578,6 +577,29 @@ describe("the new box's join attempt", () => {
     expect(sent[3]!.status).toBe(200);
     expect(requests.listed()).toEqual([]);
     expect(attempt.current()).toBeNull();
+  });
+
+  it("keeps the attempt when the main box is approving it, and refuses the cancel", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    const shown = await attempt.start(MAIN_URL);
+    const requestId = requests.listed()[0]!.id;
+    expect(requests.approve.begin(requestId, shown.code)).not.toHaveProperty("refused");
+
+    await expect(attempt.cancel()).rejects.toMatchObject({ code: "mirror.join_approving" });
+    expect(attempt.current()).toMatchObject({ state: "waiting", code: shown.code });
+
+    const bundle = await bundleFor();
+    const locked = lockJoinBundle({
+      requestId,
+      encryptionKey: (sent[0]!.body as { encryptionKey: string }).encryptionKey,
+      bundle: Buffer.from(JSON.stringify(bundle)),
+      mainPrivateKey: await mainKey(),
+    });
+    expect(requests.approve.finish(requestId, locked)).toBe(true);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
   it("refuses to start while a start runs or an attempt waits", async () => {

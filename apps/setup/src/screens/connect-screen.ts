@@ -67,6 +67,7 @@ const REFUSAL_WORDS: Record<string, StringKey> = {
   "mirror.join_code_taken": "connect.refusal.join_code_taken",
   "mirror.join_waiting": "connect.refusal.join_waiting",
   "mirror.join_in_use": "connect.refusal.join_in_use",
+  "mirror.join_approving": "connect.refusal.join_approving",
   "mirror.join_handle_invalid": "connect.refusal.join_handle_invalid",
   "mirror.bundle_fetch_failed": "connect.refusal.unreachable",
   "mirror.standby_name_taken": "connect.refusal.name_taken",

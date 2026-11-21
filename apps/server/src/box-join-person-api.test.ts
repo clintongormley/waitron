@@ -477,11 +477,39 @@ describe("the main box's person routes for a joining box", () => {
     expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
+  it("refuses the new box's cancel and a Dismiss while a right tap is being approved", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    expect(requests.approve.begin(listed.requestId, listed.code)).not.toHaveProperty("refused");
+    const cancelled = await cancelJoin(app, listed);
+    expect({ status: cancelled.status, body: await cancelled.json() }).toEqual(
+      refusal(409, "mirror.join_approving"),
+    );
+    expect(await dismiss(listed.requestId)).toEqual(refusal(409, "mirror.join_in_progress"));
+    requests.approve.abandon(listed.requestId);
+    await cancel(listed);
+    expect(await poll(listed)).toEqual({ state: "ended", reason: "cancelled" });
+  });
+
   it("says the spare was listed when its request ended while the copy was built", async () => {
     const listed = await listedRequest("192.168.1.20");
+    // The new box lost its attempt and asked again, which replaces the request being approved.
     afterIssue = () => {
       afterIssue = () => {};
-      requests.dismiss(listed.requestId);
+      const again = joiningBox(listed.box.address, { unlikeNodeId: designated.nodeId });
+      expect(requests.admitHello(again.address)).toBeNull();
+      const opened = requests.openHello({
+        address: again.address,
+        hello: again.hello,
+        main: { nodeId: designated.nodeId, publicKey: primaryKeyPair.publicKey },
+        at: new Date().toISOString(),
+      });
+      if ("refused" in opened) throw new Error("hello refused");
+      requests.reveal({
+        requestId: opened.requestId,
+        newNonce: again.newNonce,
+        seq: 1,
+        signAnswer: () => "signed",
+      });
     };
     expect(await approve(listed.requestId, { code: listed.code })).toEqual(
       refusal(409, "mirror.join_stopped_after_listing"),

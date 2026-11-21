@@ -245,6 +245,28 @@ describe("setup-connect-screen: Start again", () => {
   });
 });
 
+describe("setup-connect-screen: Start again while the main box approves", () => {
+  it.each([
+    [
+      "en-GB",
+      "The main box is approving this join right now, so it cannot be stopped. Wait a moment: this page then shows the main box's answer.",
+    ],
+    ["es-ES", es["connect.refusal.join_approving"]],
+  ])("says so in %s, keeps the code and goes on reading", async (locale, words) => {
+    setLocale(locale as "en-GB" | "es-ES");
+    const api = stubApi(WAITING);
+    api.cancelJoin.mockRejectedValue({ code: "mirror.join_approving" });
+    const { el } = await mount(api, { handle: "h1" });
+    await press(el, "start-again");
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
+    expect(text(el, "[data-test=code]")).toBe("482\u00a0913");
+    api.joinState.mockResolvedValue({ state: "approved", code: "482913" });
+    await vi.waitFor(() => expect(q(el, "[data-test=finish]")).not.toBeNull(), {
+      timeout: 5_000,
+    });
+  });
+});
+
 describe("setup-connect-screen: approved and Finish joining", () => {
   it("offers Finish joining only once approved, and hands it to the shell", async () => {
     const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });

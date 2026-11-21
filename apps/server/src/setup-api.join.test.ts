@@ -292,6 +292,17 @@ describe("the setup page's join routes", () => {
     }
   });
 
+  it("passes on a cancel the main box refuses while it approves, keeping the page's handle", async () => {
+    const handle = await started();
+    await read(handle);
+    fake.attempt.cancel.mockRejectedValueOnce(new AppError("mirror.join_approving", {}));
+    expect(await refusal(await cancel(handle))).toEqual({
+      status: 409,
+      code: "mirror.join_approving",
+    });
+    expect(await read(handle)).toMatchObject({ state: "waiting" });
+  });
+
   it("passes the attempt's refusals to the page", async () => {
     fake.attempt.start.mockRejectedValueOnce(new AppError("mirror.join_waiting", {}));
     expect(await refusal(await start())).toEqual({ status: 409, code: "mirror.join_waiting" });

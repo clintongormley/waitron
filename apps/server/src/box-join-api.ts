@@ -72,6 +72,7 @@ export const JOIN_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_name_taken": 409,
   "mirror.join_code_taken": 409,
   "mirror.join_not_found": 404,
+  "mirror.join_approving": 409,
   "mirror.join_full": 429,
 };
 
@@ -315,7 +316,10 @@ export function mountBoxJoinApi(
     run(c, log, async () => {
       const { requestId, seq } = await signedRequest(c, JOIN_CANCEL_LABEL, () => []);
       const answer = requests.cancel({ requestId, seq });
-      if ("refused" in answer) throw storeRefusal(answer.refused);
+      if ("refused" in answer) {
+        if (answer.refused === "approving") throw new AppError("mirror.join_approving", {});
+        throw storeRefusal(answer.refused);
+      }
       return c.json(answer);
     }),
   );
@@ -462,7 +466,10 @@ export function mountBoxJoinPersonApi(
     run(c, log, async () => {
       await guard(c, false);
       const answer = requests.dismiss(c.req.param("id"));
-      if ("refused" in answer) throw new AppError("mirror.join_not_found", {});
+      if ("refused" in answer) {
+        if (answer.refused === "in_progress") throw new AppError("mirror.join_in_progress", {});
+        throw new AppError("mirror.join_not_found", {});
+      }
       return c.body(null, 204);
     }),
   );
