@@ -16,10 +16,11 @@ import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { adoptWithPassword } from "./adopt.js";
+import { adoptFromPrimary, adoptWithPassword, type AdoptHooks } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { writeCredentialsRing } from "./box-secrets.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
 import {
   readPendingAdoption,
   runFinishAdoption,
@@ -123,14 +124,21 @@ function deps(value = bundle()) {
     now: () => new Date(),
   };
 }
-const request = { primaryUrl: "https://primary.test", credential };
+/** This box's identity and the bundle the main box endorsed it in, handed to adopt as a code join does. */
+async function adoptJoined(value: MirrorBundle, hooks: AdoptHooks) {
+  const identity = generateStandbyIdentity();
+  const storeUrl = "https://spare.test:7443";
+  const adoptDeps = deps(value);
+  const bundle = await adoptDeps.fetchBundle("https://primary.test", credential, identity);
+  return adoptFromPrimary(adoptDeps, { identity, bundle, storeUrl }, hooks);
+}
 
 it("keeps the stamped-environment refusal before allocation-dependent adoption", async () => {
   await suite.db.insert(deployment).values({ id: 1, environment: "production" });
   const before = await state();
   let reachedFirstWrite = false;
   await expect(
-    adoptWithPassword(deps(), request, {
+    adoptJoined(bundle(), {
       beforeFirstWrite: async () => {
         reachedFirstWrite = true;
       },
@@ -168,9 +176,9 @@ async function fiscalState() {
 it("adopts with the allocation-dependent module enabled, writing no fiscal row", async () => {
   const before = await fiscalState();
   expect(Object.values(before).every((rows) => Array.isArray(rows))).toBe(true);
-  await expect(
-    adoptWithPassword(deps(), request, { beforeFirstWrite: async () => {} }),
-  ).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
+  await expect(adoptJoined(bundle(), { beforeFirstWrite: async () => {} })).resolves.toMatchObject({
+    breakGlassKeyName: expect.any(String),
+  });
   expect(await fiscalState()).toEqual(before);
   expect(await readPendingAdoption(stateDir)).toMatchObject({
     originNodeId: PRIMARY,
@@ -180,7 +188,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
 it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
-  const adopted = adoptWithPassword(deps(value), request, { beforeFirstWrite: async () => {} });
+  const adopted = adoptJoined(value, { beforeFirstWrite: async () => {} });
   await expect(adopted).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
   const result = await adopted;
   expect(result.breakGlassKeyName).toMatch(/^\d{4}-\d{2}-\d{2} · /);

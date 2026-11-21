@@ -17,15 +17,17 @@ import type { VenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { enabledModules } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
-import { adoptWithPassword, type AdoptCredential } from "../adopt.js";
+import { personIdForLoginEmail } from "@waitron/identity";
+import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
+import { ownContactUrl } from "../box-name.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
-import { mountMirrorBundleApi } from "../mirror-bundle-api.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
+import { generateStandbyIdentity } from "../reserved-identity.js";
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
-import { TOTP_KEY_RING } from "./authenticator.js";
+import { joinAsBundleAnswer, joiningBox, mountBoxJoin, signedInCookie } from "./box-join.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./membership-doc-fixture.js";
 import { applyWithFirstSetup } from "./minute-first-setup.js";
@@ -109,14 +111,17 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
   return { modules, mainId, mainKey, session, email, bundleApp };
 }
 
-/** The real bundle route of the main box `nodeId`, whose files are `box`'s. */
+/** The main box's database behind each app {@link mirrorBundleApp} made, for the approver's sign-in. */
+const MAIN_DATABASES = new WeakMap<Hono, Database>();
+
+/** The real box-join routes of the main box `nodeId`, whose files are `box`'s. */
 export function mirrorBundleApp(
   box: { db: Database; node: NodeDatabase; stateDir: string; ring: KeyRing },
   nodeId: string,
   advertisedOrigin: string,
 ): Hono {
   const bundleApp = new Hono();
-  mountMirrorBundleApi(bundleApp, {
+  mountBoxJoin(bundleApp, {
     appDb: box.db,
     node: box.node,
     ring: box.ring,
@@ -124,10 +129,9 @@ export function mirrorBundleApp(
     boxHostname: "waitron.local",
     advertisedOrigin,
     designated: { nodeId },
-
-    credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });
+  MAIN_DATABASES.set(bundleApp, box.db);
   return bundleApp;
 }
 
@@ -144,45 +148,43 @@ async function holdBoxSecrets(stateDir: string): Promise<void> {
   await holdRecoveryKey(stateDir);
 }
 
-/** The spare joins `main` through the real `adoptFromPrimary`, the bundle route answering 200. */
+let joinAddresses = 0;
+
+/**
+ * The spare joins `main` by code: it asks, the administrator `email` taps its code on the main box,
+ * and the bundle it collects goes to the real `adoptFromPrimary`, as `adoptJoined` hands it in
+ * `boot.ts`. `primaryUrl` is not read: the main box's routes are called directly.
+ */
 export async function joinSpare(
   boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
   main: { bundleApp: Hono; email: string },
-  { primaryUrl = MAIN_URL, spareUrl = SPARE_URL } = {},
+  { spareUrl = SPARE_URL }: { primaryUrl?: string; spareUrl?: string } = {},
 ) {
   const { spareBox, spareState, ring } = boxes;
-  let bundle!: MirrorBundle;
-  let standby!: { nodeId: string; publicKey: string };
+  const mainDb = MAIN_DATABASES.get(main.bundleApp);
+  if (mainDb === undefined) throw new Error("joinSpare needs an app from mirrorBundleApp");
+  const identity = generateStandbyIdentity();
+  const contactUrl = ownContactUrl(spareUrl, identity.nodeId);
+  const store = new URL(contactUrl);
+  store.protocol = "https:";
+  store.port = "7443";
+  const storeUrl = store.origin;
+  joinAddresses += 1;
+  const box = joiningBox(`10.40.0.${joinAddresses}`, { identity, contactUrl, storeUrl });
+  const cookie = await signedInCookie(mainDb, await personIdForLoginEmail(mainDb, main.email));
+  const response = await joinAsBundleAnswer(main.bundleApp, { box, sent: { cookie } });
+  const body = await response.json();
+  expect(response.status, JSON.stringify(body)).toBe(200);
+  const bundle = body as MirrorBundle;
+  const standby = { nodeId: identity.nodeId, publicKey: identity.publicKey };
   let spareId!: string;
-  await adoptWithPassword(
+  await adoptFromPrimary(
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,
       environmentKeys: {},
       ring,
       persistCredentialsRing: async () => {},
-      fetchBundle: async (_url, credential: AdoptCredential, sent) => {
-        standby = { nodeId: sent.nodeId, publicKey: sent.publicKey };
-        const response = await main.bundleApp.request("/management-api/mirror-bundle", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email: credential.email,
-            password: credential.password,
-            standbyNodeId: sent.nodeId,
-            standbyPublicKey: sent.publicKey,
-            standbyContactUrl: sent.contactUrl,
-            standbyStoreUrl: sent.storeUrl,
-            standbyAt: sent.at,
-          }),
-        });
-        const body = await response.json();
-        expect(response.status, JSON.stringify(body)).toBe(200);
-        bundle = body as MirrorBundle;
-        return bundle;
-      },
-      advertisedOrigin: spareUrl,
-      spareStorePort: 7443,
       assertStartsWith: () => {},
       environment: "preproduction",
       persistTrading: async (args) => {
@@ -197,7 +199,7 @@ export async function joinSpare(
       listIpv4: () => [],
       now: () => new Date(),
     },
-    { primaryUrl, credential: { email: main.email, password: ADMIN_PASSWORD } },
+    { identity, bundle, storeUrl },
     { beforeFirstWrite: async () => {} },
   );
   return { bundle, standby, spareId };
