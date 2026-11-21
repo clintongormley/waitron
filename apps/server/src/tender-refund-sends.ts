@@ -394,9 +394,14 @@ async function resolve(
   await withTransaction(deps.db, (tx) => requireEconomicWrite(tx, deps.cfg, deps.admission));
   if (refund.sentAt === null && resolver !== "retry")
     return recordOutcome(deps, refund.id, { kind: "never_sent" }, signal);
-  const provider = await providerResult(signal, async () =>
-    deps.refundProviderFor?.(refund.provider!).catch(() => undefined),
-  );
+  const provider = await providerResult(signal, async () => {
+    try {
+      return await deps.refundProviderFor?.(refund.provider!);
+    } catch (error) {
+      if (refund.billPaymentId !== null) throw error;
+      return undefined;
+    }
+  });
   if (provider === undefined || provider.provider !== refund.provider) return refund;
   if (refund.sentAt === null)
     return provider.sendRefund === undefined || expired()
@@ -423,22 +428,34 @@ export async function resumeTenderRefund(
   refundId: string,
   resolver: "retry" | "manager" | "loop",
 ) {
-  const live = liveOf(deps.db);
-  const target = await withTransaction(deps.db, async (tx) => {
+  const { refund, release } = await claimPendingRefund(deps, refundId, readTenderRefund);
+  if (release === null) return toTenderRefundView(refund);
+  return resolveClaimedTenderRefund(deps, refundId, resolver, release);
+}
+
+export async function recoverCardRefund(deps: TenderRefundDeps, refundId: string): Promise<void> {
+  const { release } = await claimPendingRefund(deps, refundId, read);
+  if (release !== null) await resolveClaimedRefund(deps, refundId, "loop", release);
+}
+
+function claimPendingRefund(
+  deps: TenderRefundDeps,
+  refundId: string,
+  readRefund: (tx: Transaction, id: string) => Promise<RefundRow>,
+) {
+  return withTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const refund = await readTenderRefund(tx, refundId);
+    const refund = await readRefund(tx, refundId);
     const release =
       refund.state === "pending" &&
       refund.method === "card" &&
       !refund.manual &&
       !resolversOf(deps.db).stopping &&
-      !live.has(refundId)
-        ? claimLive(live, refundId)
+      !tenderRefundIsLive(deps.db, refundId)
+        ? claimTenderRefund(deps.db, refundId)
         : null;
     return { refund, release };
   });
-  if (target.release === null) return toTenderRefundView(target.refund);
-  return resolveClaimedTenderRefund(deps, refundId, resolver, target.release);
 }
 
 export async function resolveClaimedTenderRefund(

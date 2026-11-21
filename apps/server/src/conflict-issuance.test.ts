@@ -6,7 +6,6 @@ import { refunds, tenders, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
@@ -202,8 +201,7 @@ describe("conflict issuance preflights over real routes", () => {
         cfg: venue.cfg,
         refundProviderFor: (name: string) => venue.pool.get(name),
       };
-      if (kind === "bill") await settlePendingBillPayments(deps);
-      else await recoverTenderRefunds(deps);
+      await recoverTenderRefunds(deps);
       expect(venue.card.lookupCalls).toHaveLength(lookups);
       expect(venue.card.refundCalls).toHaveLength(1);
       expect(await suite.db.select().from(table)).toEqual(before);

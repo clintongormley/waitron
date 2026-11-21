@@ -17,7 +17,6 @@ import {
 } from "./tender-refund-sends.js";
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { TradingAdmission } from "./trading-admission.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
 useVenueDb({
@@ -140,7 +139,7 @@ it("answers a bill refund at the response deadline while its provider finishes",
   });
 });
 
-it("recovers bill and receipt refunds only through their own sender", async () => {
+it("recovers bill and receipt refunds in one pass and saves the retry time", async () => {
   const bill = await billRefund();
   vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
   const { refund: pendingBill } = await refundBillPayment(
@@ -176,22 +175,11 @@ it("recovers bill and receipt refunds only through their own sender", async () =
     lookup.mock.calls
       .map(([ask]) => ask.refundId)
       .filter((id) => id === pendingBill.id || id === pendingSale.id);
-  const beforeBill = read(pendingBill.id);
-  expect(beforeBill).toMatchObject({ state: "pending", nextRetryAt: null });
+  expect(read(pendingBill.id)).toMatchObject({ state: "pending", nextRetryAt: null });
   await recoverTenderRefunds(v.deps);
-  expect(lookedUp()).toEqual([pendingSale.id]);
-  expect(read(pendingBill.id)).toEqual(beforeBill);
-  const waitingSale = read(pendingSale.id);
-  expect(waitingSale).toMatchObject({ state: "pending", nextRetryAt: expect.any(String) });
-
-  lookup.mockClear();
-  const pass = await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
-  expect(lookedUp()).toEqual([pendingBill.id]);
-  expect(
-    pass.errors.filter((error) => "refundId" in error && error.refundId === pendingSale.id),
-  ).toEqual([]);
-  expect(read(pendingSale.id)).toEqual(waitingSale);
-  expect(read(pendingBill.id)).toMatchObject({ state: "completed" });
+  expect(lookedUp().sort()).toEqual([pendingSale.id, pendingBill.id].sort());
+  expect(read(pendingSale.id)).toMatchObject({ state: "pending", nextRetryAt: expect.any(String) });
+  expect(read(pendingBill.id)).toMatchObject({ state: "completed", nextRetryAt: null });
 });
 
 describe("settled tender recovery admission", () => {
@@ -510,164 +498,6 @@ describe("bill refund admission", () => {
     expect(v.snapshot()).toEqual(saved);
   });
 });
-describe("bill refund recovery stopping", () => {
-  it.each([true, false])(
-    "a signal stops before the next bill refund's lookup (signalled: %s)",
-    async (signalled) => {
-      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
-      for (let i = 0; i < 2; i++) {
-        const t = await billRefund();
-        await refundBillPayment(
-          v.deps,
-          v.cfg,
-          t.id,
-          t.paymentId,
-          t.request,
-          v.operator,
-          "reader-card",
-        );
-      }
-      const stateOf = async (id: string) =>
-        (await v.db.select({ state: refunds.state }).from(refunds).where(eq(refunds.id, id)))[0]!
-          .state;
-      // Sent and pending: each one this pass would ask its provider about.
-      const waiting = (
-        await v.db
-          .select({ id: refunds.id })
-          .from(refunds)
-          .where(
-            and(
-              isNotNull(refunds.billPaymentId),
-              eq(refunds.state, "pending"),
-              isNotNull(refunds.sentAt),
-            ),
-          )
-      ).map(({ id }) => id);
-      expect(waiting.length).toBeGreaterThanOrEqual(2);
-      const controller = new AbortController();
-      const asked: string[] = [];
-      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
-        asked.push(query.refundId);
-        controller.abort();
-        return {
-          kind: "match",
-          providerRefundRef: randomUUID(),
-          outcome: "completed",
-          providerStatus: "completed",
-        };
-      });
-      await settlePendingBillPayments(
-        { ...v.deps, cfg: v.cfg },
-        signalled ? controller.signal : undefined,
-      );
-      expect(asked).toHaveLength(signalled ? 1 : waiting.length);
-      expect(waiting).toEqual(expect.arrayContaining(asked));
-      for (const id of waiting) {
-        expect(await stateOf(id)).toBe(asked.includes(id) ? "completed" : "pending");
-      }
-    },
-  );
-  it.each([true, false])(
-    "a signal raised while the provider is being loaded asks it nothing (signalled: %s)",
-    async (signalled) => {
-      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
-      const t = await billRefund();
-      await refundBillPayment(
-        v.deps,
-        v.cfg,
-        t.id,
-        t.paymentId,
-        t.request,
-        v.operator,
-        "reader-card",
-      );
-      const waiting = (
-        await v.db
-          .select({ id: refunds.id })
-          .from(refunds)
-          .where(
-            and(
-              isNotNull(refunds.billPaymentId),
-              eq(refunds.state, "pending"),
-              isNotNull(refunds.sentAt),
-            ),
-          )
-      ).map(({ id }) => id);
-      const controller = new AbortController();
-      const asked: string[] = [];
-      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
-        asked.push(query.refundId);
-        return {
-          kind: "match",
-          providerRefundRef: randomUUID(),
-          outcome: "completed",
-          providerStatus: "completed",
-        };
-      });
-      const pass = await settlePendingBillPayments(
-        {
-          ...v.deps,
-          cfg: v.cfg,
-          refundProviderFor: async () => {
-            controller.abort();
-            return v.card;
-          },
-        },
-        signalled ? controller.signal : undefined,
-      );
-      expect(asked).toHaveLength(signalled ? 0 : waiting.length);
-      expect(pass.errors).toEqual([]);
-      const rows = await v.db
-        .select()
-        .from(refunds)
-        .where(and(isNotNull(refunds.billPaymentId), eq(refunds.state, "pending")));
-      expect(rows.map((row) => row.id)).toEqual(signalled ? expect.arrayContaining(waiting) : []);
-      // Nothing of the stopped pass holds the refund: the next pass without a signal settles it.
-      if (signalled) {
-        await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
-        expect(asked).toEqual(expect.arrayContaining(waiting));
-      }
-    },
-  );
-  it("a signal raised during a send the provider accepted leaves the refund sent and pending, unasked", async () => {
-    const t = await billRefund();
-    const controller = new AbortController();
-    vi.spyOn(v.card, "sendRefund").mockImplementation(async () => {
-      controller.abort();
-      return { kind: "accepted" };
-    });
-    const asked: string[] = [];
-    vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
-      asked.push(query.refundId);
-      return {
-        kind: "match",
-        providerRefundRef: randomUUID(),
-        outcome: "completed",
-        providerStatus: "completed",
-      };
-    });
-    await refundBillPayment(
-      { ...v.deps, stopSignal: controller.signal },
-      v.cfg,
-      t.id,
-      t.paymentId,
-      t.request,
-      v.operator,
-      "reader-card",
-    );
-    const [saved] = await v.db.select().from(refunds).where(eq(refunds.billPaymentId, t.paymentId));
-    expect(asked).toEqual([]);
-    expect(saved).toMatchObject({ state: "pending", sendCount: 1 });
-    expect(saved!.sentAt).not.toBeNull();
-    await resumeCardRefund(v.deps, saved!.id, "loop", "stored");
-    expect(asked).toEqual([saved!.id]);
-    const [settled] = await v.db
-      .select({ state: refunds.state })
-      .from(refunds)
-      .where(eq(refunds.id, saved!.id));
-    expect(settled!.state).toBe("completed");
-  });
-});
 describe("settled tender recovery while the start's time is unconfirmed", () => {
   it("leaves a pending refund untouched for a pass while waiting, and completes it once confirmed", async () => {
     const t = await retained(true);
@@ -745,39 +575,19 @@ describe("refund recovery under a clock before 28-10-2024", () => {
     expect(await tenderRow(t.refund.id)).toMatchObject({ state: "completed" });
   });
 
-  it("the bill-refund half of the pass asks the provider nothing and leaves the refund as it was, then settles it on 28-10-2024", async () => {
-    const refund = await pendingBillRefund();
-    const lookup = vi.spyOn(v.card, "lookupRefund").mockResolvedValue(completedMatch());
-    const send = vi.spyOn(v.card, "sendRefund");
-    v.set(DAY_BEFORE_FIRST_ISSUE);
-
-    const held = await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
-
-    expect(held.refundsCompleted).toBe(0);
-    expect(await billRow(refund.id)).toEqual(refund);
-    expect(lookup).not.toHaveBeenCalled();
-    expect(send).not.toHaveBeenCalled();
-
-    v.set(FIRST_ISSUE_DAY);
-    await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
-
-    expect(await billRow(refund.id)).toMatchObject({ state: "completed" });
-  });
-
   it.each([
     ["tender", async () => (await retained(true)).refund.id, tenderRow],
     ["bill", async () => (await pendingBillRefund()).id, billRow],
   ] as const)(
     "a %s refund stays pending when the clock reads 27-10-2024 by the time the provider answers",
-    async (kind, pending, rowOf) => {
+    async (_kind, pending, rowOf) => {
       const id = await pending();
       vi.spyOn(v.card, "lookupRefund").mockImplementation(async () => {
         v.set(DAY_BEFORE_FIRST_ISSUE);
         return completedMatch();
       });
 
-      if (kind === "tender") await recoverTenderRefunds(v.deps);
-      else await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+      await recoverTenderRefunds(v.deps);
 
       expect(v.card.lookupRefund).toHaveBeenCalled();
       expect(await rowOf(id)).toMatchObject({ state: "pending", completedAt: null });

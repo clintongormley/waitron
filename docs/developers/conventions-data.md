@@ -4756,7 +4756,7 @@ and its four writers (`recordSale`, `recordVoid`, `recordCorrection`, `recordSub
 the same, so no path through the seat writes a record. Both wrappers are needed: the plan's R6 run
 showed that wrapping the writers alone charged a card and then answered `507`. A card already
 charged when a writer refuses is answered `507 sale.charged_not_recorded` with reason
-`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the two refund recovery loops leave
+`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the shared refund recovery loop leaves
 pending refunds alone, a card refund on the till or the dashboard whose provider wait ends once the
 gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` to both route
 mounts, which `boot.start-clock-gate.test.ts` checks; the refund-wait rows in

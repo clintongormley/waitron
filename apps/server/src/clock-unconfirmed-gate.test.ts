@@ -36,7 +36,6 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { attestCardRefund } from "./bill-refunds.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { startClockState } from "./start-clock-check.js";
@@ -1185,9 +1184,9 @@ const refundWaits: Record<string, () => Promise<RefundWait>> = {
     await pendingRefund("tender");
     return { run: ({ loop }) => recoverTenderRefunds(loop) };
   },
-  "the bill-refund half of the pass": async () => {
+  "the refund loop recovering a bill refund": async () => {
     await pendingRefund("bill");
-    return { run: ({ loop }) => settlePendingBillPayments(loop) };
+    return { run: ({ loop }) => recoverTenderRefunds(loop) };
   },
   "a new tender refund on the till": async () => {
     const { saleId, tenderId } = await soldWhole("card");

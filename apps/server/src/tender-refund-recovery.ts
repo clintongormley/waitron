@@ -1,11 +1,10 @@
-import { and, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, withTransaction } from "@waitron/db";
-import { refundLookupGapMs } from "./bill-payments-loop.js";
-import { raiseTenderRefundUnresolved } from "./bill-refund-alerts.js";
+import { raisePendingRefundUnresolved } from "./bill-refund-alerts.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import {
-  resumeTenderRefund,
+  recoverCardRefund,
   tenderRefundIsLive,
   startTenderRefundResolvers,
   stopTenderRefundResolvers,
@@ -16,9 +15,13 @@ import { refundsPaused } from "./bill-refunds.js";
 
 const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;
-const FAILED = "Settled-tender refund recovery failed";
+const FAILED = "Card refund recovery failed";
+
+function refundLookupGapMs(sentAgeMs: number): number {
+  if (sentAgeMs < 5 * 60_000) return 0;
+  return Math.min(sentAgeMs / 4, 30 * 60_000);
+}
 const pendingConnected = and(
-  isNotNull(refunds.saleId),
   eq(refunds.state, "pending"),
   eq(refunds.method, "card"),
   eq(refunds.manual, false),
@@ -66,6 +69,7 @@ export async function recoverTenderRefunds(
     .orderBy(
       sql`coalesce(${refunds.nextRetryAt}, ${refunds.createdAt})`,
       refunds.createdAt,
+      sql`case when ${refunds.billPaymentId} is not null then ${refunds}.rowid end`,
       refunds.id,
     )
     .limit(50);
@@ -99,14 +103,14 @@ export async function recoverTenderRefunds(
       });
       const failures: unknown[] = [];
       if (work)
-        await resumeTenderRefund(deps, id, "loop").catch((error: unknown) => {
+        await recoverCardRefund(deps, id).catch((error: unknown) => {
           failures.push(error);
         });
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
         const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
         if (row?.state === "pending" && now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS)
-          await raiseTenderRefundUnresolved(tx, row, now);
+          await raisePendingRefundUnresolved(tx, row, now);
       }).catch((error: unknown) => {
         failures.push(error);
       });

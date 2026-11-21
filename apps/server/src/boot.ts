@@ -737,7 +737,7 @@ const BILL_PENDING_RECHECK_MS = 60_000;
 /**
  * After each pass, settle the pending card bill payments no attempt in this process is driving
  * (`settlePendingBillPayments`, bill payments design §5.4). A failure never changes the inner
- * report; while a payment or refund stays pending it brings the report's next due time forward to
+ * report; while a payment stays pending it brings the report's next due time forward to
  * {@link BILL_PENDING_RECHECK_MS} from now, never later than the report's own. Settling files
  * invoices and fails payments this process is not driving, so it runs only while `getRole` answers
  * `primary`, read for each pass.
@@ -754,9 +754,7 @@ export function withPendingBillPayments(
     if (signal?.aborted || getRole() !== "primary") return report;
     try {
       const { errors, pending, ...counts } = await settle(signal);
-      const settled =
-        counts.received + counts.failed + counts.refundsCompleted + counts.refundsFailed;
-      if (settled > 0) {
+      if (counts.received + counts.failed > 0) {
         log("info", "bill_payment.settled", counts);
       }
       for (const failure of errors) log("warn", "bill_payment.settle_failed", failure);
@@ -4714,20 +4712,16 @@ async function bootServer(
             }),
         owners: () =>
           sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
-        settle: (signal) =>
-          settlePendingBillPayments(
-            {
-              db,
-              backend: nodeBackend,
-              admission: tradingAdmission,
-              clock: tillClock,
-              cfg: tradingContext,
-              refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
-              clockUnconfirmed: startClockHolds,
-              log,
-            },
-            signal,
-          ),
+        settle: () =>
+          settlePendingBillPayments({
+            db,
+            backend: nodeBackend,
+            admission: tradingAdmission,
+            clock: tillClock,
+            cfg: tradingContext,
+            clockUnconfirmed: startClockHolds,
+            log,
+          }),
         getRole: () => holders.singletonRole.current,
         log,
       },

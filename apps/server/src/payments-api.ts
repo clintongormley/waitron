@@ -112,12 +112,7 @@ import { refuseRefundInProgress } from "./working-order.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
 import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
-import {
-  attestCardRefund,
-  billRefundIsLive,
-  refundProvidersOf,
-  resumeCardRefund,
-} from "./bill-refunds.js";
+import { attestCardRefund, refundProvidersOf, resumeCardRefund } from "./bill-refunds.js";
 import {
   attestTenderRefundIn,
   readStuckTenderRefund,
@@ -1937,7 +1932,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       );
       return c.json(
         rows
-          .filter((row) => !billRefundIsLive(deps.db, row.refundId))
+          .filter((row) => !tenderRefundIsLive(deps.db, row.refundId))
           .map((row) => ({
             ...row,
             appliedAmount: centsToDecimal(row.appliedAmount),

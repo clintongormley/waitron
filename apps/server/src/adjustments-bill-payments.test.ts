@@ -17,7 +17,7 @@ import {
 import type { RefundAnswer } from "@waitron/payments";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { AppError, centsToDecimal } from "@waitron/shared";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import {
   inTx,
   provisionBillVenue,
@@ -372,7 +372,7 @@ describe("the invoice waits for the refund (design §8 test 23)", () => {
       "10.00",
     ]);
 
-    await settlePendingBillPayments({
+    await recoverTenderRefunds({
       admission: testTradingAdmission(),
       db: venue.db,
       backend: venue.backend,

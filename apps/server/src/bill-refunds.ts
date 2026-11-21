@@ -45,7 +45,6 @@ import {
   toRefundView,
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
-import { claimLive, perDatabase } from "./live-in-process.js";
 import {
   claimTenderRefund,
   resolveClaimedRefund,
@@ -240,14 +239,6 @@ export async function clockStopsRefund(
   }
   if (deps.clockUnconfirmed?.() === true) return true;
   return clockUnusableAt(deps.backend, reading);
-}
-
-/** The card refunds this process is driving, by id: a pending refund missing here is one nothing is
- * still sending or looking up. */
-const liveRefundsOf = perDatabase(() => new Set<string>());
-
-export function billRefundIsLive(db: Database, refundId: string): boolean {
-  return liveRefundsOf(db).has(refundId) || tenderRefundIsLive(db, refundId);
 }
 
 /** A card refund, its payment's bill and its provider's `payments` row. */
@@ -515,14 +506,13 @@ export async function resumeCardRefund(
   raisedBy: AlertOrigin,
   refused?: (reason: RefundRefusalReason) => void,
 ): Promise<ResumedRefund> {
-  const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const found = await readCardRefund(tx, refundId);
     if (found === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (found.refund.state !== "pending" || billRefundIsLive(deps.db, refundId))
+    if (found.refund.state !== "pending" || tenderRefundIsLive(deps.db, refundId))
       return { found, release: null };
-    return { found, release: claimLive(live, refundId) };
+    return { found, release: claimTenderRefund(deps.db, refundId) };
   });
   if (target.release === null) return { claimed: false, refund: target.found.refund };
   const { refund, provided } = target.found;
@@ -576,18 +566,17 @@ export async function attestCardRefund(
   outcome: "completed" | "failed",
   attestation: Attestation,
 ): Promise<RefundRow> {
-  const live = liveRefundsOf(deps.db);
   const release = await withTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const target = await readCardRefund(tx, refundId);
     if (target === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (target.refund.state !== "pending" || billRefundIsLive(deps.db, refundId)) {
+    if (target.refund.state !== "pending" || tenderRefundIsLive(deps.db, refundId)) {
       throw new AppError("bill.refund_not_stuck", { refundId });
     }
     if (outcome === "completed" && target.refund.sentAt === null) {
       throw new AppError("bill.attestation_contradicted", { id: refundId, evidence: "never_sent" });
     }
-    return claimLive(live, refundId);
+    return claimTenderRefund(deps.db, refundId);
   });
   try {
     return await recordRefundOutcome(

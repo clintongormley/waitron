@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { devices, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
-import { billRefundIsLive, resumeCardRefund } from "./bill-refunds.js";
+import { resumeCardRefund } from "./bill-refunds.js";
+import { tenderRefundIsLive } from "./tender-refund-sends.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -435,7 +436,7 @@ it("finishes an admitted reader-card refund after the till is switched off", asy
     requested_by: venue.adminId,
     authorized_by: venue.adminId,
   });
-  expect(billRefundIsLive(suite.db, refund!.id)).toBe(false);
+  expect(tenderRefundIsLive(suite.db, refund!.id)).toBe(false);
   expect(venue.card.refundCalls).toHaveLength(calls + 1);
 });
 
@@ -476,6 +477,6 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
       authorized_by: venue.adminId,
     },
   ]);
-  expect(billRefundIsLive(suite.db, pending!.id)).toBe(false);
+  expect(tenderRefundIsLive(suite.db, pending!.id)).toBe(false);
   expect(venue.card.refundCalls).toHaveLength(calls + 1);
 });
