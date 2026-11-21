@@ -539,6 +539,15 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps the table's invoice number a correction refusal names, as text only", () => {
+    const refused = { code: "sale.correction_not_admitted", reason: "filing_refused" };
+    expect(refusalOf({ ...refused, status: 409, tableInvoiceNumber: "A/45" })).toEqual({
+      ...refused,
+      tableInvoiceNumber: "A/45",
+    });
+    expect(refusalOf({ ...refused, tableInvoiceNumber: 45 })).toEqual(refused);
+  });
+
   it("keeps the permission a refusal names as text", () => {
     expect(
       refusalOf({ code: "authorization.not_permitted", status: 403, permission: "sale.refund" }),

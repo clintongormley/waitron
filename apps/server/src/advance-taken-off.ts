@@ -98,7 +98,16 @@ export async function refuseFinalInvoiceFirst(
     .from(saleLines)
     .where(and(eq(saleLines.saleId, saleId), eq(saleLines.advanceRole, "payment_on_account")));
   const rate = basisPointsToDecimal(own!.rate);
-  const lines = await readCorrectableLines(tx, backend, brandSaleId(final.id), nodeId);
+  const lines = await readCorrectableLines(tx, backend, brandSaleId(final.id), nodeId).catch(
+    (error: unknown) => {
+      if (!(error instanceof AppError)) throw error;
+      throw new AppError(
+        error.code,
+        { ...error.params, tableInvoiceNumber: takenOffParams(saleId, final).invoiceNumber },
+        { reason: error.reason },
+      );
+    },
+  );
   const dishes = sumDecimals([
     decimal("0.00"),
     ...lines.filter((line) => compareDecimal(line.rate, rate) === 0).map((line) => line.left),

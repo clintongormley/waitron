@@ -9812,14 +9812,23 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
     expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
 
-  it("keeps the bill refund once the table's invoice exists", async () => {
+  it("opens Correct invoice on that ticket, and no bill refund, once the table's invoice exists", async () => {
     const { el } = await mountApp(withAdvance({ invoiceNumber: "F-0007", status: "placed" }));
     await openTable(el);
     await openDialog(el, "rest");
 
     await press(el, '[data-payment-refund="pay-1"]');
 
-    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).not.toBeNull();
-    expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
+    );
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.readInvoiceCorrectionLines).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")!.saleId).toBe(
+      "advance-sale",
+    );
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
 });

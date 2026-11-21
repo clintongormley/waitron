@@ -12,7 +12,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     "sale.correction_amount_invalid": Record<string, never>;
     "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
-    "sale.correction_history_unusable": Record<string, never>;
+    /** `tableInvoiceNumber`: the table's invoice, refused on Correct invoice of an advance it took off. */
+    "sale.correction_history_unusable": { tableInvoiceNumber?: string };
     "sale.correction_breakdown_invalid": Record<string, never>;
     "sale.correction_approval_invalid": {
       invoiceCorrectionId: string;
@@ -24,6 +25,7 @@ declare module "@waitron/shared" {
         | "replaced"
         | "filed_figures_unreadable"
         | "filed_figures_changed";
+      tableInvoiceNumber?: string;
     };
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */

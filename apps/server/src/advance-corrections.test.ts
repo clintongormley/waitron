@@ -657,8 +657,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
     });
   });
 
-  it("a rest's invoice AEAT refused: Correct invoice on the advance answers that invoice's refusal", async () => {
-    const { advanceId, finalSaleId } = await takenOff();
+  it("a rest's invoice AEAT refused: Correct invoice on the advance answers that invoice's refusal, naming it", async () => {
+    const { advanceId, finalSaleId, refusal } = await takenOff();
     const [row] = await inTx(venue(), (tx) =>
       tx
         .select({ id: invoiceRecords.id })
@@ -672,7 +672,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
     expect(refused.status, JSON.stringify(refused.json)).toBe(409);
     expect(refused.json).toEqual({
       code: "sale.correction_not_admitted",
-      params: { reason: "filing_refused" },
+      params: { reason: "filing_refused", tableInvoiceNumber: refusal.params.invoiceNumber },
     });
   });
 

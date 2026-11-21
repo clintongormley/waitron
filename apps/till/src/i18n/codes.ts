@@ -1056,6 +1056,11 @@ const FINAL_INVOICE_FIRST_UNNAMED = {
   es: "El ticket de la mesa{invoiceNumber} todavía puede devolver dinero de platos al tipo de IVA de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
 };
 
+const TABLE_RECEIPT_REFUSED = {
+  en: "The table's receipt {tableInvoiceNumber} cannot be corrected: ",
+  es: "El ticket de la mesa {tableInvoiceNumber} no se puede rectificar: ",
+};
+
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   replaced: {
@@ -1116,8 +1121,14 @@ export function codeMessage(
     invoiceNumber?: unknown;
     rate?: unknown;
     moneyLeft?: unknown;
+    tableInvoiceNumber?: unknown;
   },
 ): string {
+  if (typeof params?.tableInvoiceNumber === "string") {
+    const said = codeMessage(code, locale, { ...params, tableInvoiceNumber: undefined });
+    const lead = pickLocale(TABLE_RECEIPT_REFUSED, locale);
+    return `${lead.replace("{tableInvoiceNumber}", () => params.tableInvoiceNumber as string)}${said.charAt(0).toLowerCase()}${said.slice(1)}`;
+  }
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (
     code === "order.dining_fixed" &&

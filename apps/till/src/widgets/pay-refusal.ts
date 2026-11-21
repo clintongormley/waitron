@@ -28,6 +28,8 @@ export interface PayRefusal {
    * still give back at that rate. */
   rate?: string;
   moneyLeft?: string;
+  /** The table's invoice whose refusal Correct invoice of its advance answers. */
+  tableInvoiceNumber?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }
