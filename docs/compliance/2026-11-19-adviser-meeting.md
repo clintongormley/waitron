@@ -3,8 +3,8 @@
 Internal copy, for the owner. Rewritten with the owner on 18 November 2026: the 26 questions of the
 earlier version became 11, written to the adviser, with internal references removed. The shared
 Google Doc "Waitron adviser meeting, 19 November 2026" holds the two parts below side by side,
-English beside Spanish; this header and everything after Part 2 are not in it. Question 12 was
-added to both parts after the meeting (see [Added after the meeting](#added-after-the-meeting)).
+English beside Spanish; this header and everything after Part 2 are not in it. Questions 12 and
+13 were added to both parts after the meeting (see [Added after the meeting](#added-after-the-meeting)).
 
 **Decisions taken while rewriting (owner, 18 November).**
 
@@ -278,6 +278,10 @@ Open: which records need ten years.
 - **A negative line at one rate.** Each advance is charged at 10%, as the owner has confirmed. A bill of €20 of food at 10% and €80 of wine at 21%, with a €50 advance at 10%, leaves a record for the rest with a negative 10% line (−€27.27 base, −€2.73 VAT) beside a positive 21% line (€66.12, €13.88), total €50. Waitron's copy of AEAT's checks accepts it, and we will send one to AEAT's test service before building on it. *May a record carry a negative line at one rate beside a positive line at another? Or may an advance paid during the meal instead be charged at the mix of VAT rates on the bill so far, so that this never happens?*
 - **The eat-in rate.** *Is all dine-in consumption, drinks included, at 10%, with product rates applying only to takeaway?*
 
+**13. Money given back after the table's ticket has taken off a part payment** (added 21 November, following the owner's decision on question 6 and the part payments of question 12)
+
+- **Giving back more than the table's ticket holds.** A company pays €100 ahead, with its own ticket, A/12: €90.91 plus €9.09 VAT at 10%. The dinner comes to €120, so the table's ticket, A/45, lists the dishes, takes off A/12 (−€100.00) and comes to the €20 left (€18.18 plus €1.82 VAT). The venue then agrees to give €30 back. We plan two steps. First, a corrective of A/45 gives back the €20 paid on it, at the dishes' own VAT rates, and is filed with AEAT. Second, the €10 left over comes from the part payment, whose ticket cannot be corrected once A/45 has taken it off: staff give it back as a refund of the payment on A/12, and nothing is filed for it. Its VAT, €0.91 at 10% (€9.09 base), stays declared, and the accountant's export lists the refund with that VAT. Waitron refuses the refund on A/12 while A/45 still holds money its corrective could give back, so only the leftover goes back without a corrective. This is the owner's choice: "let's use refund a payment, but add this approach to the adviser's list for confirmation". *Is this acceptable? If not, what must the venue issue or file for the €10, and may it leave the €0.91 declared for its accountant to deal with?*
+
 ## Part 2: Español
 
 **1. Cuándo se expide el tique de la mesa** (a partir de sus respuestas 1.1, 1.3, 1.4 y 1.8)
@@ -419,6 +423,12 @@ Nota: ____
 
 Nota: ____
 
+**13. Una devolución después de que el tique de la mesa haya descontado un pago a cuenta** (añadida el 21 de noviembre, a partir de la decisión del propietario sobre la pregunta 6 y los pagos a cuenta de la pregunta 12)
+
+- **Devolver más de lo que recoge el tique de la mesa.** Una empresa paga 100 € por adelantado, con su propio tique, A/12: 90,91 € de base y 9,09 € de cuota al 10 %. La cena suma 120 €, así que el tique de la mesa, A/45, detalla los platos, descuenta A/12 (−100,00 €) y termina en los 20 € restantes (18,18 € de base y 1,82 € de cuota). Después, el local acepta devolver 30 €. Proponemos dos pasos. Primero, una rectificativa de A/45 devuelve los 20 € pagados en él, a los tipos de IVA de los platos, y se remite a la AEAT. Segundo, los 10 € restantes salen del pago a cuenta, cuyo tique ya no puede rectificarse una vez que A/45 lo ha descontado: el personal los devuelve como devolución del pago de A/12, y no se remite nada por ella. Su cuota, 0,91 € al 10 % (9,09 € de base), queda declarada, y la exportación para el gestor recoge la devolución con esa cuota. Waitron rechaza la devolución sobre A/12 mientras A/45 conserve dinero que su rectificativa pueda devolver, de modo que solo lo restante se devuelve sin rectificativa. El propietario lo ha decidido así; en sus palabras: "let's use refund a payment, but add this approach to the adviser's list for confirmation" («usemos la devolución de un pago, pero añadamos este enfoque a la lista del asesor para que lo confirme»). *¿Es aceptable? Si no lo es, ¿qué debe expedir o remitir el local por los 10 €, y puede dejar declarados los 0,91 € para que su gestor decida?*
+
+Nota: ____
+
 ## Old question numbers
 
 Plans and queues written before 18 November cite the earlier numbers. Record each answer under both.
@@ -474,4 +484,11 @@ the advance's own words, «Pago a cuenta — consumo en mesa 7», were not sent.
 Question 6's last point, goodwill money back on a bill with two VAT rates, was added in both parts on
 21 November (owner, 21 November, agreeing to put it to the adviser with the part-payment refund
 question: "yes and yes").
+Copy it into the shared Google Doc before sending.
+
+Question 13, giving back a part payment by Refund a payment once the table's ticket has taken it
+off, was added in both parts on 21 November (owner, 21 November 16:36: "let's use refund a payment,
+but add this approach to the adviser's list for confirmation"; the refusal while the table's ticket
+still holds money its corrective could give back, 16:54; plan
+[2026-11-21-advance-manual-route.md](../superpowers/plans/2026-11-21-advance-manual-route.md)).
 Copy it into the shared Google Doc before sending.
