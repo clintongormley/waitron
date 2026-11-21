@@ -71,9 +71,12 @@ import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import {
+  approveJoin,
   joinAsBundleAnswer,
   joiningBox,
+  listedJoin,
   mountBoxJoin,
+  pollJoin,
   signedInCookie,
 } from "./testing/box-join.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
@@ -272,6 +275,7 @@ function mountApp(
     designated,
     wakeSpareJoin,
     now,
+    log,
   });
   return app;
 }
@@ -418,12 +422,13 @@ let joinAddresses = 0;
 /**
  * The same join as {@link post}, reaching `issueMirrorBundle` through the box-join routes: the
  * spare named in `body` asks from an address of its own, and the person `body.email` names, signed
- * in afresh, taps its code. Answers as the password route did (`joinAsBundleAnswer`).
+ * in afresh, taps its code. Answers as the password route did (`joinAsBundleAnswer`). `plain`
+ * sends no module operation, as the password route's plain path did.
  */
 async function approvedJoin(
   app: Hono,
   body: Record<string, unknown>,
-  { veriFactu = false }: { veriFactu?: boolean } = {},
+  { veriFactu = false, plain = false }: { veriFactu?: boolean; plain?: boolean } = {},
 ): Promise<Response> {
   joinAddresses += 1;
   const box = joiningBox(`10.20.${Math.floor(joinAddresses / 250)}.${(joinAddresses % 250) + 1}`, {
@@ -439,14 +444,14 @@ async function approvedJoin(
     storeUrl: body.standbyStoreUrl as string,
   });
   const cookie = await signedInCookie(db, await personIdForLoginEmail(db, body.email as string));
-  return withFixtureOperation(body, veriFactu, (moduleOperation) =>
+  const send = (moduleOperation: unknown) =>
     joinAsBundleAnswer(app, {
       box,
       sent: { cookie },
       moduleOperation,
       at: body.standbyAt as number,
-    }),
-  );
+    });
+  return plain ? send(undefined) : withFixtureOperation(body, veriFactu, send);
 }
 
 beforeAll(async () => {
@@ -489,7 +494,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       lines.push(JSON.stringify({ level, event, fields }));
     const app = mountApp(designated, log);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -988,7 +993,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const before = await allocationSnapshot();
     const standby = validStandby();
 
-    const res = await rawPost(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+    const res = await approvedJoin(
+      app,
+      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby },
+      { plain: true },
+    );
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     const reserved = (await res.json()).reservedIdentity;
@@ -2282,6 +2291,66 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
 
       expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    });
+
+    // The hello checks the clock and the name too; these pass it, so the bundle's own checks answer.
+    async function listedSpare(app: Hono, at: number) {
+      const box = joiningBox("10.30.0.1", {
+        identity: {
+          nodeId: unusedFixtureNodeId(),
+          publicKey: STANDBY_PUB,
+          privateKey: STANDBY_KEYS.privateKey,
+        },
+        contactUrl: "https://cloud.deli.test",
+        storeUrl: "https://cloud.deli.test:7443",
+      });
+      return listedJoin(app, box, at);
+    }
+
+    it("refuses at approve a spare whose latest poll reads a clock too far away, reserving nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const primaryAt = Date.now();
+      const app = mountApp(designated, undefined, undefined, () => new Date(primaryAt));
+      const listed = await listedSpare(app, primaryAt);
+      const standbyAt = primaryAt + 11 * 60_000;
+      expect(await pollJoin(app, listed, standbyAt)).toEqual({ state: "waiting" });
+      const before = await reservedAndListed();
+
+      const answer = await approveJoin(
+        app,
+        listed.requestId,
+        { code: listed.code },
+        { cookie: await signedInCookie(db, adminPersonId) },
+      );
+
+      expect(answer.status).toBe(409);
+      expect((answer.body as { error: { code: string } }).error.code).toBe("mirror.clocks_apart");
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("refuses at approve a spare whose name a box listed after its hello already has, reserving nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const listed = await listedSpare(app, Date.now());
+      const newNodeId = listed.box.hello.newNodeId;
+      await holdChartWithStandby(
+        designated,
+        `${newNodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
+      );
+      const before = await reservedAndListed();
+
+      const answer = await approveJoin(
+        app,
+        listed.requestId,
+        { code: listed.code },
+        { cookie: await signedInCookie(db, adminPersonId) },
+      );
+
+      expect(answer).toEqual({
+        status: 409,
+        body: { error: { code: "mirror.standby_name_taken", params: {} } },
+      });
+      expect(await reservedAndListed()).toEqual(before);
     });
 
     it.each([

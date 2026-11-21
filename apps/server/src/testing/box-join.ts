@@ -27,6 +27,7 @@ import {
 } from "../box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "../box-join-seal.js";
 import { boxHostnameFor } from "../box-name.js";
+import type { Logger } from "../logger.js";
 import { generateStandbyIdentity, type StandbyIdentity } from "../reserved-identity.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 
@@ -278,12 +279,12 @@ export const dismissJoin = (app: Hono, requestId: string, sent: PersonSent) =>
 /** Mounts the box-to-box and the person routes on one request store, and returns the store. */
 export function mountBoxJoin(
   app: Hono,
-  deps: Omit<BoxJoinPersonApiDeps, "requests"> & { requests?: BoxJoinRequests },
+  deps: Omit<BoxJoinPersonApiDeps, "requests"> & { requests?: BoxJoinRequests; log?: Logger },
 ): BoxJoinRequests {
   const requests = deps.requests ?? createBoxJoinRequests();
-  const { appDb, node, ring, designated, now } = deps;
-  mountBoxJoinApi(app, { appDb, node, ring, designated, requests, now });
-  mountBoxJoinPersonApi(app, { ...deps, requests });
+  const { appDb, node, ring, designated, now, log, ...rest } = deps;
+  mountBoxJoinApi(app, { appDb, node, ring, designated, requests, now }, log);
+  mountBoxJoinPersonApi(app, { appDb, node, ring, designated, now, ...rest, requests }, log);
   return requests;
 }
 
