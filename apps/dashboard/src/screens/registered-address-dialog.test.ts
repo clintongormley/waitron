@@ -537,7 +537,7 @@ for (const [reason, key] of [
   });
 }
 
-it("a postal_code refusal shows under Postal code with the bottom message, and leaves Save enabled", async () => {
+it("a postcode refusal shows under Postal code with the bottom message, and leaves Save enabled", async () => {
   for (const locale of ["en-GB", "es-ES"]) {
     setLocale(locale);
     const api = stubApi();
