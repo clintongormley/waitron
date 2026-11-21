@@ -48,15 +48,14 @@ it.each([
   "offers the Backups guide (%s, %s, %s, manager %s)",
   async (locale, label, href, canManage) => {
     setLocale(locale);
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    await mountWidget<BackupScreen>("dashboard-backup-screen", {
       api: stubApi({}, OFF),
       canManage,
     });
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[href^='/help/']")!;
-    expect(link).not.toBeNull();
-    await expect.element(link).toBeVisible();
-    expect(link.textContent?.trim()).toBe(label);
-    expect(link.getAttribute("href")).toBe(href);
+    const links = page.getByRole("link", { name: label, exact: true });
+    await expect.poll(() => links.all().length).toBe(1);
+    await expect.element(links).toBeVisible();
+    await expect.element(links).toHaveAttribute("href", href);
   },
 );
 
@@ -298,7 +297,9 @@ describe("backup-screen", () => {
     expect(api.mintBackupKey).not.toHaveBeenCalled();
     expect(q(el, "[data-test=minted-key]")).toBeNull();
     expect(q(el, "[data-test=saved-it]")).toBeNull();
-    expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toBe(t("backup.key.existing"));
+    expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toContain(
+      "Un paquete de recuperación hecho para tu copia en el bucket lleva esta clave dentro del código de restauración.",
+    );
     expect(q(el, "[data-test=short-key]")).toBeNull();
     expect((q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
@@ -804,6 +805,8 @@ describe("backup-screen", () => {
     await flush(el);
     expect(api.mintBackupKey).toHaveBeenCalled();
     expect(q(el, "[data-test=minted-key]")!.textContent).toContain("MINTED-KEY-abcdef012345");
+    expect(el.shadowRoot!.textContent).toContain("Conserva también tu clave del servidor.");
+
     expect(q(el, "[data-test=copy-key]")).not.toBeNull();
     const download = q(el, "[data-test=download-key]") as HTMLAnchorElement;
     expect(download).not.toBeNull();

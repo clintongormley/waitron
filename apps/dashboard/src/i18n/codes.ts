@@ -1287,20 +1287,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este nodo no es el principal del local; cambia las copias de seguridad desde el nodo principal",
   },
   "backup.recovery_key_unstorable": {
-    en: "That recovery key can't be stored safely — remove any spaces or line breaks",
-    es: "Esa clave de recuperación no se puede guardar de forma segura; quita los espacios o saltos de línea",
+    en: "That backup encryption key can't be stored safely — remove any spaces or line breaks",
+    es: "Esa clave de cifrado de copias no se puede guardar de forma segura; quita los espacios o saltos de línea",
   },
   "backup.recovery_key_too_short": {
-    en: "The recovery key is too short",
-    es: "La clave de recuperación es demasiado corta",
+    en: "The backup encryption key is too short",
+    es: "La clave de cifrado de copias es demasiado corta",
   },
   "backup.new_recovery_key_too_short": {
-    en: "That recovery key is too short",
-    es: "Esa clave de recuperación es demasiado corta",
+    en: "That backup encryption key is too short",
+    es: "Esa clave de cifrado de copias es demasiado corta",
   },
   "backup.recovery_key_missing": {
-    en: "This box holds no recovery key.",
-    es: "Este servidor no tiene clave de recuperación.",
+    en: "This box holds no backup encryption key.",
+    es: "Este servidor no tiene clave de cifrado de copias.",
   },
   "backup.destinations_invalid": {
     en: "Check the backup destination",
@@ -1323,8 +1323,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se pudo confirmar la clave guardada. Conserva tanto la clave anterior como la que acabas de guardar. No sigas cambiando claves aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
   },
   "backup.recovery_key_exists": {
-    en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
-    es: "Este servidor tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
+    en: "This box holds a different backup encryption key from the one this page sent. Reload the page and try again. To replace the key, use “Change the backup encryption key”, which appears while backups are on.",
+    es: "Este servidor tiene una clave de cifrado de copias distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de cifrado de copias», que aparece mientras las copias están activadas.",
   },
   "backup.not_enabled": {
     en: "Turn on scheduled backups before starting a backup.",
@@ -1387,8 +1387,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Un archivo enviado al destino de las copias o leído de él superaba el tamaño que admite el servidor.",
   },
   "backup.rotation_metadata_failed": {
-    en: "The new recovery key is in use, but the box could not record the change in the backup settings.",
-    es: "La nueva clave de recuperación ya está en uso, pero el servidor no ha podido anotar el cambio en los ajustes de las copias.",
+    en: "The new backup encryption key is in use, but the box could not record the change in the backup settings.",
+    es: "La nueva clave de cifrado de copias ya está en uso, pero el servidor no ha podido anotar el cambio en los ajustes de las copias.",
   },
   "backup.archive_settings_invalid": {
     en: "The saved settings for scheduled backups are not valid. Choosing the destinations again and using “Turn on backups” replaces them.",

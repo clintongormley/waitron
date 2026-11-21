@@ -31,9 +31,10 @@ export const restoreEn = {
   "restore.preview_unnamed": "This backup's server key has no stored name.",
   "restore.preview_older_key": "An older backup reinstates its older server key.",
   "restore.preview_keep_keys": "Keep older server keys until no older backup remains.",
-  "restore.preview_key_separate": "The server key is separate from the recovery key.",
+  "restore.preview_key_separate":
+    "The backup encryption key opens the copy. The server key authorises recovery.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
-  "restore.preview_key_error": "Check the recovery key.",
+  "restore.preview_key_error": "Check the backup encryption key.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
@@ -46,11 +47,11 @@ export const restoreEn = {
   "restore.backup_file_help_label": "Help with backup file",
   "restore.backup_file_help": "Choose the encrypted backup from the server you are recovering.",
   "restore.backup_file_missing": "Choose a backup file.",
-  "restore.recovery_key": "Recovery key",
+  "restore.recovery_key": "Backup encryption key",
   "restore.recovery_key_hint": "The key that unlocks this backup",
-  "restore.recovery_key_missing": "Enter the recovery key.",
-  "restore.show_recovery_key": "Show recovery key",
-  "restore.hide_recovery_key": "Hide recovery key",
+  "restore.recovery_key_missing": "Enter the backup encryption key.",
+  "restore.show_recovery_key": "Show backup encryption key",
+  "restore.hide_recovery_key": "Hide backup encryption key",
   "restore.environment": "Backup environment",
   "restore.environment_help_label": "Help with backup environment",
   "restore.environment_help":
@@ -68,7 +69,7 @@ export const restoreEn = {
   "restore.review_first":
     "Press Review backup and enter the recovery details it asks for before you restore.",
   "restore.check.backup_file": "Check the backup file.",
-  "restore.check.recovery_key": "Check the recovery key.",
+  "restore.check.recovery_key": "Check the backup encryption key.",
   "restore.check.environment": "Check the backup environment.",
   "restore.back": "Back",
   "restore.submit": "Restore backup",
@@ -77,7 +78,7 @@ export const restoreEn = {
   "restore_bucket.intro":
     "Rebuild this server from the copy the old server kept in your storage bucket. Use this only when the old server is gone. You need the recovery pack or kit file, and nothing else.",
   "restore_bucket.sensitive":
-    "A recovery pack or kit file is as sensitive as the recovery key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
+    "A recovery pack or kit file is as sensitive as the backup encryption key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
   "restore_bucket.kit_file": "Recovery pack or kit file",
   "restore_bucket.pack_no_code":
     "This recovery pack holds no bucket copy code: the server had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
@@ -226,9 +227,10 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_older_key": "Una copia antigua restablece la clave del servidor de entonces.",
   "restore.preview_keep_keys":
     "Conserva las claves del servidor antiguas mientras queden copias que las necesiten.",
-  "restore.preview_key_separate": "La clave del servidor es distinta de la clave de recuperación.",
+  "restore.preview_key_separate":
+    "La clave de cifrado de copias abre la copia. La clave del servidor autoriza la restauración.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
-  "restore.preview_key_error": "Revisa la clave de recuperación.",
+  "restore.preview_key_error": "Revisa la clave de cifrado de copias.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",
   "restore.preview_failed": "No se ha podido revisar esta copia.",
@@ -243,11 +245,11 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.backup_file_help":
     "Elige la copia de seguridad cifrada del servidor que estás recuperando.",
   "restore.backup_file_missing": "Elige un archivo de copia de seguridad.",
-  "restore.recovery_key": "Clave de recuperación",
+  "restore.recovery_key": "Clave de cifrado de copias",
   "restore.recovery_key_hint": "La clave que abre esta copia",
-  "restore.recovery_key_missing": "Introduce la clave de recuperación.",
-  "restore.show_recovery_key": "Mostrar la clave de recuperación",
-  "restore.hide_recovery_key": "Ocultar la clave de recuperación",
+  "restore.recovery_key_missing": "Introduce la clave de cifrado de copias.",
+  "restore.show_recovery_key": "Mostrar la clave de cifrado de copias",
+  "restore.hide_recovery_key": "Ocultar la clave de cifrado de copias",
   "restore.environment": "Entorno de la copia",
   "restore.environment_help_label": "Ayuda sobre el entorno de la copia",
   "restore.environment_help":
@@ -267,7 +269,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.review_first":
     "Pulsa Revisar copia e introduce los datos de recuperación que pide antes de restaurar.",
   "restore.check.backup_file": "Revisa el archivo de copia de seguridad.",
-  "restore.check.recovery_key": "Revisa la clave de recuperación.",
+  "restore.check.recovery_key": "Revisa la clave de cifrado de copias.",
   "restore.check.environment": "Revisa el entorno de la copia.",
   "restore.back": "Volver",
   "restore.submit": "Restaurar la copia",
@@ -276,7 +278,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.intro":
     "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit, y nada más.",
   "restore_bucket.sensitive":
-    "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de recuperación: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
+    "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de cifrado de copias: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
   "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
   "restore_bucket.pack_no_code":
     "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",

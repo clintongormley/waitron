@@ -214,7 +214,7 @@ describe("dashboard-box-status-screen", () => {
         );
         expect(guidance).toContain("cannot free a full disk now");
         expect(guidance).toContain("Leave without changes to stop");
-        expect(guidance).toContain("database, recovery keys and saved backups");
+        expect(guidance).toContain("database, server key, backup encryption key and saved backups");
         expect(guidance).not.toMatch(/installer|installed|support/i);
       } else {
         expect(guidance).toBe(es["box_status.fillers"]);
@@ -223,7 +223,7 @@ describe("dashboard-box-status-screen", () => {
         expect(guidance).toContain("no libera espacio de inmediato en un disco lleno");
         expect(guidance).toContain("Sal sin hacer cambios para parar");
         expect(guidance).toContain(
-          "Conserva la base de datos, las claves de recuperación y las copias guardadas",
+          "Conserva la base de datos, la clave del servidor, la clave de cifrado de copias y las copias guardadas",
         );
         expect(guidance).not.toMatch(/instal|soporte|encargad|gerente|responsable/i);
       }

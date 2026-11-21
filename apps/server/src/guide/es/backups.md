@@ -14,11 +14,13 @@ Para reutilizar tu configuración en un local nuevo, introduce y confirma una co
 
 ## Copias programadas {#archives}
 
-Puedes guardar copias en una carpeta de este servidor o en un bucket compatible con S3. Para un bucket, introduce sus datos de conexión.
+Para guardar copias en **Una carpeta de este servidor**, escribe una ruta completa. El ejemplo `/var/lib/waitron/backups` es la carpeta de copias del propio servidor. Si falla su disco, perderás la copia guardada allí. Elige un bucket o Waitron Cloud para guardar una copia fuera del servidor.
 
-Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de recuperación como se indica abajo y elige **Activar las copias**.
+Para usar **Un bucket compatible con S3**, introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor. Indica un **Endpoint** o una **Carpeta dentro del bucket** si hace falta. Puedes elegir solo el bucket o guardar copias tanto en la carpeta como en el bucket.
 
-Si puedes elegir **Waitron Cloud**, selecciona **Todos los días** para que Cloud reciba las copias según la programación de tu local. Waitron Cloud decide cuándo caducan sus copias antiguas.
+Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de cifrado de copias como se indica abajo y elige **Activar las copias**.
+
+Si puedes elegir **Waitron Cloud**, usa la conexión del servidor con Cloud. Selecciona **Todos los días** para que Cloud reciba las copias según la programación de tu local. Waitron Cloud decide cuándo caducan sus copias antiguas.
 
 Con las copias activadas, usa **Cambiar el destino o la programación** y **Guardar cambios** para ajustarlas. Revisa la última copia de cada destino y atiende los fallos que muestre.
 
@@ -26,9 +28,11 @@ Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación*
 
 ## Guarda tus claves {#keys}
 
-Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de recuperación en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.
+La **Clave de cifrado de copias** abre las copias cifradas. La **Clave del servidor** autoriza la restauración o el traspaso a otro servidor. Conserva el paquete con la clave del servidor aunque el último paquete contenga la clave de cifrado de copias.
 
-Al cambiar la clave de recuperación, usa **Mostrar la clave actual** para guardar también la clave antigua. Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
+Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de cifrado de copias en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.
+
+Al cambiar la clave de cifrado de copias, usa **Mostrar la clave actual** para guardar también la clave antigua. Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
 
 ## Copia continua en tu bucket {#bucket-copy}
 

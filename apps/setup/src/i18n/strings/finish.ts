@@ -80,7 +80,7 @@ export const finishEn = {
   "done.break_glass.heading": "Save your server key now",
   "done.break_glass.key_name": "Server key {date} · {code}",
   "done.break_glass.backups":
-    "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+    "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
   "done.break_glass.warning":
     "Save it as a file or write it down, and keep it off this computer. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
@@ -192,7 +192,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.heading": "Guarda ahora tu clave del servidor",
   "done.break_glass.key_name": "Clave del servidor {date} · {code}",
   "done.break_glass.backups":
-    "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
+    "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
   "done.break_glass.warning":
     "Guárdala en un archivo o anótala, y guárdala fuera de este ordenador. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":

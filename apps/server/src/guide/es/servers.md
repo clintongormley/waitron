@@ -21,7 +21,7 @@ en cada inicio hasta que un administrador [deje que siga sin él](servers.md#car
 
 Antes de empezar, comprueba dos cosas en el servidor principal:
 
-- Tiene una clave de recuperación, que el servidor de reserva necesita. Si nunca se han
+- Tiene una clave de cifrado de copias, que el servidor de reserva necesita. Si nunca se han
   activado las copias de seguridad, abre **Copias de seguridad** y elige **Activar las copias**.
 - **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a
   la vez, y el servidor de reserva ocupa ese sitio. Para añadirlo de todos modos, elige
@@ -98,7 +98,7 @@ reserva antes de volver a elegir la copia.
 Tras **Comprobar esta copia** el inicio de sesión se pliega; **Usar otra copia** lo vuelve a mostrar,
 junto con la elección de la copia de seguridad. Para usar una copia de seguridad cifrada, elige su
 archivo y pulsa **Usar esta copia de seguridad**.
-Si se te pide, introduce la clave de esa copia; no cambia la clave guardada en este equipo.
+Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
 se uniera a su principal actual.

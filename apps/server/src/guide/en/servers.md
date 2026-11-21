@@ -20,7 +20,7 @@ While a joined spare is switched off, the main box waits at each start until an 
 
 Before you start, check two things on the main box:
 
-- It has a recovery key, which the spare needs. If backups have never been turned on, open
+- It has a backup encryption key, which the spare needs. If backups have never been turned on, open
   **Backups** and choose **Turn on backups**.
 - **Continuous copy to your bucket** is off. The venue copies its changes to one place at a time,
   and a spare takes that place. To add a spare anyway, choose **Turn off** under that heading; your
@@ -92,7 +92,7 @@ the backup again.
 
 After **Check this copy** the sign-in folds away; **Use a different copy** brings it back, with the
 backup choice. To use an encrypted backup instead, choose its file and select **Use this backup**. If asked,
-enter that backup's recovery key; this leaves the box's saved key unchanged. Keep this page open while the spare
+enter that backup's **Backup encryption key**. The box keeps its saved key. Keep this page open while the spare
 restarts, then review **Selected backup** and its latest activity before declaring. Choose a backup
 made after this spare joined its current main box.
 

@@ -52,7 +52,7 @@ it.each(["light", "dark"] as const)(
     );
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
-        "Check the recovery key.",
+        "Check the backup encryption key.",
       ),
     );
     await expectNoA11yViolations(host);

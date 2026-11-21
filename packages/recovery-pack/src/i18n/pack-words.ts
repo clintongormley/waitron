@@ -16,11 +16,11 @@ type Words = {
   checkColumn: string;
   couldNotBeDrawn: string;
   lockedAway: string;
-  /** For a pack holding a restore code or the recovery key, and not the server key. */
+  /** For a pack holding a restore code or the backup encryption key, and not the server key. */
   anyoneHoldingBackups: string;
-  /** For a pack holding a restore code or the recovery key, and the server key. */
+  /** For a pack holding a restore code or the backup encryption key, and the server key. */
   anyoneHoldingBackupsAndServerKey: string;
-  /** For a pack holding the server key and no restore code or recovery key. */
+  /** For a pack holding the server key and no restore code or backup encryption key. */
   anyoneHoldingServerKey: string;
   emergencyWarning: string;
   whichToKeep: string;
@@ -57,9 +57,9 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "Could not be drawn",
     lockedAway: "Keep this pack locked away, and off the box.",
     anyoneHoldingBackups:
-      "Anyone holding it can open the backups its restore codes or recovery key unlock.",
+      "Anyone holding it can open the backups its restore codes or backup encryption key unlock.",
     anyoneHoldingBackupsAndServerKey:
-      "Anyone holding it can open the backups its restore codes or recovery key unlock, and, with its server key and a matching backup, recover the server.",
+      "Anyone holding it can open the backups its restore codes or backup encryption key unlock, and, with its server key and a matching backup, recover the server.",
     anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the server.",
     whichToKeep:
       "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
@@ -118,9 +118,9 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "No se pudo generar",
     lockedAway: "Guarda este paquete bajo llave, y fuera del servidor.",
     anyoneHoldingBackups:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de recuperación.",
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de cifrado de copias.",
     anyoneHoldingBackupsAndServerKey:
-      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de recuperación y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de cifrado de copias y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
     anyoneHoldingServerKey:
       "Quien lo tenga, junto con su copia correspondiente, puede recuperar el servidor.",
     whichToKeep:
@@ -209,7 +209,7 @@ type PartWords = {
     stepsFolder: string[];
   };
   keyRow: string;
-  /** The cover's check for a part guarded by the recovery key. */
+  /** The cover's check for a part guarded by the backup encryption key. */
   check: (keyDay: string, revision: string | undefined) => string;
   keyChangedOn: (day: string) => string;
   alsoServerKey: (page: number) => string;
@@ -282,9 +282,9 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       introBucket:
         "The box also keeps dated archives in your bucket. To bring back one archive, the restore command asks for this code and the archive's name.",
       introFolder:
-        "The box also keeps dated archives in a folder. To bring back one archive, setup asks for the archive file and this recovery key.",
+        "The box also keeps dated archives in a folder. To bring back one archive, setup asks for the archive file and this backup encryption key.",
       codeLabel: "Restore code for the archives",
-      keyLabel: "Recovery key",
+      keyLabel: "Backup encryption key",
       folderRow: "Archive folder",
       stepsBucket: [
         "1. Copy this PDF onto the new box.",
@@ -294,10 +294,10 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       stepsFolder: [
         "1. Install Waitron on the new box and open its setup page.",
         "2. Choose Restore from backup.",
-        "3. Choose the archive file and type this recovery key exactly as printed.",
+        "3. Choose the archive file and type this backup encryption key exactly as printed.",
       ],
     },
-    keyRow: "Recovery key",
+    keyRow: "Backup encryption key",
     check: (keyDay, revision) =>
       revision === undefined
         ? `key of ${keyDay}`
@@ -317,12 +317,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Use Backups → Change destination or schedule, choose the destinations again and press Save changes. If backups are off, use Turn on backups instead. Then make a new pack.",
       },
       "backup.recovery_key_missing": {
-        what: "The box has no recovery key.",
-        todo: "Use Backups → Change the recovery key, then make a new pack.",
+        what: "The box has no backup encryption key.",
+        todo: "Use Backups → Change the backup encryption key, then make a new pack.",
       },
       "backup.recovery_key_too_short": {
-        what: "The recovery key is too short to use.",
-        todo: "Use Backups → Change the recovery key: the new key replaces the short one. Then make a new pack.",
+        what: "The backup encryption key is too short to use.",
+        todo: "Use Backups → Change the backup encryption key: the new key replaces the short one. Then make a new pack.",
       },
       "backup.stream_signer_missing": {
         what: "The box could not find the key that signs its bucket copy.",
@@ -397,9 +397,9 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       introBucket:
         "El servidor también guarda archivos fechados en tu bucket. Para recuperar un archivo, la orden de restauración pide este código y el nombre del archivo.",
       introFolder:
-        "El servidor también guarda archivos fechados en una carpeta. Para recuperar un archivo, la instalación pide el archivo y esta clave de recuperación.",
+        "El servidor también guarda archivos fechados en una carpeta. Para recuperar un archivo, la instalación pide el archivo y esta clave de cifrado de copias.",
       codeLabel: "Código de restauración de los archivos",
-      keyLabel: "Clave de recuperación",
+      keyLabel: "Clave de cifrado de copias",
       folderRow: "Carpeta de archivos",
       stepsBucket: [
         "1. Copia este PDF en el servidor nuevo.",
@@ -409,10 +409,10 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
       stepsFolder: [
         "1. Instala Waitron en el servidor nuevo y abre su página de instalación.",
         "2. Elige Restaurar desde una copia de seguridad.",
-        "3. Elige el archivo y escribe esta clave de recuperación tal como está impresa.",
+        "3. Elige el archivo y escribe esta clave de cifrado de copias tal como está impresa.",
       ],
     },
-    keyRow: "Clave de recuperación",
+    keyRow: "Clave de cifrado de copias",
     check: (keyDay, revision) =>
       revision === undefined
         ? `clave del ${keyDay}`
@@ -433,12 +433,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Usa Copias de seguridad → Cambiar el destino o la programación, elige de nuevo los destinos y pulsa Guardar cambios. Si las copias están desactivadas, usa Activar las copias. Después haz un paquete nuevo.",
       },
       "backup.recovery_key_missing": {
-        what: "El servidor no tiene clave de recuperación.",
-        todo: "Usa Copias de seguridad → Cambiar la clave de recuperación y después haz un paquete nuevo.",
+        what: "El servidor no tiene clave de cifrado de copias.",
+        todo: "Usa Copias de seguridad → Cambiar la clave de cifrado de copias y después haz un paquete nuevo.",
       },
       "backup.recovery_key_too_short": {
-        what: "La clave de recuperación es demasiado corta para usarla.",
-        todo: "Usa Copias de seguridad → Cambiar la clave de recuperación: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
+        what: "La clave de cifrado de copias es demasiado corta para usarla.",
+        todo: "Usa Copias de seguridad → Cambiar la clave de cifrado de copias: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
       },
       "backup.stream_signer_missing": {
         what: "El servidor no encontró la clave que firma su copia en el bucket.",

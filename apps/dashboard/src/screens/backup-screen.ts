@@ -1642,19 +1642,20 @@ export class BackupScreen extends LitElement {
       ${
         this.folderOn
           ? html`<wt-input
-              data-test="destination"
-              name="backup-folder"
-              autocapitalize="none"
-              autocorrect="off"
-              spellcheck="false"
-              required
-              label=${t("backup.destination.label")}
-              hint=${t("backup.destination.hint")}
-              error=${folderMessage}
-              .value=${this.folder}
-              @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
-            ></wt-input>`
+                data-test="destination"
+                name="backup-folder"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                required
+                label=${t("backup.destination.label")}
+                hint="/var/lib/waitron/backups"
+                error=${folderMessage}
+                .value=${this.folder}
+                @keydown=${(e: KeyboardEvent) => this.#submitOnEnter(e)}
+                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDestination(e)}
+              ></wt-input>
+              <p class="hint">${t("backup.destination.folder_help")}</p>`
           : nothing
       }
       <wt-combobox
@@ -1690,6 +1691,7 @@ export class BackupScreen extends LitElement {
                   this.cloudRefused = null;
                 }}
               ></wt-switch>
+              <p class="hint">${t("backup.destination.cloud_help")}</p>
               ${cloudMessage ? html`<div class="error">${cloudMessage}</div>` : nothing}
             </div>`
           : this.status?.cloud && this.cloudOn
@@ -1779,6 +1781,7 @@ export class BackupScreen extends LitElement {
   #renderCustomChoice(): TemplateResult {
     const bucket = this.custom.bucket.trim();
     return html`
+      <p class="hint">${t("backup.destination.bucket_help")}</p>
       ${BUCKET_FIELDS.map((f) => this.#renderCustomField(f))}
       ${
         bucket === "" || this.status === undefined

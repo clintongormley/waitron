@@ -236,7 +236,7 @@ describe("SetupRestoreScreen", () => {
     );
     expect(key).not.toBeNull();
     expect({ label: key!.label, required: key!.required, type: key!.type }).toEqual({
-      label: "Recovery key",
+      label: "Backup encryption key",
       required: true,
       type: "password",
     });
@@ -244,12 +244,12 @@ describe("SetupRestoreScreen", () => {
     expect(key!.getAttribute("hint")).toBe("The key that unlocks this backup");
     expect(key!.querySelector("wt-help-tooltip")).toBeNull();
     const reveal = key!.querySelector<HTMLElement>("wt-button[slot=end]")!;
-    expect(reveal.getAttribute("aria-label")).toBe("Show recovery key");
+    expect(reveal.getAttribute("aria-label")).toBe("Show backup encryption key");
     expect(reveal.querySelector("svg")).not.toBeNull();
     reveal.click();
     await el.updateComplete;
     expect(key!.type).toBe("text");
-    expect(reveal.getAttribute("aria-label")).toBe("Hide recovery key");
+    expect(reveal.getAttribute("aria-label")).toBe("Hide backup encryption key");
     reveal.click();
     await el.updateComplete;
     expect(key!.type).toBe("password");
@@ -321,7 +321,7 @@ describe("SetupRestoreScreen", () => {
 
   it.each([
     ["the backup file", { recoveryKey: true, acknowledge: true }, "Choose a backup file."],
-    ["the recovery key", { artifact: true, acknowledge: true }, "Enter the recovery key."],
+    ["the recovery key", { artifact: true, acknowledge: true }, "Enter the backup encryption key."],
     [
       "the confirmation",
       { artifact: true, recoveryKey: true },
@@ -492,7 +492,7 @@ describe("SetupRestoreScreen", () => {
       expect(fieldMessages(el)).toEqual([]);
       typeKey(el, "");
       await el.updateComplete;
-      expect(fieldMessages(el)).toEqual(["Enter the recovery key."]);
+      expect(fieldMessages(el)).toEqual(["Enter the backup encryption key."]);
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
     });
 
@@ -579,7 +579,7 @@ describe("SetupRestoreScreen", () => {
     };
     const REFUSAL = {
       artifact: "Check the backup file.",
-      recoveryKey: "Check the recovery key.",
+      recoveryKey: "Check the backup encryption key.",
       environment: "Check the backup environment.",
     } as const;
 
@@ -692,6 +692,9 @@ describe("SetupRestoreScreen in Spanish", () => {
   it("explains the recovery key with a Spanish hint", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("label")).toBe(
+      "Clave de cifrado de copias",
+    );
     expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("hint")).toBe(
       "La clave que abre esta copia",
     );
@@ -709,7 +712,7 @@ describe("SetupRestoreScreen in Spanish", () => {
     await el.updateComplete;
     expect(fieldMessages(el)).toEqual([
       "Elige un archivo de copia de seguridad.",
-      "Introduce la clave de recuperación.",
+      "Introduce la clave de cifrado de copias.",
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
     ]);
     expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
@@ -794,7 +797,7 @@ describe("SetupRestoreScreen environment from Review backup", () => {
     const { api, sent } = previewsAs("preproduction", { code: "recovery.passphrase_invalid" });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the recovery key."]));
+    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the backup encryption key."]));
     expect(sent).toEqual(["production"]);
     expect(environmentField(el).value).toBe("production");
   });
@@ -863,7 +866,7 @@ describe("SetupRestoreScreen environment from Review backup", () => {
     const { api } = previewsAs("preproduction", { code: "recovery.passphrase_invalid" });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the recovery key."]));
+    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the backup encryption key."]));
     expect(followedNote(el)).toBeUndefined();
   });
 

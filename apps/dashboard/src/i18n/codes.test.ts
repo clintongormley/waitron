@@ -868,9 +868,11 @@ it("has English and Spanish copy for every refusal of Print invoice and Download
 });
 
 it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
-  expect(codeMessage("backup.recovery_key_missing", "en")).toBe("This box holds no recovery key.");
+  expect(codeMessage("backup.recovery_key_missing", "en")).toBe(
+    "This box holds no backup encryption key.",
+  );
   expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
-    "Este servidor no tiene clave de recuperación.",
+    "Este servidor no tiene clave de cifrado de copias.",
   );
 });
 

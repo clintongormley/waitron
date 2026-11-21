@@ -1201,12 +1201,12 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+      "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
       "Server key 15 Oct 2026 · K7QF",
     ],
     [
       "es-ES",
-      "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
+      "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
       "Clave del servidor 15 oct 2026 · K7QF",
     ],
   ] as const)(
@@ -1405,7 +1405,7 @@ describe("saving the server key as a file", () => {
       "key-on-paper",
       "",
       "You need it to promote this server if the primary is unreachable.",
-      "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+      "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
       "",
       "Print this file and keep it with your recovery pack, or move it to storage away from this computer, then delete it here. A copy left on this computer is lost with it.",
       "",
@@ -1434,7 +1434,7 @@ describe("saving the server key as a file", () => {
       "key-on-paper",
       "",
       "La necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
-      "Para restaurar una copia de seguridad hace falta la clave del servidor que estaba en vigor cuando se hizo. Si tienes una clave del servidor anterior, consérvala mientras conserves copias de su época.",
+      "La clave de cifrado de copias abre la copia. Para autorizar la restauración, conserva la clave del servidor que estaba en vigor cuando se hizo la copia.",
       "",
       "Imprime este archivo y guárdalo con tu paquete de recuperación, o muévelo a un almacenamiento fuera de este ordenador y después bórralo de aquí. Una copia que se quede en este ordenador se pierde con él.",
       "",
@@ -1471,7 +1471,7 @@ describe("saving the server key as a file", () => {
       const lines = (await saves.blobs[0]!.text()).split("\n");
       expect(lines[4]).toBe(use);
       expect(lines[5]).toBe(
-        "Restoring a backup needs the server key that was current when that backup was made. If you have an earlier server key, keep it for as long as you keep backups from its time.",
+        "The backup encryption key opens the copy. To authorise a restore, keep the server key that was current when the backup was made.",
       );
     },
   );
