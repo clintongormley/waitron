@@ -915,6 +915,7 @@ describe("configuration transfer database path", () => {
       await tx
         .insert(menus)
         .values({ id: "11111111-aaaa-aaaa-aaaa-111111111111", name: "Prepared menu" });
+      await createMenuShell(tx, "11111111-aaaa-aaaa-aaaa-111111111111");
       const [sourceUnit] = await tx
         .insert(units)
         .values({
@@ -1428,6 +1429,63 @@ describe("configuration transfer database path", () => {
       { name: "Gin", gross_price: null, overrides: 0 },
       { name: "Tonic", gross_price: 550, overrides: 1 },
     ]);
+  });
+
+  it("refuses a bundle whose menu lost its root section, where no offer sync would reach", async () => {
+    const source = await applyVenue(planVenue(venue("B66778812"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    let menuId = "";
+    await withTransaction(suite.db, async (tx) => {
+      menuId = (await createMenu(tx, { name: "Bar menu" })).id;
+      await createMenu(tx, {
+        name: "Daily menu",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      });
+      const product = await createProduct(tx, {
+        categoryId: null,
+        name: "Gin",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      await addProductToMenu(tx, { menuId, productId: product.id, grossPrice: "5.50" });
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const clean = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    const roots = clean.tables.sections!.filter(
+      (row) => row.owner_menu_id === menuId && row.role === "menu_root",
+    );
+    expect(roots).toHaveLength(1);
+    const rootless: ConfigurationBundle = {
+      ...clean,
+      tables: {
+        ...clean.tables,
+        sections: clean.tables.sections!.filter((row) => row.id !== roots[0]!.id),
+        section_members: clean.tables.section_members!.filter(
+          (row) => row.section_id !== roots[0]!.id && row.child_section_id !== roots[0]!.id,
+        ),
+      },
+    };
+    expect(() => validateConfigurationBundle(clean, ALL_MODULES, versions)).not.toThrow();
+    expect(() => validateConfigurationBundle(rootless, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "sections.owner_menu_id" },
+      }),
+    );
   });
 
   it("refuses a bundle whose product, category or section colour is not lowercase #rrggbb", async () => {

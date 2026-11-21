@@ -75,6 +75,22 @@ function checkActiveOnMenus(
       });
 }
 
+/** Every menu owns exactly one root and one Home section from its creation (`createMenuShell`), and
+ * readers and the import's offer sync find a menu through its root. */
+function checkMenuShells(tables: Readonly<Record<string, Rows>>): void {
+  const owned = new Map<unknown, { menu_root: number; home_layout: number }>(
+    (tables.menus ?? []).map((row) => [row.id, { menu_root: 0, home_layout: 0 }]),
+  );
+  for (const row of tables.sections ?? []) {
+    const counts = owned.get(row.owner_menu_id);
+    if (counts !== undefined && (row.role === "menu_root" || row.role === "home_layout"))
+      counts[row.role] += 1;
+  }
+  for (const counts of owned.values())
+    if (counts.menu_root !== 1 || counts.home_layout !== 1)
+      throw new AppError("setup.request_invalid", { field: "sections.owner_menu_id" });
+}
+
 function isSetMenuAmount(cents: unknown): boolean {
   return (
     typeof cents === "number" &&
@@ -214,6 +230,7 @@ export function validateMenuConfiguration(
   checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
   checkSectionMemberRows(tables.section_members, tables.sections, tables.menus);
+  checkMenuShells(tables);
   const parentOf = new Map((tables.categories ?? []).map((row) => [row.id, row.parent_id ?? null]));
   const byParent = new Map<unknown, string[]>();
   for (const category of tables.categories ?? []) {

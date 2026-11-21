@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { validateMenuConfiguration } from "./configuration-transfer.js";
 
+/** The root and Home section a save gives every menu (`createMenuShell`). */
+function menuShells(menuIds: readonly string[]): Record<string, unknown>[] {
+  return menuIds.flatMap((id) => [
+    { id: `${id}-root`, role: "menu_root", internal_name: null, owner_menu_id: id },
+    { id: `${id}-home`, role: "home_layout", internal_name: "Home", owner_menu_id: id },
+  ]);
+}
+
 function refusal(code: string, name: string) {
   return expect.objectContaining({ code, params: { field: "name", name } });
 }
@@ -233,6 +241,50 @@ describe("validateMenuConfiguration: a variant's category and colour", () => {
   });
 });
 
+describe("validateMenuConfiguration: each menu's root and Home sections", () => {
+  const menus = [
+    { id: "lunch", kind: "menu" },
+    { id: "set", kind: "set_menu", set_price: 1400 },
+  ];
+  const sections = [
+    ...menuShells(["lunch", "set"]),
+    { id: "beer", role: "section", internal_name: "Beer", owner_menu_id: "lunch" },
+  ];
+  const refusedAs = (field: string) =>
+    expect.objectContaining({ code: "setup.request_invalid", params: { field } });
+
+  it("accepts menus of both kinds that each own one root and one Home section", () => {
+    expect(() => validateMenuConfiguration({ menus, sections })).not.toThrow();
+  });
+
+  it.each([
+    ["lunch", "menu_root"],
+    ["lunch", "home_layout"],
+    ["set", "menu_root"],
+    ["set", "home_layout"],
+  ])("refuses menu %s without its %s section", (menuId, role) => {
+    expect(() =>
+      validateMenuConfiguration({
+        menus,
+        sections: sections.filter((row) => !(row.owner_menu_id === menuId && row.role === role)),
+      }),
+    ).toThrowError(refusedAs("sections.owner_menu_id"));
+  });
+
+  it.each(["menu_root", "home_layout"])("refuses a menu owning two %s sections", (role) => {
+    const second = { id: "second", role, owner_menu_id: "lunch" };
+    expect(() =>
+      validateMenuConfiguration({
+        menus,
+        sections: [
+          ...sections,
+          role === "menu_root" ? second : { ...second, internal_name: "Home" },
+        ],
+      }),
+    ).toThrowError(refusedAs("sections.owner_menu_id"));
+  });
+});
+
 describe("validateMenuConfiguration: menu display settings", () => {
   it.each([
     ["handheld_columns", 4],
@@ -266,6 +318,7 @@ describe("validateMenuConfiguration: menu display settings", () => {
           },
           { id: "m2" },
         ],
+        sections: menuShells(["m1", "m2"]),
       }),
     ).not.toThrow();
   });
@@ -610,7 +663,10 @@ describe("set menus in a configuration bundle", () => {
 
   it.each([0, 1_000_000])("accepts a whole-cent set-menu price of %i", (setPrice) => {
     expect(() =>
-      validateMenuConfiguration({ menus: [menu, { ...setMenu, set_price: setPrice }] }),
+      validateMenuConfiguration({
+        menus: [menu, { ...setMenu, set_price: setPrice }],
+        sections: menuShells(["ordinary", "set"]),
+      }),
     ).not.toThrow();
   });
 
@@ -635,6 +691,7 @@ describe("set menus in a configuration bundle", () => {
     expect(() =>
       validateMenuConfiguration({
         menus: [setMenu, menu],
+        sections: menuShells(["set", "ordinary"]),
         menu_items: [
           { id: "dish", menu_id: "set", gross_price: null },
           { id: "fish", menu_id: "set", gross_price: 1_000_000 },
