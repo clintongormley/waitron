@@ -557,13 +557,11 @@ interface ReleasedBill {
   savedBefore?: number;
 }
 
-function storedInvoiceOf(orderId: string, order: HeldOrder) {
-  return {
-    orderId,
-    invoiceType: order.invoiceType,
-    ...(order.recipient === undefined ? {} : { recipient: order.recipient }),
-    ...(order.invoiceDelivery === undefined ? {} : { invoiceDelivery: order.invoiceDelivery }),
-  };
+function storedInvoiceOf(
+  orderId: string,
+  { invoiceType, recipient, invoiceDelivery }: HeldOrder,
+): { orderId: string } & Pick<HeldOrder, "invoiceType" | "recipient" | "invoiceDelivery"> {
+  return { orderId, invoiceType, recipient, invoiceDelivery };
 }
 
 /** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
@@ -4566,12 +4564,7 @@ export class TillApp extends LitElement {
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
   /** The invoice type, customer and delivery stored on the Counter order last read into the basket,
    * which {@link invoiceChoice} does not hold for an order this till did not set it on. */
-  #counterStoredInvoice?: {
-    orderId: string;
-    invoiceType: "F1" | "F2";
-    recipient?: HeldOrder["recipient"];
-    invoiceDelivery?: InvoiceDeliveryChoice;
-  };
+  #counterStoredInvoice?: ReturnType<typeof storedInvoiceOf>;
   /** Whether the server still let the Counter order last read into the basket switch its way. */
   @state() private counterDiningChoice?: { orderId: string; choice: DiningChoice };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
@@ -7629,10 +7622,7 @@ export class TillApp extends LitElement {
   #storedFullInvoice(orderId: string) {
     const stored = this.#counterStoredInvoice;
     if (stored?.orderId !== orderId || stored.invoiceType !== "F1") return undefined;
-    return {
-      ...(stored.invoiceDelivery === undefined ? {} : { delivery: stored.invoiceDelivery }),
-      recipient: stored.recipient ?? null,
-    };
+    return { delivery: stored.invoiceDelivery, recipient: stored.recipient ?? null };
   }
 
   /** Null when the read fails or outlasts {@link INVOICE_OPTIONS_LIMIT_MS}. */
@@ -8993,16 +8983,10 @@ export class TillApp extends LitElement {
           if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
           this.#commitBasket(payload);
         }
-        const choiceToSave = this.invoiceChoice;
-        if (choiceToSave?.orderId === id) {
-          const saved = await api.setOrderInvoiceChoice(id, {
-            revision: this.#store.revision,
-            ...choiceToSave.invoice,
-            expectedEdit: null,
-          });
-          choiceToSave.saved = true;
+        const choiceRevision = await this.#saveInvoiceChoice(id, null, api);
+        if (choiceRevision !== undefined) {
           if (!current()) return;
-          this.#store.markSaved(saved.revision);
+          this.#store.markSaved(choiceRevision);
         }
         await this.#saveUnsavedReceiptLanguage(id);
         if (!current()) return;
@@ -10364,6 +10348,7 @@ export class TillApp extends LitElement {
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     let parked = false;
     let languageUnsaved = false;
+    let invoiceUnsaved = false;
     let recheck = false;
     let inactiveChoice = false;
     try {
@@ -10397,6 +10382,15 @@ export class TillApp extends LitElement {
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
           ...(lateSend === undefined ? {} : { lateSend }),
         });
+      }
+      if (session !== this.#operatorSession) return;
+      try {
+        const revision = this.invoiceChoice?.saved
+          ? undefined
+          : await this.#saveInvoiceChoice(id, this.#counterExpectedEdit(id));
+        if (revision !== undefined && this.#store.id === id) this.#store.markSaved(revision);
+      } catch {
+        invoiceUnsaved = true;
       }
       if (session !== this.#operatorSession) return;
       try {
@@ -10441,6 +10435,7 @@ export class TillApp extends LitElement {
     }
     if (session !== this.#operatorSession) return;
     if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
+    if (invoiceUnsaved) this.errorKey = "invoice.held_unsaved";
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
@@ -11074,6 +11069,24 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (outOfDate) await this.#loadPartyBills();
+  }
+
+  /** Saves this till's invoice choice for the order, once the basket has been saved; answers the
+   * revision the save reached, or undefined when this till holds no choice for the order. */
+  async #saveInvoiceChoice(
+    id: string,
+    expectedEdit: BillEditExpected | null,
+    api = this.api,
+  ): Promise<number | undefined> {
+    const choice = this.invoiceChoice;
+    if (choice?.orderId !== id) return undefined;
+    const saved = await api.setOrderInvoiceChoice(id, {
+      revision: this.#store.revision,
+      ...choice.invoice,
+      expectedEdit,
+    });
+    choice.saved = true;
+    return saved.revision;
   }
 
   /** Saves a chosen language the server does not hold yet, once the basket has been saved. */
@@ -22177,16 +22190,10 @@ export class TillApp extends LitElement {
       )
         return;
       if (this.#hasLeftCounterOrder(id, session)) return;
-      const choiceToSave = this.invoiceChoice;
-      if (choiceToSave?.orderId === id) {
-        const saved = await this.api.setOrderInvoiceChoice(id, {
-          revision: this.#store.revision,
-          ...choiceToSave.invoice,
-          expectedEdit: this.#counterExpectedEdit(id),
-        });
-        choiceToSave.saved = true;
+      const choiceRevision = await this.#saveInvoiceChoice(id, this.#counterExpectedEdit(id));
+      if (choiceRevision !== undefined) {
         if (this.#hasLeftCounterOrder(id, session)) return;
-        this.#store.markSaved(saved.revision);
+        this.#store.markSaved(choiceRevision);
       }
     } catch (error) {
       refused = true;

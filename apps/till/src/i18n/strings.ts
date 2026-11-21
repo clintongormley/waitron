@@ -1678,6 +1678,8 @@ export const en = {
   "receipt_language.button": "Receipt: {language}",
   "receipt_language.save_error": "Could not save the receipt language, try again",
   "receipt_language.held_unsaved": "Parked without its receipt language: open it and choose again",
+  "invoice.held_unsaved":
+    "Parked without its full invoice details: open it and choose Full invoice again",
   "action.choose": "Choose",
   "receipt.error": "Could not print the receipt, try again",
   "receipt.guests_none": "No line",
@@ -3890,6 +3892,8 @@ export const es: Record<StringKey, string> = {
   "receipt_language.button": "Recibo: {language}",
   "receipt_language.save_error": "No se pudo guardar el idioma del recibo, inténtalo de nuevo",
   "receipt_language.held_unsaved": "Aparcado sin su idioma del recibo: ábrelo y vuelve a elegir",
+  "invoice.held_unsaved":
+    "Aparcado sin los datos de su factura completa: ábrelo y vuelve a elegir Factura completa",
   "action.choose": "Elegir",
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "receipt.guests_none": "Sin línea",

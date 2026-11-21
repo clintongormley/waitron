@@ -313,6 +313,170 @@ it("reopens a retrieved full-invoice order on its saved customer and A4 delivery
     delivery: { medium: "a4", pagePrinterId: "pp-office" },
   });
 });
+const confirmedRecipient = { ...recipient, address: "Calle Mayor 1, 28013 Madrid, Madrid" };
+/** An order the stubbed server keeps: retrieving it reads back the last invoice choice saved. */
+function savingServer(revision = 4) {
+  let saved = heldOrder(revision);
+  const retrieveWorkingOrder = vi.fn(async () => saved);
+  const setOrderInvoiceChoice = vi.fn(
+    async (
+      _id: string,
+      choice: { invoiceType: "F1"; recipient: HeldOrder["recipient"]; delivery: unknown },
+    ) => {
+      saved = {
+        ...saved,
+        revision: saved.revision + 1,
+        invoiceType: choice.invoiceType,
+        recipient: choice.recipient!,
+        invoiceDelivery: choice.delivery as HeldOrder["invoiceDelivery"],
+      };
+      return { revision: saved.revision };
+    },
+  );
+  return { retrieveWorkingOrder, setOrderInvoiceChoice };
+}
+it.each([
+  {
+    medium: "A4",
+    delivery: { medium: "a4", pagePrinterId: "pp-office" },
+    shown: ["a4", undefined],
+  },
+  {
+    medium: "Email",
+    delivery: { medium: "email", recipient: "customer@example.test" },
+    shown: ["email", "customer@example.test"],
+  },
+])(
+  "keeps a confirmed full invoice with $medium delivery across Hold, New sale and retrieval",
+  async ({ delivery, shown }) => {
+    const server = savingServer();
+    const el = await placeCounter({
+      ...server,
+      getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+        invoicePrinter: { id: "pp-office", name: "Office HP" },
+        emailAvailable: true,
+        emailNeedsReceiptContact: false,
+      }),
+      placeOrder: vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" }),
+    });
+    const form = () => el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    emit(form(), "invoice-recipient-confirm", {
+      invoiceType: "F1",
+      recipient: confirmedRecipient,
+      delivery,
+    });
+    await flush(el);
+    expect(form()).toBeNull();
+    expect(server.setOrderInvoiceChoice).not.toHaveBeenCalled();
+
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    expect(server.setOrderInvoiceChoice.mock.calls).toEqual([
+      [
+        "wo-9",
+        {
+          revision: 4,
+          invoiceType: "F1",
+          recipient: confirmedRecipient,
+          delivery,
+          expectedEdit: null,
+        },
+      ],
+    ]);
+
+    emit(counter(el), "new-sale");
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    emit(counter(el), "choose-invoice");
+    await flush(el);
+    await form().updateComplete;
+    const field = (name: string) =>
+      form().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)?.value;
+    expect([field("taxId"), field("legalName"), field("delivery"), field("email")]).toEqual([
+      "P123",
+      "Guest",
+      ...shown,
+    ]);
+
+    const legalName =
+      form().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=legalName]")!;
+    await userEvent.fill(
+      page.elementLocator(legalName.shadowRoot!.querySelector("input")!),
+      "Guest Ltd",
+    );
+    await form().updateComplete;
+    form().shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+    await flush(el);
+    expect(form()).toBeNull();
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(server.setOrderInvoiceChoice).toHaveBeenCalledTimes(2);
+    expect(server.setOrderInvoiceChoice.mock.calls[1]![1]).toMatchObject({
+      revision: 5,
+      invoiceType: "F1",
+      recipient: { taxId: "P123", legalName: "Guest Ltd" },
+      delivery,
+    });
+  },
+);
+it("saves a confirmed full invoice when Hold first saves a new Counter order", async () => {
+  const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 1 });
+  const parkOrder = vi.fn().mockResolvedValue(undefined);
+  const el = await placeCounter({ setOrderInvoiceChoice, parkOrder });
+  emit(counter(el), "new-sale");
+  await flush(el);
+  counter(el).store.addProduct(counter(el).products[0]!, "1");
+  await flush(el);
+  const id = counter(el).store.id;
+  emit(counter(el), "choose-invoice");
+  await flush(el);
+  emit(
+    el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+    "invoice-recipient-confirm",
+    {
+      invoiceType: "F1",
+      recipient: confirmedRecipient,
+      delivery: { medium: "receipt" },
+    },
+  );
+  await flush(el);
+
+  emit(counter(el), "park-order", {});
+  await flush(el);
+  expect(parkOrder).toHaveBeenCalledOnce();
+  expect(parkOrder.mock.calls[0]![0].id).toBe(id);
+  expect(setOrderInvoiceChoice.mock.calls).toEqual([
+    [
+      id,
+      {
+        revision: 0,
+        invoiceType: "F1",
+        recipient: confirmedRecipient,
+        delivery: { medium: "receipt" },
+        expectedEdit: null,
+      },
+    ],
+  ]);
+  expect(parkOrder.mock.invocationCallOrder[0]).toBeLessThan(
+    setOrderInvoiceChoice.mock.invocationCallOrder[0]!,
+  );
+  expect(counter(el).store.lineCount).toBe(0);
+});
+it("parks the order and says so when Hold cannot save its full invoice", async () => {
+  const setOrderInvoiceChoice = vi.fn().mockRejectedValue(new TypeError("Network down"));
+  const el = await placeCounter({ setOrderInvoiceChoice });
+  await choice(el);
+
+  emit(counter(el), "park-order", {});
+  await flush(el);
+  expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+  expect(counter(el).store.lineCount).toBe(0);
+  expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("invoice.held_unsaved"));
+});
 it("offers no way back to a simplified invoice in the Counter's own invoice window", async () => {
   const el = await placeCounter({
     setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 5 }),
