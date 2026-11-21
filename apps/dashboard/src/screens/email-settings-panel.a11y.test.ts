@@ -40,6 +40,7 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
     "remove-refused",
     "prepare-blank",
     "dev-stored",
+    "daily-report",
   ] as const)(
     "renders accessible %s at phone and desktop widths in both languages",
     async (state) => {
@@ -69,6 +70,15 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
           state === "read-failure"
             ? vi.fn().mockRejectedValue({ code: "connection.failed" })
             : vi.fn().mockResolvedValue(view),
+        getDailyReportSettings: async () => ({
+          enabled: true,
+          recipientIds: ["one"],
+          revision: 1,
+          recipients: [
+            { id: "one", name: "Alex" },
+            { id: "two", name: "Sam" },
+          ],
+        }),
         saveEmailSettings: vi.fn(() => new Promise<never>(() => {})),
         removeEmailSettings: vi.fn().mockRejectedValue({ code: "connection.failed" }),
         testEmailSettings: vi.fn().mockResolvedValue(
@@ -93,7 +103,11 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
         HTMLElementTagNameMap["dashboard-email-settings-panel"]
       >(
         "dashboard-email-settings-panel",
-        { api, intent: state === "prepare-blank" ? "prepare" : "live" },
+        {
+          api,
+          intent: state === "prepare-blank" ? "prepare" : "live",
+          canConfigureDailyReport: state === "daily-report",
+        },
         theme,
       );
       await vi.waitFor(() =>
@@ -103,6 +117,10 @@ describe.each(["light", "dark"] as const)("email settings in %s", (theme) => {
           ),
         ).not.toBeNull(),
       );
+      if (state === "daily-report") {
+        const report = el.shadowRoot!.querySelector("dashboard-daily-report-mail-form")!;
+        await vi.waitFor(() => expect(report.shadowRoot!.querySelector("fieldset")).not.toBeNull());
+      }
       if (state === "remove" || state === "remove-refused") {
         el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove]")!.click();
         await el.updateComplete;

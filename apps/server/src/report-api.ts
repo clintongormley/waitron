@@ -1,22 +1,17 @@
 import { optionalSearch } from "./orders-list.js";
-import { listOutsidePayments } from "./outside-payments-report.js";
-import { validatedRangeWindow } from "@waitron/reporting";
 import { receiptRollColumns, tableInService } from "@waitron/db";
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
-  addDecimal,
   AppError,
-  decimal,
   nodeId as brandNodeId,
   type BusinessDayClock,
   type NodeId,
   type SupportedLocale,
 } from "@waitron/shared";
 import {
-  devices,
   handoverActivations,
   isReceiptPrinter,
   printers,
@@ -30,7 +25,6 @@ import {
 import {
   CATEGORY_REPORT_MODES,
   computeCategorySales,
-  readDailyClose,
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
@@ -41,10 +35,8 @@ import {
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
-  type CashUp,
   type CategoryReport,
   type CategoryReportMode,
-  type DailyClose,
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { currentClassifications } from "@waitron/menu";
@@ -62,6 +54,7 @@ import {
 } from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
+import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
 import type { FiscalBackend } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
@@ -391,28 +384,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           dayCutover: clock.dayCutover,
           cutoverChanges: clock.cutoverChanges,
         };
-        // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
-        const close = await readDailyClose(tx, input);
-        const topSellers = await computeTopSellers(tx, {
-          nodeIds,
-          fromBusinessDay: businessDay,
-          toBusinessDay: businessDay,
-          timeZone: clock.timeZone,
-          dayCutover: clock.dayCutover,
-          cutoverChanges: clock.cutoverChanges,
-          limit: 10,
-        });
-        const cash = await namedCashUp(tx, close.cash);
-        const outsidePayments = await listOutsidePayments(
-          tx,
-          validatedRangeWindow({
-            ...input,
-            fromBusinessDay: businessDay,
-            toBusinessDay: businessDay,
-          }),
-          nodeIds,
-        );
-        const closureSummary = summariseClosures(close);
+        const { close, cash, topSellers, closureSummary, outsidePayments } =
+          await readDailySalesFigures(tx, input);
         return {
           businessDay,
           vat: close.vat,
@@ -584,46 +557,4 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return c.json({ orders });
     }),
   );
-}
-
-/** A deferred line is a final classification, never money received, so it stays out of `received`. */
-function summariseClosures(close: DailyClose) {
-  const cash = close.cash;
-  const billsClosed = close.departmentTakings.reduce(
-    (total, row) => ({
-      count: total.count + row.billsClosed.count,
-      total: addDecimal(total.total, row.billsClosed.total),
-    }),
-    { count: 0, total: decimal("0.00") },
-  );
-  let deferredPayments = decimal("0.00");
-  let received = decimal("0.00");
-  for (const line of cash.byOrigin.flatMap((row) => row.byMethod)) {
-    if (line.method === "deferred") deferredPayments = addDecimal(deferredPayments, line.amount);
-    else received = addDecimal(received, line.amount);
-  }
-  return { billsClosed, deferredPayments, received };
-}
-
-/**
- * The cash-up with each device row's name. Read with no `active` filter, so a device revoked after
- * it took money is still named on the day it took it.
- */
-async function namedCashUp(tx: Transaction, cash: CashUp) {
-  const ids = cash.byOrigin.flatMap((row) => (row.deviceId === null ? [] : [row.deviceId]));
-  const named =
-    ids.length === 0
-      ? []
-      : await tx
-          .select({ id: devices.id, label: devices.label })
-          .from(devices)
-          .where(inArray(devices.id, ids));
-  const names = new Map(named.map((row) => [row.id, row.label]));
-  return {
-    ...cash,
-    byOrigin: cash.byOrigin.map((row) => ({
-      ...row,
-      deviceName: row.deviceId === null ? null : (names.get(row.deviceId) ?? null),
-    })),
-  };
 }

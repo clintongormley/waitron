@@ -430,6 +430,7 @@ import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } fr
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { owedReceiptJob } from "./owed-receipts.js";
+import { dailyReportMail } from "./daily-report-mail.js";
 import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
@@ -3134,6 +3135,10 @@ async function bootServer(
         readDocument: (tx, delivery) =>
           readReceiptEmailDocument(nodeBackend, tx, tradingContext, delivery.saleId),
         readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
+      }),
+      dailyReportMail({
+        nodeId: tradingContext.nodeId,
+        venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
       securityChangeMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
       emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),

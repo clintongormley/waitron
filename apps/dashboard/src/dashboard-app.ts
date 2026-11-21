@@ -3622,6 +3622,7 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canManage=${this.#sessionPermissions.includes("system.manage")}
           .canReadCaptured=${this.#sessionPermissions.includes("person.admin")}
+          .canConfigureDailyReport=${this.#sessionPermissions.includes("report.view")}
           .intent=${this.onboardingIntent}
         ></dashboard-email-screen>`;
       case "demo-printer":

@@ -2,6 +2,7 @@ import { and, count, eq, exists, inArray, isNull, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   parties,
+  readSettings,
   readVenueClock,
   workingOrderLines,
   withTransaction,
@@ -20,6 +21,8 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockUnconfirmedRefusal, stillOwedOnIssuedBill } from "./bill-payments.js";
+import { queueDailyReportMail } from "./daily-report-mail.js";
+import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
 import { pinnedAt } from "./issue-moment.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
@@ -428,6 +431,22 @@ export function closeOfDayJob(deps: CloseOfDayJobDeps): JobDefinition {
       queryAgain = false;
       queriedDayStart = dayStartedAt.getTime();
       await issueDue({ dayStartedAt, venueClock }, holds, signal);
+      if (queryAgain) return { nextDueAt: null };
+      try {
+        const { doc } = await readSettings(deps.db, DAILY_REPORT_MAIL_SETTINGS);
+        if (!doc.enabled) return { nextDueAt: null };
+        const businessDay = businessDayAt(venueClock, new Date(queriedDayStart - 1));
+        await withTransaction(deps.db, async (tx) => {
+          if (stopBeforeBill(holds, signal) !== undefined) {
+            queryAgain = true;
+            return;
+          }
+          await queueDailyReportMail(tx, businessDay, reading);
+        });
+      } catch (error) {
+        queryAgain = true;
+        throw error;
+      }
       return { nextDueAt: null };
     },
   };

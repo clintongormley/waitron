@@ -2,7 +2,7 @@ import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hash
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   readActivityForSubject,
@@ -134,6 +134,62 @@ const request = (app: Hono, cookie: string | undefined, body?: unknown) =>
     headers: { ...(cookie === undefined ? {} : { cookie }), "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
+describe("daily report settings", () => {
+  const reportPath = `${path}/daily-report`;
+  const put = (app: Hono, cookie: string, body: unknown) =>
+    app.request(reportPath, {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("starts off and saves a choice of people who can read Sales & takings", async () => {
+    const { manager } = await setupVenue();
+    const app = mount();
+    const headers = { cookie: manager };
+    const response = await app.request(reportPath, { headers });
+    expect(response.status).toBe(200);
+    const initial = await response.json();
+    expect(initial).toMatchObject({ enabled: false, recipientIds: [], revision: 0 });
+    expect(initial.recipients).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "manager" })]),
+    );
+    expect(initial.recipients).not.toContainEqual(expect.objectContaining({ name: "staff" }));
+    const recipientIds = [
+      initial.recipients.find((row: { name: string }) => row.name === "manager").id,
+    ];
+    expect((await put(app, manager, { enabled: true, recipientIds, revision: 0 })).status).toBe(
+      200,
+    );
+    expect(await (await app.request(reportPath, { headers })).json()).toMatchObject({
+      enabled: true,
+      recipientIds,
+      revision: 1,
+    });
+  });
+
+  it("requires system management and report access to enable delivery", async () => {
+    const { manager, staff } = await setupVenue();
+    const app = mount();
+    const body = { enabled: true, recipientIds: [], revision: 0 };
+    const withoutSystem = await put(app, staff, body);
+    expect(withoutSystem.status).toBe(403);
+    expect(await withoutSystem.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
+    });
+    await withTransaction(suite.db, async (tx) => {
+      tx.run(
+        sql`update roles set permissions = '["system.manage"]' where built_in_key = 'manager'`,
+      );
+    });
+    const withoutReports = await put(app, manager, body);
+    expect(withoutReports.status).toBe(403);
+    expect(await withoutReports.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "report.view" } },
+    });
+  });
+});
 
 describe("SMTP settings", () => {
   it.each(["PUT", "DELETE"])(

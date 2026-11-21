@@ -84,6 +84,7 @@ export class EmailScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) canManage = false;
   @property({ type: Boolean }) canReadCaptured = false;
+  @property({ type: Boolean }) canConfigureDailyReport = false;
   @property() intent?: "demo" | "prepare" | "live";
   #messageGeneration = 0;
   readonly #queries = new DashboardQueries(
@@ -207,7 +208,7 @@ export class EmailScreen extends LitElement {
     return html`
       <h1>${t("email.title")}</h1>
       ${this.canManage ? html`<p><a class="guide" href=${guideHref("email.set-up")}>${t("email.settings.guide")}</a></p>` : nothing}
-      ${this.canManage ? html`<dashboard-email-settings-panel .api=${this.api} .intent=${this.intent}></dashboard-email-settings-panel>` : nothing}
+      ${this.canManage ? html`<dashboard-email-settings-panel .api=${this.api} .intent=${this.intent} .canConfigureDailyReport=${this.canConfigureDailyReport}></dashboard-email-settings-panel>` : nothing}
       ${
         this.inbox?.mode === "local_capture"
           ? this.canReadCaptured

@@ -49,7 +49,7 @@ export async function resolveEmailDeliveryIn(
   );
 }
 
-export type MailDeliveryRule = "notice" | "invoice";
+export type MailDeliveryRule = "notice" | "invoice" | "venue_smtp";
 
 export async function resolveMailDeliveryIn(
   tx: Transaction,
@@ -57,6 +57,7 @@ export async function resolveMailDeliveryIn(
   config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean },
   rule: MailDeliveryRule,
 ): Promise<EmailDelivery> {
+  if (rule === "venue_smtp" && config.onboardingIntent === "demo") return { mode: "unconfigured" };
   if (
     (config.onboardingIntent === "demo" && !config.devMode) ||
     (rule === "invoice" && (config.devMode || config.onboardingIntent === "demo"))
@@ -83,7 +84,8 @@ export async function resolveMailDeliveryIn(
       throw error;
     }
   }
-  if (config.devMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
+  if (config.devMode && rule !== "venue_smtp")
+    return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };
 }
 

@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { persons, listActivePersonsWithPermission } from "@waitron/identity";
+import { persons, listActivePersonsWithPermission, type Permission } from "@waitron/identity";
 
 export interface ManagerEmailRecipient {
   readonly personId: string;
@@ -8,13 +8,17 @@ export interface ManagerEmailRecipient {
   readonly language: "en" | "es";
 }
 
-async function recipients(
+export async function readStaffEmailRecipients(
   tx: Transaction,
   venueLanguage: "en" | "es",
+  permission: Permission,
   personId?: string,
-): Promise<ManagerEmailRecipient[]> {
-  const admitted = new Set(
-    (await listActivePersonsWithPermission(tx, "system.manage")).map((person) => person.personId),
+): Promise<(ManagerEmailRecipient & { displayName: string })[]> {
+  const admitted = new Map(
+    (await listActivePersonsWithPermission(tx, permission)).map(({ personId, displayName }) => [
+      personId,
+      displayName,
+    ]),
   );
   const people = await tx
     .select({
@@ -35,6 +39,7 @@ async function recipients(
     .filter((person) => admitted.has(person.id))
     .map((person) => ({
       personId: person.id,
+      displayName: admitted.get(person.id)!,
       email: person.email!.trim(),
       language:
         person.locale === "es-ES"
@@ -45,16 +50,21 @@ async function recipients(
     }));
 }
 
-export function readManagerEmailRecipients(
+export async function readManagerEmailRecipients(
   tx: Transaction,
   venueLanguage: "en" | "es",
 ): Promise<ManagerEmailRecipient[]> {
-  return recipients(tx, venueLanguage);
+  return (await readStaffEmailRecipients(tx, venueLanguage, "system.manage")).map(
+    ({ personId, email, language }) => ({ personId, email, language }),
+  );
 }
 export async function readManagerEmailRecipient(
   tx: Transaction,
   personId: string,
   venueLanguage: "en" | "es",
 ): Promise<ManagerEmailRecipient | undefined> {
-  return (await recipients(tx, venueLanguage, personId))[0];
+  const [recipient] = await readStaffEmailRecipients(tx, venueLanguage, "system.manage", personId);
+  if (!recipient) return undefined;
+  const { email, language } = recipient;
+  return { personId, email, language };
 }

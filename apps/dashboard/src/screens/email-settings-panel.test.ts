@@ -22,19 +22,61 @@ const stored: EmailSettingsView = {
   },
 };
 const q = (el: Panel, selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector);
-async function mount(settings: EmailSettingsView = stored) {
+async function mount(settings: EmailSettingsView = stored, canConfigureDailyReport = false) {
   const read = vi.fn().mockResolvedValue(settings);
+  const getDailyReportSettings = vi.fn().mockResolvedValue({
+    enabled: false,
+    recipientIds: [],
+    revision: 0,
+    recipients: [{ id: "staff-1", name: "Alex" }],
+  });
   const client = {
-    background: { getEmailSettings: read },
+    getDailyReportSettings,
+    saveDailyReportSettings: vi.fn(async (body) => ({ ...body, revision: 1 })),
+    background: { getEmailSettings: read, getDailyReportSettings },
     getEmailSettings: read,
     saveEmailSettings: vi.fn().mockResolvedValue({ saved: true }),
     removeEmailSettings: vi.fn().mockResolvedValue({ removed: true }),
     testEmailSettings: vi.fn().mockResolvedValue({ accepted: true }),
   } as unknown as DashboardApi;
-  const mounted = await mountWidget<Panel>("dashboard-email-settings-panel", { api: client });
+  const mounted = await mountWidget<Panel>("dashboard-email-settings-panel", {
+    api: client,
+    canConfigureDailyReport,
+  });
   await vi.waitFor(() => expect(q(mounted.el, "[data-test=summary]")).not.toBeNull());
   return { ...mounted, read, client };
 }
+it("lets a report manager opt in and pick a recipient before saving", async () => {
+  const { el, client } = await mount(stored, true);
+  await vi.waitFor(() => expect(q(el, "dashboard-daily-report-mail-form")).not.toBeNull());
+  const form = el.shadowRoot!.querySelector("dashboard-daily-report-mail-form")!;
+  const control = (selector: string) => form.shadowRoot!.querySelector<HTMLElement>(selector)!;
+  const toggle = (selector: string) => {
+    control(selector).dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { checked: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+  const save = () => control("[data-test=daily-report-save]") as HTMLElementTagNameMap["wt-button"];
+  expect(save().disabled).toBe(true);
+  toggle("[data-test=daily-report-enabled]");
+  await form.updateComplete;
+  expect(save().disabled).toBe(true);
+  toggle("[data-test=daily-report-recipient]");
+  await form.updateComplete;
+  expect(save().disabled).toBe(false);
+  save().click();
+  await vi.waitFor(() => expect(save().disabled).toBe(true));
+  expect(client.saveDailyReportSettings).toHaveBeenCalledExactlyOnceWith({
+    enabled: true,
+    recipientIds: ["staff-1"],
+    revision: 0,
+  });
+});
+
 it("shows the redacted gateway and opens a quiet credential editor", async () => {
   const { el } = await mount();
   expect(q(el, "[data-test=summary]")!.textContent).toContain("smtp.example.test");
