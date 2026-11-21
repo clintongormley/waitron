@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import { SetupApi } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -605,4 +606,105 @@ it("Edit these details goes back to the sign-in step and sends nothing", async (
     "owner@example.com",
   );
   expect(requests).toHaveLength(sent);
+});
+
+/** The control that holds keyboard focus, looked up through every shadow root on the way. */
+function focused(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+const nativeButton = (button: Element) => button.shadowRoot!.querySelector("button");
+/** Moves keyboard focus to a button and presses Enter on it, as a keyboard user does. */
+async function pressWithKeyboard(button: LitElement) {
+  await button.updateComplete;
+  button.focus();
+  expect(focused()).toBe(nativeButton(button));
+  await userEvent.keyboard("{Enter}");
+}
+async function continueWithKeyboard(el: SetupHandoverScreen) {
+  const clockEntry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(clockEntry, "[data-test=continue]")).not.toBeNull());
+  const button = q<LitElement & { loading: boolean }>(clockEntry, "[data-test=continue]");
+  await pressWithKeyboard(button);
+  return { clockEntry, button };
+}
+it("keeps keyboard focus on Continue while the venue starts, and a second press sends nothing", async () => {
+  const { el, requests, release } = await mount({ holdActivation: true });
+  await select(el);
+  const { clockEntry, button } = await continueWithKeyboard(el);
+  await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
+  await clockEntry.updateComplete;
+  expect(q(clockEntry, "[data-test=continue]")).toBe(button);
+  expect(button.loading).toBe(true);
+  expect(focused()).toBe(nativeButton(button));
+  await userEvent.keyboard("{Enter}");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(activations(requests)).toHaveLength(1);
+  release();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+  );
+  expect(activations(requests)).toHaveLength(1);
+});
+it("moves keyboard focus to Try again when the start is refused for a code that ran out", async () => {
+  const { el, requests, expireCode } = await mount();
+  expireCode("activate");
+  await select(el);
+  const { clockEntry } = await continueWithKeyboard(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
+  const retry = q(el, "[data-test=retry-activation]");
+  await vi.waitFor(() => expect(focused()).toBe(nativeButton(retry)));
+  await clockEntry.updateComplete;
+  expect(q(clockEntry, "[data-test=continue]")).toBeNull();
+  expect(activations(requests)).toHaveLength(1);
+});
+it("keeps keyboard focus on Try again while the start it asked for runs", async () => {
+  const { el, requests, expireCode, release } = await mount({ holdActivation: true });
+  expireCode("activate");
+  await select(el);
+  const { clockEntry } = await continueWithKeyboard(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
+  await edit(el, "handover-code", "654321");
+  const retry = q<LitElement & { loading: boolean }>(el, "[data-test=retry-activation]");
+  await pressWithKeyboard(retry);
+  await vi.waitFor(() => expect(activations(requests)).toHaveLength(2));
+  await el.updateComplete;
+  expect(q(el, "[data-test=retry-activation]")).toBe(retry);
+  expect(retry.loading).toBe(true);
+  expect(focused()).toBe(nativeButton(retry));
+  await clockEntry.updateComplete;
+  expect(q(clockEntry, "[data-test=continue]")).toBeNull();
+  await userEvent.keyboard("{Enter}");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(activations(requests)).toHaveLength(2);
+  release();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+  );
+  expect(activations(requests)).toHaveLength(2);
+});
+it("moves keyboard focus to the clock check when a refused start goes back to it", async () => {
+  const { el } = await mount({ refuse: { code: "password.throttled", params: {} } });
+  await select(el);
+  await continueWithKeyboard(el);
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).toBeNull());
+  await vi.waitFor(() => expect(focused()).toBe(nativeButton(q(el, "[data-test=authenticate]"))));
+});
+it("moves keyboard focus to the emptied password when Continue cannot start the venue", async () => {
+  const { el, requests, release } = await mount({ holdSelection: true });
+  await select(el);
+  await vi.waitFor(() =>
+    expect(
+      requests.some((row) => (row.body.proposal as { action?: string })?.action === "select"),
+    ).toBe(true),
+  );
+  await edit(el, "handover-password", "");
+  release();
+  await continueWithKeyboard(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect(focused()).toBe(q(el, '[name="handover-password"]').shadowRoot!.querySelector("input")),
+  );
+  expect(activations(requests)).toHaveLength(0);
 });

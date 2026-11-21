@@ -179,6 +179,8 @@ export class RecoveryHourEntry extends LitElement {
   @property() locale: "en" | "es" = "en";
   @property() errorMessage?: string;
   @property() refusedField?: string;
+  /** Continue stays on screen, busy, while the page starts the venue it asked for. */
+  @property({ attribute: false }) starting = false;
   @state() private draft = empty();
   @state() private busy = false;
   /** The button whose own request is being sent, which stays on screen while it is. */
@@ -649,11 +651,13 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
         }
         ${
-          promote && selectedHour && !this.continued
+          promote && selectedHour && (!this.continued || this.starting)
             ? html`<wt-button
                 data-test="continue"
                 variant="primary"
+                ?loading=${this.continued}
                 @click=${() => {
+                  if (this.continued) return;
                   this.continued = true;
                   this.#notify();
                 }}

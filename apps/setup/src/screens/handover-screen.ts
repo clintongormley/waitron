@@ -211,6 +211,7 @@ export class SetupHandoverScreen extends LitElement {
    * fields failed their check when the series became ready.
    */
   @state() private activationHeld = false;
+  @state() private retrying = false;
   @state() private entry?: ModulePromotionEntry;
   #signInChecked = false;
   #restorePage = (event: PageTransitionEvent): void => {
@@ -446,21 +447,27 @@ export class SetupHandoverScreen extends LitElement {
     });
   }
   async #retry(): Promise<void> {
-    if (!this.busy && (await this.#checked())) await this.#activate();
+    if (!this.busy && (await this.#checked())) await this.#activate(true);
   }
-  async #activate(): Promise<void> {
+  /** The button that asked for the start stays on screen, busy, until the start is answered. */
+  async #activate(retry = false): Promise<void> {
     const entry = this.entry;
     const moduleOperation = entry?.readOperation();
     if (!entry || !moduleOperation || this.busy) return;
     if (!this.#valid()) {
       this.attempted = true;
       this.activationHeld = true;
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
       return;
     }
     const controller = this.#controller;
     this.busy = true;
     this.actionError = "";
     this.activationHeld = false;
+    this.retrying = retry;
+    entry.starting = !retry;
+    let refused = false;
     try {
       const answer = await this.#step((signIn) =>
         this.api.activateHandover(this.operationId, signIn, moduleOperation),
@@ -473,6 +480,7 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
+      refused = true;
       this.actionError = this.#isEmergency
         ? this.#emergencyError(cause)
         : entry.refusalMessage(cause);
@@ -496,8 +504,17 @@ export class SetupHandoverScreen extends LitElement {
       }
       this.#restartPolling();
     } finally {
-      this.busy = false;
+      this.busy = this.retrying = entry.starting = false;
+      if (refused) void this.#focusNextAction();
     }
+  }
+  /** The refused start's button is gone or idle again, so focus moves to the action now offered. */
+  async #focusNextAction(): Promise<void> {
+    await this.updateComplete;
+    const root = this.shadowRoot!;
+    const action = root.querySelector<HTMLElement>("wt-form-actions wt-button:not([disabled])");
+    if (action) action.focus();
+    else await focusFirstInvalid(root);
   }
   #emergencyError(cause: unknown): string {
     const error = cause as {
@@ -1142,10 +1159,11 @@ export class SetupHandoverScreen extends LitElement {
                   >${t("handover.emergency.declare")}</wt-button
                 >`
               : this.entry
-                ? this.activationHeld
+                ? this.activationHeld || this.retrying
                   ? html`<wt-button
                       data-test="retry-activation"
-                      .disabled=${this.busy || !this.#valid()}
+                      .disabled=${!this.busy && !this.#valid()}
+                      ?loading=${this.busy}
                       variant="primary"
                       @click=${() => void this.#retry()}
                       >${t("handover.try_again")}</wt-button

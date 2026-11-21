@@ -1836,6 +1836,51 @@ it("a handover start lists each new series with what it is for, and hands over n
   await continueOn(el);
   expect(el.readOperation()).not.toBeNull();
 });
+it("a handover's Continue stays on screen, busy and focused, while the page starts the venue, and is not pressed twice", async () => {
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return promotionSelected;
+  });
+  const el = await mountPromotion(prepare);
+  let starts = 0;
+  let changes = 0;
+  el.addEventListener("promotion-change", () => {
+    changes++;
+    if (el.readOperation() && !el.starting) {
+      starts++;
+      el.starting = true;
+    }
+  });
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  const next = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<LitElement & { loading: boolean }>(
+      "[data-test=continue]",
+    );
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  await next.updateComplete;
+  next.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(starts).toBe(1);
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBe(next);
+  expect(next.loading).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(next);
+  const pressed = changes;
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(changes).toBe(pressed);
+  expect(starts).toBe(1);
+  el.starting = false;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  expect(el.readOperation()).not.toBeNull();
+});
 it("a Spanish handover start names each new series' use and offers Continuar", async () => {
   const prepare = vi.fn(async (proposal: unknown) => {
     const action = (proposal as { action: string }).action;

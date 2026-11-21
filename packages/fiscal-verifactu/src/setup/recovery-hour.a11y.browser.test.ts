@@ -252,6 +252,7 @@ for (const theme of ["light", "dark"] as const)
             "empty",
             "selected",
             "continued",
+            "starting",
             "confirm",
             "second-clock",
             "disagreement",
@@ -354,14 +355,20 @@ for (const theme of ["light", "dark"] as const)
                   ).toBeGreaterThan(0),
                 );
               } else {
-                if (state === "selected" || state === "continued" || state === "confirm") {
+                if (
+                  state === "selected" ||
+                  state === "continued" ||
+                  state === "starting" ||
+                  state === "confirm"
+                ) {
                   await vi.waitFor(() => expect(action("confirm-time")).not.toBeNull());
                   if (state !== "confirm") {
                     await userEvent.click(action("confirm-time"));
                     await vi.waitFor(() => expect(action("continue")).not.toBeNull());
                     expect(el.readOperation()).toBeNull();
                   }
-                  if (state === "continued") {
+                  if (state === "continued" || state === "starting") {
+                    el.starting = state === "starting";
                     await userEvent.click(action("continue"));
                     await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
                   }

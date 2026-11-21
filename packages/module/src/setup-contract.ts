@@ -92,6 +92,8 @@ export interface ModulePromotionContext {
 export interface ModulePromotionEntry extends HTMLElement {
   refusalMessage(error: unknown): string;
   locale: "en" | "es";
+  /** Set by the page while it sends the start this entry's own action asked for. */
+  starting: boolean;
   clear(): void;
   readOperation(): { binding: RecoveryOperationBinding; input: unknown } | null;
 }
