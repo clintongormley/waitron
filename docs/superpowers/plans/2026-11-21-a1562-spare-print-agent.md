@@ -1,6 +1,6 @@
 # A1562 — the spare box's print agent prints through the main box
 
-Status: plan, for the owner's review. Lane A, 2026-11-21. Nothing is built until the owner says yes.
+Status: approved by the owner on 2026-11-21 and built in branch `feat/a1562-spare-print-agent`. Lane A, 2026-11-21.
 
 ## What the owner asked for
 

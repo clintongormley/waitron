@@ -3013,14 +3013,29 @@ async function bootServer(
     },
     log,
   );
-  // Deliberately outside the `!fencedOrMirror` block: on such a node the refusal (from the read-only
-  // gate, or `isPrimary` for a node the gate does not cover) sends the agent to the manual path.
+  // Deliberately outside the `!fencedOrMirror` block: a spare asks its main box for its agent's
+  // token, and any other such node refuses.
+  const enrolAuthority =
+    isMirror && !fenced ? await readVenueAuthority(config.stateDir) : undefined;
   mountNodeEnrolApi(
     app,
     {
       db,
       nodeId: tradingContext.nodeId,
       isPrimary: isSingletonPrimary && !fencedOrMirror,
+      ...(isMirror && !fenced
+        ? {
+            spare: {
+              node: store.node,
+              ring,
+              exchange: {
+                timeoutMs: 5_000,
+                authorityOf: () => enrolAuthority,
+                lookup: seams.boxLookup,
+              },
+            },
+          }
+        : {}),
     },
     log,
   );

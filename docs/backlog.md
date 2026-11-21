@@ -879,11 +879,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
-- **The spare box's print agent prints through the main box (A1562, lane A, plan first)** — today
-  a spare's agent prints nothing. Measured on the owner's two boxes on 2026-11-21: the shared venue
-  certificate is not in the way; the spare does not pass the main box's address to its agent, the
-  agent cannot look up `.local` names, and it holds no approval. Detail in lane A's queue.
-
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
@@ -1465,7 +1460,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **Node-role collapse** — derive ONE `NodeRole` at boot from the membership document and pick one
   rule: every role change is a restart, or the worker-lifecycle manager — not both.
 
-- **The mirror as a backup destination.** (The mirror's print agent is A1562, under Printers.)
+- **The mirror as a backup destination.**
 
 **Cloud integration and SQLite work.**
 

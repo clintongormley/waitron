@@ -423,9 +423,9 @@ declare module "@waitron/shared" {
      * loopback-only trust gate: anything that can reach the box's loopback can already read its
      * vault, so enrolling a loopback caller grants nothing new; a LAN caller must not. */
     "node.enrol_not_local": Record<string, never>;
-    /** This node cannot self-enrol a print agent because it is not the primary (`node-enrol-api.ts`).
-     * A real mirror's POST is refused earlier by the read-only gate with `node.read_only`; this
-     * covers a non-primary node that gate does not. */
+    /** This node cannot give a print agent a token: it is not the serving main box, or, on a spare,
+     * the main box its chart names could not be reached or did not give one (`node-enrol-api.ts`,
+     * `print-agent-enrol-api.ts`). A fenced node's POST is refused earlier with `node.read_only`. */
     "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error code (`EADDRINUSE`,
