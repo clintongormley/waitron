@@ -21,12 +21,7 @@ export function readSetupAddressLookup(input: Record<string, unknown>): Lookup |
       (language === "en" || language === "es")
     )
       return { kind, workflowId, query, language };
-    if (
-      kind === "validate" &&
-      keys === 4 &&
-      validText(selectedText) &&
-      Array.from(selectedText).length <= 278
-    )
+    if (kind === "validate" && keys === 4 && validSelectedText(selectedText))
       return { kind, workflowId, selectedText };
   }
   throw new AppError("cloud.request_invalid", {});
@@ -34,6 +29,10 @@ export function readSetupAddressLookup(input: Record<string, unknown>): Lookup |
 
 function validText(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "" && Buffer.byteLength(value) <= 512;
+}
+
+function validSelectedText(value: unknown): value is string {
+  return validText(value) && Array.from(value).length <= 278;
 }
 
 export async function fetchSetupAddress(
@@ -61,7 +60,7 @@ export async function fetchSetupAddress(
   if (input.kind === "suggest" && Array.isArray(reply.candidates)) {
     const candidates: { text: string }[] = [];
     for (const candidate of reply.candidates)
-      if (validText(candidate?.text)) candidates.push({ text: candidate.text });
+      if (validSelectedText(candidate?.text)) candidates.push({ text: candidate.text });
     return { candidates };
   }
   if (input.kind === "validate" && reply.fields && typeof reply.fields === "object") {

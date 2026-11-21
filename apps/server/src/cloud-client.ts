@@ -271,7 +271,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     throw new AppError("cloud.unavailable", {});
   return view;
 }
-const activePaths = new Map<string, Promise<void>>();
+const connectionTurns = new Map<string | symbol, Promise<void>>();
 /** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
   const path = join(resolve(options.stateDir), CLOUD_CONNECTION_FILE);
@@ -522,11 +522,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function run<T>(work: () => Promise<T>, wait = false, signal?: AbortSignal) {
-    while (activePaths.has(path)) {
+  async function run<T>(
+    work: () => Promise<T>,
+    wait = false,
+    signal?: AbortSignal,
+    key: string | symbol = path,
+  ) {
+    while (connectionTurns.has(key)) {
       if (!wait) throw new AppError("cloud.busy", {});
       signal?.throwIfAborted();
-      const active = activePaths.get(path)!;
+      const active = connectionTurns.get(key)!;
       if (signal) {
         let remove = () => {};
         try {
@@ -545,8 +550,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
     signal?.throwIfAborted();
     let release = () => {};
-    activePaths.set(
-      path,
+    connectionTurns.set(
+      key,
       new Promise<void>((resolve) => {
         release = resolve;
       }),
@@ -554,7 +559,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     try {
       return await work();
     } finally {
-      activePaths.delete(path);
+      connectionTurns.delete(key);
       release();
     }
   }
@@ -587,7 +592,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     )
       return { state, attempt, registration: attempt.provisionalRegistration };
   }
-  // Keep a provisional lease separate from the registration written after local publication.
+  // Only lookups wait for provisional lease renewal, so local publication can record the node.
+  const setupAddressTurn = Symbol();
   let setupAddressLease:
     { requestId: string; credentials: CloudInstallationCredentials } | undefined;
 
@@ -762,7 +768,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       signal: AbortSignal,
     ) {
       if (input === undefined) return { available: !!(await setupAddressAttempt(binding)) };
-      const credentials = await run(
+      const access = await run(
         async () => {
           const held = await setupAddressAttempt(binding);
           if (!held) throw new AppError("cloud.request_unavailable", {});
@@ -779,17 +785,23 @@ export function createCloudConnection(options: CloudConnectionOptions) {
               },
             };
           }
-          const credentials = setupAddressLease.credentials;
-          await installationClient(credentials, async () => {}).ensureLease(signal);
-          return credentials;
+          await installationClient(setupAddressLease.credentials, async () => {}).ensureLease(
+            signal,
+          );
+          return setupAddressLease;
         },
         true,
         signal,
-      );
+        setupAddressTurn,
+      ).catch((error: unknown) => {
+        if (error instanceof AppError || !signal.aborted) throw error;
+        throw new AppError("cloud.unavailable", {});
+      });
       await authorize();
-      if (!(await setupAddressAttempt(binding)))
+      const held = await setupAddressAttempt(binding);
+      if (held?.attempt.requestId !== access.requestId)
         throw new AppError("cloud.request_unavailable", {});
-      return fetchSetupAddress(credentials, input, signal);
+      return fetchSetupAddress(access.credentials, input, signal);
     },
     async publishSetupSignIn(binding: CloudSignInBinding, nodeId: string) {
       await run(async () => {

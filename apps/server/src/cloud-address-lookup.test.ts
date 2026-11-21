@@ -22,6 +22,14 @@ const fields = {
   countryCode: "ES",
 };
 
+function gate(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 async function addressFixture() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const key = publicKey.export({ type: "spki", format: "der" }).toString("base64url");
@@ -30,6 +38,9 @@ async function addressFixture() {
   const workflowId = randomUUID();
   const calls: unknown[][] = [];
   let refusal = 0;
+  const renewalRequested = gate();
+  const releaseRenewal = gate();
+  let holdRenewal = false;
   const cloud = await cloudFixture(async (values, _saved, req, res, sent) => {
     calls.push(values);
     expect(req.url).toBe("/api/installations/" + values[2]);
@@ -37,6 +48,8 @@ async function addressFixture() {
     expect(Object.keys(sent).sort()).toEqual(["payload", "signature"]);
     expect(values[3]).toBe(cloud.installationId);
     if (values[2] === "renew") {
+      renewalRequested.resolve();
+      if (holdRenewal) await releaseRenewal.promise;
       const now = Date.now();
       const until = now + 3600000;
       const payload = Buffer.from(
@@ -86,7 +99,9 @@ async function addressFixture() {
         workflowId,
         provider: "google",
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        ...(body.kind === "suggest" ? { candidates: [{ text: address }] } : { fields }),
+        ...(body.kind === "suggest"
+          ? { candidates: [{ text: address }, { text: "a".repeat(300) }] }
+          : { fields }),
       }),
     );
   });
@@ -151,11 +166,18 @@ async function addressFixture() {
     refuse: (status: number) => {
       refusal = status;
     },
-    post: (operation: object, headers: Record<string, string> = {}) =>
+    holdRenewal() {
+      holdRenewal = true;
+      return { requested: renewalRequested.promise, release: releaseRenewal.resolve };
+    },
+    publish: (nodeId: string) =>
+      connection.publishSetupSignIn({ kind: "setup", tab, session }, nodeId),
+    post: (operation: object, headers: Record<string, string> = {}, signal?: AbortSignal) =>
       app.request(
         route,
         {
           method: "POST",
+          signal,
           headers: {
             origin,
             "content-type": "application/json",
@@ -202,6 +224,30 @@ it("uses one provisional lease for suggestions and validation without writing a 
   }
 });
 
+it("records the saved venue while a search still waits for Cloud to renew its lease", async () => {
+  const f = await addressFixture();
+  const held = f.holdRenewal();
+  const lookup = f.post({
+    kind: "suggest",
+    workflowId: f.workflowId,
+    query: "Calle Mayor",
+    language: "es",
+  });
+  try {
+    await held.requested;
+    const nodeId = randomUUID();
+    await f.publish(nodeId);
+    expect(JSON.parse(await readFile(f.file, "utf8")).attempt.publishedNodeId).toBe(nodeId);
+    held.release();
+    expect((await lookup).status).toBe(409);
+    expect(f.calls.map((call) => call[2])).toEqual(["renew"]);
+  } finally {
+    held.release();
+    await lookup;
+    await f.close();
+  }
+});
+
 it("keeps manual entry for a Cloud refusal and never calls Cloud for another setup binding", async () => {
   const f = await addressFixture();
   try {
@@ -222,6 +268,10 @@ it("keeps manual entry for a Cloud refusal and never calls Cloud for another set
     expect(f.calls).toEqual([]);
 
     await f.save({});
+    const cancelled = await f.post(suggest, {}, AbortSignal.abort());
+    expect(cancelled.status).toBe(503);
+    expect(await cancelled.json()).toEqual({ error: { code: "cloud.unavailable", params: {} } });
+    expect(f.calls).toEqual([]);
     f.refuse(429);
     const refused = await f.post(suggest);
     expect(refused.status).toBe(503);

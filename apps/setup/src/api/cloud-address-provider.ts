@@ -39,17 +39,8 @@ export async function setupCloudAddressProvider(
         workflowId,
         selectedText: suggestionId,
       });
-      if (
-        !fields ||
-        ![
-          fields.addressLine1,
-          fields.addressLine2,
-          fields.postalCode,
-          fields.city,
-          fields.province,
-        ].some((field) => field?.trim())
-      )
-        throw new Error("No address fields");
+      if (!fields?.addressLine1.trim() || !fields.postalCode.trim() || !fields.city.trim())
+        throw new Error("Incomplete address fields");
       const area = findAdministrativeArea(spain, fields.province);
       return {
         lines: fields.addressLine2
