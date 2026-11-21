@@ -6,16 +6,14 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import {
-  findAdministrativeArea,
-  findAdministrativeAreaByPostalCode,
-  type CountryPack,
-} from "@waitron/country";
-import {
   areaOfChosenAddress,
+  canonicalRegisteredParts,
   getCountryPack,
   joinRegisteredAddress,
+  provinceOfPostalCode,
   registeredAddressErrors,
   registeredAddressParts,
+  registeredLineErrors,
   type RegisteredAddressError,
   type RegisteredAddressParts,
 } from "@waitron/country-packs";
@@ -91,20 +89,6 @@ function requiredErrors(
   return Object.fromEntries(
     [...REQUIRED].filter((part) => parts[part].trim() === "").map((part) => [part, "required"]),
   );
-}
-
-/** The browser's check of the parts. The server splits the line it is sent and checks the split,
- *  and parts that pass can join into a line that splits otherwise, as when the city holds a comma;
- *  that is `unreadable`, checked only once the parts pass. */
-function partErrors(
-  parts: RegisteredAddressParts,
-  pack: CountryPack | undefined,
-  line: string,
-): Partial<Record<Part, RegisteredAddressError>> | "unreadable" {
-  const found = pack === undefined ? requiredErrors(parts) : registeredAddressErrors(parts, pack);
-  if (Object.keys(found).length > 0 || pack?.postalCode === undefined) return found;
-  const readBack = registeredAddressErrors(registeredAddressParts(line, pack), pack);
-  return Object.keys(readBack).length > 0 ? "unreadable" : {};
 }
 
 /** Changes the registered address that full invoices issued from now on print. It is asked for in
@@ -185,37 +169,40 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
       pack === undefined
         ? { street: line, line2: "", postalCode: "", city: "", province: "" }
         : registeredAddressParts(line, pack);
-    return { ...parts, sameAsVenue: this.#join(parts) === this.#join(this.#venueParts()) };
+    return {
+      ...parts,
+      sameAsVenue:
+        joinRegisteredAddress(parts, pack) === joinRegisteredAddress(this.#venueParts(), pack),
+    };
   }
 
   protected override valueFor(draft: RegisteredAddressDraft): string {
-    return this.#join(draft.sameAsVenue ? this.#venueParts() : draft);
+    return joinRegisteredAddress(draft.sameAsVenue ? this.#venueParts() : draft, this.#pack());
   }
 
-  /** Joined with the pack's own postcode spelling and province name, as the server's split
-   *  recognises only those. */
-  #join(parts: RegisteredAddressParts): string {
+  /** The browser's check of the parts. The server splits the line it is sent and checks the
+   *  split, and parts that pass can join into a line that splits otherwise, as when the city holds
+   *  a comma; that is `unreadable`, checked only once the parts pass. */
+  #partErrors(
+    parts: RegisteredAddressParts,
+    line: string,
+  ): Partial<Record<Part, RegisteredAddressError>> | "unreadable" {
     const pack = this.#pack();
-    const postal = pack?.postalCode?.validate(parts.postalCode.trim());
-    const province = parts.province.trim();
-    return joinRegisteredAddress({
-      ...parts,
-      postalCode: postal?.valid === true ? postal.normalized : parts.postalCode,
-      province: (pack && findAdministrativeArea(pack, province)?.name) ?? province,
-    });
+    const found = pack === undefined ? requiredErrors(parts) : registeredAddressErrors(parts, pack);
+    if (Object.keys(found).length > 0) return found;
+    return Object.keys(registeredLineErrors(line, pack)).length > 0 ? "unreadable" : {};
   }
 
   /** With the switch on no part is shown, so whatever is wrong with the venue's address is said
    *  once, at the bottom. */
   protected override fieldErrors(draft: RegisteredAddressDraft): Record<string, string> {
-    const pack = this.#pack();
     if (draft.sameAsVenue) {
-      const found = partErrors(this.#venueParts(), pack, this.valueFor(draft));
+      const found = this.#partErrors(this.#venueParts(), this.valueFor(draft));
       return found === "unreadable" || Object.keys(found).length > 0
         ? { [SAME_AS_VENUE]: t("venue_details.registered_same_unusable") }
         : {};
     }
-    const found = partErrors(draft, pack, this.valueFor(draft));
+    const found = this.#partErrors(draft, this.valueFor(draft));
     if (found === "unreadable") return { [NAMES.city]: t("venue_details.registered_city_comma") };
     const errors: Record<string, string> = {};
     for (const part of PARTS) {
@@ -300,11 +287,14 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     ></wt-address-lookup>`;
   }
 
-  #provinceOptions(pack: CountryPack): { value: string; label: string }[] {
-    if (this.#provinces?.countryCode !== pack.countryCode)
+  #provinceOptions(): { value: string; label: string }[] {
+    if (this.#provinces?.countryCode !== this.countryCode)
       this.#provinces = {
-        countryCode: pack.countryCode,
-        options: pack.administrativeAreas.map((area) => ({ value: area.name, label: area.name })),
+        countryCode: this.countryCode,
+        options: (this.#pack()?.administrativeAreas ?? []).map((area) => ({
+          value: area.name,
+          label: area.name,
+        })),
       };
     return this.#provinces.options;
   }
@@ -312,12 +302,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   #changePart(view: TaxpayerFieldsView<RegisteredAddressDraft>, part: Part, value: string): void {
     const next = { ...view.draft, [part]: value };
     if (part === "postalCode") {
-      const pack = this.#pack();
-      const postal = pack?.postalCode?.validate(value);
-      const area =
-        pack !== undefined && postal?.valid === true
-          ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
-          : undefined;
+      const area = provinceOfPostalCode(this.#pack(), value);
       if (area !== undefined) next.province = area.name;
     }
     view.change(next);
@@ -331,13 +316,12 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     };
     const pack = this.#pack();
     if (part === "province" && pack !== undefined && pack.administrativeAreas.length > 0) {
-      const province = view.draft.province.trim();
       return html`<wt-combobox
         name=${name}
         label=${t(LABELS[part])}
         search="auto"
-        .value=${findAdministrativeArea(pack, province)?.name ?? province}
-        .options=${this.#provinceOptions(pack)}
+        .value=${canonicalRegisteredParts(view.draft, pack).province.trim()}
+        .options=${this.#provinceOptions()}
         .error=${view.errors[name] ?? ""}
         ?disabled=${view.busy}
         @wt-change=${change}
