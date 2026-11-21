@@ -15,6 +15,7 @@ import { kitchenNotices, setZoneSalePolicyOverride } from "@waitron/venue-servic
 import { createStation } from "./kitchen.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
+import { leaveTables } from "./parties.js";
 import { oneBill, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { listOrders } from "./orders-list.js";
@@ -834,7 +835,12 @@ describe("a counter order delivered to a table an action brings into or takes ou
       to: { tableId: table.c6! },
       otherPartyId: null,
     });
-    expect(await inTx(v, (tx) => holderOf(tx, table.c6!))).not.toBeNull();
+    const partyId = (await billRow(v, movedBillId)).partyId;
+    expect(partyId).not.toBeNull();
+    expect(await inTx(v, (tx) => holderOf(tx, table.c6!))).toBe(partyId);
+    expect(await inTx(v, (tx) => holderOf(tx, table.t9!))).toBe(partyId);
+    // Keep the floor group named while seeding the partial seating that the split must handle.
+    await inTx(v, (tx) => leaveTables(tx, [table.t9!]));
     expect(await inTx(v, (tx) => holderOf(tx, table.t9!))).toBeNull();
     await deliveredCounterOrder(zoneId, table.t9!);
 
