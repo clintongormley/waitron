@@ -81,6 +81,7 @@ export async function beginSettledTenderRefund(
       const createdAt = reading.instant.toISOString();
       const begun = await reserveTenderRefund(
         tx,
+        deps.backend,
         cfg,
         saleId,
         request,

@@ -112,6 +112,7 @@ export async function giveCorrectionCash(
     left -= leg;
     const { refund: reserved } = await reserveTenderRefund(
       tx,
+      deps.backend,
       cfg,
       correction.originalSaleId,
       {

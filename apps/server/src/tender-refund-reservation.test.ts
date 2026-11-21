@@ -24,6 +24,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { deviceOrigin } from "@waitron/shared";
+import type { FiscalBackend } from "@waitron/fiscal";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
@@ -37,6 +38,8 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
+/** These refunds name no correction, so nothing reads the fiscal seat. */
+const NO_SEAT = {} as FiscalBackend;
 let cfg: DeviceRequestConfig;
 let seriesId: string;
 let orderId: string;
@@ -172,7 +175,9 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
   };
 }
 const reserve = (saleId: string, req: TenderRefundRequest, config = cfg) =>
-  withTransaction(store.db, (tx) => reserveTenderRefund(tx, config, saleId, req, ACTOR, AT));
+  withTransaction(store.db, (tx) =>
+    reserveTenderRefund(tx, NO_SEAT, config, saleId, req, ACTOR, AT),
+  );
 const rows = () => store.db.select().from(tenderRefunds);
 async function prior(
   target: Awaited<ReturnType<typeof paid>>,
@@ -384,7 +389,15 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const target = await paid();
     await expect(
       withTransaction(store.db, async (tx) => {
-        await reserveTenderRefund(tx, cfg, target.saleId, request(target.tenderId), ACTOR, AT);
+        await reserveTenderRefund(
+          tx,
+          NO_SEAT,
+          cfg,
+          target.saleId,
+          request(target.tenderId),
+          ACTOR,
+          AT,
+        );
         throw new Error("caller failed");
       }),
     ).rejects.toThrow("caller failed");
@@ -725,6 +738,7 @@ describe("cash reservation without the optional payments module", () => {
     const answer = await withTransaction(db, (tx) =>
       reserveTenderRefund(
         tx,
+        NO_SEAT,
         { ...cfg, nodeId: cashNodeId, origin: deviceOrigin(deviceId) },
         sale!.id,
         request(tender!.id),

@@ -279,6 +279,7 @@ async function giveBack(
     const reading = venue.clock.now();
     const begun = await reserveTenderRefund(
       tx,
+      venue.backend,
       venue.cfg,
       saleId,
       {
@@ -748,6 +749,7 @@ describe("a correction's legs", () => {
         const [cash] = await readRefundableTenders(tx, saleId);
         return reserveTenderRefund(
           tx,
+          venue.backend,
           venue.cfg,
           saleId,
           {

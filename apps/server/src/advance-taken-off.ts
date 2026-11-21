@@ -45,25 +45,31 @@ function takenOffParams(saleId: string, final: { id: string; code: string; numbe
 }
 
 /**
- * Refuses `advance.taken_off_final_invoice` for a leg of the correction `correctionId` of the
- * advance `saleId` when that correction was opened before the invoice that took the advance off
- * was issued: that invoice took the advance off whole, so the correction's money is already on it.
+ * At a leg of the correction `correctionId` of the advance `saleId`, refuses what Open would refuse
+ * now (`refuseFinalInvoiceFirst`), so the leg gives back only what a correction opened now could.
+ * A correction opened before the invoice that took the advance off was issued is refused
+ * `advance.taken_off_final_invoice` instead, read from stored times.
  */
 export async function refuseTakenOffSinceOpened(
   tx: Transaction,
+  backend: FiscalBackend,
+  nodeId: NodeId,
   saleId: string,
   correctionId: string,
 ): Promise<void> {
-  const final = await readTakingInvoice(tx, saleId);
-  if (final === undefined) return;
-  const [correction] = await tx
-    .select({ openedAt: invoiceCorrections.createdAt })
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  // Stored times, so weaker than its name if the clock was stepped back between the two.
-  if (correction !== undefined && Date.parse(correction.openedAt) >= Date.parse(final.issuedAt))
-    return;
-  throw new AppError("advance.taken_off_final_invoice", takenOffParams(saleId, final));
+  try {
+    await refuseFinalInvoiceFirst(tx, backend, nodeId, saleId);
+  } catch (error) {
+    if (!(error instanceof AppError && hasCode(error, "advance.final_invoice_first"))) throw error;
+    const final = (await readTakingInvoice(tx, saleId))!;
+    const [correction] = await tx
+      .select({ openedAt: invoiceCorrections.createdAt })
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, correctionId));
+    if (correction !== undefined && Date.parse(correction.openedAt) < Date.parse(final.issuedAt))
+      throw new AppError("advance.taken_off_final_invoice", takenOffParams(saleId, final));
+    throw error;
+  }
 }
 
 /** The refusals of reading an invoice's correctable lines that can name the table's invoice. */

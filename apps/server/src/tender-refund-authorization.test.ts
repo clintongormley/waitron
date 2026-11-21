@@ -39,6 +39,7 @@ import { AppError, deviceOrigin } from "@waitron/shared";
 import { departments, setProfileServiceAccess } from "@waitron/venue-service";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import type { FiscalBackend } from "@waitron/fiscal";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import type { TenderRefundRequest } from "./tender-refund-types.js";
@@ -58,6 +59,8 @@ const PIN = "4567";
 const PIN_HASH = hashPin(PIN);
 const CAPS = ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"];
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+/** These refunds name no correction, so nothing reads the fiscal seat. */
+const NO_SEAT = {} as FiscalBackend;
 let cfg: DeviceRequestConfig;
 let profileId: string;
 let personId: string;
@@ -217,6 +220,7 @@ async function reserve(
       const authorization = await authorize(cancelledBy);
       const held = await reserveTenderRefund(
         tx,
+        NO_SEAT,
         config,
         t.saleId,
         req,
@@ -567,6 +571,7 @@ describe("settled-tender refund authorization before reservation", () => {
           const authorization = await authorize();
           await reserveTenderRefund(
             tx,
+            NO_SEAT,
             cfg,
             t.saleId,
             request(t.tenderId),

@@ -10,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { refuseAdvanceRefund, refuseTakenOffSinceOpened } from "./advance-taken-off.js";
+import type { FiscalBackend } from "@waitron/fiscal";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -149,6 +150,7 @@ async function refuseRefundOfAdvance(
 
 export async function reserveTenderRefund(
   tx: Transaction,
+  backend: FiscalBackend,
   cfg: DeviceRequestConfig,
   saleId: string,
   request: TenderRefundRequest,
@@ -210,10 +212,9 @@ export async function reserveTenderRefund(
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
-  // No known route issues the table's invoice while an advance's correction is open
-  // (`advance.correction_open`): a guard for one missed.
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
-  else await refuseTakenOffSinceOpened(tx, saleId, correctionLink.id);
+  // A leg gives back only what a correction opened now could.
+  else await refuseTakenOffSinceOpened(tx, backend, cfg.nodeId, saleId, correctionLink.id);
   if (correctionLink === undefined && appliedAmount > 0)
     await refuseRefundOfAdvance(tx, saleId, tenderId);
 

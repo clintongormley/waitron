@@ -58,6 +58,9 @@ import {
   type AdvanceVenue,
 } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { clockAt } from "./testing/deferred-close-fixture.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
 // Correcting a bill's advances and the invoice that takes them off (advances plan, Task 1.6a),
@@ -749,6 +752,60 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ).toEqual([]);
   });
 
+  it("a €0.00 rest's invoice, then the clock stepped back two minutes: €20 in cash back on the advance still files an R5 of it at 10% naming it and opens the drawer once", async () => {
+    const billId = await seated("Tasting menu", "Salad bowl");
+    const advanceId = await advance(billId, "120.00");
+    const removed = await removeDish(billId, "Salad bowl");
+    expect(removed.status, JSON.stringify(removed.json)).toBe(200);
+    const finalSaleId = await restId(billId);
+    expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
+    const behind = venue().appAt(clockAt(Date.now() - 120_000));
+    const [reason] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
+
+    const opened = await send(
+      behind,
+      venue().cookie,
+      "POST",
+      `/api/transactions/${advanceId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "20.00",
+        reasonId: reason!.id,
+        note: "Sent back",
+        expectedSplit: [{ rate: "10.00", base: "18.18", tax: "1.82" }],
+        override: supervisor(),
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const leg = await send(
+      behind,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "20.00", override: supervisor() },
+    );
+
+    expect(leg.status, JSON.stringify(leg.json)).toBe(200);
+    const [corrective] = await inTx(venue(), (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, advanceId)),
+    );
+    expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
+    expect(filedInvoicesOf(venue().db, corrective!.id, new Date())[0]!.kind).toBe("R5");
+    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
+    expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+      expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
+    ]);
+    const opens = await inTx(venue(), (tx) =>
+      tx
+        .select({ reason: drawerOpens.reason })
+        .from(drawerOpens)
+        .innerJoin(tenderRefunds, eq(tenderRefunds.id, drawerOpens.tenderRefundId))
+        .where(eq(tenderRefunds.saleId, advanceId)),
+    );
+    expect(opens).toEqual([{ reason: "tender_refund" }]);
+  });
+
   for (const entry of ["manual", "reader"] as const) {
     it(`a €0.00 rest's invoice: €20 back by the card leg of a ${entry} card advance files an R5 of it at 10% −18.18 and −1.82 and opens no drawer`, async () => {
       const billId = await seated("Tasting menu", "Salad bowl");
@@ -1045,6 +1102,121 @@ describe("an advance once the rest's invoice has taken it off", () => {
     expect(refused.status, JSON.stringify(refused.json)).toBe(409);
     expect(refused.json).toEqual(refusal);
     await nothingGivenBack(row!.advanceId, correctionId);
+  });
+
+  // Paying the rest is refused while the correction is open (`advance.correction_open`), so the
+  // correction is closed for the payment and written back open after it.
+  it("refuses the cash of a correction opened on the advance after a printed bill's invoice took it off, once that invoice's €90 rest is paid, sending staff to that invoice, and gives nothing back", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await issueOrderInvoice(
+      {
+        db: venue().db,
+        backend: venue().backend,
+        clock: venue().clock,
+        admission: testTradingAdmission(),
+      },
+      venue().cfg,
+      billId,
+      venue().adminId,
+    );
+    const finalSaleId = await restId(billId);
+    const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const closedId = (opened.json as { correction: { id: string } }).correction.id;
+    const blocked = await cash(billId, "90.00");
+    expect(blocked.status, JSON.stringify(blocked.json)).toBe(409);
+    expect(blocked.json).toMatchObject({ code: "advance.correction_open" });
+    const [row] = await inTx(venue(), (tx) =>
+      tx.select().from(invoiceCorrections).where(eq(invoiceCorrections.id, closedId)),
+    );
+    const closed = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${closedId}/close`,
+      { override: supervisor() },
+    );
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    await payRest(billId, "90.00");
+    const correctionId = randomUUID();
+    await inTx(venue(), (tx) =>
+      tx
+        .insert(invoiceCorrections)
+        .values({ ...row!, id: correctionId, submissionId: randomUUID() }),
+    );
+
+    const refused = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "30.00", override: supervisor() },
+    );
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual({
+      code: "advance.final_invoice_first",
+      params: {
+        saleId: advanceId,
+        finalSaleId,
+        invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+        rate: "10.00",
+        moneyLeft: "90.00",
+      },
+    });
+    await nothingGivenBack(advanceId, correctionId);
+  });
+
+  it("gives back the cash of a correction opened on the advance before a €0.00 rest's invoice took it off, filing an R5 of the advance at 10% naming it", async () => {
+    const billId = await seated("Tasting menu", "Salad bowl");
+    const advanceId = await advance(billId, "120.00");
+    const opened = await open(advanceId, "20.00", [{ rate: "10.00", base: "18.18", tax: "1.82" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const closedId = (opened.json as { correction: { id: string } }).correction.id;
+    const [row] = await inTx(venue(), (tx) =>
+      tx.select().from(invoiceCorrections).where(eq(invoiceCorrections.id, closedId)),
+    );
+    const closed = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${closedId}/close`,
+      { override: supervisor() },
+    );
+    expect(closed.status, JSON.stringify(closed.json)).toBe(200);
+    const removed = await removeDish(billId, "Salad bowl");
+    expect(removed.status, JSON.stringify(removed.json)).toBe(200);
+    const finalSaleId = await restId(billId);
+    expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
+    const [final] = await inTx(venue(), (tx) =>
+      tx.select({ issuedAt: sales.issuedAt }).from(sales).where(eq(sales.id, finalSaleId)),
+    );
+    expect(Date.parse(row!.createdAt)).toBeLessThan(Date.parse(final!.issuedAt));
+    const correctionId = randomUUID();
+    await inTx(venue(), (tx) =>
+      tx
+        .insert(invoiceCorrections)
+        .values({ ...row!, id: correctionId, submissionId: randomUUID() }),
+    );
+
+    const leg = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "20.00", override: supervisor() },
+    );
+
+    expect(leg.status, JSON.stringify(leg.json)).toBe(200);
+    const [corrective] = await inTx(venue(), (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, advanceId)),
+    );
+    expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
+    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
+    expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+      expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
+    ]);
   });
 });
 

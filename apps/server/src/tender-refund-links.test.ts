@@ -208,6 +208,7 @@ describe("a refund names the cancels it pays back", () => {
     const held = await inTx(venue, async (tx) =>
       reserveTenderRefund(
         tx,
+        venue.backend,
         venue.cfg,
         paid.saleId,
         { ...refundBody(paid, "30.00"), cancellationIds: [ham, burger] },
@@ -771,6 +772,7 @@ describe("a correction's leg", () => {
       inTx(venue, (tx) =>
         reserveTenderRefund(
           tx,
+          venue.backend,
           venue.cfg,
           paid.saleId,
           {
