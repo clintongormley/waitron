@@ -120,7 +120,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/enrol-self",
     boxes: ["mirror"],
     authenticates:
-      "a request from loopback, on this box itself; it writes nothing here, and is signed onward with this box's key as an `agent-enrol` envelope to the main box its held chart names, whose token it passes back (`node-enrol-api.ts`)",
+      "a request from this box itself (otherwise `node.enrol_not_local`, before reading the body); it writes nothing here, and is signed onward with this box's key as an `agent-enrol` envelope to the main box its held chart names, whose token it passes back (`node-enrol-api.ts`)",
   },
   {
     method: "POST",

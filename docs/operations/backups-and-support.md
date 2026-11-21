@@ -54,8 +54,10 @@ If it cannot reach the venue, **Join a new network** starts a five-minute wait.
 disconnected, the agent forgets its approval and saved server list. On a separate agent,
 save the new server address and approve its join in the dashboard. A container-fixed server
 address cannot be changed on that page. On the venue's spare box the agent prints through the main
-box. When it cannot reach the main box, the page says so and offers no new reset; its agent prints
-again once it reaches the main box or that box becomes the main box.
+box. When it cannot reach the main box, or the main box refuses it because the agent was deleted
+there, the page says it cannot reach the main box and offers no new reset. It prints again once the
+main box answers — for a deleted agent, choose **Add** beside its saved name in **Print agents** — or
+once this box becomes the main box.
 
 This resets print-agent connectivity, not the venue database or fiscal identity. The
 [setup page](../../apps/print-agent/src/setup-page.ts) and

@@ -52,7 +52,7 @@ const MAIN_REFUSALS: ReadonlySet<string> = new Set([
 
 /**
  * `POST /api/node/enrol-self` — the loopback-only self-enrol a print agent running on this box
- * calls before it falls back to knock-and-accept. The rate limit and loopback gates refuse before
+ * calls first; off a spare it then falls back to knock-and-accept. The rate limit and loopback gates refuse before
  * any database work. On a spare the token comes from the main box (`print-agent-enrol-api.ts`),
  * and any failure there answers `node.enrol_unavailable`, so the agent asks again next round.
  */

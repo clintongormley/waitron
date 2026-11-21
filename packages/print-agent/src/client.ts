@@ -214,8 +214,8 @@ export const DEFAULT_TIMEOUT_MS = 3_000;
  * calls; still inside the 60 s claim lease. */
 export const PAGE_DOCUMENT_TIMEOUT_MS = 30_000;
 
-/** A spare answers self-enrolment by asking the main box, which can take 2 s to look up and 5 s to
- * answer (`apps/server/src/box-lookup.ts`, `apps/server/src/boot-peer-check.ts`). */
+/** A spare answers self-enrolment by asking the main box, which can take up to 5 s (`timeoutMs` in
+ * `apps/server/src/boot.ts`). */
 export const ENROL_SELF_TIMEOUT_MS = 10_000;
 
 /** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not

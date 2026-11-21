@@ -13,7 +13,7 @@ import { AppError, steadyNow } from "@waitron/shared";
  * admitted only while an admin holds the venue's pairing window open; self-enrolment is
  * loopback-only; and a box asking for its agent's token must sign the request. It is
  * defence-in-depth against a flood. Per-process rather than a DB attempt-counter, because a DB
- * counter would ADD write load to the unauthenticated path.
+ * counter would ADD write load to the unauthenticated paths.
  */
 
 export const ENROL_RATE_WINDOW_MS = 60_000;

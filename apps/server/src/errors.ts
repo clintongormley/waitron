@@ -419,7 +419,8 @@ declare module "@waitron/shared" {
      * raised.
      */
     "node.membership_refused_on_boot": { failure: VerifyFailure };
-    /** `POST /api/node/enrol-self` reached from a non-loopback address. Self-enrol is a
+    /** `POST /api/node/enrol-self` not proven to come from this box: a non-loopback address, or the
+     * remote staff entrance. Self-enrol is a
      * loopback-only trust gate: anything that can reach the box's loopback can already read its
      * vault, so enrolling a loopback caller grants nothing new; a LAN caller must not. */
     "node.enrol_not_local": Record<string, never>;
