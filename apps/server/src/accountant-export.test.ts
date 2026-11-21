@@ -48,6 +48,7 @@ import {
   listAccountantExport,
   partPaymentsAmong,
   refundsWithoutCorrectiveQuery,
+  refundVatShares,
   renderAccountantWorkbook,
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
@@ -1277,7 +1278,7 @@ describe("refunds without a corrective invoice", () => {
     ).toEqual(["1.00"]);
   });
 
-  it("shares a refund over a two-rate ticket by gross, the last rate taking the remainder, so the rows sum to the refund", async () => {
+  it("shares a refund over a two-rate ticket by gross, a tied leftover cent going to the earlier rate, so the rows sum to the refund", async () => {
     const saleId = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: "2026-11-02T12:00:00.000Z",
@@ -1306,6 +1307,33 @@ describe("refunds without a corrective invoice", () => {
       { rate: "21.00", base: "4.13", tax: "0.87" },
     ]);
     expect(toScale(sumDecimals(row!.vat.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("10.01");
+  });
+
+  it("shares a small refund over four rates in whole cents that are never negative and sum to the refund", () => {
+    const shares = refundVatShares(decimal("0.02"), [
+      { rate: "4.00", base: "9.62", tax: "0.38" },
+      { rate: "10.00", base: "9.09", tax: "0.91" },
+      { rate: "21.00", base: "8.26", tax: "1.74" },
+      { rate: "5.00", base: "0.01", tax: "0.00" },
+    ]);
+    expect(shares).toEqual([
+      { rate: "4.00", base: "0.01", tax: "0.00" },
+      { rate: "10.00", base: "0.01", tax: "0.00" },
+      { rate: "21.00", base: "0.00", tax: "0.00" },
+      { rate: "5.00", base: "0.00", tax: "0.00" },
+    ]);
+    expect(toScale(sumDecimals(shares.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("0.02");
+    expect(
+      refundVatShares(decimal("0.02"), [
+        { rate: "5.00", base: "0.01", tax: "0.00" },
+        { rate: "4.00", base: "9.62", tax: "0.38" },
+        { rate: "10.00", base: "9.09", tax: "0.91" },
+      ]),
+    ).toEqual([
+      { rate: "5.00", base: "0.00", tax: "0.00" },
+      { rate: "4.00", base: "0.01", tax: "0.00" },
+      { rate: "10.00", base: "0.01", tax: "0.00" },
+    ]);
   });
 
   it("shares a refund of a table's ticket only over the rates it sold at, not over the part payment it took off", async () => {

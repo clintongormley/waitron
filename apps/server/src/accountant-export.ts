@@ -40,6 +40,7 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   divideDecimal,
   multiplyDecimal,
   subtractDecimal,
@@ -108,27 +109,38 @@ export interface AccountantExport {
 
 /**
  * `amount` shared over a ticket's VAT rates whose gross is above zero, in proportion to that gross,
- * rounded to the cent, the last rate taking the remainder so the shares sum to `amount`. A rate at
- * or below zero is left out: on a table's ticket it is the part payment it took off, not a sale at
- * that rate. Within a rate the VAT is share × rate / (100 + rate), rounded to the cent, and the
- * base is the share less that VAT. A ticket with no rate above zero gives none.
+ * in whole cents: each rate takes its proportional share rounded down, and the cents left over go
+ * one at a time to the rates with the largest remainders, ties to the earlier rate in the
+ * breakdown, so no share is negative and the shares sum to `amount`. A rate whose gross is at or
+ * below zero is left out. Within a rate the VAT is share × rate / (100 + rate), rounded to the
+ * cent, and the base is the share less that VAT. A ticket with no rate above zero gives none.
  */
 export function refundVatShares(
   amount: Decimal,
   breakdown: readonly { rate: string; base: string; tax: string }[],
 ): RefundWithoutCorrective["vat"] {
   const sold = breakdown
-    .map((vat) => ({ vat, gross: addDecimal(decimal(vat.base), decimal(vat.tax)) }))
-    .filter(({ gross }) => compareDecimal(gross, decimal("0.00")) > 0);
+    .map((vat) => ({
+      vat,
+      gross: BigInt(decimalToCents(addDecimal(decimal(vat.base), decimal(vat.tax)))),
+    }))
+    .filter(({ gross }) => gross > 0n);
   if (sold.length === 0) return [];
-  const whole = sumDecimals(sold.map(({ gross }) => gross));
-  let shared = decimal("0.00");
-  return sold.map(({ vat, gross }, index) => {
-    const share =
-      index === sold.length - 1
-        ? subtractDecimal(amount, shared)
-        : divideDecimal(multiplyDecimal(amount, gross), whole, 2);
-    shared = addDecimal(shared, share);
+  const whole = sold.reduce((sum, { gross }) => sum + gross, 0n);
+  const cents = BigInt(decimalToCents(amount));
+  const shares = sold.map(({ gross }) => ({
+    cents: (cents * gross) / whole,
+    remainder: (cents * gross) % whole,
+  }));
+  const leftover = cents - shares.reduce((sum, share) => sum + share.cents, 0n);
+  const byRemainder = shares
+    .map((share, index) => ({ remainder: share.remainder, index }))
+    .sort((a, b) =>
+      a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1,
+    );
+  for (const { index } of byRemainder.slice(0, Number(leftover))) shares[index]!.cents += 1n;
+  return sold.map(({ vat }, index) => {
+    const share = centsToDecimal(Number(shares[index]!.cents));
     const rate = decimal(vat.rate);
     const tax = divideDecimal(multiplyDecimal(share, rate), addDecimal(decimal("100"), rate), 2);
     return { rate: vat.rate, base: subtractDecimal(share, tax), tax };
