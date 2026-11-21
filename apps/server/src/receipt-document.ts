@@ -108,6 +108,8 @@ export interface ReceiptDocument {
    * only the drawing knows whether a picture prints.
    */
   parts: Partial<Record<ReceiptPart, ElementRange>>;
+  /** The element of an A4 full invoice's "address · Tel. … · email" line, wrapped at its " · ". */
+  contactLine?: number;
   duplicate: boolean;
   practice: boolean;
 }
@@ -132,6 +134,8 @@ function adjustmentLabel(
   }
   return `${label.discount} ${formatter.format(percentBp / 100)}%`;
 }
+
+export const CONTACT_SEPARATOR = " · ";
 
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
 function sameAddress(lines: readonly string[], line: string, domicile: string): boolean {
@@ -179,6 +183,7 @@ export function buildReceiptDocument({
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
   const parts: ReceiptDocument["parts"] = {};
+  let contactLine: number | undefined;
   const part = (name: ReceiptPart, add: () => void): void => {
     const start = elements.length;
     add();
@@ -269,8 +274,11 @@ export function buildReceiptDocument({
   if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
   const phoneLine = phone ? `${label.phone} ${phone}` : "";
   if (surface === "a4" && !simplified) {
-    const line = [issuer.domicile, phoneLine, email].filter(Boolean).join(" · ");
-    if (line) text(line);
+    const line = [issuer.domicile, phoneLine, email].filter(Boolean).join(CONTACT_SEPARATOR);
+    if (line) {
+      contactLine = elements.length;
+      text(line);
+    }
   } else {
     if (phoneLine) part("phone", () => text(phoneLine));
     if (email) part("email", () => text(email));
@@ -609,5 +617,11 @@ export function buildReceiptDocument({
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 
-  return { elements, parts, duplicate, practice: simulated };
+  return {
+    elements,
+    parts,
+    ...(contactLine === undefined ? {} : { contactLine }),
+    duplicate,
+    practice: simulated,
+  };
 }

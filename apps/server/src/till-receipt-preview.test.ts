@@ -3,7 +3,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
@@ -57,9 +57,17 @@ describe("tillReceiptPreview", () => {
     );
   });
 
-  it("prints the registered address labelled when the venue cannot be read", async () => {
+  it("prints the registered address labelled when the venue cannot be read, and says so", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
     expect(await previewText("Carrer de Mallorca 123, 08010 Barcelona, Barcelona")).toContain(
       "Domicilio fiscal: Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
     );
+    expect(warn.mock.calls).toEqual([
+      [
+        "receipt.optional_read_failed",
+        { operation: "readVenueAddressLine", code: "receipt.read_failed" },
+      ],
+    ]);
   });
 });
