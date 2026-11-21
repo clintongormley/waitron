@@ -1008,7 +1008,8 @@ today are refused: STOP for the owner at once.
 **Interfaces:**
 - `billAdvances`: `id`, `working_order_id` (FK, restrict), `advance_sale_id` (FK `sales`, restrict,
   unique), `bill_payment_id` (FK, restrict, not null, unique),
-  `created_at`. `appendOnly()`, classified `ledger`.
+  `created_at`; and, added on 21 November in the branch's review, `order_label` (nullable), the
+  ticket's heading as it read when the advance was issued. `appendOnly()`, classified `ledger`.
 - `sale_lines.advance_role` (`'payment_on_account' | 'deduction'`, nullable) and
   `sale_lines.deducts_sale_id` (FK `sales`, nullable), CHECK
   `(advance_role is 'deduction') = (deducts_sale_id is not null)`. A `deduction` line is the stored
