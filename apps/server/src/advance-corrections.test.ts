@@ -9,6 +9,7 @@ import {
   drawerOpens,
   invoiceCorrections,
   parties,
+  readHistoryNodes,
   readLiveSeriesIdTx,
   saleLines,
   sales,
@@ -20,11 +21,19 @@ import {
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordCorrection, recordReplacement } from "@waitron/core";
+import {
+  computeCategorySales,
+  computeTopSellers,
+  computeVatSummaryForPeriod,
+  currentBusinessDay,
+  resolveVenueClock,
+} from "@waitron/reporting";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   centsToDecimal,
   decimal,
+  nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   sumDecimals,
@@ -216,6 +225,57 @@ async function registrosOf(saleId: string) {
   return rows as ((typeof rows)[number] & {
     facturasRectificadas: { IDFacturaRectificada: Record<string, string>[] } | null;
   })[];
+}
+
+function shiftDay(day: string, days: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The VAT summary's gross, category sales' gross and top sellers by name, around today. */
+function reportFigures() {
+  return inTx(venue(), async (tx) => {
+    const nodeId = brandNodeId(venue().cfg.nodeId);
+    const clock = await resolveVenueClock(tx, nodeId);
+    const day = currentBusinessDay(clock);
+    const common = {
+      nodeIds: await readHistoryNodes(tx, nodeId),
+      fromBusinessDay: shiftDay(day, -1),
+      toBusinessDay: shiftDay(day, 1),
+      timeZone: clock.timeZone,
+      dayCutover: clock.dayCutover,
+      cutoverChanges: clock.cutoverChanges,
+    };
+    const vat = await computeVatSummaryForPeriod(tx, common);
+    const categories = await computeCategorySales(tx, { ...common, mode: "at_time_of_sale" });
+    const sellers = await computeTopSellers(tx, { ...common, limit: 1000 });
+    return {
+      vat: vat.grossTotal,
+      categories: categories.gross,
+      topSellers: new Map(sellers.map((row) => [row.name, row])),
+    };
+  });
+}
+
+type Figures = Awaited<ReturnType<typeof reportFigures>>;
+
+/** How far each report moved between two readings; top sellers as the rows whose figures moved. */
+function moved(before: Figures, after: Figures) {
+  const by = (a: string, b: string | undefined) =>
+    centsToDecimal(Math.round(Number(a) * 100) - Math.round(Number(b ?? "0") * 100));
+  const topSellers: [string, string, string][] = [];
+  for (const [name, row] of after.topSellers) {
+    const earlier = before.topSellers.get(name);
+    const quantity = (Number(row.quantity) - Number(earlier?.quantity ?? "0")).toFixed(3);
+    const total = by(row.total, earlier?.total);
+    if (quantity !== "0.000" || total !== "0.00") topSellers.push([name, quantity, total]);
+  }
+  return {
+    vat: by(after.vat, before.vat),
+    categories: by(after.categories, before.categories),
+    topSellers,
+  };
 }
 
 function linesIn(tx: Transaction, saleId: string) {
@@ -526,6 +586,19 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ]);
 
     expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
+  });
+
+  it("example 1: €90 back on the rest's invoice and €10 on the advance move category sales by €20.00, as the VAT summary, and top sellers by the menu alone", async () => {
+    const before = await reportFigures();
+    const { advanceId, finalSaleId } = await takenOff();
+    await correct(finalSaleId, "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    await correct(advanceId, "10.00", [{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+
+    expect(moved(before, await reportFigures())).toEqual({
+      vat: "20.00",
+      categories: "20.00",
+      topSellers: [["Tasting menu", "1.000", "27.27"]],
+    });
   });
 
   /** Gives `amount` of the rest's invoice's cash back by a plain refund, filing no corrective. */
@@ -927,6 +1000,18 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     const entries = printed(ticket);
     expect(entries).toContain(`-1 ${words} 30,00`);
     expect(entries.some((line) => line.startsWith(`${spanish.total} -90,00`))).toBe(true);
+  });
+
+  it("example 1: a whole credit of the rest's invoice moves category sales by −€90.00, as the VAT summary, and takes the menu off top sellers", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const before = await reportFigures();
+    await creditWhole(rest.saleId);
+
+    expect(moved(before, await reportFigures())).toEqual({
+      vat: "-90.00",
+      categories: "-90.00",
+      topSellers: [["Tasting menu", "-1.000", "-109.09"]],
+    });
   });
 
   it("lets Correct invoice on the advance go ahead: the credited rest's invoice has nothing left", async () => {

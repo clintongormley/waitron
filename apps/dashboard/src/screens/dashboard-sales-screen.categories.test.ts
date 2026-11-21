@@ -458,6 +458,34 @@ describe("dashboard-sales-screen — category report", () => {
     expect(cells[9]!.querySelector(".visually-hidden")!.textContent).toBe("No registrada › ");
   });
 
+  it("names Payments on account in Spanish and English, with no path", async () => {
+    const withAdvances: CategorySalesDto = {
+      ...report,
+      tree: [
+        node({
+          kind: "payments_on_account",
+          id: "payments_on_account",
+          depth: 0,
+          gross: "-10.00",
+          net: "-9.09",
+          direct: { gross: "-10.00", net: "-9.09", lines: 3 },
+        }),
+      ],
+    };
+    const api = stubApi({
+      getCategorySales: vi.fn().mockResolvedValue(withAdvances),
+    });
+    const el = await mount(api);
+    expect(rows(el)).toEqual([
+      ["Pagos a cuenta", 0, "payments_on_account", "-10,00\u00a0€", "-9,09\u00a0€"],
+    ]);
+    const cell = el.shadowRoot!.querySelector<HTMLElement>("[data-test=category-row] th")!;
+    expect(cell.querySelector("[data-test=category-path]")).toBeNull();
+    cleanupWidgets();
+    setLocale("en");
+    expect(rows(await mount(api))[0]![0]).toBe("Payments on account");
+  });
+
   it("names the screen's own rows and the mode in English", async () => {
     setLocale("en");
     const api = stubApi({

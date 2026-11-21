@@ -31,11 +31,12 @@ export type CurrentClassifier = (
 ) => Promise<ReadonlyMap<string, SaleLineClassification>>;
 
 export interface CategoryTotal {
-  kind: "category" | "uncategorised" | "not_recorded" | "free_text";
-  /** The category id; "uncategorised"; "not_recorded"; for "free_text" the recorded text. */
+  kind: "category" | "uncategorised" | "not_recorded" | "payments_on_account" | "free_text";
+  /** The category id; "uncategorised"; "not_recorded"; "payments_on_account"; for "free_text" the
+   * recorded text. */
   id: string;
   /** A category's name (recorded, or today's in current mode); a free-text node's text; "" for
-   * uncategorised and not_recorded, which the screen names. */
+   * uncategorised, not_recorded and payments_on_account, which the screen names. */
   name: string;
   /** 0 at the root. */
   depth: number;
@@ -70,6 +71,7 @@ type LineRow = {
   dish_product_id: string | null;
   dish_category: string | null;
   dish_classification: string | null;
+  advance_role: string | null;
 };
 
 /** Which of two lines was issued later: by the original sale's issue time, then sale id, then
@@ -107,6 +109,9 @@ interface Node {
 
 const UNCATEGORISED: Segment = { kind: "uncategorised", id: "uncategorised", name: "" };
 const NOT_RECORDED: Segment = { kind: "not_recorded", id: "not_recorded", name: "" };
+const PAYMENTS_ON_ACCOUNT: Segment[] = [
+  { kind: "payments_on_account", id: "payments_on_account", name: "" },
+];
 
 /** The path a line is counted along, root first. */
 function pathOf(
@@ -140,6 +145,7 @@ const KIND_ORDER: Record<CategoryTotal["kind"], number> = {
   free_text: 0,
   uncategorised: 1,
   not_recorded: 2,
+  payments_on_account: 3,
 };
 
 function compareText(a: string, b: string): number {
@@ -202,20 +208,20 @@ export async function computeCategorySales(
   const { rows } = await tx.execute<LineRow>(sql`
     with lines as (
       select s.id as sale_id, s.issued_at, sl.line_no, sl.id, sl.line_total, sl.line_gross,
-        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification
+        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
+        sl.advance_role
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
-        and sl.advance_role is null
         ${nodeClause}
       union all
       select s.id, s.issued_at, sl.line_no, sl.id, -sl.line_total, -sl.line_gross,
-        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification
+        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification,
+        sl.advance_role
       from sale_voids sv
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
       where ${reversedSalesClause(window)}
-        and sl.advance_role is null
         ${nodeClause}
     ),
     -- A correction's extra named without its dish takes the dish of the first line up the chain
@@ -236,7 +242,7 @@ export async function computeCategorySales(
       coalesce(l.parent_line_id, u.parent_line_id) as parent_line_id,
       l.product_id, l.category, l.classification,
       dl.product_id as dish_product_id, dl.category as dish_category,
-      dl.classification as dish_classification
+      dl.classification as dish_classification, l.advance_role
     from lines l
     left join up u on u.id = l.id and u.parent_line_id is not null
     left join sale_lines dl on dl.id = coalesce(l.parent_line_id, u.parent_line_id)
@@ -270,7 +276,9 @@ export async function computeCategorySales(
   let classify: (line: (typeof lines)[number]) => Segment[];
   if (input.mode === "current") {
     const productIds = new Set<string>();
-    for (const line of lines) if (line.productId !== null) productIds.add(line.productId);
+    for (const line of lines) {
+      if (line.productId !== null && line.row.advance_role === null) productIds.add(line.productId);
+    }
     const today = await classifyCurrent!([...productIds]);
     classify = ({ productId }) => {
       return pathFor(productId === null ? null : today.get(productId), null);
@@ -291,7 +299,9 @@ export async function computeCategorySales(
   let grossCents = 0;
   for (const line of lines) {
     const { row } = line;
-    const path = classify(line);
+    // An advance's line, its deduction and their correctives are money paid ahead, not dishes: they
+    // net to what was given back, whatever product or category they recorded.
+    const path = row.advance_role === null ? classify(line) : PAYMENTS_ON_ACCOUNT;
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
     const gross = row.gross === null ? null : cents(row.gross);

@@ -660,6 +660,7 @@ export class SalesScreen extends LitElement {
   #categoryName(node: CategoryTotalDto): string {
     if (node.kind === "uncategorised") return t("sales.uncategorised");
     if (node.kind === "not_recorded") return t("sales.not_recorded");
+    if (node.kind === "payments_on_account") return t("sales.payments_on_account");
     return node.name;
   }
 
