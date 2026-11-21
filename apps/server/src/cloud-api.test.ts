@@ -132,17 +132,15 @@ it.each([
     });
     try {
       const page = await browser.newPage({ ignoreHTTPSErrors: setup });
-      await page
-        .context()
-        .addCookies([
-          {
-            name: cookie,
-            value: "test-session",
-            url: box,
-            sameSite: "Strict",
-            ...(setup && { secure: true }),
-          },
-        ]);
+      await page.context().addCookies([
+        {
+          name: cookie,
+          value: "test-session",
+          url: box,
+          sameSite: "Strict",
+          ...(setup && { secure: true }),
+        },
+      ]);
       // Intercept only the box-side receiver. The browser still sends the actual same-origin request.
       await page.route(
         setup ? "**/setup-api/cloud/sign-in/return" : "**/management-api/cloud/sign-in/return",
