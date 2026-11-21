@@ -24,6 +24,21 @@ const STANDING_KEY: Record<ServerRow["standing"], StringKey> = {
   evicted: "servers.standing.removed",
 };
 
+const STANDING_ORDER: Record<ServerRow["standing"], number> = {
+  "serving-primary": 0,
+  "serving-secondary": 1,
+  "sell-only": 2,
+  evicted: 3,
+};
+
+function inStandingOrder(nodes: readonly ServerRow[]): ServerRow[] {
+  return [...nodes].sort((a, b) => STANDING_ORDER[a.standing] - STANDING_ORDER[b.standing]);
+}
+
+function webAddress(contactUrl: string): boolean {
+  return /^https?:\/\//i.test(contactUrl) && URL.canParse(contactUrl);
+}
+
 type Action = "remove" | "clear";
 
 const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanation: StringKey }> = {
@@ -72,6 +87,22 @@ export class ServersScreen extends LitElement {
         gap: var(--wt-space-1) var(--wt-space-2);
       }
       wt-data-table::part(server-address) {
+        color: var(--wt-color-text);
+      }
+      wt-data-table::part(server-link) {
+        color: var(--wt-color-primary-text);
+      }
+      wt-data-table::part(server-link):focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      wt-data-table::part(server-link-address) {
+        color: inherit;
+      }
+      wt-data-table::part(server-replaced) {
+        display: block;
+        margin-top: var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text);
       }
       wt-data-table::part(server-role) {
@@ -363,7 +394,7 @@ export class ServersScreen extends LitElement {
   async #load(): Promise<void> {
     try {
       await this.#queries.watch("listServers", [], (listing) => {
-        this.servers = listing.nodes;
+        this.servers = inStandingOrder(listing.nodes);
         this.spare = listing.spare ?? null;
         this.authorityFingerprint = listing.authorityFingerprint;
         this.loadErrorKey = null;
@@ -433,7 +464,7 @@ export class ServersScreen extends LitElement {
     this.target = null;
     try {
       const listing = await this.api.listServers();
-      this.servers = listing.nodes;
+      this.servers = inStandingOrder(listing.nodes);
       this.spare = listing.spare ?? null;
       this.authorityFingerprint = listing.authorityFingerprint;
       this.loadErrorKey = null;
@@ -483,11 +514,25 @@ export class ServersScreen extends LitElement {
         cell: (row) =>
           html`<div part="server-cell">
             <div part="server-line">
-              <span
-                part=${row.contactUrl === "" ? "server-address server-no-address" : "server-address"}
-                data-test=${`address-${row.nodeId}`}
-                >${this.#address(row)}</span
-              >${
+              ${
+                webAddress(row.contactUrl)
+                  ? html`<a
+                      part="server-link"
+                      href=${row.contactUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      ><span
+                        part="server-address server-link-address"
+                        data-test=${`address-${row.nodeId}`}
+                        >${row.contactUrl}</span
+                      ></a
+                    >`
+                  : html`<span
+                      part=${row.contactUrl === "" ? "server-address server-no-address" : "server-address"}
+                      data-test=${`address-${row.nodeId}`}
+                      >${this.#address(row)}</span
+                    >`
+              }${
                 row.isSelf
                   ? html`<span part="server-self" data-test=${`self-${row.nodeId}`}
                       >${t("servers.this_server")}</span
@@ -503,6 +548,20 @@ export class ServersScreen extends LitElement {
             <span part="server-role" data-test=${`role-${row.nodeId}`}
               >${t(STANDING_KEY[row.standing])}</span
             >
+            ${
+              row.standing === "sell-only"
+                ? html`<span part="server-replaced" data-test=${`replaced-note-${row.nodeId}`}
+                    >${t("servers.replaced_note")}
+                    <a
+                      part="server-link"
+                      href=${guideHref("servers.handed-over")}
+                      target="_blank"
+                      rel="noopener"
+                      >${t("help.guide_link")}</a
+                    ></span
+                  >`
+                : nothing
+            }
             ${
               this.spare?.peerNodeId === row.nodeId
                 ? html`<div

@@ -1149,3 +1149,124 @@ it("shows cached spare delay, last copy and how a switch brings the copy up to d
     expect(copy()).toBeNull();
   });
 });
+
+describe("servers screen order, addresses and the replaced box", () => {
+  const SECOND_SPARE = "66666666-6666-4666-8666-666666666666";
+  const SCRIPTED = "77777777-7777-4777-8777-777777777777";
+  const NO_SLASHES = "88888888-8888-4888-8888-888888888888";
+  const byId = (id: string) => listing.nodes.find((n) => n.nodeId === id)!;
+
+  function rowOrder(el: ServersScreen): string[] {
+    return [...tableRoot(el).querySelectorAll<HTMLElement>("tbody tr[data-row-key]")].map(
+      (row) => row.dataset.rowKey!,
+    );
+  }
+
+  it("lists the main box first, then spares in the order sent, then replaced, then removed", async () => {
+    const sent: ServerListing = {
+      ...listing,
+      nodes: [
+        byId(REMOVED),
+        byId(FORMER),
+        byId(STANDBY),
+        { ...byId(STANDBY), nodeId: SECOND_SPARE, contactUrl: "https://second.venue.example" },
+        byId(SELF),
+      ],
+    };
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(sent) }));
+    expect(rowOrder(el)).toEqual([SELF, STANDBY, SECOND_SPARE, FORMER, REMOVED]);
+  });
+
+  it("makes an http or https address a link that opens in a new tab", async () => {
+    const el = await mount(
+      stubApi({
+        listServers: vi.fn().mockResolvedValue({
+          ...listing,
+          nodes: [
+            ...listing.nodes,
+            { ...byId(STANDBY), nodeId: SECOND_SPARE, contactUrl: "http://192.168.1.20:8080" },
+          ],
+        }),
+      }),
+    );
+    for (const [id, href] of [
+      [SELF, "https://till.venue.example"],
+      [SECOND_SPARE, "http://192.168.1.20:8080"],
+    ] as const) {
+      const address = inTable(el, `address-${id}`)!;
+      expect(address.textContent!.trim()).toBe(href);
+      const link = address.closest("a")!;
+      expect(link.getAttribute("href")).toBe(href);
+      expect(link.target).toBe("_blank");
+      expect(link.rel).toBe("noopener noreferrer");
+    }
+  });
+
+  it("paints a linked address in the brand text colour, unlike a plain address", async () => {
+    const el = await mount(
+      stubApi({
+        listServers: vi.fn().mockResolvedValue({
+          ...listing,
+          nodes: [
+            ...listing.nodes,
+            { ...byId(STANDBY), nodeId: SCRIPTED, contactUrl: "javascript:alert(1)" },
+          ],
+        }),
+      }),
+    );
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-primary-text)";
+    el.shadowRoot!.append(probe);
+    const brand = getComputedStyle(probe).color;
+    probe.remove();
+    expect(getComputedStyle(inTable(el, `address-${SELF}`)!).color).toBe(brand);
+    expect(getComputedStyle(inTable(el, `address-${SCRIPTED}`)!).color).not.toBe(brand);
+  });
+
+  it("leaves a missing address and a non-web address as plain text", async () => {
+    const el = await mount(
+      stubApi({
+        listServers: vi.fn().mockResolvedValue({
+          ...listing,
+          nodes: [
+            ...listing.nodes,
+            { ...byId(STANDBY), nodeId: SCRIPTED, contactUrl: "javascript:alert(1)" },
+            { ...byId(STANDBY), nodeId: NO_SLASHES, contactUrl: "https:spare.example" },
+          ],
+        }),
+      }),
+    );
+    expect(inTable(el, `address-${REMOVED}`)!.textContent!.trim()).toBe(t("servers.no_address"));
+    expect(inTable(el, `address-${SCRIPTED}`)!.textContent!.trim()).toBe("javascript:alert(1)");
+    expect(inTable(el, `address-${NO_SLASHES}`)!.textContent!.trim()).toBe("https:spare.example");
+    for (const id of [REMOVED, SCRIPTED, NO_SLASHES]) {
+      expect(inTable(el, `address-${id}`)!.closest("a")).toBeNull();
+      expect(tableRoot(el).querySelector(`tr[data-row-key="${id}"] a`)).toBeNull();
+    }
+  });
+
+  it("names a replaced box as not selling and says to keep it on, with the guide link", async () => {
+    const el = await mount();
+    expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Replaced; not selling");
+    const note = inTable(el, `replaced-note-${FORMER}`)!;
+    expect(note.textContent).toContain("Keep it switched on while it returns its invoice records.");
+    const link = note.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("/help/en/servers#handed-over");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener");
+    expect(link.textContent!.trim()).toBe(t("help.guide_link"));
+    for (const id of [SELF, STANDBY, REMOVED])
+      expect(inTable(el, `replaced-note-${id}`)).toBeNull();
+  });
+
+  it("words the replaced box in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Sustituido; no vende");
+    const note = inTable(el, `replaced-note-${FORMER}`)!;
+    expect(note.textContent).toContain(
+      "Mantenlo encendido mientras devuelve sus registros de facturación.",
+    );
+    expect(note.querySelector("a")!.getAttribute("href")).toBe("/help/es/servers#handed-over");
+  });
+});
