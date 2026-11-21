@@ -738,7 +738,7 @@ established. The only way past the refusal on a genuinely production box is deli
 The command was designed and built in #314.
 
 A box whose join to another server stopped partway can also be reset from the setup wizard, without
-a terminal, given the admin login the join used; the server refuses it in any other state. The box
+a terminal and with no sign-in; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them),
 `pending-adoption.json`, the record of the stopped join and, last, its own request file,

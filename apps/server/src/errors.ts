@@ -1732,9 +1732,7 @@ declare module "@waitron/shared" {
     /**
      * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,
      * or names a host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over
-     * any scheme, or a non-loopback host over plain http). `POST /setup-api/adopt` is
-     * UNAUTHENTICATED, so this is what stops an attacker driving the mirror to send its admin
-     * credential to such a target. It covers LITERAL-IP SSRF only: a public DNS hostname over https
+     * any scheme, or a non-loopback host over plain http). It covers LITERAL-IP SSRF only: a public DNS hostname over https
      * is trusted, so DNS rebinding to an internal address is NOT blocked here.
      *
      * NO params: the URL is attacker-controlled and is never echoed — it can carry a credential in

@@ -4159,10 +4159,10 @@ async function bootServer(
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
-  // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
-  // node that is not the chart's serving primary refuses it itself.
   // One store, so the Servers page lists the requests the new boxes' routes hold.
   const boxJoinRequests = createBoxJoinRequests();
+  // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
+  // node that is not the chart's serving primary refuses it itself.
   mountMembershipRemovalApi(
     app,
     {

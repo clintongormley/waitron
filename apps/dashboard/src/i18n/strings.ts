@@ -7042,7 +7042,7 @@ export const es: Record<StringKey, string> = {
   "servers.join_choice_label": "Código {code}",
   "servers.join_approved": "Aprobado. En el servidor nuevo, elige Terminar la unión.",
   "servers.join_recovery_key_missing":
-    "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar copias en Copias de seguridad y vuelve a elegir Comprobar.",
+    "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar las copias en Copias de seguridad y vuelve a elegir Comprobar.",
   "servers.join_module_config_invalid":
     "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
