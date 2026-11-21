@@ -337,7 +337,7 @@ vi.mock("./hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
 let monotonicOffset = 0;
-const monotonicNow = () => performance.now() + monotonicOffset;
+const monotonicNow = () => 1_000_000 + monotonicOffset;
 beforeEach(() => {
   monotonicOffset = 0;
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -1169,19 +1169,13 @@ it("issuing refuses when the only fresh reading is the box's alone", async () =>
   const f = configured();
   await f.clock();
   await f.select();
-  const stale = vi.spyOn(performance, "now");
-  const start = performance.now();
-  stale.mockImplementation(() => start + 31_000);
+  monotonicOffset += 31_000;
   vi.setSystemTime(Date.now() + 31_000);
-  try {
-    await boxOnlyComparison(f);
-    await expect(prepareSetup(f)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "second_clock_missing" },
-    });
-  } finally {
-    stale.mockRestore();
-  }
+  await boxOnlyComparison(f);
+  await expect(prepareSetup(f)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
+  });
 });
 
 it("issuing refuses when the only passing reading is older than thirty seconds and no fresh second clock exists", async () => {
@@ -1191,18 +1185,12 @@ it("issuing refuses when the only passing reading is older than thirty seconds a
   await f.select();
   source.internet.mockReset();
   source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
-  const stale = vi.spyOn(performance, "now");
-  const start = performance.now();
-  stale.mockImplementation(() => start + 30_001);
+  monotonicOffset += 30_001;
   vi.setSystemTime(Date.now() + 30_001);
-  try {
-    await expect(prepareSetup(f)).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "second_clock_missing" },
-    });
-  } finally {
-    stale.mockRestore();
-  }
+  await expect(prepareSetup(f)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "second_clock_missing" },
+  });
 });
 
 it("a select with another page's box-only comparison stays refused", async () => {
@@ -1287,11 +1275,11 @@ it("set-clock hands the host a disagreeing device's measurement and answers what
   expect(setBoxClock).toHaveBeenCalledWith(context.binding, {
     offsetMs: 120_000,
     agreesWithinMs: 30_000,
-    measuredAt: { wallMs: expect.closeTo(now, -2), monoMs: expect.any(Number) },
+    measuredAt: { wallMs: now, monoMs: 1_000_000 },
     reading: {
       boxAt: new Date(now).toISOString(),
       witnessAt: new Date(now + 120_000).toISOString(),
-      uncertaintyMs: expect.any(Number),
+      uncertaintyMs: 0,
     },
   });
   setBoxClock.mockResolvedValueOnce({ status: "refused", reason: "synchronised" } as never);
