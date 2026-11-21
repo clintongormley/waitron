@@ -582,7 +582,7 @@ describe("the password never leaves the body", () => {
     ],
   ];
 
-  it.each(RUNS)("%s", async (_label, run) => {
+  it.each(RUNS)("%s", async (label, run) => {
     const spies = CONSOLE.map((method) => vi.spyOn(console, method).mockImplementation(() => {}));
     try {
       const log = vi.fn<Logger>();
@@ -590,10 +590,13 @@ describe("the password never leaves the body", () => {
       const text = await response.text();
       expect(response.status).toBe(status);
       const logged = JSON.stringify(log.mock.calls);
+      const answeredByBoundary =
+        status >= 400 && !["plain HTTP", "another origin", "a body over the limit"].includes(label);
+      const errorCode = answeredByBoundary ? JSON.parse(text).error.code : undefined;
       expect(log).toHaveBeenCalledWith(
-        "debug",
+        answeredByBoundary ? "warn" : "debug",
         "http.request",
-        expect.objectContaining({ status }),
+        expect.objectContaining({ status, errorCode }),
       );
       for (const secret of [CANARY, CANARY.slice(0, 6), CANARY.slice(-8), SHORT]) {
         expect(logged).not.toContain(secret);
