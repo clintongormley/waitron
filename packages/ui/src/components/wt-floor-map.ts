@@ -307,8 +307,8 @@ export class WtFloorMap extends LitElement {
       [part="table"][data-held][data-merge],
       [part="table"][data-drop-target]:not([data-merge]) [part="shape"],
       [part="table"][data-drop-target][data-merge] {
-        outline: var(--wt-selected-ring);
-        outline-offset: var(--wt-focus-offset);
+        outline: var(--map-selection, var(--wt-selected-ring));
+        outline-offset: var(--map-selection-offset, var(--wt-focus-offset));
       }
 
       /* With keyboard focus the button's outline is the focus ring, and it goes past the selected ring
@@ -316,17 +316,42 @@ export class WtFloorMap extends LitElement {
          --wt-focus-offset. It comes after the merge's selected-ring rule above, which has the same
          specificity. */
       [part="table"][data-held]:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: calc(var(--wt-focus-offset) * 2);
+        outline: var(--map-focus, var(--wt-focus-ring));
+        outline-offset: var(--map-focus-offset, calc(var(--wt-focus-offset) * 2));
       }
 
       [part="table"][data-held][data-merge]:focus-visible::after {
         content: "";
         position: absolute;
         inset: 0;
-        outline: var(--wt-selected-ring);
-        outline-offset: var(--wt-focus-offset);
+        outline: var(--map-selection, var(--wt-selected-ring));
+        outline-offset: var(--map-selection-offset, var(--wt-focus-offset));
         pointer-events: none;
+      }
+
+      @media (forced-colors: active) {
+        :host {
+          /* Leave space between the pulse, selection and focus, even when they share a colour. */
+          --map-selection: 2px dashed Highlight;
+          --map-selection-offset: calc(var(--wt-space-1) * 1.5);
+          --map-focus: 2px solid Highlight;
+          --map-focus-offset: calc(var(--wt-space-1) * 2.5);
+        }
+
+        [part="table"]:focus-visible,
+        [part="table"][data-drop-target][data-merge]:focus-visible {
+          outline: var(--map-focus);
+          outline-offset: var(--map-focus-offset);
+        }
+
+        [part="table"][data-drop-target][data-merge]:focus-visible::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          outline: var(--map-selection);
+          outline-offset: var(--map-selection-offset);
+          pointer-events: none;
+        }
       }
 
       /* Above every table that is neither held nor focused, and above that table's allergy mark
@@ -1099,7 +1124,7 @@ export class WtFloorMap extends LitElement {
         outline === "overdue" || outline === "waiting"
           ? renderFloorRing(outline, false, { onFill: true })
           : nothing
-      }${still === null ? nothing : renderFloorPulse(table.pulse, !still)}</span
+      }${still === null ? nothing : renderFloorPulse(table.pulse, !still, { steadyForgotten: true })}</span
     >`;
   }
 }

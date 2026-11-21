@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { elementPixels, emulateForcedColours } from "@waitron/ui/src/test-helpers.js";
 import type { TableSignal } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -369,6 +370,37 @@ describe("till-floor-screen: zone tabs", () => {
     // Only Forgotten fills; an overdue tab keeps its tint.
     expect(getComputedStyle(buttonOf(el, "z3")).backgroundColor).toBe("rgb(1, 2, 3)");
   });
+
+  it.each(["light", "dark"] as const)(
+    "distinguishes the still forgotten tab in %s forced colours",
+    async (theme) => {
+      await emulateForcedColours("active");
+      try {
+        const { el } = await mountWidget<TillFloorScreen>(
+          "till-floor-screen",
+          {
+            zones: [...zones, zone("z3", "Bar", 2)],
+            tables: [
+              seated("t1", "z1"),
+              seated("t2", "z2", { timingBand: "forgotten" }),
+              seated("t3", "z3", { timingBand: "overdue" }),
+            ],
+            now,
+            reducedMotion: true,
+          },
+          theme,
+        );
+        const fill = async (id: string) => {
+          const button = buttonOf(el, id);
+          const box = button.getBoundingClientRect();
+          return (await elementPixels(button))(box.left + 8, box.top + 8);
+        };
+        expect(await fill("z2")).not.toEqual(await fill("z3"));
+      } finally {
+        await emulateForcedColours(null);
+      }
+    },
+  );
 
   it("draws a filled forgotten tab's icon in the filled tab's text colour", async () => {
     const { el, host } = await mount([

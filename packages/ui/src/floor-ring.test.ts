@@ -8,7 +8,7 @@ import {
   renderFloorPulse,
   renderFloorRing,
 } from "./floor-ring.js";
-import { cleanup, mount } from "./test-helpers.js";
+import { cleanup, elementPixels, emulateForcedColours, host, mount } from "./test-helpers.js";
 import "./components/wt-icon.js";
 
 declare module "vitest/browser" {
@@ -349,3 +349,33 @@ test("an outline with onFill left unset has one layer, as before", async () => {
     expect(shadow, name).not.toContain("rgb(9, 9, 9)");
   }
 });
+
+it.each(["light", "dark"] as const)(
+  "paints the inner and outer waits in %s forced colours",
+  async (scheme) => {
+    await commands.emulateColorScheme(scheme);
+    await emulateForcedColours("active");
+    try {
+      const el = await probe("overdue", false);
+      el.pulse = "fire";
+      el.moving = true;
+      await el.updateComplete;
+      const box = ringOf(el).parentElement!;
+      box.style.margin = "16px";
+      const { left, top, height } = box.getBoundingClientRect();
+      const at = await elementPixels(host);
+      const y = top + height / 2;
+      expect(at(left + 3, y)).not.toEqual(at(left + 6, y));
+      expect(Array.from({ length: 12 }, (_, i) => String(at(left - 3, y - 6 + i)))).toContain(
+        String(at(left + 3, y)),
+      );
+      el.ring = "waiting";
+      await el.updateComplete;
+      const waiting = await elementPixels(host);
+      expect(waiting(left + 1, y)).not.toEqual(waiting(left + 3, y));
+    } finally {
+      await emulateForcedColours(null);
+      await commands.emulateColorScheme(null);
+    }
+  },
+);

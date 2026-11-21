@@ -515,6 +515,14 @@ export class TillFloorScreen extends LitElement {
         color: var(--wt-color-on-danger);
       }
 
+      @media (forced-colors: active) {
+        .zone-tab.filled-forgotten wt-button::part(button),
+        [data-tabs-edge].filled-forgotten {
+          background: Highlight;
+          color: HighlightText;
+        }
+      }
+
       .map {
         display: flex;
         flex-direction: column;

@@ -211,14 +211,6 @@ Retiring the summary once its last consumer moves away remains open.
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
 
-## Contrast-theme styles for the remaining primitives
-
-The remaining contrast-theme work is `wt-floor-map` and the floor plan's overdue and forgotten
-rings (`packages/ui/src/floor-ring.ts`), whose backgrounds and shadows can lose their marks,
-read from their CSS, not run. The rule and how to test it
-are in [design-system.md](../developers/design-system.md#forced-colours-windows-contrast-themes).
-Size M.
-
 ## Bundle: Other browser check
 
 4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
