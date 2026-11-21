@@ -10,7 +10,8 @@ import type { DailyClose, DailyCloseInput, DepartmentTakings } from "./types.js"
  * The daily close for a list of boxes — or the whole venue when `input.nodeIds` is omitted (the
  * venue-wide dashboard overview) — over one business day. The sales figures use the opening day
  * for automatic close bills and the issue day for other sales. Voids and cash-up use their event
- * days. Each aggregate scopes by box only when a list is given.
+ * days. Department figures count bills when settled, using the opening day for zero-total bills
+ * the automatic close settles as it issues them. Aggregates scope by box when a list is given.
  */
 export async function computeDailyClose(
   tx: Transaction,

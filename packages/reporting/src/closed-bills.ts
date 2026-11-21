@@ -18,8 +18,7 @@ export async function computeDepartmentClosedBills(tx: Transaction, input: Daily
     from working_orders wo
     join sales s on s.working_order_id = wo.id
     left join departments d on d.id = s.receipt_department_id
-    where wo.settled_at is not null
-      and ${window(sql`case
+    where ${window(sql`case
         when s.source = 'business_day_close' and s.total = 0 then wo.trusted_opened_at
         else wo.settled_at
       end`)}

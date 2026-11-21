@@ -642,9 +642,12 @@ mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por ser
 queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
-imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
-o sin enviar sigue abierta. En **Ventas y recaudación**, selecciona el día en que se abrió la
-cuenta para ver la venta.
+imprimirlo. Para encontrar una venta emitida en el cierre automático, selecciona en **Ventas y
+recaudación** el día en que se abrió la cuenta. Cóbrala con **Cobrar** o registra una salida sin
+pagar. Una cuenta con platos en espera o sin enviar sigue abierta.
+
+Para la declaración de impuestos, consulta la declaración de IVA, que sigue las fechas registradas
+en las facturas.
 
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba

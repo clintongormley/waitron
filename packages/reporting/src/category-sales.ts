@@ -179,7 +179,7 @@ function toTotal(node: Node, depth: number): CategoryTotal {
  * never by its own id alone: a category moved in the period appears under each parent it had.
  *
  * Inclusion is the other reports' (`issuedSalesClause`, `reversedSalesClause`): a void in the range
- * of a sale issued outside it subtracts, at time of sale under the voided line's own recorded
+ * of a sale counted outside it subtracts, at time of sale under the voided line's own recorded
  * snapshot, and corrections other than a replacement net in with their signed lines. Every amount
  * is summed in whole cents.
  *

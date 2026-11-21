@@ -240,7 +240,7 @@ function saleInTradingWindow(window: WindowClause): SQL {
   )`;
 }
 
-/** Sales and their voids in the same window cancel. Voids in later windows leave the sale counted. */
+/** A condition on `sales s`. Sales and their voids in the same trading window cancel. */
 export function issuedSalesClause(window: WindowClause): SQL {
   return sql`${saleInTradingWindow(window)}
       and ${notSubstituteClause()}
@@ -248,7 +248,7 @@ export function issuedSalesClause(window: WindowClause): SQL {
       and not exists (select 1 from sale_voids vd where vd.sale_id = s.id and ${window(sql`vd.voided_at`)})`;
 }
 
-/** A void reverses the sale in its own window when the sale counted in another window. */
+/** A condition on `sale_voids sv` joined to `sales s`. The void reverses a sale from another trading window. */
 export function reversedSalesClause(window: WindowClause): SQL {
   return sql`${window(sql`sv.voided_at`)}
       and not (${saleInTradingWindow(window)})
