@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { isNumberedVersion } from "./box/release-list.mjs";
+import { compareReleaseVersions, isNumberedVersion } from "./box/release-list.mjs";
 
 const FOLDER = "packages/fiscal-verifactu/declarations";
 const isVersionTag = (name) => name.startsWith("v") && isNumberedVersion(name.slice(1));
 
 /**
  * What breaks "a released declaration never changes" in `repo` at `HEAD`, one line per problem:
- * a release tag whose declaration is missing at `HEAD` or differs from the tag's copy, or
- * a declaration in a checkout with no tags at all.
+ * a release tag whose declaration is missing at `HEAD` or differs from the tag's copy; a
+ * declaration below the highest version with no tag of its own; any declaration in a checkout with
+ * no tags at all, which cannot tell a released version from a prepared one.
  *
  * @param {string} repo
  * @returns {string[]}
@@ -31,6 +32,12 @@ export function releasedDeclarationProblems(repo) {
     else if (!atHead.has(name)) problems.push(`${path} was released as ${name} but is missing`);
     else if (atHead.get(name) !== atTag) problems.push(`${path} differs from its release ${name}`);
   }
+  const highest = declared.reduce((a, b) => (compare(a, b) >= 0 ? a : b), declared[0]);
+  for (const name of declared)
+    if (name !== highest && !released.includes(name))
+      problems.push(
+        `${FOLDER}/${name}.md is below the highest version ${highest} but has no tag ${name}`,
+      );
   return problems;
 }
 
@@ -44,6 +51,8 @@ function blobs(repo, ref) {
   }
   return entries;
 }
+
+const compare = (a, b) => compareReleaseVersions(a.slice(1), b.slice(1));
 
 // The caller's GIT_DIR and its family would point git at another repository than `repo`.
 function git(repo, ...args) {

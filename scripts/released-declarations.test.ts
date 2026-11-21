@@ -61,6 +61,31 @@ describe("releasedDeclarationProblems", () => {
     expect(releasedDeclarationProblems(repo)).toEqual([]);
   });
 
+  it("fails a version below the highest that has no tag of its own", () => {
+    const repo = repository({ "v1.0.0.md": "one\n", "v1.0.1.md": "two\n" });
+    tag(repo, "pre-sqlite-migration");
+    const problems = releasedDeclarationProblems(repo);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("no tag v1.0.0");
+  });
+
+  it("orders versions as numbers, not text", () => {
+    const repo = repository({ "v1.0.9.md": "nine\n", "v1.0.10.md": "ten\n" });
+    tag(repo, "v1.0.9");
+    expect(releasedDeclarationProblems(repo)).toEqual([]);
+  });
+
+  it("orders versions past JavaScript's exact whole numbers", () => {
+    const repo = repository({
+      "v9007199254740992.0.0.md": "lower\n",
+      "v9007199254740993.0.0.md": "higher\n",
+    });
+    tag(repo, "v9007199254740993.0.0");
+    const problems = releasedDeclarationProblems(repo);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("no tag v9007199254740992.0.0");
+  });
+
   it("passes a tagged version whose file is unchanged", () => {
     const repo = repository({ "v1.0.0.md": "one\n", "template.md": "t\n" });
     tag(repo, "v1.0.0");
@@ -121,15 +146,11 @@ describe("releasedDeclarationProblems", () => {
     ]);
   });
 
-  it("accepts a new declaration below a published release and guards it once tagged", () => {
-    const repo = repository({ "v2.0.0.md": "new major\n" });
-    tag(repo, "v2.0.0");
-    commit(repo, { "v1.4.0.md": "older line\n" }, "prepare older minor");
-    expect(releasedDeclarationProblems(repo)).toEqual([]);
-    tag(repo, "v1.4.0");
-    commit(repo, { "v1.4.0.md": "edited\n" }, "edit older minor");
+  it("refuses a prepared release candidate left behind by a newer declaration", () => {
+    const repo = repository({ "v1.3.0-rc.1.md": "candidate\n", "v1.3.0.md": "stable\n" });
+    tag(repo, "pre-sqlite-migration");
     expect(releasedDeclarationProblems(repo)).toEqual([
-      `${FOLDER}/v1.4.0.md differs from its release v1.4.0`,
+      `${FOLDER}/v1.3.0-rc.1.md is below the highest version v1.3.0 but has no tag v1.3.0-rc.1`,
     ]);
   });
 

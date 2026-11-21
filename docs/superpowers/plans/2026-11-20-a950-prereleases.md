@@ -30,10 +30,6 @@ the test-box rehearsal and scheduled upgrades have separate steps.
   version with the existing `software-identity.test.ts` fixture and run the golden write-path
   and immutability suites unchanged.
 
-**20 November, 22:45.** The owner asked to allow older version lines to receive releases at any
-time. The watcher directed Lane F to remove the highest-version requirement from preparation,
-tagging and the declaration guard. The release guide describes the result.
-
 ## Install by hand and keep offers readable
 
 - Require the signed prerelease flag and version suffix to agree in `scripts/box/release-list.mjs`.

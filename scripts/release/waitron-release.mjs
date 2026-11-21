@@ -64,9 +64,13 @@ function onCleanBranchAtOriginMain(run, branch) {
   return head;
 }
 
-function refuseIfAlreadyReleased(run, version) {
+function refuseUnlessNextVersion(run, version) {
   const released = releasedVersions(run("git", ["ls-remote", "--tags", "origin", "refs/tags/v*"]));
   if (released.includes(version)) throw new Error(`${version} is already released`);
+  const highest = released.at(-1);
+  if (highest !== undefined && compareReleaseVersions(version, highest) <= 0) {
+    throw new Error(`${version} is not above ${highest}, the highest released version`);
+  }
 }
 
 const declarationFile = (version) => `packages/fiscal-verifactu/declarations/v${version}.md`;
@@ -75,7 +79,7 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
   requireVersion(version);
   const branch = `release/${version}`;
   onCleanBranchAtOriginMain(run, branch);
-  refuseIfAlreadyReleased(run, version);
+  refuseUnlessNextVersion(run, version);
 
   const date = madridDate(now);
   print(run("pnpm", declarationArgs("show", version, place, date)));
@@ -115,7 +119,7 @@ export async function tagRelease({ version, run }) {
     throw new Error(`${file} is not committed on main; land the release pull request first`);
   }
   run("pnpm", declarationArgs("check", version));
-  refuseIfAlreadyReleased(run, version);
+  refuseUnlessNextVersion(run, version);
 
   const runs = JSON.parse(
     run("gh", [
