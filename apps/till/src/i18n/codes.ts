@@ -662,8 +662,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   },
   "advance.taken_off_final_invoice": {
-    en: "This payment on account was already taken off the table's receipt{invoiceNumber}. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
-    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+    en: "This payment on account was already taken off the table's receipt{invoiceNumber}, so this ticket cannot be corrected. To give money back, first use Correct invoice on {receipt}: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on {it}. For anything more, choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que este ticket no se puede rectificar. Para devolver dinero, usa primero Rectificar factura en {receipt}: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en {it}. Para lo que falte, elige Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
   },
   "advance.correction_open": {
     en: "The table's receipt cannot be issued while a correction of the payment on account{invoiceNumber} is open. In Correct invoice, use Finish now or Discard, then try again.",
@@ -1082,6 +1082,24 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   filed_figures_changed: FIGURES_UNCHECKED,
 };
 
+/** `advance.taken_off_final_invoice` once nothing paid on the table's receipt is left to give back. */
+const TAKEN_OFF_NOTHING_LEFT = {
+  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, and nothing paid on {it} is left to give back. Choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber} y no queda nada pagado en {it} por devolver. Elige Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+};
+
+/** What `invoice_correction.money_short` adds when the receipt took payments on account off. */
+const MONEY_SHORT_ADVANCES = {
+  one: {
+    en: "For the rest, once this correction is done, choose Refund a payment on the ticket of the payment on account {numbers}: it gives money back from that payment and files no corrective invoice; the accountant's export lists it.",
+    es: "Para lo que falte, cuando termine esta rectificación, elige Devolver un pago en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  },
+  many: {
+    en: "For the rest, once this correction is done, choose Refund a payment on the tickets of the payments on account {numbers}: it gives money back from those payments and files no corrective invoice; the accountant's export lists it.",
+    es: "Para lo que falte, cuando termine esta rectificación, elige Devolver un pago en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  },
+};
+
 /** `order.dining_fixed` by the way the order is sold. */
 const DINING_FIXED: Record<string, { en: string; es: string }> = {
   eat_in: {
@@ -1105,9 +1123,14 @@ export function codeMessage(
     dishName?: unknown;
     dishNames?: unknown;
     invoiceNumber?: unknown;
+    finalMoneyLeft?: unknown;
+    advanceInvoiceNumbers?: unknown;
   },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  if (code === "advance.taken_off_final_invoice") return takenOffMessage(locale, params);
+  if (code === "invoice_correction.money_short")
+    return moneyShortMessage(locale, params?.advanceInvoiceNumbers);
   if (
     code === "order.dining_fixed" &&
     typeof params?.dining === "string" &&
@@ -1132,7 +1155,6 @@ export function codeMessage(
   if (
     code === "tender.refund_of_advance" ||
     code === "bill.refund_of_advance" ||
-    code === "advance.taken_off_final_invoice" ||
     code === "advance.correction_open"
   )
     return message.replace(
@@ -1160,6 +1182,39 @@ export function codeMessage(
     if (field === "dishName") return dishName;
     return listed;
   });
+}
+
+function takenOffMessage(
+  locale: string,
+  params: { invoiceNumber?: unknown; finalMoneyLeft?: unknown } | undefined,
+): string {
+  const nothingLeft =
+    typeof params?.finalMoneyLeft === "string" && /^0+(\.0+)?$/.test(params.finalMoneyLeft);
+  const number = typeof params?.invoiceNumber === "string" ? params.invoiceNumber : undefined;
+  const message = pickLocale(
+    nothingLeft ? TAKEN_OFF_NOTHING_LEFT : CODE_MESSAGES["advance.taken_off_final_invoice"]!,
+    locale,
+  );
+  return message.replace(/\{(invoiceNumber|receipt|it)\}/g, (_, field: string) => {
+    if (field === "invoiceNumber") return number === undefined ? "" : ` ${number}`;
+    if (number !== undefined) return number;
+    return field === "receipt"
+      ? pickLocale({ en: "that receipt", es: "ese ticket" }, locale)
+      : pickLocale({ en: "it", es: "él" }, locale);
+  });
+}
+
+function moneyShortMessage(locale: string, advanceInvoiceNumbers: unknown): string {
+  const message = pickLocale(CODE_MESSAGES["invoice_correction.money_short"]!, locale);
+  const numbers = Array.isArray(advanceInvoiceNumbers)
+    ? advanceInvoiceNumbers.filter((number): number is string => typeof number === "string")
+    : [];
+  if (numbers.length === 0) return message;
+  const listed = new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(
+    numbers,
+  );
+  const more = pickLocale(MONEY_SHORT_ADVANCES[numbers.length === 1 ? "one" : "many"], locale);
+  return `${message} ${more.replace("{numbers}", () => listed)}`;
 }
 
 function zoneAdmissionMessage(reason: unknown, locale: string): string {

@@ -3724,6 +3724,49 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     expect(root(el).querySelector("[data-payment-taken-off]")).toBeNull();
   });
 
+  const givenBackRow = (givenBack: string) =>
+    balanceOf({
+      ...takenOffRow,
+      payments: [{ ...takenOffRow.payments[0]!, left: "30.00", givenBack }],
+    });
+
+  it("shows what Refund a payment gave back of it, and offers to refund only the rest", async () => {
+    const el = await mount({ balance: givenBackRow("20.00") });
+
+    const row = root(el).querySelector("[data-payment]")!;
+    expect(text(row.querySelector("[data-payment-given-back]"))).toBe(
+      `${money("20.00")} given back`,
+    );
+    expect(text(row)).toContain(`${t("bill_pay.applied")} ${money("30.00")}`);
+    expect(row.querySelector("[data-payment-refund]")!.getAttribute("aria-label")).toBe(
+      t("bill_pay.refund_label")
+        .replace("{n}", "1")
+        .replace("{amount}", () => money("10.00")),
+    );
+  });
+
+  it("says nothing was given back while nothing was, and offers no Refund once all of it was", async () => {
+    const none = await mount({ balance: givenBackRow("0.00") });
+    expect(root(none).querySelector("[data-payment-given-back]")).toBeNull();
+    const all = await mount({ balance: givenBackRow("30.00") });
+    expect(text(root(all).querySelector("[data-payment-given-back]"))).toBe(
+      `${money("30.00")} given back`,
+    );
+    expect(root(all).querySelector("[data-payment-refund]")).toBeNull();
+  });
+
+  it("words what was given back in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount({ balance: givenBackRow("20.00") });
+      expect(text(root(el).querySelector("[data-payment-given-back]"))).toBe(
+        `${money("20.00")} devueltos`.replace(/\s+/g, " "),
+      );
+    } finally {
+      setLocale("en");
+    }
+  });
+
   it("shows, and offers to refund, what a part correction left", async () => {
     const el = await mount({ balance: advanceRow("20.00") });
 

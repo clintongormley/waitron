@@ -24,6 +24,11 @@ export interface PayRefusal {
   reason?: string;
   /** The ticket a payment on account was issued on, which gives it back. */
   invoiceNumber?: string;
+  /** An `advance.taken_off_final_invoice`'s: what Correct invoice on the table's receipt can still
+   * give back. */
+  finalMoneyLeft?: string;
+  /** An `invoice_correction.money_short`'s: the payments on account the receipt took off. */
+  advanceInvoiceNumbers?: string[];
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }

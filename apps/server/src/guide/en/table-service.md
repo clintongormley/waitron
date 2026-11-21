@@ -332,6 +332,10 @@ such as **Other**, asks you to type one. Choose **Refund**. For cash, hand the m
 once the refund is done. **Download for accountant (XLSX)** lists these refunds on a sheet of their
 own, with the VAT that stays declared because no corrective invoice is filed.
 
+To give back a part payment that the table's receipt already took off, first use **Correct
+invoice** on the table's receipt. Once that has given back everything paid on it, choose **Refund a
+payment** on the part payment's own receipt for the rest.
+
 After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens filled in.
 The payment is chosen when only one can be refunded on this device. The amount is the dishes'
 total, the tip is 0.00, the reason is the one you gave for the cancel, and the dishes are listed

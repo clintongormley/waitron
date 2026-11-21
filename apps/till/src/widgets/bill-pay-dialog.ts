@@ -1437,6 +1437,14 @@ export class TillBillPayDialog extends LitElement {
           ${t("bill_pay.applied")} ${this.#money(payment.left ?? payment.applied)} ·
           ${t("bill_pay.tip")} ${this.#money(payment.tipLeft ?? payment.tip)}
         </p>
+        ${
+          payment.givenBack !== undefined &&
+          compareDecimal(decimal(payment.givenBack), decimal("0")) > 0
+            ? html`<p data-payment-given-back>
+                ${t("bill_pay.given_back").replace("{amount}", () => this.#money(payment.givenBack!))}
+              </p>`
+            : nothing
+        }
         ${payment.refunds.map(
           (refund) =>
             html`<p class="muted" data-payment-refunded>

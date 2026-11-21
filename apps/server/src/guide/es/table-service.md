@@ -351,6 +351,10 @@ entrega el dinero al cliente cuando la devolución se haya hecho. **Descargar pa
 lista estas devoluciones en una hoja propia, con el IVA que sigue declarado porque no se emite
 factura rectificativa.
 
+Para devolver un pago parcial que el ticket de la mesa ya descontó, usa primero **Rectificar
+factura** en el ticket de la mesa. Cuando haya devuelto todo lo pagado en él, elige **Devolver un
+pago** en el ticket propio del pago parcial para el resto.
+
 Después de **Cancelar y devolver**, o de **Cerrar mesa** con platos marcados, la ventana se abre
 ya rellenada. El pago queda elegido cuando solo uno se puede devolver en este dispositivo. El
 importe es el total de los platos, la propina es 0,00, el motivo es el que diste al cancelar y los
