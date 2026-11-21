@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { OnRefusal } from "./cloud-translation.js";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import { machinePayload, readCloudInstallationView } from "./cloud-installation.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 
@@ -36,11 +36,14 @@ export function readCloudEmailGrant(value: unknown): CloudEmailGrant | null {
 }
 
 async function emailExchange(
-  state: SavedCloudState,
+  state: CloudInstallationCredentials,
   action: "configuration" | "email-submit" | "email-status",
   operationId: string,
   body: string,
   signal?: AbortSignal,
+  endpoint = action === "configuration"
+    ? "/api/installations/configuration"
+    : "/v1/installations/email/" + action.slice(6),
 ) {
   const bytes = machinePayload(state, {
     action,
@@ -48,24 +51,18 @@ async function emailExchange(
     lease: JSON.stringify(state.lifecycle!.lease),
     body,
   });
-  const response = await fetch(
-    state.origin +
-      (action === "configuration"
-        ? "/api/installations/configuration"
-        : "/v1/installations/email/" + action.slice(6)),
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        payload: bytes.toString("base64url"),
-        signature: signCloudPayload(bytes, state.privateKey),
-      }),
-      redirect: "error",
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
-        : AbortSignal.timeout(8000),
-    },
-  );
+  const response = await fetch(state.origin + endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      payload: bytes.toString("base64url"),
+      signature: signCloudPayload(bytes, state.privateKey),
+    }),
+    redirect: "error",
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
+      : AbortSignal.timeout(8000),
+  });
   const value: unknown = JSON.parse(
     new TextDecoder("utf-8", { fatal: true }).decode(
       await readCloudResponseBytes(response, action === "configuration" ? 65536 : 4096),
@@ -74,7 +71,7 @@ async function emailExchange(
   return { response, value };
 }
 export async function fetchCloudEmailGrant(
-  state: SavedCloudState,
+  state: CloudInstallationCredentials,
   signal?: AbortSignal,
   managementOrigin?: string,
   onRefusal?: OnRefusal,
@@ -104,6 +101,36 @@ export async function fetchCloudEmailGrant(
     throw new AppError("cloud.unavailable", {});
   }
   return readCloudEmailGrant((value as Record<string, unknown>).emailRelay);
+}
+
+export async function requestSetupCloudEmailGrant(
+  state: CloudInstallationCredentials,
+  requestId: string,
+): Promise<boolean> {
+  try {
+    const { response, value } = await emailExchange(
+      state,
+      "configuration",
+      randomUUID(),
+      JSON.stringify({
+        purpose: "waitron-cloud-setup-email-consent-v1",
+        requestId,
+        consent: true,
+        consentVersion: "local-v1",
+      }),
+      undefined,
+      "/api/pairing/email-grant",
+    );
+    if (response.ok) return readCloudEmailGrant(record(value) && value.emailRelay) !== null;
+    if (response.status < 500) return false;
+  } catch {
+    // Cloud may have saved the choice before the reply was lost.
+  }
+  try {
+    return (await fetchCloudEmailGrant(state)) !== null;
+  } catch {
+    return false;
+  }
 }
 
 export interface CloudAccountEmail {

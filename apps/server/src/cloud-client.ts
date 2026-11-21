@@ -14,6 +14,7 @@ import { fetchSetupAddress } from "./cloud-address-lookup.js";
 import { fetchOwnerRecovery, ownerRecoveryBinding } from "./cloud-owner-recovery.js";
 import {
   fetchCloudEmailGrant,
+  requestSetupCloudEmailGrant,
   sendCloudEmail,
   type CloudEmailGrant,
   type CloudAccountEmail,
@@ -582,6 +583,9 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   async function setupAddressAttempt(binding: CloudSignInBinding) {
     if (options.signIn?.setup !== true) return;
     const state = await signInState();
+    return provisionalSetupAttempt(state, binding);
+  }
+  function provisionalSetupAttempt(state: CloudSignInState, binding: CloudSignInBinding) {
     const attempt = state.attempt;
     if (
       attempt?.kind === "setup" &&
@@ -593,10 +597,25 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     )
       return { state, attempt, registration: attempt.provisionalRegistration };
   }
-  // Only lookups wait for provisional lease renewal, so local publication can record the node.
-  const setupAddressTurn = Symbol();
-  let setupAddressLease:
+  // An address lookup never holds the connection turn used by Provision.
+  const setupServiceTurn = Symbol();
+  let setupServiceLease:
     { requestId: string; credentials: CloudInstallationCredentials } | undefined;
+
+  function setupServiceAccess(
+    state: CloudSignInState,
+    attempt: { requestId: string },
+    registration: CloudRegistration,
+  ) {
+    if (setupServiceLease?.requestId !== attempt.requestId) {
+      const { origin, publicKey, privateKey } = state;
+      setupServiceLease = {
+        requestId: attempt.requestId,
+        credentials: { origin, publicKey, privateKey, environment: "test", view: { registration } },
+      };
+    }
+    return setupServiceLease;
+  }
 
   async function bindSetupAccount(
     state: CloudSignInState,
@@ -623,6 +642,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     await save({
       version: 2,
       signedIn: true,
+      ...(state.attempt?.emailRelayEnabled && { emailRelayEnabled: true }),
       origin: state.origin,
       privateKey: state.privateKey,
       publicKey: state.publicKey,
@@ -776,27 +796,13 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         async () => {
           const held = await setupAddressAttempt(binding);
           if (!held) throw new AppError("cloud.request_unavailable", {});
-          if (setupAddressLease?.requestId !== held.attempt.requestId) {
-            const { origin, publicKey, privateKey } = held.state;
-            setupAddressLease = {
-              requestId: held.attempt.requestId,
-              credentials: {
-                origin,
-                publicKey,
-                privateKey,
-                environment: "test",
-                view: { registration: held.registration },
-              },
-            };
-          }
-          await installationClient(setupAddressLease.credentials, async () => {}).ensureLease(
-            signal,
-          );
-          return setupAddressLease;
+          const access = setupServiceAccess(held.state, held.attempt, held.registration);
+          await installationClient(access.credentials, async () => {}).ensureLease(signal);
+          return access;
         },
         true,
         signal,
-        setupAddressTurn,
+        setupServiceTurn,
       ).catch((error: unknown) => {
         if (error instanceof AppError || !signal.aborted) throw error;
         throw new AppError("cloud.unavailable", {});
@@ -807,8 +813,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         throw new AppError("cloud.request_unavailable", {});
       return fetchSetupAddress(access.credentials, input, signal);
     },
-    async publishSetupSignIn(binding: CloudSignInBinding, nodeId: string) {
-      await run(async () => {
+    async publishSetupSignIn(binding: CloudSignInBinding, nodeId: string, staffEmail?: true) {
+      return run(async () => {
         const state = await readState();
         if (state?.version !== 4 || options.signIn?.setup !== true) return;
         const attempt = state.attempt;
@@ -819,8 +825,30 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           Date.parse(attempt.expiresAt) <= Date.now()
         )
           return;
-        attempt.publishedNodeId = nodeId;
-        await writeState(state);
+        if (!attempt.publishedNodeId && staffEmail) {
+          const held = provisionalSetupAttempt(state, binding);
+          if (held) {
+            const { credentials } = setupServiceAccess(state, attempt, held.registration);
+            try {
+              const signal = AbortSignal.timeout(8000);
+              await run(
+                () => installationClient(credentials, async () => {}).ensureLease(signal),
+                true,
+                signal,
+                setupServiceTurn,
+              );
+              if (await requestSetupCloudEmailGrant(credentials, attempt.requestId))
+                attempt.emailRelayEnabled = true;
+            } catch {
+              // Mail server settings are already saved when this optional Cloud request runs.
+            }
+          }
+        }
+        if (!attempt.publishedNodeId) {
+          attempt.publishedNodeId = nodeId;
+          await writeState(state);
+        }
+        return staffEmail ? attempt.emailRelayEnabled === true : undefined;
       });
     },
     async startSignIn(binding: CloudSignInBinding, authorize: () => Promise<void>) {
@@ -836,6 +864,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           (attempt?.resumeSetup ||
             (attempt?.kind === "setup" && attempt.phase !== "awaiting_cloud"));
         const provisionalRegistration = resumeSetup ? attempt?.provisionalRegistration : undefined;
+        const emailRelayEnabled = resumeSetup ? attempt?.emailRelayEnabled : undefined;
         if (attempt && attempt.kind !== binding.kind) {
           if (setup) throw new AppError("cloud.binding_conflict", {});
           try {
@@ -896,7 +925,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             tab: binding.tab,
             session: hashSessionToken(binding.session),
             ...(setup && { kind: "setup" as const }),
-            ...(resumeSetup && { resumeSetup: true, provisionalRegistration }),
+            ...(resumeSetup && { resumeSetup: true, provisionalRegistration, emailRelayEnabled }),
           });
           state.attempt = attempt;
           await writeState(state);

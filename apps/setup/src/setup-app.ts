@@ -178,6 +178,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
     delete body.aeatCert;
   }
   if (draft.mode === "demo") delete body.email;
+  if (draft.mode !== "prepare" || body.cloudStaffEmail !== true) delete body.cloudStaffEmail;
   if (draft.mode !== "demo") delete body.demoVenueNameSource;
   delete body.registeredAddress;
   return body as ProvisionBody;
@@ -839,6 +840,30 @@ export class SetupApp extends LitElement {
   #cloudSignInAvailable = false;
   @state() private cloudAddressProvider?: AddressLookupProvider;
   #addressLoad?: Promise<AddressLookupProvider | undefined>;
+  @state() private cloudStaffEmailAvailable = false;
+  #staffEmailLoad?: Promise<boolean | undefined>;
+
+  #loadCloudStaffEmail(): void {
+    this.cloudStaffEmailAvailable = false;
+    const tab =
+      this.screen === "email" &&
+      this.draft.mode === "prepare" &&
+      !this.developmentMode &&
+      !this.draft.configurationImport
+        ? this.#cloudSignInTab
+        : undefined;
+    const pending = tab
+      ? this.api
+          .cloudAddressLookup(tab, { kind: "available" })
+          .then(({ available }) => available)
+          .catch(() => false)
+      : undefined;
+    this.#staffEmailLoad = pending;
+    void pending?.then((available) => {
+      if (this.isConnected && this.#staffEmailLoad === pending)
+        this.cloudStaffEmailAvailable = available === true;
+    });
+  }
 
   #loadCloudAddressProvider(): void {
     this.cloudAddressProvider = undefined;
@@ -1075,6 +1100,7 @@ export class SetupApp extends LitElement {
   @state() private breakGlassSecret?: string;
   @state() private breakGlassKeyName?: string;
   @state() private breakGlassKeyInBackups = false;
+  @state() private cloudStaffEmailUnavailable = false;
 
   /**
    * Kept apart from {@link SetupApp.breakGlassSecret} because
@@ -1238,6 +1264,7 @@ export class SetupApp extends LitElement {
     if (!changed.has("screen")) return;
     if (this.screen !== "connection") this.#joinAbort.abort();
     this.#loadCloudAddressProvider();
+    this.#loadCloudStaffEmail();
   }
 
   #requestModeChoice(
@@ -1899,6 +1926,7 @@ export class SetupApp extends LitElement {
       this.breakGlassSecret = result.breakGlassSecret;
       this.breakGlassKeyName = result.breakGlassKeyName;
       this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
+      this.cloudStaffEmailUnavailable = result.cloudStaffEmailUnavailable === true;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
@@ -2502,6 +2530,7 @@ export class SetupApp extends LitElement {
     this.breakGlassSecret = undefined;
     this.breakGlassKeyName = undefined;
     this.breakGlassKeyInBackups = false;
+    this.cloudStaffEmailUnavailable = false;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -2956,6 +2985,8 @@ export class SetupApp extends LitElement {
         return html`<setup-email-screen
           data-test="screen-email"
           .email=${this.draft.email}
+          .cloudStaffEmailAvailable=${this.cloudStaffEmailAvailable}
+          .cloudStaffEmail=${this.draft.cloudStaffEmail === true}
           .mode=${this.draft.mode === "prepare" ? "prepare" : "live"}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
           .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
@@ -3040,6 +3071,7 @@ export class SetupApp extends LitElement {
           .breakGlassSecret=${this.breakGlassSecret}
           .breakGlassKeyName=${this.breakGlassKeyName}
           .breakGlassKeyInBackups=${this.breakGlassKeyInBackups}
+          .cloudStaffEmailUnavailable=${this.cloudStaffEmailUnavailable}
           .mirrorJoin=${this.mirrorJoin}
           .serversUrl=${this.primaryServersUrl}
           .onboardingIntent=${this.draft.mode}

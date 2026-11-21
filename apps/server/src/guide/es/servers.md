@@ -327,8 +327,9 @@ una sugerencia en **Buscar el domicilio fiscal** o **Buscar la dirección**. Rev
 que se han rellenado y corrígelos antes de continuar. Si añades un local a una empresa que ya
 usa Cloud o la búsqueda no está disponible, escribe las direcciones a mano.
 
-Introduce el servidor de correo durante la configuración. Si eliges **Omitir** antes de abrir
-Cloud o importas una configuración, escribe las direcciones a mano y conéctate más tarde desde
+Introduce el servidor de correo durante la configuración. En Preparar también puedes
+[elegir Cloud para el correo del personal](email.md#cloud-staff-email). Si eliges **Omitir** antes de
+abrir Cloud o importas una configuración, escribe las direcciones a mano y conéctate más tarde desde
 **Servicios Cloud**.
 
 Si tu sesión de Cloud caduca o la cierras antes de que se registre el local, termina de

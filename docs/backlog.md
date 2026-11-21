@@ -1304,8 +1304,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   on 20 November using Waitron [#3893](https://github.com/clintongormley/waitron/pull/3893)
   and Cloud [#1343](https://github.com/waitron-io/waitron-cloud/pull/1343).
   Configured test boxes also offer sign-in in fresh Prepare and development Live,
-  then file the saved venue after restart. [Early setup still needs](superpowers/plans/2026-11-21-setup-cloud-sign-in-early.md)
-  staff email consent. The address
+  then file the saved venue after restart. Prepare on configured test boxes also offers
+  [staff email through Cloud](superpowers/plans/2026-11-21-setup-cloud-staff-email.md). The hosted
+  test release and live Google qualification remain open. The address
   picker requires one Spanish business with no tax number or venues. Adding a venue to an
   existing Cloud business still needs manual address entry and wider Cloud support.
   Cloud installs the private package with its workflow token. Remaining: the sign-in

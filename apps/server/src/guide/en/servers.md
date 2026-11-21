@@ -293,8 +293,9 @@ suggestion in **Find the registered address** or **Find the address**. Check the
 and correct them before continuing. If you add a venue to an existing Cloud business or the
 search is unavailable, enter the addresses by hand.
 
-Enter the mail server during setup. If you choose **Skip** before opening Cloud or import a
-configuration, fill in the addresses by hand and connect later from **Cloud services**.
+Enter the mail server during setup. In Prepare you can also [choose Cloud for staff email](email.md#cloud-staff-email).
+If you choose **Skip** before opening Cloud or import a configuration, fill in the addresses by hand
+and connect later from **Cloud services**.
 
 If your Cloud session expires or you sign out before the venue is registered, finish saving the
 venue. Then go to **System → Cloud services**, choose **Sign in to Waitron Cloud** and use the

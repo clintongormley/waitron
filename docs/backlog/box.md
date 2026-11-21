@@ -404,7 +404,9 @@ local signed-client and worker checks are separate from live qualification: the 
 still prove three real deliveries and link/code consumption, SMTP after off, a refusal while sales
 continue and linked Demo priority. Cloud's published interface is #1254 at
 `34a0731e39aa38e5922e3f7ed5167441cafe21a5`; D102's former release gate is replaced by this concrete
-joint test. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
+joint test. In configured test-box Prepare, you can choose Cloud for staff email at Provision.
+Prepare still requires the venue's mail server. If Cloud staff email cannot be confirmed, setup
+shows the notice and finishes with the saved mail server.
 The setup-test network-target issue below remains separate open work.
 
 ## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN

@@ -24,6 +24,7 @@ type Attempt = CloudSignInBinding & {
   profile?: CloudSignInProfile;
   resumeSetup?: true;
   publishedNodeId?: string;
+  emailRelayEnabled?: true;
   provisionalRegistration?: CloudRegistration;
 };
 export interface CloudSignInState {
@@ -84,6 +85,10 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
       (value.kind !== "setup" ||
         value.phase !== "account_bound" ||
         !cloudSignInId(value.publishedNodeId))) ||
+    (value.emailRelayEnabled !== undefined &&
+      (value.emailRelayEnabled !== true ||
+        value.provisionalRegistration === undefined ||
+        (value.publishedNodeId === undefined && value.resumeSetup !== true))) ||
     (value.resumeSetup !== undefined && (value.resumeSetup !== true || value.kind !== undefined)) ||
     (value.provisionalRegistration !== undefined &&
       value.kind !== "setup" &&
@@ -100,7 +105,8 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
 }
 
 export function newCloudSignInAttempt(
-  binding: CloudSignInBinding & Pick<Attempt, "resumeSetup" | "provisionalRegistration">,
+  binding: CloudSignInBinding &
+    Pick<Attempt, "resumeSetup" | "provisionalRegistration" | "emailRelayEnabled">,
 ): Attempt {
   return {
     ...binding,

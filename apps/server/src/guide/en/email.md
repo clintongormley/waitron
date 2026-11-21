@@ -36,6 +36,17 @@ Waitron emails the most recently ended trading day's report after the automatic 
 You can also receive that report after a box restart. After a closure spanning several days, open
 **Sales & takings** and select an earlier day to see its figures.
 
+## Choose staff email during test setup {#cloud-staff-email}
+
+In Prepare on a test box, sign in to Waitron Cloud and tick **Send staff email through Waitron
+Cloud** on the email step. Test your own mail server before continuing. Your choice takes effect
+when you press **Provision**. Cloud can then send staff invitations, password resets and email
+changes. Your mail server still sends invoices and notices.
+
+If setup says it could not confirm Cloud staff email, your mail server is available for those
+messages. If your Cloud sign-in expired, finish [connecting the test box](servers.md#setup-cloud-sign-in)
+from **System → Cloud services**.
+
 ## Account email through test Cloud {#cloud-account-email}
 
 When you pair your box with the test Cloud and enable its email relay, invitations,

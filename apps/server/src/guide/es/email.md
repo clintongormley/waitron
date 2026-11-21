@@ -39,6 +39,18 @@ Waitron envía el informe del último día de actividad terminado cuando concluy
 automático. También puedes recibirlo después de un reinicio de la caja. Tras un cierre que abarque
 varios días, abre **Ventas y cobros** y elige un día anterior para consultar sus cifras.
 
+## Elegir el correo del personal durante la configuración de prueba {#cloud-staff-email}
+
+En Preparar, inicia sesión en Waitron Cloud en el servidor de pruebas y marca **Enviar el correo
+del personal a través de Waitron Cloud** en el paso de correo. Prueba tu servidor de correo antes
+de continuar. La elección se aplica al completar la configuración. Cloud podrá enviar invitaciones
+al personal, mensajes para restablecer contraseñas y cambios de correo. Tu servidor de correo
+seguirá enviando las facturas y los avisos.
+
+Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, puedes
+usar tu servidor de correo para esos mensajes. Si ha caducado la sesión de Cloud, termina de
+[conectar el servidor de pruebas](servers.md#setup-cloud-sign-in) desde **Sistema → Servicios Cloud**.
+
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 
 Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invitaciones,

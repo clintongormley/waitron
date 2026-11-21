@@ -5,6 +5,9 @@ export const venueEn = {
   "email.show_password": "Show password",
   "email.hide_password": "Hide password",
   "email.heading": "Set up email",
+  "email.cloud_staff_email": "Send staff email through Waitron Cloud",
+  "email.cloud_staff_email_detail":
+    "Cloud sends staff invitations, password resets and email changes. Your mail server sends invoices and notices.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
   "email.server.label": "Mail server",
@@ -269,6 +272,9 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.show_password": "Mostrar contraseña",
   "email.hide_password": "Ocultar contraseña",
   "email.heading": "Configura el correo electrónico",
+  "email.cloud_staff_email": "Enviar el correo del personal a través de Waitron Cloud",
+  "email.cloud_staff_email_detail":
+    "Cloud envía invitaciones al personal, restablecimientos de contraseña y cambios de correo. Tu servidor de correo envía las facturas y los avisos.",
   "email.intro":
     "Envía un mensaje de prueba a {recipient} antes de continuar. Usa los ajustes de tu proveedor de correo.",
   "email.server.label": "Servidor de correo",
