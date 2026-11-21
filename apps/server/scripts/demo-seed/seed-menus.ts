@@ -22,6 +22,7 @@ import type { DemoPlainText } from "@waitron/country";
 import type { SeedLocale } from "./locale.js";
 import { demoPlainText, demoLanguagesFor, type DemoDataSet, type SeedMenu } from "./data-set.js";
 import { inLanguages } from "./in-languages.js";
+import { storeDemoImage } from "./seed-media.js";
 
 export interface SeedMenusInput {
   locale: SeedLocale;
@@ -101,6 +102,14 @@ export async function seedMenus(
   });
   await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required, null);
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
+  const presentation = async (text: Readonly<Record<string, string>>, basename?: string) => {
+    const names = translated(text);
+    const image =
+      basename === undefined
+        ? undefined
+        : await storeDemoImage(tx, dataSet.mediaDataSet, basename, names);
+    return { names, image };
+  };
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
   const categoryByImage = new Map<string, string>();
@@ -116,17 +125,18 @@ export async function seedMenus(
     limit 1`);
 
   const seedOne = async (data: SeedMenu, existingMenuId?: string): Promise<string> => {
+    const menuPresentation = await presentation(data.customerName, data.image);
     const menu =
       existingMenuId === undefined
         ? await createMenu(tx, {
             name: plain(data.name),
-            names: translated(data.customerName),
+            ...menuPresentation,
           })
         : { id: existingMenuId };
     if (existingMenuId !== undefined)
       await updateMenuDetails(tx, existingMenuId, {
         name: plain(data.name),
-        names: translated(data.customerName),
+        ...menuPresentation,
       });
     const rootSectionId = await requireMenuRoot(tx, menu.id);
     for (const cat of data.categories) {
@@ -144,7 +154,7 @@ export async function seedMenus(
       const section = await createSectionIn(
         tx,
         rootSectionId,
-        { internalName: plain(cat.name), names: translated(cat.name) },
+        { internalName: plain(cat.name), ...(await presentation(cat.name, cat.sectionImage)) },
         undefined,
         locale,
       );
@@ -228,7 +238,7 @@ export async function seedMenus(
         rootSectionId,
         {
           internalName: plain(data.listedSection.name),
-          names: translated(data.listedSection.name),
+          ...(await presentation(data.listedSection.name, data.listedSection.image)),
         },
         undefined,
         locale,
@@ -238,11 +248,12 @@ export async function seedMenus(
     return menu.id;
   };
 
-  const { restaurant, lunch, deli, drinksName, drinksCustomerName } = dataSet.menus;
+  const { restaurant, lunch, deli, drinksName, drinksCustomerName, drinksImage } = dataSet.menus;
   const drinksCategories = restaurant.categories.filter((category) => category.station === "bar");
   const drinksId = await seedOne({
     name: drinksName,
     customerName: drinksCustomerName,
+    image: drinksImage,
     categories: drinksCategories,
   });
   const casaId = await seedOne(

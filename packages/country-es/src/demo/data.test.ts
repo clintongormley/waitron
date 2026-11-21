@@ -4,6 +4,7 @@ import {
   CASA_DELGADO_ES,
   CASA_DELGADO_GL,
   CASA_DELGADO_VALENCIA,
+  DEMO_MEDIA_ROOTS,
 } from "./index.js";
 import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -29,6 +30,7 @@ describe("pack-owned Spanish demo", () => {
       "deli",
       "lunch",
       "drinksName",
+      "drinksImage",
       "drinksCustomerName",
     ]);
     expect(
@@ -103,6 +105,24 @@ describe("pack-owned Spanish demo", () => {
       }
     }
   });
+
+  it.each([CASA_DELGADO_ES, CASA_DELGADO_CA, CASA_DELGADO_GL, CASA_DELGADO_VALENCIA])(
+    "$id ships a photo for each menu section",
+    ({ mediaDataSet, menus }) => {
+      const url = DEMO_MEDIA_ROOTS[mediaDataSet]!;
+      const categories = [menus.restaurant, menus.deli, menus.lunch].flatMap((menu) => [
+        ...menu.categories,
+      ]);
+      for (const category of categories) {
+        expect(category.sectionImage, category.name.en).toMatch(/^section-.+\.png$/);
+        expect(existsSync(new URL(category.sectionImage, url)), category.sectionImage).toBe(true);
+      }
+      for (const image of [menus.drinksImage, menus.deli.listedSection.image]) {
+        expect(image).toMatch(/^section-.+\.png$/);
+        expect(existsSync(new URL(image, url)), image).toBe(true);
+      }
+    },
+  );
 
   it("provides the complete Madrid developer geography without importing server defaults", async () => {
     const { DEMO_DEVELOPER_PRESETS } = await demo();

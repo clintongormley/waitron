@@ -10,7 +10,13 @@ import { and, eq, sql } from "drizzle-orm";
 import { withTransaction, floorZones } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAvailableProducts, menuItems, readLiveDocuments, documentOffers } from "@waitron/menu";
+import {
+  listAvailableProducts,
+  menuItems,
+  readLiveDocuments,
+  documentOffers,
+  type DocumentMember,
+} from "@waitron/menu";
 import { computeDailyClose } from "@waitron/reporting";
 import {
   compareDecimal,
@@ -86,6 +92,57 @@ describe("demo seed end-to-end", () => {
       ["options", "Doneness"],
       ["extras", "Sides"],
     ]);
+  });
+
+  it("publishes every demo menu section with a photo from the media library", async () => {
+    const venue = await provisionVenue();
+    await seedDemoRestaurant(suite.db, {
+      venue,
+      locale: LOCALE,
+      salesDays: 0,
+      departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
+      dataSet: CASA_DELGADO_ES,
+    });
+    const withSections = (members: readonly DocumentMember[]) =>
+      members.filter((member) => member.kind === "section");
+
+    await withTransaction(suite.db, async (tx) => {
+      const menus = await venueMenus(tx);
+      const documents = await readLiveDocuments(
+        tx,
+        menus.map((menu) => menu.id),
+      );
+      const sections = [...documents.values()].flatMap(({ document }) => {
+        const top = withSections(document.root.members);
+        return [...top, ...top.flatMap((section) => withSections(section.members))];
+      });
+
+      expect(new Set(sections.map((section) => section.names.en))).toEqual(
+        new Set([
+          "Tapas",
+          "Sharing plates",
+          "Mains",
+          "Desserts",
+          "Drinks menu",
+          "Cocktails",
+          "Wine and beer",
+          "Soft drinks",
+          "Coffee",
+          "Charcuterie",
+          "Cheeses",
+          "Conserves",
+          "Drinks",
+          "Starters",
+        ]),
+      );
+      expect(sections.filter((section) => section.names.en === "Mains")).toHaveLength(2);
+      for (const section of sections) {
+        expect(section.image, section.names.en).toEqual(expect.stringMatching(MEDIA_FILENAME));
+        const stored = await readImageBytes(tx, section.image!);
+        expect(stored?.contentType, section.names.en).toBe("image/webp");
+        expect(stored!.bytes.length, section.names.en).toBeGreaterThan(0);
+      }
+    });
   });
 
   it("seeds a venue whose reports, menus, media, and mixed order all compose", async () => {

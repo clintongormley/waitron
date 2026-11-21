@@ -23,6 +23,20 @@ export function demoMediaPath(
   return join(source, basename);
 }
 
+export async function storeDemoImage(
+  tx: Transaction,
+  mediaDataSet: string,
+  basename: string,
+  names: Record<string, string>,
+): Promise<string> {
+  const bytes = await readFile(
+    demoMediaPath(mediaDataSet, basename, process.env.WAITRON_DEMO_MEDIA_SOURCE),
+  );
+  const image = await prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
+  const { image: stored } = await uploadImage(tx, { image, names });
+  return stored.filename;
+}
+
 export interface SeedMediaInput {
   mediaDataSet: string;
   /** Committed image basename → product id, from seedMenus. */
@@ -58,12 +72,7 @@ export async function seedMedia(
       },
       defaultLanguage,
     ).product;
-    const bytes = await readFile(
-      demoMediaPath(mediaDataSet, imageBasename, process.env.WAITRON_DEMO_MEDIA_SOURCE),
-    );
-    // Inside the caller's transaction, unlike the upload route: seeding runs before the venue sells.
-    const image = await prepareImage(bytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
-    const { image: stored } = await uploadImage(tx, { image, names });
-    await tx.update(products).set({ image: stored.filename }).where(eq(products.id, productId));
+    const filename = await storeDemoImage(tx, mediaDataSet, imageBasename, names);
+    await tx.update(products).set({ image: filename }).where(eq(products.id, productId));
   }
 }

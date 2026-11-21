@@ -147,6 +147,7 @@ const REGIONAL_SECTION = {
   },
   color: "#3b7892",
   station: "kitchen",
+  sectionImage: "section-galicia.png",
   products: REGIONAL_DISHES,
 } as const;
 export const CASA_DELGADO_GL = {

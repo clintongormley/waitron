@@ -88,6 +88,7 @@ export const CASA_DELGADO_ES = {
       "ca-ES-valencia": "Begudes",
       gl: "Bebidas",
     },
+    drinksImage: "section-drinks.png",
     drinksCustomerName: {
       en: "Drinks menu",
       es: "Carta de bebidas",

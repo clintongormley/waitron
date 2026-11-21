@@ -72,7 +72,8 @@ describe("seedMedia", () => {
     }
 
     const written = await suite.db.execute<{ count: number }>(
-      sql`select cast(count(*) as integer) as count from media_images`,
+      sql`select cast(count(*) as integer) as count from media_images
+          where filename in (select image from products)`,
     );
     const distinctPhotos = new Set(
       await Promise.all(
