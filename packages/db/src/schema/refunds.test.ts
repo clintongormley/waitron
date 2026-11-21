@@ -179,14 +179,15 @@ describe("settled-tender refund ledger", () => {
       })
       .returning({ id: billPayments.id });
     const bill = { bill_payment_id: payment!.id, provider_payment_ref: "pi_bill" };
-    for (const parent of [
+    const invalidParents: Record<string, string | null>[] = [
       bill,
       { ...bill, tender_id: null },
       { tender_id: null },
       { ...bill, sale_id: null },
       { sale_id: null },
       { sale_id: null, tender_id: null },
-    ]) {
+    ];
+    for (const parent of invalidParents) {
       const error = await captureError(() => insert(parent));
       expect(checkFailed(error, "refunds_parent_ck")).toBe(true);
     }
