@@ -106,34 +106,26 @@ The work is in `apps/dashboard/src/screens/servers-screen.ts`.
 - **As built.** The key keeps its current form: the conflict switch and the promote route check it exactly as typed (`apps/server/src/operation-authentication.ts`), so the grouped form would be refused there. The page counts the box as joined when its own `/api/node` answers `standing: "serving-secondary"`, the standing the main box gives a joining box (`packages/membership/src/standings.ts`, `withMember`). After the restart into joining the box serves a certificate from the venue's authority (adopt.ts installVenueAuthority, boot.ts checkLeaf), so a tab that accepted only its first certificate loses it; after a minute without an answer the page says so and links the main box's Servers page. A box still joining answers /api/node with 404 and /api/box/status with the copy's stage once its first copy has reported one.
 - **Not alerts.** The owner allowed alerts here, but these steps are done once, on this page, by the person who is joining, so a task list is the simpler choice.
 
-## For the owner first: approve a joining box on the main box instead of typing its password
+## PR 9: a new box joins by comparing a code on both screens (the owner lands it)
 
-- **What happens now.**
-  - The person types the main box's administrator email, password and code into the joining box.
-  - The joining box forwards them to the main box (`mirror-bundle-fetch.ts:697-722` to `mirror-bundle-api.ts:133`) and keeps a hash of the password (`setup-api.ts:1157-1162`).
-  - What comes back includes the venue's certificate authority key (`adopt.ts:244`): whoever holds it can pose as any of the venue's boxes.
-- **The proposal.** It follows the same-tab round trip the owner chose for Cloud sign-in (watcher log, 20 November, 14:16).
-  1. The joining box sends the person's browser to the main box's approval page. The link carries the joining box's id, its public key (the request already sends `standbyPublicKey`, `mirror-bundle-fetch.ts:716-722`) and a short code that the joining box also shows.
-  2. On the main box, in the person's existing session (a passkey works), the page shows that code. The person approves only when the code matches.
-  3. The main box redirects back with a one-time code.
-  4. To exchange it for the bundle, the joining box must prove it holds the private key for that public key.
-- **Why this works.**
-  - The person's browser already trusts the main box, so nobody can stand in the middle of the approval itself.
-  - The key proof means only the box the person approved can collect the bundle.
-  - Together these replace the fingerprint comparison the person does today.
-- **Cost.** A new route pair on the main box and a change to how a box joins. It takes the full review path, with two Codex angles. Not started until the owner answers.
+The owner chose, on 21 November 2026, to compare a code on both screens rather than type anything
+("we should be comparing codes rather than typing anything"). The round trip first proposed here was
+replaced. Plan: [2026-11-21-a1558-pr9-join-by-code.md](2026-11-21-a1558-pr9-join-by-code.md),
+cleared by the watcher after two fresh security reads. Full review path.
 
-## Questions for the owner (through the watcher)
+## PR 10: the replaced main box becomes a spare (the owner lands it)
 
-1. **The approval round trip above.** Recommended: yes, as PR 9, built after PR 7.
-2. **"isn't it set up as a backup automatically? do i need reinstall it?"** Today a replaced box must be reset and joined again. Making it a spare by itself, once its records are back, is a new feature that would follow A1561. Recommended: keep the reset for now, put it as one button in the row menu once A1561 lands, and file the automatic version as its own backlog entry only if the owner wants it.
+The owner chose a button on the old box's Servers row to reset it once its records are back, and
+"Reset anyway" when they cannot come back. Plan:
+[2026-11-21-a1558-pr10-replaced-box-spare.md](2026-11-21-a1558-pr10-replaced-box-spare.md),
+cleared by the watcher. Built after PR 9 and the join-environment fix (#3955). Full review path.
 
 ## Order and who lands
 
-Lane B builds them in the order **1, 3, 2, 4, 5, 6, 7, 8**.
+Lane B builds them in the order **1, 3, 2, 4, 5, 6, 7, 8**, then **9** and **10**.
 
-- **The owner lands** 1 and 2.
+- **The owner lands** 1, 2, 9 and 10.
 - **Lane B lands** the rest.
-- **The full review path** is for PR 7, which touches certificates and sign-in, and for the approval proposal. The rest take the light path.
+- **The full review path** is for PR 7, which touches certificates and sign-in, and for PRs 9 and 10. The rest take the light path.
 
 `docs/backlog.md` has no A1558 entry. Anything still open when PR 8 lands gets a short entry in the replication area.
