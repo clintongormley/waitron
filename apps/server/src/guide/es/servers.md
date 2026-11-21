@@ -172,7 +172,7 @@ no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo**
 hora del servidor de reserva con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Elige **Continuar** otra vez para iniciar el local en el servidor de reserva. Un código del autenticador dura
 menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige
-**Volver a intentarlo** para seguir. Antes del primer **Continuar**,
+**Volver a intentarlo** para seguir. Antes de elegir **Continuar** en la comprobación del reloj,
 **Editar estos datos** vuelve a la identificación. Si la página indica que el
 servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este servidor**.
 Los pagos ya registrados se conservan en la copia transferida.
