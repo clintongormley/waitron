@@ -336,6 +336,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 Hardware and inbox checks to complete in the owner session.
 
+- Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
+
 - **What the 20 November session raised, by lane** (session notes:
   `~/waitron-campaign-shared/real-box-session-20261120.md`, on the owner's Mac):
   - C: drawer button only with a drawer (#3899), invoice email offered only when the bill can be emailed (#3905), Full invoice keeps its details on reopen (#3914, #3921), return to Card readers and no email in search boxes (#3927).

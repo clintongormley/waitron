@@ -68,6 +68,7 @@ const PROBLEMS: Record<string, StringKey> = {
   length: "venue_details.length",
   cutover: "venue_details.cutover",
   time_zone: "venue_details.time_zone",
+  postcode: "venue_details.postcode_invalid",
   country_unavailable: "venue_details.geography_context",
 };
 const REASONS: Record<string, StringKey> = {
@@ -368,6 +369,9 @@ export class VenueDetailsPanel extends LitElement {
   #patch() {
     return this.#expected && this.draft ? venueDetailPatch(this.#expected, this.draft) : {};
   }
+  #problems(patch = this.#patch()): ReturnType<typeof venueDetailProblems> {
+    return venueDetailProblems(patch, this.model?.issuer.country);
+  }
   #warnings(): StringKey[] {
     const patch = this.#patch();
     const warnings: StringKey[] = [];
@@ -385,7 +389,7 @@ export class VenueDetailsPanel extends LitElement {
       !this.model ||
       !this.draft ||
       (patch.timeZone === undefined && patch.dayCutover === undefined) ||
-      Object.keys(venueDetailProblems(patch)).length > 0
+      Object.keys(this.#problems(patch)).length > 0
     )
       return "";
     return JSON.stringify([
@@ -484,7 +488,7 @@ export class VenueDetailsPanel extends LitElement {
   }
   #needsAcknowledgement(): boolean {
     return (
-      Object.keys(venueDetailProblems(this.#patch())).length === 0 &&
+      Object.keys(this.#problems()).length === 0 &&
       this.#warnings().length > 0 &&
       (!this.#previewReady() || this.acknowledged !== JSON.stringify(this.#patch()))
     );
@@ -530,7 +534,7 @@ export class VenueDetailsPanel extends LitElement {
     this.draft = { ...this.draft, ...values };
     this.#scope?.changed();
     if (JSON.stringify(this.#patch()) !== previousPatch) this.acknowledged = "";
-    const next = venueDetailProblems(this.#patch());
+    const next = this.#problems();
     const errors = { ...this.errors };
     for (const field of Object.keys(values) as VenueDetailField[]) delete errors[field];
     if (this.#feedback.attempted) {
@@ -545,7 +549,7 @@ export class VenueDetailsPanel extends LitElement {
     if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
     if (saveActionState(this.#scope).unchanged) return;
     const patch = this.#patch();
-    const problems = venueDetailProblems(patch);
+    const problems = this.#problems(patch);
     this.#feedback.press();
     if (Object.keys(problems).length > 0) {
       this.errors = Object.fromEntries(
@@ -935,8 +939,7 @@ export class VenueDetailsPanel extends LitElement {
                             saveAction.unchanged ||
                             this.submitting ||
                             this.#needsAcknowledgement() ||
-                            (this.#feedback.attempted &&
-                              Object.keys(venueDetailProblems(this.#patch())).length > 0)
+                            (this.#feedback.attempted && Object.keys(this.#problems()).length > 0)
                           }
                           @click=${() => {
                             if (current()) void this.#save();

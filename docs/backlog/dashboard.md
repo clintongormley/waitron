@@ -95,11 +95,6 @@ Not observed in a real password manager — the tests replace the browser's meth
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
 - Find a bill retains its existing request state until its own adoption.
 
-## Some typed fields still need validation
-
-Review typed dashboard fields beyond email and telephone for useful checks. Keep tax-identifier
-validation in the fiscal module.
-
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
 Safari was not tried, so what it draws with no colour chosen, and whether the ring and the

@@ -4,6 +4,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import {
   focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   UrlStateController,
   navigationGuardFor,
@@ -79,6 +80,15 @@ import type {
   PrinterProfileOffer,
   PrinterStationName,
 } from "../api/client.js";
+
+function isProbeIpAddress(host: string): boolean {
+  try {
+    if (/^\d+(?:\.\d+){3}$/.test(host)) return new URL(`http://${host}`).hostname === host;
+    return /^[\da-f:.]+$/i.test(host) && URL.canParse(`http://[${host}]`);
+  } catch {
+    return false;
+  }
+}
 
 export const printerSettingFields = [
   {
@@ -1238,7 +1248,7 @@ export class PrintersScreen extends LitElement {
   @state() private scanning = false;
   @state() private probeHost = "";
   @state() private probePort = "9100";
-  @state() private probeAttempted = false;
+  readonly #probeFeedback = new FormFeedback(this);
   /** Address fields the server refused, each shown until the owner changes it. */
   @state() private probeRefused: Partial<Record<"host" | "port", string>> = {};
   /** A refused address check that names no field, shown above Check address. */
@@ -1698,7 +1708,7 @@ export class PrintersScreen extends LitElement {
   #probeValidate(): Partial<Record<"host" | "port", string>> {
     const port = Number(this.probePort);
     const errors: Partial<Record<"host" | "port", string>> = {};
-    if (!this.probeHost.trim()) errors.host = t("printers.probe_host_invalid");
+    if (!isProbeIpAddress(this.probeHost.trim())) errors.host = t("printers.probe_host_invalid");
     if (!/^\d+$/.test(this.probePort) || !Number.isInteger(port) || port < 1 || port > 65535)
       errors.port = t("printers.port_invalid");
     return errors;
@@ -1706,7 +1716,7 @@ export class PrintersScreen extends LitElement {
 
   async #probe(): Promise<void> {
     if (this.probeStatus === "pending") return;
-    this.probeAttempted = true;
+    this.#probeFeedback.press();
     this.probeRefused = {};
     if (Object.keys(this.#probeValidate()).length) {
       this.#focusFirstInvalid("[data-test=probe-panel]");
@@ -4248,7 +4258,7 @@ export class PrintersScreen extends LitElement {
     this.addingPrinter = true;
     this.probeHost = "";
     this.probePort = "9100";
-    this.probeAttempted = false;
+    this.#probeFeedback.reset();
     this.probeRefused = {};
     this.probeErrorKey = null;
     this.#registeredDevices.clear();
@@ -5246,12 +5256,13 @@ export class PrintersScreen extends LitElement {
     ];
     const bluetooth = rows.some((d) => d.transport === "bluetooth");
     const otherDevices = addable.some((d) => !shown(d));
-    const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
+    const probeChecked = this.#probeFeedback.attempted ? this.#probeValidate() : {};
     const probeErrors = { ...this.probeRefused, ...probeChecked };
     const probeInvalid = Object.keys(probeChecked).length > 0;
-    const probeMessage = bottomMessage(
-      refusal(this.probeErrorKey),
-      Object.keys(probeErrors).length > 0 ? t("form.fix_fields") : null,
+    const probeMessage = this.#probeFeedback.message(
+      { request: refusal(this.probeErrorKey) ?? undefined },
+      new Set(Object.keys(probeErrors)),
+      t("form.fix_fields"),
     );
     return html`<wt-modal
       size="wide"

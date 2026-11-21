@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { classifySavedTimeZone, classifyTimeZone } from "@waitron/shared";
 import type { VenueDetailPatch, VenueDetailValues, VenueDetailField } from "../api/client.js";
 
@@ -49,6 +50,7 @@ export function venueDetailPatch(
 
 export function venueDetailProblems(
   patch: VenueDetailPatch,
+  country?: string,
 ): Partial<Record<VenueDetailField, string>> {
   const problems: Partial<Record<VenueDetailField, string>> = {};
   for (const field of VENUE_DETAIL_FIELDS) {
@@ -60,6 +62,10 @@ export function venueDetailProblems(
     }
     if (["name", "addressLine1", "addressLine2", "city"].includes(field) && [...value].length > 200)
       problems[field] = "length";
+    if (field === "postalCode" && country !== undefined) {
+      const result = getCountryPack(country)?.postalCode?.validate(value);
+      if (result?.valid === false) problems[field] = "postcode";
+    }
     if (field === "dayCutover" && !CUTOVER.test(value)) problems[field] = "cutover";
     if (field === "timeZone" && classifyTimeZone(value).kind !== "valid")
       problems[field] = "time_zone";

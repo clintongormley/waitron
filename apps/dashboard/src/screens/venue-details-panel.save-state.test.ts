@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { venueClockPreviewFixture, venueDetailsFixture } from "../testing/venue-details-fixture.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, VenueDetailsModel, VenueDetailWrite } from "../api/client.js";
 import "./venue-details-panel.js";
 import type { VenueDetailsPanel } from "./venue-details-panel.js";
@@ -133,6 +133,61 @@ it("a change that needs acknowledging is drawn primary and disabled until acknow
   expect(await state(el)).toEqual(blocked);
   await press(el, "[data-test=acknowledge]");
   expect(await state(el)).toEqual(ready);
+});
+
+it("marks a malformed changed postcode on Save and lets a corrected postcode be acknowledged and saved", async () => {
+  const { el, api } = await mountOpen();
+  const postcode = q<HTMLElementTagNameMap["wt-input"]>(el, "wt-input[name=postalCode]")!;
+  const messages = q<HTMLElementTagNameMap["wt-form-actions"]>(el, "form wt-form-actions")!;
+  expect(postcode.required).toBe(true);
+  await type(el, "postalCode", "2800");
+  expect(postcode.error).toBe("");
+  expect(messages.error).toBe("");
+  await press(el, "[data-test=save]");
+  expect(postcode.error).toBe(t("venue_details.postcode_invalid"));
+  expect(messages.error).toBe(t("form.fix_fields"));
+  expect(await state(el)).toEqual(blocked);
+  expect(api.patchVenueDetails).not.toHaveBeenCalled();
+
+  await type(el, "postalCode", "28002");
+  expect(postcode.error).toBe("");
+  expect(messages.error).toBe("");
+  await press(el, "[data-test=acknowledge]");
+  expect(await state(el)).toEqual(ready);
+  await press(el, "[data-test=save]");
+  expect(api.patchVenueDetails).toHaveBeenCalledExactlyOnceWith({
+    changes: { postalCode: "28002" },
+    expected: expect.objectContaining({ postalCode: "28001" }),
+  });
+});
+
+it("shows the server's postcode refusal beneath the field without disabling a retry", async () => {
+  const { el, api } = await mountOpen();
+  api.patchVenueDetails.mockRejectedValueOnce({
+    code: "venue.detail_invalid",
+    params: { field: "postalCode", reason: "postcode" },
+  });
+  await type(el, "postalCode", "08001");
+  await press(el, "[data-test=acknowledge]");
+  await press(el, "[data-test=save]");
+  expect(q<HTMLElementTagNameMap["wt-input"]>(el, "wt-input[name=postalCode]")!.error).toBe(
+    t("venue_details.postcode_invalid"),
+  );
+  expect(await state(el)).toEqual(ready);
+  expect(api.patchVenueDetails).toHaveBeenCalledOnce();
+});
+
+it("saves an alphanumeric postcode for a country pack without a format check", async () => {
+  const model = filled();
+  model.issuer.country = "GB";
+  const { el, api } = await mountOpen(model);
+  await type(el, "postalCode", "SW1A 1AA");
+  await press(el, "[data-test=acknowledge]");
+  await press(el, "[data-test=save]");
+  expect(api.patchVenueDetails).toHaveBeenCalledExactlyOnceWith({
+    changes: { postalCode: "SW1A 1AA" },
+    expected: expect.objectContaining({ postalCode: "28001" }),
+  });
 });
 
 it("after a save, the reopened form shows the saved values with Save quiet", async () => {
