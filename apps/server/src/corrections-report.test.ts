@@ -156,7 +156,10 @@ describe("corrections workbook", () => {
   ] as const)(
     "writes one line saying so when the period corrected nothing (%s)",
     async (language, nothing) => {
-      const { summary, rows } = await sheets({ madeIn: "2026-2T", summary: [], rows: [] }, language);
+      const { summary, rows } = await sheets(
+        { madeIn: "2026-2T", summary: [], rows: [] },
+        language,
+      );
       expect(summary.match(/<row /g)).toHaveLength(2);
       expect(row(summary, 2)).toEqual([nothing]);
       expect(rows.match(/<row /g)).toHaveLength(1);
