@@ -18,8 +18,8 @@ import {
   BILL_NUMBER_DECREASE_REFUSAL,
   BILL_PAYMENT_CHANGE_REFUSAL,
   BILL_PAYMENT_DELETE_REFUSAL,
-  BILL_REFUND_CHANGE_REFUSAL,
-  BILL_REFUND_DELETE_REFUSAL,
+  REFUND_CHANGE_REFUSAL,
+  REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
   DAY_START_HISTORY_REFUSAL,
   DINING_FIXED_REFUSAL,
@@ -46,7 +46,7 @@ import {
  * so a regenerated migration set does not carry it.
  *
  * It also holds three triggers on `products` — a variant is one level deep, keeps the parent it
- * was created with, and no product's id changes — and the state guards on `bill_payments` and `bill_payment_refunds`, with a
+ * was created with, and no product's id changes — and the state guards on `bill_payments` and `refunds`, with a
  * trigger on each refusing every delete, as on `payments` — those three refuse by design whatever the row, so they
  * have no accepting control here.
  *
@@ -110,8 +110,6 @@ const EXPECTED_TRIGGERS = [
   "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",
   "day_cutover_changes_keep_closed",
-  "bill_payment_refunds_guard_update",
-  "bill_payment_refunds_no_delete",
   "bill_payments_guard_update",
   "bill_payments_no_delete",
   "device_profile_form_factor_locked",
@@ -139,8 +137,10 @@ const EXPECTED_TRIGGERS = [
   "working_orders_recipient_identity_insert",
   "working_orders_recipient_identity_update",
   "sales_recipient_identity_insert",
-  "tender_refunds_guard_update",
-  "tender_refunds_no_delete",
+  "refunds_guard_update",
+  "adjustment_refunds_require_sale_refund",
+  "invoice_correction_refunds_require_sale_refund",
+  "refunds_no_delete",
   "invoice_corrections_guard_update",
   "invoice_corrections_no_delete",
 ];
@@ -194,11 +194,11 @@ function billPayment(id, state) {
 /** A pending card refund of 5.00 from bill payment `paymentId`, not yet sent. */
 function billRefund(id, paymentId) {
   return (
-    `insert into bill_payment_refunds (id, bill_payment_id, submission_id, fingerprint, ` +
+    `insert into refunds (id, bill_payment_id, submission_id, fingerprint, ` +
     ` applied_amount, tip_amount, reason, authorized_by, requested_by, source, device_id, ` +
-    ` state, send_count, created_at) ` +
+    ` node_id, method, provider, provider_payment_ref, state, send_count, created_at) ` +
     `values ('${id}', '${paymentId}', '${id}', 'fp', 500, 0, 'wrong item', 'person', 'person', ` +
-    ` 'device', 'dev-active', 'pending', 0, '${STAMP}')`
+    ` 'device', 'dev-active', 'node', 'card', 'stripe', '${id}', 'pending', 0, '${STAMP}')`
   );
 }
 
@@ -2035,49 +2035,49 @@ describe("bill_payments_no_delete", () => {
   });
 });
 
-describe("bill_payment_refunds_guard_update", () => {
+describe("refunds_guard_update", () => {
   it("refuses counting two sends at once", () => {
     expect(
       refusalFor(
         connection,
-        `update bill_payment_refunds set sent_at = '${STAMP}', send_count = 2 where id = 'bpr-pending'`,
+        `update refunds set sent_at = '${STAMP}', send_count = 2 where id = 'bpr-pending'`,
       ),
-    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+    ).toBe(REFUND_CHANGE_REFUSAL);
   });
 
   it("refuses a change to the device a refund was asked for on", () => {
     expect(
       refusalFor(
         connection,
-        `update bill_payment_refunds set device_id = 'dev-off' where id = 'bpr-pending'`,
+        `update refunds set device_id = 'dev-off' where id = 'bpr-pending'`,
       ),
-    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+    ).toBe(REFUND_CHANGE_REFUSAL);
   });
 
   it("refuses a change to a refund's source", () => {
     expect(
       refusalFor(
         connection,
-        `update bill_payment_refunds set source = 'demo_seed', device_id = null where id = 'bpr-pending'`,
+        `update refunds set source = 'demo_seed', device_id = null where id = 'bpr-pending'`,
       ),
-    ).toBe(BILL_REFUND_CHANGE_REFUSAL);
+    ).toBe(REFUND_CHANGE_REFUSAL);
   });
 
   it("accepts stamping the first send", () => {
     expect(
       refusalFor(
         connection,
-        `update bill_payment_refunds set sent_at = '${STAMP}', send_count = 1 where id = 'bpr-pending'`,
+        `update refunds set sent_at = '${STAMP}', send_count = 1 where id = 'bpr-pending'`,
       ),
     ).toBeUndefined();
   });
 });
 
-describe("bill_payment_refunds_no_delete", () => {
+describe("refunds_no_delete", () => {
   it("refuses deleting a bill payment refund", () => {
     expect(
-      refusalFor(connection, `delete from bill_payment_refunds where id = 'bpr-pending'`),
-    ).toBe(BILL_REFUND_DELETE_REFUSAL);
+      refusalFor(connection, `delete from refunds where id = 'bpr-pending'`),
+    ).toBe(REFUND_DELETE_REFUSAL);
   });
 });
 

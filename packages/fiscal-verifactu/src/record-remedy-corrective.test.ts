@@ -8,7 +8,7 @@ import {
   saleLines,
   saleSettlements,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -189,7 +189,7 @@ async function snapshot() {
     sales: await suite.db.select().from(sales),
     lines: await suite.db.select().from(saleLines),
     tenders: await suite.db.select().from(tenders),
-    refunds: await suite.db.select().from(tenderRefunds),
+    refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
     series: await suite.db.select().from(invoiceSeries),
     events: await suite.db.select().from(filingCaseEvents),

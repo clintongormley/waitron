@@ -4,7 +4,7 @@ import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
 import { refundsPaused } from "./bill-refunds.js";
 import { eq, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { refunds, billPayments, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
@@ -75,7 +75,7 @@ export interface BillPaymentsPass {
   errors: (({ billPaymentId: string } | { refundId: string }) & { error: string })[];
 }
 
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 
 const PAYMENT_CHECK = jobOrigin("payment_check");
 
@@ -253,11 +253,11 @@ async function settlePendingBillRefunds(
   if (await refundsPaused(deps, reading)) return;
   const pending = await withTransaction(deps.db, (tx) =>
     tx
-      .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })
-      .from(billPaymentRefunds)
-      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-      .where(eq(billPaymentRefunds.state, "pending"))
-      .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`),
+      .select({ refund: refunds, workingOrderId: billPayments.workingOrderId })
+      .from(refunds)
+      .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
+      .where(eq(refunds.state, "pending"))
+      .orderBy(refunds.createdAt, sql`${refunds}.rowid`),
   );
   pass.pending += pending.length;
   const lastLookups = lastLookupsOf(deps.db);
@@ -291,8 +291,8 @@ async function settlePendingBillRefunds(
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
         const [refund] = await tx
           .select()
-          .from(billPaymentRefunds)
-          .where(eq(billPaymentRefunds.id, id));
+          .from(refunds)
+          .where(eq(refunds.id, id));
         if (refund?.state !== "pending") return;
         pass.refundsUnresolved += 1;
         await raiseRefundUnresolved(tx, refund, workingOrderId, now);

@@ -9,7 +9,7 @@ import {
   sales,
   saleSettlements,
   tenders,
-  tenderRefunds,
+  refunds,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -199,7 +199,7 @@ async function snapshot() {
     events: await suite.db.select().from(filingCaseEvents),
     deliveries: await suite.db.select().from(envios),
     tenders: await suite.db.select().from(tenders),
-    refunds: await suite.db.select().from(tenderRefunds),
+    refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };

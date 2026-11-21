@@ -123,7 +123,8 @@ async function protectHistory(
         union all select v.voided_at from sale_voids v
         union all select t.settled_at from tenders t
         union all select p.received_at from bill_payments p
-        union all select r.completed_at from bill_payment_refunds r where r.state = 'completed'
+        union all select r.completed_at from refunds r
+          where r.bill_payment_id is not null and r.state = 'completed'
         union all select w.opened_at from working_orders w
         union all select k.created_at from kitchen_notices k
       ) where at >= ${earliest}) as future`);

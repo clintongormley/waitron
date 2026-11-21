@@ -1,11 +1,11 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/menu";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   parties,
   products,
@@ -755,8 +755,9 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const paymentId = await cashContribution(v, p.bill2, "1.00");
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: paymentId,
+        ...billRefundFields(tx, v.cfg.nodeId, paymentId),
         submissionId: randomUUID(),
         fingerprint: "pending refund",
         appliedAmount: 100,
@@ -778,8 +779,9 @@ describe("A803 move dishes refuses, and changes nothing", () => {
     const paymentId = await cashContribution(v, p.bill1, "5.00");
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: paymentId,
+        ...billRefundFields(tx, v.cfg.nodeId, paymentId),
         submissionId: randomUUID(),
         fingerprint: "pending refund",
         appliedAmount: 500,

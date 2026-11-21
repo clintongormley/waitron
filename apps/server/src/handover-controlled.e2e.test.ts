@@ -1756,7 +1756,7 @@ async function inheritedWork(
     () =>
       readRows<{ node_id: string; state: string }>(
         m2.venueFile,
-        "select node_id, state from tender_refunds where sale_id = ?",
+        "select node_id, state from refunds where sale_id = ?",
         refundTarget?.sale_id ?? "",
       ),
     [],

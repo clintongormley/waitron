@@ -425,7 +425,7 @@ export class PaymentsScreen extends LitElement {
   @state() private confirmingPartial: StuckBillPaymentRow | null = null;
   @state() private billPayments: StuckBillPaymentRow[] = [];
   @state() private billRefunds: StuckBillRefundRow[] = [];
-  @state() private tenderRefunds: StuckTenderRefundRow[] = [];
+  @state() private refunds: StuckTenderRefundRow[] = [];
   @state() private tenderRefundLoadError: string | null = null;
   #tenderRefundRead = 0;
   @state() private billPaymentLoadError: string | null = null;
@@ -622,7 +622,7 @@ export class PaymentsScreen extends LitElement {
     void this.#tenderRefundQuery
       .watch("listStuckTenderRefunds", [], (rows) => {
         this.#tenderRefundRead++;
-        this.tenderRefunds = rows;
+        this.refunds = rows;
         this.tenderRefundLoadError = null;
       })
       .catch(() => undefined);
@@ -1061,7 +1061,7 @@ export class PaymentsScreen extends LitElement {
     }
     if (tenderRead === this.#tenderRefundRead && this.isConnected) {
       if (tenders.status === "fulfilled") {
-        this.tenderRefunds = tenders.value;
+        this.refunds = tenders.value;
         this.tenderRefundLoadError = null;
       } else this.tenderRefundLoadError = codeOf(tenders.reason);
     }
@@ -1479,7 +1479,7 @@ export class PaymentsScreen extends LitElement {
     const pending =
       this.billPayments.length ||
       this.billRefunds.length ||
-      this.tenderRefunds.length ||
+      this.refunds.length ||
       this.heldPayments.length;
     if (!pending && !this.billResult && !errors.length) return nothing;
     return html`<section
@@ -1515,10 +1515,10 @@ export class PaymentsScreen extends LitElement {
           : html`<p>${t("payments.bill.no_refunds")}</p>`
       }
       ${
-        this.tenderRefunds.length
+        this.refunds.length
           ? html`<h3>${t("payments.tender.heading")}</h3>
               <ul class="stuck-list">
-                ${this.tenderRefunds.map((row) => this.#renderBillRow({ kind: "tender", row }))}
+                ${this.refunds.map((row) => this.#renderBillRow({ kind: "tender", row }))}
               </ul>`
           : nothing
       }

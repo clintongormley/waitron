@@ -5,13 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
-  billPaymentRefunds,
+  refunds,
   captureError,
   deviceProfiles,
   devices,
   sales,
   taxpayer,
-  tenderRefunds,
   tenders,
   withTransaction,
   workingOrders,
@@ -272,16 +271,16 @@ function moneyState() {
     tenders: rowCount("tenders"),
     payments: rowCount("payments"),
     billPayments: rowCount("bill_payments"),
-    billRefunds: rowCount("bill_payment_refunds"),
-    tenderRefunds: rowCount("tender_refunds"),
+    billRefunds: rowCount("refunds"),
+    refunds: rowCount("refunds"),
     providerRefunds: rowCount("payment_refunds"),
     adjustments: rowCount("adjustments"),
     departures: rowCount("unpaid_departures"),
     deferredClosures: rowCount("deferred_closures"),
     holdOutcomes: rowCount("payments", sql`hold_outcome is not null`),
     settledRefunds:
-      rowCount("bill_payment_refunds", sql`state <> 'pending'`) +
-      rowCount("tender_refunds", sql`state <> 'pending'`),
+      rowCount("refunds", sql`state <> 'pending'`) +
+      rowCount("refunds", sql`state <> 'pending'`),
     drawerJobs: rowCount("print_jobs", sql`kind = 'drawer'`),
     printJobs: rowCount("print_jobs"),
     collects: venue.card.collectCalls.length,
@@ -609,18 +608,18 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   },
   "a new connected card tender refund": async () => {
     const { saleId, tenderId } = await soldWhole("card");
-    return { send: tenderRefund(saleId, tenderId), grows: ["tenderRefunds", "refundSends"] };
+    return { send: tenderRefund(saleId, tenderId), grows: ["refunds", "refundSends"] };
   },
   "a new cash tender refund": async () => {
     const { saleId, tenderId } = await soldWhole("cash");
-    return { send: tenderRefund(saleId, tenderId), grows: ["tenderRefunds", "drawerJobs"] };
+    return { send: tenderRefund(saleId, tenderId), grows: ["refunds", "drawerJobs"] };
   },
   "a correction's cash leg": async () => {
     const correctionId = await openedCorrection("5.00");
     const body = { submissionId: randomUUID(), amount: "5.00", override: OVERRIDE() };
     return {
       send: (app) => as(app, "POST", `/api/invoice-corrections/${correctionId}/cash`, body),
-      grows: ["tenderRefunds", "drawerJobs", "sales", "records"],
+      grows: ["refunds", "drawerJobs", "sales", "records"],
     };
   },
   "a correction's File now": async () => {
@@ -932,9 +931,9 @@ async function pendingRefund(kind: "bill" | "tender"): Promise<string> {
     await billRefund(billId, paymentId)(venue.app);
     const [row] = await inTx(venue, (tx) =>
       tx
-        .select({ id: billPaymentRefunds.id, state: billPaymentRefunds.state })
-        .from(billPaymentRefunds)
-        .where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+        .select({ id: refunds.id, state: refunds.state })
+        .from(refunds)
+        .where(eq(refunds.billPaymentId, paymentId)),
     );
     expect(row!.state).toBe("pending");
     return row!.id;
@@ -943,9 +942,9 @@ async function pendingRefund(kind: "bill" | "tender"): Promise<string> {
   await tenderRefund(saleId, tenderId)(venue.app);
   const [row] = await inTx(venue, (tx) =>
     tx
-      .select({ id: tenderRefunds.id, state: tenderRefunds.state })
-      .from(tenderRefunds)
-      .where(eq(tenderRefunds.saleId, saleId)),
+      .select({ id: refunds.id, state: refunds.state })
+      .from(refunds)
+      .where(eq(refunds.saleId, saleId)),
   );
   expect(row!.state).toBe("pending");
   return row!.id;

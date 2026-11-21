@@ -13,7 +13,7 @@ import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
   billPaymentLines,
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   insertInChunks,
   invoiceCorrectionRefunds,
@@ -305,7 +305,7 @@ function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill
 
 type PaymentRow = typeof billPayments.$inferSelect;
 type PaymentLineRow = typeof billPaymentLines.$inferSelect;
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refundRows.$inferSelect;
 
 export interface PaymentMoney {
   row: PaymentRow;
@@ -415,16 +415,16 @@ async function readPaymentsAndRefunds(
       ? []
       : await tx
           .select()
-          .from(billPaymentRefunds)
+          .from(refundRows)
           .where(
             inArray(
-              billPaymentRefunds.billPaymentId,
+              refundRows.billPaymentId,
               rows.map((row) => row.id),
             ),
           )
           // Two refunds can share a millisecond; a tie falls back to `rowid`, the order the rows
           // were written in.
-          .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
+          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`);
   return { rows, refunds, advanced };
 }
 
@@ -679,7 +679,7 @@ async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map
 export function toRefundView(refund: RefundRow): BillRefundView {
   return {
     id: refund.id,
-    paymentId: refund.billPaymentId,
+    paymentId: refund.billPaymentId!,
     submissionId: refund.submissionId,
     appliedAmount: centsToDecimal(refund.appliedAmount),
     tipAmount: centsToDecimal(refund.tipAmount),
@@ -1583,13 +1583,13 @@ export async function findSubmission(
       ),
     );
   const [found] = await tx
-    .select({ refund: billPaymentRefunds })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .select({ refund: refundRows })
+    .from(refundRows)
+    .innerJoin(billPayments, eq(billPayments.id, refundRows.billPaymentId))
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
-        eq(billPaymentRefunds.submissionId, submissionId),
+        eq(refundRows.submissionId, submissionId),
       ),
     );
   return { payment, refund: found?.refund };

@@ -1,4 +1,4 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   devices,
   kitchenStations,
@@ -551,8 +551,9 @@ describe("permanent station deletion", () => {
           .returning({ id: billPayments.id }),
       );
       await inTx(v, (tx) =>
-        tx.insert(billPaymentRefunds).values({
+        tx.insert(refunds).values({
           billPaymentId: payment!.id,
+          ...billRefundFields(tx, v.cfg.nodeId, payment!.id),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount: 100,
@@ -567,9 +568,9 @@ describe("permanent station deletion", () => {
       return async () => {
         const [refund] = await inTx(v, (tx) =>
           tx
-            .select({ state: billPaymentRefunds.state })
-            .from(billPaymentRefunds)
-            .where(eq(billPaymentRefunds.billPaymentId, payment!.id)),
+            .select({ state: refunds.state })
+            .from(refunds)
+            .where(eq(refunds.billPaymentId, payment!.id)),
         );
         expect(refund?.state).toBe("pending");
       };

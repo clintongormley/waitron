@@ -52,7 +52,7 @@ export * from "./node-sealed-state.js";
 export * from "./recovery-packs.js";
 export * from "./invoice-deliveries.js";
 
-export * from "./tender-refunds.js";
+export * from "./refunds.js";
 
 // The tables of the modules whose tables live in core's set.
 export * from "./credentials/index.js";

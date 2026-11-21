@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { invoiceSeries, readTaxpayer, sales, tenderRefunds, type Transaction } from "@waitron/db";
+import { invoiceSeries, readTaxpayer, sales, refunds, type Transaction } from "@waitron/db";
 import { payments } from "@waitron/payments";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -20,8 +20,9 @@ export async function readTenderRefundAcknowledgment(
   tx: Transaction,
   refundId: string,
 ): Promise<TenderRefundAcknowledgment> {
-  const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, refundId));
-  if (row === undefined) throw new AppError("tender.refund_not_found", { refundId });
+  const [row] = await tx.select().from(refunds).where(eq(refunds.id, refundId));
+  if (row === undefined || row.saleId === null || row.tenderId === null)
+    throw new AppError("tender.refund_not_found", { refundId });
   await resolveTransactionScope(tx, row.saleId);
   if (row.state !== "completed")
     throw new AppError("tender.refund_unavailable", { tenderId: row.tenderId });

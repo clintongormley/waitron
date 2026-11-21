@@ -127,7 +127,7 @@ function effects(id: string) {
     payments: suite.db.all(sql`select * from payments where working_order_id = ${id}`),
     billPayments: suite.db.all(sql`select * from bill_payments where working_order_id = ${id}`),
     refunds: suite.db.all(
-      sql`select * from bill_payment_refunds where bill_payment_id in (select id from bill_payments where working_order_id = ${id})`,
+      sql`select * from refunds where bill_payment_id in (select id from bill_payments where working_order_id = ${id})`,
     ),
     tenders: suite.db.all(
       sql`select * from tenders where sale_id in (select id from sales where working_order_id = ${id})`,

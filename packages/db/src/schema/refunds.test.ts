@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
-import { UNIQUE_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { TENDER_REFUND_CHANGE_REFUSAL, TENDER_REFUND_DELETE_REFUSAL } from "../trigger-refusals.js";
+import { REFUND_CHANGE_REFUSAL, REFUND_DELETE_REFUSAL } from "../trigger-refusals.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { isRefusal } from "../unique-violation.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 
@@ -26,6 +27,7 @@ describe("settled-tender refund ledger", () => {
 
   beforeEach(async () => {
     const db = suite.db;
+    await seedPerson(db, { id: PERSON, displayName: "Cashier" });
     await seedVenue(db, {
       name: "Venue",
       invoiceLocales: ["es"],
@@ -70,9 +72,9 @@ describe("settled-tender refund ledger", () => {
       db
         .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
         .map((r) => r.name),
-    ).toContain("tender_refunds");
+    ).toContain("refunds");
     await withTransaction(db, async (tx) => {
-      await tx.run(sql`insert into tender_refunds
+      await tx.run(sql`insert into refunds
         (id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
          authorized_by, requested_by, source, device_id, node_id, method, provider, provider_payment_ref,
          state, created_at)
@@ -81,7 +83,7 @@ describe("settled-tender refund ledger", () => {
     });
     expect(
       db.all(
-        sql`select id, sale_id, tender_id, state, applied_amount, tip_amount, provider_payment_ref, send_count, sent_at from tender_refunds`,
+        sql`select id, sale_id, tender_id, state, applied_amount, tip_amount, provider_payment_ref, send_count, sent_at from refunds`,
       ),
     ).toEqual([
       {
@@ -135,7 +137,7 @@ describe("settled-tender refund ledger", () => {
       ...overrides,
     };
     return withTransaction(suite.db, async (tx) => {
-      await tx.run(sql`insert into tender_refunds
+      await tx.run(sql`insert into refunds
         (id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
          authorized_by, requested_by, source, device_id, node_id, method, manual,
          provider, provider_payment_ref, state, created_at, completed_at, failed_at, sent_at, send_count,
@@ -152,16 +154,26 @@ describe("settled-tender refund ledger", () => {
 
   function update(refundId: string, assignment: ReturnType<typeof sql>) {
     return withTransaction(suite.db, async (tx) => {
-      await tx.run(sql`update tender_refunds set ${assignment} where id = ${refundId}`);
+      await tx.run(sql`update refunds set ${assignment} where id = ${refundId}`);
     });
   }
+
+  it("only records a refund against a stored authorizer", async () => {
+    const missingPerson = "ffffffff-0000-4000-8000-000000000001";
+    const error = await captureError(() => insert({ authorized_by: missingPerson }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await insert();
+    expect(suite.db.all(sql`select authorized_by from refunds`)).toEqual([
+      { authorized_by: PERSON },
+    ]);
+  });
 
   it("keeps one submission identity per sale, including after failure", async () => {
     await insert({ submission_id: SUBMISSION, state: "failed", failed_at: AT });
     const error = await captureError(() => insert({ submission_id: SUBMISSION }));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "tender_refunds",
+        table: "refunds",
         columns: ["sale_id", "submission_id"],
       }),
     ).toBe(true);
@@ -172,12 +184,12 @@ describe("settled-tender refund ledger", () => {
     const first = await insert(cash);
     const error = await captureError(() => insert(cash));
     expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "tender_refunds", columns: ["tender_id"] }),
+      refusalOn(error, UNIQUE_VIOLATION, { table: "refunds", columns: ["tender_id"] }),
     ).toBe(true);
     await update(first, sql`state = 'failed', failed_at = ${AT}`);
     const second = await insert(cash);
     expect(second).not.toBe(first);
-    expect(suite.db.all(sql`select state from tender_refunds order by rowid`)).toEqual([
+    expect(suite.db.all(sql`select state from refunds order by rowid`)).toEqual([
       { state: "failed" },
       { state: "pending" },
     ]);
@@ -192,12 +204,12 @@ describe("settled-tender refund ledger", () => {
     const error = await captureError(() => insert({ tender_id: another!.id }));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "tender_refunds",
+        table: "refunds",
         columns: ["provider", "provider_payment_ref"],
       }),
     ).toBe(true);
     await insert({ tender_id: another!.id, provider_payment_ref: "pi_independent" });
-    expect(suite.db.all(sql`select count(*) as n from tender_refunds`)).toEqual([{ n: 2 }]);
+    expect(suite.db.all(sql`select count(*) as n from refunds`)).toEqual([{ n: 2 }]);
   });
 
   it.each([
@@ -209,14 +221,14 @@ describe("settled-tender refund ledger", () => {
     ["applied_amount", 100000000000000],
   ])("refuses invalid whole-cent storage %s=%s", async (column, value) => {
     const error = await captureError(() => insert({ [column]: value }));
-    expect(checkFailed(error, "tender_refunds_amounts_ck")).toBe(true);
+    expect(checkFailed(error, "refunds_amounts_ck")).toBe(true);
   });
 
   it("refuses zero total but permits a positive tip-only intent", async () => {
     const error = await captureError(() => insert({ applied_amount: 0 }));
-    expect(checkFailed(error, "tender_refunds_amounts_ck")).toBe(true);
+    expect(checkFailed(error, "refunds_amounts_ck")).toBe(true);
     await insert({ applied_amount: 0, tip_amount: 100 });
-    expect(suite.db.all(sql`select applied_amount, tip_amount from tender_refunds`)).toEqual([
+    expect(suite.db.all(sql`select applied_amount, tip_amount from refunds`)).toEqual([
       { applied_amount: 0, tip_amount: 100 },
     ]);
   });
@@ -248,7 +260,7 @@ describe("settled-tender refund ledger", () => {
     [{ device_id: null }, "source_device"],
   ] as const)("refuses inconsistent metadata %j", async (overrides, constraint) => {
     const error = await captureError(() => insert(overrides));
-    expect(checkFailed(error, `tender_refunds_${constraint}_ck`)).toBe(true);
+    expect(checkFailed(error, `refunds_${constraint}_ck`)).toBe(true);
   });
 
   it.each([
@@ -256,7 +268,7 @@ describe("settled-tender refund ledger", () => {
     { method: "card", manual: 1, provider: null, provider_payment_ref: null },
   ])("stores an explicitly completed local return %j", async (overrides) => {
     await insert({ ...overrides, state: "completed", completed_at: AT });
-    expect(suite.db.all(sql`select state, send_count from tender_refunds`)).toEqual([
+    expect(suite.db.all(sql`select state, send_count from refunds`)).toEqual([
       { state: "completed", send_count: 0 },
     ]);
   });
@@ -285,7 +297,7 @@ describe("settled-tender refund ledger", () => {
     const error = await captureError(() =>
       update(refundId, sql`${sql.identifier(column)} = ${value}`),
     );
-    expect(triggerRaised(error, TENDER_REFUND_CHANGE_REFUSAL)).toBe(true);
+    expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
   });
 
   it("records send intent, fixed pre-send references and a stable provider event before completing once", async () => {
@@ -303,7 +315,7 @@ describe("settled-tender refund ledger", () => {
     await update(refundId, sql`state = 'completed'`);
     expect(
       suite.db.all(
-        sql`select state, send_count, sent_at, provider_refund_ref, refs_before_send, next_retry_at from tender_refunds`,
+        sql`select state, send_count, sent_at, provider_refund_ref, refs_before_send, next_retry_at from refunds`,
       ),
     ).toEqual([
       {
@@ -332,7 +344,7 @@ describe("settled-tender refund ledger", () => {
       provider_refund_ref: "re_current",
     });
     const error = await captureError(() => update(refundId, assignment));
-    expect(triggerRaised(error, TENDER_REFUND_CHANGE_REFUSAL)).toBe(true);
+    expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
   });
 
   it.each(["completed", "failed"])(
@@ -355,10 +367,10 @@ describe("settled-tender refund ledger", () => {
           : sql`failed_at = '2026-10-17T00:00:00.000Z'`,
       ]) {
         const error = await captureError(() => update(refundId, assignment));
-        expect(triggerRaised(error, TENDER_REFUND_CHANGE_REFUSAL)).toBe(true);
+        expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
       }
       await update(refundId, sql`state = ${state}`);
-      expect(suite.db.all(sql`select state from tender_refunds`)).toEqual([{ state }]);
+      expect(suite.db.all(sql`select state from refunds`)).toEqual([{ state }]);
     },
   );
 
@@ -366,10 +378,10 @@ describe("settled-tender refund ledger", () => {
     const refundId = await insert();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
-        await tx.run(sql`delete from tender_refunds where id = ${refundId}`);
+        await tx.run(sql`delete from refunds where id = ${refundId}`);
       }),
     );
-    expect(triggerRaised(error, TENDER_REFUND_DELETE_REFUSAL)).toBe(true);
+    expect(triggerRaised(error, REFUND_DELETE_REFUSAL)).toBe(true);
   });
 
   it("does not attribute one provider event to another completed or failed attempt", async () => {
@@ -379,11 +391,11 @@ describe("settled-tender refund ledger", () => {
     );
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
-        table: "tender_refunds",
+        table: "refunds",
         columns: ["provider", "provider_payment_ref", "provider_refund_ref"],
       }),
     ).toBe(true);
     await insert({ state: "completed", completed_at: AT, provider_refund_ref: "re_distinct" });
-    expect(suite.db.all(sql`select count(*) as n from tender_refunds`)).toEqual([{ n: 2 }]);
+    expect(suite.db.all(sql`select count(*) as n from refunds`)).toEqual([{ n: 2 }]);
   });
 });

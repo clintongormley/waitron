@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, money, newId, nowIso, table, tsString } from "../columns.js";
-import { tenderRefunds } from "../tender-refunds.js";
+import { refunds } from "../refunds.js";
 import { adjustments } from "./adjustments.js";
 
 /**
@@ -13,7 +13,7 @@ export const adjustmentRefunds = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     adjustmentId: id("adjustment_id").notNull(),
-    tenderRefundId: id("tender_refund_id").notNull(),
+    refundId: id("refund_id").notNull(),
     amount: money("amount").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
@@ -24,12 +24,12 @@ export const adjustmentRefunds = table(
       name: "adjustment_refunds_adjustment_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.tenderRefundId],
-      foreignColumns: [tenderRefunds.id],
-      name: "adjustment_refunds_tender_refund_fk",
+      columns: [t.refundId],
+      foreignColumns: [refunds.id],
+      name: "adjustment_refunds_refund_fk",
     }).onDelete("restrict"),
-    uniqueIndex("adjustment_refunds_adjustment_refund_key").on(t.adjustmentId, t.tenderRefundId),
-    index("adjustment_refunds_tender_refund_idx").on(t.tenderRefundId),
+    uniqueIndex("adjustment_refunds_adjustment_refund_key").on(t.adjustmentId, t.refundId),
+    index("adjustment_refunds_refund_idx").on(t.refundId),
     check("adjustment_refunds_amount_ck", sql`${t.amount} > 0`),
   ],
 );

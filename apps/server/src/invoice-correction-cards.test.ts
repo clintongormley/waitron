@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { sales, tenderRefunds, tenders } from "@waitron/db";
+import { sales, refunds, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -154,7 +154,7 @@ async function confirmedByThePass(refundId: string) {
     providerStatus: "succeeded",
   });
   for (let minute = 31; minute < 60; minute++) {
-    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, refundId));
+    const [row] = await v.db.select().from(refunds).where(eq(refunds.id, refundId));
     if (row!.state !== "pending") return row!;
     v.set(`2026-10-14T23:${String(minute)}:00.000Z`);
     await recoverTenderRefunds(v.deps);
@@ -373,13 +373,13 @@ describe("a correction's connected card legs", () => {
     const leg = await refundSettledTender(v.deps, v.cfg, t.saleId, request, v.operator);
     expect(leg).toMatchObject({ state: "completed" });
     expect(await read(correction.id)).toMatchObject({ state: "filed" });
-    const refundsBefore = await v.db.select().from(tenderRefunds);
+    const refundsBefore = await v.db.select().from(refunds);
     const salesBefore = salesCount();
 
     await expect(
       refundSettledTender(v.deps, v.cfg, t.saleId, request, v.operator),
     ).resolves.toEqual(leg);
-    expect(await v.db.select().from(tenderRefunds)).toEqual(refundsBefore);
+    expect(await v.db.select().from(refunds)).toEqual(refundsBefore);
     expect(salesCount()).toBe(salesBefore);
   });
 });

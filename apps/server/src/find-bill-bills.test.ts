@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { addFixtureExtra } from "./testing/portion-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
@@ -11,7 +12,7 @@ import {
   workingOrders,
   workingOrderLines,
   billPayments,
-  billPaymentRefunds,
+  refunds,
   floorZones,
   invoiceCorrections,
   sales,
@@ -743,8 +744,9 @@ describe("Find Bills SQL paging", () => {
           })),
         )
         .returning({ id: billPayments.id });
-      await tx.insert(billPaymentRefunds).values({
+      await tx.insert(refunds).values({
         billPaymentId: inserted[0]!.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, inserted[0]!.id),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 400,

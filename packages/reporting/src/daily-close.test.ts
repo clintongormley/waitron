@@ -73,7 +73,7 @@ describe("computeDailyClose", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, deviceId: venue.deviceId },
+      { billPaymentId: payment, deviceId: venue.deviceId, nodeId: venue.nodeId },
       { applied: "5.00", state: "completed", at },
     );
     expect((await run(input())).departmentTakings).toEqual([

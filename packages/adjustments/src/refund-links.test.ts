@@ -136,7 +136,7 @@ describe("the link from a refund to its cancels", () => {
     expect(linkedOf(await read([first, second]))).toEqual({ [first]: "3.00", [second]: "2.50" });
 
     await db.execute(
-      sql`update tender_refunds set state = 'failed', failed_at = ${AT} where id = ${refundId}`,
+      sql`update refunds set state = 'failed', failed_at = ${AT} where id = ${refundId}`,
     );
     expect(linkedOf(await read([first, second]))).toEqual({ [first]: "0.00", [second]: "0.00" });
 
@@ -251,7 +251,7 @@ describe("the link from a refund to its cancels", () => {
     );
     expect(isRefusal(twice, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(twice)).toContain(
-      "adjustment_refunds.adjustment_id, adjustment_refunds.tender_refund_id",
+      "adjustment_refunds.adjustment_id, adjustment_refunds.refund_id",
     );
   });
 });
@@ -291,7 +291,7 @@ it("links every one of 12,000 dish cancellations to its refund", async () => {
   const stored = await db
     .select()
     .from(adjustmentRefunds)
-    .where(eq(adjustmentRefunds.tenderRefundId, refundId));
+    .where(eq(adjustmentRefunds.refundId, refundId));
   expect(stored).toHaveLength(12000);
   expect(new Set(stored.map((row) => row.adjustmentId))).toEqual(new Set(ids));
   expect(stored.every((row) => row.amount === 1)).toBe(true);

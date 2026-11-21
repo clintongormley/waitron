@@ -1,10 +1,10 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { billPaymentRefunds, type billPayments, type Transaction } from "@waitron/db";
+import { refunds as refundRows, type billPayments, type Transaction } from "@waitron/db";
 import { MONEY_SCALE, subtractDecimal, sumDecimals, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
 type PaymentRow = typeof billPayments.$inferSelect;
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refundRows.$inferSelect;
 
 export type RefundMoney = Pick<
   RefundRow,
@@ -34,22 +34,22 @@ export async function completedRefundsOf(tx: Transaction, rows: readonly Pick<Pa
   if (rows.length === 0) return [];
   return tx
     .select({
-      billPaymentId: billPaymentRefunds.billPaymentId,
-      appliedAmount: billPaymentRefunds.appliedAmount,
-      tipAmount: billPaymentRefunds.tipAmount,
-      state: billPaymentRefunds.state,
+      billPaymentId: refundRows.billPaymentId,
+      appliedAmount: refundRows.appliedAmount,
+      tipAmount: refundRows.tipAmount,
+      state: refundRows.state,
     })
-    .from(billPaymentRefunds)
+    .from(refundRows)
     .where(
       and(
         inArray(
-          billPaymentRefunds.billPaymentId,
+          refundRows.billPaymentId,
           rows.map((row) => row.id),
         ),
-        eq(billPaymentRefunds.state, "completed"),
+        eq(refundRows.state, "completed"),
       ),
     )
-    .orderBy(billPaymentRefunds.completedAt, sql`${billPaymentRefunds}.rowid`);
+    .orderBy(refundRows.completedAt, sql`${refundRows}.rowid`);
 }
 
 /** A bill's `total` less what it has received, at the money scale. */

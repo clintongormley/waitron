@@ -2,7 +2,7 @@ import { assertStillSignedIn } from "./till-session.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
-import { billAdvances, billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { billAdvances, refunds, billPayments, withTransaction } from "@waitron/db";
 import { refuseAdvanceRefund } from "./advance-taken-off.js";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
@@ -47,7 +47,7 @@ import {
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { enqueueBillRefundDrawer } from "./receipt-print.js";
+import { enqueueRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { fingerprint } from "./parties.js";
@@ -130,7 +130,7 @@ export function refundProvidersOf(sources: {
   };
 }
 
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 
 async function captureRefundAttendance(
   tx: Transaction,
@@ -254,12 +254,12 @@ interface CardRefund {
 
 async function readCardRefund(tx: Transaction, refundId: string): Promise<CardRefund | undefined> {
   const [found] = await tx
-    .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-    .where(eq(billPaymentRefunds.id, refundId));
+    .select({ refund: refunds, workingOrderId: billPayments.workingOrderId })
+    .from(refunds)
+    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
+    .where(eq(refunds.id, refundId));
   if (found === undefined) return undefined;
-  const provided = await findPaymentByBillPayment(tx, found.refund.billPaymentId);
+  const provided = await findPaymentByBillPayment(tx, found.refund.billPaymentId!);
   return {
     ...found,
     provided:
@@ -316,26 +316,26 @@ async function recordRefundOutcome(
     const attested = attestationColumns(attestation);
     if (outcome === "failed") {
       const [failed] = await tx
-        .update(billPaymentRefunds)
+        .update(refunds)
         .set({
           state: "failed",
           failedAt: now.toISOString(),
           ...(providerRefundRef === null ? {} : { providerRefundRef }),
           ...attested,
         })
-        .where(eq(billPaymentRefunds.id, refundId))
+        .where(eq(refunds.id, refundId))
         .returning();
       return failed!;
     }
     const [completed] = await tx
-      .update(billPaymentRefunds)
+      .update(refunds)
       .set({
         state: "completed",
         completedAt: now.toISOString(),
         ...(providerRefundRef === null ? {} : { providerRefundRef }),
         ...attested,
       })
-      .where(eq(billPaymentRefunds.id, refundId))
+      .where(eq(refunds.id, refundId))
       .returning();
     await recordRefund(tx, {
       provider: target.provided!.provider,
@@ -380,13 +380,13 @@ async function sendCardRefund(
     if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
     if (await refundRefused(tx, deps)) return { ...target, stopped: true };
     const [row] = await tx
-      .update(billPaymentRefunds)
+      .update(refunds)
       .set({
         sentAt: target.refund.sentAt ?? reading.instant.toISOString(),
         sendCount: target.refund.sendCount + 1,
         ...(refsBeforeSend === null ? {} : { refsBeforeSend }),
       })
-      .where(eq(billPaymentRefunds.id, refundId))
+      .where(eq(refunds.id, refundId))
       .returning();
     return { ...target, refund: row!, stopped: false };
   });
@@ -398,7 +398,7 @@ async function sendCardRefund(
     answer = await provider.sendRefund!({
       processorRef: provided!.processorRef,
       amount: refundAmountOf(refund),
-      idempotencyKey: `bpr_${refund.id}`,
+      idempotencyKey: `tr_${refund.id}`,
       refundId: refund.id,
     });
   } catch {
@@ -429,17 +429,23 @@ async function sendCardRefund(
  * none of them can be this refund. */
 async function attributedRefundRefs(tx: Transaction, refund: RefundRow): Promise<string[]> {
   const others = await tx
-    .select({ ref: billPaymentRefunds.providerRefundRef })
-    .from(billPaymentRefunds)
+    .select({ ref: refunds.providerRefundRef })
+    .from(refunds)
     .where(
       and(
-        eq(billPaymentRefunds.billPaymentId, refund.billPaymentId),
-        ne(billPaymentRefunds.id, refund.id),
-        isNotNull(billPaymentRefunds.providerRefundRef),
+        eq(refunds.provider, refund.provider!),
+        eq(refunds.providerPaymentRef, refund.providerPaymentRef!),
+        ne(refunds.id, refund.id),
+        isNotNull(refunds.providerRefundRef),
       ),
     );
-  const recorded = await recordedRefundRefs(tx, refund.billPaymentId);
-  return [...new Set([...recorded, ...others.map((other) => other.ref!)])];
+  const recorded = await recordedRefundRefs(tx, refund.billPaymentId!);
+  return [
+    ...new Set([
+      ...recorded.filter((ref) => ref !== refund.providerRefundRef),
+      ...others.map((other) => other.ref!),
+    ]),
+  ];
 }
 
 async function lookUp(
@@ -751,6 +757,8 @@ export async function refundBillPayment(
         const createdAt = reading.instant.toISOString();
         const values = {
           billPaymentId: paymentId,
+          nodeId: cfg.nodeId,
+          method: payment.method,
           submissionId: req.submissionId,
           fingerprint: print,
           appliedAmount: decimalToCents(applied),
@@ -764,11 +772,11 @@ export async function refundBillPayment(
         };
         if (payment.method === "cash") {
           const [refund] = await tx
-            .insert(billPaymentRefunds)
+            .insert(refunds)
             .values({ ...values, state: "completed", completedAt: createdAt })
             .returning();
           await captureRefundAttendance(tx, refund!, deps.attendance, "qualified");
-          await enqueueBillRefundDrawer(tx, cfg, paymentId, operator.personId, {
+          await enqueueRefundDrawer(tx, cfg, refund!.id, operator.personId, {
             authorizedBy: authorization.authorizedBy,
             viaOverride: authorization.viaOverride,
           });
@@ -794,10 +802,11 @@ export async function refundBillPayment(
             confirmedBy = override.personId;
           }
           const [refund] = await tx
-            .insert(billPaymentRefunds)
+            .insert(refunds)
             .values({
               ...values,
               authorizedBy: confirmedBy,
+              manual: true,
               state: "completed",
               completedAt: createdAt,
             })
@@ -823,8 +832,13 @@ export async function refundBillPayment(
           amount: centsToDecimal(values.appliedAmount + values.tipAmount),
         });
         const [refund] = await tx
-          .insert(billPaymentRefunds)
-          .values({ ...values, state: "pending" })
+          .insert(refunds)
+          .values({
+            ...values,
+            provider: provided.provider,
+            providerPaymentRef: provided.paymentRef,
+            state: "pending",
+          })
           .returning();
         await captureRefundAttendance(tx, refund!, deps.attendance, "pending");
         // Inside the transaction, so no loop pass runs between the insert and the claim.
@@ -846,8 +860,8 @@ export async function refundBillPayment(
     return await withTransaction(deps.db, async (tx) => {
       const [refund] = await tx
         .select()
-        .from(billPaymentRefunds)
-        .where(eq(billPaymentRefunds.id, refundId));
+        .from(refunds)
+        .where(eq(refunds.id, refundId));
       const result = await resultOf(tx, refund!, workingOrderId);
       if (result.refund.state === "failed" && refusalReason !== undefined) {
         result.refund.refusalReason = refusalReason;

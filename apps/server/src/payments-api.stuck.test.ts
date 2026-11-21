@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   tenders,
   billPayments,
   devices,
@@ -68,7 +68,7 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
@@ -1790,10 +1790,11 @@ describe("the manager's lists, of rows written within one millisecond", () => {
     const asked: string[] = [];
     for (const billPaymentId of paid) {
       const [row] = await suite.db
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           id: id(),
           billPaymentId,
+          ...billRefundFields(suite.db, v.cfg.nodeId, billPaymentId),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount: 100,
@@ -1805,7 +1806,7 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           state: "pending",
           createdAt: AT,
         })
-        .returning({ id: billPaymentRefunds.id });
+        .returning({ id: refunds.id });
       asked.push(row!.id);
     }
 

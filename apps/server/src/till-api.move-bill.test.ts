@@ -12,7 +12,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentLines, billPaymentRefunds, saleLines, sales } from "@waitron/db";
+import { billPaymentLines, refunds as refundRows, saleLines, sales } from "@waitron/db";
 import { parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -467,9 +467,9 @@ describe("money on a moved bill", () => {
     });
     const refunds = await inTx(venue, (tx) =>
       tx
-        .select({ state: billPaymentRefunds.state })
-        .from(billPaymentRefunds)
-        .where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+        .select({ state: refundRows.state })
+        .from(refundRows)
+        .where(eq(refundRows.billPaymentId, paymentId)),
     );
     expect(refunds).toEqual([{ state: "completed" }]);
   });
@@ -788,7 +788,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     await vi.waitFor(() =>
       expect(
         venue.db.all(
-          sql`select id from bill_payment_refunds where bill_payment_id = ${paymentId} and state = 'pending'`,
+          sql`select id from refunds where bill_payment_id = ${paymentId} and state = 'pending'`,
         ),
       ).toHaveLength(1),
     );

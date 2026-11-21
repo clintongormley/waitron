@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { billPaymentRefunds, tenderRefunds, tenders, sales, withTransaction } from "@waitron/db";
+import { refunds, tenders, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
@@ -143,8 +143,8 @@ describe("conflict issuance preflights over real routes", () => {
       const answer = await send(venue.app, venue.cookie, "POST", request.path, request.body);
       expect(answer.json).toMatchObject(refusal);
       expect(venue.card.refundCalls).toEqual([]);
-      expect(await suite.db.select().from(billPaymentRefunds)).toEqual([]);
-      expect(await suite.db.select().from(tenderRefunds)).toEqual([]);
+      expect(await suite.db.select().from(refunds)).toEqual([]);
+      expect(await suite.db.select().from(refunds)).toEqual([]);
     });
 
     it(`checks the active conflict again after the ${kind} refund's provider read`, async () => {
@@ -158,7 +158,7 @@ describe("conflict issuance preflights over real routes", () => {
         kind === "bill" ? { refund: { state: "pending" } } : { state: "pending" },
       );
       expect(venue.card.refundCalls).toEqual([]);
-      const table = kind === "bill" ? billPaymentRefunds : tenderRefunds;
+      const table = kind === "bill" ? refunds : refunds;
       expect(
         await suite.db.select({ sentAt: table.sentAt, sendCount: table.sendCount }).from(table),
       ).toEqual([{ sentAt: null, sendCount: 0 }]);
@@ -191,7 +191,7 @@ describe("conflict issuance preflights over real routes", () => {
         kind === "bill" ? { refund: { state: "pending" } } : { state: "pending" },
       );
       await markConflict();
-      const table = kind === "bill" ? billPaymentRefunds : tenderRefunds;
+      const table = kind === "bill" ? refunds : refunds;
       const before = await suite.db.select().from(table);
       const lookups = venue.card.lookupCalls.length;
       const deps = {

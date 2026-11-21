@@ -7,7 +7,7 @@ import {
   type DeleteTarget,
 } from "@waitron/shared";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   deviceNotDeleted,
   devices,
@@ -65,10 +65,10 @@ async function deviceDeleteRules(
     .where(and(eq(billPayments.deviceId, id), eq(billPayments.state, "pending")));
   const refundOrders = await tx
     .select(orderColumns)
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .from(refunds)
+    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
     .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
-    .where(and(eq(billPaymentRefunds.deviceId, id), eq(billPaymentRefunds.state, "pending")));
+    .where(and(eq(refunds.deviceId, id), eq(refunds.state, "pending")));
   const unfinished = named(
     "device.payment_in_progress",
     [...cardOrders, ...billOrders, ...refundOrders].map(orderName),

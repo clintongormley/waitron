@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   incidents,
   kitchenStations,
@@ -24,7 +24,7 @@ import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import type { CounterPaymentBasket } from "./bill-payments.js";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
-import {
+import { billRefundFields,
   billShare,
   seedPendingCardPayment,
   takeBillPayment,
@@ -1237,8 +1237,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
           .returning({ id: billPayments.id }),
       );
       await inTx(v, (tx) =>
-        tx.insert(billPaymentRefunds).values({
+        tx.insert(refunds).values({
           billPaymentId: payment!.id,
+          ...billRefundFields(tx, v.cfg.nodeId, payment!.id),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount: 100,
@@ -1253,9 +1254,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       return async () => {
         const [refund] = await inTx(v, (tx) =>
           tx
-            .select({ state: billPaymentRefunds.state })
-            .from(billPaymentRefunds)
-            .where(eq(billPaymentRefunds.billPaymentId, payment!.id)),
+            .select({ state: refunds.state })
+            .from(refunds)
+            .where(eq(refunds.billPaymentId, payment!.id)),
         );
         expect(refund?.state).toBe("pending");
       };

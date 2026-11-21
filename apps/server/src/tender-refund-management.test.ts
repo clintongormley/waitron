@@ -8,7 +8,7 @@ import {
   saleLines,
   tenders,
   saleSettlements,
-  tenderRefunds,
+  refunds,
   drawerOpens,
   printJobs,
   withTransaction,
@@ -84,10 +84,10 @@ const attest = (
   cookie = venue.adminDashboard,
 ) => send(app, cookie, "POST", path(id, "attest"), body);
 const row = async (id: string) =>
-  (await store.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id)))[0]!;
+  (await store.db.select().from(refunds).where(eq(refunds.id, id)))[0]!;
 async function snapshot() {
   return inTx(venue, async (tx) => ({
-    refunds: await tx.select().from(tenderRefunds),
+    refunds: await tx.select().from(refunds),
     evidence: await tx.select().from(paymentRefunds),
     drawers: await tx.select().from(drawerOpens),
     prints: await tx.select().from(printJobs),
@@ -179,7 +179,7 @@ async function unsent() {
   const t = await target("card"),
     id = randomUUID();
   const [capture] = await store.db.select().from(payments).where(eq(payments.saleId, t.saleId));
-  await store.db.insert(tenderRefunds).values({
+  await store.db.insert(refunds).values({
     id,
     ...t,
     submissionId: randomUUID(),

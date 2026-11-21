@@ -15,7 +15,7 @@ import {
   parties,
   products,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   ticketItems,
   workingOrderLines,
@@ -364,7 +364,7 @@ async function seedTenderRefund(
     createdAt: string;
   },
 ): Promise<void> {
-  await tx.insert(tenderRefunds).values({
+  await tx.insert(refunds).values({
     ...row,
     tipAmount: 0,
     method: "cash",

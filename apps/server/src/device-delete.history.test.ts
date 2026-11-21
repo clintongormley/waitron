@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -5,7 +6,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   printers,
   withTransaction,
@@ -231,9 +232,10 @@ describe("a deleted device's history", () => {
     const pending = await billPayment(await openOrder(venue), barTill, "pending");
     const received = await billPayment(await openOrder(venue), barTill, "received");
     const [refund] = await suite.db
-      .insert(billPaymentRefunds)
+      .insert(refundRows)
       .values({
         billPaymentId: received,
+        ...billRefundFields(suite.db, venue.cfg.nodeId, received),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 100,
@@ -244,7 +246,7 @@ describe("a deleted device's history", () => {
         deviceId: barTill,
         state: "pending",
       })
-      .returning({ id: billPaymentRefunds.id });
+      .returning({ id: refundRows.id });
 
     const app = paymentsApp(venue);
     const cookie = venue.managerCookie;

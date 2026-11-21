@@ -415,7 +415,7 @@ export function mountBillPaymentsApi(
   );
 
   // The refund names the requesting device. Cash opens a drawer only where
-  // `enqueueBillRefundDrawer` finds one this device may open; a connected card goes through its
+  // `enqueueRefundDrawer` finds one this device may open; a connected card goes through its
   // provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {

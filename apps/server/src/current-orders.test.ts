@@ -2276,7 +2276,7 @@ describe("a paid held dish fired on its own", () => {
         numbers: await suite.db.all(sql`select * from invoice_series order by id`),
         adjustments: await suite.db.select().from(adjustments).orderBy(adjustments.id),
         payments: await suite.db.all(sql`select * from bill_payments order by id`),
-        refunds: await suite.db.all(sql`select * from bill_payment_refunds order by id`),
+        refunds: await suite.db.all(sql`select * from refunds order by id`),
       };
     }
     const facts = await financial();

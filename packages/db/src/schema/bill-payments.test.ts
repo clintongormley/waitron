@@ -12,10 +12,11 @@ import { useVenueDb } from "../testing/venue-db.js";
 import {
   BILL_PAYMENT_CHANGE_REFUSAL,
   BILL_PAYMENT_DELETE_REFUSAL,
-  BILL_REFUND_CHANGE_REFUSAL,
-  BILL_REFUND_DELETE_REFUSAL,
+  REFUND_CHANGE_REFUSAL,
+  REFUND_DELETE_REFUSAL,
 } from "../trigger-refusals.js";
-import { billPaymentLines, billPaymentRefunds, billPayments } from "./bill-payments.js";
+import { billPaymentLines, billPayments } from "./bill-payments.js";
+import { refunds } from "./refunds.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { persons } from "./identity/persons.js";
 import { sales, tenders } from "./sales.js";
@@ -86,7 +87,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   });
 
   type PaymentValues = typeof billPayments.$inferInsert;
-  type RefundValues = typeof billPaymentRefunds.$inferInsert;
+  type RefundValues = typeof refunds.$inferInsert;
 
   function paymentValues(overrides: Partial<PaymentValues> = {}): PaymentValues {
     nextSubmission += 1;
@@ -140,6 +141,10 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       billPaymentId,
       submissionId: `refund-${nextSubmission}`,
       fingerprint: "fingerprint",
+      nodeId,
+      method: "card" as const,
+      provider: "stripe",
+      providerPaymentRef: `charge-${nextSubmission}`,
       appliedAmount: 500,
       tipAmount: 0,
       reason: "wrong item",
@@ -158,9 +163,9 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   ): Promise<string> {
     const [row] = await inTx((tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values(refundValues(billPaymentId, overrides))
-        .returning({ id: billPaymentRefunds.id }),
+        .returning({ id: refunds.id }),
     );
     return row!.id;
   }
@@ -174,7 +179,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   }
 
   function updateRefund(id: string, set: string): Promise<unknown> {
-    return run(sql`update bill_payment_refunds set ${sql.raw(set)} where id = ${id}`);
+    return run(sql`update refunds set ${sql.raw(set)} where id = ${id}`);
   }
 
   async function paymentState(id: string): Promise<string> {
@@ -750,12 +755,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("bill_payment_refunds columns and checks", () => {
+  describe("refunds columns and checks", () => {
     it("writes and reads back a pending card refund", async () => {
       const paymentId = await receivedPayment();
       const id = await insertRefund(paymentId);
       const [row] = await inTx((tx) =>
-        tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.id, id)),
+        tx.select().from(refunds).where(eq(refunds.id, id)),
       );
       expect(row).toMatchObject({
         billPaymentId: paymentId,
@@ -783,7 +788,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const error = await captureError(() => insertRefund(paymentId, { submissionId: "again" }));
       expect(
         refusalOn(error, UNIQUE_VIOLATION, {
-          table: "bill_payment_refunds",
+          table: "refunds",
           columns: ["bill_payment_id", "submission_id"],
         }),
       ).toBe(true);
@@ -791,63 +796,63 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
 
     it.each([
-      ["nothing given back", { appliedAmount: 0, tipAmount: 0 }, "bill_payment_refunds_amounts_ck"],
-      ["a negative tip", { appliedAmount: 500, tipAmount: -1 }, "bill_payment_refunds_amounts_ck"],
+      ["nothing given back", { appliedAmount: 0, tipAmount: 0 }, "refunds_amounts_ck"],
+      ["a negative tip", { appliedAmount: 500, tipAmount: -1 }, "refunds_amounts_ck"],
       [
         "a negative applied amount",
         { appliedAmount: -1, tipAmount: 500 },
-        "bill_payment_refunds_amounts_ck",
+        "refunds_amounts_ck",
       ],
-      ["an unknown state", { state: "lost" }, "bill_payment_refunds_state_ck"],
+      ["an unknown state", { state: "lost" }, "refunds_state_ck"],
       [
         "a send counted with no send time",
         { sendCount: 1, sentAt: null },
-        "bill_payment_refunds_sent_ck",
+        "refunds_sent_ck",
       ],
       [
         "a send time with no send counted",
         { sendCount: 0, sentAt: AT },
-        "bill_payment_refunds_sent_ck",
+        "refunds_sent_ck",
       ],
       [
         "a completed refund with no time",
         { state: "completed", completedAt: null },
-        "bill_payment_refunds_completed_at_ck",
+        "refunds_completed_at_ck",
       ],
       [
         "a pending refund with a completed time",
         { completedAt: AT },
-        "bill_payment_refunds_completed_at_ck",
+        "refunds_completed_at_ck",
       ],
       [
         "a failed refund with no time",
         { state: "failed", failedAt: null },
-        "bill_payment_refunds_failed_at_ck",
+        "refunds_failed_at_ck",
       ],
       [
         "a pending refund with a failed time",
         { failedAt: AT },
-        "bill_payment_refunds_failed_at_ck",
+        "refunds_failed_at_ck",
       ],
       [
         "an attestation with no note",
         { state: "failed", failedAt: AT, attestedBy: MANAGER },
-        "bill_payment_refunds_attestation_ck",
+        "refunds_attestation_ck",
       ],
       [
         "a note with no attester",
         { state: "failed", failedAt: AT, attestationNote: "SumUp support" },
-        "bill_payment_refunds_attestation_ck",
+        "refunds_attestation_ck",
       ],
       [
         "an attestation with a blank note",
         { state: "failed", failedAt: AT, attestedBy: MANAGER, attestationNote: "  " },
-        "bill_payment_refunds_attestation_ck",
+        "refunds_attestation_ck",
       ],
       [
         "an attestation on a pending refund",
         { attestedBy: MANAGER, attestationNote: "SumUp support" },
-        "bill_payment_refunds_attestation_ck",
+        "refunds_attestation_ck",
       ],
     ] as const)("refuses %s", async (_name, overrides, check) => {
       const paymentId = await receivedPayment();
@@ -870,10 +875,10 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("bill_payment_refunds_guard_update: outcome once, sent once, counted up by one", () => {
+  describe("refunds_guard_update: outcome once, sent once, counted up by one", () => {
     async function refundState(id: string) {
       const [row] = await inTx((tx) =>
-        tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.id, id)),
+        tx.select().from(refunds).where(eq(refunds.id, id)),
       );
       return row!;
     }
@@ -993,7 +998,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     ] as const)("refuses %s", async (_name, start, set) => {
       const id = await insertRefund(await receivedPayment(), start as Partial<RefundValues>);
       const error = await captureError(() => updateRefund(id, set));
-      expect(triggerRaised(error, BILL_REFUND_CHANGE_REFUSAL)).toBe(true);
+      expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
     });
 
     it.each([
@@ -1017,16 +1022,16 @@ describe("bill payments: the three tables, their checks and their triggers", () 
           `${set.replace("__OTHER__", other).replace("__DEVICE2__", device2)}, sent_at = '${AT}', send_count = 1`,
         ),
       );
-      expect(triggerRaised(error, BILL_REFUND_CHANGE_REFUSAL)).toBe(true);
+      expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
       expect((await refundState(id)).sendCount).toBe(0);
     });
 
     it("refuses a delete", async () => {
       const id = await insertRefund(await receivedPayment());
       const error = await captureError(() =>
-        run(sql`delete from bill_payment_refunds where id = ${id}`),
+        run(sql`delete from refunds where id = ${id}`),
       );
-      expect(triggerRaised(error, BILL_REFUND_DELETE_REFUSAL)).toBe(true);
+      expect(triggerRaised(error, REFUND_DELETE_REFUSAL)).toBe(true);
     });
   });
 

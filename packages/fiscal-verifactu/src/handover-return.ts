@@ -36,10 +36,15 @@ export interface ReturnedOriginals {
   substitutions: ReturnRow[];
 }
 
-function staffIds(sales: ReturnRow[], voids: ReturnRow[]) {
+function refundStaffIds(refund: ReturnRow) {
+  return [refund.requested_by, refund.authorized_by, refund.attested_by];
+}
+
+function staffIds(sales: ReturnRow[], voids: ReturnRow[], refunds: ReturnRow[]) {
   return new Set([
     ...sales.flatMap((row) => [row.operator_id, row.authorized_by]),
     ...voids.map((row) => row.voided_by),
+    ...refunds.flatMap(refundStaffIds),
   ]);
 }
 
@@ -58,14 +63,14 @@ export async function readReturnedOriginals(
     union select s.substituted_sale_id from sale_substitutions s
       join parents p on p.id = s.substitution_sale_id
   ) select id from parents)`;
-  const refunds = tx.all<ReturnRow>(sql`select * from tender_refunds
+  const refunds = tx.all<ReturnRow>(sql`select * from refunds
     where sale_id in ${saleIds} and state <> 'failed' order by id`);
   const captures = tx.all<ReturnRow>(sql`select p.* from payments p where exists (
-    select 1 from tender_refunds r where r.sale_id in ${saleIds}
+    select 1 from refunds r where r.sale_id in ${saleIds}
       and r.state = 'pending' and r.provider = p.provider and r.provider_payment_ref = p.payment_ref
   ) order by p.id`);
   const orders = tx.all<ReturnRow>(sql`select * from working_orders where id in (
-    select p.working_order_id from payments p join tender_refunds r
+    select p.working_order_id from payments p join refunds r
       on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
     where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
@@ -75,12 +80,12 @@ export async function readReturnedOriginals(
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
     select device_id from registros_facturacion where node_id = ${sourceNodeId}
     union select device_id from sales where id in ${saleIds}
-    union select device_id from tender_refunds where sale_id in ${saleIds} and state <> 'failed'
-    union select p.device_id from payments p join tender_refunds r
+    union select device_id from refunds where sale_id in ${saleIds} and state <> 'failed'
+    union select p.device_id from payments p join refunds r
       on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
       where r.sale_id in ${saleIds} and r.state = 'pending'
     union select o.device_id from working_orders o join payments p on p.working_order_id = o.id
-      join tender_refunds r on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
+      join refunds r on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
       where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
   const heads = tx.all<ReturnRow>(sql`select * from cadenas where node_id = ${sourceNodeId}`);
@@ -98,7 +103,7 @@ export async function readReturnedOriginals(
   );
   const staff = tx.all<ReturnRow>(sql`
     select id, display_name as displayName from persons
-    where id in (select value from json_each(${JSON.stringify([...staffIds(sales, voids)])}))
+    where id in (select value from json_each(${JSON.stringify([...staffIds(sales, voids, refunds)])}))
     order by id`);
   const departments = tx.all<ReturnRow>(sql`
     select id, name as departmentName from departments
@@ -149,7 +154,7 @@ export async function inspectReturnedPayments(
 ): Promise<ReturnDiscrepancy[]> {
   const matches = (table: string, row: ReturnRow) => {
     const ownRow = held(tx, table, row.id);
-    const pending = table === "tender_refunds" && row.state === "pending";
+    const pending = table === "refunds" && row.state === "pending";
     return (
       ownRow !== undefined &&
       canonicalize(normalized(table, ownRow, pending)) ===
@@ -161,7 +166,7 @@ export async function inspectReturnedPayments(
       ["registros_facturacion", returned.records],
       ["sales", returned.sales],
       ["tenders", returned.tenders],
-      ["tender_refunds", returned.refunds],
+      ["refunds", returned.refunds],
       ["payments", returned.captures],
       ["sale_settlements", returned.settlements],
       ["sale_voids", returned.voids],
@@ -189,7 +194,7 @@ export async function inspectReturnedPayments(
         sql`select * from sale_settlements where sale_id = ${sale.id} order by id`,
       ),
       refunds: tx.all<ReturnRow>(
-        sql`select * from tender_refunds where sale_id = ${sale.id} order by id`,
+        sql`select * from refunds where sale_id = ${sale.id} order by id`,
       ),
     };
     const records = forSale(returned.records);
@@ -364,7 +369,7 @@ export async function receiveReturnedOriginals(
       const refunds = new Map(
         [
           ...tx.all<ReturnRow>(
-            sql`select * from tender_refunds where tender_id = ${tenderId} and state <> 'failed'`,
+            sql`select * from refunds where tender_id = ${tenderId} and state <> 'failed'`,
           ),
           ...incomingRefunds.filter((row) => row.tender_id === tenderId),
         ].map((row) => [row.id, row]),
@@ -412,8 +417,11 @@ export async function receiveReturnedOriginals(
             });
         }
         for (const refund of returned.refunds.filter((row) => row.sale_id === sale.id)) {
-          if (!held(paymentTx, "tender_refunds", refund.id))
-            await insertRow(paymentTx, "tender_refunds", refund);
+          if (!held(paymentTx, "refunds", refund.id)) {
+            for (const id of refundStaffIds(refund))
+              await restoreStaff(paymentTx, returned.staff, id, now.toISOString());
+            await insertRow(paymentTx, "refunds", refund);
+          }
         }
       });
     } catch (error) {
@@ -421,8 +429,16 @@ export async function receiveReturnedOriginals(
         !refusalOn(error, UNIQUE_VIOLATION, { table: "tenders", columns: ["bill_payment_id"] }) &&
         !refusalOn(error, UNIQUE_VIOLATION, { table: "sale_settlements", columns: ["sale_id"] }) &&
         !refusalOn(error, UNIQUE_VIOLATION, {
-          table: "tender_refunds",
+          table: "refunds",
           columns: ["sale_id", "submission_id"],
+        }) &&
+        !refusalOn(error, UNIQUE_VIOLATION, {
+          table: "refunds",
+          columns: ["provider", "provider_payment_ref"],
+        }) &&
+        !refusalOn(error, UNIQUE_VIOLATION, {
+          table: "refunds",
+          columns: ["provider", "provider_payment_ref", "provider_refund_ref"],
         }) &&
         !triggerRaised(error, COVERAGE_REFUSAL) &&
         !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
@@ -514,7 +530,7 @@ export async function receiveReturnedOriginals(
     ["registros_facturacion", returned.records],
     ["sales", returned.sales],
     ["tenders", returned.tenders],
-    ["tender_refunds", returned.refunds],
+    ["refunds", returned.refunds],
     ["payments", returned.captures],
     ["sale_settlements", returned.settlements],
     ["sale_voids", returned.voids],
@@ -522,7 +538,7 @@ export async function receiveReturnedOriginals(
   ] as const) {
     for (const row of rows) {
       if (
-        ["tenders", "tender_refunds", "sale_settlements"].includes(table) &&
+        ["tenders", "refunds", "sale_settlements"].includes(table) &&
         acceptedSales.has(String(row.sale_id))
       )
         continue;
@@ -531,7 +547,7 @@ export async function receiveReturnedOriginals(
         missing = true;
         continue;
       }
-      const pendingRefund = table === "tender_refunds" && row.state === "pending";
+      const pendingRefund = table === "refunds" && row.state === "pending";
       if (
         canonicalize(normalized(table, own, pendingRefund)) ===
         canonicalize(normalized(table, row, pendingRefund))
@@ -683,7 +699,7 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
       ...unit.orders.map((row) => row.device_id),
     ]);
     unit.devices = [...deviceIds].filter((id) => devices.has(id)).map((id) => devices.get(id)!);
-    unit.staff = [...staffIds(unit.sales, unit.voids)]
+    unit.staff = [...staffIds(unit.sales, unit.voids, unit.refunds)]
       .filter((id) => staff.has(id))
       .map((id) => staff.get(id)!);
     unit.departments = [...departmentIds(unit.sales)]

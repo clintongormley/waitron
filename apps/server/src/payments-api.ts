@@ -29,7 +29,7 @@ import {
 } from "@waitron/shared";
 import {
   withTransaction,
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   deviceNotDeleted,
   deviceProfiles,
@@ -39,7 +39,6 @@ import {
   saveSettings,
   readNodeMembership,
   workingOrders,
-  tenderRefunds,
   sales,
   invoiceSeries,
   type Database,
@@ -1912,29 +1911,29 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
-            refundId: billPaymentRefunds.id,
-            billPaymentId: billPaymentRefunds.billPaymentId,
+            refundId: refundRows.id,
+            billPaymentId: billPayments.id,
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
-            source: billPaymentRefunds.source,
-            deviceId: billPaymentRefunds.deviceId,
+            source: refundRows.source,
+            deviceId: refundRows.deviceId,
             deviceName: devices.label,
-            appliedAmount: billPaymentRefunds.appliedAmount,
-            tipAmount: billPaymentRefunds.tipAmount,
-            reason: billPaymentRefunds.reason,
-            requestedAt: billPaymentRefunds.createdAt,
-            sentAt: billPaymentRefunds.sentAt,
-            sendCount: billPaymentRefunds.sendCount,
+            appliedAmount: refundRows.appliedAmount,
+            tipAmount: refundRows.tipAmount,
+            reason: refundRows.reason,
+            requestedAt: refundRows.createdAt,
+            sentAt: refundRows.sentAt,
+            sendCount: refundRows.sendCount,
             provider: payments.provider,
           })
-          .from(billPaymentRefunds)
-          .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+          .from(refundRows)
+          .innerJoin(billPayments, eq(billPayments.id, refundRows.billPaymentId))
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
-          .leftJoin(devices, eq(devices.id, billPaymentRefunds.deviceId))
+          .leftJoin(devices, eq(devices.id, refundRows.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
-          .where(eq(billPaymentRefunds.state, "pending"))
-          .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`),
+          .where(eq(refundRows.state, "pending"))
+          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`),
       );
       return c.json(
         rows
@@ -1999,21 +1998,21 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
-            refund: tenderRefunds,
+            refund: refundRows,
             invoiceNumber: sales.invoiceNumber,
             seriesCode: invoiceSeries.code,
           })
-          .from(tenderRefunds)
-          .innerJoin(sales, eq(sales.id, tenderRefunds.saleId))
+          .from(refundRows)
+          .innerJoin(sales, eq(sales.id, refundRows.saleId))
           .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
           .where(
             and(
-              eq(tenderRefunds.state, "pending"),
-              eq(tenderRefunds.method, "card"),
-              eq(tenderRefunds.manual, false),
+              eq(refundRows.state, "pending"),
+              eq(refundRows.method, "card"),
+              eq(refundRows.manual, false),
             ),
           )
-          .orderBy(tenderRefunds.createdAt, sql`${tenderRefunds}.rowid`),
+          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`),
       );
       return c.json(
         rows

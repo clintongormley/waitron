@@ -124,7 +124,7 @@ async function frozen() {
       "sale_voids",
       "tenders",
       "bill_payments",
-      "bill_payment_refunds",
+      "refunds",
       "invoice_series",
       "registros_facturacion",
       "daily_closes",
@@ -278,7 +278,7 @@ describe("dated business-day reporting through real storage", () => {
       "sale_settlements",
       "sale_voids",
       "bill_payments",
-      "bill_payment_refunds",
+      "refunds",
       "adjustments",
     ])
       expect((rows[table] as unknown[]).length).toBeGreaterThan(0);

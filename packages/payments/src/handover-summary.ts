@@ -35,8 +35,7 @@ function nullableText(value: BackupValue | undefined): string | null {
 
 /**
  * Each ordered by id, reading only: payments in `attempting` or `initiated`;
- * `tender_refunds` that are connected card and pending; every pending `bill_payment_refunds` row (only a
- * card refund is ever saved pending), with its bill payment's provider row when there is one.
+ * Pending connected refunds on a sale, and pending bill refunds with their payment references.
  */
 export async function summariseOpenPayments(query: BackupQuery): Promise<OpenPayments> {
   const payments: OpenPayments["payments"][number][] = [];
@@ -55,8 +54,8 @@ export async function summariseOpenPayments(query: BackupQuery): Promise<OpenPay
   // Only connected refunds are recovered on the receiving box.
   const refunds: OpenPayments["refunds"][number][] = [];
   for await (const row of query.rows(
-    `select id, provider, provider_payment_ref from tender_refunds
-     where method = 'card' and state = 'pending' and manual = false order by id`,
+    `select id, provider, provider_payment_ref from refunds
+     where sale_id is not null and method = 'card' and state = 'pending' and manual = false order by id`,
   ))
     refunds.push({
       refundId: String(row.id),
@@ -67,8 +66,8 @@ export async function summariseOpenPayments(query: BackupQuery): Promise<OpenPay
   const billRefunds: OpenPayments["billRefunds"][number][] = [];
   for await (const row of query.rows(
     `select r.id, r.bill_payment_id, r.sent_at, p.provider, p.payment_ref, p.external_ref
-     from bill_payment_refunds r left join payments p on p.bill_payment_id = r.bill_payment_id
-     where r.state = 'pending' order by r.id`,
+     from refunds r left join payments p on p.bill_payment_id = r.bill_payment_id
+     where r.bill_payment_id is not null and r.state = 'pending' order by r.id`,
   ))
     billRefunds.push({
       refundId: String(row.id),

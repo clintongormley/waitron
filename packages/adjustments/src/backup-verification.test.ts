@@ -118,9 +118,9 @@ async function seedRefundLink(db: Database) {
     createdAt: "2026-10-20T08:00:00.000Z",
     at: "2026-10-20T08:00:00.000Z",
   });
-  await corrupt(db, `update tender_refunds set id='refund' where id='${refundId}'`);
+  await corrupt(db, `update refunds set id='refund' where id='${refundId}'`);
   db.run(
-    sql`insert into adjustment_refunds (id,adjustment_id,tender_refund_id,amount,created_at) values ('link','adjustment','refund',300,'2026-10-20T08:00:00.000Z')`,
+    sql`insert into adjustment_refunds (id,adjustment_id,refund_id,amount,created_at) values ('link','adjustment','refund',300,'2026-10-20T08:00:00.000Z')`,
   );
 }
 function hideTable(table: string) {

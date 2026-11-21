@@ -601,7 +601,7 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, deviceId: deviceB },
+      { billPaymentId: payment, deviceId: deviceB, nodeId: venue.nodeId },
       { applied: "20.00", state: "completed", at: day2Noon },
     );
 
@@ -626,7 +626,7 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, deviceId: deviceC },
+      { billPaymentId: payment, deviceId: deviceC, nodeId: venue.nodeId },
       { applied: "50.00", state: "completed", at: day1Noon },
     );
     await seedBillPayment(

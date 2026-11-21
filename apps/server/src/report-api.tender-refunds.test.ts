@@ -8,7 +8,7 @@ import {
   saleLines,
   saleSettlements,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -137,7 +137,7 @@ async function get(path: string, onNode = nodeId) {
 }
 async function refund(state: "completed" | "pending" | "failed", refundNode = nodeId) {
   const id = randomUUID();
-  await suite.db.insert(tenderRefunds).values({
+  await suite.db.insert(refunds).values({
     id,
     saleId,
     tenderId,

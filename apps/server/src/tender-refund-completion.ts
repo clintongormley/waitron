@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
-import { tenderRefunds, type Transaction } from "@waitron/db";
+import { refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import type { NodeId } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
-type RefundRow = typeof tenderRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 
 /**
  * Takes a refund `reserveTenderRefund` has just written forward: refused while the clock is behind
@@ -28,12 +28,12 @@ export async function carryNewTenderRefund(
   await steps.beforeCompletion?.(refund);
   if (refund.method === "cash" || refund.manual) {
     const [completed] = await tx
-      .update(tenderRefunds)
+      .update(refunds)
       .set({
         state: "completed",
         completedAt: reading.instant.toISOString(),
       })
-      .where(eq(tenderRefunds.id, refund.id))
+      .where(eq(refunds.id, refund.id))
       .returning();
     refund = completed!;
     if (refund.method === "cash") await steps.openDrawer?.(refund);

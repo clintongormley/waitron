@@ -103,7 +103,7 @@ function cashMovements(input: DailyCloseInput) {
         ${nodeScopeClause(input.nodeIds, sql`wo.node_id`)}
       union all
       select r.source, r.device_id, bp.method, -(r.applied_amount + r.tip_amount), -r.tip_amount, null, bp.working_order_id
-      from bill_payment_refunds r
+      from refunds r
       join bill_payments bp on bp.id = r.bill_payment_id
       join working_orders wo on wo.id = bp.working_order_id
       where r.state = 'completed'
@@ -111,8 +111,8 @@ function cashMovements(input: DailyCloseInput) {
         ${nodeScopeClause(input.nodeIds, sql`wo.node_id`)}
       union all
       select r.source, r.device_id, r.method, -(r.applied_amount + r.tip_amount), -r.tip_amount, r.sale_id, null
-      from tender_refunds r
-      where r.state = 'completed'
+      from refunds r
+      where r.sale_id is not null and r.state = 'completed'
         and ${window(sql`r.completed_at`)}
         ${nodeScopeClause(input.nodeIds, sql`r.node_id`)}
   `;

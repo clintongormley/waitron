@@ -166,7 +166,7 @@ function counts() {
     corrections: number;
   }>(sql`
     select (select count(*) from sales) as invoices,
-           (select count(*) from tender_refunds) as refunds,
+           (select count(*) from refunds) as refunds,
            (select count(*) from print_jobs where kind = 'drawer') as drawers,
            (select count(*) from invoice_corrections) as corrections`)[0]!;
 }

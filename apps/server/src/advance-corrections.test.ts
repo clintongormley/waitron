@@ -13,7 +13,7 @@ import {
   readLiveSeriesIdTx,
   saleLines,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -264,7 +264,7 @@ describe("a plain refund of an advance's own ticket", () => {
 
     expect(
       await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
+        tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
       ),
     ).toEqual([]);
     expect(
@@ -584,7 +584,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
     }
     expect(
       await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
+        tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
       ),
     ).toEqual([]);
   });
@@ -636,7 +636,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ).toEqual([]);
     expect(
       await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
+        tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
       ),
     ).toEqual([]);
     const closed = await send(

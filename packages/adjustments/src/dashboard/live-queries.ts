@@ -14,7 +14,7 @@ export const QUERY_DEPENDENCIES = {
   entries: [
     "adjustments",
     "adjustment_refunds",
-    "tender_refunds",
+    "refunds",
     "working_orders",
     "persons",
     "settings.business_day",

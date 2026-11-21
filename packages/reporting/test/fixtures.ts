@@ -21,7 +21,7 @@ import type {
   SeriesId,
 } from "@waitron/shared";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   diningTables,
   invoiceSeries,
@@ -316,7 +316,7 @@ export async function seedBillPayment(
 /** Money given back from one bill payment, on `deviceId`. `at` is `completed_at` or `failed_at`. */
 export async function seedBillRefund(
   db: Database,
-  ref: { billPaymentId: string; deviceId: DeviceId },
+  ref: { billPaymentId: string; deviceId: DeviceId; nodeId: NodeId },
   opts: {
     applied: string;
     tip?: string;
@@ -324,8 +324,15 @@ export async function seedBillRefund(
     at?: string;
   },
 ): Promise<void> {
-  await db.insert(billPaymentRefunds).values({
+  const [payment] = await db
+    .select({ method: billPayments.method })
+    .from(billPayments)
+    .where(eq(billPayments.id, ref.billPaymentId));
+  await db.insert(refunds).values({
     billPaymentId: ref.billPaymentId,
+    nodeId: ref.nodeId,
+    method: payment!.method,
+    manual: payment!.method === "card",
     submissionId: randomUUID(),
     fingerprint: "fixture",
     appliedAmount: stringToCents(opts.applied),

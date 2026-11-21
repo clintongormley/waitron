@@ -1,6 +1,6 @@
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { tenderRefunds, withTransaction } from "@waitron/db";
+import { refunds, withTransaction } from "@waitron/db";
 import { refundLookupGapMs } from "./bill-payments-loop.js";
 import { raiseTenderRefundUnresolved } from "./bill-refund-alerts.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
@@ -18,9 +18,10 @@ const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;
 const FAILED = "Settled-tender refund recovery failed";
 const pendingConnected = and(
-  eq(tenderRefunds.state, "pending"),
-  eq(tenderRefunds.method, "card"),
-  eq(tenderRefunds.manual, false),
+  isNotNull(refunds.saleId),
+  eq(refunds.state, "pending"),
+  eq(refunds.method, "card"),
+  eq(refunds.manual, false),
 );
 
 export async function recoverTenderRefunds(
@@ -45,34 +46,34 @@ export async function recoverTenderRefunds(
     if (failed.length > 0) throw new AggregateError(failed, FAILED);
     const [summary] = await deps.db
       .select({ pending: sql<number>`count(*)` })
-      .from(tenderRefunds)
+      .from(refunds)
       .where(pendingConnected);
     return { pending: summary!.pending, nextDueAt: new Date(now.getTime() + RECHECK_MS) };
   }
   const batch = await deps.db
-    .select({ id: tenderRefunds.id })
-    .from(tenderRefunds)
+    .select({ id: refunds.id })
+    .from(refunds)
     .where(
       and(
         pendingConnected,
         or(
-          sql`${tenderRefunds.nextRetryAt} is null`,
-          sql`${tenderRefunds.nextRetryAt} <= ${instant}`,
-          sql`${tenderRefunds.lastLookupAt} > ${instant}`,
+          sql`${refunds.nextRetryAt} is null`,
+          sql`${refunds.nextRetryAt} <= ${instant}`,
+          sql`${refunds.lastLookupAt} > ${instant}`,
         ),
       ),
     )
     .orderBy(
-      sql`coalesce(${tenderRefunds.nextRetryAt}, ${tenderRefunds.createdAt})`,
-      tenderRefunds.createdAt,
-      tenderRefunds.id,
+      sql`coalesce(${refunds.nextRetryAt}, ${refunds.createdAt})`,
+      refunds.createdAt,
+      refunds.id,
     )
     .limit(50);
   const results = await Promise.allSettled(
     batch.map(async ({ id }) => {
       const work = await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
-        const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+        const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
         if (row?.state !== "pending") return false;
         const live = tenderRefundIsLive(deps.db, id);
         const gap =
@@ -91,9 +92,9 @@ export async function recoverTenderRefunds(
         if (alertAt > now.getTime()) next = Math.min(next, alertAt);
         // Moving live rows to a later pass lets the next bounded batch reach other captures.
         await tx
-          .update(tenderRefunds)
+          .update(refunds)
           .set({ nextRetryAt: new Date(next).toISOString() })
-          .where(eq(tenderRefunds.id, id));
+          .where(eq(refunds.id, id));
         return !live && (row.sentAt === null || lookupDue);
       });
       const failures: unknown[] = [];
@@ -103,7 +104,7 @@ export async function recoverTenderRefunds(
         });
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
-        const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+        const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
         if (row?.state === "pending" && now.getTime() - Date.parse(row.createdAt) > UNRESOLVED_MS)
           await raiseTenderRefundUnresolved(tx, row, now);
       }).catch((error: unknown) => {
@@ -124,9 +125,9 @@ export async function recoverTenderRefunds(
       pending: sql<number>`count(*)`,
       next: sql<
         string | null
-      >`min(case when ${tenderRefunds.lastLookupAt} > ${instant} then ${instant} else coalesce(${tenderRefunds.nextRetryAt}, ${instant}) end)`,
+      >`min(case when ${refunds.lastLookupAt} > ${instant} then ${instant} else coalesce(${refunds.nextRetryAt}, ${instant}) end)`,
     })
-    .from(tenderRefunds)
+    .from(refunds)
     .where(pendingConnected);
   return {
     pending: summary!.pending,

@@ -121,9 +121,7 @@ function assertUpgradeQuiet(stateDirectory, now) {
       union all select 1 from sales where issued_at > $since
       union all select 1 from bill_payments
         where state = 'pending' or created_at > $since or received_at > $since
-      union all select 1 from bill_payment_refunds
-        where state = 'pending' or created_at > $since or completed_at > $since
-      union all select 1 from tender_refunds
+      union all select 1 from refunds
         where state = 'pending' or created_at > $since or completed_at > $since
     ) as busy`,
       )

@@ -220,7 +220,7 @@ describe("computeCashUp — settled-tender refunds", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId, deviceId: venue.deviceId },
+      { billPaymentId, deviceId: venue.deviceId, nodeId: venue.nodeId },
       { applied: "20.00", tip: "0.00", state: "completed", at: DAY1 },
     );
     const paid = await seedRefundableSale(suite.db, venue, {

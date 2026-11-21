@@ -19,7 +19,7 @@ import {
   deviceProfiles,
   devices,
   billPaymentLines,
-  billPaymentRefunds,
+  refunds,
   billPayments,
   BILL_PAYMENT_CHANGE_REFUSAL,
   captureError,
@@ -74,7 +74,7 @@ import {
   readBillBalance,
   readPaymentsByBill,
 } from "./bill-payments.js";
-import {
+import { billRefundFields,
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,
@@ -762,8 +762,9 @@ describe("a bill holding money", () => {
     const billId = await tabWith("Steak");
     const paid = await take(billId, cash("10.00"));
     await inTx((tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: paid.payment.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, paid.payment.id),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 1000,
@@ -877,8 +878,9 @@ describe("the money a bill has received", () => {
     const other = await tabWith("Beer");
     const received = await take(billId, cash("5.00"));
     await inTx((tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: received.payment.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, received.payment.id),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 100,
@@ -3039,8 +3041,9 @@ describe("the invoice at full payment", () => {
     const billId = await tabWith("Beer");
     const paid = await take(billId, cash("1.00"));
     await inTx((tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: paid.payment.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, paid.payment.id),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 100,
@@ -3235,9 +3238,10 @@ describe("the receipt's payments, taken within one millisecond", () => {
     const refundId = descendingIds();
     for (const appliedAmount of AMOUNTS) {
       await inTx((tx) =>
-        tx.insert(billPaymentRefunds).values({
+        tx.insert(refunds).values({
           id: refundId(),
           billPaymentId: paymentId,
+          ...billRefundFields(tx, venue.cfg.nodeId, paymentId),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount,
@@ -3304,9 +3308,10 @@ describe("the bill's payments, taken within one millisecond", () => {
     const refundId = descendingIds();
     for (const appliedAmount of AMOUNTS) {
       await inTx((tx) =>
-        tx.insert(billPaymentRefunds).values({
+        tx.insert(refunds).values({
           id: refundId(),
           billPaymentId: payment!.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, payment!.id),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount,

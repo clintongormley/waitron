@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { billPaymentRefunds, tenderRefunds, tenders, sales } from "@waitron/db";
+import { refunds, tenders, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
@@ -53,7 +53,7 @@ async function target() {
 async function retained(sent = false) {
   const t = await target();
   const [refund] = await v.db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId: t.sale.id,
       tenderId: t.tender.id,
@@ -108,7 +108,7 @@ describe("settled tender recovery admission", () => {
       expect(v.snapshot()).toEqual(before);
       await recoverTenderRefunds(v.deps);
       expect(
-        (await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id)))[0],
+        (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
       ).toEqual({
         ...t.refund,
         state: "failed",
@@ -156,7 +156,7 @@ describe("settled tender recovery admission", () => {
     }
     expect(v.snapshot()).toEqual(before);
     expect(
-      (await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id)))[0],
+      (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
     ).toEqual(t.refund);
   });
   it("preserves pending evidence when admission closes during a provider lookup", async () => {
@@ -182,8 +182,8 @@ describe("settled tender recovery admission", () => {
     }
     const current = await v.db
       .select()
-      .from(tenderRefunds)
-      .where(eq(tenderRefunds.id, t.refund.id));
+      .from(refunds)
+      .where(eq(refunds.id, t.refund.id));
     expect(current[0]).toEqual({ ...t.refund, lastLookupAt: "2026-10-14T23:30:00.000Z" });
     const after = v.snapshot();
     expect(after.payment_refunds).toEqual(before.payment_refunds);
@@ -233,7 +233,7 @@ describe("settled tender recovery admission", () => {
     expect(errors).toEqual([]);
     expect(v.snapshot()).toEqual(before);
     expect(
-      (await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id)))[0],
+      (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
     ).toEqual(t.refund);
   });
 });
@@ -247,21 +247,21 @@ describe("settled tender recovery stopping", () => {
       const pending = async () =>
         (
           await v.db
-            .select({ id: tenderRefunds.id })
-            .from(tenderRefunds)
-            .where(and(eq(tenderRefunds.state, "pending"), eq(tenderRefunds.method, "card")))
+            .select({ id: refunds.id })
+            .from(refunds)
+            .where(and(eq(refunds.state, "pending"), eq(refunds.method, "card")))
         ).map(({ id }) => id);
       // Sent and due: each one this pass would put to the provider.
       const waiting = (
         await v.db
-          .select({ id: tenderRefunds.id })
-          .from(tenderRefunds)
+          .select({ id: refunds.id })
+          .from(refunds)
           .where(
             and(
-              eq(tenderRefunds.state, "pending"),
-              eq(tenderRefunds.method, "card"),
-              isNotNull(tenderRefunds.sentAt),
-              isNull(tenderRefunds.nextRetryAt),
+              eq(refunds.state, "pending"),
+              eq(refunds.method, "card"),
+              isNotNull(refunds.sentAt),
+              isNull(refunds.nextRetryAt),
             ),
           )
       ).map(({ id }) => id);
@@ -289,7 +289,7 @@ describe("settled tender recovery stopping", () => {
         expect.arrayContaining(waiting.filter((id) => !asked.includes(id))),
       );
       for (const id of asked) {
-        const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+        const [row] = await v.db.select().from(refunds).where(eq(refunds.id, id));
         expect(row!.state).toBe("completed");
       }
     },
@@ -299,7 +299,7 @@ describe("settled tender recovery stopping", () => {
     const lookups = v.card.lookupCalls.length;
     await recoverTenderRefunds({ ...v.deps, stopSignal: AbortSignal.abort() });
     expect(v.card.lookupCalls).toHaveLength(lookups);
-    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
+    const [row] = await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id));
     expect(row).toMatchObject({ state: "pending", lastLookupAt: null, sendCount: 1 });
   });
   it("the loop hands its own signal to its pass", async () => {
@@ -393,8 +393,8 @@ describe("bill refund admission", () => {
     }
     const [refund] = await v.db
       .select()
-      .from(billPaymentRefunds)
-      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+      .from(refunds)
+      .where(eq(refunds.billPaymentId, t.paymentId));
     expect(refund).toMatchObject({ state: "pending", completedAt: null, sendCount: 1 });
     const before = v.snapshot(),
       calls = v.card.lookupCalls.length;
@@ -437,16 +437,16 @@ describe("bill refund recovery stopping", () => {
       const stateOf = async (id: string) =>
         (
           await v.db
-            .select({ state: billPaymentRefunds.state })
-            .from(billPaymentRefunds)
-            .where(eq(billPaymentRefunds.id, id))
+            .select({ state: refunds.state })
+            .from(refunds)
+            .where(eq(refunds.id, id))
         )[0]!.state;
       // Sent and pending: each one this pass would ask its provider about.
       const waiting = (
         await v.db
-          .select({ id: billPaymentRefunds.id })
-          .from(billPaymentRefunds)
-          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+          .select({ id: refunds.id })
+          .from(refunds)
+          .where(and(eq(refunds.state, "pending"), isNotNull(refunds.sentAt)))
       ).map(({ id }) => id);
       expect(waiting.length).toBeGreaterThanOrEqual(2);
       const controller = new AbortController();
@@ -488,9 +488,9 @@ describe("bill refund recovery stopping", () => {
       );
       const waiting = (
         await v.db
-          .select({ id: billPaymentRefunds.id })
-          .from(billPaymentRefunds)
-          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+          .select({ id: refunds.id })
+          .from(refunds)
+          .where(and(eq(refunds.state, "pending"), isNotNull(refunds.sentAt)))
       ).map(({ id }) => id);
       const controller = new AbortController();
       const asked: string[] = [];
@@ -518,8 +518,8 @@ describe("bill refund recovery stopping", () => {
       expect(pass.errors).toEqual([]);
       const rows = await v.db
         .select()
-        .from(billPaymentRefunds)
-        .where(eq(billPaymentRefunds.state, "pending"));
+        .from(refunds)
+        .where(eq(refunds.state, "pending"));
       expect(rows.map((row) => row.id)).toEqual(signalled ? expect.arrayContaining(waiting) : []);
       // Nothing of the stopped pass holds the refund: the next pass without a signal settles it.
       if (signalled) {
@@ -556,17 +556,17 @@ describe("bill refund recovery stopping", () => {
     );
     const [saved] = await v.db
       .select()
-      .from(billPaymentRefunds)
-      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+      .from(refunds)
+      .where(eq(refunds.billPaymentId, t.paymentId));
     expect(asked).toEqual([]);
     expect(saved).toMatchObject({ state: "pending", sendCount: 1 });
     expect(saved!.sentAt).not.toBeNull();
     await resumeCardRefund(v.deps, saved!.id, "loop", "stored");
     expect(asked).toEqual([saved!.id]);
     const [settled] = await v.db
-      .select({ state: billPaymentRefunds.state })
-      .from(billPaymentRefunds)
-      .where(eq(billPaymentRefunds.id, saved!.id));
+      .select({ state: refunds.state })
+      .from(refunds)
+      .where(eq(refunds.id, saved!.id));
     expect(settled!.state).toBe("completed");
   });
 });
@@ -594,7 +594,7 @@ describe("settled tender recovery while the start's time is unconfirmed", () => 
     waiting = false;
     await recoverTenderRefunds(deps);
 
-    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
+    const [row] = await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id));
     expect(row!.state).toBe("completed");
   });
 });
@@ -619,15 +619,15 @@ describe("refund recovery under a clock before 28-10-2024", () => {
     send.mockRestore();
     const [refund] = await v.db
       .select()
-      .from(billPaymentRefunds)
-      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+      .from(refunds)
+      .where(eq(refunds.billPaymentId, t.paymentId));
     expect(refund).toMatchObject({ state: "pending", sendCount: 1 });
     return refund!;
   }
   const billRow = async (id: string) =>
-    (await v.db.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.id, id)))[0];
+    (await v.db.select().from(refunds).where(eq(refunds.id, id)))[0];
   const tenderRow = async (id: string) =>
-    (await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id)))[0];
+    (await v.db.select().from(refunds).where(eq(refunds.id, id)))[0];
 
   it("the tender-refund loop asks the provider nothing and leaves the refund as it was, then settles it on 28-10-2024", async () => {
     const t = await retained(true);

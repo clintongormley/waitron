@@ -12,7 +12,7 @@ import {
   saleSettlements,
   sales,
   saleSubstitutions,
-  tenderRefunds,
+  refunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -227,7 +227,7 @@ async function reserve(
     },
   );
 }
-const rows = () => store.db.select().from(tenderRefunds);
+const rows = () => store.db.select().from(refunds);
 async function refused(
   t: Target,
   code: string,
@@ -691,9 +691,9 @@ describe("settled-tender refund authorization before reservation", () => {
     const req = request(t.tenderId, { appliedAmount: "10.00" });
     const original = await reserve(t, req);
     await store.db
-      .update(tenderRefunds)
+      .update(refunds)
       .set({ state: "completed", completedAt: AT })
-      .where(eq(tenderRefunds.id, original.refund.id));
+      .where(eq(refunds.id, original.refund.id));
     expect(await reserve(t, req)).toMatchObject({
       replayed: true,
       refund: { id: original.refund.id, state: "completed" },

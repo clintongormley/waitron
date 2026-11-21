@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   captureError,
   diningTables,
@@ -24,7 +24,7 @@ import { listOutstandingSales } from "@waitron/core";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { MONEY_SCALE, decimal, deviceId, sumDecimals, toScale } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -1710,8 +1710,9 @@ describe("money received against a bill before its invoice", () => {
     tip: number,
   ): Promise<void> {
     await inTx(suite, (tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: paymentId,
+        ...billRefundFields(tx, cfg.nodeId, paymentId),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: applied,

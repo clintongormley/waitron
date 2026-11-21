@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { saleSettlements, tenderRefunds, tenders } from "@waitron/db";
+import { saleSettlements, refunds, tenders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { addDecimal, decimal, stringToCents } from "@waitron/shared";
 import { seedSale, seedTender } from "./fixtures.js";
@@ -59,7 +59,7 @@ export async function seedTenderRefund(
 ) {
   const origin = input.origin ?? target.venue;
   const [row] = await db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId: target.saleId,
       tenderId: target.tenderId,
@@ -80,6 +80,6 @@ export async function seedTenderRefund(
       completedAt: input.state === "completed" ? input.at : null,
       failedAt: input.state === "failed" ? input.at : null,
     })
-    .returning({ id: tenderRefunds.id });
+    .returning({ id: refunds.id });
   return row!.id;
 }

@@ -1,9 +1,10 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds as refundTable,
   billPayments,
   readLiveSeriesIdTx,
   saleSettlements,
@@ -158,8 +159,9 @@ async function receivedPayment(
       })
       .returning({ id: billPayments.id });
     for (const refund of refunds) {
-      await tx.insert(billPaymentRefunds).values({
+      await tx.insert(refundTable).values({
         billPaymentId: row!.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, row!.id),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: refund.applied,

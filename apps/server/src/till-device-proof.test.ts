@@ -304,8 +304,8 @@ async function refundRequest(kind: RefundRoute) {
 const refundRoutes: RefundRoute[] = ["bill-refund", "tender-refund", "tender-retry"];
 function refundEffects() {
   return {
-    billRefunds: suite.db.all(sql`select * from bill_payment_refunds order by id`),
-    tenderRefunds: suite.db.all(sql`select * from tender_refunds order by id`),
+    billRefunds: suite.db.all(sql`select * from refunds order by id`),
+    refunds: suite.db.all(sql`select * from refunds order by id`),
     drawers: suite.db.all(sql`select * from drawer_opens order by id`),
     prints: suite.db.all(sql`select * from print_jobs order by id`),
   };

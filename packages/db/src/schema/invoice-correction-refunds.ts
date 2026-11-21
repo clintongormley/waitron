@@ -1,7 +1,7 @@
 import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { id, newId, nowIso, table, tsString } from "./columns.js";
 import { invoiceCorrections } from "./invoice-corrections.js";
-import { tenderRefunds } from "./tender-refunds.js";
+import { refunds } from "./refunds.js";
 
 /** One leg of a correction: a refund that gives back part of its money. */
 export const invoiceCorrectionRefunds = table(
@@ -21,7 +21,7 @@ export const invoiceCorrectionRefunds = table(
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.tenderRefundId],
-      foreignColumns: [tenderRefunds.id],
+      foreignColumns: [refunds.id],
       name: "invoice_correction_refunds_tender_refund_fk",
     }).onDelete("restrict"),
     unique("invoice_correction_refunds_tender_refund_key").on(t.tenderRefundId),

@@ -6,14 +6,14 @@ import { refusalOn, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
 import { invoiceCorrectionRefunds } from "./invoice-correction-refunds.js";
 import { invoiceCorrections } from "./invoice-corrections.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { tenderRefunds } from "./tender-refunds.js";
+import { refunds } from "./refunds.js";
 
 const AT = "2026-11-11T09:00:00.000Z";
 const GHOST = "bbbbbbbb-0000-4000-8000-0000000000ff";
@@ -31,6 +31,7 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
   beforeEach(async () => {
     db = suite.db;
     await seedVenue(db, { name: "Fix", invoiceLocales: ["en"] });
+    const refunder = await seedPerson(db, { displayName: "Refund operator" });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db
@@ -64,7 +65,7 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
       .values({ saleId: original!.id, method: "cash", amount: 1000, settledAt: AT })
       .returning();
     const [refund] = await db
-      .insert(tenderRefunds)
+      .insert(refunds)
       .values({
         saleId: original!.id,
         tenderId: tender!.id,
@@ -72,8 +73,8 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
         fingerprint: "leg",
         appliedAmount: 400,
         reason: "Wrong dish",
-        requestedBy: GHOST,
-        authorizedBy: GHOST,
+        requestedBy: refunder,
+        authorizedBy: refunder,
         source: "device",
         deviceId,
         nodeId,

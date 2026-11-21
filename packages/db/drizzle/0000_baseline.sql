@@ -958,7 +958,7 @@ CREATE TABLE `print_jobs` (
 	FOREIGN KEY (`handed_over_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`resend_of`) REFERENCES `print_jobs`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`tender_refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "print_jobs_kind_ck" CHECK("print_jobs"."kind" in ('document', 'drawer', 'a4')),
 	CONSTRAINT "print_jobs_status_ck" CHECK("print_jobs"."status" in ('queued', 'printing', 'done', 'failed')),
 	CONSTRAINT "print_jobs_payload_ck" CHECK(("print_jobs"."kind" = 'a4') = ("print_jobs"."payload" is null)),
@@ -1040,7 +1040,7 @@ CREATE TABLE `invoice_correction_refunds` (
 	`request_id` text NOT NULL,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`invoice_correction_id`) REFERENCES `invoice_corrections`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE restrict
+	FOREIGN KEY (`tender_refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
 CREATE INDEX `invoice_correction_refunds_request_idx` ON `invoice_correction_refunds` (`invoice_correction_id`,`request_id`);--> statement-breakpoint
@@ -1102,7 +1102,7 @@ CREATE TABLE `drawer_opens` (
 	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`tender_refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund', 'card_slip', 'tender_refund')),
 	CONSTRAINT "drawer_opens_target_ck" CHECK((
         "drawer_opens"."tender_refund_id" is null and (
@@ -1291,41 +1291,6 @@ CREATE TABLE `bill_payment_lines` (
 );
 --> statement-breakpoint
 CREATE INDEX `bill_payment_lines_payment_idx` ON `bill_payment_lines` (`bill_payment_id`);--> statement-breakpoint
-CREATE TABLE `bill_payment_refunds` (
-	`id` text PRIMARY KEY NOT NULL,
-	`bill_payment_id` text NOT NULL,
-	`submission_id` text NOT NULL,
-	`fingerprint` text NOT NULL,
-	`applied_amount` integer NOT NULL,
-	`tip_amount` integer DEFAULT 0 NOT NULL,
-	`reason` text NOT NULL,
-	`authorized_by` text NOT NULL,
-	`requested_by` text NOT NULL,
-	`source` text NOT NULL,
-	`device_id` text,
-	`state` text NOT NULL,
-	`sent_at` text,
-	`send_count` integer DEFAULT 0 NOT NULL,
-	`provider_refund_ref` text,
-	`refs_before_send` text,
-	`attested_by` text,
-	`attestation_note` text,
-	`created_at` text NOT NULL,
-	`completed_at` text,
-	`failed_at` text,
-	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "bill_payment_refunds_state_ck" CHECK("bill_payment_refunds"."state" in ('pending', 'completed', 'failed')),
-	CONSTRAINT "bill_payment_refunds_source_ck" CHECK("bill_payment_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
-	CONSTRAINT "bill_payment_refunds_source_device_ck" CHECK(("bill_payment_refunds"."source" = 'device') = ("bill_payment_refunds"."device_id" is not null)),
-	CONSTRAINT "bill_payment_refunds_amounts_ck" CHECK("bill_payment_refunds"."applied_amount" >= 0 and "bill_payment_refunds"."tip_amount" >= 0 and "bill_payment_refunds"."applied_amount" + "bill_payment_refunds"."tip_amount" > 0),
-	CONSTRAINT "bill_payment_refunds_sent_ck" CHECK(("bill_payment_refunds"."send_count" = 0) = ("bill_payment_refunds"."sent_at" is null) and "bill_payment_refunds"."send_count" >= 0),
-	CONSTRAINT "bill_payment_refunds_completed_at_ck" CHECK(("bill_payment_refunds"."state" = 'completed') = ("bill_payment_refunds"."completed_at" is not null)),
-	CONSTRAINT "bill_payment_refunds_failed_at_ck" CHECK(("bill_payment_refunds"."state" = 'failed') = ("bill_payment_refunds"."failed_at" is not null)),
-	CONSTRAINT "bill_payment_refunds_attestation_ck" CHECK(("bill_payment_refunds"."attested_by" is null) = ("bill_payment_refunds"."attestation_note" is null) and ("bill_payment_refunds"."attested_by" is null or ("bill_payment_refunds"."state" <> 'pending' and coalesce(length(trim("bill_payment_refunds"."attestation_note")), 0) > 0)))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `bill_payment_refunds_submission_key` ON `bill_payment_refunds` (`bill_payment_id`,`submission_id`);--> statement-breakpoint
 CREATE TABLE `bill_payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -1709,10 +1674,11 @@ CREATE UNIQUE INDEX `invoice_deliveries_print_job_uq` ON `invoice_deliveries` (`
 CREATE UNIQUE INDEX `invoice_deliveries_request_uq` ON `invoice_deliveries` (`sale_id`,`request_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_deliveries_generation_uq` ON `invoice_deliveries` (`sale_id`,`generation`);--> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_deliveries_active_uq` ON `invoice_deliveries` (`sale_id`) WHERE "invoice_deliveries"."status" in ('queued', 'sending');--> statement-breakpoint
-CREATE TABLE `tender_refunds` (
+CREATE TABLE `refunds` (
 	`id` text PRIMARY KEY NOT NULL,
-	`sale_id` text NOT NULL,
-	`tender_id` text NOT NULL,
+	`bill_payment_id` text,
+	`sale_id` text,
+	`tender_id` text,
 	`submission_id` text NOT NULL,
 	`fingerprint` text NOT NULL,
 	`applied_amount` integer NOT NULL,
@@ -1740,30 +1706,39 @@ CREATE TABLE `tender_refunds` (
 	`provider_status` text,
 	`last_lookup_at` text,
 	`next_retry_at` text,
+	`drawer_opened_at` text,
+	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`tender_id`) REFERENCES `tenders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "tender_refunds_source_ck" CHECK("tender_refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
-	CONSTRAINT "tender_refunds_source_device_ck" CHECK(("tender_refunds"."source" = 'device') = ("tender_refunds"."device_id" is not null)),
-	CONSTRAINT "tender_refunds_state_ck" CHECK("tender_refunds"."state" in ('pending', 'completed', 'failed')),
-	CONSTRAINT "tender_refunds_method_ck" CHECK("tender_refunds"."method" in ('cash', 'card')),
-	CONSTRAINT "tender_refunds_amounts_ck" CHECK(typeof("tender_refunds"."applied_amount") = 'integer' and typeof("tender_refunds"."tip_amount") = 'integer' and "tender_refunds"."applied_amount" >= 0 and "tender_refunds"."tip_amount" >= 0 and "tender_refunds"."applied_amount" + "tender_refunds"."tip_amount" between 1 and 99999999999999),
-	CONSTRAINT "tender_refunds_reason_ck" CHECK(length(trim("tender_refunds"."reason")) > 0),
-	CONSTRAINT "tender_refunds_completed_at_ck" CHECK(("tender_refunds"."state" = 'completed') = ("tender_refunds"."completed_at" is not null)),
-	CONSTRAINT "tender_refunds_failed_at_ck" CHECK(("tender_refunds"."state" = 'failed') = ("tender_refunds"."failed_at" is not null)),
-	CONSTRAINT "tender_refunds_sent_ck" CHECK(typeof("tender_refunds"."send_count") = 'integer' and "tender_refunds"."send_count" >= 0 and ("tender_refunds"."send_count" = 0) = ("tender_refunds"."sent_at" is null)),
-	CONSTRAINT "tender_refunds_provider_ck" CHECK(("tender_refunds"."manual" in (0, 1)) and ("tender_refunds"."method" = 'card' or "tender_refunds"."manual" = 0) and (("tender_refunds"."method" = 'card' and "tender_refunds"."manual" = 0 and coalesce(length(trim("tender_refunds"."provider")), 0) > 0 and coalesce(length(trim("tender_refunds"."provider_payment_ref")), 0) > 0) or (("tender_refunds"."method" = 'cash' or "tender_refunds"."manual" = 1) and "tender_refunds"."provider" is null and "tender_refunds"."provider_payment_ref" is null))),
-	CONSTRAINT "tender_refunds_provider_status_ck" CHECK("tender_refunds"."provider_status" in ('pending', 'completed', 'failed')),
-	CONSTRAINT "tender_refunds_refs_ck" CHECK(case when "tender_refunds"."refs_before_send" is null then 1 when json_valid("tender_refunds"."refs_before_send") then json_type("tender_refunds"."refs_before_send") = 'array' else 0 end),
-	CONSTRAINT "tender_refunds_attestation_ck" CHECK(("tender_refunds"."attested_by" is null) = ("tender_refunds"."attestation_note" is null) and ("tender_refunds"."attested_by" is null or ("tender_refunds"."state" <> 'pending' and length(trim("tender_refunds"."attestation_note")) > 0)))
+	FOREIGN KEY (`authorized_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`attested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "refunds_source_ck" CHECK("refunds"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
+	CONSTRAINT "refunds_source_device_ck" CHECK(("refunds"."source" = 'device') = ("refunds"."device_id" is not null)),
+	CONSTRAINT "refunds_parent_ck" CHECK(("refunds"."bill_payment_id" is not null and "refunds"."sale_id" is null and "refunds"."tender_id" is null)
+        or ("refunds"."bill_payment_id" is null and "refunds"."sale_id" is not null and "refunds"."tender_id" is not null)),
+	CONSTRAINT "refunds_state_ck" CHECK("refunds"."state" in ('pending', 'completed', 'failed')),
+	CONSTRAINT "refunds_method_ck" CHECK("refunds"."method" in ('cash', 'card')),
+	CONSTRAINT "refunds_amounts_ck" CHECK(typeof("refunds"."applied_amount") = 'integer' and typeof("refunds"."tip_amount") = 'integer' and "refunds"."applied_amount" >= 0 and "refunds"."tip_amount" >= 0 and "refunds"."applied_amount" + "refunds"."tip_amount" between 1 and 99999999999999),
+	CONSTRAINT "refunds_reason_ck" CHECK(length(trim("refunds"."reason")) > 0),
+	CONSTRAINT "refunds_completed_at_ck" CHECK(("refunds"."state" = 'completed') = ("refunds"."completed_at" is not null)),
+	CONSTRAINT "refunds_failed_at_ck" CHECK(("refunds"."state" = 'failed') = ("refunds"."failed_at" is not null)),
+	CONSTRAINT "refunds_sent_ck" CHECK(typeof("refunds"."send_count") = 'integer' and "refunds"."send_count" >= 0 and ("refunds"."send_count" = 0) = ("refunds"."sent_at" is null)),
+	CONSTRAINT "refunds_provider_ck" CHECK(("refunds"."manual" in (0, 1)) and ("refunds"."method" = 'card' or "refunds"."manual" = 0) and (("refunds"."method" = 'card' and "refunds"."manual" = 0 and coalesce(length(trim("refunds"."provider")), 0) > 0 and coalesce(length(trim("refunds"."provider_payment_ref")), 0) > 0) or (("refunds"."method" = 'cash' or "refunds"."manual" = 1) and "refunds"."provider" is null and "refunds"."provider_payment_ref" is null))),
+	CONSTRAINT "refunds_provider_status_ck" CHECK("refunds"."provider_status" in ('pending', 'completed', 'failed')),
+	CONSTRAINT "refunds_refs_ck" CHECK(case when "refunds"."refs_before_send" is null then 1 when json_valid("refunds"."refs_before_send") then json_type("refunds"."refs_before_send") = 'array' else 0 end),
+	CONSTRAINT "refunds_attestation_ck" CHECK(("refunds"."attested_by" is null) = ("refunds"."attestation_note" is null) and ("refunds"."attested_by" is null or ("refunds"."state" <> 'pending' and length(trim("refunds"."attestation_note")) > 0)))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `tender_refunds_pending_tender_key` ON `tender_refunds` (`tender_id`) WHERE "tender_refunds"."state" = 'pending';--> statement-breakpoint
-CREATE UNIQUE INDEX `tender_refunds_pending_capture_key` ON `tender_refunds` (`provider`,`provider_payment_ref`) WHERE "tender_refunds"."state" = 'pending' and "tender_refunds"."provider" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `tender_refunds_provider_event_key` ON `tender_refunds` (`provider`,`provider_payment_ref`,`provider_refund_ref`) WHERE "tender_refunds"."provider_refund_ref" is not null;--> statement-breakpoint
-CREATE INDEX `tender_refunds_recovery_idx` ON `tender_refunds` (`state`,`next_retry_at`,`created_at`,`id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `tender_refunds_submission_key` ON `tender_refunds` (`sale_id`,`submission_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `refunds_pending_tender_key` ON `refunds` (`tender_id`) WHERE "refunds"."state" = 'pending';--> statement-breakpoint
+CREATE UNIQUE INDEX `refunds_pending_capture_key` ON `refunds` (`provider`,`provider_payment_ref`) WHERE "refunds"."state" = 'pending' and "refunds"."provider" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `refunds_provider_event_key` ON `refunds` (`provider`,`provider_payment_ref`,`provider_refund_ref`) WHERE "refunds"."provider_refund_ref" is not null;--> statement-breakpoint
+CREATE INDEX `refunds_recovery_idx` ON `refunds` (`state`,`next_retry_at`,`created_at`,`id`);--> statement-breakpoint
+CREATE INDEX `refunds_created_at_idx` ON `refunds` (`created_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `refunds_bill_submission_key` ON `refunds` (`bill_payment_id`,`submission_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `refunds_sale_submission_key` ON `refunds` (`sale_id`,`submission_id`);--> statement-breakpoint
 CREATE TABLE `venue_credentials` (
 	`purpose` text PRIMARY KEY NOT NULL,
 	`ciphertext` blob NOT NULL,
@@ -2397,16 +2372,16 @@ CREATE INDEX `adjustments_approved_by_idx` ON `adjustments` (`approved_by`);--> 
 CREATE TABLE `adjustment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`adjustment_id` text NOT NULL,
-	`tender_refund_id` text NOT NULL,
+	`refund_id` text NOT NULL,
 	`amount` integer NOT NULL,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`adjustment_id`) REFERENCES `adjustments`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`tender_refund_id`) REFERENCES `tender_refunds`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`refund_id`) REFERENCES `refunds`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "adjustment_refunds_amount_ck" CHECK("adjustment_refunds"."amount" > 0)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `adjustment_refunds_adjustment_refund_key` ON `adjustment_refunds` (`adjustment_id`,`tender_refund_id`);--> statement-breakpoint
-CREATE INDEX `adjustment_refunds_tender_refund_idx` ON `adjustment_refunds` (`tender_refund_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `adjustment_refunds_adjustment_refund_key` ON `adjustment_refunds` (`adjustment_id`,`refund_id`);--> statement-breakpoint
+CREATE INDEX `adjustment_refunds_refund_idx` ON `adjustment_refunds` (`refund_id`);--> statement-breakpoint
 CREATE TABLE `adjustment_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`adjustment_id` text NOT NULL,
@@ -2892,50 +2867,6 @@ BEGIN
   WHERE new.id IS NOT old.id;
 END;
 --> statement-breakpoint
-CREATE TRIGGER bill_payment_refunds_guard_update
-BEFORE UPDATE ON bill_payment_refunds
-FOR EACH ROW
-BEGIN
-  SELECT raise(abort, 'bill payment refund cannot make that change')
-  WHERE NOT (
-    new.id IS old.id
-    AND new.bill_payment_id IS old.bill_payment_id
-    AND new.submission_id IS old.submission_id
-    AND new.fingerprint IS old.fingerprint
-    AND new.applied_amount IS old.applied_amount
-    AND new.tip_amount IS old.tip_amount
-    AND new.reason IS old.reason
-    AND new.authorized_by IS old.authorized_by
-    AND new.requested_by IS old.requested_by
-    AND new.source IS old.source
-    AND new.device_id IS old.device_id
-    AND new.created_at IS old.created_at
-    AND (
-      (new.state IS old.state
-        AND new.sent_at IS old.sent_at
-        AND new.send_count IS old.send_count
-        AND new.provider_refund_ref IS old.provider_refund_ref
-        AND new.refs_before_send IS old.refs_before_send
-        AND new.attested_by IS old.attested_by
-        AND new.attestation_note IS old.attestation_note
-        AND new.completed_at IS old.completed_at
-        AND new.failed_at IS old.failed_at)
-      OR (old.state = 'pending'
-        AND (old.sent_at IS NULL OR new.sent_at IS old.sent_at)
-        AND (old.sent_at IS NULL OR new.refs_before_send IS old.refs_before_send)
-        AND new.send_count IN (old.send_count, old.send_count + 1)
-        AND (old.provider_refund_ref IS NULL OR new.provider_refund_ref IS old.provider_refund_ref))
-    )
-  );
-END;
---> statement-breakpoint
-CREATE TRIGGER bill_payment_refunds_no_delete
-BEFORE DELETE ON bill_payment_refunds
-FOR EACH ROW
-BEGIN
-  SELECT raise(abort, 'a bill payment refund is never deleted');
-END;
---> statement-breakpoint
 CREATE TRIGGER bill_payments_guard_update
 BEFORE UPDATE ON bill_payments
 FOR EACH ROW
@@ -3157,13 +3088,14 @@ BEGIN
   );
 END;
 --> statement-breakpoint
-CREATE TRIGGER tender_refunds_guard_update
-BEFORE UPDATE ON tender_refunds
+CREATE TRIGGER refunds_guard_update
+BEFORE UPDATE ON refunds
 FOR EACH ROW
 BEGIN
-  SELECT raise(abort, 'tender refund cannot make that change')
+  SELECT raise(abort, 'refund cannot make that change')
   WHERE NOT (
     new.id IS old.id
+    AND new.bill_payment_id IS old.bill_payment_id
     AND new.sale_id IS old.sale_id
     AND new.tender_id IS old.tender_id
     AND new.submission_id IS old.submission_id
@@ -3181,6 +3113,9 @@ BEGIN
     AND new.provider IS old.provider
     AND new.provider_payment_ref IS old.provider_payment_ref
     AND new.created_at IS old.created_at
+    AND (new.drawer_opened_at IS old.drawer_opened_at
+      OR (old.drawer_opened_at IS NULL AND new.drawer_opened_at IS NOT NULL
+        AND old.state = 'completed' AND old.method = 'cash'))
     AND (
       (new.state IS old.state
         AND new.sent_at IS old.sent_at
@@ -3203,11 +3138,27 @@ BEGIN
   );
 END;
 --> statement-breakpoint
-CREATE TRIGGER tender_refunds_no_delete
-BEFORE DELETE ON tender_refunds
+CREATE TRIGGER refunds_no_delete
+BEFORE DELETE ON refunds
 FOR EACH ROW
 BEGIN
-  SELECT raise(abort, 'a tender refund is never deleted');
+  SELECT raise(abort, 'a refund is never deleted');
+END;
+--> statement-breakpoint
+CREATE TRIGGER adjustment_refunds_require_sale_refund
+BEFORE INSERT ON adjustment_refunds
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM refunds WHERE id = NEW.refund_id AND bill_payment_id IS NOT NULL)
+BEGIN
+  SELECT raise(abort, 'an adjustment refund must name a sale refund');
+END;
+--> statement-breakpoint
+CREATE TRIGGER invoice_correction_refunds_require_sale_refund
+BEFORE INSERT ON invoice_correction_refunds
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM refunds WHERE id = NEW.tender_refund_id AND bill_payment_id IS NOT NULL)
+BEGIN
+  SELECT raise(abort, 'an invoice correction refund must name a sale refund');
 END;
 --> statement-breakpoint
 CREATE TRIGGER invoice_corrections_guard_update

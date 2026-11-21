@@ -2,7 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
-  tenderRefunds,
+  refunds as refundRows,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -44,7 +44,7 @@ export async function readCorrectionLegs(
 }
 
 export interface CorrectionLegs {
-  refunds: (typeof tenderRefunds.$inferSelect)[];
+  refunds: (typeof refundRows.$inferSelect)[];
   requestIds: string[];
   money: CorrectionMoney;
 }
@@ -57,7 +57,7 @@ export async function readCorrectionLegsOf(
 ): Promise<Map<string, CorrectionLegs>> {
   const links: {
     correctionId: string;
-    refund: typeof tenderRefunds.$inferSelect;
+    refund: typeof refundRows.$inferSelect;
     requestId: string;
   }[] = [];
   for (let start = 0; start < correctionIds.length; start += SQL_VARIABLE_LIMIT)
@@ -65,12 +65,12 @@ export async function readCorrectionLegsOf(
       ...(await tx
         .select({
           correctionId: invoiceCorrectionRefunds.invoiceCorrectionId,
-          refund: tenderRefunds,
+          refund: refundRows,
           requestId: invoiceCorrectionRefunds.requestId,
         })
         .from(invoiceCorrectionRefunds)
-        .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-        .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+        .innerJoin(refundRows, eq(refundRows.id, invoiceCorrectionRefunds.tenderRefundId))
+        .innerJoin(tenders, eq(tenders.id, refundRows.tenderId))
         .where(
           inArray(
             invoiceCorrectionRefunds.invoiceCorrectionId,
@@ -90,7 +90,7 @@ export async function readCorrectionLegsOf(
 }
 
 function legsOf(
-  links: readonly { refund: typeof tenderRefunds.$inferSelect; requestId: string }[],
+  links: readonly { refund: typeof refundRows.$inferSelect; requestId: string }[],
 ): CorrectionLegs {
   const refunds = links.map(({ refund }) => refund);
   const money: CorrectionMoney = {

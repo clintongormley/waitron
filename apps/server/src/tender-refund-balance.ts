@@ -1,10 +1,9 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   saleSettlements,
   saleVoids,
-  tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -70,10 +69,10 @@ export async function readRefundableTenders(
   const ledger = (
     await tx
       .select()
-      .from(tenderRefunds)
+      .from(refunds)
       .where(
         inArray(
-          tenderRefunds.tenderId,
+          refunds.tenderId,
           rows.map((row) => row.id),
         ),
       )
@@ -88,11 +87,11 @@ export async function readRefundableTenders(
       : (
           await tx
             .select()
-            .from(billPaymentRefunds)
+            .from(refunds)
             .where(
               and(
-                inArray(billPaymentRefunds.billPaymentId, billIds),
-                eq(billPaymentRefunds.state, "completed"),
+                inArray(refunds.billPaymentId, billIds),
+                eq(refunds.state, "completed"),
               ),
             )
         ).map((row) => ({

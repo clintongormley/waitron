@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { billPaymentRefunds, billPayments, ticketItems, workingOrderLines } from "@waitron/db";
+import { refunds, billPayments, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -470,9 +470,9 @@ describe("kitchen work that changes no amount carries on while the bill's card m
   }
   async function refundStates(billId: string): Promise<string[]> {
     const rows = await venue.db
-      .select({ state: billPaymentRefunds.state })
-      .from(billPaymentRefunds)
-      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+      .select({ state: refunds.state })
+      .from(refunds)
+      .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
       .where(eq(billPayments.workingOrderId, billId));
     return rows.map((row) => row.state);
   }

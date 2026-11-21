@@ -1,15 +1,15 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  billPaymentRefunds,
+  refunds,
   billPayments,
   invoiceSeries,
   saleSettlements,
   sales,
   saleVoids,
-  tenderRefunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -173,14 +173,14 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
 }
 const reserve = (saleId: string, req: TenderRefundRequest, config = cfg) =>
   withTransaction(store.db, (tx) => reserveTenderRefund(tx, config, saleId, req, ACTOR, AT));
-const rows = () => store.db.select().from(tenderRefunds);
+const rows = () => store.db.select().from(refunds);
 async function prior(
   target: Awaited<ReturnType<typeof paid>>,
-  patch: Partial<typeof tenderRefunds.$inferInsert> = {},
+  patch: Partial<typeof refunds.$inferInsert> = {},
 ) {
   return (
     await store.db
-      .insert(tenderRefunds)
+      .insert(refunds)
       .values({
         saleId: target.saleId,
         tenderId: target.tenderId,
@@ -319,9 +319,9 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const req = request(target.tenderId);
     const first = await reserve(target.saleId, req);
     await store.db
-      .update(tenderRefunds)
+      .update(refunds)
       .set({ state: "failed", failedAt: AT })
-      .where(eq(tenderRefunds.id, first.refund.id));
+      .where(eq(refunds.id, first.refund.id));
     expect((await reserve(target.saleId, req)).refund.state).toBe("failed");
     expect(await rows()).toHaveLength(1);
   });
@@ -354,9 +354,9 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     const req = request(target.tenderId);
     const first = await reserve(target.saleId, req);
     await store.db
-      .update(tenderRefunds)
+      .update(refunds)
       .set({ state: "completed", completedAt: AT })
-      .where(eq(tenderRefunds.id, first.refund.id));
+      .where(eq(refunds.id, first.refund.id));
     const replay = await reserve(target.saleId, req);
     expect(replay.replayed).toBe(true);
     expect(replay.refund).toMatchObject({
@@ -572,8 +572,9 @@ describe("settled-tender reservation inside the caller's transaction", () => {
 
   it("does not subtract pre-invoice returns already netted into the original bill tender", async () => {
     const target = await paid("card", { bill: true, state: "partially_refunded", netApplied: 700 });
-    await store.db.insert(billPaymentRefunds).values({
+    await store.db.insert(refunds).values({
       billPaymentId: target.billPaymentId!,
+      ...billRefundFields(store.db, cfg.nodeId, target.billPaymentId!),
       submissionId: randomUUID(),
       fingerprint: "old",
       appliedAmount: 300,
@@ -599,7 +600,7 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     );
     expect(refund.refund).toMatchObject({ appliedAmount: 700, tipAmount: 100 });
     expect(await store.db.select().from(billPayments)).toEqual(before);
-    expect(await store.db.select().from(billPaymentRefunds)).toHaveLength(1);
+    expect(await store.db.select().from(refunds)).toHaveLength(1);
   });
 
   it("refuses direct card capture ambiguity", async () => {
@@ -666,8 +667,9 @@ describe("settled-tender reservation inside the caller's transaction", () => {
 
   it("refuses a pending pre-invoice refund on the same capture", async () => {
     const target = await paid("card", { bill: true });
-    await store.db.insert(billPaymentRefunds).values({
+    await store.db.insert(refunds).values({
       billPaymentId: target.billPaymentId!,
+      ...billRefundFields(store.db, cfg.nodeId, target.billPaymentId!),
       submissionId: randomUUID(),
       fingerprint: "older",
       appliedAmount: 100,
@@ -740,6 +742,6 @@ describe("cash reservation without the optional payments module", () => {
       state: "pending",
       provider: null,
     });
-    expect(await db.select().from(tenderRefunds)).toEqual([answer.refund]);
+    expect(await db.select().from(refunds)).toEqual([answer.refund]);
   });
 });
