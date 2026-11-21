@@ -75,15 +75,13 @@ it.each(["missing", "partial"])(
     document.body.append(app);
     const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
     await expect.poll(() => screen("admin")).not.toBeNull();
-    app
-      .shadowRoot!.querySelector("main")!
-      .dispatchEvent(
-        new CustomEvent("setup-goto", {
-          detail: { screen: "venue" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+    app.shadowRoot!.querySelector("main")!.dispatchEvent(
+      new CustomEvent("setup-goto", {
+        detail: { screen: "venue" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await expect.poll(() => screen("venue")).not.toBeNull();
     const form = screen("venue")!.shadowRoot!;
     const widget = form.querySelector<WtAddressLookup>("[data-test=address-lookup]")!;
