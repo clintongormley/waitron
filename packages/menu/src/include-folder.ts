@@ -149,6 +149,14 @@ function importedOverrides(row: Record<string, unknown>): IncludeFolderOverrides
     }
     if (!isNamesMap(parsed) || Object.keys(parsed).length === 0) refuse("folder_names");
     names = parsed as Record<string, string>;
+    let saved: Record<string, string> = {};
+    try {
+      saved = validateOptionalTranslations(names);
+    } catch {
+      refuse("folder_names");
+    }
+    if (Object.entries(names).some(([language, text]) => text !== "" && saved[language] !== text))
+      refuse("folder_names");
   }
   for (const column of ["folder_image_fixed", "folder_color_fixed"])
     if (row[column] !== undefined && row[column] !== 0 && row[column] !== 1) refuse(column);

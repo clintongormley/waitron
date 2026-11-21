@@ -7,9 +7,10 @@ import {
   homeDisplayProblem,
 } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
-import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
+import { menus, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkSectionMemberRows } from "./include-folder.js";
+import { syncMenuOffers } from "./menu-structure.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
@@ -205,6 +206,11 @@ export function validateMenuConfiguration(
   checkHomeDisplays(tables.menus);
   checkSetMenus(tables);
   checkColors(tables.products, "products");
+  for (const row of tables.products ?? [])
+    if (row.parent_id != null)
+      for (const column of ["category_id", "color"])
+        if (row[column] != null)
+          throw new AppError("setup.request_invalid", { field: `products.${column}` });
   checkColors(tables.categories, "categories");
   checkColors(tables.sections, "sections");
   checkSectionMemberRows(tables.section_members, tables.sections, tables.menus);
@@ -278,5 +284,12 @@ export const MENU_CONFIGURATION_TRANSFER = {
       country,
       area: (await readVenue(tx)).province,
     });
+  },
+  async afterImport(tx: Transaction): Promise<void> {
+    const rows = await tx.select({ id: menus.id }).from(menus);
+    await syncMenuOffers(
+      tx,
+      rows.map((row) => row.id),
+    );
   },
 } as const;

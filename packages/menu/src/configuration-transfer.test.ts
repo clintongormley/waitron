@@ -207,6 +207,32 @@ describe("validateMenuConfiguration: colours", () => {
   );
 });
 
+describe("validateMenuConfiguration: a variant's category and colour", () => {
+  const parent = { id: "gin", name: "Gin", category_id: "spirits", color: "#256bb1" };
+  const withVariant = (variant: Record<string, unknown>) => ({
+    products: [parent, { id: "single", name: "Single", parent_id: "gin", ...variant }],
+  });
+
+  it.each([
+    ["category_id", "spirits"],
+    ["color", "#256bb1"],
+  ])("refuses a variant that stores its own %s", (column, value) => {
+    expect(() => validateMenuConfiguration(withVariant({ [column]: value }))).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: `products.${column}` },
+      }),
+    );
+  });
+
+  it("accepts a variant storing neither, and a product with its own category and colour", () => {
+    expect(() =>
+      validateMenuConfiguration(withVariant({ category_id: null, color: null })),
+    ).not.toThrow();
+    expect(() => validateMenuConfiguration(withVariant({}))).not.toThrow();
+  });
+});
+
 describe("validateMenuConfiguration: menu display settings", () => {
   it.each([
     ["handheld_columns", 4],
@@ -335,6 +361,22 @@ describe("validateMenuConfiguration: include folders", () => {
       {},
     ])
       expect(() => validateMenuConfiguration(bundle(member)), JSON.stringify(member)).not.toThrow();
+  });
+
+  it.each(['{"en":" Bar"}', '{"en":"Bar "}', '{"en":"Bar","es":"\\tBarra"}'])(
+    "refuses an imported folder name a save would trim: %s",
+    (folder_names) => {
+      expect(() => validateMenuConfiguration(bundle({ folder_names }))).toThrowError(
+        refusedAs("section_members.folder_names"),
+      );
+    },
+  );
+
+  it("refuses an imported folder name too long for a save", () => {
+    const folder_names = JSON.stringify({ en: "é".repeat(2049) });
+    expect(() => validateMenuConfiguration(bundle({ folder_names }))).toThrowError(
+      refusedAs("section_members.folder_names"),
+    );
   });
 
   it.each(["yes", 2, null, "1"])("refuses a show_as_folder of %j", (show_as_folder) => {

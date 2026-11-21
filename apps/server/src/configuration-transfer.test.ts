@@ -1362,6 +1362,77 @@ describe("configuration transfer database path", () => {
     expect(imported.rows).toEqual([{ category: "#b12525", product: "#256bb1" }]);
   });
 
+  it("clears the menu price and variant prices of a product no imported menu reaches", async () => {
+    const source = await applyVenue(planVenue(venue("B66778811"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const menu = await createMenu(tx, { name: "Bar menu" });
+      for (const name of ["Gin", "Tonic"]) {
+        const product = await createProduct(tx, {
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "4",
+          vatClass: "general",
+        });
+        await tx
+          .insert(products)
+          .values({ id: `${name}-single`, parentId: product.id, name: "Single" });
+        const item = await addProductToMenu(tx, {
+          menuId: menu.id,
+          productId: product.id,
+          grossPrice: "5.50",
+        });
+        await tx.execute(sql`
+          insert into menu_item_variant_overrides (menu_item_id, product_id, variant_id, price)
+          values (${item.id}, ${product.id}, ${`${name}-single`}, 600)
+        `);
+      }
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const clean = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    const gin = clean.tables.products!.find((row) => row.name === "Gin")!.id;
+    expect(clean.tables.section_members!.filter((row) => row.product_id === gin)).toHaveLength(1);
+    const unplaced: ConfigurationBundle = {
+      ...clean,
+      tables: {
+        ...clean.tables,
+        section_members: clean.tables.section_members!.filter((row) => row.product_id !== gin),
+      },
+    };
+    await applyVenue(planVenue(venue("B99887711"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, unplaced, ALL_MODULES, versions),
+    });
+    const { rows } = await targetSuite.db.execute<{
+      name: string;
+      gross_price: number | null;
+      overrides: number;
+    }>(sql`
+      select p.name, mi.gross_price,
+             (select count(*) from menu_item_variant_overrides o where o.menu_item_id = mi.id) as overrides
+      from menu_items mi
+      join products p on p.id = mi.product_id
+      order by p.name
+    `);
+    expect(rows).toEqual([
+      { name: "Gin", gross_price: null, overrides: 0 },
+      { name: "Tonic", gross_price: 550, overrides: 1 },
+    ]);
+  });
+
   it("refuses a bundle whose product, category or section colour is not lowercase #rrggbb", async () => {
     const source = await applyVenue(planVenue(venue("B66778800"), ALL_MODULES), {
       db: suite.db,
