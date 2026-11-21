@@ -61,7 +61,7 @@ import { createPasswordThrottle } from "./password-throttle.js";
 import { fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
-import type { BoxJoinAttempt } from "./box-join-attempt.js";
+import type { BoxJoinAttempt, JoinedBox } from "./box-join-attempt.js";
 import { JOIN_STATUS } from "./box-join-api.js";
 import { requestAddress } from "./request-from-box.js";
 import { mountSetupSpa } from "./setup-spa.js";
@@ -166,6 +166,11 @@ export interface SetupDeps {
    * and never logged. */
   adopt?: (
     req: AdoptRequest,
+    hooks: AdoptHooks,
+  ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
+  /** Adopts the main box's bundle that the join attempt holds once approved. */
+  adoptJoined?: (
+    joined: JoinedBox,
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
   joinAttempt?: BoxJoinAttempt;
@@ -369,6 +374,10 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "totp.required": 401,
   "password.throttled": 429,
+  "setup.connection_insecure": 403,
+  "setup.owner_required": 403,
+  "setup.not_ready": 503,
+  "mirror.join_handle_invalid": 409,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
   "setup.adopt_incomplete": 409,
@@ -411,6 +420,8 @@ const runPrimaryCertificate = createErrorBoundary(
 
 const RESET_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
+  "setup.connection_insecure": 403,
+  "setup.owner_required": 403,
   "password.invalid": 401,
   "setup.reset_unavailable": 409,
   "setup.operation_conflict": 409,
@@ -1349,7 +1360,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   app.post("/setup-api/adopt", async (c) => {
     const adopt = deps.adopt;
     const requestRestart = deps.requestRestart;
-    if (adopt === undefined || requestRestart === undefined) {
+    if ((adopt === undefined && deps.adoptJoined === undefined) || requestRestart === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
 
@@ -1359,15 +1370,32 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
+    type AdoptBody = { primaryUrl?: unknown; credential?: unknown; confirmedCaPem?: unknown };
+    const restartWith = (secret: { breakGlassSecret: string; breakGlassKeyName?: string }) => {
+      // The operator's only chance to record the offline promote fallback. It is NEVER logged.
+      const response = c.json({ adopted: true, ...secret, restarting: true }, 200);
+      setTimeout(() => requestRestart(), 0);
+      return response;
+    };
+    const executeJoined = async (
+      joined: JoinedBox,
+      operation?: ActiveSetupOperation,
+    ): Promise<Response> =>
+      restartWith(
+        await deps.adoptJoined!(joined, {
+          beforeFirstWrite: async (environment) => {
+            await operation?.advance("venue_committed", { environment });
+          },
+        }),
+      );
+    const execute = async (
+      body: AdoptBody,
+      operation?: ActiveSetupOperation,
+    ): Promise<Response> => {
+      if (adopt === undefined) throw new AppError("setup.not_ready", {});
       // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
       // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
       // TOTP are never logged: `asString` names the field, never its value.
-      const body = await readJsonBody<{
-        primaryUrl?: unknown;
-        credential?: unknown;
-        confirmedCaPem?: unknown;
-      }>(c);
       const primaryUrl = asString(body.primaryUrl, "primaryUrl");
       // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
       // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
@@ -1406,13 +1434,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         },
       );
 
-      // The operator's only chance to record the offline promote fallback. It is NEVER logged.
-      const response = c.json(
-        { adopted: true, breakGlassSecret, breakGlassKeyName, restarting: true },
-        200,
-      );
-      setTimeout(() => requestRestart(), 0);
-      return response;
+      return restartWith({ breakGlassSecret, breakGlassKeyName });
     };
     return runAdopt(c, log, async () => {
       let succeeded = false;
@@ -1420,9 +1442,22 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const requestHash = createHash("sha256")
           .update(await c.req.raw.clone().text())
           .digest("hex");
+        const body = await readJsonBody<AdoptBody>(c);
+        let run: (operation?: ActiveSetupOperation) => Promise<Response>;
+        if (body.primaryUrl === undefined && body.credential === undefined) {
+          refuseJoinElsewhere(c);
+          if (deps.adoptJoined === undefined || deps.joinAttempt === undefined)
+            throw new AppError("setup.not_ready", {});
+          if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
+          const joined = deps.joinAttempt.joined();
+          if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
+          run = (operation) => executeJoined(joined, operation);
+        } else {
+          run = (operation) => execute(body, operation);
+        }
         const response =
           deps.operations === undefined
-            ? await execute()
+            ? await run()
             : await runOperation(c.req.raw, "adopt", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { adopted: true; restarting: true });
@@ -1430,7 +1465,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
                 if (operation.phase !== "started") {
                   throw new AppError("setup.adopt_incomplete", {});
                 }
-                const response = await execute(operation);
+                const response = await run(operation);
                 if (response.ok) {
                   await operation.complete({ adopted: true, restarting: true });
                 }
@@ -1444,8 +1479,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
-  // These routes are unauthenticated on the LAN, so without the proof anyone on the network could
-  // wipe a half-adopted box. The wipe itself happens at the next start, under the venue lock.
+  // The wipe happens at the next start, under the venue lock, which refuses a box holding trading
+  // settings, a taxpayer or an operational venue (`runStagedReset`).
   const resetThrottle = createPasswordThrottle();
   app.post("/setup-api/reset-incomplete-adopt", async (c) => {
     const stageReset = deps.stageReset;
@@ -1463,25 +1498,34 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       let succeeded = false;
       try {
         const body = await readJsonBody<{ email?: unknown; password?: unknown }>(c);
-        const email = asString(body.email, "email");
-        const password = asString(body.password, "password");
+        const proof =
+          body.email === undefined && body.password === undefined
+            ? null
+            : {
+                email: asString(body.email, "email"),
+                password: asString(body.password, "password"),
+              };
+        if (proof === null) refuseJoinElsewhere(c);
         const record = await operations.read();
         if (!isUnfinishedAdopt(record)) {
           throw new AppError("setup.reset_unavailable", {});
         }
-        // Keyed by the saved operation, not the submitted email: only its one saved login can
-        // authorise this, and a key per submitted email lets invented ones crowd the real one out.
-        const finish = resetThrottle.begin(record.id);
-        let outcome: "success" | "invalid" | "error" = "error";
-        try {
-          outcome = (await matchesResetProof(record.data.resetProof, email, password))
-            ? "success"
-            : "invalid";
-        } finally {
-          finish(outcome);
+        if (proof !== null) {
+          // Keyed by the saved operation, not the submitted email: only its one saved login can
+          // authorise this, and a key per submitted email lets invented ones crowd the real one
+          // out.
+          const finish = resetThrottle.begin(record.id);
+          let outcome: "success" | "invalid" | "error" = "error";
+          try {
+            outcome = (await matchesResetProof(record.data.resetProof, proof.email, proof.password))
+              ? "success"
+              : "invalid";
+          } finally {
+            finish(outcome);
+          }
+          if (outcome === "invalid")
+            throw new AppError("password.invalid", {}, { reason: "reset_proof_mismatch" });
         }
-        if (outcome === "invalid")
-          throw new AppError("password.invalid", {}, { reason: "reset_proof_mismatch" });
 
         await stageReset(record.id);
         const response = c.json({ resetStaged: true, restarting: true }, 202);

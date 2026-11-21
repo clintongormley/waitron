@@ -620,6 +620,41 @@ describe("runStagedReset", () => {
     expect(events).toContainEqual(["warn", "setup.reset_discarded", { reason }]);
   });
 
+  it("discards a reset asked for without a proof on a box with trading settings", async () => {
+    const box = await halfAdoptedBox();
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        operations: createSetupOperationStore(box.stateDir),
+        stageReset: (operationId) => stageResetRequest(box.stateDir, operationId),
+        requestRestart: vi.fn(),
+      },
+      () => {},
+    );
+    const response = await app.request(
+      "/setup-api/reset-incomplete-adopt",
+      { method: "POST" },
+      { incoming: { socket: { remoteAddress: "127.0.0.1" } } },
+    );
+    expect(response.status).toBe(202);
+    await writeFile(join(box.stateDir, "trading.env"), "WAITRON_NODE_ID=x\n");
+    const before = await snapshot(box.stateDir);
+    const { log, events } = capturingLog();
+
+    expect(await runStagedReset({ stateDir: box.stateDir, venueDir: box.venueDir, log })).toBe(
+      false,
+    );
+
+    expect(await snapshot(box.stateDir)).toEqual(before);
+    expect(events).toContainEqual([
+      "warn",
+      "setup.reset_discarded",
+      { reason: "trading_configured" },
+    ]);
+  });
+
   it("counts a database it cannot read as holding a venue", async () => {
     const box = await halfAdoptedBox();
     await rm(join(box.venueDir, "venue.db"));

@@ -1595,6 +1595,8 @@ declare module "@waitron/shared" {
      * read the join's state in the last 15 seconds.
      */
     "mirror.join_in_use": Record<string, never>;
+    /** A Finish joining without the current join's handle. */
+    "mirror.join_handle_invalid": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;

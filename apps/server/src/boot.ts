@@ -408,7 +408,7 @@ import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
-import { adoptWithPassword } from "./adopt.js";
+import { adoptFromPrimary, adoptWithPassword, type PasswordAdoptDeps } from "./adopt.js";
 import {
   fetchMirrorBundle,
   fetchPrimaryCertificate,
@@ -1640,6 +1640,37 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
+    const adoptDeps: PasswordAdoptDeps = {
+      ownerDb: db,
+      ownerNode: store.node,
+      ring,
+      environmentKeys: keyRingVariables(base),
+      persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
+      persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
+      fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>
+        fetchMirrorBundle(primaryUrl, credential, standby, confirmedCaPem, {
+          lookup: seams.boxLookup,
+        }),
+      advertisedOrigin: config.managementOrigin,
+      spareStorePort: config.spareStorePort,
+      environment: config.configuredEnvironment,
+      persistTrading,
+      assertStartsWith: (trading) => {
+        // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
+        const next = { ...env };
+        if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
+        if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
+        const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+        refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
+      },
+      persistModuleConfig: async (c) => {
+        await writeModuleConfig(db, c, null);
+      },
+      stateDir: config.stateDir,
+      database: ownerDatabaseName,
+      listIpv4: boxAddresses,
+      now,
+    };
     const joinAttempt = createBoxJoinAttempt({
       advertisedOrigin: config.managementOrigin,
       spareStorePort: config.spareStorePort,
@@ -1883,42 +1914,8 @@ async function bootServer(
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
         recoveryPackEvidence: documentEvidence,
-        adopt: (req, hooks) =>
-          adoptWithPassword(
-            {
-              ownerDb: db,
-              ownerNode: store.node,
-              ring,
-              environmentKeys: keyRingVariables(base),
-              persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
-              persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
-              fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>
-                fetchMirrorBundle(primaryUrl, credential, standby, confirmedCaPem, {
-                  lookup: seams.boxLookup,
-                }),
-              advertisedOrigin: config.managementOrigin,
-              spareStorePort: config.spareStorePort,
-              environment: config.configuredEnvironment,
-              persistTrading,
-              assertStartsWith: (trading) => {
-                // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
-                const next = { ...env };
-                if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
-                if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
-                const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
-                refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
-              },
-              persistModuleConfig: async (c) => {
-                await writeModuleConfig(db, c, null);
-              },
-              stateDir: config.stateDir,
-              database: ownerDatabaseName,
-              listIpv4: boxAddresses,
-              now,
-            },
-            req,
-            hooks,
-          ),
+        adopt: (req, hooks) => adoptWithPassword(adoptDeps, req, hooks),
+        adoptJoined: (joined, hooks) => adoptFromPrimary(adoptDeps, joined, hooks),
         establishIdentity: (nodeId) =>
           establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
         seedMembership: (nodeId) =>

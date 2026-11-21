@@ -3761,7 +3761,7 @@ describe("POST /setup-api/primary-certificate — the main box's authority, read
     const other = app.request("/setup-api/adopt", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ primaryUrl: 1 }),
     });
     let timer: NodeJS.Timeout | undefined;
     const answered = await Promise.race([

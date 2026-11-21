@@ -1,12 +1,15 @@
+import { mkdtempSync, rmSync } from "node:fs";
 import { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
-import type { BoxJoinAttempt, JoinAttemptState } from "./box-join-attempt.js";
+import type { BoxJoinAttempt, JoinAttemptState, JoinedBox } from "./box-join-attempt.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
-import type { SetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 
 const PRIMARY_URL = "https://main.deli.test:8443";
 const ADDRESSES = ["192.168.1.20"];
@@ -15,6 +18,7 @@ const EXPIRES_AT = "2026-11-21T10:15:00.000Z";
 /** Stands in for the attempt, whose own behaviour `box-join-attempt.test.ts` covers. */
 function fakeAttempt() {
   let state: JoinAttemptState | null = null;
+  let joined: JoinedBox | null = null;
   let started = 0;
   let gate: Promise<void> | undefined;
   let running: Promise<unknown> | null = null;
@@ -39,9 +43,10 @@ function fakeAttempt() {
     cancel: vi.fn(async () => {
       await running?.catch(() => {});
       state = null;
+      joined = null;
     }),
     current: () => state,
-    joined: () => null,
+    joined: () => joined,
   } satisfies BoxJoinAttempt;
   /** Holds the next start until the returned function is called. */
   const hold = () => {
@@ -52,7 +57,11 @@ function fakeAttempt() {
       release();
     };
   };
-  return { attempt, hold, set: (next: JoinAttemptState | null) => (state = next) };
+  const approve = (box: JoinedBox) => {
+    state = { state: "approved", code: String(100000 + started) };
+    joined = box;
+  };
+  return { attempt, hold, approve, set: (next: JoinAttemptState | null) => (state = next) };
 }
 
 type Env = { incoming: { socket: unknown } };
@@ -322,5 +331,124 @@ describe("the setup page's join routes", () => {
     expect(assertOtherAllowed).toHaveBeenCalledOnce();
     release();
     expect((await starting).status).toBe(200);
+  });
+
+  const JOINED = { storeUrl: "https://box-aaaa.waitron.local:7600" } as unknown as JoinedBox;
+  const ADOPTED = { breakGlassSecret: "the-server-key", breakGlassKeyName: "Spare key" };
+
+  function mountAdopt(deps: Partial<SetupDeps> = {}) {
+    const adoptJoined = vi.fn<NonNullable<SetupDeps["adoptJoined"]>>(async () => ADOPTED);
+    const requestRestart = vi.fn();
+    const stageReset = vi.fn<NonNullable<SetupDeps["stageReset"]>>(async () => {});
+    mount({ adoptJoined, requestRestart, stageReset, ...deps });
+    return { adoptJoined, requestRestart, stageReset };
+  }
+  function post(
+    path: "adopt" | "reset-incomplete-adopt",
+    options: { handle?: string; headers?: Record<string, string>; env?: Env } = {},
+  ) {
+    const headers: Record<string, string> = { ...options.headers };
+    if (options.handle !== undefined) headers["x-waitron-join-handle"] = options.handle;
+    return app.request(
+      `https://box.test/setup-api/${path}`,
+      { method: "POST", headers },
+      options.env ?? secure,
+    );
+  }
+
+  it("finishes an approved join for the page holding its handle, and only once", async () => {
+    const { adoptJoined, requestRestart } = mountAdopt();
+    const handle = await started();
+    fake.approve(JOINED);
+    const response = await post("adopt", { handle });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ adopted: true, ...ADOPTED, restarting: true });
+    expect(adoptJoined).toHaveBeenCalledWith(JOINED, expect.anything());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(requestRestart).toHaveBeenCalledOnce();
+    expect(await refusal(await post("adopt", { handle }))).toEqual({
+      status: 409,
+      code: "setup.already_provisioning",
+    });
+    expect(adoptJoined).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["no handle", undefined],
+    ["another handle", "another"],
+  ])("refuses to finish a join for a page with %s", async (_label, handle) => {
+    const { adoptJoined } = mountAdopt();
+    await started();
+    fake.approve(JOINED);
+    expect(await refusal(await post("adopt", { handle }))).toEqual({
+      status: 409,
+      code: "mirror.join_handle_invalid",
+    });
+    expect(adoptJoined).not.toHaveBeenCalled();
+  });
+
+  it("refuses to finish a join the main box has not approved, and finishes it once approved", async () => {
+    const { adoptJoined } = mountAdopt();
+    const handle = await started();
+    expect(await refusal(await post("adopt", { handle }))).toEqual({
+      status: 400,
+      code: "setup.request_invalid",
+    });
+    expect(adoptJoined).not.toHaveBeenCalled();
+    fake.approve(JOINED);
+    expect((await post("adopt", { handle })).status).toBe(200);
+  });
+
+  it.each(["adopt", "reset-incomplete-adopt"] as const)(
+    "refuses %s without a proof from another page or over plain http",
+    async (path) => {
+      const operations = { read: async () => null } as unknown as SetupOperationStore;
+      const { adoptJoined, stageReset } = mountAdopt({ operations });
+      const handle = await started();
+      fake.approve(JOINED);
+      const refusals = [
+        await post(path, { handle, env: { incoming: { socket: new Socket() } } }),
+        await post(path, { handle, headers: { origin: "https://other.test" } }),
+      ];
+      expect(await Promise.all(refusals.map(refusal))).toEqual([
+        { status: 403, code: "setup.connection_insecure" },
+        { status: 403, code: "setup.owner_required" },
+      ]);
+      expect(adoptJoined).not.toHaveBeenCalled();
+      expect(stageReset).not.toHaveBeenCalled();
+    },
+  );
+
+  it("records no reset proof for a join stopped after its first write, refuses its resend, and resets with no body", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-join-adopt-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const { adoptJoined, stageReset, requestRestart } = mountAdopt({ operations });
+      adoptJoined.mockImplementationOnce(async (_joined, hooks) => {
+        await hooks.beforeFirstWrite("preproduction");
+        throw new AppError("mirror.bundle_fetch_failed", {});
+      });
+      const handle = await started();
+      fake.approve(JOINED);
+      expect((await post("adopt", { handle })).status).toBe(502);
+      const record = await operations.read();
+      expect(record).toMatchObject({ kind: "adopt", phase: "venue_committed" });
+      expect(record?.data).toEqual({ environment: "preproduction" });
+
+      expect(await refusal(await post("adopt", { handle }))).toEqual({
+        status: 409,
+        code: "setup.adopt_incomplete",
+      });
+      expect(adoptJoined).toHaveBeenCalledOnce();
+
+      const reset = await post("reset-incomplete-adopt");
+      expect(reset.status).toBe(202);
+      expect(await reset.json()).toEqual({ resetStaged: true, restarting: true });
+      expect(stageReset).toHaveBeenCalledWith(record?.id);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
