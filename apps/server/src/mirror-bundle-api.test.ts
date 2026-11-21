@@ -70,6 +70,12 @@ import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/auth
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
+import {
+  joinAsBundleAnswer,
+  joiningBox,
+  mountBoxJoin,
+  signedInCookie,
+} from "./testing/box-join.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 
@@ -132,8 +138,9 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// A real key, so the endorsement's signature can be verified.
-const STANDBY_PUB = generateNodeKeyPair().publicKey;
+// A real key, so the endorsement's signature can be verified and the joining box can sign.
+const STANDBY_KEYS = generateNodeKeyPair();
+const STANDBY_PUB = STANDBY_KEYS.publicKey;
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -255,6 +262,17 @@ function mountApp(
     },
     log,
   );
+  mountBoxJoin(app, {
+    appDb: db,
+    node: suite.node,
+    ring: RING,
+    stateDir,
+    boxHostname: "waitron.local",
+    advertisedOrigin,
+    designated,
+    wakeSpareJoin,
+    now,
+  });
   return app;
 }
 
@@ -322,20 +340,18 @@ async function rawPost(app: Hono, body: unknown): Promise<Response> {
 }
 // The fiscal module joins as an unmarked stand-in unless `veriFactu` is set, so the join's
 // reservation path, which a module whose series open on activation never takes, stays reachable.
-async function post(
-  app: Hono,
-  body: unknown,
-  { veriFactu = false }: { veriFactu?: boolean } = {},
+async function withFixtureOperation(
+  request: Record<string, unknown>,
+  veriFactu: boolean,
+  send: (moduleOperation: unknown) => Promise<Response>,
 ): Promise<Response> {
-  if (typeof body !== "object" || body === null) return rawPost(app, body);
-  const request = body as Record<string, unknown>;
   if (
     request.moduleOperation !== undefined ||
     typeof request.standbyNodeId !== "string" ||
     !/^[0-9a-f-]{36}$/i.test(request.standbyNodeId) ||
     typeof request.email !== "string"
   )
-    return rawPost(app, body);
+    return send(request.moduleOperation);
   const primary = (await db.select().from(nodes))[0]!;
   const fixture = await standbyContract(
     db,
@@ -377,13 +393,60 @@ async function post(
     ...(veriFactu ? allocated : withoutActivationMark(allocated)),
   );
   try {
-    return await rawPost(app, {
-      ...request,
-      moduleOperation: { binding: held.binding, input: held.input },
-    });
+    return await send({ binding: held.binding, input: held.input });
   } finally {
     (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
   }
+}
+
+/** The password route, which the password cases still use. */
+async function post(
+  app: Hono,
+  body: unknown,
+  { veriFactu = false }: { veriFactu?: boolean } = {},
+): Promise<Response> {
+  if (typeof body !== "object" || body === null) return rawPost(app, body);
+  const request = body as Record<string, unknown>;
+  if (typeof request.email !== "string") return rawPost(app, body);
+  return withFixtureOperation(request, veriFactu, (moduleOperation) =>
+    rawPost(app, { ...request, moduleOperation }),
+  );
+}
+
+let joinAddresses = 0;
+
+/**
+ * The same join as {@link post}, reaching `issueMirrorBundle` through the box-join routes: the
+ * spare named in `body` asks from an address of its own, and the person `body.email` names, signed
+ * in afresh, taps its code. Answers as the password route did (`joinAsBundleAnswer`).
+ */
+async function approvedJoin(
+  app: Hono,
+  body: Record<string, unknown>,
+  { veriFactu = false }: { veriFactu?: boolean } = {},
+): Promise<Response> {
+  joinAddresses += 1;
+  const box = joiningBox(`10.20.${Math.floor(joinAddresses / 250)}.${(joinAddresses % 250) + 1}`, {
+    identity: {
+      nodeId: body.standbyNodeId as string,
+      publicKey: body.standbyPublicKey as string,
+      privateKey:
+        body.standbyPublicKey === STANDBY_PUB
+          ? STANDBY_KEYS.privateKey
+          : generateNodeKeyPair().privateKey,
+    },
+    contactUrl: body.standbyContactUrl as string,
+    storeUrl: body.standbyStoreUrl as string,
+  });
+  const cookie = await signedInCookie(db, await personIdForLoginEmail(db, body.email as string));
+  return withFixtureOperation(body, veriFactu, (moduleOperation) =>
+    joinAsBundleAnswer(app, {
+      box,
+      sent: { cookie },
+      moduleOperation,
+      at: body.standbyAt as number,
+    }),
+  );
 }
 
 beforeAll(async () => {
@@ -472,7 +535,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         }),
       );
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         standbyNodeId,
@@ -497,7 +560,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
   it("answers 409 mirror.not_provisioned when this box's database carries no deployment stamp", async () => {
     const { designated } = await setupVenue();
     await db.execute(sql`delete from deployment where id = 1`);
-    const res = await post(mountApp(designated), {
+    const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -511,7 +574,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await db.execute(
       sql`insert into settings (module, version, revision, doc, updated_at) values ('modules', 1, 1, '{"modules":{"bookings":"yes"}}', '2026-11-20T12:00:00.000Z') on conflict (module) do update set doc = excluded.doc`,
     );
-    const res = await post(mountApp(designated), {
+    const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -525,7 +588,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     pause.moduleConfigReads = 0;
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -564,7 +627,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const before = await readNodeMembership(db);
     expect(before?.body.nodes.length ?? 0).toBeGreaterThan(0);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId,
@@ -600,7 +663,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
 
     // A re-adopt of the same node refreshes its entry in place rather than adding a second.
-    const res2 = await post(app, {
+    const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId,
@@ -641,7 +704,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await db.update(nodes).set({ endorsement }).where(eq(nodes.id, designated.nodeId));
     const app = mountApp(designated);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -710,7 +773,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     try {
       const app = mountApp(designated);
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -757,7 +820,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ),
     );
     try {
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -783,7 +846,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ),
     );
     try {
-      const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+      const res = await approvedJoin(app, {
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+        ...standby,
+      });
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({
         error: { code: "membership.write_contended", params: { attempts: 8 } },
@@ -793,7 +860,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     }
     expect(outsideReservations).toEqual([]);
 
-    const again = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+    const again = await approvedJoin(app, {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      ...standby,
+    });
 
     expect(again.status, JSON.stringify(await again.clone().json())).toBe(200);
     expect(outsideReservations).toHaveLength(1);
@@ -810,7 +881,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       throw new AppError("mirror.not_provisioned", {});
     };
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -937,7 +1008,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     const before = await allocationSnapshot();
 
-    const res = await post(
+    const res = await approvedJoin(
       app,
       { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
       { veriFactu: true },
@@ -1226,7 +1297,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1256,7 +1327,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const keys: string[] = [];
       for (let i = 0; i < 2; i += 1) {
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -1275,7 +1346,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const standby = validStandby();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...standby,
@@ -1298,7 +1369,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         seen.push(readPairLink(suite.node, designated.nodeId).then((link) => link?.state)),
       );
 
-      const refused = await post(app, {
+      const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1307,7 +1378,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(refused.status).toBe(400);
       expect(seen).toHaveLength(0);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1327,7 +1398,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const before = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1369,7 +1440,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         });
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1417,7 +1488,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       };
       const standby = validStandby();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...standby,
@@ -1478,7 +1549,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         await holdRetiredLink(designated, peer);
         const standby = validStandby();
 
-        const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+        const res = await approvedJoin(app, {
+          email: ADMIN_EMAIL,
+          password: ADMIN_PASSWORD,
+          ...standby,
+        });
 
         expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
         expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
@@ -1493,7 +1568,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const joined = await holdRetiredLink(designated, "unlisted");
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1574,12 +1649,12 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+    const res = await approvedJoin(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.standby_invalid");
 
     // Every field but the one under test is well-formed; `""` is a valid contact URL.
-    const res2 = await post(app, {
+    const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId: "not-a-uuid",
@@ -1590,7 +1665,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(res2.status).toBe(400);
     expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
 
-    const res3 = await post(app, {
+    const res3 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
@@ -1607,7 +1682,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
 
     // Not a bare origin: tills concatenate paths onto it.
-    const slash = await post(app, {
+    const slash = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
@@ -1618,7 +1693,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(slash.status).toBe(400);
     expect(await slash.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
 
-    const script = await post(app, {
+    const script = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
@@ -1635,7 +1710,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const app = mountApp(designated);
     const before = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -1669,7 +1744,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -1682,7 +1757,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readNodeMembership(db)).toEqual(chartBefore);
 
     // A fresh id through the same app reaches the signed outside reservation.
-    const fresh = await post(app, {
+    const fresh = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -1714,7 +1789,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -1749,7 +1824,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const chartBefore = await readNodeMembership(db);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -1880,7 +1955,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const app = mountApp(designated);
         await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH));
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -1896,7 +1971,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       await writePairLink(designated, "streaming");
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1914,7 +1989,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       await writePairLink(designated, "pending");
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1943,7 +2018,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -1978,7 +2053,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         );
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2030,7 +2105,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
       let res: Response;
       try {
-        res = await post(app, {
+        res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -2072,7 +2147,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2090,7 +2165,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const app = mountApp(designated);
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2111,7 +2186,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       await holdChartWithStandby(designated, listed);
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2148,7 +2223,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       const before = await reservedAndListed();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2173,7 +2248,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const standbyAt = primaryAt + minutes * 60_000;
         const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -2199,7 +2274,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const primaryAt = Date.now();
       const app = mountApp(designated, undefined, undefined, () => new Date(primaryAt));
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2251,7 +2326,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -2284,7 +2359,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     );
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -2322,7 +2397,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated, (doc) => ({ ...doc, note: "x" }));
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -2341,7 +2416,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated, (doc) => ({ ...doc, signature: undefined }));
     const chartBefore = await readNodeMembership(db);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -2360,7 +2435,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await holdStrangerChart(designated);
     const counterBefore = await allocationSnapshot();
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       ...validStandby(),
@@ -2396,7 +2471,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const chartBefore = await readNodeMembership(db);
       const counterBefore = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2422,7 +2497,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
       pause.beforeChartMint = () => holdMainSignedBody(designated, bodyAt(seedTerm + 1));
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2464,7 +2539,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     await writeNodeMembership(db, { ...retirement, endorsements: [endorsement] });
     const standby = validStandby();
 
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+    const res = await approvedJoin(app, {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      ...standby,
+    });
 
     expect(res.status).toBe(200);
     const held = (await readNodeMembership(db))!;
@@ -2528,7 +2607,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const chartBefore = await readNodeMembership(db);
       const counterBefore = await allocationSnapshot();
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2548,7 +2627,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { ids } = await holdFullChart(designated);
       const removed = ids[0]!;
       const newcomer = validStandby();
-      const refused = await post(app, {
+      const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...newcomer,
@@ -2561,7 +2640,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       expect(clearance.cleared).toBe(true);
 
-      const joined = await post(app, {
+      const joined = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...newcomer,
@@ -2572,7 +2651,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(after.body.nodes.map((n) => n.nodeId)).toContain(newcomer.standbyNodeId);
       expect(after.body.revoked).toEqual([removed]);
 
-      const returning = await post(app, {
+      const returning = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2590,7 +2669,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { ids } = await holdFullChart(designated);
       const listed = ids[1]!;
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2614,7 +2693,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         filledTerm = (await holdFullChart(designated)).term;
       };
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2648,7 +2727,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const counterBefore = await allocationSnapshot();
       pause.beforeModuleConfigRead = removeDuringRequest(designated, adminPersonId, standbyNodeId);
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2690,7 +2769,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           }),
         );
 
-      const res = await post(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2713,7 +2792,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
       password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
@@ -2766,7 +2845,7 @@ async function allocatedReply(
     ...withoutActivationMark(allocatedStandbyModules(ALL_MODULES, fixture)),
   );
   try {
-    const res = await post(app, {
+    const res = await approvedJoin(app, {
       ...body,
       moduleOperation: { binding: held.binding, input: held.input },
     });

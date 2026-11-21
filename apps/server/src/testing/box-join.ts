@@ -94,13 +94,13 @@ export function helloBody(
   overrides: Record<string, unknown> = {},
   at = Date.now(),
 ): Record<string, unknown> {
-  return {
-    protocol: 1,
-    ...box.hello,
-    at,
-    signature: signedBy(box, JOIN_HELLO_LABEL, "", 0, helloMessageFields(box.hello, at)),
-    ...overrides,
-  };
+  let signature = "";
+  try {
+    signature = signedBy(box, JOIN_HELLO_LABEL, "", 0, helloMessageFields(box.hello, at));
+  } catch {
+    // A field that cannot be signed goes unsigned, for the route's own shape check to answer.
+  }
+  return { protocol: 1, ...box.hello, at, signature, ...overrides };
 }
 
 export function revealBody(box: JoiningBox, requestId: string): Record<string, unknown> {
