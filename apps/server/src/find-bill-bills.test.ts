@@ -44,6 +44,7 @@ import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import { readBillBalance, readPaymentsByBill } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
+import { endMeal } from "./meal-end.js";
 import { assignProductUnit, setProductVariants, units } from "@waitron/menu";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
@@ -65,7 +66,12 @@ async function named(label: string, ...names: string[]) {
   );
   return id;
 }
-async function contribute(id: string, amount: string, tip = "0.00") {
+async function contribute(
+  id: string,
+  amount: string,
+  tip = "0.00",
+  extra: Record<string, unknown> = {},
+) {
   const result = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     submissionId: randomUUID(),
     kind: "contribution",
@@ -75,6 +81,7 @@ async function contribute(id: string, amount: string, tip = "0.00") {
     applied: amount,
     addedTip: tip,
     tip,
+    ...extra,
   });
   expect(result.status, JSON.stringify(result.json)).toBe(200);
   return (result.json as { payment: { id: string } }).payment.id;
@@ -282,6 +289,76 @@ describe("Find Bills SQL paging", () => {
     expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
       paid: "10.00",
       stillOwed: "0.00",
+    });
+  });
+  it("a printed table bill a part payment was taken on reads what its Pay window reads: the meal, the part payment as paid and the rest owed", async () => {
+    const wine = Array.from({ length: 4 }, () => "Red wine bottle");
+    const party = await seatedWith(venue, ...wine);
+    expect(
+      (await contribute(party.tabId, "30.00", "0.00", { ownReceipt: true })).length,
+    ).toBeGreaterThan(0);
+    const expectedPartyRevision = await partyRevision(store.db, party.partyId);
+    const expectedEdits = await closingEditsForTest(store.db, party.partyId);
+    await inTx(venue, (tx) =>
+      endMeal(
+        tx,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        party.partyId,
+        {
+          billId: party.tabId,
+          expectedPartyRevision,
+          expectedEdits,
+          submissionId: randomUUID(),
+          printAnyway: true,
+        },
+        venue.operatorId,
+        null,
+      ),
+    );
+    const balance = await inTx(venue, (tx) => readBillBalance(tx, party.tabId));
+    expect(balance).toMatchObject({
+      status: "placed",
+      total: "120.00",
+      received: "30.00",
+      outstanding: "90.00",
+    });
+
+    expect(await inTx(venue, (tx) => readFindBill(tx, party.tabId))).toMatchObject({
+      total: balance.total,
+      paid: balance.received,
+      stillOwed: balance.outstanding,
+      state: "part-paid",
+    });
+  });
+  it("a paid counter bill a part payment was taken on reads the meal as paid and owes nothing, as its Pay window does", async () => {
+    const id = await parked(venue, "Red wine bottle", "Red wine bottle");
+    await placeOrder(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+    await contribute(id, "20.00", "0.00", { ownReceipt: true });
+    await contribute(id, "40.00");
+    const balance = await inTx(venue, (tx) => readBillBalance(tx, id));
+    expect(balance).toMatchObject({ status: "settled", total: "60.00", received: "60.00" });
+
+    expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
+      total: "60.00",
+      paid: "60.00",
+      stillOwed: "0.00",
+      state: "paid-not-handed-over",
     });
   });
   it("a settled counter bill counts the applied tender without counting its tip as paid", async () => {

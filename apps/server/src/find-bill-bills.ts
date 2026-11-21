@@ -33,6 +33,10 @@ type RawBill = {
 export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
   const zone = VENUE_SERVICE.orderZoneIdSql(sql`wo.id`);
   const active = sql`l.quantity - coalesce(cancelled.quantity, 0)`;
+  // The part payments the bill's own ticket took off: their money was paid on the bill but is not
+  // in the ticket's total, so the meal is that total with them added back.
+  const takenOff = sql`(select coalesce(-sum(dl.line_gross), 0) from sale_lines dl
+       where dl.sale_id = s.id and dl.deducts_sale_id is not null)`;
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.label, wo.party_id,
       wo.status as order_status, p.name as party_name, p.table_names as party_table_names,
@@ -51,10 +55,11 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
        left join products parent on parent.id = product.parent_id
        left join units unit on unit.id = case when product.parent_id is null then product.unit_id else parent.unit_id end
        where l.working_order_id = wo.id and l.parent_line_id is null) as item_count,
-      coalesce(s.total, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
+      coalesce(s.total + ${takenOff}, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
       coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}),0) as corrections,
       case when exists(select 1 from sale_settlements settled where settled.sale_id = s.id) then
         (select coalesce(sum(t.amount - t.tip_amount),0) from tenders t where t.sale_id = s.id)
+        + ${takenOff}
         - (select coalesce(sum(tr.applied_amount),0) from refunds tr
           join tenders t on t.id = tr.tender_id
           join invoice_correction_refunds icr on icr.tender_refund_id = tr.id
