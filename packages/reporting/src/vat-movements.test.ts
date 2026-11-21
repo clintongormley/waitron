@@ -116,6 +116,23 @@ describe("vatMovements", () => {
     ]);
   });
 
+  it("reads a stamp just after the period whose date, in its offset, is the period's last day", async () => {
+    const id = await seedSale(suite.db, venue, {
+      ...TICKET,
+      invoiceNumber: 1,
+      issuedAt: at("2026-07-01", "01:00:00"),
+      issuedOffsetMinutes: -120,
+    });
+    expect((await movements(Q2)).map((m) => [m.saleId, m.madeDay])).toEqual([[id, "2026-06-30"]]);
+  });
+
+  it("returns a ticket issued long after the period for a supply day in it", async () => {
+    const id = await sale("2026-08-10", { supplyDay: "2026-06-20" });
+    expect((await movements(Q2)).map((m) => [m.saleId, m.kind, m.belongsDay])).toEqual([
+      [id, "issued_late", "2026-06-20"],
+    ]);
+  });
+
   it("returns nothing made and belonging outside the period", async () => {
     const march = await sale("2026-03-10");
     await sale("2026-07-02");
@@ -377,6 +394,38 @@ describe("vatMovements", () => {
       ["invoice", advance, "50.00", "5.00", "2026-04-01"],
       ["invoice", invoice, "50.00", "5.00", "2026-04-03"],
     ]);
+  });
+
+  describe("stamped by a clock put back", () => {
+    it("returns a correction stamped before its sale in both periods it touches", async () => {
+      const original = await sale("2026-04-02");
+      const correction = await refund("2026-03-26", original);
+      const row = {
+        ...MINUS,
+        kind: "correction",
+        madeDay: "2026-03-26",
+        belongsDay: "2026-04-02",
+        saleId: correction,
+        correctedSaleId: original,
+      };
+      expect((await movements(Q2)).filter((m) => m.kind === "correction")).toEqual([row]);
+      expect(await movements(Q1)).toEqual([row]);
+    });
+
+    it("returns a void stamped before its sale in both periods it touches", async () => {
+      const id = await sale("2026-04-03");
+      await seedVoid(suite.db, { saleId: id }, at("2026-03-27"));
+      const row = {
+        ...MINUS,
+        kind: "void",
+        madeDay: "2026-03-27",
+        belongsDay: "2026-04-03",
+        saleId: id,
+        correctedSaleId: null,
+      };
+      expect((await movements(Q2)).filter((m) => m.kind === "void")).toEqual([row]);
+      expect(await movements(Q1)).toEqual([row]);
+    });
   });
 
   it("refuses a bad period", async () => {

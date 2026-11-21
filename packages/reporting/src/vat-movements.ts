@@ -43,13 +43,21 @@ function ownDay(alias: string): SQL {
 }
 
 /**
- * The day before the period's first day, `"YYYY-MM-DD"`: a lower bound on any stored stamp
- * whose civil date, in any offset, lies in the period or after it.
+ * Bounds on the stored stamp of a sale whose civil date lies in the period, as `"YYYY-MM-DD"`
+ * strings that compare with a stamp: `from` is the day before the first day and `before` the day
+ * after the last day plus one. `sales_issued_offset_ck` keeps an offset within ±840 minutes, so a
+ * stamp is never more than a day from its civil date.
  */
-function dayBeforePeriod(year: number, period: LiquidationPeriod): string {
-  const month =
-    period.kind === "month" ? period.month : period.kind === "quarter" ? 3 * period.quarter - 2 : 1;
-  return new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10);
+function stampBounds(year: number, period: LiquidationPeriod): { from: string; before: string } {
+  const [first, months] =
+    period.kind === "month"
+      ? [period.month, 1]
+      : period.kind === "quarter"
+        ? [3 * period.quarter - 2, 3]
+        : [1, 12];
+  const day = (n: number, d: number) =>
+    new Date(Date.UTC(year, n - 1, d)).toISOString().slice(0, 10);
+  return { from: day(first, 0), before: day(first + months, 2) };
 }
 
 /**
@@ -63,12 +71,14 @@ export async function vatMovements(
 ): Promise<VatMovement[]> {
   validatePeriod(input.year, input.period);
   const inPeriod = (day: SQL): SQL => periodDateFilter(day, input.year, input.period);
-  // A movement is never made before the day it belongs to (a supply day is never after its issue
-  // day; a void follows its sale), so one made before the period cannot reach it. A record stamped
-  // with a wrong clock is outside this, as the plan states.
-  const bound = dayBeforePeriod(input.year, input.period);
+  // Only an ordinary invoice is bounded by date: its supply day, when kept, is earlier than its
+  // issue day from the same clock reading (`record-sale.ts`), so it belongs no later than it was
+  // made, even on a wrong clock. One with no supply day belongs on its issue date. Correctives and
+  // voids are read whole, since a clock put back can stamp them before the sale they change.
+  const bound = stampBounds(input.year, input.period);
 
-  // `starts`: the sales issued, or voided, from the bound on. `chain` walks each up through the
+  // `starts`: the ordinary invoices that can reach the period, every corrective and every voided
+  // sale. `chain` walks each up through the
   // correctives it corrects to the invoice whose day they take: an ordinary invoice (its own day)
   // or a replacement (its `supply_day`, else its original's own day). `placed`: each ordinary
   // invoice and non-replacement corrective, with the day its VAT first belongs to and the day it
@@ -87,10 +97,17 @@ export async function vatMovements(
   }>(sql`
     with recursive
     starts(id) as (
-      select s.id from sales s indexed by sales_issued_idx where s.issued_at >= ${bound}
+      select s.id from sales s indexed by sales_issued_idx
+      where s.issued_at >= ${bound.from} and s.issued_at < ${bound.before}
+        and s.corrects_sale_id is null
       union
-      select sv.sale_id from sale_voids sv indexed by sale_voids_voided_at_idx
-      where sv.voided_at >= ${bound}
+      select s.id from sales s indexed by sales_issued_idx
+      where s.issued_at >= ${bound.before} and s.supply_day is not null
+        and s.corrects_sale_id is null
+      union
+      select s.id from sales s indexed by sales_corrects_idx where s.corrects_sale_id is not null
+      union
+      select sv.sale_id from sale_voids sv
     ),
     chain(start_id, cur_id) as (
       select id, id from starts
@@ -137,9 +154,8 @@ export async function vatMovements(
       select st.id, st.corrects_sale_id, st.issued_at, 'void', 4, -1,
         date(sv.voided_at, printf('%+d minutes', st.issued_offset_minutes)), p.now_day,
         st.vat_breakdown
-      from sale_voids sv indexed by sale_voids_voided_at_idx
+      from sale_voids sv
       join sales st on st.id = sv.sale_id join placed p on p.id = st.id
-      where sv.voided_at >= ${bound}
     )
     select
       b.value ->> 'rate' as rate,
