@@ -100,8 +100,10 @@ invoice still has money to give back and a dish at the advance's own rate left t
 invoice on the advance's ticket is refused with `advance.final_invoice_first`, naming the table's
 invoice, the rate and the smaller of the two amounts (`apps/server/src/advance-taken-off.ts`;
 `apps/server/src/advance-corrections.test.ts`, "refuses Correct invoice on the advance's ticket
-while the rest's invoice can give back €90 at 10%, naming it, and files nothing"). Otherwise, as for any of
-an advance that equals the meal, it comes back as an R5 of the advance's own ticket at its 10%, filed by `recordCorrection` unchanged, cash with its own drawer
+while the rest's invoice can give back €90 at 10%, naming it, and files nothing"). While a refund on the table's invoice is still waiting for its result and
+could change that answer, it is refused with `advance.final_invoice_refund_pending` instead. Otherwise (a
+€0.00 table's invoice, dishes sent back for more than it carries, or no dish left at the advance's
+rate), it comes back as an R5 of the advance's own ticket at its 10%, filed by `recordCorrection` unchanged, cash with its own drawer
 opening or card ("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10%
 −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were");
 the table's invoice is never altered by it. The till's Refund beside such a payment opens Correct
