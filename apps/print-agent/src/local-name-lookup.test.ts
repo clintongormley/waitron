@@ -70,6 +70,16 @@ async function sentQuestion(socket: FakeSocket): Promise<void> {
   await vi.waitFor(() => expect(socket.sent).toHaveLength(1));
 }
 
+/** A normal lookup that knows no name, as a container's resolver does for a `.local` name. */
+function unknownToSystem() {
+  return vi.fn<LookupFunction>((hostname, _options, callback) =>
+    callback(
+      Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: "ENOTFOUND" }),
+      "",
+    ),
+  );
+}
+
 describe("createLocalNameLookup", () => {
   it("asks the local network for a .local name and answers the first matching reply as a list", async () => {
     const socket = new FakeSocket();
@@ -210,9 +220,10 @@ describe("createLocalNameLookup", () => {
       vi.useRealTimers();
     });
 
-    it("asks again at 250 ms and 1 s, then gives up at 2 s and leaves no timer behind", async () => {
+    it("asks again at 250 ms and 1 s, then hands the name on at 1.5 s and leaves no timer behind", async () => {
       const socket = new FakeSocket();
-      const lookup = createLocalNameLookup({ openSocket: () => socket });
+      const fallback = unknownToSystem();
+      const lookup = createLocalNameLookup({ openSocket: () => socket, fallback });
       let settled: Answer | undefined;
       void ask(lookup, "box-1.local", { all: true }).then((a) => (settled = a));
       await vi.advanceTimersByTimeAsync(0);
@@ -226,9 +237,11 @@ describe("createLocalNameLookup", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(socket.sent).toHaveLength(3);
       expect(new Set(socket.sent.map((q) => q.msg.toString("hex"))).size).toBe(1);
-      await vi.advanceTimersByTimeAsync(999);
+      await vi.advanceTimersByTimeAsync(499);
       expect(settled).toBeUndefined();
+      expect(fallback).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
+      expect(fallback).toHaveBeenCalledTimes(1);
       expect(settled?.error?.code).toBe("ENOTFOUND");
       expect(socket.sent).toHaveLength(3);
       expect(socket.closed).toBe(true);
@@ -250,42 +263,72 @@ describe("createLocalNameLookup", () => {
     });
   });
 
-  it("answers ENOTFOUND and closes the socket when no reply comes in time", async () => {
+  it("hands the name, with its options, to the normal lookup when no reply comes in time", async () => {
     const socket = new FakeSocket();
-    const lookup = createLocalNameLookup({ openSocket: () => socket, timeoutMs: 20 });
+    const fallback = vi.fn<LookupFunction>((_host, _options, callback) => {
+      expect(socket.closed).toBe(true);
+      callback(null, [{ address: "192.0.2.12", family: 4 }]);
+    });
+    const lookup = createLocalNameLookup({ openSocket: () => socket, fallback, timeoutMs: 20 });
+    const answer = await ask(lookup, "configured-box.local", { all: true });
+    expect(answer).toEqual({
+      error: null,
+      address: [{ address: "192.0.2.12", family: 4 }],
+      family: undefined,
+    });
+    expect(fallback).toHaveBeenCalledTimes(1);
+    expect(fallback).toHaveBeenCalledWith(
+      "configured-box.local",
+      { all: true },
+      expect.any(Function),
+    );
+  });
+
+  it("passes on the normal lookup's refusal when neither knows the name", async () => {
+    const socket = new FakeSocket();
+    const fallback = unknownToSystem();
+    const lookup = createLocalNameLookup({ openSocket: () => socket, fallback, timeoutMs: 20 });
     const answer = await ask(lookup, "box-1.local", { all: true });
     expect(answer.error?.code).toBe("ENOTFOUND");
     expect(answer.error?.message).toContain("box-1.local");
     expect(socket.closed).toBe(true);
   });
 
-  it("answers ENOTFOUND when the socket fails", async () => {
+  it("hands the name to the normal lookup when the socket fails", async () => {
     const socket = new FakeSocket();
-    const lookup = createLocalNameLookup({ openSocket: () => socket });
+    const fallback = unknownToSystem();
+    const lookup = createLocalNameLookup({ openSocket: () => socket, fallback });
     const answer = ask(lookup, "box-1.local", { all: true });
     socket.emit("error", new Error("bind EADDRNOTAVAIL"));
     const settled = await answer;
     expect(settled.error?.code).toBe("ENOTFOUND");
+    expect(fallback).toHaveBeenCalledWith("box-1.local", { all: true }, expect.any(Function));
     expect(socket.closed).toBe(true);
   });
 
-  it("answers ENOTFOUND, without asking, when the group cannot be joined", async () => {
+  it("hands the name to the normal lookup, without asking, when the group cannot be joined", async () => {
     const socket = new FakeSocket();
     socket.addMembership = () => {
       throw new Error("addMembership ENODEV");
     };
-    const lookup = createLocalNameLookup({ openSocket: () => socket });
+    const fallback = unknownToSystem();
+    const lookup = createLocalNameLookup({ openSocket: () => socket, fallback });
     const settled = await ask(lookup, "box-1.local", { all: true });
     expect(settled.error?.code).toBe("ENOTFOUND");
+    expect(fallback).toHaveBeenCalledTimes(1);
     expect(socket.sent).toHaveLength(0);
     expect(socket.closed).toBe(true);
   });
 
-  it("answers ENOTFOUND for a .local name asked as IPv6 only, without asking the network", async () => {
+  it("hands a .local name asked as IPv6 only to the normal lookup, without asking the network", async () => {
     const openSocket = vi.fn(() => new FakeSocket());
-    const lookup = createLocalNameLookup({ openSocket });
+    const fallback = vi.fn<LookupFunction>((_host, _options, callback) =>
+      callback(null, "fd00::7", 6),
+    );
+    const lookup = createLocalNameLookup({ openSocket, fallback });
     const answer = await ask(lookup, "box-1.local", { family: 6 });
-    expect(answer.error?.code).toBe("ENOTFOUND");
+    expect(answer).toEqual({ error: null, address: "fd00::7", family: 6 });
+    expect(fallback).toHaveBeenCalledWith("box-1.local", { family: 6 }, expect.any(Function));
     expect(openSocket).not.toHaveBeenCalled();
   });
 
@@ -306,11 +349,14 @@ describe("createLocalNameLookup", () => {
   });
 
   it("by default sends other names to the system lookup and .local names to a real socket", async () => {
-    const lookup = createLocalNameLookup({ timeoutMs: 50 });
-    const local = await ask(lookup, "localhost", { all: true });
+    const local = await ask(createLocalNameLookup(), "localhost", { all: true });
     expect(local.error).toBeNull();
     expect(Array.isArray(local.address) && local.address.length > 0).toBe(true);
+    // A stand-in normal lookup: a Mac's own takes 5 s to refuse an unknown `.local` name.
+    const fallback = unknownToSystem();
+    const lookup = createLocalNameLookup({ timeoutMs: 50, fallback });
     const missing = await ask(lookup, "no-such-box-a1562.local", { all: true });
     expect(missing.error?.code).toBe("ENOTFOUND");
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
