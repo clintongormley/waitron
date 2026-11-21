@@ -379,6 +379,8 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     const said = codeMessage(refusal.code, currentLocale(), refusal);
     const refundStill =
       this.correction === null &&
+      // About the table's receipt on a payment on account, whose money no plain refund gives back.
+      refusal.tableInvoiceNumber === undefined &&
       REFUND_STILL.has(refusal.code) &&
       !(
         refusal.code === "sale.correction_not_admitted" &&

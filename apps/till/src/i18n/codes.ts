@@ -1057,8 +1057,8 @@ const FINAL_INVOICE_FIRST_UNNAMED = {
 };
 
 const TABLE_RECEIPT_REFUSED = {
-  en: "The table's receipt {tableInvoiceNumber} cannot be corrected: ",
-  es: "El ticket de la mesa {tableInvoiceNumber} no se puede rectificar: ",
+  en: "Table's receipt {tableInvoiceNumber}: ",
+  es: "Ticket de la mesa {tableInvoiceNumber}: ",
 };
 
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
@@ -1127,7 +1127,7 @@ export function codeMessage(
   if (typeof params?.tableInvoiceNumber === "string") {
     const said = codeMessage(code, locale, { ...params, tableInvoiceNumber: undefined });
     const lead = pickLocale(TABLE_RECEIPT_REFUSED, locale);
-    return `${lead.replace("{tableInvoiceNumber}", () => params.tableInvoiceNumber as string)}${said.charAt(0).toLowerCase()}${said.slice(1)}`;
+    return `${lead.replace("{tableInvoiceNumber}", () => params.tableInvoiceNumber as string)}${said}`;
   }
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (

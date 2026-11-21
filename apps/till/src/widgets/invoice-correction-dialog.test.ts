@@ -263,6 +263,37 @@ it("sends staff to the table's receipt first on opening a payment on account it 
   expect(confirm(el)).toBeNull();
 });
 
+it("names the table's receipt when its refusal answers a payment on account, and says nothing of Refund a payment", async () => {
+  const api = fakeApi();
+  api.readInvoiceCorrectionLines.mockRejectedValue({
+    code: "sale.correction_history_unusable",
+    status: 409,
+    tableInvoiceNumber: "A/45",
+  });
+  const { el } = await mount(api);
+
+  expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+    "Table's receipt A/45: This invoice's earlier corrections cannot be read, so it cannot be corrected.",
+  );
+});
+
+it("names the table's receipt when the preview answers its refusal, and says nothing of Refund a payment", async () => {
+  const api = fakeApi();
+  api.previewInvoiceCorrection.mockRejectedValue({
+    code: "sale.correction_not_admitted",
+    reason: "filed_figures_changed",
+    tableInvoiceNumber: "A/45",
+  });
+  const { el } = await mount(api);
+
+  await type(el, "5");
+  await vi.waitFor(() =>
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+      "Table's receipt A/45: This invoice's filed figures cannot be checked, so it cannot be corrected.",
+    ),
+  );
+});
+
 it("puts an amount the preview refuses under the money field, leaving the action enabled", async () => {
   const api = fakeApi();
   api.previewInvoiceCorrection.mockRejectedValue({ code: "sale.correction_amount_invalid" });

@@ -8,6 +8,7 @@ import {
   basisPointsToDecimal,
   compareDecimal,
   decimal,
+  hasCode,
   saleId as brandSaleId,
   sumDecimals,
   type ErrorParams,
@@ -65,6 +66,9 @@ export async function refuseTakenOffSinceOpened(
   throw new AppError("advance.taken_off_final_invoice", takenOffParams(saleId, final));
 }
 
+/** The refusals of reading an invoice's correctable lines that can name the table's invoice. */
+type NamesTableInvoice = "sale.correction_not_admitted" | "sale.correction_history_unusable";
+
 /**
  * Refuses `advance.final_invoice_first` once an invoice has taken the advance `saleId` off, while
  * that invoice can still give back money for a dish at the advance's rate: `moneyLeft` is the
@@ -93,6 +97,12 @@ export async function refuseFinalInvoiceFirst(
     .where(inArray(saleLines.correctsLineId, [final.deductionLineId, ...deductions]))
     .limit(1);
   if (credit !== undefined) return;
+  const money = sumDecimals([
+    decimal("0.00"),
+    ...(await readRefundableTenders(tx, final.id)).map((row) => decimal(row.appliedRemaining)),
+  ]);
+  // Nothing to send staff to, so a refusal of reading the table's invoice must not block this one.
+  if (compareDecimal(money, decimal("0.00")) <= 0) return;
   const [own] = await tx
     .select({ rate: saleLines.vatRate })
     .from(saleLines)
@@ -100,21 +110,23 @@ export async function refuseFinalInvoiceFirst(
   const rate = basisPointsToDecimal(own!.rate);
   const lines = await readCorrectableLines(tx, backend, brandSaleId(final.id), nodeId).catch(
     (error: unknown) => {
-      if (!(error instanceof AppError)) throw error;
-      throw new AppError(
-        error.code,
-        { ...error.params, tableInvoiceNumber: takenOffParams(saleId, final).invoiceNumber },
-        { reason: error.reason },
-      );
+      if (
+        error instanceof AppError &&
+        (hasCode(error, "sale.correction_not_admitted") ||
+          hasCode(error, "sale.correction_history_unusable"))
+      ) {
+        throw new AppError<NamesTableInvoice>(
+          error.code,
+          { ...error.params, tableInvoiceNumber: takenOffParams(saleId, final).invoiceNumber },
+          { reason: error.reason },
+        );
+      }
+      throw error;
     },
   );
   const dishes = sumDecimals([
     decimal("0.00"),
     ...lines.filter((line) => compareDecimal(line.rate, rate) === 0).map((line) => line.left),
-  ]);
-  const money = sumDecimals([
-    decimal("0.00"),
-    ...(await readRefundableTenders(tx, final.id)).map((row) => decimal(row.appliedRemaining)),
   ]);
   const moneyLeft = compareDecimal(dishes, money) < 0 ? dishes : money;
   if (compareDecimal(moneyLeft, decimal("0.00")) <= 0) return;

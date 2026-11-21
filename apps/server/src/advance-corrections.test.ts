@@ -676,6 +676,36 @@ describe("an advance once the rest's invoice has taken it off", () => {
     });
   });
 
+  it("a rest's invoice AEAT refused once a plain refund gave back its whole €90: the advance's preview goes ahead", async () => {
+    const { advanceId, finalSaleId } = await takenOff();
+    await refundRest(finalSaleId, "90.00");
+    const [row] = await inTx(venue(), (tx) =>
+      tx
+        .select({ id: invoiceRecords.id })
+        .from(invoiceRecords)
+        .where(eq(invoiceRecords.saleId, finalSaleId)),
+    );
+    await refuseRecord(venue().db, row!.id, "1100");
+    const lines = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/transactions/${finalSaleId}/corrections/lines`,
+    );
+    expect(lines.status, JSON.stringify(lines.json)).toBe(409);
+    expect(lines.json).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "filing_refused" },
+    });
+
+    const previewed = await preview(advanceId, "30.00");
+
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    expect(previewed.json).toMatchObject({
+      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+    });
+  });
+
   it("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10% −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were", async () => {
     const billId = await seated("Tasting menu", "Salad bowl");
     const advanceId = await advance(billId, "120.00");
