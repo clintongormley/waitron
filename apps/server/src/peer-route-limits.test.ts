@@ -21,6 +21,7 @@ import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mountBoxJoinApi } from "./box-join-api.js";
 import type { Logger } from "./logger.js";
 
 function mounted() {
@@ -60,6 +61,7 @@ function mounted() {
   mount(mountReturnRecordsApi);
   mount(mountPromoteApi);
   mount(mountMirrorBundleApi);
+  mount(mountBoxJoinApi);
   armed = true;
   return { app, reads: () => reads };
 }

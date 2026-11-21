@@ -86,7 +86,7 @@ export interface MirrorBundleApiDeps {
  * Every request the main box sends the spare's store is signed by the main box's clock, and the
  * store accepted one 14 minutes off its own and refused one 16 minutes off (probe P36).
  */
-const MAX_CLOCK_GAP_MS = 10 * 60_000;
+export const MAX_CLOCK_GAP_MS = 10 * 60_000;
 
 /**
  * This box's refusals of a join that the spare passes on to its wizard (`fetchMirrorBundle`), each
@@ -301,7 +301,7 @@ export function mountMirrorBundleApi(
 }
 
 /** An `https` bare origin at the contact URL's host, so the pair's key goes to no other machine. */
-function isStoreUrlOf(storeUrl: unknown, contactUrl: string): boolean {
+export function isStoreUrlOf(storeUrl: unknown, contactUrl: string): boolean {
   if (typeof storeUrl !== "string" || contactUrl === "" || !isBareOrigin(storeUrl)) return false;
   const store = new URL(storeUrl);
   return store.protocol === "https:" && store.hostname === new URL(contactUrl).hostname;

@@ -1567,6 +1567,20 @@ declare module "@waitron/shared" {
     "mirror.standby_name_taken": Record<string, never>;
     /** The two boxes' clocks, both given as ISO times, are 10 minutes or more apart. */
     "mirror.clocks_apart": { primaryAt: string; standbyAt: string };
+    /** A join hello, or a later message of that join, came from an address the hello does not list. */
+    "mirror.join_address_mismatch": Record<string, never>;
+    /**
+     * A join message the main box cannot accept: a bad signature, a `seq` not greater than the last,
+     * a second reveal with another nonce (which ends the request) or an unknown `protocol`. The new
+     * box also uses it when the main box's reveal or approved answer does not check.
+     */
+    "mirror.join_invalid": Record<string, never>;
+    /** A join limit was reached; `retryAt` is when it frees, as an ISO time on the main box's clock. */
+    "mirror.join_full": { limit: "address" | "network" | "listed" | "recent"; retryAt: string };
+    /** A reveal's code equals one a listed request shows; the request ended and no nonce was sent. */
+    "mirror.join_code_taken": Record<string, never>;
+    /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */
+    "mirror.join_not_found": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;

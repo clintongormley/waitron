@@ -385,6 +385,7 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mountBoxJoinApi } from "./box-join-api.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
@@ -4344,6 +4345,7 @@ async function bootServer(
       },
       log,
     );
+    mountBoxJoinApi(app, { appDb: db, node: store.node, ring, designated: config.node }, log);
   }
 
   const promoteDeps: PromoteDeps = {
