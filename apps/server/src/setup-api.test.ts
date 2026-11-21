@@ -92,6 +92,7 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
         cloudSignIn: {
           origin: "https://box.test",
           connection: {
+            setupAddressLookup: async () => ({ available: false }),
             setupSignInAvailable: async () => true,
             startSignIn,
             returnSignIn,
@@ -669,6 +670,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         cloudSignIn: {
           origin: "https://box.test",
           connection: {
+            setupAddressLookup: async () => ({ available: false }),
             setupSignInAvailable: async () => true,
             startSignIn: async () => ({}),
             returnSignIn: async () => {},

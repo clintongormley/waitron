@@ -1307,9 +1307,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   and Cloud [#1343](https://github.com/waitron-io/waitron-cloud/pull/1343).
   Configured test boxes also offer sign-in in fresh Prepare and development Live,
   then file the saved venue after restart. [Early setup still needs](superpowers/plans/2026-11-21-setup-cloud-sign-in-early.md)
-  the address picker, recovery from an expired or signed-out setup session, and the staff email
-  consent. The address pilot needs exactly one Spanish business with no tax number or venues.
-  Adding a venue to an existing account still needs manual address entry and wider Cloud support.
+  recovery from an expired or signed-out setup session and the staff email consent. The address
+  picker requires one Spanish business with no tax number or venues. Adding a venue to an
+  existing Cloud business still needs manual address entry and wider Cloud support.
   Cloud installs the private package with its workflow token. Remaining: the sign-in
   rules (with A1437 and Cloud's D608), then the message list and texts (with Cloud's D610 and the
   email relay). Roles, storage, sessions and
@@ -1479,7 +1479,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **A951-S provider trials.** Public staff-name changes and certificate renewal still need joint
   qualification. Translate all returned one editable menu suggestion on the test box;
-  address completion still needs its trial. Keep the approved consent and request limits.
+  the live Google address trial remains open. Keep the approved consent and request limits.
   Idle gateway recovery still needs testing through Cloud’s staff and public HTTPS routes.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 

@@ -796,7 +796,7 @@ export class SetupVenueScreen extends LitElement {
       class="field"
       data-test=${`${which}-lookup`}
       name=${`${which}-search`}
-      .provider=${this.addressProvider}
+      .provider=${pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
       label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}
       placeholder=${t("venue.address_lookup.placeholder")}

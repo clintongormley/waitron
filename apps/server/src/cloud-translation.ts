@@ -6,12 +6,13 @@ import type {
 } from "@waitron/menu/src/content-suggestion-types.js";
 import "@waitron/menu/src/errors.js";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
 import { machinePayload } from "./cloud-installation.js";
 import "./errors.js";
 
 export type MachineServiceAction =
   | TranslationAction
+  | "address-lookup"
   | "staff-certificate-submit"
   | "staff-certificate-status"
   | "guest-menu-status"
@@ -36,7 +37,7 @@ export function submitSignedBody(body: string): string {
 }
 
 export function translationEnvelope(
-  state: Pick<SavedCloudState, "origin" | "view" | "privateKey">,
+  state: Pick<CloudInstallationCredentials, "origin" | "view" | "privateKey">,
   action: MachineServiceAction,
   input: { operationId: string; lease: string; signedBody: string },
   now = Date.now(),
@@ -92,6 +93,7 @@ export type OnRefusal = (
   publicKey: string,
 ) => Promise<void>;
 const LIMITS: Record<MachineServiceAction, { reply: number; ms: number }> = {
+  "address-lookup": { reply: 16384, ms: 8000 },
   "owner-recovery-read": { reply: 65536, ms: 8000 },
   "owner-recovery-approve": { reply: 65536, ms: 8000 },
   "owner-recovery-refuse": { reply: 65536, ms: 8000 },
@@ -136,7 +138,7 @@ export function refusalOf(status: number, value: unknown): AppError {
 }
 
 export async function serviceExchange(
-  state: SavedCloudState,
+  state: CloudInstallationCredentials,
   action: MachineServiceAction,
   operationId: string,
   signedBody: string,

@@ -121,6 +121,15 @@ describe("the venue screen's address search", () => {
     expect(tests.indexOf("address-lookup")).toBe(tests.indexOf("addressLine1") - 1);
   });
 
+  it("keeps both searches hidden until Spain is selected", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) }, { venue: { country: "" } });
+    for (const which of ["address-lookup", "domicile-lookup"])
+      expect(lookup(el, which)!.hidden).toBe(true);
+    await type(el, "country", "ES");
+    for (const which of ["address-lookup", "domicile-lookup"])
+      expect(lookup(el, which)!.hidden).toBe(false);
+  });
+
   it("fills the address fields from a chosen address, and Next sends them", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     const patches = collect(el);

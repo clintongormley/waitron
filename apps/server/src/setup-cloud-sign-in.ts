@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { getCookie, setCookie } from "hono/cookie";
 import { codeOf, createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { readSetupAddressLookup } from "./cloud-address-lookup.js";
 import type { CloudConnection } from "./cloud-client.js";
 import { mountCloudSignInCallback } from "./cloud-sign-in-callback.js";
 import { cloudSignInId, readCloudSignInReturn } from "./cloud-sign-in.js";
@@ -21,7 +22,11 @@ export interface SetupCloudSignIn {
   origin: string;
   connection: Pick<
     CloudConnection,
-    "setupSignInAvailable" | "startSignIn" | "returnSignIn" | "publishSetupSignIn"
+    | "setupSignInAvailable"
+    | "startSignIn"
+    | "returnSignIn"
+    | "publishSetupSignIn"
+    | "setupAddressLookup"
   >;
 }
 
@@ -74,7 +79,7 @@ export function mountSetupCloudSignIn(
     }),
   );
   mountCloudSignInCallback(app, (c) => onSetupOrigin(c, deps), true);
-  for (const action of ["start", "return"] as const) {
+  for (const action of ["start", "return", "address-lookup"] as const) {
     app.post(`${ROOT}/${action}`, (c) =>
       run(c, log, async () => {
         c.header("Cache-Control", "no-store");
@@ -98,6 +103,17 @@ export function mountSetupCloudSignIn(
         )
           throw new AppError("cloud.request_invalid", {});
         const session = sessionFrom(c);
+        if (action === "address-lookup") {
+          if (!session) throw new AppError("setup.owner_required", {});
+          return c.json(
+            await deps.connection.setupAddressLookup(
+              { kind: "setup", tab: input.tab, session },
+              readSetupAddressLookup(input),
+              authorize,
+              c.req.raw.signal,
+            ),
+          );
+        }
         if (action === "return") {
           if (!session) throw new AppError("setup.owner_required", {});
           await deps.connection.returnSignIn(

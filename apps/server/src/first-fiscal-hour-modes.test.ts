@@ -189,6 +189,7 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
     cloudSignIn: {
       origin: "https://box.test",
       connection: {
+        setupAddressLookup: async () => ({ available: false }),
         setupSignInAvailable: async () => true,
         startSignIn: async () => ({}),
         returnSignIn: async () => {},
