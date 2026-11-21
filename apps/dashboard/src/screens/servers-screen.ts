@@ -40,11 +40,21 @@ function grouped(code: string): string {
   return `${code.slice(0, 3)} ${code.slice(3)}`;
 }
 
-/** A join refusal in words; the key code is the general one elsewhere, so it is reworded here. */
+/** Codes whose shared words serve other screens too, so a join refusal words them here. */
+const JOIN_WORDS: Partial<Record<string, StringKey>> = {
+  "backup.recovery_key_missing": "servers.join_recovery_key_missing",
+  "module.config_invalid": "servers.join_module_config_invalid",
+};
+
 function joinRefusal(error: unknown): string {
   const code = codeOf(error);
-  if (code === "backup.recovery_key_missing") return t("servers.join_recovery_key_missing");
-  return codeMessage(code, undefined, (error as { params?: Record<string, unknown> }).params);
+  const key = JOIN_WORDS[code];
+  if (key !== undefined) return t(key);
+  return codeMessage(
+    code,
+    undefined,
+    (error as { params?: Record<string, unknown> } | null)?.params,
+  );
 }
 
 const STANDING_KEY: Record<ServerRow["standing"], StringKey> = {
@@ -298,9 +308,14 @@ export class ServersScreen extends LitElement {
     ended: boolean;
     approved: boolean;
   } | null = null;
-  /** `"check"` while Check reads, or the code being sent. */
+  /** `"check"` while Check reads, `"dismiss"` while Dismiss is sent, or the code being sent. */
   @state() private joinBusy: string | null = null;
   #joinPoll?: ReturnType<typeof setInterval>;
+  #pollOut = false;
+  /** Every read and live snapshot takes the next number; an answer numbered at or below the
+   * newest applied one is older than what the screen shows, so it is dropped. */
+  #readsBegun = 0;
+  #newestApplied = 0;
   @state() private loading = true;
   @state() private loadErrorKey: string | null = null;
   @state() private target: { action: Action; row: ServerRow } | null = null;
@@ -362,7 +377,9 @@ export class ServersScreen extends LitElement {
     super.disconnectedCallback();
   }
 
-  #applyListing(listing: ServerListing): void {
+  #applyListing(listing: ServerListing, read = ++this.#readsBegun): void {
+    if (read <= this.#newestApplied) return;
+    this.#newestApplied = read;
     this.servers = inStandingOrder(listing.nodes);
     this.spare = listing.spare ?? null;
     this.authorityFingerprint = listing.authorityFingerprint;
@@ -377,16 +394,30 @@ export class ServersScreen extends LitElement {
       this.#joinPoll = undefined;
       return;
     }
-    this.#joinPoll ??= setInterval(() => void this.#reread(true), JOIN_POLL_MS);
+    this.#joinPoll ??= setInterval(() => void this.#poll(), JOIN_POLL_MS);
   }
 
+  async #poll(): Promise<void> {
+    if (this.#pollOut) return;
+    this.#pollOut = true;
+    try {
+      await this.#reread(true);
+    } finally {
+      this.#pollOut = false;
+    }
+  }
+
+  /** A read after an action supersedes every read begun before it, which may predate the change. */
   async #reread(passive = false): Promise<void> {
+    if (!passive) this.#newestApplied = this.#readsBegun;
+    const read = ++this.#readsBegun;
     try {
       this.#applyListing(
         await (passive ? (this.api.background ?? this.api) : this.api).listServers(),
+        read,
       );
     } catch (error) {
-      this.loadErrorKey = codeOf(error);
+      if (read > this.#newestApplied) this.loadErrorKey = codeOf(error);
     }
   }
 
@@ -394,16 +425,19 @@ export class ServersScreen extends LitElement {
     if (this.joinBusy !== null) return;
     this.join = { request, choices: null, error: "", ended: false, approved: false };
     this.joinBusy = "check";
+    let ended = false;
     try {
       const checked = await this.api.checkBoxJoin(request.id);
       if (this.join?.request !== request) return;
       this.join = { ...this.join, choices: checked.choices };
     } catch (error) {
       if (this.join?.request !== request) return;
-      this.join = { ...this.join, error: joinRefusal(error), ended: JOIN_ENDED.has(codeOf(error)) };
+      ended = JOIN_ENDED.has(codeOf(error));
+      this.join = { ...this.join, error: joinRefusal(error), ended };
     } finally {
       this.joinBusy = null;
     }
+    if (ended) await this.#reread();
   }
 
   async #approveJoin(code: string): Promise<void> {
@@ -432,6 +466,8 @@ export class ServersScreen extends LitElement {
   }
 
   async #dismissJoin(request: BoxJoinRequestRow): Promise<void> {
+    if (this.joinBusy !== null) return;
+    this.joinBusy = "dismiss";
     this.joinListError = "";
     try {
       await this.api.dismissBoxJoin(request.id);
@@ -440,7 +476,10 @@ export class ServersScreen extends LitElement {
         this.joinListError = joinRefusal(error);
         return;
       }
+    } finally {
+      this.joinBusy = null;
     }
+    if (this.join?.request.id === request.id) this.#closeJoin();
     await this.#reread();
   }
 
@@ -490,6 +529,7 @@ export class ServersScreen extends LitElement {
                   size="sm"
                   data-test="join-dismiss-${request.id}"
                   aria-label=${`${t("servers.join_dismiss")}: ${asking}`}
+                  ?disabled=${this.joinBusy !== null}
                   @click=${() => void this.#dismissJoin(request)}
                   >${t("servers.join_dismiss")}</wt-button
                 >

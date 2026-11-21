@@ -1681,13 +1681,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The new box's request could not be read, so nothing was sent. Choose Start again on the new box.",
     es: "No se ha podido leer la solicitud del servidor nuevo, así que no se ha enviado nada. Elige Empezar de nuevo en el servidor nuevo.",
   },
+  // Setting up a venue (`provision.ts`) and joining as a spare (`adopt.ts`) both record whether it
+  // is a trial or the real venue; the development demo seed (`scripts/dev-setup.ts`) does not.
   "mirror.not_provisioned": {
-    en: "This box has not been set up as a venue yet, so it has nothing to copy to a spare.",
-    es: "Este servidor aún no se ha configurado como local, así que no tiene nada que copiar a un servidor de reserva.",
+    en: "This box does not record whether this venue is a trial or the real one, so it cannot be copied to a spare. Nothing was changed. On a venue set up through its setup page, this is a fault in Waitron.",
+    es: "Este servidor no tiene registrado si este local es de prueba o el real, así que no se puede copiar a un servidor de reserva. No se ha cambiado nada. En un local configurado desde su página de configuración, es un fallo de Waitron.",
   },
   "module.config_invalid": {
-    en: "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
-    es: "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
+    en: "A module's settings on this box could not be read, so this could not be done. Nothing was changed.",
+    es: "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha podido hacer. No se ha cambiado nada.",
   },
   "membership.write_contended": {
     en: "The list of servers was being changed at the same moment. Try again.",

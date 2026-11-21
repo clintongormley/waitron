@@ -2342,6 +2342,8 @@ export const en = {
   "servers.join_approved": "Approved; the new box is fetching its copy",
   "servers.join_recovery_key_missing":
     "This box has no backup encryption key, which a spare needs. Choose Turn on backups under Backups, then choose Check again.",
+  "servers.join_module_config_invalid":
+    "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
   "servers.machine": "Machine",
   "servers.not_primary":
@@ -7043,6 +7045,8 @@ export const es: Record<StringKey, string> = {
   "servers.join_approved": "Aprobado; el servidor nuevo está descargando su copia",
   "servers.join_recovery_key_missing":
     "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar copias en Copias de seguridad y vuelve a elegir Comprobar.",
+  "servers.join_module_config_invalid":
+    "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
   "servers.machine": "Máquina",
   "servers.not_primary":

@@ -882,6 +882,15 @@ it("says a box holds no recovery key rather than asking for one to be entered, s
   );
 });
 
+it("words a module's unreadable settings generally, since a personal-data download shows it too", () => {
+  expect(codeMessage("module.config_invalid", "en")).toBe(
+    "A module's settings on this box could not be read, so this could not be done. Nothing was changed.",
+  );
+  expect(codeMessage("module.config_invalid", "es")).toBe(
+    "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha podido hacer. No se ha cambiado nada.",
+  );
+});
+
 it("words each Translate all code in both languages", () => {
   for (const code of [
     "content.suggestion_job_running",

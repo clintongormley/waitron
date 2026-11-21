@@ -6,6 +6,7 @@ import type { ServersScreen } from "./servers-screen.js";
 import type { BoxJoinCheck, DashboardApi, ServerListing } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { formatRecentMinute } from "../date-utils.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const REQUEST = "66666666-6666-4666-8666-666666666666";
 
@@ -251,6 +252,202 @@ describe("a box asking to join, on the Servers screen", () => {
     }
   });
 
+  it("starts no timer while nothing is listed, and stops when the screen is removed", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const background = { listServers: vi.fn().mockResolvedValue(listing()) };
+      const empty = await mount(
+        stubApi({ background, listServers: vi.fn().mockResolvedValue(listing([])) }),
+      );
+      vi.advanceTimersByTime(15000);
+      await flush(empty);
+      expect(background.listServers).not.toHaveBeenCalled();
+
+      const el = await mount(stubApi({ background }));
+      vi.advanceTimersByTime(5000);
+      await flush(el);
+      expect(background.listServers).toHaveBeenCalledTimes(1);
+      el.remove();
+      vi.advanceTimersByTime(15000);
+      await flush(el);
+      expect(background.listServers).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends no second poll while one is still out", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let releasePoll!: (value: ServerListing) => void;
+      const background = {
+        listServers: vi.fn(
+          () =>
+            new Promise<ServerListing>((resolve) => {
+              releasePoll = resolve;
+            }),
+        ),
+      };
+      const el = await mount(stubApi({ background }));
+      vi.advanceTimersByTime(10000);
+      await flush(el);
+      expect(background.listServers).toHaveBeenCalledTimes(1);
+      releasePoll(listing());
+      await flush(el);
+      vi.advanceTimersByTime(5000);
+      await flush(el);
+      expect(background.listServers).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a slow poll finishing after the approval's own read does not bring the request back", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let releasePoll!: (value: ServerListing) => void;
+      const background = {
+        listServers: vi.fn(
+          () =>
+            new Promise<ServerListing>((resolve) => {
+              releasePoll = resolve;
+            }),
+        ),
+      };
+      const listServers = vi.fn().mockResolvedValueOnce(listing()).mockResolvedValue(listing([]));
+      const el = await mount(stubApi({ background, listServers }));
+      vi.advanceTimersByTime(5000);
+      await flush(el);
+      expect(background.listServers).toHaveBeenCalledTimes(1);
+
+      await check(el);
+      choiceButtons(el)[0]!.click();
+      await flush(el);
+      await flush(el);
+      expect(listServers).toHaveBeenCalledTimes(2);
+      expect(find(el, `join-row-${REQUEST}`)).toBeNull();
+
+      releasePoll(listing());
+      await flush(el);
+      expect(find(el, `join-row-${REQUEST}`)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a poll begun before an approval is not applied, even when it lands before the approval's read", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let releasePoll!: (value: ServerListing) => void;
+      let releaseReread!: (value: ServerListing) => void;
+      const background = {
+        listServers: vi.fn(
+          () =>
+            new Promise<ServerListing>((resolve) => {
+              releasePoll = resolve;
+            }),
+        ),
+      };
+      const listServers = vi
+        .fn()
+        .mockResolvedValueOnce(listing())
+        .mockImplementationOnce(
+          () =>
+            new Promise<ServerListing>((resolve) => {
+              releaseReread = resolve;
+            }),
+        );
+      const el = await mount(stubApi({ background, listServers }));
+      vi.advanceTimersByTime(5000);
+      await flush(el);
+
+      await check(el);
+      choiceButtons(el)[0]!.click();
+      await flush(el);
+      expect(listServers).toHaveBeenCalledTimes(2);
+      releasePoll(listing([{ ...asking, startedAgain: true }]));
+      await flush(el);
+      expect(find(el, `join-started-again-${REQUEST}`)).toBeNull();
+
+      releaseReread(listing([]));
+      await flush(el);
+      expect(find(el, `join-row-${REQUEST}`)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Check refused because the request has gone reads the list again and offers no Check again", async () => {
+    const listServers = vi.fn().mockResolvedValueOnce(listing()).mockResolvedValue(listing([]));
+    const api = stubApi({
+      listServers,
+      checkBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_not_found", status: 404 }),
+    });
+    const el = await mount(api);
+    await check(el);
+    expect(listServers).toHaveBeenCalledTimes(2);
+    expect(find(el, `join-row-${REQUEST}`)).toBeNull();
+    expect(find(el, "join-check-again")).toBeNull();
+  });
+
+  it("Dismiss waits while another join action is out, and closes the codes dialog for that request", async () => {
+    let releaseCheck!: (value: BoxJoinCheck) => void;
+    const checkBoxJoin = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<BoxJoinCheck>((resolve) => {
+            releaseCheck = resolve;
+          }),
+      )
+      .mockResolvedValue(checked);
+    const listServers = vi.fn().mockResolvedValueOnce(listing()).mockResolvedValue(listing([]));
+    const api = stubApi({ checkBoxJoin, listServers });
+    const el = await mount(api);
+    find(el, `join-check-${REQUEST}`)!.click();
+    await flush(el);
+    const dismiss = find(el, `join-dismiss-${REQUEST}`) as HTMLElementTagNameMap["wt-button"];
+    expect(dismiss.disabled).toBe(true);
+    dismiss.click();
+    await flush(el);
+    expect(api.dismissBoxJoin).not.toHaveBeenCalled();
+    releaseCheck(checked);
+    await flush(el);
+    expect(choiceButtons(el)).toHaveLength(3);
+
+    find(el, `join-dismiss-${REQUEST}`)!.click();
+    await flush(el);
+    await flush(el);
+    expect(api.dismissBoxJoin).toHaveBeenCalledWith(REQUEST);
+    expect(joinDialog(el).open).toBe(false);
+    expect(choiceButtons(el)).toEqual([]);
+  });
+
+  it("words a module's unreadable settings for the join here, while the shared words stay general", async () => {
+    const api = stubApi({
+      approveBoxJoin: vi
+        .fn()
+        .mockRejectedValue({ code: "module.config_invalid", status: 500, params: { reason: "x" } }),
+    });
+    const el = await mount(api);
+    await check(el);
+    choiceButtons(el)[0]!.click();
+    await flush(el);
+    await flush(el);
+    expect(await message(el)).toBe(
+      "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
+    );
+    expect(codeMessage("module.config_invalid", "en")).not.toContain("new box");
+    expect(codeMessage("module.config_invalid", "es")).not.toContain("servidor nuevo");
+  });
+
+  it("a rejection with no value still shows words rather than throwing", async () => {
+    const api = stubApi({ checkBoxJoin: vi.fn().mockRejectedValue(undefined) });
+    const el = await mount(api);
+    await check(el);
+    expect(await message(el)).toBe(codeMessage(codeOf(undefined)));
+  });
+
   it("speaks Spanish on a Spanish dashboard", async () => {
     const before = currentLocale();
     setLocale("es");
@@ -336,7 +533,7 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   [
     "check",
     { code: "mirror.not_provisioned" },
-    "This box has not been set up as a venue yet, so it has nothing to copy to a spare.",
+    "This box does not record whether this venue is a trial or the real one, so it cannot be copied to a spare. Nothing was changed. On a venue set up through its setup page, this is a fault in Waitron.",
   ],
   [
     "approve",
@@ -383,5 +580,8 @@ describe("each refusal's words", () => {
       .replace("{primaryAt}", params.primaryAt ? formatRecentMinute(params.primaryAt) : "")
       .replace("{standbyAt}", params.standbyAt ? formatRecentMinute(params.standbyAt) : "");
     expect(await message(el)).toBe(expected);
+    const code = (error as { code: string }).code;
+    if (route === "check")
+      expect(find(el, "join-check-again") === null, code).toBe(code === "mirror.join_not_found");
   });
 });
