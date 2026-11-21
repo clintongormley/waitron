@@ -1251,6 +1251,8 @@ export interface BillBalance {
   paidLines: { lineId: string; lineNo: number; paidQuantity: string }[];
 }
 
+export type BillReaderStopOutcome = "requested" | "unavailable" | "refused" | "unknown";
+
 export interface BillPaymentResult {
   slipPrintFailed?: true;
   failureReason?: string;
@@ -5069,6 +5071,19 @@ export class TillApi {
     options: ReadOptions = {},
   ): Promise<BillPaymentResult> {
     return this.#request(`/api/working-orders/${billId}/payments`, "POST", request, options.signal);
+  }
+
+  cancelBillReaderPayment(
+    billId: string,
+    submissionId: string,
+    options: ReadOptions = {},
+  ): Promise<{ outcome: BillReaderStopOutcome }> {
+    return this.#request(
+      `/api/working-orders/${billId}/payments/${encodeURIComponent(submissionId)}/cancel`,
+      "POST",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Gives money back from one payment of the bill →

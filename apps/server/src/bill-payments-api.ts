@@ -3,6 +3,7 @@ import { parseBillEditExpected } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
+import type { RequestReaderStop } from "@waitron/payments";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
 import { readRawJsonBody, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requireDining } from "./order-dining.js";
@@ -216,6 +217,10 @@ export function mountBillPaymentsApi(
   run: Run,
   pinThrottle: PinThrottle,
 ): void {
+  const readerStops = new Map<
+    string,
+    { sessionId: string; deviceId: string; stop: RequestReaderStop }
+  >();
   const runBodyLines = runBodyIds("tab.line_not_found");
   const runPayment = runBodyIds("tab.line_not_found", "course.not_found");
   const fiscal = {
@@ -331,11 +336,17 @@ export function mountBillPaymentsApi(
         );
       }
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
+      const stopKey = `${id}/${request.submissionId}`;
+      let activeStop: RequestReaderStop | undefined;
       const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         takeReaderBillPayment(
           {
             ...fiscal,
             provider,
+            onReaderCheckout(stop) {
+              activeStop = stop;
+              readerStops.set(stopKey, { sessionId, deviceId: device.deviceId, stop });
+            },
             settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
               const settled = await settleFromProviderRow(
                 tx,
@@ -358,7 +369,10 @@ export function mountBillPaymentsApi(
           operator,
           basket === undefined ? undefined : { ...basket, lateSend: late },
         ),
-      );
+      ).finally(() => {
+        if (activeStop !== undefined && readerStops.get(stopKey)?.stop === activeStop)
+          readerStops.delete(stopKey);
+      });
       if (
         outcome.outcome === "declined" ||
         outcome.outcome === "failed" ||
@@ -372,6 +386,21 @@ export function mountBillPaymentsApi(
         });
       }
       return c.json(outcome);
+    }),
+  );
+
+  app.post("/api/working-orders/:id/payments/:submissionId/cancel", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { permission: "payment.take" });
+      await assertRequestDevice(deps, c, session);
+      assertTakesTender(session.device, "reader-card");
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      const submissionId = submissionIdOf({ submissionId: c.req.param("submissionId") });
+      const active = readerStops.get(`${id}/${submissionId}`);
+      if (active?.sessionId !== session.sessionId || active.deviceId !== session.deviceId)
+        return c.json({ outcome: "unavailable" });
+      return c.json({ outcome: await active.stop() });
     }),
   );
 

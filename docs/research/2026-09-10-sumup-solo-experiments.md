@@ -726,11 +726,11 @@ with.
 **Failing case:** both return 2xx (the "one reader is one queue" claim is false and the adapter
 must serialise per reader itself). Record the second call's status and body. Cancel on the reader.
 
-**Result (5b):**
-
-```
-(paste)
-```
+**Result (5b, 2026-11-21, Lenovo test Solo):** The €1.00 request returned HTTP 201.
+The €1.10 request, 325 ms after the first, returned HTTP 422 `READER_BUSY`. The owner saw
+only €1.00 on the Solo. The prompt ended by itself with “transaction refused”. A later
+history read found one €1.00 transaction in that time window and its detail read showed
+`FAILED`. We did not retain the checkout id for the separate checkout read.
 
 ### 5c. Terminate while waiting for a card
 
@@ -753,11 +753,19 @@ terminate is unreliable, and the spec's "we deliberately do not call it" stays t
 policy). Record the final `status` from both lookups — the spec expects `FAILED` or `CANCELLED`, and
 which one matters to the sweep.
 
-**Result (5c):**
+**Result (5c, 2026-11-21, Lenovo test Solo):** The €1.20 checkout returned HTTP 201.
+After the reader reported `WAITING_FOR_CARD`, terminate returned HTTP 202. At 281 ms
+after that reply the checkout read `cancelled`, the transaction read `PENDING` and the
+reader still reported `WAITING_FOR_CARD`. At 1,518 ms the checkout read `cancelled`,
+payment status `failed`, reason `CANCELLED`. The transaction lookup by client id read
+`FAILED` and the reader reported `IDLE`. The owner saw the €1.20 prompt flash and the
+SumUp logo return without touching the reader.
 
-```
-(paste)
-```
+The fresh €1.30 checkout, sent about 37 seconds later, returned HTTP 201 and reached
+`WAITING_FOR_CARD`. The owner saw the amount stay on screen and confirmed Cancel on the
+Solo, which returned to its logo. A later history read found one €1.30 transaction in
+that time window and its detail read showed `FAILED`. We did not retain the fresh
+checkout id. No card was presented in these probes.
 
 ---
 

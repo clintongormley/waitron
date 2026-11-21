@@ -1915,6 +1915,13 @@ export const en = {
     "Open Check card payments in Reporting and sign in to finish recording this payment. Do not take it again.",
   "bill_pay.card_recovery_open": "Check card payments / sign in",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
+  "bill_pay.cancel_reader": "Cancel payment",
+  "bill_pay.stop_requested": "Stop requested. Checking the payment…",
+  "bill_pay.stop_unavailable": "The reader is not ready to cancel. Check the reader and try again.",
+  "bill_pay.stop_refused": "Could not stop the reader. You can try cancelling on the reader.",
+  "bill_pay.stop_unknown":
+    "The reader may still be waiting. Check it while the till checks the payment.",
+  "bill_pay.no_payment_taken": "No payment was taken.",
   "bill_pay.choose_later":
     "These items cost more than is left to pay on the bill. Choose how to pay for them.",
   "bill_pay.choice_legend": "How are these items paid?",
@@ -4124,6 +4131,14 @@ export const es: Record<StringKey, string> = {
     "Abre Comprobar pagos con tarjeta en Informes e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
   "bill_pay.card_recovery_open": "Comprobar pagos con tarjeta / acceder",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
+  "bill_pay.cancel_reader": "Cancelar cobro",
+  "bill_pay.stop_requested": "Cancelación solicitada. Comprobando el cobro…",
+  "bill_pay.stop_unavailable":
+    "El lector aún no permite cancelar. Compruébalo y vuelve a intentarlo.",
+  "bill_pay.stop_refused": "No se pudo detener el lector. Puedes intentar cancelar en el lector.",
+  "bill_pay.stop_unknown":
+    "El lector puede seguir esperando. Revísalo mientras el terminal comprueba el cobro.",
+  "bill_pay.no_payment_taken": "No se ha cobrado nada.",
   "bill_pay.choose_later":
     "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
   "bill_pay.choice_legend": "¿Cómo se pagan estos artículos?",

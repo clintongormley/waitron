@@ -118,9 +118,9 @@ complete detail through the real adapter matched its refund; the raw 19-row hist
 omits foreign-reference keys, while the two detail responses carry them. See the runbook's
 §10.7.
 
-Physical declined-card behavior, the statement/fee check and the SIM-only, offline, busy-reader
-and termination probes remain open. No further paid request is authorised unattended, and a
-distinct authorisation void has not been measured.
+Physical declined-card behavior, the statement/fee check and the SIM-only and offline probes
+remain open. No further paid request is authorised unattended, and a distinct authorisation void
+has not been measured.
 
 ## The deli's outage card machine
 

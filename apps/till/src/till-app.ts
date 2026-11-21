@@ -257,6 +257,7 @@ import "./widgets/dead-ends-dialog.js";
 import type { DeadEndsDecision } from "./widgets/dead-ends-dialog.js";
 import type {
   BillPayConfirmDetail,
+  BillReaderStopStatus,
   TillBillPayDialog,
   PayLine,
   PayRefusal,
@@ -387,6 +388,7 @@ import type {
   AllocationPreview,
   BillBalance,
   BillParty,
+  BillReaderStopOutcome,
   BillPaymentResult,
   BillPaymentView,
   BillRefundResult,
@@ -1610,6 +1612,13 @@ interface PendingReread {
   pending: Map<string, PayTaken>;
   timer: ReturnType<typeof setInterval>;
   out: boolean;
+}
+
+interface BillReaderStop {
+  submissionId: string;
+  signal: AbortSignal;
+  status: BillReaderStopStatus;
+  answer?: Promise<BillReaderStopOutcome>;
 }
 
 /** The bill payment dialog: the order it pays, and what the server last answered it. */
@@ -4428,7 +4437,10 @@ export class TillApp extends LitElement {
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
   /** The bill payment being sent on each bill, and the dialog that sent it. */
-  #paymentsOut = new Map<string, { dialogId: number; shown: PendingBillPayment["shown"] }>();
+  #paymentsOut = new Map<
+    string,
+    { dialogId: number; shown: PendingBillPayment["shown"]; readerStop?: BillReaderStop }
+  >();
   /** One count for both balance reads sent and payment sends ended, so a read can tell whether it
    * was sent after the bill's last send ended. */
   #payTicks = 0;
@@ -12452,6 +12464,7 @@ export class TillApp extends LitElement {
     const open = this.billPaying;
     if (open === null) return nothing;
     const pending = this.#unansweredPayments.get(open.billId);
+    const send = this.#paymentsOut.get(open.billId);
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
         .sumUpConnected=${this.sumUpConnected}
@@ -12498,6 +12511,8 @@ export class TillApp extends LitElement {
           void this.#pickUpSticker(event.detail)}
         @pay-equipment-nfc=${() => this.#askNfc()}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
+        .readerStop=${send?.dialogId === open.id ? (send.readerStop?.status ?? null) : null}
+        @bill-pay-stop=${() => void this.#onBillPayStop()}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
         @bill-pay-deferred=${() => this.#onBillPayDeferred()}
@@ -22740,6 +22755,26 @@ export class TillApp extends LitElement {
     }
   }
 
+  async #onBillPayStop(): Promise<void> {
+    const open = this.billPaying;
+    if (open === null) return;
+    const send = this.#paymentsOut.get(open.billId);
+    if (send?.dialogId !== open.id || send.readerStop === undefined) return;
+    const stop = send.readerStop;
+    if (stop.status === "sending" || stop.status === "requested" || stop.status === "unknown")
+      return;
+    stop.status = "sending";
+    this.requestUpdate();
+    stop.answer = this.api
+      .cancelBillReaderPayment(open.billId, stop.submissionId, { signal: stop.signal })
+      .then(
+        ({ outcome }) => outcome,
+        () => "unknown" as const,
+      );
+    stop.status = await stop.answer;
+    this.requestUpdate();
+  }
+
   async #onBillPayConfirm(event: Event): Promise<void> {
     // Sent only from the confirmation, which shows an allocated preview of what was asked.
     const open = this.billPaying!;
@@ -22824,7 +22859,11 @@ export class TillApp extends LitElement {
       release();
     };
     const card = asked.pay.method === "card";
-    this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
+    const readerStop: BillReaderStop | undefined =
+      asked.card?.entry === "reader" && this.#cardReader() === "sumup_cloud"
+        ? { submissionId: submission.request.submissionId, signal: limit.signal, status: "ready" }
+        : undefined;
+    this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown, readerStop });
     await this.#holdingReload(async () => {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
@@ -22838,8 +22877,12 @@ export class TillApp extends LitElement {
           ),
         );
         if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
+        const cancelled =
+          result.payment.state === "failed" &&
+          NOT_CHARGED_OUTCOMES.has(result.outcome) &&
+          (await readerStop?.answer) === "requested";
         settle(undefined, result.payment.state === "pending");
-        await this.#onBillPaid(open, result, readerName, readerMakesSlip);
+        await this.#onBillPaid(open, result, readerName, readerMakesSlip, cancelled);
         if (result.slipPrintFailed && session === this.#operatorSession) {
           this.errorKey = "payment_slip.capture_failed";
           this.#moveSlipFailureIntoPay(open);
@@ -22894,6 +22937,7 @@ export class TillApp extends LitElement {
     result: BillPaymentResult,
     readerName: string | undefined,
     readerMakesSlip: boolean,
+    cancelled: boolean,
   ): Promise<void> {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
@@ -22915,14 +22959,16 @@ export class TillApp extends LitElement {
       this.billPaying = {
         ...now,
         balance: result.balance,
-        refusal: {
-          code:
-            result.outcome === "network_unavailable"
-              ? "card_network"
-              : result.outcome === "failed"
-                ? "payment_failed"
-                : "declined",
-        },
+        refusal: cancelled
+          ? { code: "payment_failed", text: t("bill_pay.no_payment_taken") }
+          : {
+              code:
+                result.outcome === "network_unavailable"
+                  ? "card_network"
+                  : result.outcome === "failed"
+                    ? "payment_failed"
+                    : "declined",
+            },
         busy: false,
       };
       return;

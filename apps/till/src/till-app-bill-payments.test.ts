@@ -6910,6 +6910,63 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
   });
 
+  it.each([
+    ["requested", "declined", "No payment was taken."],
+    ["requested", "received", ""],
+    ["refused", "declined", null],
+  ] as const)(
+    "keeps waiting after a %s stop and uses the original %s payment answer",
+    async (stopOutcome, finalOutcome, message) => {
+      let settle!: (result: BillPaymentResult) => void;
+      const takeBillPayment = vi.fn(
+        () =>
+          new Promise<BillPaymentResult>((resolve) => {
+            settle = resolve;
+          }),
+      );
+      const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: stopOutcome });
+      const el = await takeOnReader(takeBillPayment, {
+        cancelBillReaderPayment,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "sumup_cloud",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+          activeReaders: readers.map((reader) => ({ ...reader, provider: "sumup_cloud" })),
+          defaultReaderId: readers[0]!.id,
+        }),
+      });
+      try {
+        expect(text(inDialog(el, "[data-pay-cancel-reader]"))).toBe("Cancel payment");
+        await press(el, "[data-pay-cancel-reader]");
+        expect(cancelBillReaderPayment).toHaveBeenCalledWith(
+          "wo-4",
+          sent()[0]!.submissionId,
+          expect.anything(),
+        );
+        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(true);
+        expect(inDialog(el, "[data-pay-stop-status]")!.textContent).toContain(
+          stopOutcome === "requested" ? "Stop requested" : "Could not stop the reader",
+        );
+        expect(inDialog(el, "[data-pay-collecting]") !== null).toBe(stopOutcome === "refused");
+        expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+      } finally {
+        settle(
+          finalOutcome === "received"
+            ? onReader("received", "received", { received: "40.00", outstanding: "80.00" })
+            : onReader("declined", "failed", {}),
+        );
+        await flush(el);
+      }
+      if (finalOutcome === "received") {
+        expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+      } else {
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(message ?? t("bill_pay.card_declined"));
+        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+      }
+      expect(inDialog(el, "[data-pay-cancel-reader]")).toBeNull();
+    },
+  );
+
   it("says a declined card took nothing, above the action, and tries it again as a new payment", async () => {
     const takeBillPayment = vi
       .fn()

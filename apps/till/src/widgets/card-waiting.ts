@@ -1,4 +1,4 @@
-import { LitElement, css, html, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-spinner.js";
@@ -20,11 +20,16 @@ export function sentCard(reader: { name: string }, amount: string): SentCard {
 
 /** What a pay sheet shows in place of its body while `sent` is at the reader: the panel, and
  * under it a tap's notice, which has nowhere else to show while the sheet is open. */
-export function cardWaitingView(sent: SentCard, notice: PayNotice | null): TemplateResult {
+export function cardWaitingView(
+  sent: SentCard,
+  notice: PayNotice | null,
+  promptForCard = true,
+): TemplateResult {
   return html`<till-card-waiting
       .amount=${formatMoney(sent.amount, currentLocale())}
       .reader=${sent.readerName}
       .since=${sent.at}
+      .promptForCard=${promptForCard}
     ></till-card-waiting
     >${payNotice(notice)}`;
 }
@@ -87,6 +92,7 @@ export class TillCardWaiting extends LitElement {
   @property() reader = "";
   /** When the payment was sent, in epoch milliseconds. */
   @property({ type: Number }) since = 0;
+  @property({ type: Boolean }) promptForCard = true;
 
   #clock?: ReturnType<typeof setInterval>;
 
@@ -118,7 +124,11 @@ export class TillCardWaiting extends LitElement {
     return html`<div class="panel" data-pay-waiting>
       <wt-spinner decorative></wt-spinner>
       <div role="status">
-        <p class="lead" data-pay-collecting>${t("card.collecting")}</p>
+        ${
+          this.promptForCard
+            ? html`<p class="lead" data-pay-collecting>${t("card.collecting")}</p>`
+            : nothing
+        }
         <p class="on" data-pay-waiting-on>${this.#on()}</p>
       </div>
       <p data-pay-waiting-since>

@@ -1364,6 +1364,13 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
   [
+    "POST /api/working-orders/:id/payments/:submissionId/cancel",
+    "POST",
+    (x) => `/api/working-orders/${x.deliOrder}/payments/${id}/cancel`,
+    () => ({}),
+    deliOrderZone,
+  ],
+  [
     "POST /api/working-orders/:id/payments/:paymentId/refunds",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/payments/${id}/refunds`,
