@@ -492,6 +492,71 @@ export interface AttemptingPayment {
   createdAt: string;
 }
 
+function ownedBy(owners: CollectionOwners) {
+  return or(
+    eq(payments.nodeId, owners.nodeId),
+    owners.takenOverFrom.length > 0
+      ? inArray(payments.nodeId, [...owners.takenOverFrom])
+      : undefined,
+    owners.unowned ? isNull(payments.nodeId) : undefined,
+  );
+}
+
+function emptyReaderCard() {
+  return and(
+    eq(payments.state, "captured"),
+    isNotNull(payments.readerId),
+    isNull(payments.cardScheme),
+    isNull(payments.cardLast4),
+    isNull(payments.cardEntryMode),
+    isNull(payments.cardAuthCode),
+  );
+}
+
+export async function listCapturesMissingCard(
+  db: Database,
+  provider: string,
+  owners: CollectionOwners,
+  since: Date,
+) {
+  const rows = await db
+    .select({
+      paymentRef: payments.paymentRef,
+      externalRef: sql<string>`${payments.externalRef}`,
+      amount: payments.amount,
+      settledAt: sql<string>`${payments.settledAt}`,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.provider, provider),
+        gte(payments.settledAt, since.toISOString()),
+        isNotNull(payments.externalRef),
+        ownedBy(owners),
+        emptyReaderCard(),
+      ),
+    );
+  return rows.map(withDecimalAmount);
+}
+
+export async function fillCapturedCard(
+  tx: Transaction,
+  key: Key & { externalRef: string },
+  card: CardDetails,
+): Promise<boolean> {
+  const [row] = await tx
+    .update(payments)
+    .set({
+      cardScheme: card.scheme,
+      cardLast4: card.last4,
+      cardEntryMode: card.entryMode,
+      cardAuthCode: card.authCode,
+    })
+    .where(and(keyWhere(key), eq(payments.externalRef, key.externalRef), emptyReaderCard()))
+    .returning({ id: payments.id });
+  return row !== undefined;
+}
+
 /** Not a claim: `captureAttempting`/`failAttempting` each match only a
  * row still `attempting`, so two concurrent passes cannot resolve a row twice; the loser throws
  * `payment.not_found`. Lists only the rows `owners` covers. */
@@ -500,13 +565,6 @@ export async function listAttempting(
   provider: string,
   owners: CollectionOwners,
 ): Promise<AttemptingPayment[]> {
-  const owned = or(
-    eq(payments.nodeId, owners.nodeId),
-    owners.takenOverFrom.length > 0
-      ? inArray(payments.nodeId, [...owners.takenOverFrom])
-      : undefined,
-    owners.unowned ? isNull(payments.nodeId) : undefined,
-  );
   const rows = await tx
     .select({
       paymentRef: payments.paymentRef,
@@ -516,7 +574,7 @@ export async function listAttempting(
       createdAt: payments.createdAt,
     })
     .from(payments)
-    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting"), owned))
+    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting"), ownedBy(owners)))
     .orderBy(payments.createdAt, sql`${payments}.rowid`);
   return rows.map(withDecimalAmount);
 }

@@ -635,27 +635,17 @@ export function sweepOwners(
   return { nodeId, takenOverFrom, unowned: role === "primary" };
 }
 
-/** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
- * singleton fiscal pass: a local secondary its chart does not fence must sweep its own `attempting`
- * card rows even though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every
- * `ALL_DUTIES` member is seeded on every node, so a duty that never runs on a no-card node would
- * read stale and fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The
- * providers are enumerated each pass, so one connected while the host runs is swept without a
- * restart. `owners` is read once per pass and limits every provider to the `attempting` rows this
- * box owns, so a change of singleton role in this process is seen at the next pass.
- *
- * Exported for a direct test (`boot-pending-sweep.test.ts`). */
+/** Resolve pending payments, settle bills, then look up receipt details. Secondary boxes
+ * sweep their own payments even when they never settle bills. */
 export function withPendingSweep(
-  inner: (now: Date) => Promise<PassReport>,
+  settle: (now: Date) => Promise<PassReport>,
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
   owners: () => CollectionOwners,
   log: Logger,
   signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
-    const report = await inner(now);
-    // An owners or enumeration failure is a sweep failure and never propagates: the fiscal `report`
-    // must be returned whatever the card backstop does.
+    if (signal?.aborted) return settle(now);
     let owned: CollectionOwners;
     let providers: readonly PaymentProvider[];
     try {
@@ -663,9 +653,10 @@ export function withPendingSweep(
       providers = await sweepProviders();
     } catch (error) {
       log("warn", "resolve_pending.failed", { error: String(error) });
-      return report;
+      return settle(now);
     }
     for (const provider of providers) {
+      if (signal?.aborted) break;
       try {
         const r = await provider.resolvePending(now, owned, signal);
         const hasWork =
@@ -684,11 +675,30 @@ export function withPendingSweep(
         });
       }
     }
-    return report;
+    const report = await settle(now);
+    let nextDueAt = report.nextDueAt;
+    for (const provider of providers) {
+      if (signal?.aborted) break;
+      try {
+        const due = await provider.fillMissingCardDetails?.(
+          owned,
+          (paymentRef, outcome) =>
+            log("info", `payment.card_details_${outcome}`, {
+              provider: provider.provider,
+              paymentRef,
+            }),
+          signal,
+        );
+        if (due != null && (nextDueAt === null || due < nextDueAt)) nextDueAt = due;
+      } catch {
+        // A failed write can include the card details in the query error.
+        log("warn", "payment.card_details_failed", { provider: provider.provider });
+      }
+    }
+    return nextDueAt === report.nextDueAt ? report : { ...report, nextDueAt };
   };
 }
 
-/** Sweep the providers before bill settlement. An abort during the sweep skips settlement. */
 export function pendingCardPass(
   parts: {
     sweepProviders: () => Promise<readonly PaymentProvider[]>;
@@ -700,16 +710,16 @@ export function pendingCardPass(
   signal: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   const { getRole, log } = parts;
-  return withPendingBillPayments(
-    withPendingSweep(
+  return withPendingSweep(
+    withPendingBillPayments(
       async () => ({ duties: [], nextDueAt: null }),
-      parts.sweepProviders,
-      parts.owners,
+      parts.settle,
+      getRole,
       log,
       signal,
     ),
-    parts.settle,
-    getRole,
+    parts.sweepProviders,
+    parts.owners,
     log,
     signal,
   );
