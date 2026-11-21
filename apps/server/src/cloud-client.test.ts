@@ -302,9 +302,9 @@ it.each([
       { requestId: original.get("request_id")!, state: original.get("state")!, code: f.code },
       f.authorize,
     );
-    await setup.publishSetupSignIn(setupBinding, f.nodeId);
     f.expire();
     if (failure === "expired") vi.setSystemTime(Date.now() + 600_001);
+    await setup.publishSetupSignIn(setupBinding, f.nodeId);
     const dashboard = f.restartAsPublished();
     if (failure === "signed out")
       await expect(dashboard.refresh()).rejects.toMatchObject({
@@ -321,6 +321,11 @@ it.each([
     await expect(
       dashboard.returnSignIn(manager, { ...cancelled, error: "access_denied" }, f.authorize),
     ).rejects.toMatchObject({ code: "cloud.request_unavailable" });
+    const beforeLateReturn = f.requests.length;
+    await expect(
+      dashboard.returnSignIn(manager, { ...cancelled, code: f.code }, f.authorize),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    expect(f.requests).toHaveLength(beforeLateReturn);
     const resumed = await getReturn();
     expect(resumed.requestId).not.toBe(cancelled.requestId);
     expect(resumed.requestId).not.toBe(original.get("request_id"));
@@ -345,6 +350,34 @@ it.each([
     expect(await f.options.readVenueId()).toBe(f.venueId);
   } finally {
     vi.useRealTimers();
+    await f.close();
+  }
+});
+
+it("finishes a still-current published setup sign-in when the dashboard connects", async () => {
+  const f = await installedSignInFixture(true, true);
+  try {
+    const setup = f.client();
+    const binding = { ...f.binding, kind: "setup" as const };
+    const { authorizationUrl } = await setup.startSignIn(binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    await setup.returnSignIn(
+      binding,
+      { requestId: query.get("request_id")!, state: query.get("state")!, code: f.code },
+      f.authorize,
+    );
+    await setup.publishSetupSignIn(binding, f.nodeId);
+    const dashboard = f.restartAsPublished();
+
+    await expect(dashboard.startSignIn(f.binding, f.authorize)).resolves.toEqual({});
+    expect(f.requests.map((request) => request[2])).toEqual([
+      "start",
+      "redeem",
+      "status",
+      "complete",
+    ]);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+  } finally {
     await f.close();
   }
 });

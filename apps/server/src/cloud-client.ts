@@ -838,18 +838,24 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         const provisionalRegistration = resumeSetup ? attempt?.provisionalRegistration : undefined;
         if (attempt && attempt.kind !== binding.kind) {
           if (setup) throw new AppError("cloud.binding_conflict", {});
-          // Only a previously sent completion can be adopted without another Cloud sign-in.
-          if (attempt.profile) {
-            try {
+          try {
+            if (
+              attempt.publishedNodeId &&
+              attempt.publishedNodeId === options.signIn?.currentNodeId?.() &&
+              Date.parse(attempt.expiresAt) > Date.now()
+            ) {
+              if (await recoverSignIn(state, attempt, authorize)) return {};
+            } else if (attempt.profile) {
+              // Cloud can confirm a filed registration after the sign-in expires.
               const reply = await exchangeSignIn(state, attempt, { action: "status", args: [] });
               if (reply.state === "complete") {
                 await finishSignIn(state, attempt.requestId, reply, authorize);
                 return {};
               }
-            } catch (error) {
-              if (!(error instanceof AppError) || error.code !== "cloud.request_unavailable")
-                throw error;
             }
+          } catch (error) {
+            if (!(error instanceof AppError) || error.code !== "cloud.request_unavailable")
+              throw error;
           }
           attempt = undefined;
         }
@@ -924,12 +930,18 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if ("error" in input) {
           if (attempt.phase === "awaiting_cloud") {
             // A cancelled login can leave the original placeholder behind.
-            if (attempt.resumeSetup) attempt.expiresAt = new Date().toISOString();
+            if (attempt.resumeSetup) attempt.expiresAt = new Date(0).toISOString();
             else delete state.attempt;
             await writeState(state);
           }
           throw new AppError("cloud.request_unavailable", {});
         }
+        if (
+          attempt.resumeSetup &&
+          attempt.phase === "awaiting_cloud" &&
+          Date.parse(attempt.expiresAt) <= Date.now()
+        )
+          throw new AppError("cloud.binding_conflict", {});
         if (attempt.phase !== "awaiting_cloud") {
           if (attempt.kind === "setup") {
             if (attempt.phase === "account_bound") return;
