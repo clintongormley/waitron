@@ -1,41 +1,45 @@
-# A950 step 5c. Reserve a quiet stop for an automatic upgrade
+# A950 step 5c. Apply a signed offer in the quiet window
 
-A box can ask its running app to reserve a stop after ten quiet minutes with no open orders. A
-busy app carries on trading. A quiet app holds new work while the host starts the existing
-checked shutdown. This is the first of two installation slices under the
-[parent plan](2026-11-09-a950-shorter-upgrades.md) and the
-[staged-offer plan](2026-11-19-a950-staged-offers.md). The timer continues checking offers.
-The following slice connects the stable signed offer and final pause/window check to this
-stop and the existing automatic restore policy. Default activation, Box status, email,
-pairs and the physical release-to-release rehearsal stay separate.
+**Finish line.** An operator can run `waitron.sh install-offered-upgrade` on a numbered
+standalone test box during 03:00–05:00 venue time. It installs the currently offered stable
+release using the checked installer. If the candidate fails the stopped checks or test sale,
+the old copy reopens automatically. The installed timer still checks offers. Switching the
+timer to install, default activation, editable hours, status/email, pairs and the physical
+release-to-release rehearsal remain open. See the [parent plan](2026-11-09-a950-shorter-upgrades.md)
+and the [staged-offer plan](2026-11-19-a950-staged-offers.md).
 
-- In `apps/server/src/upgrade-quiet.ts` and `boot.ts`, track time from full start and from
-  admitted change requests finishing, using the steady clock. Passive reads leave the time
-  alone. Add a reversible hold to the request tracking in `handover-gate.ts`. An upgrade
-  returns busy if the box is already stepping down, the ten minutes have not elapsed, or
-  admitted changes fail to settle within the existing shutdown deadline. After the hold and
-  drain, check again for quiet and for open or placed orders and unresolved connected payments
-  or refunds, using the existing row state and write queue. Only a healthy standalone primary
-  can reserve the stop. No new table, durable state or public endpoint.
-- Start an app-owned Unix socket at a fixed path inside the installed app container only.
-  Configure that path in `deploy/compose.yml`, and close the socket with the server. The host
-  reaches it through `docker exec` on the app it inspected. One bounded exchange reserves a
-  stop only for the life of that connection, releasing the temporary hold if the host leaves
-  without stopping the app. A handover or shutdown that has already begun keeps its own gate.
-- In `scripts/box/upgrades/host.mjs`, add `reserveQuietStop` for the inspected app container
-  and let `stopUpgradeWriters` accept that reservation. Hold it across `docker stop` of the
-  same container and keep the fresh `server.shutdown_complete` check and writer stop order.
-  A missing socket (including an older app), refusal or timeout yields no reservation.
-  Manual stops keep their current path. The next slice acquires the reservation after
-  online trial and the final offer/window check, before disabling restart policies or
-  stopping writers. It releases the reservation if preparation aborts.
+**Decision for the watcher.** Claude proposed using the existing checked shutdown as the
+point that closes admission and drains work. The host checks trading activity before stopping
+and again after all writers stop. Work admitted just before shutdown can cause a brief restart
+of the old version. The parent plan calls for closing admission and rechecking. Confirm that
+the brief interruption is acceptable and that business-row activity is the intended measure
+of quiet. Open or placed orders still defer, including tabs left open overnight.
 
-Start with failing cases. `upgrade-quiet.test.ts` uses the real test database for placed
-orders and pending provider work, and a controlled steady clock for the quiet boundary.
-`handover-gate.test.ts` tests a write already inside, a later refused write and release of the
-temporary hold, preserving its existing handover cases. `host.test.mjs` checks that a deferral
-issues no stop and that a granted connection stays open across the existing shutdown check.
-The Linux fixture must let a blocked venue keep answering, then observe real app shutdown
-for a quiet one. Record the result and keep each changed test file focused. Update the A950
-entry in `docs/backlog.md` and `docs/backlog/box.md` in the build. Estimate +210/−10 production
-and +200/−0 test lines, plus docs. The following connection slice gets its own reviewed plan.
+1. In `scripts/box/upgrades/host.mjs`, reuse the installed state-volume and standalone-box
+   reads. Check that the app is running, the venue clock/window can be read, there are no
+   open or placed orders or pending connected payments/refunds, and no sale, order or
+   payment/refund activity is recorded in the last ten minutes. Use the timestamps the rows
+   actually store. A missing venue, unknown role, unreadable data or unknown state defers.
+   Read before shutdown and again after the checked shutdown and state lock, before copying.
+   A failed stopped check takes the transaction's existing reopen-old path. Manual installs
+   keep their current admission and Restore/Keep choices.
+2. In `deploy/waitron.sh` and `scripts/box/upgrades/cli.mjs`, reuse signed-offer selection,
+   accepted pause/serial state, numbered release verification, source and digest staging,
+   and checked Apply. Only the new entry selects automatic mode in `applyUpgrade`. Re-fetch
+   and verify the offer after the online trial, under the existing host lock. Before
+   disabling restart policies or stopping writers, require that it still offers that exact
+   newer stable release and that time remains for the measured copy/check/restore work.
+   Record the timing of that work on the disposable Linux fixture before assigning a
+   budget. Use the existing release trust and checked host refresh. Defer before replacing
+   the driver if the signed target lacks the automatic entry. A pause accepted at the
+   final check prevents any stop. Update `deploy/README.md` and both A950 backlog entries.
+
+**Tests first.** `host.test.mjs` owns busy vs quiet and activity that lands between the checks.
+It must show no candidate copy in the latter case. `cli.test.mjs` owns the mode selected for
+the transaction. `scripts/waitron-sh.test.mjs` owns the final signed offer and window reaching
+Apply or deferring, and keeps the manual install cases. Existing transaction tests own the
+restore transitions. Use `bench/box-installer/upgrade.mjs`'s disposable Linux fixture to run
+the installed entry with a test key and stable release fixtures. Observe deferral while busy,
+candidate success and reopening the old version after a failed candidate sale. Run the
+changed test files and the normal push hook. Estimate +240/−30 production and +220/−0 tests
+and test support, plus docs.
