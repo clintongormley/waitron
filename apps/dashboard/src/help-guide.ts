@@ -6,6 +6,7 @@ export const GUIDE_LINKS = {
   "servers.reconciliation": { page: "servers", section: "reconciliation" },
   "modules.set-up": { page: "modules", section: "set-up" },
   "servers.handover": { page: "servers", section: "hand-over" },
+  "servers.handed-over": { page: "servers", section: "handed-over" },
   "email.set-up": { page: "email", section: "set-up" },
   "email.remove": { page: "email", section: "remove" },
   "email.test-results": { page: "email", section: "test-results" },
