@@ -602,8 +602,10 @@ reopens before Waitron copies any data. If the candidate fails its checks, Waitr
 old version automatically.
 
 The JSON result says `none`, `deferred`, `deferred-at-stop`, `rolled-back` or `upgraded`.
-A deferral or rollback includes a reason. If the installer cannot prepare or complete an
-attempt, it prints an error. The overnight timer continues to check offers.
+A deferral or rollback includes a reason. If a copy fails partway and the previous release
+reopens, the result is `rolled-back`. If the installer cannot prepare or complete an attempt,
+it prints an error. Check **Last offered upgrade** in **Box status** for the most recent
+completed offered upgrade or rollback. The overnight timer continues to check offers.
 
 ### Trying a branch before it merges
 

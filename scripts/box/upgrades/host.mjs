@@ -1,6 +1,11 @@
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { recoverUpgrade, upgradeStatus, writeFileDurable } from "./transaction.mjs";
+import {
+  recoverUpgrade,
+  upgradeResultPath,
+  upgradeStatus,
+  writeFileDurable,
+} from "./transaction.mjs";
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
@@ -385,6 +390,7 @@ export async function recoverInstalledUpgrade({
   try {
     marker = await recoverUpgrade({
       directory,
+      resultPath: upgradeResultPath(boxDirectory),
       choice,
       host: {
         async stop() {

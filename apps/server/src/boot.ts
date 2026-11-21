@@ -11,6 +11,7 @@ import {
   boxHostRequests,
   type BoxHostClient,
   type BoxHostRequests,
+  type LastOfferedUpgrade,
 } from "./box-host-client.js";
 import { keepTimeServiceOn } from "./time-service-kept-on.js";
 import { timeServiceRetry } from "./time-service-retry.js";
@@ -1251,7 +1252,8 @@ async function bootServer(
   // `recovery-surface.test.ts` → "the caught error's own words on the page". That is `redactSecrets`
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
-  const boxHost = keepTimeServiceOn(seams.boxHost ?? boxHostClient(), log, now);
+  const hostClient = seams.boxHost ?? boxHostClient();
+  const boxHost = keepTimeServiceOn(hostClient, log, now);
   const timeServiceSynchronised = timeServiceReader(boxHost);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   // Built in setup mode, once the log exists, before any setup route is mounted.
@@ -4077,6 +4079,7 @@ async function bootServer(
     backupDirs: localBackupDirs,
   };
   const diskUsageCache = createTtlCache<DiskUsage>({ ttlMs: 60_000, now });
+  const upgradeResultCache = createTtlCache<LastOfferedUpgrade | null>({ ttlMs: 60_000, now });
   const pageNoticeLog = createStaffNoticeLog(log);
   const pageNoticeSources = deviceNoticeSources(
     { disk: diskFull, space: freeSpace },
@@ -4109,6 +4112,11 @@ async function bootServer(
           authorityClock: authorityClock.read,
           startClock: startClockWaits,
           timeHealth: readTimeHealth,
+          lastOfferedUpgrade: () =>
+            upgradeResultCache.get(
+              "result",
+              async () => (await hostClient.lastOfferedUpgrade?.()) ?? null,
+            ),
           disk: diskFull,
           space: freeSpace,
           usage: () =>

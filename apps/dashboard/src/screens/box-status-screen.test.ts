@@ -155,6 +155,42 @@ function deferred<T>() {
 }
 
 describe("dashboard-box-status-screen", () => {
+  it.each([
+    ["en", "upgraded", "Last offered upgrade", "Upgraded from 1.2.2 to 1.2.3"],
+    [
+      "es",
+      "rolled-back",
+      "Última actualización ofrecida",
+      "Volvió a la versión 1.2.2 tras intentar instalar la 1.2.3",
+    ],
+  ] as const)("shows the finished upgrade in %s after %s", async (locale, status, label, line) => {
+    setLocale(locale);
+    const finishedAt = "2026-11-21T03:45:00.000Z";
+    const { el } = await mount(
+      stubApi(
+        {},
+        health({
+          lastOfferedUpgrade: {
+            attemptId: "attempt-1",
+            finishedAt,
+            fromVersion: "1.2.2",
+            toVersion: "1.2.3",
+            status,
+          },
+        }),
+      ),
+    );
+    const row = q(el, "[data-test=row-upgrade]");
+    expect(text(row?.querySelector(".name") ?? null)).toBe(label);
+    expect(text(row?.querySelector(".line") ?? null)).toBe(line);
+    expect(text(row?.querySelector(".detail") ?? null)).toBe(formatIsoMinute(finishedAt));
+  });
+
+  it("omits upgrade history when the box has no offered result", async () => {
+    const { el } = await mount(stubApi());
+    expect(q(el, "[data-test=row-upgrade]")).toBeNull();
+  });
+
   it("shows the spare copy limit and receives freshness through the passive page refresh", async () => {
     const spare = {
       peerNodeId: "spare",

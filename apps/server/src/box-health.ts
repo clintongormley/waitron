@@ -15,6 +15,7 @@ import {
   type OwnedStaffNoticeSource,
   type StaffNoticeLog,
 } from "./staff-notices.js";
+import type { LastOfferedUpgrade } from "./box-host-client.js";
 import type { AuthorityClockStatus, TimeHealth } from "./time-health.js";
 import type { StartClockWaiting } from "./clock-unconfirmed-alert.js";
 import type { FiscalOutboxState } from "@waitron/fiscal";
@@ -33,6 +34,7 @@ export interface BoxHealth {
   outbox: (FiscalOutboxState & { awaitingCertificate: boolean }) | null;
   stream: StreamView;
   spare?: SpareFollowView | null;
+  lastOfferedUpgrade?: LastOfferedUpgrade;
   clock: {
     authority: AuthorityClockStatus;
     sync: TimeHealth;
@@ -71,6 +73,7 @@ export interface BoxHealthReaders {
   /** Absent where nothing waits for the start's time. */
   startClock?: () => StartClockWaiting | null;
   timeHealth: () => Promise<TimeHealth>;
+  lastOfferedUpgrade?: () => Promise<LastOfferedUpgrade | null>;
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
   /** May be cached; its `freeBytes` is replaced by `free()`'s. */
@@ -165,11 +168,12 @@ export async function collectBoxHealth(
   // An outbox this read did not try stays failing until a read that tries it succeeds.
   noticeRead.settle(readsOutbox ? noticesUnavailable : [...noticesUnavailable, "fiscal-outbox"]);
 
-  const [usage, free, reclaimable, sync] = await Promise.all([
+  const [usage, free, reclaimable, sync, lastOfferedUpgrade] = await Promise.all([
     readers.usage(),
     readers.free(),
     readers.leftovers(),
     readers.timeHealth(),
+    readers.lastOfferedUpgrade?.().catch(() => null),
   ]);
 
   const stream: StreamView & { pruneBlockedSince?: string } = { ...readers.stream() };
@@ -185,6 +189,7 @@ export async function collectBoxHealth(
     outbox,
     stream,
     ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
+    ...(lastOfferedUpgrade == null ? {} : { lastOfferedUpgrade }),
     clock: {
       authority: readers.authorityClock(),
       sync,

@@ -67,7 +67,7 @@ export function networkOutcome(network: Pick<BoxNetwork, "change" | "bootCopy">)
 }
 
 export type PartId =
-  "sales" | "tax" | "spare" | "bucket" | "printers" | "readers" | "clock" | "disk";
+  "sales" | "tax" | "spare" | "bucket" | "printers" | "readers" | "clock" | "disk" | "upgrade";
 export type PartState = "ok" | "attention" | "stopped";
 export interface PartRow {
   id: PartId;
@@ -93,6 +93,7 @@ const PART_ORDER: readonly PartId[] = [
   "readers",
   "clock",
   "disk",
+  "upgrade",
 ];
 
 const SCREENS: Readonly<Record<PartId, string | null>> = {
@@ -104,6 +105,7 @@ const SCREENS: Readonly<Record<PartId, string | null>> = {
   readers: "payments",
   clock: null,
   disk: null,
+  upgrade: null,
 };
 
 const NOTICE_PARTS: Readonly<Record<string, readonly PartId[]>> = {
@@ -140,6 +142,7 @@ export function boxStatusRows(
   const parts = PART_ORDER.filter(
     (id) =>
       (id !== "readers" || health.readers !== null) &&
+      (id !== "upgrade" || health.lastOfferedUpgrade !== undefined) &&
       (id !== "spare" || health.spare != null) &&
       (id !== "bucket" || health.spare == null || health.stream.toSpare !== true),
   );
@@ -171,6 +174,7 @@ export function boxStatusRows(
         : notices.length > 0 ||
             rowAlerts.length > 0 ||
             (id === "spare" && spareNeedsAttention(health.spare!)) ||
+            (id === "upgrade" && health.lastOfferedUpgrade!.status === "rolled-back") ||
             clockOff(id, health)
           ? "attention"
           : "ok";
@@ -267,6 +271,13 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
         ? t("box_status.clock.unknown")
         : t("box_status.clock.ok");
     }
+    case "upgrade": {
+      const { status, fromVersion, toVersion } = health.lastOfferedUpgrade!;
+      return fill(
+        status === "upgraded" ? "box_status.upgrade.upgraded" : "box_status.upgrade.rolled_back",
+        { fromVersion, toVersion },
+      );
+    }
     default:
       return diskLine(health.disk);
   }
@@ -351,6 +362,8 @@ function detailsOf(id: PartId, health: BoxHealth, notices: readonly Notice[]): s
       return clockDetails(health.clock);
     case "disk":
       return diskDetails(health.disk);
+    case "upgrade":
+      return [formatIsoMinute(health.lastOfferedUpgrade!.finishedAt)];
     default:
       return [];
   }

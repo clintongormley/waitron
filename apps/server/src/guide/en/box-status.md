@@ -74,6 +74,9 @@ When nothing is wrong, each row says:
   needs. After a start that used that space, the tills stay stopped until about 24 MB is free and
   the box has put the 8 MB aside again.
 
+Check **Last offered upgrade** to see which versions were involved and when the attempt finished.
+An amber dot means your box went back to its previous version.
+
 After a send to the tax agency has failed, the **Tax agency** row says how many records are
 waiting, and whether the box is retrying them by itself or a manager needs to sort some of them
 out. It also says **Unsent since** and when the oldest of them was made.

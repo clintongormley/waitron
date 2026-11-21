@@ -370,6 +370,32 @@ describe("on a full disk with a change waiting to be delivered", () => {
     expect(waiting()).toBe(1);
   });
 
+  it("keeps the rest of Box status available when the offered upgrade read fails", async () => {
+    const result = {
+      attemptId: "attempt-1",
+      finishedAt: "2026-11-21T03:45:00.000Z",
+      fromVersion: "1.2.2",
+      toVersion: "1.2.3",
+      status: "rolled-back",
+    } as const;
+    const lastOfferedUpgrade = vi
+      .fn<() => Promise<typeof result>>()
+      .mockResolvedValueOnce(result)
+      .mockRejectedValueOnce(new Error("host unavailable"));
+    const { app } = mount(suite.db, () =>
+      collectBoxHealth(suite.db, { ...readers(), lastOfferedUpgrade }),
+    );
+    const initial = await get(app, manager.cookie);
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toMatchObject({ lastOfferedUpgrade: result });
+
+    const fallback = await get(app, manager.cookie);
+    expect(fallback.status).toBe(200);
+    const body = await fallback.json();
+    expect(body).not.toHaveProperty("lastOfferedUpgrade");
+    expect(body).toMatchObject({ disk: { stoppedSince: "2026-10-22T08:00:00.000Z" } });
+  });
+
   it("answers the box's real health read, passive or not, and leaves the change waiting", async () => {
     const db = writeRefusingDb(suite.db);
     const { app } = mount(db, () => collectBoxHealth(db, readers()));

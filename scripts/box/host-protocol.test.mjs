@@ -78,7 +78,13 @@ describe("the lists", () => {
       "screen.set",
       "tag.write",
     ]);
-    expect(SHELL_VERBS).toEqual(["clock.status", "clock.set", "clock.sync-on", "clock.retry"]);
+    expect(SHELL_VERBS).toEqual([
+      "clock.status",
+      "clock.set",
+      "clock.sync-on",
+      "clock.retry",
+      "upgrade.status",
+    ]);
     expect(HOST_VERBS.filter((verb) => SHELL_VERBS.includes(verb))).toEqual([]);
     expect(Object.isFrozen(HOST_VERBS)).toBe(true);
     expect(Object.isFrozen(SHELL_VERBS)).toBe(true);

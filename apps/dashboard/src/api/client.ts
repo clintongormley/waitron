@@ -2160,6 +2160,13 @@ export interface BoxHealth {
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
   spare?: SpareFollowView | null;
+  lastOfferedUpgrade?: {
+    attemptId: string;
+    finishedAt: string;
+    fromVersion: string;
+    toVersion: string;
+    status: "upgraded" | "rolled-back";
+  };
   clock: {
     authority:
       { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };

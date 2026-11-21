@@ -62,6 +62,113 @@ async function fixture() {
   return { ...input, input, root, state, config, events };
 }
 
+function offered(f) {
+  return {
+    ...f.input,
+    mode: "automatic",
+    resultPath: join(f.root, "box.upgrade-result.json"),
+    versions: { fromVersion: "1.2.2", toVersion: "1.2.3" },
+  };
+}
+
+it.each([
+  ["successful candidate", "upgraded", "candidate", true],
+  ["failed checks", "rolled-back", "old", true],
+  ["partial stopped copy", "rolled-back", "old", false],
+])("retains the offered upgrade result after a %s", async (scenario, status, target, copied) => {
+  const f = await fixture();
+  const input = offered(f);
+  const at = "2026-11-21T03:42:00.000Z";
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date(at));
+  if (scenario === "failed checks")
+    f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  if (scenario === "partial stopped copy") input.paths.push(join(f.root, "missing"));
+
+  const result = await applyUpgrade(input);
+
+  expect(result).toMatchObject({ target, copied });
+  expect(JSON.parse(await fs.readFile(input.resultPath, "utf8"))).toEqual({
+    attemptId: "attempt",
+    finishedAt: at,
+    fromVersion: "1.2.2",
+    toVersion: "1.2.3",
+    status,
+  });
+  expect(await fs.readdir(f.directory)).toEqual(["attempt.json"]);
+});
+
+it("records a healthy recovery once even when cleanup is retried", async () => {
+  const f = await fixture();
+  const input = offered(f);
+  const resume = f.host.resume;
+  const cleanup = f.host.cleanup;
+  f.host.resume = async () => false;
+  await applyUpgrade(input);
+  await expect(fs.access(input.resultPath)).rejects.toMatchObject({ code: "ENOENT" });
+
+  f.host.resume = resume;
+  f.host.cleanup = async () => {
+    throw new Error("cleanup interrupted");
+  };
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date("2026-11-21T03:50:00.000Z"));
+  await expect(recoverUpgrade(input)).rejects.toThrow("cleanup interrupted");
+
+  f.host.cleanup = cleanup;
+  vi.setSystemTime(new Date("2026-11-21T03:55:00.000Z"));
+  await recoverUpgrade(input);
+  expect(JSON.parse(await fs.readFile(input.resultPath, "utf8"))).toEqual({
+    attemptId: "attempt",
+    finishedAt: "2026-11-21T03:50:00.000Z",
+    fromVersion: "1.2.2",
+    toVersion: "1.2.3",
+    status: "upgraded",
+  });
+});
+
+it.each(["late busy stop", "marker without versions"])(
+  "keeps the previous result on a %s",
+  async (scenario) => {
+    const f = await fixture();
+    const input = offered(f);
+    const previous = '{"attemptId":"previous"}\n';
+    await fs.writeFile(input.resultPath, previous);
+    if (scenario === "late busy stop") {
+      f.host.stop = async () => {
+        throw new Error("venue has recent trading activity");
+      };
+      expect(await applyUpgrade(input)).toMatchObject({ target: "old", copied: false });
+    } else {
+      f.host.resume = async () => false;
+      await applyUpgrade({ ...input, versions: undefined });
+      f.host.resume = async () => undefined;
+      await recoverUpgrade(input);
+    }
+    expect(await fs.readFile(input.resultPath, "utf8")).toBe(previous);
+  },
+);
+
+it("cleans up after a healthy reopen even when the result cannot be saved", async () => {
+  const f = await fixture();
+  const input = offered(f);
+  await fs.mkdir(input.resultPath);
+  const log = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  onTestFinished(() => log.mockRestore());
+
+  expect(await applyUpgrade(input)).toMatchObject({ target: "candidate" });
+
+  expect(log).toHaveBeenCalledWith(
+    expect.stringContaining("could not save offered upgrade result"),
+  );
+  expect(f.events.at(-1)).toEqual([
+    "cleanup",
+    { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } },
+  ]);
+});
+
 it("records completion before reopening the candidate and removes its recovery copies", async () => {
   const f = await fixture();
   const result = await applyUpgrade({ ...f.input, mode: "manual" });

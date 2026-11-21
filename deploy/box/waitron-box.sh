@@ -91,6 +91,19 @@ restore() {
   fi
 }
 
+upgrade_status() {
+  local file="${WAITRON_DIR:-/opt/waitron}.upgrade-result.json" result
+  if [ ! -f "$file" ]; then
+    answer '{"ok":true,"result":null}'
+    return
+  fi
+  if ! result="$(head -c 2049 -- "$file")" || [ -z "$result" ] || [ "${#result}" -gt 2048 ]; then
+    refuse host_failed
+    return
+  fi
+  answer "{\"ok\":true,\"result\":$result}"
+}
+
 clock_status() {
   local ntp synced unit unit_json=null service last=null
   ntp="$(ntp_property NTP)"
@@ -305,6 +318,7 @@ main() {
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
   case "$line" in
     clock.status) clock_status ;;
+    upgrade.status) upgrade_status ;;
     clock.sync-on) clock_sync_on ;;
     clock.retry) clock_retry ;;
     "clock.set "*)

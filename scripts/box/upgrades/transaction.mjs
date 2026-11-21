@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { copyStoppedTree, restoreStoppedTree } from "./copy.mjs";
 
 // The Node-only host uses the default layout; the nested-lock test reads the store constants.
@@ -77,21 +77,51 @@ async function record(directory, marker) {
   return marker;
 }
 
-async function reopen(directory, host, marker) {
+export const upgradeResultPath = (boxDirectory) => `${boxDirectory}.upgrade-result.json`;
+
+export function offeredUpgradeOutcome(marker) {
+  if (marker.target === "candidate") return "upgraded";
+  return marker.restored === true ? "rolled-back" : "deferred-at-stop";
+}
+
+async function saveOfferedResult(directory, marker, resultPath) {
+  const status = offeredUpgradeOutcome(marker);
+  if (resultPath === undefined || marker.versions === undefined || status === "deferred-at-stop")
+    return marker;
+  try {
+    // A recovery that retries cleanup keeps the time of the first healthy reopen.
+    if (marker.finishedAt === undefined)
+      marker = await record(directory, { ...marker, finishedAt: new Date().toISOString() });
+    const { fromVersion, toVersion } = marker.versions;
+    await writeFileDurable(resultPath, {
+      attemptId: basename(directory),
+      finishedAt: marker.finishedAt,
+      fromVersion,
+      toVersion,
+      status,
+    });
+  } catch (error) {
+    process.stderr.write(`could not save offered upgrade result: ${failureText(error)}\n`);
+  }
+  return marker;
+}
+
+async function reopen(directory, host, marker, resultPath) {
   // Pre-Docker recovery returns false until the selected image can reopen the venue.
   if ((await host.resume(marker.images[marker.target])) === false) return marker;
+  marker = await saveOfferedResult(directory, marker, resultPath);
   await fs.rm(join(directory, "copies"), { recursive: true, force: true });
   await syncDirectory(directory);
   await host.cleanup(marker.images);
   return marker;
 }
 
-async function commit(directory, host, marker, target) {
+async function commit(directory, host, marker, target, resultPath) {
   const completed = await record(directory, { ...marker, phase: "committed", target });
-  return reopen(directory, host, completed);
+  return reopen(directory, host, completed, resultPath);
 }
 
-async function restore(directory, host, marker) {
+async function restore(directory, host, marker, resultPath) {
   await host.stop();
   marker = await record(directory, { ...marker, phase: "restoring" });
   if (marker.copied) {
@@ -99,7 +129,8 @@ async function restore(directory, host, marker) {
       await restoreStoppedTree(join(directory, "copies", String(index)), path, RETAINED_LOCK_PATHS);
     }
   }
-  return commit(directory, host, marker, "old");
+  if (marker.mode === "automatic") marker = { ...marker, restored: true };
+  return commit(directory, host, marker, "old", resultPath);
 }
 
 /**
@@ -110,7 +141,7 @@ async function restore(directory, host, marker) {
  * The host owns the fixed volume/config inventory and its free-space check before this call.
  * It supplies a fresh attempt directory and the default state-volume layout.
  */
-export async function applyUpgrade({ directory, paths, mode, host }) {
+export async function applyUpgrade({ directory, paths, mode, host, versions, resultPath }) {
   if (!["manual", "automatic"].includes(mode)) throw new Error("invalid upgrade mode");
   validateInputs({ mode, paths });
   await fs.mkdir(directory, { mode: 0o700 });
@@ -127,6 +158,7 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
       images,
       checks: null,
       failure: null,
+      ...(versions === undefined ? {} : { versions }),
     });
   } catch (error) {
     // Stop follows the first marker; only that marker's own files are removed on abort.
@@ -140,7 +172,7 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
   try {
     await host.stop();
   } catch (error) {
-    return commit(directory, host, { ...marker, failure: failureText(error) }, "old");
+    return commit(directory, host, { ...marker, failure: failureText(error) }, "old", resultPath);
   }
   try {
     await fs.mkdir(join(directory, "copies"), { mode: 0o700 });
@@ -164,13 +196,13 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
       phase: "awaiting-choice",
       failure: failureText(error),
     });
-    return mode === "automatic" ? restore(directory, host, marker) : marker;
+    return mode === "automatic" ? restore(directory, host, marker, resultPath) : marker;
   }
-  return commit(directory, host, marker, "candidate");
+  return commit(directory, host, marker, "candidate", resultPath);
 }
 
 /** A new process resumes the recorded decision; committed attempts never restore a snapshot. */
-export async function recoverUpgrade({ directory, host, choice }) {
+export async function recoverUpgrade({ directory, host, choice, resultPath }) {
   let marker = await upgradeStatus(directory);
   if (marker === null) {
     try {
@@ -181,7 +213,7 @@ export async function recoverUpgrade({ directory, host, choice }) {
     }
     return null;
   }
-  if (marker.phase === "committed") return reopen(directory, host, marker);
+  if (marker.phase === "committed") return reopen(directory, host, marker, resultPath);
   if (["copying", "candidate"].includes(marker.phase)) {
     marker = await record(directory, {
       ...marker,
@@ -190,13 +222,13 @@ export async function recoverUpgrade({ directory, host, choice }) {
     });
   }
   if (marker.phase === "restoring" || choice === "restore" || marker.mode === "automatic") {
-    return restore(directory, host, marker);
+    return restore(directory, host, marker, resultPath);
   }
   if (choice === "keep") {
     if (!marker.copied) throw new Error("candidate was not installed");
     await host.stop();
     await host.installCandidate(marker.images.candidate);
-    return commit(directory, host, marker, "candidate");
+    return commit(directory, host, marker, "candidate", resultPath);
   }
   if (choice !== undefined) throw new Error("invalid upgrade choice");
   await host.stop();

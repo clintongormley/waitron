@@ -58,6 +58,35 @@ const STATUS = {
   nowMs: 1793425411088,
 };
 
+describe("boxHostClient().lastOfferedUpgrade", () => {
+  const result = {
+    attemptId: "attempt-1",
+    finishedAt: "2026-11-21T03:45:00.000Z",
+    fromVersion: "1.2.2",
+    toVersion: "1.2.3",
+    status: "rolled-back",
+  };
+
+  it("asks for the last offered upgrade with a fixed request", async () => {
+    const h = await host(answer({ ok: true, result }));
+    expect(await boxHostClient({ socketPath: h.path }).lastOfferedUpgrade()).toEqual(result);
+    expect(h.lines).toEqual(["upgrade.status"]);
+  });
+
+  it.each([
+    { ok: false, reason: "unknown_request" },
+    { ok: true, result: null },
+    { ok: true, result: { ...result, finishedAt: "not a time" } },
+    { ok: true, result: { ...result, status: "deferred" } },
+    { ok: true, result: { ...result, toVersion: "main" } },
+    { ok: true, result: { ...result, fromVersion: 12 } },
+    { ok: true, result: { ...result, attemptId: "" } },
+  ])("omits an absent or invalid result %j", async (reply) => {
+    const h = await host(answer(reply));
+    expect(await boxHostClient({ socketPath: h.path }).lastOfferedUpgrade()).toBeNull();
+  });
+});
+
 describe("boxHostClient().clockStatus", () => {
   it("reads the host's time service state", async () => {
     const h = await host(answer(STATUS));
