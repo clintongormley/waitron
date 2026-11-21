@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
+  billPayments,
   captureError,
+  insertInChunks,
   invoiceCorrections,
+  readHistoryNodes,
   readLiveSeriesIdTx,
   saleLines,
   sales,
@@ -17,8 +20,16 @@ import {
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordCorrection } from "@waitron/core";
 import {
+  computeCategorySales,
+  computeTopSellers,
+  computeVatSummaryForPeriod,
+  currentBusinessDay,
+  resolveVenueClock,
+} from "@waitron/reporting";
+import {
   centsToDecimal,
   decimal,
+  nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   sumDecimals,
@@ -66,7 +77,7 @@ useVenueDb({
 });
 
 const venue = () => advanceVenue.venue;
-const { seated, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
+const { seated, cash, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
   () => advanceVenue,
 );
 const supervisor = () => ({ personId: venue().adminId, pin: "1234" });
@@ -160,6 +171,61 @@ async function correctionOf(tx: Transaction, saleId: string) {
     correctsSaleId: brandSaleId(saleId),
     authz: { sessionId: adminSessionId },
     clock: venue().clock,
+  };
+}
+
+function shiftDay(day: string, days: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The VAT summary's gross, category sales' gross and its payments-on-account row's, and top
+ * sellers by name, around today. */
+function reportFigures() {
+  return inTx(venue(), async (tx) => {
+    const nodeId = brandNodeId(venue().cfg.nodeId);
+    const clock = await resolveVenueClock(tx, nodeId);
+    const day = currentBusinessDay(clock);
+    const common = {
+      nodeIds: await readHistoryNodes(tx, nodeId),
+      fromBusinessDay: shiftDay(day, -1),
+      toBusinessDay: shiftDay(day, 1),
+      timeZone: clock.timeZone,
+      dayCutover: clock.dayCutover,
+      cutoverChanges: clock.cutoverChanges,
+    };
+    const vat = await computeVatSummaryForPeriod(tx, common);
+    const categories = await computeCategorySales(tx, { ...common, mode: "at_time_of_sale" });
+    const sellers = await computeTopSellers(tx, { ...common, limit: 1000 });
+    return {
+      vat: vat.grossTotal,
+      categories: categories.gross,
+      paymentsOnAccount:
+        categories.tree.find((row) => row.kind === "payments_on_account")?.gross ?? "0.00",
+      topSellers: new Map(sellers.map((row) => [row.name, row])),
+    };
+  });
+}
+
+type Figures = Awaited<ReturnType<typeof reportFigures>>;
+
+/** How far each report moved between two readings; top sellers as the rows whose figures moved. */
+function moved(before: Figures, after: Figures) {
+  const by = (a: string, b: string | undefined) =>
+    centsToDecimal(Math.round(Number(a) * 100) - Math.round(Number(b ?? "0") * 100));
+  const topSellers: [string, string, string][] = [];
+  for (const [name, row] of after.topSellers) {
+    const earlier = before.topSellers.get(name);
+    const quantity = (Number(row.quantity) - Number(earlier?.quantity ?? "0")).toFixed(3);
+    const total = by(row.total, earlier?.total);
+    if (quantity !== "0.000" || total !== "0.00") topSellers.push([name, quantity, total]);
+  }
+  return {
+    vat: by(after.vat, before.vat),
+    categories: by(after.categories, before.categories),
+    paymentsOnAccount: by(after.paymentsOnAccount, before.paymentsOnAccount),
+    topSellers,
   };
 }
 
@@ -405,6 +471,29 @@ describe("an advance corrected before the meal ends", () => {
 
     expect(invoice.lines.at(-1)).toMatchObject({ gross: "-20.00" });
     expect(recordOf(await restId(billId))).toEqual([["10.00", "90.91", "9.09"]]);
+  });
+
+  it("moves category sales as the VAT summary, the advance's €10 back under payments on account, and top sellers by the menu alone", async () => {
+    const start = await reportFigures();
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const advanced = await reportFigures();
+    await correct(advanceId, "10.00", [{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+
+    expect(moved(advanced, await reportFigures())).toEqual({
+      vat: "-10.00",
+      categories: "-10.00",
+      paymentsOnAccount: "-10.00",
+      topSellers: [],
+    });
+
+    await payRest(billId, "100.00");
+    expect(moved(start, await reportFigures())).toEqual({
+      vat: "120.00",
+      categories: "120.00",
+      paymentsOnAccount: "0.00",
+      topSellers: [["Tasting menu", "1.000", "109.09"]],
+    });
   });
 });
 
@@ -661,6 +750,209 @@ describe("what is left of an advance, on the bill's payments", () => {
   });
 });
 
+describe("a settled bill's received, once Correct invoice gave money back", () => {
+  async function balanceOf(billId: string) {
+    const read = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/working-orders/${billId}/payments`,
+    );
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    return read.json;
+  }
+
+  /** Gives `amount` of the rest's invoice's cash back by a plain refund, filing no corrective. */
+  async function refundRest(finalSaleId: string, amount: string) {
+    const [tender] = await inTx(venue(), (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, finalSaleId)),
+    );
+    const refunded = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/transactions/${finalSaleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: amount,
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: supervisor(),
+      },
+    );
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select().from(sales).where(eq(sales.correctsSaleId, finalSaleId)),
+      ),
+    ).toEqual([]);
+  }
+
+  it("no advance: €120 paid and €90 back by Correct invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("a plain refund of €20 of the settled €120 leaves €120 received of €120, and €90 then back by Correct invoice shows €30 of €30", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    const saleId = await restId(billId);
+    await refundRest(saleId, "20.00");
+    expect(await balanceOf(billId)).toMatchObject({ total: "120.00", received: "120.00" });
+
+    await correct(saleId, "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("€50 paid and €20 of it refunded while the bill was open, €90 for the rest and €90 back by Correct invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    const paid = await cash(billId, "50.00");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const paymentId = (paid.json as { payment: { id: string } }).payment.id;
+    const refunded = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: supervisor(),
+      },
+    );
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    await payRest(billId, "90.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("€40 of a €90 correction back in cash leaves €120 received of €120 until the rest comes back and it files", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    const saleId = await restId(billId);
+    const opened = await open(saleId, "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const giveCash = async (amount: string) => {
+      const given = await send(
+        venue().app,
+        venue().cookie,
+        "POST",
+        `/api/invoice-corrections/${correctionId}/cash`,
+        { submissionId: randomUUID(), amount, override: supervisor() },
+      );
+      expect(given.status, JSON.stringify(given.json)).toBe(200);
+    };
+
+    await giveCash("40.00");
+    expect(
+      await inTx(venue(), (tx) =>
+        tx
+          .select({ state: invoiceCorrections.state })
+          .from(invoiceCorrections)
+          .where(eq(invoiceCorrections.id, correctionId)),
+      ),
+    ).toEqual([{ state: "open" }]);
+    expect(await balanceOf(billId)).toMatchObject({ total: "120.00", received: "120.00" });
+
+    await giveCash("50.00");
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("a replay of the €120 cash payment after €90 back by Correct invoice answers the payment and its invoice as taken, and the bill's €30 received of €30 now", async () => {
+    const billId = await seated("Tasting menu");
+    const submissionId = randomUUID();
+    const paid = await cash(billId, "120.00", { submissionId });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const first = paid.json as {
+      payment: { id: string; applied: string; tendered: string; change: string };
+      balance: { total: string; received: string };
+      invoice: { invoiceNumber: string; total: string };
+    };
+    expect(first.balance).toMatchObject({ total: "120.00", received: "120.00" });
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    const replayed = await cash(billId, "120.00", { submissionId });
+
+    expect(replayed.status, JSON.stringify(replayed.json)).toBe(200);
+    expect(replayed.json).toMatchObject({
+      outcome: "received",
+      payment: {
+        id: first.payment.id,
+        applied: "120.00",
+        tendered: "120.00",
+        change: first.payment.change,
+      },
+      invoice: { invoiceNumber: first.invoice.invoiceNumber, total: first.invoice.total },
+      balance: { total: "30.00", received: "30.00" },
+    });
+  });
+
+  it("reads its balance when the given-back sum alone would bind 32,767 values, one past SQLite's limit", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    const at = new Date().toISOString();
+    await inTx(venue(), (tx) =>
+      insertInChunks(
+        tx,
+        billPayments,
+        // 32,765 ids plus the two state values exceeded the old query's limit; readPaymentsAndRefunds still binds every id.
+        Array.from({ length: 32_764 }, () => ({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          kind: "contribution" as const,
+          method: "cash" as const,
+          applied: 100,
+          tendered: 100,
+          state: "failed" as const,
+          failedAt: at,
+          requestedBy: venue().operatorId,
+          ...venue().cfg.origin,
+        })),
+      ),
+    );
+    expect(
+      await inTx(venue(), (tx) =>
+        tx
+          .select({ count: sql<number>`count(*)` })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, billId)),
+      ),
+    ).toEqual([{ count: 32_765 }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("example 1: €30 advance, €90 for the rest and €90 back on the rest's invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("€10 of a €30 advance back before the rest's invoice, €100 for the rest and €90 back on it shows €30 received of €30, the advance's €10 not taken off again", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await correct(advanceId, "10.00", [{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+    await payRest(billId, "100.00");
+    expect(await balanceOf(billId)).toMatchObject({ total: "120.00", received: "120.00" });
+
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+});
+
 describe("a whole credit of the rest's invoice (ruling L9)", () => {
   /** Credits the settled rest's invoice whole: its lines reversed as cancelling an order reverses
    * them, and its split the invoice's own negated. The credit's id. */
@@ -697,6 +989,27 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     const entries = printed(ticket);
     expect(entries).toContain(`-1 ${words} 30,00`);
     expect(entries.some((line) => line.startsWith(`${spanish.total} -90,00`))).toBe(true);
+  });
+
+  it("example 1: the advance and its deduction net to 0.00, and a whole credit of the rest's invoice moves category sales by −€90.00, as the VAT summary, and takes the menu off top sellers", async () => {
+    const start = await reportFigures();
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const paid = await reportFigures();
+    expect(moved(start, paid)).toEqual({
+      vat: "120.00",
+      categories: "120.00",
+      paymentsOnAccount: "0.00",
+      topSellers: [["Tasting menu", "1.000", "109.09"]],
+    });
+
+    await creditWhole(rest.saleId);
+
+    expect(moved(paid, await reportFigures())).toEqual({
+      vat: "-90.00",
+      categories: "-90.00",
+      paymentsOnAccount: "30.00",
+      topSellers: [["Tasting menu", "-1.000", "-109.09"]],
+    });
   });
 
   it("leaves Correct invoice on the advance refused, naming the credited rest's invoice", async () => {

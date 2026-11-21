@@ -13,12 +13,14 @@ import {
   billPayments,
   billPaymentRefunds,
   floorZones,
+  invoiceCorrections,
   sales,
   tenders,
   saleSettlements,
   lineServiceCancellations,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { listAdjustmentReasons } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -289,6 +291,56 @@ describe("Find Bills SQL paging", () => {
       paid: "10.00",
       stillOwed: "0.00",
       state: "paid-not-handed-over",
+    });
+  });
+  it("a settled counter bill reads as paid what its balance reads as received once Correct invoice gave €5 back, and owes nothing", async () => {
+    const id = await parked(venue, "Croquettes");
+    await contribute(id, "10.00", "2.00");
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
+    );
+    const transaction = `/api/transactions/${sale!.id}/corrections`;
+    const previewed = await send(venue.app, venue.cookie, "POST", `${transaction}/preview`, {
+      gross: "5.00",
+    });
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const supervisor = { personId: venue.adminId, pin: "1234" };
+    const opened = await send(venue.app, venue.cookie, "POST", transaction, {
+      submissionId: randomUUID(),
+      gross: "5.00",
+      reasonId: reason!.id,
+      note: "Cold",
+      expectedSplit: (previewed.json as { vatBreakdown: unknown }).vatBreakdown,
+      override: supervisor,
+    });
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+    const given = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "5.00", override: supervisor },
+    );
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ state: invoiceCorrections.state })
+          .from(invoiceCorrections)
+          .where(eq(invoiceCorrections.id, correctionId)),
+      ),
+    ).toEqual([{ state: "filed" }]);
+
+    const row = await inTx(venue, (tx) => readFindBill(tx, id));
+    const balance = await inTx(venue, (tx) => readBillBalance(tx, id));
+    expect([row.paid, balance.received]).toEqual(["5.00", "5.00"]);
+    expect(row).toMatchObject({
+      total: "10.00",
+      stillOwed: "0.00",
+      state: "paid-not-handed-over",
+      collectionStatus: null,
     });
   });
   it("pages 101 equal-time orders without loading their whole set into JavaScript", async () => {

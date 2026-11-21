@@ -41,7 +41,9 @@ export function formatCategorySalesPage({
       ? s.uncategorised
       : node.kind === "not_recorded"
         ? s.notRecorded
-        : node.name;
+        : node.kind === "payments_on_account"
+          ? s.paymentsOnAccount
+          : node.name;
 
   // A category is printed by its whole path, so two with one name under different parents differ.
   // Not recorded is no category, so what sits under it is printed by its own name. The no-break

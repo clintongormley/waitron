@@ -9,15 +9,19 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
   insertInChunks,
+  invoiceCorrectionRefunds,
+  invoiceCorrections,
   isUniqueViolation,
   sales,
+  tenderRefunds,
+  tenders,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -35,6 +39,7 @@ import {
   firstCodeInCauseChain,
   isAppError,
   multiplyDecimal,
+  rawCentsToDecimal,
   stringToThousandths,
   subtractDecimal,
   sumDecimals,
@@ -266,7 +271,8 @@ export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: Decimal;
-  /** The net applied of the received payments. */
+  /** The net applied of the received payments; on a settled bill, less the completed refunds of
+   * filed Correct invoices on its payments that paid no advance. */
   received: Decimal;
   /** The applied amount of the pending payments. */
   reserved: Decimal;
@@ -831,6 +837,45 @@ async function readBillFigures(
   return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
+/** The applied money the completed `tender_refunds` of filed Correct invoices gave back from the
+ * tenders of the bill's payments that paid no advance; an advance's own are already out of what is
+ * left of it. Until a correction files, and for a plain refund, the bill's total is as it was, so
+ * those are left in. Filtered by the bill, so the values it binds do not grow with its payments. */
+async function givenBackAfterSettling(tx: Transaction, workingOrderId: string): Promise<Decimal> {
+  const [row] = await tx
+    .select({ cents: sql<string>`cast(coalesce(sum(${tenderRefunds.appliedAmount}), 0) as text)` })
+    // The box collects no planner statistics; unnamed, this read searched `tender_refunds` by
+    // `state` alone, every completed refund the venue holds, on SQLite 3.54.1.
+    .from(sql`${tenderRefunds} indexed by tender_refunds_submission_key`)
+    .innerJoin(
+      tenders,
+      and(eq(tenders.id, tenderRefunds.tenderId), eq(tenderRefunds.saleId, tenders.saleId)),
+    )
+    .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
+    .innerJoin(
+      invoiceCorrectionRefunds,
+      eq(invoiceCorrectionRefunds.tenderRefundId, tenderRefunds.id),
+    )
+    .innerJoin(
+      invoiceCorrections,
+      eq(invoiceCorrections.id, invoiceCorrectionRefunds.invoiceCorrectionId),
+    )
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        notExists(
+          tx
+            .select({ id: billAdvances.id })
+            .from(billAdvances)
+            .where(eq(billAdvances.billPaymentId, billPayments.id)),
+        ),
+        eq(tenderRefunds.state, "completed"),
+        eq(invoiceCorrections.state, "filed"),
+      ),
+    );
+  return rawCentsToDecimal(row!.cents);
+}
+
 /**
  * The bill's balance and its payments; `working_order.not_found` for an unknown bill. `total` is
  * the bill's total when the caller has priced its current lines in this transaction already.
@@ -869,7 +914,11 @@ export async function readBillBalance(
     workingOrderId,
     status: order.status,
     total: money(funds.total),
-    received: money(funds.received),
+    received: money(
+      order.status === "settled"
+        ? subtractDecimal(funds.received, await givenBackAfterSettling(tx, workingOrderId))
+        : funds.received,
+    ),
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
     tips: money(
