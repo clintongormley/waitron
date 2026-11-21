@@ -586,6 +586,25 @@ installer. The next checked upgrade to a release that includes the timer brings 
 If you install a release that predates the timer, checks pause until the box runs a release with
 timer support again.
 
+#### Rehearsing an offered install
+
+On a numbered standalone test box, run the retained installer from 03:00 through 04:30 in
+the venue’s time zone.
+
+```bash
+sudo bash /opt/waitron-host/waitron.sh install-offered-upgrade
+```
+
+The installer checks the signed offer and requires ten minutes without trading activity.
+An open order or unresolved payment or refund puts off the attempt. The installer checks the
+offer again after the migration trial. If trading resumes during shutdown, the old version
+reopens before Waitron copies any data. If the candidate fails its checks, Waitron restores the
+old version automatically.
+
+The JSON result says `none`, `deferred`, `deferred-at-stop`, `rolled-back` or `upgraded`.
+A deferral or rollback includes a reason. If the installer cannot prepare or complete an
+attempt, it prints an error. The overnight timer continues to check offers.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and

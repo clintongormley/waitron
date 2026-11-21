@@ -39,6 +39,7 @@ waitron.sh: usage:
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
   waitron.sh check-upgrade-offer  check which signed release is offered to this box
+  waitron.sh install-offered-upgrade  apply the signed offer during the quiet window
   waitron.sh restore           restore the intact copy from a held manual upgrade
   waitron.sh keep              start the candidate despite its failed checks
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
@@ -968,7 +969,7 @@ defer_upgrade_offer() {
 }
 
 cmd_check_upgrade_offer() (
-  local current result offer status=0
+  local current result offer status=0 verb="${1:-check-upgrade-offer}"
   [ -x "$HOST_NODE" ] || defer_upgrade_offer offer-check-unavailable
   offer="$(mktemp "${TMPDIR:-/tmp}/waitron-offer.XXXXXX")" || defer_upgrade_offer offer-check-unavailable
   trap 'rm -f -- "$offer"' EXIT
@@ -980,10 +981,22 @@ cmd_check_upgrade_offer() (
   if upgrade_pending; then defer_upgrade_offer upgrade-pending; fi
   current="$(installed_app_ref)" && is_release_tag "$current" \
     || defer_upgrade_offer installed-version-unavailable
-  result="$(upgrade_cli check-upgrade-offer "${current#v}" "$RELEASE_TRUST" "$offer")" || status=$?
+  result="$(upgrade_cli "$verb" "${current#v}" "$RELEASE_TRUST" "$offer")" || status=$?
   [ -n "$result" ] || defer_upgrade_offer offer-check-unavailable
   printf '%s\n' "$result"
   exit "$status"
+)
+
+cmd_install_offered_upgrade() (
+  local result status=0 version
+  require_numbered_release_verifier
+  result="$(cmd_check_upgrade_offer check-offered-upgrade)" || status=$?
+  if [ "$status" -ne 0 ] || ! version="$(jq -er 'select(.status == "offered") | .version' <<<"$result")"; then
+    printf '%s\n' "$result"
+    exit "$status"
+  fi
+  is_release_tag "v$version" && [[ "$version" != *-* ]] || die 'an offered upgrade needs a stable numbered release'
+  cmd_install automatic "v$version"
 )
 
 cmd_upgrade_choice() (
@@ -1082,12 +1095,13 @@ ensure_host_node_libraries() {
   apt_get install -y --no-install-recommends libatomic1
 }
 
-cmd_manual_install() (
-  local ref="$1" release_file="${2:-}" signed_sha="${3:-}" metadata sha preferred="" source="resolved Git SHA" stage result
-  shift
+cmd_checked_install() (
+  local mode="$1" ref="$2" release_file="${3:-}" signed_sha="${4:-}" metadata sha preferred="" source="resolved Git SHA" stage result
+  shift 2
   if [ -n "$signed_sha" ]; then shift 2; fi
-  local trust_ready=0
-  [ -d "$SYSTEMD_RUN_DIR" ] || die 'safe manual upgrades require a Linux host running systemd'
+  local trust_ready=0 progress_fd=1
+  [ "$mode" = manual ] || progress_fd=2
+  [ -d "$SYSTEMD_RUN_DIR" ] || die "safe $mode upgrades require a Linux host running systemd"
   metadata="$(resolve_source_metadata "${signed_sha:-$ref}")"
   sha="${metadata%%:*}"
   [ -z "$signed_sha" ] || [ "$sha" = "$signed_sha" ] || die "source metadata did not match signed release $ref"
@@ -1116,8 +1130,12 @@ cmd_manual_install() (
       trust_ready=1
     fi
   fi
-  ensure_host_node_libraries
-  bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR"
+  if [ "$mode" = automatic ]; then
+    grep -Eq '^[[:blank:]]+install-offered-upgrade[[:blank:]]*\)' "$stage/waitron.sh" \
+      || die "release $ref cannot apply an offered upgrade"
+  fi
+  ensure_host_node_libraries >&"$progress_fd"
+  bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR" >&"$progress_fd"
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die 'another host operation is running'
   refuse_pending_upgrade
@@ -1126,7 +1144,15 @@ cmd_manual_install() (
     [ -L "$RELEASE_TRUST" ] \
       && checked="$("$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" "$ref" < "$release_file")" \
       && [ "$checked" = "$signed_sha $*" ] || die "release trust changed while preparing $ref — try again"
-    require_current_or_newer_release "$ref"
+    if [ "$mode" = automatic ]; then
+      local current
+      current="$(installed_app_ref)" && is_release_tag "$current" \
+        || defer_upgrade_offer installed-version-unavailable
+      [ "$current" != "$ref" ] || defer_upgrade_offer offer-changed
+      "$HOST_NODE" "$RELEASE_TRUST/verify-release.mjs" --check-version "$ref" "$current"
+    else
+      require_current_or_newer_release "$ref"
+    fi
   fi
   if [ "$trust_ready" -eq 1 ]; then refuse_legacy_release_trust; fi
   install_upgrade_driver "$stage"
@@ -1135,17 +1161,26 @@ cmd_manual_install() (
   elif [ "$ref" = main ]; then
     echo 'waitron.sh: could not load release trust files — use a published main image with both release keys and check that the files can be downloaded' >&2
   fi
-  load_print_agent_apparmor "$sha"
-  ensure_bluez
-  disable_bluetooth_autopair
-  enable_time_sync
-  install_box_service "$sha"
+  {
+    load_print_agent_apparmor "$sha"
+    ensure_bluez
+    disable_bluetooth_autopair
+    enable_time_sync
+    install_box_service "$sha"
+  } >&"$progress_fd"
   echo "waitron.sh: retained upgrade driver $sha ($source)" >&2
-  result="$(upgrade_cli apply bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR" "$@")"
-  printf '%s\n' "$result"
+  local status=0
+  local apply=(apply)
+  if [ "$mode" = automatic ]; then
+    apply=(apply-offered-upgrade "${current#v}" "${ref#v}" "$RELEASE_TRUST")
+  fi
+  result="$(upgrade_cli "${apply[@]}" bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR" "$@")" || status=$?
+  [ -z "$result" ] || printf '%s\n' "$result"
+  [ "$status" -eq 0 ] || exit "$status"
   if upgrade_pending; then
     die "upgrade held — run 'waitron.sh status', then choose restore or keep"
   fi
+  [ "$mode" = manual ] || exit 0
   flock -u 9
   exec 9>&-
   as_root systemctl --no-block restart waitron-app.service
@@ -1215,6 +1250,8 @@ box_started() {
 }
 
 cmd_install() (
+  local mode="$1"
+  shift
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 docker_ready=0
   local verified signed_sha="" app_digest="" agent_digest="" tunnel_digest="" source_ref="$ref"
   refuse_pending_upgrade
@@ -1229,14 +1266,18 @@ cmd_install() (
     source_ref="$signed_sha"
     unset WAITRON_IMAGE WAITRON_PRINT_AGENT_IMAGE WAITRON_TUNNEL_IMAGE
   fi
+  if [ "$mode" = automatic ]; then
+    cmd_checked_install automatic "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest" "$tunnel_digest"
+    return
+  fi
   if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
     ensure_docker
     docker_ready=1
     if box_started; then
       if [ -n "$signed_sha" ]; then
-        cmd_manual_install "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest" "$tunnel_digest"
+        cmd_checked_install manual "$ref" "$release_file" "$signed_sha" "$app_digest" "$agent_digest" "$tunnel_digest"
       else
-        cmd_manual_install "$ref"
+        cmd_checked_install manual "$ref"
       fi
       return
     fi
@@ -1393,7 +1434,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | check-upgrade-offer | check-upgrade-window | restore | keep | reset | __candidate | "" | -h | --help) ;;
+    install | update | status | check-upgrade-offer | check-upgrade-window | install-offered-upgrade | restore | keep | reset | __candidate | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -1402,11 +1443,12 @@ main() {
     [ "$verb" = "install" ] || die "--reset goes only with install: 'waitron.sh --reset install [ref]'" 2
   fi
   case "$verb" in
-    install | update) shift; cmd_install "$@" ;;
+    install | update) shift; cmd_install manual "$@" ;;
     __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
     check-upgrade-offer) cmd_check_upgrade_offer ;;
     check-upgrade-window) cmd_check_upgrade_window ;;
+    install-offered-upgrade) cmd_install_offered_upgrade ;;
     restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;

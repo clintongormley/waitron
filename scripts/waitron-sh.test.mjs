@@ -243,7 +243,12 @@ case "$1" in
     case "$args" in
       *'--format {{index .Config.Labels "org.opencontainers.image.ref.name"}}'*)
         case "$args" in
-          *sha256:running-app*|*waitron:configured*) printf '%s\\n' "\${WT_INSTALLED_RELEASE_REF-<no value>}" ;;
+          *sha256:running-app*|*waitron:configured*)
+            if [ -n "\${WT_RELEASE_AFTER_OFFER:-}" ] && grep -q ' check-offered-upgrade ' "$WT_LOG"; then
+              printf '%s\\n' "$WT_RELEASE_AFTER_OFFER"
+            else
+              printf '%s\\n' "\${WT_INSTALLED_RELEASE_REF-<no value>}"
+            fi ;;
           *override:app*) printf 'main\\n' ;;
           *) exit 97 ;;
         esac
@@ -469,6 +474,13 @@ case "$1" in
   -e|*/verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
 esac
 case "$2" in
+  download-upgrade-offer)
+    printf 'signed fixture\n'; exit 0 ;;
+  check-offered-upgrade)
+    test "$(cat "$6")" = 'signed fixture' || exit 90
+    printf '{"status":"offered","version":"1.2.3"}\n'; exit 0 ;;
+  apply-offered-upgrade)
+    printf '{"status":"upgraded"}\n'; exit 0 ;;
   apply)
     if [ "\${WT_RUN_CANDIDATE:-0}" = 1 ]; then
       shift 3
@@ -1588,6 +1600,55 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
+  it.each(["offered", "older driver", "newer installed release"])(
+    "checks %s before Apply",
+    (scenario) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const release = signedRelease(sb);
+      const driver = join(sb.root, "offered-driver.sh");
+      const source = readFileSync(SCRIPT, "utf8");
+      writeFileSync(
+        driver,
+        scenario === "older driver"
+          ? source.replace(/^ {4}install-offered-upgrade\).*$/m, "")
+          : source,
+      );
+      writeFileSync(sb.log, "");
+      const result = run(sb, ["install-offered-upgrade"], {
+        ...release,
+        WT_INSTALLED_RELEASE_REF: "v1.2.2",
+        WT_RELEASE_AFTER_OFFER: scenario === "newer installed release" ? "v1.2.4" : "",
+        WT_SELF_SCRIPT: driver,
+      });
+      const calls = loggedCalls(sb);
+      const check = calls.findIndex((call) => call.includes("cli.mjs check-offered-upgrade"));
+      const sourceFetch = calls.findIndex((call) =>
+        call.includes(`/${signedSource}/deploy/waitron.sh`),
+      );
+      expect(check).toBeGreaterThan(calls.indexOf("flock -n 9"));
+      expect(calls.indexOf("flock -n 9")).toBeGreaterThanOrEqual(0);
+      expect(sourceFetch).toBeGreaterThan(check);
+      if (scenario === "older driver") {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("cannot apply an offered upgrade");
+        expect(calls.some((call) => call.startsWith("bootstrap "))).toBe(false);
+      } else if (scenario === "newer installed release") {
+        expect(result.status).toBe(1);
+        expect(
+          calls.findIndex((line) => line.endsWith("--check-version v1.2.3 v1.2.4")),
+        ).toBeGreaterThan(calls.lastIndexOf("flock -n 9"));
+        expect(calls.some((line) => line.includes("cli.mjs apply-offered-upgrade"))).toBe(false);
+      } else {
+        expect(result.status, result.stderr).toBe(0);
+        expect(calls).toContainEqual(
+          expect.stringContaining(`cli.mjs apply-offered-upgrade ${sb.boxDir} 1.2.2 1.2.3`),
+        );
+        expect(result.stdout).toBe('{"status":"upgraded"}\n');
+      }
+    },
+  );
+
   it("installs a signed release whose driver predates the upgrade timer", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);

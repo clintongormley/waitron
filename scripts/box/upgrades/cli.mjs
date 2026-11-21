@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  checkInstalledUpgradeQuiet,
   createUpgradeHost,
   installedBoxId,
   installedVenueTimeZone,
@@ -41,6 +42,8 @@ async function pending(boxDirectory) {
 }
 
 const offerVerb = "check-upgrade-offer";
+const offeredCheckVerb = "check-offered-upgrade";
+const offeredApplyVerb = "apply-offered-upgrade";
 const windowVerb = "check-upgrade-window";
 const downloadOfferVerb = "download-upgrade-offer";
 const deferred = (reason) => ({ status: "deferred", reason });
@@ -95,13 +98,7 @@ async function downloadUpgradeOffer(run) {
   }
 }
 
-async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory, stagedOffer, run) {
-  try {
-    if (await pending(boxDirectory)) return deferred("upgrade-pending");
-  } catch {
-    return deferred("upgrade-pending");
-  }
-
+async function selectOffer(boxDirectory, installedVersion, trustDirectory, readOffer, run) {
   let boxId;
   try {
     boxId = await installedBoxId(boxDirectory, run);
@@ -134,7 +131,7 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
 
   let selected;
   try {
-    selected = selector.selectUpgradeOffer(await fs.readFile(stagedOffer), keys, {
+    selected = selector.selectUpgradeOffer(await readOffer(), keys, {
       boxId,
       installedVersion,
       previous,
@@ -153,7 +150,37 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
   return version ? { status: "offered", version } : { status: "none" };
 }
 
-async function checkUpgradeWindow(boxDirectory, run) {
+async function checkUpgradeOffer(
+  boxDirectory,
+  installedVersion,
+  trustDirectory,
+  stagedOffer,
+  run,
+  offeredInstall,
+) {
+  try {
+    if (await pending(boxDirectory)) return deferred("upgrade-pending");
+  } catch {
+    return deferred("upgrade-pending");
+  }
+  if (offeredInstall) {
+    try {
+      await checkUpgradeWindow(boxDirectory, run, true);
+      await checkInstalledUpgradeQuiet(boxDirectory, run);
+    } catch (error) {
+      return deferred(error.message);
+    }
+  }
+  return selectOffer(
+    boxDirectory,
+    installedVersion,
+    trustDirectory,
+    () => fs.readFile(stagedOffer),
+    run,
+  );
+}
+
+async function checkUpgradeWindow(boxDirectory, run, offeredInstall = false) {
   let timeZone;
   try {
     timeZone = await installedVenueTimeZone(boxDirectory, run);
@@ -166,14 +193,45 @@ async function checkUpgradeWindow(boxDirectory, run) {
   if (typeof timeZone !== "string") throw new Error(invalid);
   let formatter;
   try {
-    formatter = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" });
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
   } catch {
     throw new Error(invalid);
   }
   if (/^[+-]/.test(formatter.resolvedOptions().timeZone)) throw new Error(invalid);
-  const hour = formatter.format(new Date());
-  if (hour !== "03" && hour !== "04")
+  const time = formatter.format(new Date());
+  if (offeredInstall && (time < "03:00:00" || time > "04:30:00"))
+    throw new Error(
+      "outside the offered upgrade start window (03:00–04:30 in the venue time zone)",
+    );
+  if (time < "03:00:00" || time >= "05:00:00")
     throw new Error("upgrade check skipped: outside 03:00–05:00 in the venue time zone");
+}
+
+class OfferedUpgradeDeferred extends Error {}
+
+export async function recheckOfferedUpgrade(
+  boxDirectory,
+  installedVersion,
+  target,
+  trustDirectory,
+  run,
+) {
+  const bytes = await downloadUpgradeOffer(run);
+  if (bytes === null) throw new OfferedUpgradeDeferred("offer-download-failed");
+  const offer = await selectOffer(boxDirectory, installedVersion, trustDirectory, () => bytes, run);
+  if (offer.status === "deferred") throw new OfferedUpgradeDeferred(offer.reason);
+  if (offer.version !== target) throw new OfferedUpgradeDeferred("offer-changed");
+  try {
+    await checkUpgradeWindow(boxDirectory, run, true);
+  } catch (error) {
+    throw new OfferedUpgradeDeferred(error.message);
+  }
 }
 
 // Mutating callers hold <box>.upgrade.lock; status takes no lock and writes nothing.
@@ -187,6 +245,8 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
       "recover",
       "offline-recovery",
       offerVerb,
+      offeredCheckVerb,
+      offeredApplyVerb,
       windowVerb,
       downloadOfferVerb,
     ].includes(verb) ||
@@ -197,17 +257,27 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
     );
   if (verb === windowVerb) return checkUpgradeWindow(boxDirectory, run);
   if (verb === downloadOfferVerb) return downloadUpgradeOffer(run);
-  if (verb === offerVerb)
-    return checkUpgradeOffer(boxDirectory, prepare[0], prepare[1], prepare[2], run);
+  if (verb === offerVerb || verb === offeredCheckVerb)
+    return checkUpgradeOffer(
+      boxDirectory,
+      prepare[0],
+      prepare[1],
+      prepare[2],
+      run,
+      verb === offeredCheckVerb,
+    );
+  const automatic = verb === offeredApplyVerb;
   let current = await pending(boxDirectory);
   if (verb === "status") return current?.marker ?? null;
+  if (automatic && current) return deferred("upgrade-pending");
   if (current?.marker === null) {
     await recoverInstalledUpgrade({ boxDirectory, run });
     current = null;
   }
-  if (verb === "apply") {
+  if (verb === "apply" || automatic) {
     if (current)
       throw new Error("resolve the upgrade attempt with restore or keep before installing");
+    const [installedVersion, target, trustDirectory] = automatic ? prepare.splice(0, 3) : [];
     if (prepare.length === 0) throw new Error("apply requires the candidate preparation command");
     await fs.mkdir(`${boxDirectory}.upgrades`, { recursive: true, mode: 0o700 });
     const directory = join(`${boxDirectory}.upgrades`, `${Date.now()}-${randomUUID()}`);
@@ -217,13 +287,24 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
       run,
       prepareCandidate: async () => JSON.parse((await run(prepare[0], prepare.slice(1))).stdout),
       checkCandidate: () => checkUpgradeCandidate({ boxDirectory, directory, run }),
+      beforeAutomaticStop: automatic
+        ? () => recheckOfferedUpgrade(boxDirectory, installedVersion, target, trustDirectory, run)
+        : undefined,
     });
-    return applyUpgrade({
-      directory,
-      paths: candidate.paths,
-      mode: "manual",
-      host: candidate.host,
-    });
+    try {
+      const marker = await applyUpgrade({
+        directory,
+        paths: candidate.paths,
+        mode: automatic ? "automatic" : "manual",
+        host: candidate.host,
+      });
+      if (!automatic) return marker;
+      if (marker.target === "candidate") return { status: "upgraded" };
+      return { status: marker.copied ? "rolled-back" : "deferred-at-stop", reason: marker.failure };
+    } catch (error) {
+      if (error instanceof OfferedUpgradeDeferred) return deferred(error.message);
+      throw error;
+    }
   }
   if (!current) return null;
   const offline = verb === "offline-recovery";
@@ -248,7 +329,10 @@ export async function runUpgradeCliMain(args, { stdout, stderr, run } = process)
     if (args[0] === windowVerb) return 0;
     if (args[0] === downloadOfferVerb && result === null) return 1;
     stdout.write(args[0] === downloadOfferVerb ? result : JSON.stringify(result) + "\n");
-    return args[0] === offerVerb && result.status === "deferred" ? 1 : 0;
+    return [offerVerb, offeredCheckVerb, offeredApplyVerb].includes(args[0]) &&
+      result.status === "deferred"
+      ? 1
+      : 0;
   } catch (error) {
     stderr.write(String(error instanceof Error ? error.message : error) + "\n");
     return 1;

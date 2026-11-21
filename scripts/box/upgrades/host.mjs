@@ -16,7 +16,7 @@ const command = (file, args, input, options = {}) => {
   return result;
 };
 
-export async function stopUpgradeWriters({ run = command, compose }) {
+export async function stopUpgradeWriters({ run = command, compose, requireRunning = false }) {
   const id = (await run("docker", [...compose, "ps", "-a", "-q", "app"])).stdout.trim();
   if (id) {
     const inspect = async () => JSON.parse((await run("docker", ["inspect", id])).stdout)[0].State;
@@ -46,7 +46,11 @@ export async function stopUpgradeWriters({ run = command, compose }) {
       ) {
         throw new Error("app shutdown incomplete; no upgrade copy permitted");
       }
+    } else if (requireRunning) {
+      throw new Error("app already stopped; no upgrade copy permitted");
     }
+  } else if (requireRunning) {
+    throw new Error("app already stopped; no upgrade copy permitted");
   }
   await run("docker", [
     ...compose,
@@ -89,12 +93,78 @@ export async function installedVenueTimeZone(boxDirectory, run = command) {
   }
 }
 
+async function appIsRunning(compose, run) {
+  const app = (await run("docker", [...compose, "ps", "-q", "app"])).stdout.trim();
+  return (
+    app !== "" &&
+    (await run("docker", ["inspect", app, "--format", "{{.State.Running}}"])).stdout.trim() ===
+      "true"
+  );
+}
+
+function assertUpgradeQuiet(stateDirectory, now) {
+  const db = new DatabaseSync(join(stateDirectory, "venue", "venue.db"), { readOnly: true });
+  try {
+    db.exec("begin");
+    const since = new Date(now - 10 * 60_000).toISOString();
+    const cardActivity = recentCardActivity(db, since);
+    const { busy } = db
+      .prepare(
+        `select exists (
+      select 1 from working_orders
+        where status in ('open', 'placed') or opened_at > $since or settled_at > $since
+      union all select 1 from sales where issued_at > $since
+      union all select 1 from bill_payments
+        where state = 'pending' or created_at > $since or received_at > $since
+      union all select 1 from bill_payment_refunds
+        where state = 'pending' or created_at > $since or completed_at > $since
+      union all select 1 from tender_refunds
+        where state = 'pending' or created_at > $since or completed_at > $since
+    ) as busy`,
+      )
+      .get({ $since: since });
+    if (busy || cardActivity) throw new Error("venue has recent or unresolved trading activity");
+  } finally {
+    db.close();
+  }
+}
+
+function recentCardActivity(db, since) {
+  if (hasTable(db, "payments")) {
+    return (
+      db
+        .prepare(
+          `select 1 from payments
+      where state in ('attempting', 'initiated') or created_at > ?1 or updated_at > ?1
+      limit 1`,
+        )
+        .get({ "?1": since }) !== undefined
+    );
+  }
+  const disabled = db
+    .prepare(
+      `select 1 from settings where module = 'modules'
+    and version = 1 and json_type(doc, '$.modules.payments') = 'false'`,
+    )
+    .get();
+  if (!disabled) throw new Error("payment data is unavailable");
+  return false;
+}
+
+export async function checkInstalledUpgradeQuiet(boxDirectory, run = command, now = Date.now()) {
+  if (!(await appIsRunning(composeFor(boxDirectory), run))) throw new Error("app is stopped");
+  const state = await installedStateDirectory(boxDirectory, run);
+  await assertSingleBox(state);
+  assertUpgradeQuiet(state, now);
+}
+
 export async function createUpgradeHost({
   boxDirectory,
   candidate,
   directory,
   checkCandidate,
   prepareCandidate,
+  beforeAutomaticStop,
   run = command,
 }) {
   const compose = composeFor(boxDirectory);
@@ -207,13 +277,7 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
-          const app = (await run("docker", [...compose, "ps", "-q", "app"])).stdout.trim();
-          if (
-            app &&
-            (
-              await run("docker", ["inspect", app, "--format", "{{.State.Running}}"])
-            ).stdout.trim() === "true"
-          )
+          if (await appIsRunning(compose, run))
             await runOnlineTrial({
               work: trial,
               state: paths[0],
@@ -231,6 +295,7 @@ export async function createUpgradeHost({
             .trim()
             .split(/\s+/)
             .filter(Boolean);
+          await beforeAutomaticStop?.();
           if (ids.length > 0) await run("docker", ["update", "--restart=no", ...ids]);
           return { old, candidate: next };
         } catch (error) {
@@ -242,14 +307,21 @@ export async function createUpgradeHost({
         await writeFileDurable(join(directory, "candidate-compose.json"), {
           compose: rawCandidate,
         });
-        await stopUpgradeWriters({ compose, run });
+        await stopUpgradeWriters({
+          compose,
+          run,
+          requireRunning: Boolean(beforeAutomaticStop && !releaseState),
+        });
         // GNU cp preserves sockets, and the snapshot flush cannot open them.
         try {
           if ((await fs.lstat(staffSocket)).isSocket()) await fs.unlink(staffSocket);
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
-        releaseState ??= await holdUpgradeState(paths[0]);
+        if (!releaseState) {
+          releaseState = await holdUpgradeState(paths[0]);
+          if (beforeAutomaticStop) assertUpgradeQuiet(paths[0], Date.now());
+        }
       },
       async installCandidate(images) {
         await pins(images, rawCandidate);

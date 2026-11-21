@@ -228,6 +228,9 @@ back.
 
 Managers and Admins can restart the box.
 
+If an order or payment arrives as Waitron shuts down during a supervised overnight upgrade,
+give it time to reopen on the old version.
+
 ## Set the clock from your own device {#clock-own-device}
 
 Box administration, held by Admin by default, lets you set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.

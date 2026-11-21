@@ -6,9 +6,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, URL } from "node:url";
-import { createHash, generateKeyPairSync } from "node:crypto";
-import { signUpgradeOffer } from "../release-list.mjs";
-import { runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
+import { createHash } from "node:crypto";
+import { offerTrustFixture } from "./offers.test-support.mjs";
+import { recheckOfferedUpgrade, runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
 
 async function fixture() {
   const root = await fs.mkdtemp(join(tmpdir(), "upgrade-cli-"));
@@ -35,6 +35,10 @@ it("reports the retained manual refusal read-only, including from the installed 
     throw new Error("status must not call Docker");
   };
   expect(await runUpgradeCli(["status", f.box], { run: forbidden })).toEqual(marker);
+  expect(await runUpgradeCli(["apply-offered-upgrade", f.box], { run: forbidden })).toEqual({
+    status: "deferred",
+    reason: "upgrade-pending",
+  });
   const invoked = await promisify(execFile)(process.execPath, [
     new URL("./cli.mjs", import.meta.url).pathname,
     "status",
@@ -162,50 +166,54 @@ const deferred = (reason) => ({ status: "deferred", reason });
 async function offerFixture() {
   const { root, box } = await fixture();
   const state = join(root, "state");
-  const trust = join(root, "trust generation #1");
-  const link = join(root, "release-trust");
+  const { trust, link, offer } = await offerTrustFixture(root, "box-one");
   await fs.mkdir(state);
   await fs.writeFile(join(state, "trading.env"), 'WAITRON_NODE_ID="box-one"\n');
-  await fs.mkdir(join(trust, "upgrades"), { recursive: true });
-  await fs.copyFile(
-    new URL("../release-list.mjs", import.meta.url),
-    join(trust, "release-list.mjs"),
-  );
-  await fs.copyFile(
-    new URL("./contracts.mjs", import.meta.url),
-    join(trust, "upgrades/contracts.mjs"),
-  );
-  await fs.symlink(trust, link);
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const current = generateKeyPairSync("ed25519").publicKey;
-  await fs.writeFile(join(trust, "current.pem"), current.export({ type: "spki", format: "pem" }));
-  await fs.writeFile(join(trust, "spare.pem"), publicKey.export({ type: "spki", format: "pem" }));
-  const offer = (serial, target) =>
-    signUpgradeOffer(
-      {
-        format: 1,
-        kind: "offer",
-        serial,
-        default: "none",
-        entries: [{ condition: { installations: ["box-one"] }, target }],
-      },
-      privateKey.export({ type: "pkcs8", format: "pem" }),
-    );
+  const run = async (command, args) => {
+    if (command === "docker" && args.includes("config"))
+      return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
+    if (command === "docker" && args.join(" ") === "volume inspect test_state")
+      return { stdout: JSON.stringify([{ Mountpoint: state }]) };
+    throw new Error(`unexpected command ${command} ${args.join(" ")}`);
+  };
   const check = async (bytes, version = "1.2.3-rc.1", trustDirectory = link) => {
     const stagedOffer = join(root, "offer");
     await fs.writeFile(stagedOffer, bytes);
-    return runUpgradeCli([offerVerb, box, version, trustDirectory, stagedOffer], {
-      run: async (command, args) => {
-        if (command === "docker" && args.includes("config"))
-          return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
-        if (command === "docker" && args.join(" ") === "volume inspect test_state")
-          return { stdout: JSON.stringify([{ Mountpoint: state }]) };
-        throw new Error(`unexpected command ${command} ${args.join(" ")}`);
-      },
-    });
+    return runUpgradeCli([offerVerb, box, version, trustDirectory, stagedOffer], { run });
   };
-  return { check, offer, state, trust, record: `${box}.upgrade-offer.json` };
+  return { box, check, link, offer, run, state, trust, record: `${box}.upgrade-offer.json` };
 }
+
+it.each([
+  ["none", "03:29:00", "offer-changed"],
+  ["1.2.4", "03:29:00", "offer-changed"],
+  ["1.2.3", "03:30:01", "outside the offered upgrade start window"],
+  ["1.2.3", "03:30:00", null],
+])("rechecks target %s at %s UTC while this attempt is preparing", async (target, time, reason) => {
+  const f = await offerFixture();
+  await f.check(f.offer(4, "1.2.3"));
+  await fs.mkdir(join(`${f.box}.upgrades`, "preparing"), { recursive: true });
+  await fs.mkdir(join(f.state, "venue"));
+  const database = new DatabaseSync(join(f.state, "venue/venue.db"));
+  try {
+    database.exec(`create table settings (module text, version integer, doc text);
+      insert into settings values ('business_day', 1, '{"timeZone":"Europe/Madrid"}');`);
+  } finally {
+    database.close();
+  }
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date(`2026-11-21T${time}Z`));
+  const bytes = f.offer(5, target);
+  const run = (command, args) => (command === "curl" ? { stdout: bytes } : f.run(command, args));
+  const recheck = recheckOfferedUpgrade(f.box, "1.2.3-rc.1", "1.2.3", f.link, run);
+  if (reason) await expect(recheck).rejects.toThrow(reason);
+  else await expect(recheck).resolves.toBeUndefined();
+  expect(JSON.parse(await fs.readFile(f.record, "utf8"))).toEqual({
+    serial: 5,
+    digest: createHash("sha256").update(bytes).digest("hex"),
+  });
+});
 
 it("checks the installed box's signed offer and remembers a newer pause across calls", async () => {
   const f = await offerFixture();
