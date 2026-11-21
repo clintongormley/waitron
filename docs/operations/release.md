@@ -128,10 +128,10 @@ pnpm release prepare 1.0.0 --place "<town>"
 
 It stops at the first thing that is wrong, and changes nothing until you sign. In order, it:
 
-1. checks that the version looks like `1.2.3`, that you are on `release/1.0.0` with nothing
+1. checks that the version looks like `1.2.3` or `1.2.3-rc.1`, that you are on `release/1.0.0` with nothing
    uncommitted in files git tracks (untracked files are ignored), and that the branch is
    `origin/main`'s latest commit;
-2. refuses a version that is already released, or that is not above the highest released one;
+2. refuses a version that already has a release tag;
 3. prints the whole declaration with your three settings filled in and today's date in Madrid;
 4. asks you to type `yes`. Typing it is the producer signing; anything else stops with nothing
    written;
@@ -175,7 +175,7 @@ pnpm release tag 1.0.0
 It refuses unless you are on `main` with no uncommitted change to a file git tracks (untracked
 files are ignored here too), at `origin/main`'s latest commit; unless `main` holds
 `declarations/v1.0.0.md`; unless that file still carries no blocker line and its name, system
-code, version and yes/no answers still match the code; unless the version is still unreleased and above the highest released one; and unless
+code, version and yes/no answers still match the code; unless the version is still untagged; and unless
 `main`'s CI run for that commit has finished green. Other pull requests can land between `prepare`
 and `tag`, which is why it checks the declaration again. Then it makes the annotated tag
 `v1.0.0` ("Waitron 1.0.0") and pushes it.
@@ -187,14 +187,15 @@ and its annotation is “Waitron prerelease 1.3.0-rc.1”. You can use `-alpha.N
 `-rc.N`. Each number can be zero. Leave off any leading zeroes and keep the full version within
 50 characters.
 
-Versions increase in a single order. Compare the three version numbers first. For the same
-three numbers, alpha comes before beta, then release candidates, then stable. Within each
-suffix, the largest sequence number comes last. After `1.3.0-rc.1` you can prepare
-`1.3.0-rc.2` or `1.3.0`. A `1.2.1` patch is below that candidate and the command refuses it.
-If you abandon a prepared version before tagging it, remove its declaration from `main`
-through a pull request before preparing the next one. Once tagged, keep the tag and its
-declaration fixed. CI checks that the annotation agrees with the version and passes the
-prerelease flag to the GitHub Release and signed release file.
+You can publish an unused version in an older series through the same main release process.
+For example, you can publish `1.2.1` after `1.3.0-rc.1`, or `1.4.0` after `2.0.0`.
+Once tagged, keep the tag and its declaration fixed. CI checks that the annotation agrees with
+the version and passes the prerelease flag to the GitHub Release and signed release file.
+
+Boxes compare the three version numbers first. For the same three numbers, alpha comes before
+beta, then release candidates, then stable. Within each suffix, the largest sequence number comes
+last. When `1.2.1` and `1.3.0` are both published, a box on `1.2.0` can install either by hand.
+Its automatic check follows the stable version selected for that box in the signed offer.
 
 `main`'s green run proves less than it sounds: an ordinary push to `main` runs no package tests.
 The tag's own CI run is the full one, and publishing the image waits for it.

@@ -289,14 +289,6 @@ describe("prepareRelease", () => {
       /already released/,
       6,
     ],
-    [
-      "a version not above the highest released",
-      {
-        answers: { "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.0.1\n` },
-      },
-      /1\.0\.1/,
-      6,
-    ],
   ];
 
   it.each(refusals)(
@@ -309,17 +301,19 @@ describe("prepareRelease", () => {
     },
   );
 
-  it("orders versions numerically: with v1.9.0 released, 1.10.0 passes and 1.8.9 refuses", async () => {
-    const answers = (version) => ({
-      "git rev-parse --abbrev-ref HEAD": `release/${version}\n`,
-      "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.9.0\n`,
+  it.each([
+    ["1.2.1", "1.3.0-rc.1"],
+    ["1.4.0", "2.0.0"],
+  ])("prepares unused version %s after %s was published", async (version, published) => {
+    const { calls, error } = await prepare({
+      version,
+      answers: {
+        "git rev-parse --abbrev-ref HEAD": `release/${version}\n`,
+        "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v${published}\n`,
+      },
     });
-    const passes = await prepare({ version: "1.10.0", answers: answers("1.10.0") });
-    expect(passes.error).toBeUndefined();
-    expect(passes.calls).toEqual(happyPath("1.10.0"));
-    const refuses = await prepare({ version: "1.8.9", answers: answers("1.8.9") });
-    expect(refuses.error?.message).toMatch(/not above 1\.9\.0/);
-    expect(forbidden(refuses.calls)).toEqual([]);
+    expect(error).toBeUndefined();
+    expect(calls).toEqual(happyPath(version));
   });
 
   it("passes when nothing has been released yet", async () => {
@@ -345,6 +339,14 @@ describe("tagRelease", () => {
   const tagged = (calls) =>
     calls.filter(([file, command]) => file === "git" && ["tag", "push"].includes(command));
   const runList = tagPath()[8].join(" ");
+
+  it("tags an unused version even when a higher version has shipped", async () => {
+    const { calls, error } = await tag({
+      "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v2.0.0\n`,
+    });
+    expect(error).toBeUndefined();
+    expect(calls).toEqual(tagPath());
+  });
 
   it("issues the happy path's commands in order", async () => {
     const { calls, error } = await tag();
