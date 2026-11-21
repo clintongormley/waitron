@@ -145,8 +145,10 @@ import {
   readBillAdvances,
   refuseWhileAdvanceCorrectionOpen,
   type AdvancePaymentMoney,
+  type AdvanceTicket,
   type BillAdvances,
 } from "./bill-advances.js";
+import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
@@ -243,6 +245,9 @@ export interface BillPaymentView extends OutsideCardDetails {
    * invoice on that ticket has not given back. */
   hasTicket?: true;
   saleId?: string;
+  ticket?: AdvanceTicket;
+  /** The bill's invoice that took the advance off, once issued; never a corrective of it. */
+  takenOffBy?: TakenOffBy;
   left?: Decimal;
   tipLeft?: Decimal;
   id: string;
@@ -695,7 +700,12 @@ function toView(
   refunds: readonly RefundRow[],
   lineNos: ReadonlyMap<string, number>,
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
-  advance: (PaymentMoney & { saleId: string }) | undefined,
+  advance:
+    | (PaymentMoney &
+        Pick<AdvancePaymentMoney, "saleId" | "ticket"> & {
+          takenOffBy: TakenOffBy | undefined;
+        })
+    | undefined,
 ): BillPaymentView {
   const manual = manualCards.get(payment.id);
   return {
@@ -706,6 +716,8 @@ function toView(
       : {
           hasTicket: true as const,
           saleId: advance.saleId,
+          ticket: advance.ticket,
+          ...(advance.takenOffBy === undefined ? {} : { takenOffBy: advance.takenOffBy }),
           left: money(advance.netApplied),
           tipLeft: money(advance.netTip),
         }),
@@ -899,9 +911,20 @@ export async function readBillBalance(
     held,
   );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
+  const takenOff = await advancesTakenOff(
+    tx,
+    [...advances.payments.values()].map((advance) => advance.saleId),
+  );
   const advanceOf = (payment: PaymentMoney) => {
     const advance = advances.payments.get(payment.row.id);
-    return advance === undefined ? undefined : { ...payment, saleId: advance.saleId };
+    return advance === undefined
+      ? undefined
+      : {
+          ...payment,
+          saleId: advance.saleId,
+          ticket: advance.ticket,
+          takenOffBy: takenOff.get(advance.saleId),
+        };
   };
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
   return {

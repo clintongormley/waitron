@@ -11,6 +11,7 @@ import {
 } from "@waitron/db";
 import { readJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
+import { advancesTakenOff } from "./advance-taken-off.js";
 import { assertDeviceCapability } from "./device-session.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
@@ -211,7 +212,12 @@ export function mountTransactionReceiptApi(
           scope.workingOrderIds.map((orderId) => ({ orderId })),
         );
         const ticket = await readTransactionReceipt(deps.backend, tx, deps.cfg, id);
-        return tillReceiptPreview(tx, id, ticket, deps.cfg.practiceMode === true);
+        // Shown beside the ticket, never printed on it.
+        const takenOffBy = (await advancesTakenOff(tx, [id])).get(id);
+        return {
+          ...(await tillReceiptPreview(tx, id, ticket, deps.cfg.practiceMode === true)),
+          ...(takenOffBy === undefined ? {} : { takenOffBy }),
+        };
       });
       return c.json(result);
     }),

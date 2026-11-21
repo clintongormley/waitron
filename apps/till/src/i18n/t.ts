@@ -1,4 +1,6 @@
 import { FALLBACK_LOCALE, formatMoney } from "@waitron/shared";
+import { formatDecimalInput } from "@waitron/ui";
+import type { VatBreakdownEntry } from "../api/client.js";
 import { catalogues, en, type StringKey } from "./strings.js";
 
 // Module-level on purpose: the till shows one locale at a time. till-app switches it at boot, so this
@@ -134,4 +136,13 @@ export function pickLocale(entry: { en: string; es: string }, l: string = locale
   return Object.hasOwn(entry, lang)
     ? ((entry as Record<string, string>)[lang] ?? entry.en)
     : entry.en;
+}
+
+/** One VAT rate's base and tax, worded as Correct invoice and the Pay window both show them. */
+export function vatSplitText(split: VatBreakdownEntry): string {
+  const locale = currentLocale();
+  return t("invoice_correction.split")
+    .replace("{rate}", () => formatDecimalInput(String(Number(split.rate)), locale))
+    .replace("{base}", () => formatMoney(split.base, locale))
+    .replace("{tax}", () => formatMoney(split.tax, locale));
 }

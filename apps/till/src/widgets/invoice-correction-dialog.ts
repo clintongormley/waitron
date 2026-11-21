@@ -5,7 +5,6 @@ import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shar
 import {
   baseStyles,
   draftScopeFor,
-  formatDecimalInput,
   focusFirstInvalid,
   submitOnEnter,
   type DraftScope,
@@ -20,7 +19,7 @@ import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import "./supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, t, vatSplitText } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type { RefundableTender } from "../api/tender-refund-types.js";
@@ -693,15 +692,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       </wt-form-actions>`;
   }
   #split(lines: readonly CorrectionSplitLine[]) {
-    return lines.map(
-      (line) =>
-        html`<p data-split>
-          ${t("invoice_correction.split")
-            .replace("{rate}", () => formatDecimalInput(String(Number(line.rate)), currentLocale()))
-            .replace("{base}", () => this.#money(line.base))
-            .replace("{tax}", () => this.#money(line.tax))}
-        </p>`,
-    );
+    return lines.map((line) => html`<p data-split>${vatSplitText(line)}</p>`);
   }
   #cancelButton() {
     return html`<wt-button

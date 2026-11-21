@@ -54,10 +54,11 @@ import {
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
+  AdvanceTicket,
   AllocationChoice,
   AllocationPreview,
   BillBalance,
@@ -1403,6 +1404,25 @@ export class TillBillPayDialog extends LitElement {
       : message;
   }
 
+  /** A part payment's own ticket as printed: number, issue day, total and each VAT rate's split. */
+  #advanceTicket(ticket: AdvanceTicket): string {
+    const [year, month, day] = ticket.issuedOn.split("-").map(Number);
+    const date = new Intl.DateTimeFormat(currentLocale(), {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(Date.UTC(year!, month! - 1, day!));
+    return [
+      fill(t("bill_pay.payment_ticket"), {
+        number: ticket.invoiceNumber,
+        date,
+        total: this.#money(ticket.total),
+      }),
+      ...ticket.vatBreakdown.map(vatSplitText),
+    ].join(" · ");
+  }
+
   /** The bill's payments, oldest first, each with a Refund while it has money to give back. */
   #payments(): TemplateResult | typeof nothing {
     const balance = this.balance;
@@ -1436,6 +1456,14 @@ export class TillBillPayDialog extends LitElement {
             .replace("{method}", () => method)}
           · ${t(PAYMENT_STATES[payment.state])}
         </span>
+        ${payment.ticket === undefined ? nothing : html`<p data-payment-ticket>${this.#advanceTicket(payment.ticket)}</p>`}
+        ${
+          payment.takenOffBy === undefined
+            ? nothing
+            : html`<p data-payment-taken-off>
+                ${t("bill_pay.taken_off_on").replace("{number}", () => payment.takenOffBy!.invoiceNumber)}
+              </p>`
+        }
         <p>
           ${t("bill_pay.applied")} ${this.#money(payment.left ?? payment.applied)} ·
           ${t("bill_pay.tip")} ${this.#money(payment.tipLeft ?? payment.tip)}

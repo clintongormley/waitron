@@ -222,10 +222,19 @@ export async function issueAdvance(
  */
 export const paidNoAdvance = sql`not exists (select 1 from ${billAdvances} where ${billAdvances.billPaymentId} = ${billPayments}.id)`;
 
+/** An advance's own ticket, as printed: its number, local issue day, total and VAT breakdown. */
+export interface AdvanceTicket {
+  invoiceNumber: string;
+  issuedOn: string;
+  total: Decimal;
+  vatBreakdown: (typeof sales.$inferSelect)["vatBreakdown"];
+}
+
 /** What the bill payment that paid an advance holds on its bill. */
 export interface AdvancePaymentMoney {
   /** The advance's own sale. */
   saleId: string;
+  ticket: AdvanceTicket;
   /** What is left of its advance: the advance's total plus its correctives. */
   left: Decimal;
   /** How many correctives its advance has. */
@@ -257,6 +266,7 @@ export async function readBillAdvances(
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
       issuedAt: sales.issuedAt,
+      issuedOffsetMinutes: sales.issuedOffsetMinutes,
       total: sales.total,
       vatBreakdown: sales.vatBreakdown,
     })
@@ -318,10 +328,11 @@ export async function readBillAdvances(
       (sum, row) => addDecimal(sum, rawCentsToDecimal(row.total)),
       centsToDecimal(advance.total),
     );
+    const invoiceNumber = formatInvoiceNumber(advance.code, advance.number);
     const list = credits.get(advance.workingOrderId) ?? [];
     list.push({
       saleId: advance.saleId,
-      invoiceNumber: formatInvoiceNumber(advance.code, advance.number),
+      invoiceNumber,
       issuedAt: advance.issuedAt,
       groups: [...groups.values()],
       gross,
@@ -329,6 +340,12 @@ export async function readBillAdvances(
     credits.set(advance.workingOrderId, list);
     payments.set(advance.billPaymentId, {
       saleId: advance.saleId,
+      ticket: {
+        invoiceNumber,
+        issuedOn: localCalendarDate(new Date(advance.issuedAt), advance.issuedOffsetMinutes),
+        total: centsToDecimal(advance.total),
+        vatBreakdown: advance.vatBreakdown,
+      },
       left: gross,
       correctives: own.length,
       tipGivenBack:

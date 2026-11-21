@@ -1,4 +1,5 @@
 import { strFromU8, unzipSync } from "fflate";
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -25,7 +26,12 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
+import {
+  linkPaymentsOnAccount,
+  listAccountantExport,
+  partPaymentsAmong,
+  renderAccountantWorkbook,
+} from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { row } from "./testing/xlsx-rows.js";
@@ -285,6 +291,90 @@ describe("accountant workbook", () => {
   });
 
   it.each([
+    [
+      "en",
+      "Payment on account",
+      ["Cash; taken off by A/45", "Card; taken off by A/45", "Card", "Takes off A/12, A/13"],
+    ],
+    [
+      "es",
+      ACCOUNTANT_EXPORT_WORDS.es.paymentOnAccountColumn,
+      [
+        "Efectivo; descontado en A/45",
+        "Tarjeta; descontado en A/45",
+        "Tarjeta",
+        "Descuenta A/12, A/13",
+      ],
+    ],
+  ] as const)(
+    "links each part payment and the table's ticket that took it off, in %s",
+    async (language, heading, cells) => {
+      const plain = { ...invoice, invoiceType: "F2" as const, voidedAt: null, vatBreakdown: [] };
+      const files = unzipSync(
+        await renderAccountantWorkbook(
+          {
+            invoices: [
+              {
+                ...plain,
+                id: "advance-12",
+                advance: { paidBy: "cash", takenOffBy: "A/45" },
+              },
+              {
+                ...plain,
+                id: "advance-13",
+                saleDate: "2026-10-31",
+                advance: { paidBy: "card", takenOffBy: "A/45" },
+              },
+              {
+                ...plain,
+                id: "advance-14",
+                advance: { paidBy: "card", takenOffBy: null },
+              },
+              { ...plain, id: "table-45", takesOff: ["A/12", "A/13"] },
+              { ...plain, id: "credit-46", invoiceType: "corrective", correctsSaleId: "table-45" },
+            ],
+            purchases: [],
+            outsidePayments: [],
+          },
+          language,
+        ),
+      );
+      const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+      const header = row(xml, 1);
+      const column = header.indexOf(heading);
+      expect(column).toBe(header.indexOf(ACCOUNTANT_EXPORT_WORDS[language].saleDateColumn) + 1);
+      expect([2, 3, 4, 5, 6].map((number) => row(xml, number)[column] ?? "")).toEqual([
+        ...cells,
+        "",
+      ]);
+      expect(row(xml, 3)[column - 1]).toBe("2026-10-31");
+      expect(row(xml, 6)).toHaveLength(19);
+    },
+  );
+
+  it("lists a table's ticket's part payments in the order they were issued, whatever order they were read in", () => {
+    const table = { saleId: "table-45", invoiceNumber: "A/45" };
+    const part = (saleId: string, number: number, issuedAt: string) => ({
+      saleId,
+      code: "A",
+      number,
+      issuedAt,
+      method: "cash" as const,
+    });
+    // As two reads might return them: the later part payment's read first, and one part payment
+    // found by both reads.
+    const rows = [
+      part("advance-3", 3, "2026-11-20T10:00:00.000Z"),
+      part("advance-2", 2, "2026-11-20T09:00:00.000Z"),
+      part("advance-1", 1, "2026-11-20T09:00:00.000Z"),
+      part("advance-2", 2, "2026-11-20T09:00:00.000Z"),
+    ];
+    const linked = linkPaymentsOnAccount(rows, new Map(rows.map((row) => [row.saleId, table])));
+    expect(linked.takesOff.get("table-45")).toEqual(["A/1", "A/2", "A/3"]);
+    expect(linked.advances.get("advance-2")).toEqual({ paidBy: "cash", takenOffBy: "A/45" });
+  });
+
+  it.each([
     ["en", "Replacement corrective — do not add (repeats the original)"],
     ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
   ] as const)(
@@ -410,6 +500,23 @@ describe("accountant period selection", () => {
   });
   const list = (from = "2026-11-01", to = "2026-11-30") =>
     withTransaction(suite.db, (tx) => listAccountantExport(tx, { from, to }));
+
+  it("finds the period's part payments by key, and deducting lines through the deduction index rather than every line of the period's sales", async () => {
+    const plan = await withTransaction(suite.db, async (tx) =>
+      (
+        await tx.execute<{ detail: string }>(
+          sql`explain query plan ${partPaymentsAmong(tx, ["sale-1", "sale-2"]).getSQL()}`,
+        )
+      ).rows.map((step) => step.detail),
+    );
+    expect(plan).toContain(
+      "SEARCH sale_lines USING INDEX sale_lines_deducts_sale_idx (deducts_sale_id>?)",
+    );
+    expect(plan).toContain(
+      "SEARCH bill_advances USING INDEX bill_advances_advance_sale_key (advance_sale_id=?)",
+    );
+    expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  });
 
   it("reads unpaid invoices across nodes by their inclusive recorded civil dates and keeps customer and VAT facts", async () => {
     const other = await seedNodeAndSeries(suite.db, "B");

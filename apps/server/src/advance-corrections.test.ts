@@ -18,7 +18,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
-import { recordCorrection } from "@waitron/core";
+import { recordCorrection, recordSubstitution } from "@waitron/core";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   computeCategorySales,
   computeTopSellers,
@@ -27,16 +28,19 @@ import {
   resolveVenueClock,
 } from "@waitron/reporting";
 import {
+  basisPointsToDecimal,
   centsToDecimal,
   decimal,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   sumDecimals,
+  thousandthsToDecimal,
 } from "@waitron/shared";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
+import { listAccountantExport } from "./accountant-export.js";
 import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
@@ -226,6 +230,31 @@ function moved(before: Figures, after: Figures) {
     categories: by(after.categories, before.categories),
     paymentsOnAccount: by(after.paymentsOnAccount, before.paymentsOnAccount),
     topSellers,
+  };
+}
+
+/** When `saleId` was issued. */
+async function issuedAt(saleId: string): Promise<Date> {
+  const [row] = await inTx(venue(), (tx) =>
+    tx.select({ at: sales.issuedAt }).from(sales).where(eq(sales.id, saleId)),
+  );
+  return new Date(row!.at);
+}
+
+/** A clock that reads an hour before `instant`. */
+function anHourBefore(instant: Date): TrustedClock {
+  return {
+    now: () => ({
+      instant: new Date(instant.getTime() - 3_600_000),
+      offsetMinutes: 60,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("anchor() is not used here");
+    },
+    currentAnchor: () => null,
   };
 }
 
@@ -744,6 +773,136 @@ describe("what is left of an advance, on the bill's payments", () => {
   });
 });
 
+/** The bill's payments as the Pay window reads them. */
+async function billPaymentsOf(billId: string): Promise<Record<string, unknown>[]> {
+  const read = await send(
+    venue().app,
+    venue().cookie,
+    "GET",
+    `/api/working-orders/${billId}/payments`,
+  );
+  expect(read.status, JSON.stringify(read.json)).toBe(200);
+  return (read.json as { payments: Record<string, unknown>[] }).payments;
+}
+
+/** The ticket view's read of `saleId`. */
+async function ticketOf(saleId: string): Promise<Record<string, unknown>> {
+  const read = await send(
+    venue().app,
+    venue().cookie,
+    "GET",
+    `/api/transactions/${saleId}/receipt`,
+  );
+  expect(read.status, JSON.stringify(read.json)).toBe(200);
+  return read.json;
+}
+
+describe("the link between an advance and the rest's invoice that took it off", () => {
+  it("the bill's payment names the advance's ticket, its day and VAT, and the rest's invoice once it is issued", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const facts = await advanceFacts(advanceId);
+    const ticket = {
+      saleId: advanceId,
+      ticket: {
+        invoiceNumber: facts.invoiceNumber,
+        issuedOn: facts.issuedOn,
+        total: "30.00",
+        vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+      },
+    };
+    const before = (await billPaymentsOf(billId))[0]!;
+    expect(before).toMatchObject(ticket);
+    expect(before).not.toHaveProperty("takenOffBy");
+
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+
+    const [paidAdvance, rest] = await billPaymentsOf(billId);
+    expect(paidAdvance).toMatchObject({
+      ...ticket,
+      takenOffBy: {
+        saleId: finalSaleId,
+        invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+      },
+    });
+    for (const key of ["ticket", "takenOffBy"]) expect(rest).not.toHaveProperty(key);
+  });
+
+  it("after a part correction, the bill's payment keeps the advance's ticket as printed, and what is left of it apart", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await correct(advanceId, "10.00", [{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+
+    expect((await billPaymentsOf(billId))[0]).toMatchObject({
+      ticket: { total: "30.00", vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }] },
+      left: "20.00",
+    });
+  });
+
+  it("the advance's ticket names the rest's invoice that took it off; the rest's invoice and a ticket with no advance name none", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    expect(await ticketOf(advanceId)).not.toHaveProperty("takenOffBy");
+
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+
+    expect((await ticketOf(advanceId)).takenOffBy).toEqual({
+      saleId: finalSaleId,
+      invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+    });
+    expect(await ticketOf(finalSaleId)).not.toHaveProperty("takenOffBy");
+    const plainBill = await seated("Tasting menu");
+    await payRest(plainBill, "120.00");
+    expect(await ticketOf(await restId(plainBill))).not.toHaveProperty("takenOffBy");
+  });
+
+  it("a corrective of the rest's invoice names nothing, and the advance's ticket still names the rest's invoice", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+    const corrective = await correct(finalSaleId, "20.00", [
+      { rate: "10.00", base: "18.18", tax: "1.82" },
+    ]);
+
+    expect(await ticketOf(corrective)).not.toHaveProperty("takenOffBy");
+    expect((await ticketOf(advanceId)).takenOffBy).toEqual({
+      saleId: finalSaleId,
+      invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+    });
+  });
+
+  it("the accountant export links each advance and the rest's invoice, and a corrective of the rest's invoice to nothing", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00", "20.00"], "70.00");
+    const corrective = await correct(rest.saleId, "20.00", [
+      { rate: "10.00", base: "18.19", tax: "1.81" },
+    ]);
+    const number = async (saleId: string) => (await advanceFacts(saleId)).invoiceNumber;
+    const [first, second] = [await number(rest.advanceIds[0]!), await number(rest.advanceIds[1]!)];
+    const final = await number(rest.saleId);
+    const notYetTakenOff = await advance(await seated("Tasting menu"), "30.00");
+
+    const exported = await inTx(venue(), (tx) =>
+      listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+    );
+    const byId = new Map(exported.invoices.map((invoice) => [invoice.id, invoice]));
+    for (const advanceId of rest.advanceIds)
+      expect(byId.get(advanceId)).toMatchObject({
+        advance: { paidBy: "cash", takenOffBy: final },
+      });
+    expect(byId.get(notYetTakenOff)).toMatchObject({
+      advance: { paidBy: "cash", takenOffBy: null },
+    });
+    expect(byId.get(rest.saleId)).toMatchObject({ takesOff: [first, second] });
+    expect(byId.get(rest.saleId)).not.toHaveProperty("advance");
+    expect(byId.get(corrective)).toBeDefined();
+    expect(byId.get(corrective)).not.toHaveProperty("advance");
+    expect(byId.get(corrective)).not.toHaveProperty("takesOff");
+  });
+});
+
 describe("a settled bill's received, once Correct invoice gave money back", () => {
   async function balanceOf(billId: string) {
     const read = await send(
@@ -950,7 +1109,7 @@ describe("a settled bill's received, once Correct invoice gave money back", () =
 describe("a whole credit of the rest's invoice (ruling L9)", () => {
   /** Credits the settled rest's invoice whole: its lines reversed as cancelling an order reverses
    * them, and its split the invoice's own negated. The credit's id. */
-  async function creditWhole(saleId: string): Promise<string> {
+  async function creditWhole(saleId: string, clock?: TrustedClock): Promise<string> {
     const { saleId: credit } = await inTx(venue(), async (tx) => {
       const [sale] = await tx
         .select({ total: sales.total })
@@ -958,6 +1117,7 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
         .where(eq(sales.id, saleId));
       return recordCorrection(tx, venue().backend, {
         ...(await correctionOf(tx, saleId)),
+        ...(clock === undefined ? {} : { clock }),
         total: centsToDecimal(-sale!.total),
         lines: reversedLines(await linesIn(tx, saleId)),
         wholeInvoice: true,
@@ -1019,6 +1179,30 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
         saleId: rest.advanceIds[0],
         finalSaleId: rest.saleId,
         invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
+      },
+    });
+  });
+
+  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment, the advance's ticket and its refusal, though the credit is dated before it", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const original = await issuedAt(rest.saleId);
+    const credit = await creditWhole(rest.saleId, anHourBefore(original));
+    expect((await issuedAt(credit)).getTime()).toBeLessThan(original.getTime());
+    const takenOffBy = {
+      saleId: rest.saleId,
+      invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
+    };
+
+    expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
+    expect((await ticketOf(rest.advanceIds[0]!)).takenOffBy).toEqual(takenOffBy);
+    expect(await ticketOf(credit)).not.toHaveProperty("takenOffBy");
+    const refused = await preview(rest.advanceIds[0]!, "30.00");
+    expect(refused.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: rest.advanceIds[0],
+        finalSaleId: rest.saleId,
+        invoiceNumber: takenOffBy.invoiceNumber,
       },
     });
   });
@@ -1160,5 +1344,82 @@ describe("the rest's invoice Discard issues after a card paid the bill off", () 
     expect(venue().device2Id).not.toBe(venue().deviceId);
     expect(venue().adminId).not.toBe(venue().operatorId);
     expect(rest).toEqual({ deviceId: venue().deviceId, operatorId: venue().operatorId });
+  });
+});
+
+describe("a full invoice issued in substitution of the rest's invoice", () => {
+  /** Issues a full invoice in substitution of `saleId`, an hour before it, restating its lines,
+   * the deduction line included. The full invoice's id. */
+  async function substituteEarlier(saleId: string): Promise<string> {
+    const clock = anHourBefore(await issuedAt(saleId));
+    const { saleId: substitution } = await inTx(venue(), async (tx) => {
+      const [sale] = await tx
+        .select({ total: sales.total })
+        .from(sales)
+        .where(eq(sales.id, saleId));
+      return recordSubstitution(tx, venue().backend, {
+        operationDescription: "Sale on premises",
+        origin: venue().cfg.origin,
+        nodeId: venue().cfg.nodeId,
+        seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue().cfg.nodeId, "full")),
+        substitutedSaleIds: [brandSaleId(saleId)],
+        counterparty: { taxId: "B12345674", legalName: "Customer SL", countryCode: "ES" },
+        total: centsToDecimal(sale!.total),
+        lines: (await linesIn(tx, saleId)).map((row) => ({
+          lineNo: row.lineNo,
+          name: row.name,
+          descriptions: row.descriptions,
+          quantity: thousandthsToDecimal(row.quantity),
+          unitPrice: centsToDecimal(row.unitPrice),
+          vatRate: basisPointsToDecimal(row.vatRate),
+          lineTotal: centsToDecimal(row.lineTotal),
+          lineGross: row.lineGross === null ? null : centsToDecimal(row.lineGross),
+          advanceRole: row.advanceRole,
+          deductsSaleId: row.deductsSaleId,
+        })),
+        locale: venue().cfg.locale,
+        invoiceLocales: [venue().cfg.locale],
+        clock,
+      });
+    });
+    return substitution;
+  }
+
+  it("still names the rest's invoice as taking the advance off, on the bill's payment, the advance's ticket, its refusal and the accountant export, though the full invoice is dated before it and repeats the deduction", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const substitution = await substituteEarlier(rest.saleId);
+    expect((await issuedAt(substitution)).getTime()).toBeLessThan(
+      (await issuedAt(rest.saleId)).getTime(),
+    );
+    expect(
+      (await linesOf(substitution)).filter((line) => line.deductsSaleId === rest.advanceIds[0]),
+    ).toHaveLength(1);
+    const takenOffBy = {
+      saleId: rest.saleId,
+      invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
+    };
+
+    expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
+    expect((await ticketOf(rest.advanceIds[0]!)).takenOffBy).toEqual(takenOffBy);
+    const refused = await preview(rest.advanceIds[0]!, "30.00");
+    expect(refused.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: rest.advanceIds[0],
+        finalSaleId: rest.saleId,
+        invoiceNumber: takenOffBy.invoiceNumber,
+      },
+    });
+    const exported = await inTx(venue(), (tx) =>
+      listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+    );
+    const byId = new Map(exported.invoices.map((invoice) => [invoice.id, invoice]));
+    expect(byId.get(rest.advanceIds[0]!)).toMatchObject({
+      advance: { paidBy: "cash", takenOffBy: takenOffBy.invoiceNumber },
+    });
+    expect(byId.get(rest.saleId)).toMatchObject({
+      takesOff: [(await advanceFacts(rest.advanceIds[0]!)).invoiceNumber],
+    });
+    expect(byId.has(substitution)).toBe(false);
   });
 });

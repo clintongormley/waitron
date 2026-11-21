@@ -3657,6 +3657,73 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     );
   });
 
+  // A €30.00 part payment of which Correct invoice gave €10.00 back.
+  const takenOffRow = balanceOf({
+    received: "20.00",
+    outstanding: "100.00",
+    payments: [
+      {
+        ...pendingCard,
+        state: "received",
+        receivedAt: pendingCard.createdAt,
+        applied: "30.00",
+        tip: "0.00",
+        hasTicket: true,
+        saleId: "advance-sale",
+        ticket: {
+          invoiceNumber: "A/12",
+          issuedOn: "2026-11-19",
+          total: "30.00",
+          vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+        },
+        takenOffBy: { saleId: "table-sale", invoiceNumber: "A/45" },
+        left: "20.00",
+        tipLeft: "0.00",
+      },
+    ],
+  });
+
+  it("names its ticket with its date, year included, its own total and VAT, beside what is left of it on the bill, and the table's ticket that took it off", async () => {
+    const el = await mount({ balance: takenOffRow });
+
+    const date = new Intl.DateTimeFormat(currentLocale(), {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(Date.UTC(2026, 10, 19));
+    const row = root(el).querySelector("[data-payment]")!;
+    expect(text(row.querySelector("[data-payment-ticket]"))).toBe(
+      `Receipt A/12, ${date}: ${money("30.00")} · VAT 10%: base ${money("27.27")}, VAT ${money("2.73")}`,
+    );
+    expect(text(row)).toContain(`${t("bill_pay.applied")} ${money("20.00")}`);
+    expect(text(row.querySelector("[data-payment-taken-off]"))).toBe(
+      t("bill_pay.taken_off_on").replace("{number}", "A/45"),
+    );
+  });
+
+  it("words the row in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount({ balance: takenOffRow });
+      expect(text(root(el).querySelector("[data-payment-ticket]"))).toBe(
+        `Ticket A/12, 19/11/2026: ${money("30.00")} · IVA 10 %: base ${money("27.27")}, IVA ${money("2.73")}`.replace(
+          /\s+/g,
+          " ",
+        ),
+      );
+      expect(text(root(el).querySelector("[data-payment-taken-off]"))).toBe("Descontado en A/45");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("names no ticket on a payment that has none", async () => {
+    const el = await mount({ balance: advanceRow("30.00") });
+    expect(root(el).querySelector("[data-payment-ticket]")).toBeNull();
+    expect(root(el).querySelector("[data-payment-taken-off]")).toBeNull();
+  });
+
   it("shows, and offers to refund, what a part correction left", async () => {
     const el = await mount({ balance: advanceRow("20.00") });
 

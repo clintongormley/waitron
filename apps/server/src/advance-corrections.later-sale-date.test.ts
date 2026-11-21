@@ -3,9 +3,11 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billAdvances } from "@waitron/db";
+import { billAdvances, invoiceSeries, sales } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { listAccountantExport } from "./accountant-export.js";
 import { advanceBills, provisionAdvanceVenue, type AdvanceVenue } from "./testing/advance-bills.js";
 import { inTx, send, statusOf } from "./testing/bill-venue.js";
 import { capturedPending, clockAtIso, filedFor } from "./testing/later-sale-date-fixture.js";
@@ -141,5 +143,56 @@ describe("the rest's invoice of a bill whose card was recovered the next day", (
       record: { operationDate: "2026-03-14", issueDate: "2026-03-15" },
       rates: [1000, 1000],
     });
+  });
+});
+
+describe("the accountant export of a part payment paid the day before the table's receipt", () => {
+  it("names the earlier part payment on the table's receipt when only the later day is exported", async () => {
+    advanceVenue = await provisionAdvanceVenue(suite.db);
+    const billId = await seated("Tasting menu");
+    const pay = async (at: string, amount: string, ownReceipt: boolean) => {
+      const paid = await send(
+        venue().appAt(clockAtIso(at)),
+        venue().cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount,
+          method: "cash",
+          tendered: amount,
+          applied: amount,
+          tip: "0.00",
+          ...(ownReceipt ? { ownReceipt: true } : {}),
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      return paid.json as { invoice?: { invoiceNumber: string } };
+    };
+    await pay("2026-03-12T12:00:00.000Z", "30.00", true);
+    const [advance] = await inTx(venue(), (tx) =>
+      tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, billId)),
+    );
+    await pay("2026-03-13T12:00:00.000Z", "90.00", false);
+    const [rest] = await inTx(venue(), (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    const [advanceSale] = await inTx(venue(), (tx) =>
+      tx
+        .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
+        .from(sales)
+        .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+        .where(eq(sales.id, advance!.advanceSaleId)),
+    );
+
+    const exported = await inTx(venue(), (tx) =>
+      listAccountantExport(tx, { from: "2026-03-13", to: "2026-03-13" }),
+    );
+
+    expect(exported.invoices.map((invoice) => invoice.id)).toEqual([rest!.id]);
+    expect(exported.invoices[0]!.takesOff).toEqual([
+      formatInvoiceNumber(advanceSale!.code, advanceSale!.number),
+    ]);
   });
 });

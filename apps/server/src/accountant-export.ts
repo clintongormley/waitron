@@ -1,9 +1,32 @@
 import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
 import { stampDate, validatedRangeWindow } from "@waitron/reporting";
 import { readVenueClock } from "@waitron/db";
-import { and, asc, between, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  asc,
+  between,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
+import {
+  billAdvances,
+  billPayments,
+  invoiceSeries,
+  saleLines,
+  sales,
+  saleSubstitutions,
+  saleVoids,
+  type Transaction,
+} from "@waitron/db";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
+import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -37,12 +60,125 @@ export interface AccountantInvoice {
   correctsSaleId: string | null;
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
+  /** On a part payment's ticket: how it was paid, and the table's ticket that took it off. */
+  advance?: AdvanceCell;
+  /** On a table's ticket (never a corrective): the part payments it took off. */
+  takesOff?: string[];
+}
+
+type PaymentMethod = (typeof billPayments.$inferSelect)["method"];
+
+export interface AdvanceCell {
+  paidBy: PaymentMethod;
+  takenOffBy: string | null;
 }
 
 export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
   purchases: readonly PurchaseInvoice[];
   outsidePayments: readonly OutsidePayment[];
+}
+
+function paymentOnAccount(
+  invoice: AccountantInvoice,
+  words: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+): string | null {
+  if (invoice.takesOff !== undefined)
+    return words.takesOff.replace("{numbers}", () => invoice.takesOff!.join(", "));
+  if (invoice.advance === undefined) return null;
+  const paid = words.paymentMethods[invoice.advance.paidBy];
+  const takenOffBy = invoice.advance.takenOffBy;
+  return takenOffBy === null
+    ? paid
+    : `${paid}; ${words.takenOffBy.replace("{number}", () => takenOffBy)}`;
+}
+
+/** A part payment's own ticket, as {@link partPaymentsAmong} reads it. */
+export interface PartPaymentRow {
+  saleId: string;
+  code: string;
+  number: number;
+  issuedAt: string;
+  method: PaymentMethod;
+}
+
+/**
+ * The part payments among the sales `saleIds`, or taken off by one of them. A deducting line is
+ * found through `sale_lines_deducts_sale_idx`, so the read goes over every deduction line rather
+ * than every line of every sale named; the box collects no planner statistics to choose it.
+ */
+export function partPaymentsAmong(tx: Transaction, saleIds: readonly string[]) {
+  return tx
+    .select({
+      saleId: billAdvances.advanceSaleId,
+      code: invoiceSeries.code,
+      number: sales.invoiceNumber,
+      issuedAt: sales.issuedAt,
+      method: billPayments.method,
+    })
+    .from(billAdvances)
+    .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .innerJoin(billPayments, eq(billPayments.id, billAdvances.billPaymentId))
+    .where(
+      or(
+        inArray(billAdvances.advanceSaleId, [...saleIds]),
+        inArray(
+          billAdvances.advanceSaleId,
+          tx
+            .select({ id: sql<string>`${saleLines.deductsSaleId}` })
+            // Unnamed, the planner took `sale_lines_line_no_key` (node:26-slim, SQLite 3.54.1),
+            // reading every line of every sale named.
+            .from(sql`${saleLines} indexed by sale_lines_deducts_sale_idx`)
+            .where(
+              and(isNotNull(saleLines.deductsSaleId), inArray(saleLines.saleId, [...saleIds])),
+            ),
+        ),
+      ),
+    );
+}
+
+/**
+ * How each part payment in `rows` was paid and the table's ticket that took it off (`takenOff`,
+ * from {@link advancesTakenOff}), and each such ticket's part payments in the order they were
+ * issued, whatever the order of `rows`.
+ */
+export function linkPaymentsOnAccount(
+  rows: readonly PartPaymentRow[],
+  takenOff: ReadonlyMap<string, TakenOffBy>,
+): { advances: Map<string, AdvanceCell>; takesOff: Map<string, string[]> } {
+  const advances = new Map<string, AdvanceCell>();
+  const takesOff = new Map<string, string[]>();
+  const issued = [...rows].sort((a, b) =>
+    a.issuedAt < b.issuedAt ? -1 : a.issuedAt > b.issuedAt ? 1 : a.number - b.number,
+  );
+  for (const row of issued) {
+    if (advances.has(row.saleId)) continue;
+    const final = takenOff.get(row.saleId);
+    advances.set(row.saleId, { paidBy: row.method, takenOffBy: final?.invoiceNumber ?? null });
+    if (final !== undefined)
+      takesOff.set(final.saleId, [
+        ...(takesOff.get(final.saleId) ?? []),
+        formatInvoiceNumber(row.code, row.number),
+      ]);
+  }
+  return { advances, takesOff };
+}
+
+/** {@link linkPaymentsOnAccount} of the part payments among, or taken off by, the sales `saleIds`,
+ * read once per half {@link SQL_VARIABLE_LIMIT} sales (each id is bound twice). */
+async function readPaymentsOnAccount(
+  tx: Transaction,
+  saleIds: readonly string[],
+): Promise<ReturnType<typeof linkPaymentsOnAccount>> {
+  const rows: PartPaymentRow[] = [];
+  const half = Math.floor(SQL_VARIABLE_LIMIT / 2);
+  for (let start = 0; start < saleIds.length; start += half)
+    rows.push(...(await partPaymentsAmong(tx, saleIds.slice(start, start + half))));
+  return linkPaymentsOnAccount(
+    rows,
+    await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]),
+  );
 }
 
 export async function renderAccountantWorkbook(
@@ -54,6 +190,9 @@ export async function renderAccountantWorkbook(
   for (const [position, invoice] of data.invoices.entries()) {
     if (position % 250 === 0) await nextTurn();
     const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
+    const trailing: Cell[] = [invoice.saleDate ?? null, paymentOnAccount(invoice, words)];
+    // Empty trailing cells are left off rather than written blank: a missing one reads as empty.
+    while (trailing.at(-1) === null) trailing.pop();
     for (const [index, vat] of groups.entries()) {
       invoiceRows.push([
         invoice.id,
@@ -81,8 +220,7 @@ export async function renderAccountantWorkbook(
         invoice.originalInvoiceNumber,
         invoice.voidedAt,
         null,
-        // Left off rather than blank: a missing trailing cell reads as an empty one.
-        ...(invoice.saleDate === undefined ? [] : [invoice.saleDate]),
+        ...trailing,
       ]);
     }
   }
@@ -131,7 +269,10 @@ export async function renderAccountantWorkbook(
   return renderWorkbook([
     {
       name: words.invoiceSheet,
-      rows: [[...words.invoiceColumns, words.saleDateColumn], ...invoiceRows],
+      rows: [
+        [...words.invoiceColumns, words.saleDateColumn, words.paymentOnAccountColumn],
+        ...invoiceRows,
+      ],
     },
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
@@ -228,6 +369,16 @@ export async function listAccountantExport(
       total: centsToDecimal(row.total),
     }),
   );
+  const onAccount = await readPaymentsOnAccount(
+    tx,
+    invoices.map((invoice) => invoice.id),
+  );
+  for (const invoice of invoices) {
+    const advance = onAccount.advances.get(invoice.id);
+    if (advance !== undefined) invoice.advance = advance;
+    const takesOff = onAccount.takesOff.get(invoice.id);
+    if (takesOff !== undefined) invoice.takesOff = takesOff;
+  }
   const nextDay = new Date(`${range.to}T00:00:00.000Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const purchases = await listPurchaseInvoices(tx, {
