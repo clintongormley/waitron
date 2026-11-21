@@ -19,7 +19,9 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
-import { recordCorrection } from "@waitron/core";
+import { recordCorrection, recordReplacement } from "@waitron/core";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu";
+import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   centsToDecimal,
   decimal,
@@ -204,6 +206,16 @@ async function removeDish(billId: string, name: string) {
     `/api/parties/${ask.partyId}/lines/${ask.lineId}/cancel-item`,
     ask.body,
   );
+}
+
+/** The filed records of `saleId`, with the fields naming a corrected invoice. */
+async function registrosOf(saleId: string) {
+  const rows = await inTx(venue(), (tx) =>
+    tx.select().from(registrosFacturacion).where(eq(registrosFacturacion.saleId, saleId)),
+  );
+  return rows as ((typeof rows)[number] & {
+    facturasRectificadas: { IDFacturaRectificada: Record<string, string>[] } | null;
+  })[];
 }
 
 function linesIn(tx: Transaction, saleId: string) {
@@ -614,6 +626,14 @@ describe("an advance once the rest's invoice has taken it off", () => {
       tx.select().from(sales).where(eq(sales.id, corrective)),
     );
     expect(filed!.correctsSaleId).toBe(advanceId);
+    const [advanceRecord] = await registrosOf(advanceId);
+    const [r5] = await registrosOf(corrective);
+    expect(r5!.facturasRectificadas?.IDFacturaRectificada).toEqual([
+      expect.objectContaining({
+        IDEmisorFactura: advanceRecord!.idEmisorFactura,
+        NumSerieFactura: advanceRecord!.numSerieFactura,
+      }),
+    ]);
     const opens = await inTx(venue(), (tx) =>
       tx
         .select({ reason: drawerOpens.reason })
@@ -912,6 +932,23 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
   it("lets Correct invoice on the advance go ahead: the credited rest's invoice has nothing left", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
     await creditWhole(rest.saleId);
+
+    const previewed = await preview(rest.advanceIds[0]!, "30.00");
+
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    expect(previewed.json).toMatchObject({
+      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+    });
+  });
+
+  it("lets Correct invoice on the advance go ahead once the rest's invoice was replaced and the replacement credited whole", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const replacement = await inTx(venue(), async (tx) => {
+      await refusedByAeat(tx, rest.saleId);
+      return (await recordReplacement(tx, venue().backend, await correctionOf(tx, rest.saleId)))
+        .saleId;
+    });
+    await creditWhole(replacement);
 
     const previewed = await preview(rest.advanceIds[0]!, "30.00");
 
