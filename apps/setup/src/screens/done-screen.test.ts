@@ -34,8 +34,8 @@ const RESTART_EN = "The server is restarting to finish setup. Once it is back, o
 const READY_EN = "The server is ready. Open it here:";
 const JOINING_BODY_EN =
   "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.";
-const JOINING_STATUS_EN = "Joining. This page updates by itself.";
-const JOINING_STATUS_ES = "Uniéndose. Esta página se actualiza sola.";
+const JOINING_STATUS_EN = "Joining. This can take a few minutes.";
+const JOINING_STATUS_ES = "Uniéndose. Puede tardar unos minutos.";
 
 /** Waits past the first poll a trading server would make (`startDelayMs: 0`) and redraws. */
 async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
@@ -1139,17 +1139,20 @@ describe("setup-done-screen", () => {
   it.each([
     [
       "en-GB",
-      "In the primary's dashboard, open System, then Servers, and choose Print switch label in each server's row menu. Stick each label on its server.",
+      "Once this server has joined, open the primary's Servers page and choose Print switch label in each server's row menu. Stick each label on its server.",
     ],
     [
       "es-ES",
-      "En el panel del principal, abre Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
+      "Cuando este servidor se haya unido, abre la página Servidores del principal y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
     ],
   ] as const)(
-    "tells the joining server's person to print switch labels (%s)",
+    "tells the joining server's person to print switch labels once it has joined (%s)",
     async (locale, words) => {
       setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+      const el = await mountDone(() => new Promise(() => {}), {
+        mirrorJoin: true,
+        serversUrl: "https://waitron.local/servers",
+      });
       expect(q(el, "[data-test=task-label-detail]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
         words,
       );
@@ -1177,10 +1180,11 @@ describe("setup-done-screen", () => {
     },
   );
 
-  it("does not say the page will not change on the ordinary done page", async () => {
+  it("shows no joining status or task list on the ordinary done page", async () => {
     const el = await mountDone(() => new Promise(() => {}));
     expect(q(el, "h1")).not.toBeNull();
-    expect(q(el, "[data-test=joining-next]")).toBeNull();
+    expect(q(el, "[data-test=joining-status]")).toBeNull();
+    expect(q(el, "[data-test=joining-tasks]")).toBeNull();
   });
 
   it.each(["en-GB", "es-ES"] as const)(
@@ -1997,29 +2001,46 @@ describe("the joining page", () => {
     acceptingSales: false,
     environment: "preproduction",
   };
+  const SERVERS = "https://waitron.local/servers";
+  const LOST_EN =
+    "This page can no longer reach this server. That is expected after it restarts to join, because it then uses the restaurant's own security certificate. To check, open the primary's Servers page and look at this server's row.";
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json" },
     });
+  const notFound = () =>
+    Promise.resolve(json({ error: { code: "server.not_found", params: {} } }, 404));
+  const unreachable = () => Promise.reject(new TypeError("Failed to fetch"));
 
-  /** A real client over a fetch that gives each answer in turn, then repeats the last. */
-  function joiningApi(answers: (() => Promise<Response>)[]) {
+  /**
+   * A real client over a fetch that gives each `/api/node` answer in turn, then repeats the last;
+   * `/api/box/status` answers through `boxStatus`, 404 unless told otherwise.
+   */
+  function joiningApi(
+    answers: (() => Promise<Response>)[],
+    boxStatus: () => Promise<Response> = notFound,
+  ) {
     let calls = 0;
-    const fetchImpl = vi.fn((url: RequestInfo | URL) => {
+    const signals: (AbortSignal | undefined)[] = [];
+    const fetchImpl = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      signals.push(init?.signal ?? undefined);
+      if (url === "/api/box/status") return boxStatus();
       expect(url).toBe("/api/node");
       const answer = answers[Math.min(calls, answers.length - 1)]!;
       calls += 1;
       return answer();
     });
-    return { api: new SetupApi("", fetchImpl), fetchImpl };
+    const nodeCalls = () => fetchImpl.mock.calls.filter(([url]) => url === "/api/node").length;
+    return { api: new SetupApi("", fetchImpl), fetchImpl, nodeCalls, signals };
   }
 
   async function mountJoining(
     answers: (() => Promise<Response>)[],
     extra: Partial<SetupDoneScreen> = {},
+    boxStatus?: () => Promise<Response>,
   ) {
-    const { api, fetchImpl } = joiningApi(answers);
+    const { api, ...rest } = joiningApi(answers, boxStatus);
     const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
       api,
       startDelayMs: 0,
@@ -2028,47 +2049,48 @@ describe("the joining page", () => {
       breakGlassSecret: "key-on-paper",
       ...extra,
     });
-    return { el, fetchImpl };
+    return { el, ...rest };
   }
 
   const status = (el: SetupDoneScreen) => q(el, "[data-test=joining-status]")!;
+  const statusText = (el: SetupDoneScreen) => status(el).textContent!.replace(/\s+/g, " ").trim();
   const done = (el: SetupDoneScreen, task: string) =>
     q(el, `[data-test=task-${task}]`)!.getAttribute("data-done");
+  const stateText = (el: SetupDoneScreen, task: string) =>
+    q(el, `[data-test=task-${task}-state]`)!.textContent!.trim();
+  const confirm = (el: SetupDoneScreen, task: string) => q(el, `[data-test=task-${task}-confirm]`)!;
 
   it("says it is joining, then changes by itself to joined and ticks the first task", async () => {
-    const { el, fetchImpl } = await mountJoining([
-      () => Promise.reject(new TypeError("Failed to fetch")),
-      () => Promise.resolve(json({ error: { code: "server.not_found", params: {} } }, 404)),
+    const { el, nodeCalls } = await mountJoining([
+      unreachable,
+      notFound,
       () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 503)),
       () => Promise.resolve(json(JOINED_PROBE)),
     ]);
     expect(q(el, "h1")!.textContent!.trim()).toBe("This server is joining");
     expect(status(el).getAttribute("role")).toBe("status");
-    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
     expect(done(el, "join")).toBe("false");
-    await vi.waitFor(() =>
-      expect(status(el).textContent!.trim()).toBe("Joined. This server is now the standby."),
-    );
+    await vi.waitFor(() => expect(statusText(el)).toBe("Joined. This server is now the standby."));
     expect(q(el, "h1")!.textContent!.trim()).toBe("This server has joined");
     expect(done(el, "join")).toBe("true");
-    expect(q(el, "[data-test=task-join]")!.textContent!.replace(/\s+/g, " ")).toContain("Done");
+    expect(stateText(el, "join")).toBe("Done");
     expect(q(el, "[data-test=error]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-    const calls = fetchImpl.mock.calls.length;
-    expect(calls).toBe(4);
+    expect(nodeCalls()).toBe(4);
     await afterATimerTurn(el);
-    expect(fetchImpl.mock.calls.length).toBe(calls);
+    expect(nodeCalls()).toBe(4);
   });
 
   it("keeps polling quietly while the box restarts, showing no error", async () => {
-    const { el, fetchImpl } = await mountJoining([
-      () => Promise.reject(new TypeError("Failed to fetch")),
-      () => Promise.resolve(json({ error: { code: "server.not_found", params: {} } }, 404)),
+    const { el, nodeCalls } = await mountJoining([
+      unreachable,
+      notFound,
       () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 500)),
       () => Promise.resolve(new Response("<!doctype html>", { status: 200 })),
     ]);
-    await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(5));
-    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(5));
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
     expect(done(el, "join")).toBe("false");
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
@@ -2078,10 +2100,103 @@ describe("the joining page", () => {
     ["a box holding no chart", { ...JOINED_PROBE, term: null, standing: null }],
     ["a box the chart lists as evicted", { ...JOINED_PROBE, standing: "evicted" }],
   ])("does not count the answer of %s as joined", async (_, body) => {
-    const { el, fetchImpl } = await mountJoining([() => Promise.resolve(json(body))]);
-    await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(3));
-    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    const { el, nodeCalls } = await mountJoining([() => Promise.resolve(json(body))]);
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(3));
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
     expect(done(el, "join")).toBe("false");
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "waiting",
+      "Joining. Waiting for the primary to send its copy of the restaurant's data.",
+    ],
+    ["en-GB", "restoring", "Joining. Copying the restaurant's data from the primary."],
+    ["en-GB", "ready", "Joining. The copy is complete and this server is restarting."],
+    [
+      "es-ES",
+      "waiting",
+      "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
+    ],
+    ["es-ES", "restoring", "Uniéndose. Copiando los datos del restaurante desde el principal."],
+    ["es-ES", "ready", "Uniéndose. La copia está completa y este servidor se está reiniciando."],
+  ] as const)(
+    "says where the first copy has got to while the box is joining (%s, %s)",
+    async (locale, copy, words) => {
+      setLocale(locale);
+      const { el } = await mountJoining([notFound], {}, () =>
+        Promise.resolve(json({ adoption: "pending", copy })),
+      );
+      await vi.waitFor(() => expect(statusText(el)).toBe(words));
+      expect(done(el, "join")).toBe("false");
+    },
+  );
+
+  it("drops the copy's stage once the box answers its role probe without being joined", async () => {
+    let probe: () => Promise<Response> = notFound;
+    const { el } = await mountJoining([() => probe()], {}, () =>
+      Promise.resolve(json({ adoption: "pending", copy: "ready" })),
+    );
+    await vi.waitFor(() =>
+      expect(statusText(el)).toBe("Joining. The copy is complete and this server is restarting."),
+    );
+    probe = () => Promise.resolve(json({ acceptingSales: false }));
+    await vi.waitFor(() => expect(statusText(el)).toBe(JOINING_STATUS_EN));
+  });
+
+  it("says plainly when it has lost the box, links the Servers page, and still ticks joined later", async () => {
+    let probe: () => Promise<Response> = notFound;
+    const { el, nodeCalls } = await mountJoining([() => probe()], {
+      serversUrl: SERVERS,
+      lostAfterMs: 40,
+      lostPollIntervalMs: 6,
+    });
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(1));
+    probe = unreachable;
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
+    await vi.waitFor(() => expect(statusText(el)).toBe(LOST_EN));
+    const link = q(el, "[data-test=joining-status] a") as HTMLAnchorElement;
+    expect(link.href).toBe(SERVERS);
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener noreferrer");
+    expect(link.textContent!.trim()).toBe("Servers page");
+    expect(done(el, "join")).toBe("false");
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+    probe = () => Promise.resolve(json(JOINED_PROBE));
+    await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
+    expect(statusText(el)).toBe("Joined. This server is now the standby.");
+  });
+
+  it("goes back to the joining status when the box answers again", async () => {
+    let probe: () => Promise<Response> = unreachable;
+    const { el } = await mountJoining([() => probe()], { lostAfterMs: 20, lostPollIntervalMs: 6 });
+    await vi.waitFor(() => expect(statusText(el)).toMatch(/^This page can no longer reach/));
+    probe = notFound;
+    await vi.waitFor(() => expect(statusText(el)).toBe(JOINING_STATUS_EN));
+  });
+
+  it("does not say it has lost the box before a minute without an answer", async () => {
+    const { el, nodeCalls } = await mountJoining([unreachable]);
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(5));
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
+  });
+
+  it("gives up on a request the box never answers, and counts it as no answer", async () => {
+    const { el, nodeCalls, signals } = await mountJoining([() => new Promise(() => {})], {
+      requestTimeoutMs: 5,
+      lostAfterMs: 30,
+      lostPollIntervalMs: 6,
+    });
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(2));
+    expect(signals[0]?.aborted).toBe(true);
+    await vi.waitFor(() => expect(statusText(el)).toMatch(/^This page can no longer reach/));
+  });
+
+  it("shows the Servers page words without a link when the primary's address is not known", async () => {
+    const { el } = await mountJoining([unreachable], { lostAfterMs: 0 });
+    await vi.waitFor(() => expect(statusText(el)).toBe(LOST_EN));
+    expect(q(el, "[data-test=joining-status] a")).toBeNull();
   });
 
   it("stops polling when the screen leaves the page", async () => {
@@ -2098,51 +2213,57 @@ describe("the joining page", () => {
     expect(fetchImpl.mock.calls.length).toBe(settled);
   });
 
-  it("ticks Save the server key once the file is saved, and not when saving fails", async () => {
+  it("ticks Save the server key only when the person says it is saved, not when the file is saved", async () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    const realURL = URL.createObjectURL.bind(URL);
-    vi.spyOn(URL, "createObjectURL")
-      .mockImplementationOnce(() => {
-        throw new Error("Download refused");
-      })
-      .mockImplementation(realURL);
     const { el } = await mountJoining([() => new Promise(() => {})]);
     expect(q(el, "[data-test=task-key]")!.textContent!.replace(/\s+/g, " ")).toContain(
       "Save the server key",
     );
     expect(done(el, "key")).toBe("false");
+    expect(stateText(el, "key")).toBe("To do");
     await userEvent.click(q(el, "[data-test=break-glass-save]")!);
     await el.updateComplete;
-    expect(q(el, "[data-test=break-glass-save-error]")).not.toBeNull();
+    expect(q(el, "[data-test=break-glass-save-error]")).toBeNull();
     expect(done(el, "key")).toBe("false");
-    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+    const sw = q(el, "[data-test=task-key-confirm]")!;
+    expect(sw.getAttribute("label")).toBe("I have saved the key");
+    await userEvent.click(confirm(el, "key"));
     await el.updateComplete;
     expect(done(el, "key")).toBe("true");
+    expect(stateText(el, "key")).toBe("Done");
+    await userEvent.click(confirm(el, "key"));
+    await el.updateComplete;
+    expect(done(el, "key")).toBe("false");
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
   });
 
-  it("links the switch-label task to the primary's Servers page in a new tab, and never ticks it", async () => {
+  it("links the switch-label task to the primary's Servers page, and ticks it only when the person says so", async () => {
     const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
-      serversUrl: "https://waitron.local/servers",
+      serversUrl: SERVERS,
     });
     await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
-    const link = q(el, "[data-test=task-label] a") as HTMLAnchorElement;
-    expect(link.href).toBe("https://waitron.local/servers");
+    const link = q(el, "[data-test=task-label] [data-test=servers-link]") as HTMLAnchorElement;
+    expect(link.href).toBe(SERVERS);
     expect(link.target).toBe("_blank");
-    expect(link.rel).toBe("noopener");
+    expect(link.rel).toBe("noopener noreferrer");
     expect(link.textContent!.trim()).toBe("Servers page");
-    expect(q(el, "[data-test=task-label]")!.textContent!.replace(/\s+/g, " ")).toContain(
-      "Open the primary's Servers page and choose Print switch label in each server's row menu. Stick each label on its server.",
-    );
     expect(done(el, "label")).toBe("false");
+    expect(q(el, "[data-test=task-label-confirm]")!.getAttribute("label")).toBe(
+      "I have stuck on the labels",
+    );
+    await userEvent.click(confirm(el, "label"));
+    await el.updateComplete;
+    expect(done(el, "label")).toBe("true");
+    expect(stateText(el, "label")).toBe("Done");
   });
 
-  it("says where the Servers page is, with no link, when the primary's address is not known", async () => {
-    const { el } = await mountJoining([() => new Promise(() => {})]);
-    expect(q(el, "[data-test=task-label] a")).toBeNull();
-    expect(q(el, "[data-test=task-label]")!.textContent!.replace(/\s+/g, " ")).toContain(
-      "In the primary's dashboard, open System, then Servers, and choose Print switch label in each server's row menu. Stick each label on its server.",
-    );
+  it.each(["join", "key", "label"])("shows the %s task's state as visible words", async (task) => {
+    const { el } = await mountJoining([() => new Promise(() => {})], { serversUrl: SERVERS });
+    const state = q(el, `[data-test=task-${task}-state]`)!;
+    const box = state.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(8);
+    expect(box.height).toBeGreaterThan(8);
+    expect(getComputedStyle(state).clipPath).toBe("none");
   });
 
   it("drops the long paragraphs and never says the page will not change", async () => {
@@ -2157,12 +2278,29 @@ describe("the joining page", () => {
   it("shows the joining and joined page in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
-      serversUrl: "https://waitron.local/servers",
+      serversUrl: SERVERS,
       startDelayMs: 100000,
     });
     expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
-    expect(status(el).textContent!.trim()).toBe("Uniéndose. Esta página se actualiza sola.");
+    expect(statusText(el)).toBe(JOINING_STATUS_ES);
     expect(q(el, "[data-test=task-label] a")!.textContent!.trim()).toBe("página Servidores");
     expect(q(el, "[data-test=task-key]")!.textContent!).toContain("Guardar la clave del servidor");
+    expect(q(el, "[data-test=task-key-confirm]")!.getAttribute("label")).toBe(
+      "He guardado la clave",
+    );
+    expect(q(el, "[data-test=task-label-confirm]")!.getAttribute("label")).toBe(
+      "He pegado las etiquetas",
+    );
+    expect(stateText(el, "key")).toBe("Pendiente");
+  });
+
+  it("says in Spanish when it has lost the box", async () => {
+    setLocale("es-ES");
+    const { el } = await mountJoining([unreachable], { serversUrl: SERVERS, lostAfterMs: 0 });
+    await vi.waitFor(() =>
+      expect(statusText(el)).toBe(
+        "Esta página ya no puede comunicarse con este servidor. Es lo esperado después de que se reinicie para unirse, porque entonces usa el certificado de seguridad propio del restaurante. Para comprobarlo, abre la página Servidores del principal y mira la fila de este servidor.",
+      ),
+    );
   });
 });

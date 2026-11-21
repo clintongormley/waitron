@@ -263,7 +263,11 @@ export class SetupResetScreen extends LitElement {
           this.serversUrl === undefined
             ? t("reset.remove_plain")
             : html`${t("reset.remove_before")}
-                <a data-test="servers-link" href=${this.serversUrl} target="_blank" rel="noopener"
+                <a
+                  data-test="servers-link"
+                  href=${this.serversUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   >${t("reset.servers_link")}</a
                 >
                 ${t("reset.remove_after")}`

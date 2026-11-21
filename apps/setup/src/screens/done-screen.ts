@@ -1,12 +1,13 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
-import type { SetupApi } from "../api/client.js";
+import type { JoinCopyStage, SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 
@@ -44,6 +45,12 @@ function isRecoveryAnswer(answer: unknown): boolean {
   if (typeof answer !== "object" || answer === null) return false;
   const { failures, level } = answer as { failures?: unknown; level?: unknown };
   return typeof failures === "number" && typeof level === "string";
+}
+
+/** A rejection that carries an HTTP status, or a body that would not parse, came from the box. */
+function boxAnswered(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true;
+  return typeof error === "object" && error !== null && "status" in error;
 }
 
 function isServerError(error: unknown): boolean {
@@ -100,6 +107,15 @@ export class SetupDoneScreen extends LitElement {
       .task-label {
         font-weight: var(--wt-font-weight-bold);
       }
+      .task-state {
+        margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .tasks wt-switch {
+        display: block;
+        margin-block-start: var(--wt-space-1);
+      }
       .mark {
         flex: none;
         display: inline-flex;
@@ -108,7 +124,7 @@ export class SetupDoneScreen extends LitElement {
         inline-size: var(--wt-space-5);
         block-size: var(--wt-space-5);
         border: 2px solid var(--wt-color-text-muted);
-        border-radius: 50%;
+        border-radius: var(--wt-radius-full);
         font-weight: var(--wt-font-weight-bold);
       }
       .in_progress .mark {
@@ -118,9 +134,6 @@ export class SetupDoneScreen extends LitElement {
         border-color: var(--wt-color-success);
         background: var(--wt-color-success);
         color: var(--wt-color-on-success);
-      }
-      .visually-hidden {
-        ${visuallyHiddenStyles}
       }
       .clock dl {
         margin: 0 0 var(--wt-space-3);
@@ -195,13 +208,21 @@ export class SetupDoneScreen extends LitElement {
    * addresses, so devices may need pointing at this server. */
   @property() restored?: "bucket" | "archive" | "cloud";
 
-  /** A pause before the first poll so the box has begun its restart. */
   /** The main box's Servers page, from the address typed to join; unset when it is not a URL. */
   @property({ attribute: false }) serversUrl?: string;
 
+  /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
 
   @property({ type: Number }) pollIntervalMs = 1500;
+
+  /** How long the joining page waits for one answer before counting it as none. */
+  @property({ type: Number }) requestTimeoutMs = 5000;
+
+  /** How long the joining page goes without an answer before saying it has lost the box. */
+  @property({ type: Number }) lostAfterMs = 60_000;
+
+  @property({ type: Number }) lostPollIntervalMs = 5000;
 
   /** In memory only, to confirm the restore's start's time; dropped once ready or off the page. */
   @property({ attribute: false }) nodeRecoveryKey?: string;
@@ -210,9 +231,20 @@ export class SetupDoneScreen extends LitElement {
 
   @state() private breakGlassSaveFailed = false;
 
-  @state() private breakGlassSaved = false;
+  @state() private keyConfirmed = false;
+
+  @state() private labelsConfirmed = false;
 
   @state() private joined = false;
+
+  @state() private lost = false;
+
+  @state() private copyStage?: JoinCopyStage;
+
+  /** The join request answered just before this screen shows, so its start counts as an answer. */
+  #lastAnswerMs = Date.now();
+
+  #joinRequest?: AbortController;
 
   @state() private startFailed = false;
 
@@ -282,21 +314,59 @@ export class SetupDoneScreen extends LitElement {
     this.nodeRecoveryKey = undefined;
     this.#releaseRecoveryPack();
     if (this.#timer !== undefined) clearTimeout(this.#timer);
+    this.#joinRequest?.abort();
+  }
+
+  async #joinTick(): Promise<void> {
+    if (!this.isConnected || this.joined) return;
+    const answer = await this.#askJoin();
+    if (!this.isConnected) return;
+    if (answer === "none") {
+      if (Date.now() - this.#lastAnswerMs >= this.lostAfterMs) this.lost = true;
+    } else {
+      this.#lastAnswerMs = Date.now();
+      this.lost = false;
+      this.joined = answer === "joined";
+      this.copyStage = answer === "joined" || answer === "answered" ? undefined : answer;
+      if (this.joined) return;
+    }
+    this.#timer = setTimeout(
+      () => void this.#joinTick(),
+      this.lost ? this.lostPollIntervalMs : this.pollIntervalMs,
+    );
   }
 
   /**
-   * Only a box that finished joining answers `/api/node` with its standing; until then the probe is
-   * unmounted, the box is restarting, or it answers without one. None of those is shown.
+   * Asks the role probe, then, when the box answers without one, the status a box still joining
+   * answers. Each request is abandoned after `requestTimeoutMs`, so one that never settles cannot
+   * stop the polling.
    */
-  async #joinTick(): Promise<void> {
-    if (!this.isConnected || this.joined) return;
+  async #askJoin(): Promise<"joined" | "answered" | "none" | JoinCopyStage> {
+    const controller = new AbortController();
+    this.#joinRequest = controller;
+    let limit: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      limit = setTimeout(() => {
+        controller.abort();
+        reject(new DOMException("No answer", "TimeoutError"));
+      }, this.requestTimeoutMs);
+    });
     try {
-      this.joined = (await this.api.nodeStanding()) === "serving-secondary";
-    } catch {
-      // Not joined yet.
+      const standing = await Promise.race([this.api.nodeStanding(controller.signal), deadline]);
+      return standing === "serving-secondary" ? "joined" : "answered";
+    } catch (error) {
+      if (!boxAnswered(error)) return "none";
+      try {
+        return (
+          (await Promise.race([this.api.joinCopyStage(controller.signal), deadline])) ?? "answered"
+        );
+      } catch {
+        return "answered";
+      }
+    } finally {
+      clearTimeout(limit);
+      controller.abort();
     }
-    if (!this.isConnected || this.joined) return;
-    this.#timer = setTimeout(() => void this.#joinTick(), this.pollIntervalMs);
   }
 
   async #tick(): Promise<void> {
@@ -561,7 +631,6 @@ export class SetupDoneScreen extends LitElement {
       document.body.append(anchor);
       anchor.click();
       this.breakGlassSaveFailed = false;
-      this.breakGlassSaved = true;
     } catch {
       this.breakGlassSaveFailed = true;
     } finally {
@@ -700,12 +769,10 @@ export class SetupDoneScreen extends LitElement {
   #renderJoining(): TemplateResult {
     return html`
       <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
-      <p class="intro" data-test="joining-status" role="status">
-        ${t(this.joined ? "done.joined.status" : "done.joining.status")}
-      </p>
+      <p class="intro" data-test="joining-status" role="status">${this.#joiningStatus()}</p>
       <ul class="tasks" data-test="joining-tasks">
         ${this.#task(
-          "task-join",
+          "join",
           this.joined ? "done" : "in_progress",
           t("done.task.join"),
           this.joined
@@ -716,31 +783,77 @@ export class SetupDoneScreen extends LitElement {
           this.breakGlassSecret === undefined
             ? nothing
             : this.#task(
-                "task-key",
-                this.breakGlassSaved ? "done" : "to_do",
+                "key",
+                this.keyConfirmed ? "done" : "to_do",
                 t("done.task.key"),
-                nothing,
+                this.#confirmation("key", t("done.task.key_confirm"), this.keyConfirmed, (on) => {
+                  this.keyConfirmed = on;
+                }),
               )
         }
         ${this.#task(
-          "task-label",
-          "to_do",
+          "label",
+          this.labelsConfirmed ? "done" : "to_do",
           t("done.task.label"),
           html`<p data-test="task-label-detail">
-            ${
-              this.serversUrl === undefined
-                ? t("done.task.label_plain")
-                : html`${t("done.task.label_before")}
-                    <a href=${this.serversUrl} target="_blank" rel="noopener"
-                      >${t("done.task.label_link")}</a
-                    >
-                    ${t("done.task.label_after")}`
-            }
-          </p>`,
+              ${t("done.task.label_before")}
+              ${this.#serversLink("done.task.label_link", "servers-link")}
+              ${t("done.task.label_after")}
+            </p>
+            ${this.#confirmation(
+              "label",
+              t("done.task.label_confirm"),
+              this.labelsConfirmed,
+              (on) => {
+                this.labelsConfirmed = on;
+              },
+            )}`,
         )}
       </ul>
       ${this.#breakGlass()}
     `;
+  }
+
+  #joiningStatus(): TemplateResult | string {
+    if (this.joined) return t("done.joined.status");
+    if (this.lost) {
+      return html`${t("done.joining.lost_before")}
+      ${this.#serversLink("done.joining.lost_link", "lost-servers-link")}
+      ${t("done.joining.lost_after")}`;
+    }
+    return t(
+      this.copyStage === undefined ? "done.joining.status" : `done.joining.copy_${this.copyStage}`,
+    );
+  }
+
+  /** The link words alone when the main box's address is not known. */
+  #serversLink(
+    words: "done.task.label_link" | "done.joining.lost_link",
+    test: string,
+  ): TemplateResult | string {
+    if (this.serversUrl === undefined) return t(words);
+    return html`<a
+      data-test=${test}
+      href=${this.serversUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      >${t(words)}</a
+    >`;
+  }
+
+  #confirmation(
+    id: string,
+    label: string,
+    checked: boolean,
+    change: (checked: boolean) => void,
+  ): TemplateResult {
+    return html`<wt-switch
+      data-test=${`task-${id}-confirm`}
+      name=${`task-${id}-confirmed`}
+      label=${label}
+      .checked=${checked}
+      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => change(event.detail.checked)}
+    ></wt-switch>`;
   }
 
   #task(
@@ -750,11 +863,11 @@ export class SetupDoneScreen extends LitElement {
     detail: TemplateResult | typeof nothing,
   ): TemplateResult {
     const done = state === "done";
-    return html`<li data-test=${id} data-done=${done ? "true" : "false"} class=${state}>
+    return html`<li data-test=${`task-${id}`} data-done=${done ? "true" : "false"} class=${state}>
       <span class="mark" aria-hidden="true">${done ? "✓" : ""}</span>
       <div>
         <span class="task-label">${label}</span>
-        <span class="visually-hidden">(${t(`done.task.${state}`)})</span>
+        <span class="task-state" data-test=${`task-${id}-state`}>${t(`done.task.${state}`)}</span>
         ${detail}
       </div>
     </li>`;

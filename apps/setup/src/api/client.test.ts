@@ -95,11 +95,13 @@ describe("SetupApi", () => {
     async (body, standing) => {
       const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
       const api = new SetupApi("", fetchImpl);
-      expect(await api.nodeStanding()).toBe(standing);
+      const signal = new AbortController().signal;
+      expect(await api.nodeStanding(signal)).toBe(standing);
       expect(fetchImpl).toHaveBeenCalledWith("/api/node", {
         method: "GET",
         credentials: "omit",
         cache: "no-store",
+        signal,
       });
     },
   );
@@ -111,7 +113,45 @@ describe("SetupApi", () => {
         jsonResponse({ error: { code: "server.internal", params: {} } }, false, 503),
       );
     const api = new SetupApi("", fetchImpl);
-    await expect(api.nodeStanding()).rejects.toMatchObject({ status: 503 });
+    await expect(api.nodeStanding(new AbortController().signal)).rejects.toMatchObject({
+      status: 503,
+    });
+  });
+
+  it.each([
+    [{ adoption: "pending", copy: "waiting" }, "waiting"],
+    [{ adoption: "pending", copy: "restoring" }, "restoring"],
+    [{ adoption: "pending", copy: "ready", bytes: 4096, ms: 120 }, "ready"],
+    [{ adoption: "pending" }, null],
+    [{ adoption: "pending", copy: "finished" }, null],
+    [{ copy: "restoring" }, null],
+    [null, null],
+  ])(
+    "joinCopyStage GETs this box's /api/box/status unstored and reads a joining box's copy stage: %j",
+    async (body, stage) => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+      const api = new SetupApi("", fetchImpl);
+      const signal = new AbortController().signal;
+      expect(await api.joinCopyStage(signal)).toBe(stage);
+      expect(fetchImpl).toHaveBeenCalledWith("/api/box/status", {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+        signal,
+      });
+    },
+  );
+
+  it("joinCopyStage rejects on a non-2xx answer", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "management_session.required", params: {} } }, false, 401),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.joinCopyStage(new AbortController().signal)).rejects.toMatchObject({
+      status: 401,
+    });
   });
 
   it("getStatus GETs /setup-api/status with credentials and returns the parsed status", async () => {

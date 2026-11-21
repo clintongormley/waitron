@@ -108,7 +108,15 @@ export const finishEn = {
     "You will need it if this server ever has to take over from the primary.",
   "done.joining.heading": "This server is joining",
   "done.joined.heading": "This server has joined",
-  "done.joining.status": "Joining. This page updates by itself.",
+  "done.joining.status": "Joining. This can take a few minutes.",
+  "done.joining.copy_waiting":
+    "Joining. Waiting for the primary to send its copy of the restaurant's data.",
+  "done.joining.copy_restoring": "Joining. Copying the restaurant's data from the primary.",
+  "done.joining.copy_ready": "Joining. The copy is complete and this server is restarting.",
+  "done.joining.lost_before":
+    "This page can no longer reach this server. That is expected after it restarts to join, because it then uses the restaurant's own security certificate. To check, open the primary's",
+  "done.joining.lost_link": "Servers page",
+  "done.joining.lost_after": "and look at this server's row.",
   "done.joined.status": "Joined. This server is now the standby.",
   "done.task.done": "Done",
   "done.task.in_progress": "In progress",
@@ -116,13 +124,13 @@ export const finishEn = {
   "done.task.join": "Join the restaurant",
   "done.task.join_detail": "Taking its first copy from the primary, which keeps selling.",
   "done.task.key": "Save the server key",
+  "done.task.key_confirm": "I have saved the key",
   "done.task.label": "Print the switch labels",
-  "done.task.label_before": "Open the primary's",
+  "done.task.label_before": "Once this server has joined, open the primary's",
   "done.task.label_link": "Servers page",
   "done.task.label_after":
     "and choose Print switch label in each server's row menu. Stick each label on its server.",
-  "done.task.label_plain":
-    "In the primary's dashboard, open System, then Servers, and choose Print switch label in each server's row menu. Stick each label on its server.",
+  "done.task.label_confirm": "I have stuck on the labels",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -237,7 +245,17 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "La necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joined.heading": "Este servidor se ha unido",
-  "done.joining.status": "Uniéndose. Esta página se actualiza sola.",
+  "done.joining.status": "Uniéndose. Puede tardar unos minutos.",
+  "done.joining.copy_waiting":
+    "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
+  "done.joining.copy_restoring":
+    "Uniéndose. Copiando los datos del restaurante desde el principal.",
+  "done.joining.copy_ready":
+    "Uniéndose. La copia está completa y este servidor se está reiniciando.",
+  "done.joining.lost_before":
+    "Esta página ya no puede comunicarse con este servidor. Es lo esperado después de que se reinicie para unirse, porque entonces usa el certificado de seguridad propio del restaurante. Para comprobarlo, abre la",
+  "done.joining.lost_link": "página Servidores",
+  "done.joining.lost_after": "del principal y mira la fila de este servidor.",
   "done.joined.status": "Unido. Este servidor es ahora el servidor en espera.",
   "done.task.done": "Hecho",
   "done.task.in_progress": "En curso",
@@ -245,11 +263,11 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.task.join": "Unirse al restaurante",
   "done.task.join_detail": "Recibiendo su primera copia del principal, que sigue vendiendo.",
   "done.task.key": "Guardar la clave del servidor",
+  "done.task.key_confirm": "He guardado la clave",
   "done.task.label": "Imprimir las etiquetas de cambio",
-  "done.task.label_before": "Abre la",
+  "done.task.label_before": "Cuando este servidor se haya unido, abre la",
   "done.task.label_link": "página Servidores",
   "done.task.label_after":
     "del principal y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
-  "done.task.label_plain":
-    "En el panel del principal, abre Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
+  "done.task.label_confirm": "He pegado las etiquetas",
 };

@@ -46,9 +46,9 @@ muestra el servidor nuevo. Elige
 el botón con el icono de ojo para comprobar lo que has escrito. Elige **Conectar**. Si la cuenta
 usa un autenticador, la página te pide su código actual. Escríbelo y elige **Conectar** otra vez.
 El servidor nuevo recibe su primera copia por la red del
-local y se reinicia solo como servidor de reserva. Deja su página abierta: cambia sola a
-**Este servidor se ha unido** y muestra lo que queda por hacer: guardar la clave del servidor e
-imprimir las [etiquetas de cambio](servers.md#switch-label) desde la página Servidores enlazada.
+local y se reinicia solo como servidor de reserva. Su página muestra lo que queda por hacer:
+guardar la clave del servidor y, cuando se haya unido, imprimir las
+[etiquetas de cambio](servers.md#switch-label).
 
 En el servidor principal, abre **Sistema → Servidores** para comprobar el retraso del equipo de reserva en segundos y la **Última copia recibida**.
 Deja ambos equipos encendidos. Si la copia lleva más de un minuto de retraso o sigue apareciendo **Actualización desconocida**,

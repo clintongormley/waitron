@@ -1962,7 +1962,6 @@ describe("setup-app", () => {
   it.each([
     ["https://waitron.local", "https://waitron.local/servers"],
     ["https://waitron.local:8443/setup", "https://waitron.local:8443/servers"],
-    ["not an address", undefined],
   ])(
     "hands the done screen the Servers page of the typed address %s",
     async (primaryUrl, servers) => {
@@ -1973,7 +1972,9 @@ describe("setup-app", () => {
         updateComplete: Promise<unknown>;
       };
       await done.updateComplete;
-      const link = done.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=task-label] a");
+      const link = done.shadowRoot!.querySelector<HTMLAnchorElement>(
+        "[data-test=task-label] [data-test=servers-link]",
+      );
       expect(link?.href).toBe(servers);
     },
   );

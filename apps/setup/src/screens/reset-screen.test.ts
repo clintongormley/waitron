@@ -102,6 +102,7 @@ describe("setup-reset-screen", () => {
       const link = q(el, "[data-test=servers-link]") as HTMLAnchorElement;
       expect(link.href).toBe("https://waitron.local/servers");
       expect(link.target).toBe("_blank");
+      expect(link.rel).toBe("noopener noreferrer");
       expect(link.textContent!.trim()).toBe(label);
       const text = q(el, "[data-test=remove-from-list]")!.textContent!.replace(/\s+/g, " ").trim();
       expect(text).toBe(words);

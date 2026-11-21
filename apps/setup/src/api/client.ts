@@ -304,6 +304,9 @@ async function upload(fetchImpl: typeof fetch, url: string, init: RequestInit): 
   return response;
 }
 
+const JOIN_COPY_STAGES = ["waiting", "restoring", "ready"] as const;
+export type JoinCopyStage = (typeof JOIN_COPY_STAGES)[number];
+
 export interface HandoverStatus {
   operationId: string;
   role: "source" | "destination";
@@ -386,16 +389,37 @@ export class SetupApi {
   }
 
   /** This box's standing in the chart it holds, from its role probe; `null` when the answer names none. */
-  async nodeStanding(): Promise<string | null> {
+  async nodeStanding(signal: AbortSignal): Promise<string | null> {
     const fetchImpl = this.#fetchImpl;
     const response = await fetchImpl(this.#baseUrl + "/api/node", {
       method: "GET",
       credentials: "omit",
       cache: "no-store",
+      signal,
     });
     if (!response.ok) throw await apiError(response);
     const body = (await response.json()) as { standing?: unknown };
     return typeof body.standing === "string" ? body.standing : null;
+  }
+
+  /**
+   * Where the first copy has got to, from the status a box still joining answers
+   * (`mountLatchBoxStatus`); `null` for any other answer.
+   */
+  async joinCopyStage(signal: AbortSignal): Promise<JoinCopyStage | null> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/api/box/status", {
+      method: "GET",
+      credentials: "omit",
+      cache: "no-store",
+      signal,
+    });
+    if (!response.ok) throw await apiError(response);
+    const body: unknown = await response.json();
+    if (!isRecord(body) || body.adoption !== "pending") return null;
+    return (JOIN_COPY_STAGES as readonly unknown[]).includes(body.copy)
+      ? (body.copy as JoinCopyStage)
+      : null;
   }
 
   /** Resolves once the main server answers at all: a `no-cors` answer is opaque, and still an answer. */
