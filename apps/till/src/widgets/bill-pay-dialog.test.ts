@@ -3735,8 +3735,9 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
 
     const row = root(el).querySelector("[data-payment]")!;
     expect(text(row.querySelector("[data-payment-given-back]"))).toBe(
-      `${money("20.00")} given back`,
+      `Given back: ${money("20.00")}`,
     );
+    expect(row.querySelector("[data-payment-given-back]")!.classList.contains("muted")).toBe(true);
     expect(text(row)).toContain(`${t("bill_pay.applied")} ${money("30.00")}`);
     expect(row.querySelector("[data-payment-refund]")!.getAttribute("aria-label")).toBe(
       t("bill_pay.refund_label")
@@ -3750,7 +3751,7 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     expect(root(none).querySelector("[data-payment-given-back]")).toBeNull();
     const all = await mount({ balance: givenBackRow("30.00") });
     expect(text(root(all).querySelector("[data-payment-given-back]"))).toBe(
-      `${money("30.00")} given back`,
+      `Given back: ${money("30.00")}`,
     );
     expect(root(all).querySelector("[data-payment-refund]")).toBeNull();
   });
@@ -3760,7 +3761,7 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     try {
       const el = await mount({ balance: givenBackRow("20.00") });
       expect(text(root(el).querySelector("[data-payment-given-back]"))).toBe(
-        `${money("20.00")} devueltos`.replace(/\s+/g, " "),
+        `Devuelto: ${money("20.00")}`.replace(/\s+/g, " "),
       );
     } finally {
       setLocale("en");

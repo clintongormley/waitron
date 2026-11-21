@@ -1440,7 +1440,7 @@ export class TillBillPayDialog extends LitElement {
         ${
           payment.givenBack !== undefined &&
           compareDecimal(decimal(payment.givenBack), decimal("0")) > 0
-            ? html`<p data-payment-given-back>
+            ? html`<p class="muted" data-payment-given-back>
                 ${t("bill_pay.given_back").replace("{amount}", () => this.#money(payment.givenBack!))}
               </p>`
             : nothing
