@@ -9,7 +9,7 @@ import {
   orderTableLabels,
   readLiveSeriesIdTx,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   workingOrders,
   type Transaction,
@@ -230,7 +230,7 @@ export interface AdvancePaymentMoney {
   left: Decimal;
   /** How many correctives its advance has. */
   correctives: number;
-  /** The tips, in cents, of the completed `tender_refunds` against its tender on the advance. */
+  /** The tips, in cents, of the completed `refunds` against its tender on the advance. */
   tipGivenBack: number;
 }
 
@@ -280,17 +280,17 @@ export async function readBillAdvances(
   const tipsGivenBack = await tx
     .select({
       billPaymentId: tenders.billPaymentId,
-      tips: sql<number>`sum(${tenderRefunds.tipAmount})`.mapWith(Number),
+      tips: sql<number>`sum(${refunds.tipAmount})`.mapWith(Number),
     })
-    .from(tenderRefunds)
-    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+    .from(refunds)
+    .innerJoin(tenders, eq(tenders.id, refunds.tenderId))
     .where(
       and(
         inArray(
-          tenderRefunds.saleId,
+          refunds.saleId,
           advances.map((advance) => advance.saleId),
         ),
-        eq(tenderRefunds.state, "completed"),
+        eq(refunds.state, "completed"),
         isNotNull(tenders.billPaymentId),
       ),
     )

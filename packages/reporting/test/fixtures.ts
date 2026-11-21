@@ -21,7 +21,7 @@ import type {
   SeriesId,
 } from "@waitron/shared";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   diningTables,
   invoiceSeries,
@@ -316,29 +316,40 @@ export async function seedBillPayment(
 /** Money given back from one bill payment, on `deviceId`. `at` is `completed_at` or `failed_at`. */
 export async function seedBillRefund(
   db: Database,
-  ref: { billPaymentId: string; deviceId: DeviceId },
+  ref: { billPaymentId: string; deviceId: DeviceId; nodeId: NodeId },
   opts: {
     applied: string;
     tip?: string;
     state: "pending" | "completed" | "failed";
     at?: string;
   },
-): Promise<void> {
-  await db.insert(billPaymentRefunds).values({
-    billPaymentId: ref.billPaymentId,
-    submissionId: randomUUID(),
-    fingerprint: "fixture",
-    appliedAmount: stringToCents(opts.applied),
-    tipAmount: stringToCents(opts.tip ?? "0.00"),
-    reason: "fixture",
-    authorizedBy: PERSON,
-    requestedBy: PERSON,
-    source: "device",
-    deviceId: ref.deviceId,
-    state: opts.state,
-    completedAt: opts.state === "completed" ? opts.at! : null,
-    failedAt: opts.state === "failed" ? opts.at! : null,
-  });
+): Promise<string> {
+  const [payment] = await db
+    .select({ method: billPayments.method })
+    .from(billPayments)
+    .where(eq(billPayments.id, ref.billPaymentId));
+  const [refund] = await db
+    .insert(refunds)
+    .values({
+      billPaymentId: ref.billPaymentId,
+      nodeId: ref.nodeId,
+      method: payment!.method,
+      manual: payment!.method === "card",
+      submissionId: randomUUID(),
+      fingerprint: "fixture",
+      appliedAmount: stringToCents(opts.applied),
+      tipAmount: stringToCents(opts.tip ?? "0.00"),
+      reason: "fixture",
+      authorizedBy: PERSON,
+      requestedBy: PERSON,
+      source: "device",
+      deviceId: ref.deviceId,
+      state: opts.state,
+      completedAt: opts.state === "completed" ? opts.at! : null,
+      failedAt: opts.state === "failed" ? opts.at! : null,
+    })
+    .returning({ id: refunds.id });
+  return refund!.id;
 }
 
 export async function seedVoid(

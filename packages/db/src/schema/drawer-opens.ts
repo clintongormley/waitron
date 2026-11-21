@@ -5,7 +5,7 @@ import { billPayments } from "./bill-payments.js";
 import { devices } from "./devices.js";
 import { sales } from "./sales.js";
 import { printers } from "./printers.js";
-import { tenderRefunds } from "./tender-refunds.js";
+import { refunds } from "./refunds.js";
 
 /**
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
@@ -45,7 +45,7 @@ export const drawerOpens = table(
     /* v8 ignore start */
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */
-    tenderRefundId: id("tender_refund_id").references(() => tenderRefunds.id),
+    tenderRefundId: id("tender_refund_id").references(() => refunds.id),
     authorizedBy: id("authorized_by"),
     // A person holding cash.drawer authorized the open on behalf of an operator who does not.
     viaOverride: flag("via_override").notNull().default(false),

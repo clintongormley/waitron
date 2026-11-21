@@ -1,15 +1,15 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  billPaymentRefunds,
+  refunds,
   billPayments,
   invoiceSeries,
   saleSettlements,
   sales,
   saleVoids,
-  tenderRefunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -119,10 +119,10 @@ async function capture(saleId: string, values: Partial<typeof payments.$inferIns
 }
 async function refund(
   target: { saleId: string; tenderId: string },
-  values: Partial<typeof tenderRefunds.$inferInsert> = {},
+  values: Partial<typeof refunds.$inferInsert> = {},
 ) {
   const [row] = await store.db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       ...target,
       submissionId: randomUUID(),
@@ -556,8 +556,9 @@ describe("settled-tender refundable balances", () => {
         deviceId,
       })
       .returning();
-    await store.db.insert(billPaymentRefunds).values({
+    await store.db.insert(refunds).values({
       billPaymentId: bill!.id,
+      ...billRefundFields(store.db, cfg.nodeId, bill!.id),
       submissionId: randomUUID(),
       fingerprint: "before-invoice",
       appliedAmount: 200,
@@ -607,10 +608,7 @@ describe("settled-tender refundable balances", () => {
       },
     ]);
     expect(
-      await store.db
-        .select()
-        .from(billPaymentRefunds)
-        .where(eq(billPaymentRefunds.billPaymentId, bill!.id)),
+      await store.db.select().from(refunds).where(eq(refunds.billPaymentId, bill!.id)),
     ).toHaveLength(1);
   });
 });

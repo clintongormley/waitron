@@ -262,7 +262,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   adjustment_reasons: ["apply_roles", "approver_roles"],
   devices: ["location_id", "created_at"],
   working_orders: ["location_id"],
-  tender_refunds: ["location_id"],
+  refunds: ["location_id"],
   join_requests: ["location_id"],
   dining_tables: ["location_id"],
   floor_plan_sets: ["location_id"],
@@ -292,7 +292,9 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   convenio_config: ["location_id"],
 };
 
-const RENAMED_COLUMNS: MadridColumnRenames = {};
+const RENAMED_COLUMNS: MadridColumnRenames = {
+  adjustment_refunds: { tender_refund_id: "refund_id" },
+};
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
   "sign_in_challenges",
@@ -734,12 +736,41 @@ for (const locale of ["en", "es"] as const) {
       tenants: "taxpayer",
       tenant_credentials: "venue_credentials",
       scheduled_runs: "reconciliation_runs",
+      tender_refunds: "refunds",
       sessions: "till_sessions",
       management_sessions: "dashboard_sessions",
       management_account_actions: "account_actions",
     };
-    for (const phase of ["before", "provisioned", "seeded"] as const)
+    for (const phase of ["before", "provisioned", "seeded"] as const) {
       expected[phase] = madridWithRenamedTables(expected[phase], tableRenames);
+      const refundRows = expected[phase].tables.refunds!;
+      const billRefundRows = expected[phase].tables.bill_payment_refunds!;
+      expect(refundRows.rows).toEqual({});
+      expect(billRefundRows.rows).toEqual({});
+      refundRows.columns.splice(1, 0, {
+        ...billRefundRows.columns.find((column) => column.name === "bill_payment_id")!,
+        notnull: 0,
+      });
+      for (const name of ["sale_id", "tender_id"])
+        refundRows.columns.find((column) => column.name === name)!.notnull = 0;
+      refundRows.columns.push({
+        name: "drawer_opened_at",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      refundRows.foreignKeys = [
+        ...["attested_by", "requested_by", "authorized_by"].map((from) => ({
+          ...refundRows.foreignKeys[0]!,
+          from,
+          table: "persons",
+        })),
+        ...refundRows.foreignKeys,
+        billRefundRows.foreignKeys.find((key) => key.from === "bill_payment_id")!,
+      ].map((key, id) => ({ ...key, id }));
+      delete expected[phase].tables.bill_payment_refunds;
+    }
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
@@ -2849,7 +2880,7 @@ for (const locale of ["en", "es"] as const) {
         {
           id: 0,
           seq: 0,
-          table: "tender_refunds",
+          table: "refunds",
           from: "tender_refund_id",
           to: "id",
           on_update: "NO ACTION",
@@ -2873,6 +2904,10 @@ for (const locale of ["en", "es"] as const) {
           ...table.foreignKeys.map((key) => ({ ...key, id: key.id + columns.length })),
         ];
       }
+
+      expect(phases[phase]!.refunds).toBe(0);
+      expect(phases[phase]!.bill_payment_refunds).toBe(0);
+      delete phases[phase]!.bill_payment_refunds;
 
       if (phase !== "seeded") expected[phase] = madridWithPhotos(expected[phase]);
       const themes = expected[phase].tables.custom_themes!;

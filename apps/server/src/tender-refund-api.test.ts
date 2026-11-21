@@ -12,7 +12,7 @@ import {
   saleSettlements,
   saleSubstitutions,
   tenders,
-  tenderRefunds,
+  refunds,
   printJobs,
   withTransaction,
   floorZones,
@@ -122,7 +122,7 @@ async function originalFacts() {
 }
 async function effects() {
   return inTx(venue, async (tx) => ({
-    refunds: await tx.select().from(tenderRefunds),
+    refunds: await tx.select().from(refunds),
     drawers: await tx.select().from(drawerOpens),
     prints: await tx.select().from(printJobs),
   }));
@@ -336,7 +336,7 @@ it.each(["cash", "manual", "connected"] as const)(
     const t = await target(kind === "cash" ? "cash" : "card", kind === "manual");
     const id = randomUUID(),
       manual = kind === "manual";
-    await store.db.insert(tenderRefunds).values({
+    await store.db.insert(refunds).values({
       id,
       saleId: t.saleId,
       tenderId: t.tenderId,
@@ -414,7 +414,7 @@ it.each([true, "true", null])("ignores a leftover cashConfirmed %j", async (left
   const first = await create(t.saleId, { ...body, cashConfirmed: leftover });
   expect(first, JSON.stringify(first.json)).toMatchObject({ status: 200 });
   const id = (first.json as { id: string }).id;
-  const [row] = await store.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+  const [row] = await store.db.select().from(refunds).where(eq(refunds.id, id));
   expect(row!.fingerprint).toBe(
     fingerprint({
       saleId: t.saleId,

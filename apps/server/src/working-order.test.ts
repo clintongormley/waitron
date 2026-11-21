@@ -1,4 +1,4 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 
@@ -28,7 +28,7 @@ import { DatabaseSync } from "node:sqlite";
 import { and, eq, isNull, sql, inArray } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   captureError,
   isUniqueViolation,
@@ -5276,8 +5276,9 @@ describe("an order whose card payment is in flight (plan D22)", () => {
         deviceId: cfg.origin.deviceId,
       })
       .returning({ id: billPayments.id });
-    await db.insert(billPaymentRefunds).values({
+    await db.insert(refunds).values({
       billPaymentId: payment!.id,
+      ...billRefundFields(db, cfg.nodeId, payment!.id),
       submissionId: randomUUID(),
       fingerprint: "f",
       appliedAmount: 100,
@@ -5344,9 +5345,9 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     await onlyNoteChanged(id, { order, lines }, "No salt");
     expect(
       await db
-        .select({ state: billPaymentRefunds.state })
-        .from(billPaymentRefunds)
-        .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+        .select({ state: refunds.state })
+        .from(refunds)
+        .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
         .where(eq(billPayments.workingOrderId, id)),
     ).toEqual([{ state: "pending" }]);
   });
@@ -5442,8 +5443,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual(before.lines.map((row) => ({ ...(row as object), ...change })));
-    for (const refund of await db.select().from(billPaymentRefunds))
-      expect(refund.state).toBe("pending");
+    for (const refund of await db.select().from(refunds)) expect(refund.state).toBe("pending");
   }
 
   // A sale line files its own options answer, and a whole-order card files the answers it priced.

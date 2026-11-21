@@ -18,7 +18,7 @@ import { nodes } from "../schema/nodes.js";
 import { printers } from "../schema/printers.js";
 import { sales, tenders } from "../schema/sales.js";
 import { invoiceSeries } from "../schema/series.js";
-import { tenderRefunds } from "../schema/tender-refunds.js";
+import { refunds } from "../schema/refunds.js";
 import { workingOrders } from "../schema/orders.js";
 import { newId, nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
@@ -406,7 +406,7 @@ export async function seedCompletedCashRefund(
 ): Promise<string> {
   const { saleId, tenderId, nodeId, personId } = input;
   const [refund] = await db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId,
       tenderId,
@@ -422,7 +422,7 @@ export async function seedCompletedCashRefund(
       state: "completed",
       completedAt: "2026-10-16T10:00:00.000Z",
     })
-    .returning({ id: tenderRefunds.id });
+    .returning({ id: refunds.id });
   return refund!.id;
 }
 

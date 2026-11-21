@@ -25,7 +25,7 @@ import {
   type InvoiceCorrectionDeps,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
-import { enqueueTenderRefundDrawer } from "./receipt-print.js";
+import { enqueueRefundDrawer } from "./receipt-print.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
@@ -139,7 +139,7 @@ export async function giveCorrectionCash(
       refunds.length === 0
         ? {
             openDrawer: (done) =>
-              enqueueTenderRefundDrawer(tx, cfg, done.id, actor.personId, actor.authorization),
+              enqueueRefundDrawer(tx, cfg, done.id, actor.personId, actor.authorization),
           }
         : {},
     );

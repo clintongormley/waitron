@@ -1,9 +1,10 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { refunds, billPayments, withTransaction } from "@waitron/db";
 import { payments, recordRefund } from "@waitron/payments";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { decimal } from "@waitron/shared";
@@ -235,8 +236,9 @@ describe("a bill payment completed on a later day files the day it was accepted"
           receivedAt: "2026-04-01T07:00:00.000Z",
         })
         .returning({ id: billPayments.id });
-      await tx.insert(billPaymentRefunds).values({
+      await tx.insert(refunds).values({
         billPaymentId: cash!.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, cash!.id),
         submissionId: randomUUID(),
         fingerprint: "cash-given-back",
         appliedAmount: 1000,

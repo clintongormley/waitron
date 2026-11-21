@@ -17,7 +17,7 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import {
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   saleLines,
   sales,
@@ -41,7 +41,11 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { paySavedBillInCash, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import {
+  billRefundFields,
+  paySavedBillInCash,
+  seedPendingCardPayment,
+} from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,
@@ -1100,8 +1104,9 @@ describe("a card refund pending on a bill", () => {
         deviceId: v.cfg.origin.deviceId,
       })
       .returning({ id: billPayments.id });
-    await suite.db.insert(billPaymentRefunds).values({
+    await suite.db.insert(refundRows).values({
       billPaymentId: payment!.id,
+      ...billRefundFields(suite.db, v.cfg.nodeId, payment!.id),
       submissionId: randomUUID(),
       fingerprint: "f",
       appliedAmount: 100,
@@ -1148,9 +1153,9 @@ describe("a card refund pending on a bill", () => {
     });
 
     const refunds = await suite.db
-      .select({ state: billPaymentRefunds.state })
-      .from(billPaymentRefunds)
-      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+      .select({ state: refundRows.state })
+      .from(refundRows)
+      .innerJoin(billPayments, eq(billPayments.id, refundRows.billPaymentId))
       .where(eq(billPayments.workingOrderId, s.tabId));
     expect(refunds).toEqual([{ state: "pending" }]);
   });

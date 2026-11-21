@@ -6,7 +6,7 @@ import {
   incidents,
   invoiceCorrections,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   withFoldedPersonChanges,
 } from "@waitron/db";
@@ -216,7 +216,7 @@ describe("the unfinished-correction alert", () => {
       outcome: "completed",
       providerStatus: "succeeded",
     });
-    v.db.run(sql`create trigger fail_recovered_refund before update of state on tender_refunds
+    v.db.run(sql`create trigger fail_recovered_refund before update of state on refunds
       when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
 
     at(61);
@@ -300,7 +300,7 @@ describe("the unfinished-correction alert", () => {
     const { saleId } = await fifteenBack();
     at(61);
     const [{ pending }] = v.db.all<{ pending: number }>(
-      sql`select count(*) as pending from tender_refunds
+      sql`select count(*) as pending from refunds
         where state = 'pending' and method = 'card' and manual = 0`,
     ) as [{ pending: number }];
     await expect(
@@ -405,10 +405,7 @@ describe("automatic filing of a correction whose money is all back", () => {
     expect(await alertsFor(t.saleId, FILING_REFUSED)).toEqual(raised);
     expect(salesCount()).toBe(before);
     expect(
-      await v.db
-        .select({ state: tenderRefunds.state })
-        .from(tenderRefunds)
-        .where(eq(tenderRefunds.id, leg.id)),
+      await v.db.select({ state: refunds.state }).from(refunds).where(eq(refunds.id, leg.id)),
     ).toEqual([{ state: "completed" }]);
 
     at(2);

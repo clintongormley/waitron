@@ -13,7 +13,7 @@ import {
   readLiveSeriesIdTx,
   saleLines,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -263,9 +263,7 @@ describe("a plain refund of an advance's own ticket", () => {
     }
 
     expect(
-      await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
-      ),
+      await inTx(venue(), (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
     ).toEqual([]);
     expect(
       await inTx(venue(), (tx) => readBillBalance(tx, billId, decimal("120.00"))),
@@ -583,9 +581,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
       expect(refused.json).toEqual(refusal);
     }
     expect(
-      await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
-      ),
+      await inTx(venue(), (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
     ).toEqual([]);
   });
 
@@ -635,9 +631,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
       ),
     ).toEqual([]);
     expect(
-      await inTx(venue(), (tx) =>
-        tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
-      ),
+      await inTx(venue(), (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
     ).toEqual([]);
     const closed = await send(
       venue().app,

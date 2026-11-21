@@ -4,14 +4,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  billPaymentRefunds,
-  billPaymentRefundState,
-  CORE_MIGRATIONS,
-  tenderRefunds,
-  tenders,
-} from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { refunds, refundState, CORE_MIGRATIONS, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { PAYMENTS_HANDOVER, summariseOpenPayments, type OpenPayments } from "./handover-summary.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -26,6 +22,10 @@ let saleId: string;
 beforeEach(async () => {
   seeded = await seedWorkingOrder(suite.db);
   saleId = await seedSale(suite.db, seeded);
+  await seedPerson(suite.db, {
+    id: "11111111-1111-1111-1111-111111111111",
+    displayName: "Cashier",
+  });
 });
 
 afterEach(async () => {
@@ -80,7 +80,7 @@ async function refund(
     .values({ saleId, method, amount: 1000, settledAt: STAMPED })
     .returning({ id: tenders.id });
   const [row] = await suite.db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId,
       tenderId: tender!.id,
@@ -101,7 +101,7 @@ async function refund(
       completedAt: state === "completed" ? STAMPED : null,
       failedAt: state === "failed" ? STAMPED : null,
     })
-    .returning({ id: tenderRefunds.id });
+    .returning({ id: refunds.id });
   return row!.id;
 }
 
@@ -124,13 +124,22 @@ async function chargedBillPayment(provider: string, ref: string, externalRef: st
 
 async function billRefund(
   billPaymentId: string,
-  state: (typeof billPaymentRefundState.enumValues)[number],
+  state: (typeof refundState.enumValues)[number],
   sentAt: string | null,
 ) {
+  const [capture] = await suite.db
+    .select({ provider: payments.provider, paymentRef: payments.paymentRef })
+    .from(payments)
+    .where(eq(payments.billPaymentId, billPaymentId));
   const [row] = await suite.db
-    .insert(billPaymentRefunds)
+    .insert(refunds)
     .values({
       billPaymentId,
+      nodeId: seeded.nodeId,
+      method: "card",
+      manual: capture === undefined,
+      provider: capture?.provider,
+      providerPaymentRef: capture?.paymentRef,
       submissionId: `submission-${Math.random()}`,
       fingerprint: "fingerprint",
       appliedAmount: 300,
@@ -145,7 +154,7 @@ async function billRefund(
       completedAt: state === "completed" ? STAMPED : null,
       failedAt: state === "failed" ? STAMPED : null,
     })
-    .returning({ id: billPaymentRefunds.id });
+    .returning({ id: refunds.id });
   return row!.id;
 }
 
@@ -216,7 +225,8 @@ describe("summariseOpenPayments", () => {
     const sumup = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
     const simulator = await chargedBillPayment("simulator", "sim-ref", null);
     const sent = await billRefund(sumup, "pending", STAMPED);
-    const unsent = await billRefund(sumup, "pending", null);
+    const unsentPayment = await chargedBillPayment("sumup", "unsent-ref", "txn-2");
+    const unsent = await billRefund(unsentPayment, "pending", null);
     const own = await billRefund(simulator, "pending", STAMPED);
 
     const summary = await summarise();
@@ -233,10 +243,10 @@ describe("summariseOpenPayments", () => {
         },
         {
           refundId: unsent,
-          billPaymentId: sumup,
+          billPaymentId: unsentPayment,
           provider: "sumup",
-          paymentRef: "sumup-ref",
-          processorRef: "txn-1",
+          paymentRef: "unsent-ref",
+          processorRef: "txn-2",
           sentAt: null,
         },
         {
@@ -273,8 +283,8 @@ describe("summariseOpenPayments", () => {
 
   it("lists no bill refund in another state", async () => {
     const billPaymentId = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
-    const others = billPaymentRefundState.enumValues.filter((state) => state !== "pending");
-    expect(others.length).toBe(billPaymentRefundState.enumValues.length - 1);
+    const others = refundState.enumValues.filter((state) => state !== "pending");
+    expect(others.length).toBe(refundState.enumValues.length - 1);
     for (const state of others) await billRefund(billPaymentId, state, STAMPED);
     const open = await billRefund(billPaymentId, "pending", STAMPED);
 

@@ -3,7 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import {
   devices,
   deviceProfiles,
-  tenderRefunds,
+  refunds,
   receiptReprints,
   sales,
   withTransaction,
@@ -81,9 +81,10 @@ export async function checkAccess(
   return device;
 }
 async function readRefund(tx: Transaction, id: string) {
-  const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
-  if (row === undefined) throw new AppError("tender.refund_not_found", { refundId: id });
-  return row;
+  const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
+  if (row === undefined || row.saleId === null || row.tenderId === null)
+    throw new AppError("tender.refund_not_found", { refundId: id });
+  return { ...row, saleId: row.saleId, tenderId: row.tenderId };
 }
 export function overrideOf(body: Record<string, unknown>): Override | undefined {
   if (body.override === null) throw invalid("override");

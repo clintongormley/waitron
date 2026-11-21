@@ -1,4 +1,4 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   diningTables,
   invoiceSeries,
@@ -2578,8 +2578,9 @@ describe("left unpaid with part paid", () => {
     );
     expect(paid.status).toBe(200);
     await inTx(venue, (tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: (paid.json.payment as { id: string }).id,
+        ...billRefundFields(tx, venue.cfg.nodeId, (paid.json.payment as { id: string }).id),
         submissionId: randomUUID(),
         fingerprint: "pending",
         appliedAmount: 200,

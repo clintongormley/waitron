@@ -1,14 +1,14 @@
 import { eq, or } from "drizzle-orm";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { tenderRefunds, tenders, type Transaction } from "@waitron/db";
+import { refunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import { payments, recordManualRefund } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
 import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
-import { enqueueTenderRefundDrawer } from "./receipt-print.js";
+import { enqueueRefundDrawer } from "./receipt-print.js";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
@@ -24,13 +24,13 @@ import "./errors.js";
 /** Once `stopSignal` is aborted the recovery pass looks up no further refund; each sent one it did
  * not ask about stays pending for a later pass. */
 export type TenderRefundDeps = BillRefundDeps & { stopSignal?: AbortSignal; log?: Logger };
-type RefundRow = typeof tenderRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 
 export function toTenderRefundView(row: RefundRow): TenderRefundView {
   return {
     id: row.id,
-    saleId: row.saleId,
-    tenderId: row.tenderId,
+    saleId: row.saleId!,
+    tenderId: row.tenderId!,
     state: row.state,
     appliedAmount: centsToDecimal(row.appliedAmount),
     tipAmount: centsToDecimal(row.tipAmount),
@@ -40,14 +40,14 @@ export function toTenderRefundView(row: RefundRow): TenderRefundView {
 }
 
 async function captureFor(tx: Transaction, refund: RefundRow) {
-  const originals = await tx.select().from(tenders).where(eq(tenders.saleId, refund.saleId));
+  const originals = await tx.select().from(tenders).where(eq(tenders.saleId, refund.saleId!));
   const tender = originals.find((row) => row.id === refund.tenderId)!;
   const captures = await tx
     .select()
     .from(payments)
     .where(
       or(
-        eq(payments.saleId, refund.saleId),
+        eq(payments.saleId, refund.saleId!),
         tender.billPaymentId === null
           ? undefined
           : eq(payments.billPaymentId, tender.billPaymentId),
@@ -115,11 +115,11 @@ export async function beginSettledTenderRefund(
               (!provider.capabilities.partialRefund &&
                 reserved.appliedAmount + reserved.tipAmount !== capture.amount)
             )
-              throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId });
+              throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
           }
         },
         openDrawer: (reserved) =>
-          enqueueTenderRefundDrawer(tx, cfg, reserved.id, operator.personId, {
+          enqueueRefundDrawer(tx, cfg, reserved.id, operator.personId, {
             authorizedBy: reserved.authorizedBy,
             viaOverride: reserved.authorizedBy !== operator.personId,
           }),

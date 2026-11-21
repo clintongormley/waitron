@@ -10,7 +10,7 @@ import {
   saleSettlements,
   saleSubstitutions,
   tenders,
-  tenderRefunds,
+  refunds,
   workingOrders,
   parties,
   withFoldedPersonChanges,
@@ -556,11 +556,11 @@ describe("Find Transactions SQL paging", () => {
 });
 
 describe("completed post-invoice refund Transactions", () => {
-  async function returned(saleId: string, values: Partial<typeof tenderRefunds.$inferInsert> = {}) {
+  async function returned(saleId: string, values: Partial<typeof refunds.$inferInsert> = {}) {
     return inTx(venue, async (tx) => {
       const [tender] = await tx.select().from(tenders).where(eq(tenders.saleId, saleId));
       const [row] = await tx
-        .insert(tenderRefunds)
+        .insert(refunds)
         .values({
           saleId,
           tenderId: tender!.id,

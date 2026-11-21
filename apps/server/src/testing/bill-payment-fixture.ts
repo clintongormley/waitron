@@ -1,5 +1,6 @@
 import { settleFromProviderRow } from "../bill-payments-loop.js";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import {
   billPayments,
   persons,
@@ -8,6 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { MANUAL_PROVIDER, payments } from "@waitron/payments";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
@@ -256,4 +258,31 @@ export async function seedPendingCardPayment(db: Database | Transaction, billId:
     })
     .returning({ id: billPayments.id });
   return payment!.id;
+}
+
+export function billRefundFields(
+  db: Database | Transaction,
+  nodeId: string,
+  billPaymentId: string,
+) {
+  const payment = db
+    .select({
+      method: billPayments.method,
+      provider: payments.provider,
+      paymentRef: payments.paymentRef,
+    })
+    .from(billPayments)
+    .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
+    .where(eq(billPayments.id, billPaymentId))
+    .get();
+  if (payment === undefined) throw new Error(`Missing bill payment ${billPaymentId}`);
+  const connected =
+    payment.method === "card" && payment.provider !== null && payment.provider !== MANUAL_PROVIDER;
+  return {
+    nodeId,
+    method: payment.method,
+    manual: payment.method === "card" && !connected,
+    provider: connected ? payment.provider : null,
+    providerPaymentRef: connected ? payment.paymentRef : null,
+  };
 }

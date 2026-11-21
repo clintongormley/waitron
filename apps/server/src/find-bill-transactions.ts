@@ -88,7 +88,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
   ), refund_rows as (
     select r.*, (select p.card_last4 from payments p
       where p.provider = r.provider and p.payment_ref = r.provider_payment_ref) as last4
-    from tender_refunds r where r.state = 'completed'
+    from refunds r where r.sale_id is not null and r.state = 'completed'
   ), transactions as (
     select i.*, i.id as sale_id, null as refund_id from invoices i
     union all

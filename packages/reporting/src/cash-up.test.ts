@@ -473,12 +473,12 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: cashPayment, deviceId: deviceB },
+      { billPaymentId: cashPayment, deviceId: deviceB, nodeId: venue.nodeId },
       { applied: "20.00", state: "completed", at: day2Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: cardPayment, deviceId: deviceB },
+      { billPaymentId: cardPayment, deviceId: deviceB, nodeId: venue.nodeId },
       { applied: "30.00", tip: "3.00", state: "completed", at: day2Noon },
     );
 
@@ -524,7 +524,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, deviceId: venue.deviceId },
+      { billPaymentId: payment, deviceId: venue.deviceId, nodeId: venue.nodeId },
       { applied: "50.00", state: "completed", at: day1Noon },
     );
 
@@ -567,12 +567,12 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: received, deviceId: venue.deviceId },
+      { billPaymentId: received, deviceId: venue.deviceId, nodeId: venue.nodeId },
       { applied: "5.00", state: "pending" },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: received, deviceId: venue.deviceId },
+      { billPaymentId: received, deviceId: venue.deviceId, nodeId: venue.nodeId },
       { applied: "6.00", state: "failed", at: day1Noon },
     );
 
@@ -596,7 +596,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, deviceId: other.deviceId },
+      { billPaymentId: payment, deviceId: other.deviceId, nodeId: venue.nodeId },
       { applied: "5.00", state: "completed", at: day1Noon },
     );
 

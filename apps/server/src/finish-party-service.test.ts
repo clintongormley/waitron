@@ -1,12 +1,12 @@
 import { openTillSession } from "./testing/session-device.js";
-import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   lineServiceCancellations,
   parties,
@@ -865,9 +865,10 @@ describe("whether a party's service can finish, read without writing", () => {
     );
     return async () =>
       inTx(venue, (tx) =>
-        tx.insert(billPaymentRefunds).values({
+        tx.insert(refunds).values({
           ...origin,
           billPaymentId: payment!.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, payment!.id),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount: 0,

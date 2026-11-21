@@ -1,8 +1,9 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   invoiceDeliveries,
   invoiceSeries,
@@ -495,8 +496,9 @@ describe("issueBillAtClose", () => {
     const party = await seatedWith(venue, "Red wine bottle");
     const [payment] = await insertPayment(party.tabId, "received", 500);
     await inTx(venue, (tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refunds).values({
         billPaymentId: payment!.id,
+        ...billRefundFields(tx, venue.cfg.nodeId, payment!.id),
         submissionId: randomUUID(),
         fingerprint: randomUUID(),
         appliedAmount: 500,

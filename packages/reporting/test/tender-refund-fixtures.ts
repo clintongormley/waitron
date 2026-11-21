@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { saleSettlements, tenderRefunds, tenders } from "@waitron/db";
+import { saleSettlements, refunds, tenders } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { addDecimal, decimal, stringToCents } from "@waitron/shared";
 import { seedSale, seedTender } from "./fixtures.js";
 import type { SeededVenue } from "./fixtures.js";
@@ -44,6 +45,9 @@ export async function seedRefundableSale(
   return { saleId, tenderId: tender!.id, method: input.method, venue };
 }
 
+const REFUND_OPERATOR = "cccccccc-0000-4000-8000-000000000010";
+const REFUND_AUTHORIZER = "cccccccc-0000-4000-8000-000000000011";
+
 export async function seedTenderRefund(
   db: Database,
   target: Awaited<ReturnType<typeof seedRefundableSale>>,
@@ -59,15 +63,18 @@ export async function seedTenderRefund(
 ) {
   const origin = input.origin ?? target.venue;
   const [row] = await db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId: target.saleId,
       tenderId: target.tenderId,
       submissionId: randomUUID(),
       fingerprint: "reporting-fixture",
       reason: "Money returned after the invoice",
-      requestedBy: randomUUID(),
-      authorizedBy: randomUUID(),
+      requestedBy: await seedPerson(db, { id: REFUND_OPERATOR, displayName: "Refund operator" }),
+      authorizedBy: await seedPerson(db, {
+        id: REFUND_AUTHORIZER,
+        displayName: "Refund authorizer",
+      }),
       appliedAmount: stringToCents(input.applied),
       tipAmount: stringToCents(input.tip),
       method: target.method,
@@ -80,6 +87,6 @@ export async function seedTenderRefund(
       completedAt: input.state === "completed" ? input.at : null,
       failedAt: input.state === "failed" ? input.at : null,
     })
-    .returning({ id: tenderRefunds.id });
+    .returning({ id: refunds.id });
   return row!.id;
 }

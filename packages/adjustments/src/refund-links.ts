@@ -20,7 +20,7 @@ export async function linkRefundToCancels(
     adjustmentRefunds,
     input.links.map((link) => ({
       adjustmentId: link.adjustmentId,
-      tenderRefundId: input.tenderRefundId,
+      refundId: input.tenderRefundId,
       amount: decimalToCents(link.amount),
     })),
   );
@@ -67,7 +67,7 @@ export async function readCancelsForRefund(
       a.requested_by as requestedBy, a.approved_by as approvedBy,
       cast(coalesce((
         select sum(l.amount) from adjustment_refunds l
-        join tender_refunds r on r.id = l.tender_refund_id
+        join refunds r on r.id = l.refund_id
         where l.adjustment_id = a.id and r.state in ('pending', 'completed')
       ), 0) as text) as linked
     from adjustments a

@@ -7,7 +7,6 @@ import {
   flag,
   id,
   label,
-  labelList,
   money,
   newId,
   nowIso,
@@ -23,7 +22,6 @@ import { originChecks, saleSourceColumn } from "./origin.js";
 export const billPaymentKind = enumType(["items", "contribution", "share"]);
 export const billPaymentMethod = enumType(["cash", "card"]);
 export const billPaymentState = enumType(["pending", "received", "failed", "declined"]);
-export const billPaymentRefundState = enumType(["pending", "completed", "failed"]);
 
 /**
  * One payment taken against a bill before its invoice exists (bill payments design §2.1). A card is
@@ -140,78 +138,5 @@ export const billPaymentLines = table(
     index("bill_payment_lines_payment_idx").on(t.billPaymentId),
     check("bill_payment_lines_quantity_ck", sql`${t.quantity} > 0`),
     check("bill_payment_lines_amount_ck", sql`${t.amount} >= 0`),
-  ],
-);
-
-/**
- * Money given back from one bill payment before the invoice (design §2.3, §6b). A cash refund is
- * written `completed`; only a card refund is ever `pending`.
- *
- * While pending, only the first send's `sent_at` and `refs_before_send`, a `send_count` raised by
- * one, the provider's refund id once, and the outcome — with an attestation when a manager records
- * it — may be written; after the outcome nothing changes, and a refund is never deleted. Those
- * rules are the `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
- * (`triggers/core.sql`).
- *
- * `authorized_by`, `requested_by` and `attested_by` are plain person ids.
- */
-export const billPaymentRefunds = table(
-  "bill_payment_refunds",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    billPaymentId: id("bill_payment_id").notNull(),
-    submissionId: label("submission_id").notNull(),
-    fingerprint: label("fingerprint").notNull(),
-    appliedAmount: money("applied_amount").notNull(),
-    tipAmount: money("tip_amount").notNull().default(0),
-    reason: label("reason").notNull(),
-    authorizedBy: id("authorized_by").notNull(),
-    requestedBy: id("requested_by").notNull(),
-    source: saleSourceColumn("source").notNull(),
-    /* v8 ignore start */
-    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
-    state: billPaymentRefundState("state").notNull(),
-    sentAt: tsString("sent_at"),
-    sendCount: count("send_count").notNull().default(0),
-    providerRefundRef: label("provider_refund_ref"),
-    /** The provider's refund ids of the payment read just before the first send, for a provider
-     * whose refunds cannot carry our id; null when no reading was taken. */
-    refsBeforeSend: labelList("refs_before_send"),
-    attestedBy: id("attested_by"),
-    attestationNote: label("attestation_note"),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    completedAt: tsString("completed_at"),
-    failedAt: tsString("failed_at"),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.billPaymentId],
-      foreignColumns: [billPayments.id],
-      name: "bill_payment_refunds_payment_fk",
-    }).onDelete("restrict"),
-    unique("bill_payment_refunds_submission_key").on(t.billPaymentId, t.submissionId),
-    check("bill_payment_refunds_state_ck", enumCheck(t.state)),
-    ...originChecks("bill_payment_refunds", t.source, t.deviceId),
-    check(
-      "bill_payment_refunds_amounts_ck",
-      sql`${t.appliedAmount} >= 0 and ${t.tipAmount} >= 0 and ${t.appliedAmount} + ${t.tipAmount} > 0`,
-    ),
-    check(
-      "bill_payment_refunds_sent_ck",
-      sql`(${t.sendCount} = 0) = (${t.sentAt} is null) and ${t.sendCount} >= 0`,
-    ),
-    check(
-      "bill_payment_refunds_completed_at_ck",
-      sql`(${t.state} = 'completed') = (${t.completedAt} is not null)`,
-    ),
-    check(
-      "bill_payment_refunds_failed_at_ck",
-      sql`(${t.state} = 'failed') = (${t.failedAt} is not null)`,
-    ),
-    check(
-      "bill_payment_refunds_attestation_ck",
-      sql`(${t.attestedBy} is null) = (${t.attestationNote} is null) and (${t.attestedBy} is null or (${t.state} <> 'pending' and coalesce(length(trim(${t.attestationNote})), 0) > 0))`,
-    ),
   ],
 );

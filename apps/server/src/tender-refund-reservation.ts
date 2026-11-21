@@ -3,9 +3,8 @@ import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments"
 import {
   adjustmentRefunds,
   billAdvances,
-  billPaymentRefunds,
+  refunds,
   sales,
-  tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
@@ -111,16 +110,16 @@ type RefundActor = { requestedBy: string } & (
 
 export async function authorizeStoredTenderRefund(
   tx: Transaction,
-  refund: typeof tenderRefunds.$inferSelect,
+  refund: typeof refunds.$inferSelect,
   authorize: (cancelledBy?: string) => Promise<Authorization>,
 ): Promise<void> {
   const links = await tx
     .select()
     .from(adjustmentRefunds)
-    .where(eq(adjustmentRefunds.tenderRefundId, refund.id));
+    .where(eq(adjustmentRefunds.refundId, refund.id));
   const cancels = await cancelsForSale(
     tx,
-    refund.saleId,
+    refund.saleId!,
     links.map((row) => row.adjustmentId),
   );
   const authorisers = new Set(cancels.map((row) => row.approvedBy ?? row.requestedBy));
@@ -158,7 +157,7 @@ export async function reserveTenderRefund(
    * set only by server code, never from a request body. */
   correctionRead?: CorrectionRead,
 ): Promise<{
-  refund: typeof tenderRefunds.$inferSelect;
+  refund: typeof refunds.$inferSelect;
   replayed: boolean;
   /** What the named cancels could still take before this refund; only on a new refund naming
    * cancels. */
@@ -203,8 +202,8 @@ export async function reserveTenderRefund(
   await resolveTransactionScope(tx, saleId);
   const [earlier] = await tx
     .select()
-    .from(tenderRefunds)
-    .where(and(eq(tenderRefunds.saleId, saleId), eq(tenderRefunds.submissionId, submissionId)));
+    .from(refunds)
+    .where(and(eq(refunds.saleId, saleId), eq(refunds.submissionId, submissionId)));
   if (earlier !== undefined) {
     if (earlier.fingerprint !== print) throw new AppError("submission.id_reused", { submissionId });
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
@@ -261,27 +260,22 @@ export async function reserveTenderRefund(
     if (capture === undefined) throw new AppError("tender.refund_unavailable", { tenderId });
     if (capture.billPaymentId !== null) {
       const [pending] = await tx
-        .select({ id: billPaymentRefunds.id })
-        .from(billPaymentRefunds)
-        .where(
-          and(
-            eq(billPaymentRefunds.billPaymentId, capture.billPaymentId),
-            eq(billPaymentRefunds.state, "pending"),
-          ),
-        );
+        .select({ id: refunds.id })
+        .from(refunds)
+        .where(and(eq(refunds.billPaymentId, capture.billPaymentId), eq(refunds.state, "pending")));
       if (pending !== undefined) throw new AppError("tender.refund_in_progress", { tenderId });
     }
     if (!refundable.manual) {
       provider = capture.provider;
       providerPaymentRef = capture.paymentRef;
       const [pending] = await tx
-        .select({ id: tenderRefunds.id })
-        .from(tenderRefunds)
+        .select({ id: refunds.id })
+        .from(refunds)
         .where(
           and(
-            eq(tenderRefunds.provider, provider),
-            eq(tenderRefunds.providerPaymentRef, providerPaymentRef),
-            eq(tenderRefunds.state, "pending"),
+            eq(refunds.provider, provider),
+            eq(refunds.providerPaymentRef, providerPaymentRef),
+            eq(refunds.state, "pending"),
           ),
         );
       if (pending !== undefined) throw new AppError("tender.refund_in_progress", { tenderId });
@@ -335,7 +329,7 @@ export async function reserveTenderRefund(
     }
   } else authorizedBy = actor.authorizedBy;
   const [refund] = await tx
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId,
       tenderId,

@@ -143,7 +143,7 @@ const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update:
   },
   adjustment_refunds: {
     insert: [
-      sql`insert into adjustment_refunds (id, adjustment_id, tender_refund_id, amount, created_at)
+      sql`insert into adjustment_refunds (id, adjustment_id, refund_id, amount, created_at)
           values ('refund-link-1', 'adjustment-1', 'tender-refund-1', 100, ${AT})`,
     ],
     update: sql`update adjustment_refunds set amount = 50`,

@@ -908,6 +908,8 @@ also qualifies the historical operation-description references in this section.
   Bill numbers, names and editor ownership now use columns on each bill, with the next number
   held by its party. A party merge also moves paid bills and preserves their collection facts;
   abandoned bills stay behind.
+  Bill and receipt refunds share one table. Each row points to the bill payment or receipt tender
+  and names the staff who handled it. The two refund routes still run separately until os13.
 
 ### 2026-11-19 counter save-and-pay benchmark
 

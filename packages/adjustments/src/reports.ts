@@ -373,7 +373,7 @@ async function refundsOf(
   }>(sql`
     select l.adjustment_id as adjustmentId, cast(l.amount as text) as amount, r.state
     from adjustment_refunds l
-    join tender_refunds r on r.id = l.tender_refund_id
+    join refunds r on r.id = l.refund_id
     where l.adjustment_id in (select value from json_each(${JSON.stringify(ids)}))
       and r.state in ('pending', 'completed')
     order by l.created_at, l.id`);

@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { seedAttendanceDay } from "@waitron/workforce/test/fixtures.js";
 import { seedRosterWeek } from "@waitron/workforce/test/fixtures.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
@@ -11,14 +12,13 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   drawerOpens,
   invoiceSeries,
   nodes,
   sales,
   saleVoids,
-  tenderRefunds,
   tenders,
   withTransaction,
   recordActivity,
@@ -613,7 +613,7 @@ async function seedActions(colleague: string): Promise<void> {
       reason: "Rang up the wrong table",
     });
     const refunded = await sale(a.refundSale);
-    await suite.db.insert(tenderRefunds).values({
+    await suite.db.insert(refunds).values({
       saleId: refunded.saleId,
       tenderId: refunded.tenderId,
       submissionId: crypto.randomUUID(),
@@ -663,8 +663,9 @@ async function seedActions(colleague: string): Promise<void> {
       })
       .returning({ id: billPayments.id });
     await sale(a.billSale, order!.id);
-    await suite.db.insert(billPaymentRefunds).values({
+    await suite.db.insert(refunds).values({
       billPaymentId: payment!.id,
+      ...billRefundFields(suite.db, NODE_ID, payment!.id),
       submissionId: crypto.randomUUID(),
       fingerprint: `bill refund ${personId}`,
       reason: "Charged twice",

@@ -5,13 +5,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
-  billPaymentRefunds,
+  refunds,
   invoiceCorrections,
   invoiceSeries,
   parties,
   saleLines,
   sales,
-  tenderRefunds,
   tenders,
   withTransaction,
   workingOrderLines,
@@ -452,8 +451,8 @@ describe("money and cards around an advance", () => {
     );
     const refundsOf = () =>
       inTx(venue, async (tx) => ({
-        bill: await tx.select().from(billPaymentRefunds),
-        tender: await tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),
+        bill: await tx.select().from(refunds),
+        tender: await tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
         balance: await readBillBalance(tx, bill.billId),
       }));
     const before = await refundsOf();

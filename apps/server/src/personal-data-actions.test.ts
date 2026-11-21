@@ -1,7 +1,8 @@
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   CORE_MIGRATIONS,
   drawerOpens,
@@ -9,7 +10,6 @@ import {
   printers,
   sales,
   saleVoids,
-  tenderRefunds,
   tenders,
   withTransaction,
   type Database,
@@ -135,7 +135,7 @@ async function seedTenderRefund(
     createdAt: string;
   },
 ): Promise<void> {
-  await db.insert(tenderRefunds).values({
+  await db.insert(refunds).values({
     ...row,
     saleId: sale.saleId,
     tenderId: sale.tenderId,
@@ -201,9 +201,13 @@ async function seedBillRefund(
     createdAt: string;
   },
 ): Promise<void> {
-  await db.insert(billPaymentRefunds).values({
+  const [payment] = await db.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
+  await db.insert(refunds).values({
     ...row,
     billPaymentId,
+    nodeId: at.nodeId,
+    method: payment!.method,
+    manual: payment!.method === "card",
     submissionId: randomUUID(),
     fingerprint: `bill refund ${row.id}`,
     reason: `bill refund reason ${row.id}`,
@@ -723,12 +727,8 @@ describe("actionsPersonalData", () => {
     const content = await text(MARTHA);
     const typed = [
       ...(await suite.db.select({ text: saleVoids.reason }).from(saleVoids)),
-      ...(await suite.db.select({ text: tenderRefunds.reason }).from(tenderRefunds)),
-      ...(await suite.db.select({ text: tenderRefunds.attestationNote }).from(tenderRefunds)),
-      ...(await suite.db.select({ text: billPaymentRefunds.reason }).from(billPaymentRefunds)),
-      ...(await suite.db
-        .select({ text: billPaymentRefunds.attestationNote })
-        .from(billPaymentRefunds)),
+      ...(await suite.db.select({ text: refunds.reason }).from(refunds)),
+      ...(await suite.db.select({ text: refunds.attestationNote }).from(refunds)),
     ]
       .map((row) => row.text)
       .filter((value): value is string => value !== null);

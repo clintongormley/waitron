@@ -4,7 +4,7 @@ import type { Hono } from "hono";
 import { expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { sales, tenderRefunds, tenders } from "@waitron/db";
+import { sales, refunds, tenders } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
@@ -110,9 +110,7 @@ function retry(app: Hono, refundId: string) {
 }
 
 function tenderRefundRows(saleId: string) {
-  return inTx(venue, (tx) =>
-    tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, saleId)),
-  );
+  return inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, saleId)));
 }
 
 const refundSends = () => venue.card.refundCalls.length;

@@ -11,7 +11,7 @@ import {
   invoiceSeries,
   saleLines,
   sales,
-  tenderRefunds,
+  refunds as refundRows,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -258,7 +258,7 @@ function counts() {
   }>(sql`
     select (select count(*) from sales) as invoices,
            (select count(*) from invoice_corrections) as corrections,
-           (select count(*) from tender_refunds) as refunds,
+           (select count(*) from refunds) as refunds,
            (select count(*) from print_jobs where kind = 'drawer') as drawers`);
   return row!;
 }
@@ -572,9 +572,9 @@ describe("openInvoiceCorrection", () => {
     });
     expect(
       await venue.db
-        .select({ reason: tenderRefunds.reason })
-        .from(tenderRefunds)
-        .where(eq(tenderRefunds.saleId, saleId)),
+        .select({ reason: refundRows.reason })
+        .from(refundRows)
+        .where(eq(refundRows.saleId, saleId)),
     ).toEqual([{ reason: correction.reason }]);
   });
 
@@ -1068,7 +1068,7 @@ describe("a correction's cash", () => {
       vatBreakdown: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
     });
     expect(
-      await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, saleId)),
+      await venue.db.select().from(refundRows).where(eq(refundRows.saleId, saleId)),
     ).toMatchObject([{ method: "cash", state: "completed", appliedAmount: 605, tipAmount: 0 }]);
     expect(await drawerOpensFor(given.refunds.map((refund) => refund.id))).toHaveLength(1);
     expect(counts()).toEqual({
@@ -1104,6 +1104,18 @@ describe("a correction's cash", () => {
       { tenderRefundId: given.refunds[0]!.id },
     ]);
     expect(counts().drawers).toBe(was.drawers + 1);
+    const stamps = await venue.db
+      .select({
+        id: refundRows.id,
+        openedAt: refundRows.drawerOpenedAt,
+        doneAt: refundRows.completedAt,
+      })
+      .from(refundRows)
+      .where(eq(refundRows.saleId, saleId));
+    const first = stamps.find((row) => row.id === given.refunds[0]!.id)!;
+    expect(first.openedAt).not.toBeNull();
+    expect(first.openedAt).toBe(first.doneAt);
+    expect(stamps.find((row) => row.id === given.refunds[1]!.id)!.openedAt).toBeNull();
     expect(given.correction).toMatchObject({ state: "filed", moneyBack: "25.00" });
     expect(await original(saleId)).toEqual(before);
   });

@@ -156,7 +156,7 @@ describe("manager post-invoice refunds", () => {
     await open(el, "attest");
     await change(el, "note", "Calling provider");
     await change(el, "pin", "0123");
-    api.liveData.invalidate([{ type: "tender_refunds" }]);
+    api.liveData.invalidate([{ type: "refunds" }]);
     await vi.waitFor(() => expect(api.listStuckTenderRefunds).toHaveBeenCalledTimes(2));
     expect((q(el, "[name=note]") as HTMLElement & { value: string }).value).toBe(
       "Calling provider",
@@ -240,7 +240,7 @@ describe("manager post-invoice refunds", () => {
       const { el, api } = await mount(stub({ listStuckTenderRefunds: reads }));
       q(el, "[data-test=refresh-bill-recovery]").click();
       await vi.waitFor(() => expect(typeof release).toBe("function"));
-      api.liveData.invalidate([{ type: "tender_refunds" }]);
+      api.liveData.invalidate([{ type: "refunds" }]);
       await vi.waitFor(() => expect(q(el, "[data-test=tender-refund-tr-1]")).toBeNull());
       release();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

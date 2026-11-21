@@ -17,7 +17,7 @@ import {
   handoverActivations,
   withNodeTransaction,
   tenders,
-  tenderRefunds,
+  refunds,
   sales,
   saleSettlements,
   invoiceSeries,
@@ -32,7 +32,7 @@ import {
   readHandoverOperation,
   readOpenHandoverOperation,
 } from "@waitron/node-db";
-import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode as bareNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments, recordRefund } from "@waitron/payments";
 import { getHeldOrder, listHeldOrders } from "./working-order.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -660,7 +660,9 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
-  await old.db.insert(tenderRefunds).values({
+  await seedPerson(old.db, { id: "operator", displayName: "Refund operator" });
+  await seedPerson(old.db, { id: "manager", displayName: "Refund manager" });
+  await old.db.insert(refunds).values({
     id: "returned-refund",
     saleId: sale!.id,
     tenderId: "returned-tender",
@@ -690,8 +692,8 @@ it("counts returned VAT and settled payments without changing the new main's own
   expect(await withTransaction(current.db, (tx) => readRefundableTenders(tx, sale!.id))).toEqual(
     [],
   );
-  expect(current.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(
-    old.db.all<ReturnRow>(sql`select * from tender_refunds`),
+  expect(current.db.all<ReturnRow>(sql`select * from refunds`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from refunds`),
   );
 });
 
@@ -740,7 +742,9 @@ async function pendingCardOriginal() {
     state: "captured",
     settledAt: "2026-07-20T17:21:00.000Z",
   });
-  await old.db.insert(tenderRefunds).values({
+  await seedPerson(old.db, { id: "operator", displayName: "Refund operator" });
+  await seedPerson(old.db, { id: "manager", displayName: "Refund manager" });
+  await old.db.insert(refunds).values({
     id: "pending-card-refund",
     saleId,
     tenderId: "pending-card-tender",
@@ -782,11 +786,11 @@ it("returns a pending card refund with a settled order that cannot be reopened a
     code: "working_order.not_found",
   });
   expect(current.db.all(sql`select * from working_order_lines`)).toEqual([]);
-  for (const table of ["payments", "tender_refunds"])
+  for (const table of ["payments", "refunds"])
     expect(current.db.all(sql`select * from ${sql.identifier(table)}`)).toEqual(
       old.db.all(sql`select * from ${sql.identifier(table)}`),
     );
-  await current.db.execute(sql`update tender_refunds set state = 'completed',
+  await current.db.execute(sql`update refunds set state = 'completed',
     completed_at = '2026-07-20T17:22:00.000Z', last_lookup_at = '2026-07-20T17:22:00.000Z',
     provider_refund_ref = 'matched-refund', provider_status = 'completed' where id = 'pending-card-refund'`);
   await withTransaction(current.db, (tx) =>
@@ -806,7 +810,7 @@ it("returns a pending card refund with a settled order that cannot be reopened a
         receiveReturnedOriginals(tx, String(order.nodeId), batch, now),
       ),
     ).toEqual({ complete: true });
-  expect(current.db.all(sql`select state, provider_refund_ref from tender_refunds`)).toEqual([
+  expect(current.db.all(sql`select state, provider_refund_ref from refunds`)).toEqual([
     { state: "completed", provider_refund_ref: "matched-refund" },
   ]);
 });

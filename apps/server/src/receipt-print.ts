@@ -10,7 +10,7 @@ import {
   printJobs,
   readTaxpayer,
   sales,
-  tenderRefunds,
+  refunds,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -761,8 +761,7 @@ async function enqueueBillDrawer(
   cfg: OriginConfig,
   billPaymentId: string,
   operatorId: string,
-  reason: "bill_payment" | "bill_refund" | "card_slip",
-  authorization: { authorizedBy: string; viaOverride: boolean } | null,
+  reason: "bill_payment" | "card_slip",
   printers: PrinterLookup,
 ): Promise<void> {
   const printer = await drawerPrinter(printers);
@@ -773,7 +772,6 @@ async function enqueueBillDrawer(
     personId: operatorId,
     reason,
     billPaymentId,
-    ...(authorization ?? {}),
   });
   await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }
@@ -788,7 +786,7 @@ export async function enqueueBillPaymentDrawer(
   operatorId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_payment", null, printers);
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_payment", printers);
 }
 
 /**
@@ -802,32 +800,10 @@ export async function enqueueBillCardSlipDrawer(
   operatorId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "card_slip", null, printers);
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "card_slip", printers);
 }
 
-/**
- * Cash given back from a bill payment before the invoice opens the drawer {@link drawerPrinter}
- * finds, naming that payment and whoever authorised the refund.
- */
-export async function enqueueBillRefundDrawer(
-  tx: Transaction,
-  cfg: OriginConfig,
-  billPaymentId: string,
-  operatorId: string,
-  authorization: { authorizedBy: string; viaOverride: boolean },
-): Promise<void> {
-  await enqueueBillDrawer(
-    tx,
-    cfg,
-    billPaymentId,
-    operatorId,
-    "bill_refund",
-    authorization,
-    printerLookup(tx, cfg.origin),
-  );
-}
-
-export async function enqueueTenderRefundDrawer(
+export async function enqueueRefundDrawer(
   tx: Transaction,
   cfg: OriginConfig,
   refundId: string,
@@ -835,33 +811,30 @@ export async function enqueueTenderRefundDrawer(
   authorization: { authorizedBy: string; viaOverride: boolean },
 ): Promise<void> {
   if (cfg.origin.source !== "device") return;
-  const [refund] = await tx
-    .select({ saleId: tenderRefunds.saleId })
-    .from(tenderRefunds)
-    .where(
-      and(
-        eq(tenderRefunds.id, refundId),
-        eq(tenderRefunds.state, "completed"),
-        eq(tenderRefunds.method, "cash"),
-        eq(tenderRefunds.deviceId, cfg.origin.deviceId),
-        eq(tenderRefunds.nodeId, cfg.nodeId),
-      ),
-    );
-  if (refund === undefined) return;
-  const [earlier] = await tx
-    .select({ id: drawerOpens.id })
-    .from(drawerOpens)
-    .where(eq(drawerOpens.tenderRefundId, refundId));
-  if (earlier !== undefined) return;
   const printer = await drawerPrinter(printerLookup(tx, cfg.origin));
   if (printer === undefined) return;
+  const [refund] = await tx
+    .update(refunds)
+    .set({ drawerOpenedAt: sql`${refunds.completedAt}` })
+    .where(
+      and(
+        eq(refunds.id, refundId),
+        eq(refunds.state, "completed"),
+        eq(refunds.method, "cash"),
+        eq(refunds.deviceId, cfg.origin.deviceId),
+        eq(refunds.nodeId, cfg.nodeId),
+        isNull(refunds.drawerOpenedAt),
+      ),
+    )
+    .returning({ saleId: refunds.saleId, billPaymentId: refunds.billPaymentId });
+  if (refund === undefined) return;
   await tx.insert(drawerOpens).values({
     deviceId: cfg.origin.deviceId,
     printerId: printer.id,
     personId: operatorId,
-    saleId: refund.saleId,
-    tenderRefundId: refundId,
-    reason: "tender_refund",
+    ...(refund.billPaymentId === null
+      ? { saleId: refund.saleId, tenderRefundId: refundId, reason: "tender_refund" as const }
+      : { billPaymentId: refund.billPaymentId, reason: "bill_refund" as const }),
     ...authorization,
   });
   await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");

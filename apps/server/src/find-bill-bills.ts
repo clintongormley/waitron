@@ -55,12 +55,12 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
       coalesce((select sum(c.total) from sales c where ${correctivesOf(sql`c`, sql`s.id`)}),0) as corrections,
       case when exists(select 1 from sale_settlements settled where settled.sale_id = s.id) then
         (select coalesce(sum(t.amount - t.tip_amount),0) from tenders t where t.sale_id = s.id)
-        - (select coalesce(sum(tr.applied_amount),0) from tender_refunds tr
+        - (select coalesce(sum(tr.applied_amount),0) from refunds tr
           join tenders t on t.id = tr.tender_id
           join invoice_correction_refunds icr on icr.tender_refund_id = tr.id
           join invoice_corrections ic on ic.id = icr.invoice_correction_id
           where tr.sale_id = s.id and t.sale_id = s.id and tr.state = 'completed' and ic.state = 'filed')
-      else (select coalesce(sum(bp.applied - coalesce((select sum(br.applied_amount) from bill_payment_refunds br
+      else (select coalesce(sum(bp.applied - coalesce((select sum(br.applied_amount) from refunds br
         where br.bill_payment_id = bp.id and br.state = 'completed'),0)),0)
         from bill_payments bp where bp.working_order_id = wo.id and bp.state = 'received') end as paid_cents,
       coalesce(

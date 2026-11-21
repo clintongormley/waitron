@@ -11,7 +11,7 @@ import {
   printJobs,
   receiptReprints,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   floorZones,
 } from "@waitron/db";
@@ -47,12 +47,12 @@ async function profile() {
   return (await store.db.select().from(devices).where(eq(devices.id, venue.deviceId)))[0]!
     .deviceProfileId;
 }
-async function target(values: Partial<typeof tenderRefunds.$inferInsert> = {}, saleId?: string) {
+async function target(values: Partial<typeof refunds.$inferInsert> = {}, saleId?: string) {
   saleId ??= await billlessSale(venue);
   const [tender] = await store.db.select().from(tenders).where(eq(tenders.saleId, saleId));
   const [row] = await inTx(venue, (tx) =>
     tx
-      .insert(tenderRefunds)
+      .insert(refunds)
       .values({
         saleId,
         tenderId: tender!.id,
@@ -74,7 +74,7 @@ async function target(values: Partial<typeof tenderRefunds.$inferInsert> = {}, s
       })
       .returning(),
   );
-  return row!;
+  return { ...row!, saleId: row!.saleId! };
 }
 const get = (id: string, cookie = venue.cookie) =>
   send(venue.app, cookie, "GET", `/api/tender-refunds/${id}/receipt`);
@@ -84,7 +84,7 @@ async function immutable() {
   return inTx(venue, async (tx) => ({
     sales: await tx.select().from(sales),
     tenders: await tx.select().from(tenders),
-    refunds: await tx.select().from(tenderRefunds),
+    refunds: await tx.select().from(refunds),
     fiscal: (await tx.execute(sql`select * from registros_facturacion order by id`)).rows,
     drawers: await tx.select().from(drawerOpens),
     deliveries: await tx.select().from(invoiceDeliveries),

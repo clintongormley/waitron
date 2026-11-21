@@ -79,14 +79,11 @@ export const BILL_PAYMENT_CHANGE_REFUSAL = "bill payment cannot make that change
 /** `bill_payments_no_delete`. */
 export const BILL_PAYMENT_DELETE_REFUSAL = "a bill payment is never deleted";
 
-/** `bill_payment_refunds_guard_update`: a fixed column changed, or a pending-only write came late. */
-export const BILL_REFUND_CHANGE_REFUSAL = "bill payment refund cannot make that change";
+/** `refunds_guard_update`: a fixed column changed, or a pending-only write came late. */
+export const REFUND_CHANGE_REFUSAL = "refund cannot make that change";
 
-/** `bill_payment_refunds_no_delete`. */
-export const BILL_REFUND_DELETE_REFUSAL = "a bill payment refund is never deleted";
-
-export const TENDER_REFUND_CHANGE_REFUSAL = "tender refund cannot make that change";
-export const TENDER_REFUND_DELETE_REFUSAL = "a tender refund is never deleted";
+/** `refunds_no_delete`. */
+export const REFUND_DELETE_REFUSAL = "a refund is never deleted";
 
 export const DAY_START_HISTORY_REFUSAL = "day start history cannot change";
 

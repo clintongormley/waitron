@@ -14,7 +14,7 @@ import {
   saleSubstitutions,
   saleVoids,
   tenders,
-  tenderRefunds,
+  refunds,
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
@@ -914,7 +914,8 @@ it("stops when both boxes independently settled the same sale", async () => {
   const withCapture = structuredClone(returned);
   withCapture.captures.push({ id: "capture", sale_id: source.saleId });
   expect((await inspect(receiver.db, source.nodeId, withCapture))[0]!.eligible).toBe(false);
-  await receiver.db.insert(tenderRefunds).values({
+  await seedRefundActors(receiver.db);
+  await receiver.db.insert(refunds).values({
     id: "new-held-refund",
     saleId: source.saleId,
     tenderId: "receiver-tender",
@@ -1300,9 +1301,15 @@ it.each([60000, 60001])(
   },
 );
 
+async function seedRefundActors(db: typeof suite.db) {
+  await seedPerson(db, { id: "manager", displayName: "Refund manager" });
+  await seedPerson(db, { id: "operator", displayName: "Refund cashier" });
+}
+
 it("selects a pending refund and preserves its completed outcome on return", async () => {
   const source = await original("Source", 1, copyBase);
   const device = await addDeviceToNode(suite.db, source);
+  await seedRefundActors(suite.db);
   await suite.db.insert(tenders).values({
     id: "refunded-tender",
     saleId: source.saleId,
@@ -1311,7 +1318,7 @@ it("selects a pending refund and preserves its completed outcome on return", asy
     settledAt: "2026-07-20T17:21:00.000Z",
   });
   const [refund] = await suite.db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       id: "finished-refund",
       saleId: source.saleId,
@@ -1335,17 +1342,23 @@ it("selects a pending refund and preserves its completed outcome on return", asy
   const inProgress = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
-  expect(inProgress.refunds).toEqual(suite.db.all<ReturnRow>(sql`select * from tender_refunds`));
+  expect(inProgress.refunds).toEqual(suite.db.all<ReturnRow>(sql`select * from refunds`));
   await suite.db
-    .update(tenderRefunds)
+    .update(refunds)
     .set({ state: "completed", completedAt: "2026-07-20T17:21:02.000Z" })
-    .where(eq(tenderRefunds.id, refund!.id));
+    .where(eq(refunds.id, refund!.id));
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
   const batch = makeReturnedBatches(returned).find((row) => row.tenders.length > 0)!;
-  const stored = suite.db.all<ReturnRow>(sql`select * from tender_refunds`);
+  const stored = suite.db.all<ReturnRow>(sql`select * from refunds`);
   expect(batch.refunds).toEqual(stored);
+  expect(batch.staff).toEqual(
+    expect.arrayContaining([
+      { id: "manager", displayName: "Refund manager" },
+      { id: "operator", displayName: "Refund cashier" },
+    ]),
+  );
   expect(batch.devices.map((row) => row.id)).toContain(device.deviceId);
   const now = new Date("2026-07-20T17:22:00.000Z");
   for (let pass = 0; pass < 2; pass++) {
@@ -1354,7 +1367,7 @@ it("selects a pending refund and preserves its completed outcome on return", asy
         receiveReturnedOriginals(tx, source.nodeId, batch, now),
       ),
     ).toEqual({ complete: true });
-    expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+    expect(receiver.db.all<ReturnRow>(sql`select * from refunds`)).toEqual(stored);
   }
   const changed = structuredClone(batch);
   changed.refunds[0]!.reason = "Different refund";
@@ -1363,7 +1376,7 @@ it("selects a pending refund and preserves its completed outcome on return", asy
       receiveReturnedOriginals(tx, source.nodeId, changed, now),
     ),
   ).toEqual({ complete: false });
-  expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+  expect(receiver.db.all<ReturnRow>(sql`select * from refunds`)).toEqual(stored);
   changed.refunds[0]!.id = "same-submission-another-id";
   changed.refunds[0]!.reason = returned.refunds[0]!.reason!;
   expect(
@@ -1371,7 +1384,7 @@ it("selects a pending refund and preserves its completed outcome on return", asy
       receiveReturnedOriginals(tx, source.nodeId, changed, now),
     ),
   ).toEqual({ complete: false });
-  expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
+  expect(receiver.db.all<ReturnRow>(sql`select * from refunds`)).toEqual(stored);
   changed.refunds[0]!.state = "failed";
   await expect(
     withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, changed, now)),
@@ -1445,7 +1458,8 @@ it.each([
       createdAt: "2026-07-20T17:21:01.000Z",
       completedAt: "2026-07-20T17:21:02.000Z",
     };
-    await suite.db.insert(tenderRefunds).values(refund);
+    await seedRefundActors(suite.db);
+    await suite.db.insert(refunds).values(refund);
     const returned = await withTransaction(suite.db, (tx) =>
       readReturnedOriginals(tx, source.nodeId),
     );
@@ -1453,7 +1467,8 @@ it.each([
     await withTransaction(receiver.db, (tx) =>
       receiveReturnedOriginals(tx, source.nodeId, { ...returned, refunds: [] }, now),
     );
-    await receiver.db.insert(tenderRefunds).values({
+    await seedRefundActors(receiver.db);
+    await receiver.db.insert(refunds).values({
       ...refund,
       id: "receiver-refund",
       submissionId: "receiver-submission",
@@ -1467,7 +1482,7 @@ it.each([
         receiveReturnedOriginals(tx, source.nodeId, returned, now),
       ),
     ).toEqual({ complete });
-    expect(receiver.db.all<{ id: string }>(sql`select id from tender_refunds order by id`)).toEqual(
+    expect(receiver.db.all<{ id: string }>(sql`select id from refunds order by id`)).toEqual(
       complete ? [{ id: "receiver-refund" }, { id: "source-refund" }] : [{ id: "receiver-refund" }],
     );
     if (!complete) {
@@ -1478,9 +1493,9 @@ it.each([
           receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
         ),
       ).toEqual({ complete: true });
-      expect(
-        receiver.db.all<{ id: string }>(sql`select id from tender_refunds order by id`),
-      ).toEqual([{ id: "receiver-refund" }]);
+      expect(receiver.db.all<{ id: string }>(sql`select id from refunds order by id`)).toEqual([
+        { id: "receiver-refund" },
+      ]);
     }
   },
 );
@@ -1518,14 +1533,15 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
     values ('capture', ${order.id}, 'device', ${source.deviceId}, ${source.nodeId}, ${source.saleId},
       'recorded-provider', 'recorded-charge', 100, 'captured',
       '2026-07-20T17:21:00.000Z', '2026-07-20T17:21:00.000Z', '2026-07-20T17:21:00.000Z')`);
-  await suite.db.insert(tenderRefunds).values({
+  await seedRefundActors(suite.db);
+  await suite.db.insert(refunds).values({
     id: "pending-refund",
     saleId: source.saleId,
     tenderId: "pending-tender",
     submissionId: "pending-submission",
     fingerprint: "pending-fingerprint",
     appliedAmount: 0,
-    tipAmount: 100,
+    tipAmount: 40,
     reason: "Goodwill",
     authorizedBy: "manager",
     requestedBy: "operator",
@@ -1554,12 +1570,18 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
   expect(await receive()).toEqual({ complete: true });
   expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(batch!.captures);
   expect(receiver.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(batch!.orders);
-  await receiver.db.execute(sql`update tender_refunds set state = 'completed',
+  const conflicting = structuredClone(batch!);
+  conflicting.refunds[0]!.id = "another-refund";
+  conflicting.refunds[0]!.submission_id = "another-submission";
+  await expect(receive(conflicting)).rejects.toThrow(
+    "UNIQUE constraint failed: refunds.provider, refunds.provider_payment_ref",
+  );
+  await receiver.db.execute(sql`update refunds set state = 'completed',
     completed_at = '2026-07-20T17:22:00.000Z' where id = 'pending-refund'`);
   await receiver.db.execute(sql`update payments set state = 'refunded',
     updated_at = '2026-07-20T17:22:00.000Z' where id = 'capture'`);
   expect(await receive()).toEqual({ complete: true });
-  expect(receiver.db.all<{ state: string }>(sql`select state from tender_refunds`)).toEqual([
+  expect(receiver.db.all<{ state: string }>(sql`select state from refunds`)).toEqual([
     { state: "completed" },
   ]);
   expect(receiver.db.all<{ state: string }>(sql`select state from payments`)).toEqual([

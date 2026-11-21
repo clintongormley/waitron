@@ -89,14 +89,9 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "which advance invoice was issued against which bill; never corrected",
   ),
   classify(
-    "bill_payment_refunds",
+    "refunds",
     "ledger",
-    "money given back from a bill payment before the invoice; only its outcome moves, under a trigger",
-  ),
-  classify(
-    "tender_refunds",
-    "ledger",
-    "money returned after the invoice; request identity and terminal outcomes held by its transition triggers",
+    "money returned before or after the invoice; request identity and terminal outcomes held by its transition trigger",
   ),
   classify(
     "invoice_corrections",

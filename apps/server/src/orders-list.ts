@@ -5,7 +5,7 @@ import { canEmailInvoice } from "./invoice-email-contact.js";
 import { and, asc, desc, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
-  billPaymentRefunds,
+  refunds as refundRows,
   correctivesOf,
   billPayments,
   diningTables,
@@ -1115,21 +1115,21 @@ async function readBillPayments(tx: Transaction, billId: string): Promise<OrderB
   if (payments.length === 0) return [];
   const refunds = await tx
     .select({
-      billPaymentId: billPaymentRefunds.billPaymentId,
-      applied: billPaymentRefunds.appliedAmount,
-      tip: billPaymentRefunds.tipAmount,
-      state: billPaymentRefunds.state,
-      reason: billPaymentRefunds.reason,
-      createdAt: billPaymentRefunds.createdAt,
+      billPaymentId: refundRows.billPaymentId,
+      applied: refundRows.appliedAmount,
+      tip: refundRows.tipAmount,
+      state: refundRows.state,
+      reason: refundRows.reason,
+      createdAt: refundRows.createdAt,
     })
-    .from(billPaymentRefunds)
+    .from(refundRows)
     .where(
       inArray(
-        billPaymentRefunds.billPaymentId,
+        refundRows.billPaymentId,
         payments.map((payment) => payment.id),
       ),
     )
-    .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
+    .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`);
   return payments.map((payment) => ({
     method: payment.method,
     state: payment.state,

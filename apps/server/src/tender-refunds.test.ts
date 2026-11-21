@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { setPrinterListsForTest } from "@waitron/db/testing/printers.js";
 import { getTableColumns } from "drizzle-orm";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
@@ -10,7 +11,7 @@ import {
   installChangeFeed,
   subscribeToChanges,
   billPayments,
-  billPaymentRefunds,
+  refunds,
   incidents,
   withTransaction,
   deviceProfiles,
@@ -21,7 +22,6 @@ import {
   printJobs,
   saleSettlements,
   sales,
-  tenderRefunds,
   tenders,
   workingOrders,
 } from "@waitron/db";
@@ -250,7 +250,7 @@ async function originalFacts() {
   };
 }
 async function noEffects() {
-  expect(await store.db.select().from(tenderRefunds)).toEqual([]);
+  expect(await store.db.select().from(refunds)).toEqual([]);
   expect(await store.db.select().from(drawerOpens)).toEqual([]);
   expect(await store.db.select().from(printJobs)).toEqual([]);
   expect(await store.db.select().from(paymentRefunds)).toEqual([]);
@@ -271,7 +271,7 @@ describe("settled-tender refund command local transaction", () => {
       createdAt: AT,
       completedAt: AT,
     });
-    expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+    expect(await store.db.select().from(refunds)).toMatchObject([
       {
         id: result.id,
         state: "completed",
@@ -302,7 +302,7 @@ describe("settled-tender refund command local transaction", () => {
     const req = request(t, { appliedAmount: "10.00" });
     const first = await run(t, req);
     const snapshot = {
-      refunds: await store.db.select().from(tenderRefunds),
+      refunds: await store.db.select().from(refunds),
       drawers: await store.db.select().from(drawerOpens),
       jobs: await store.db.select().from(printJobs),
     };
@@ -314,7 +314,7 @@ describe("settled-tender refund command local transaction", () => {
     };
     expect(await run(t, req, failIfCalled)).toEqual(first);
     expect({
-      refunds: await store.db.select().from(tenderRefunds),
+      refunds: await store.db.select().from(refunds),
       drawers: await store.db.select().from(drawerOpens),
       jobs: await store.db.select().from(printJobs),
     }).toEqual(snapshot);
@@ -327,7 +327,7 @@ describe("settled-tender refund command local transaction", () => {
       run(t, request(t), {
         ...deps,
         attendance: async (tx, fact) => {
-          expect(await tx.select().from(tenderRefunds)).toMatchObject([
+          expect(await tx.select().from(refunds)).toMatchObject([
             { state: "completed", id: fact.key },
           ]);
           expect(await tx.select().from(drawerOpens)).toHaveLength(1);
@@ -408,7 +408,7 @@ describe("settled-tender refund command local transaction", () => {
     const req = request(t);
     const results = await Promise.all([run(t, req), run(t, req)]);
     expect(results[1]).toEqual(results[0]);
-    expect(await store.db.select().from(tenderRefunds)).toHaveLength(1);
+    expect(await store.db.select().from(refunds)).toHaveLength(1);
     expect(await store.db.select().from(drawerOpens)).toHaveLength(1);
     expect(await store.db.select().from(printJobs)).toHaveLength(1);
   });
@@ -420,7 +420,7 @@ describe("settled-tender refund command local transaction", () => {
     ]);
     expect(results.map((r) => r.status)).toEqual(["fulfilled", "rejected"]);
     expect(results[1]).toMatchObject({ reason: { code: "tender.refund_exceeds_payment" } });
-    expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+    expect(await store.db.select().from(refunds)).toMatchObject([
       { state: "completed", appliedAmount: 700 },
     ]);
     expect(await store.db.select().from(printJobs)).toHaveLength(1);
@@ -477,7 +477,7 @@ describe("settled-tender refund command local transaction", () => {
     expect(await store.db.select().from(payments)).toMatchObject([
       { paymentRef: t.paymentRef, state: "refunded", amount: 1100 },
     ]);
-    expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+    expect(await store.db.select().from(refunds)).toMatchObject([
       { authorizedBy: managerId, manual: true },
     ]);
     expect(await store.db.select().from(drawerOpens)).toEqual([]);
@@ -567,9 +567,9 @@ describe("settled-tender refund command local transaction", () => {
       { amount: 300 },
       { amount: 500 },
     ]);
-    expect(await store.db.select().from(tenderRefunds)).toHaveLength(3);
-    for (const refund of await store.db.select().from(tenderRefunds)) {
-      expect(changes).toContainEqual({ type: "tender_refunds", id: refund.id });
+    expect(await store.db.select().from(refunds)).toHaveLength(3);
+    for (const refund of await store.db.select().from(refunds)) {
+      expect(changes).toContainEqual({ type: "refunds", id: refund.id });
     }
     await expect(local("0.01")).rejects.toMatchObject({ code: "tender.refund_unavailable" });
     expect(await store.db.select().from(printJobs)).toEqual([]);
@@ -590,7 +590,7 @@ describe("settled-tender refund command local transaction", () => {
         },
       }),
     ).toEqual(first);
-    expect(await store.db.select().from(tenderRefunds)).toHaveLength(1);
+    expect(await store.db.select().from(refunds)).toHaveLength(1);
   });
   it("keeps a connected-capable command pending without fabricating returned money", async () => {
     const t = await target("card", "fake");
@@ -601,7 +601,7 @@ describe("settled-tender refund command local transaction", () => {
       refundProviderFor: async (name) => (name === "fake" ? provider : undefined),
     });
     expect(result).toMatchObject({ state: "pending", completedAt: null });
-    expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+    expect(await store.db.select().from(refunds)).toMatchObject([
       { id: result.id, state: "pending", sentAt: null, sendCount: 0 },
     ]);
 
@@ -631,7 +631,7 @@ async function connected(tip = 0, billDerived = false) {
   return { t, provider };
 }
 async function row(id: string) {
-  return (await store.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id)))[0]!;
+  return (await store.db.select().from(refunds).where(eq(refunds.id, id)))[0]!;
 }
 
 describe("settled-tender connected refund orchestration", () => {
@@ -889,13 +889,13 @@ describe("settled-tender connected refund orchestration", () => {
       .where(eq(payments.paymentRef, t.paymentRef));
     provider.existingRefundRefs = async (ref) => {
       expect(ref).toBe("processor-1");
-      expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+      expect(await store.db.select().from(refunds)).toMatchObject([
         { state: "pending", sentAt: null, sendCount: 0 },
       ]);
       return ["preexisting"];
     };
     vi.spyOn(provider, "sendRefund").mockImplementation(async () => {
-      expect(await store.db.select().from(tenderRefunds)).toMatchObject([
+      expect(await store.db.select().from(refunds)).toMatchObject([
         { refsBeforeSend: ["preexisting"], sendCount: 1 },
       ]);
       return { kind: "accepted" };
@@ -1012,7 +1012,7 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     let checked = false;
     vi.spyOn(store.db, "withWriteLock").mockImplementation(async (body) => {
       const result = await original(body);
-      const [pending] = await store.db.select().from(tenderRefunds);
+      const [pending] = await store.db.select().from(refunds);
       if (!checked && pending?.state === "pending" && pending.sentAt === null) {
         checked = true;
         expect(tenderRefundIsLive(store.db, pending.id)).toBe(true);
@@ -1097,10 +1097,7 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     });
     // Start separately to exercise the lookup path, which must union all ledgers' references.
     const next = await run(t);
-    await store.db
-      .update(tenderRefunds)
-      .set({ sentAt: AT, sendCount: 1 })
-      .where(eq(tenderRefunds.id, next.id));
+    await store.db.update(refunds).set({ sentAt: AT, sendCount: 1 }).where(eq(refunds.id, next.id));
     expect((await resumeTenderRefund(deps, next.id, "loop")).state).toBe("pending");
     expect(provider.lookupCalls.at(-1)!.excludeRefs).toEqual(["attributed-failure"]);
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
@@ -1116,8 +1113,9 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
       .where(eq(payments.paymentRef, t.paymentRef));
     // A new settled sale can point to its already received bill tender before settlement.
     const pending = await run(t);
-    await store.db.insert(billPaymentRefunds).values({
+    await store.db.insert(refunds).values({
       billPaymentId: payment!.billPaymentId!,
+      ...billRefundFields(store.db, cfg.nodeId, payment!.billPaymentId!),
       submissionId: randomUUID(),
       fingerprint: "failed-pre",
       appliedAmount: 100,
@@ -1149,11 +1147,17 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     });
     deps.refundProviderFor = async () => provider;
     await store.db
-      .update(tenderRefunds)
-      .set({ sentAt: AT, sendCount: 1 })
-      .where(eq(tenderRefunds.id, pending.id));
+      .update(refunds)
+      .set({ sentAt: AT, sendCount: 1, providerRefundRef: "own-ref" })
+      .where(eq(refunds.id, pending.id));
+    await store.db.insert(paymentRefunds).values({
+      paymentId: payment!.id,
+      amount: 100,
+      state: "failed",
+      providerRefundRef: "own-ref",
+    });
     const pendingRow = await row(pending.id);
-    await store.db.insert(tenderRefunds).values({
+    await store.db.insert(refunds).values({
       ...pendingRow,
       id: randomUUID(),
       submissionId: randomUUID(),
@@ -1319,10 +1323,7 @@ describe("settled-tender send deadline and terminal controls", () => {
     const work = refundSettledTender(deps, cfg, t.saleId, request(t), operator());
     await vi.waitFor(() => expect(provider.refundCalls).toHaveLength(1));
     const id = provider.refundCalls[0]!.refundId;
-    await store.db
-      .update(tenderRefunds)
-      .set({ state: "failed", failedAt: AT })
-      .where(eq(tenderRefunds.id, id));
+    await store.db.update(refunds).set({ state: "failed", failedAt: AT }).where(eq(refunds.id, id));
     release();
     expect((await work).state).toBe("failed");
     expect(await row(id)).toMatchObject({
@@ -1421,9 +1422,9 @@ describe("settled-tender refund scheduled recovery", () => {
     const refund = await run(t);
     if (sent)
       await store.db
-        .update(tenderRefunds)
+        .update(refunds)
         .set({ sentAt: AT, sendCount: 1 })
-        .where(eq(tenderRefunds.id, refund.id));
+        .where(eq(refunds.id, refund.id));
     return { t, provider, refund };
   }
   it("returns no scheduled work when only completed cash returns exist", async () => {
@@ -1531,7 +1532,7 @@ describe("settled-tender refund scheduled recovery", () => {
       deps.refundProviderFor = async () => provider;
       ids.push((await run(t)).id);
     }
-    await store.db.update(tenderRefunds).set({ sentAt: AT, sendCount: 1 });
+    await store.db.update(refunds).set({ sentAt: AT, sendCount: 1 });
     expect(await recoverTenderRefunds(deps)).toEqual({ pending: 51, nextDueAt: new Date(AT) });
     expect(lookup.mock.calls.map(([q]) => q.refundId)).toEqual(ids.sort().slice(0, 50));
     expect(await recoverTenderRefunds(deps)).toEqual({
@@ -1851,7 +1852,7 @@ describe("settled-tender refund bounded shutdown", () => {
       if (waitingOn === "send" || waitingOn === "snapshot") {
         command = refundSettledTender(deps, cfg, t.saleId, request(t), operator());
         await entered;
-        refundId = (await store.db.select().from(tenderRefunds))[0]!.id;
+        refundId = (await store.db.select().from(refunds))[0]!.id;
       }
       const control = new AbortController();
       const timeouts: string[][] = [];

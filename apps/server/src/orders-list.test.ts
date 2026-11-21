@@ -1,10 +1,11 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   diningTables,
   invoicePdfDownloads,
@@ -696,9 +697,10 @@ describe("rows written within one millisecond, read in the order they were writt
         payments.push(payment!.id);
       }
       for (const appliedAmount of [10, 20, 30])
-        await tx.insert(billPaymentRefunds).values({
+        await tx.insert(refunds).values({
           id: refundId(),
           billPaymentId: payments[0]!,
+          ...billRefundFields(tx, venue.cfg.nodeId, payments[0]!),
           submissionId: randomUUID(),
           fingerprint: "f",
           appliedAmount,

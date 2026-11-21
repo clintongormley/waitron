@@ -4,7 +4,7 @@ import {
   incidents,
   invoiceCorrectionRefunds,
   invoiceCorrections,
-  tenderRefunds,
+  refunds,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -48,11 +48,11 @@ function openAlert(db: Transaction, code: string, saleId: string | SQLWrapper) {
  * unhandled unfinished alert yet, each with the money its completed refunds gave back, as raw
  * cents text, and that earliest completion. */
 function dueCorrections(db: Transaction, cutoff: string) {
-  const completedSince = sql<string>`min(${tenderRefunds.completedAt})`;
+  const completedSince = sql<string>`min(${refunds.completedAt})`;
   return db
     .select({
       correction: invoiceCorrections,
-      back: sql<string>`cast(sum(${tenderRefunds.appliedAmount}) as text)`,
+      back: sql<string>`cast(sum(${refunds.appliedAmount}) as text)`,
       completedSince,
     })
     .from(invoiceCorrections)
@@ -61,11 +61,8 @@ function dueCorrections(db: Transaction, cutoff: string) {
       eq(invoiceCorrectionRefunds.invoiceCorrectionId, invoiceCorrections.id),
     )
     .innerJoin(
-      tenderRefunds,
-      and(
-        eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId),
-        eq(tenderRefunds.state, "completed"),
-      ),
+      refunds,
+      and(eq(refunds.id, invoiceCorrectionRefunds.tenderRefundId), eq(refunds.state, "completed")),
     )
     .where(
       and(
@@ -82,7 +79,7 @@ function dueCorrections(db: Transaction, cutoff: string) {
 /** Open corrections whose completed refunds add up to their amount, none pending. */
 async function settledCorrections(db: Transaction): Promise<string[]> {
   const legs = (state: "completed" | "pending") => sql`from ${invoiceCorrectionRefunds} l
-    join ${tenderRefunds} r on r.id = l.tender_refund_id and r.state = ${state}
+    join ${refunds} r on r.id = l.tender_refund_id and r.state = ${state}
     where l.invoice_correction_id = c.id`;
   const { rows } = await db.execute<{ id: string }>(sql`select c.id from ${invoiceCorrections} c
     where c.state = 'open'

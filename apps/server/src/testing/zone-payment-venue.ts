@@ -120,8 +120,8 @@ export async function zonePaymentVenue(db: Database) {
     return Object.fromEntries(
       [
         "bill_payments",
-        "bill_payment_refunds",
-        "tender_refunds",
+        "refunds",
+        "refunds",
         "payments",
         "payment_refunds",
         "sales",

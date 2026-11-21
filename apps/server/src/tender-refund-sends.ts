@@ -1,12 +1,6 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
-import {
-  billPaymentRefunds,
-  tenderRefunds,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { refunds, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   payments,
   recordRefund,
@@ -29,7 +23,7 @@ import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import "./errors.js";
 
-type RefundRow = typeof tenderRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 const SHUTDOWN_GRACE_MS = 2_000;
 const liveOf = perDatabase(() => new Set<string>());
 const resolversOf = perDatabase(() => ({
@@ -82,7 +76,10 @@ export function claimTenderRefund(db: Database, refundId: string): () => void {
   return claimLive(liveOf(db), refundId);
 }
 async function read(tx: Transaction, id: string): Promise<RefundRow> {
-  const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+  const [row] = await tx
+    .select()
+    .from(refunds)
+    .where(and(eq(refunds.id, id), isNotNull(refunds.saleId)));
   if (row === undefined) throw new AppError("tender.refund_not_found", { refundId: id });
   return row;
 }
@@ -101,36 +98,29 @@ async function capture(tx: Transaction, refund: RefundRow) {
 const amount = (row: RefundRow) => centsToDecimal(row.appliedAmount + row.tipAmount);
 async function excludedRefs(tx: Transaction, refund: RefundRow): Promise<string[]> {
   const payment = await capture(tx, refund);
-  const post = await tx
-    .select({ ref: tenderRefunds.providerRefundRef })
-    .from(tenderRefunds)
+  const others = await tx
+    .select({ ref: refunds.providerRefundRef })
+    .from(refunds)
     .where(
       and(
-        eq(tenderRefunds.provider, refund.provider!),
-        eq(tenderRefunds.providerPaymentRef, refund.providerPaymentRef!),
-        ne(tenderRefunds.id, refund.id),
-        isNotNull(tenderRefunds.providerRefundRef),
+        eq(refunds.provider, refund.provider!),
+        eq(refunds.providerPaymentRef, refund.providerPaymentRef!),
+        ne(refunds.id, refund.id),
+        isNotNull(refunds.providerRefundRef),
       ),
     );
-  const pre =
-    payment.billPaymentId === null
-      ? []
-      : await tx
-          .select({ ref: billPaymentRefunds.providerRefundRef })
-          .from(billPaymentRefunds)
-          .where(
-            and(
-              eq(billPaymentRefunds.billPaymentId, payment.billPaymentId),
-              isNotNull(billPaymentRefunds.providerRefundRef),
-            ),
-          );
   const recorded = await tx
     .select({ ref: paymentRefunds.providerRefundRef })
     .from(paymentRefunds)
     .where(
       and(eq(paymentRefunds.paymentId, payment.id), isNotNull(paymentRefunds.providerRefundRef)),
     );
-  return [...new Set([...post, ...pre, ...recorded].map((row) => row.ref!))];
+  return [
+    ...new Set([
+      ...others.map((row) => row.ref!),
+      ...recorded.map((row) => row.ref!).filter((ref) => ref !== refund.providerRefundRef),
+    ]),
+  ];
 }
 async function recordOutcome(
   deps: TenderRefundDeps,
@@ -176,7 +166,7 @@ async function recordOutcomeIn(
   if (outcome !== "pending" && (await clockStopsRefund(tx, deps, evidence, reading))) return refund;
   const now = reading.instant.toISOString();
   const [saved] = await tx
-    .update(tenderRefunds)
+    .update(refunds)
     .set({
       state: outcome,
       ...attestationColumns(attestation),
@@ -185,7 +175,7 @@ async function recordOutcomeIn(
       ...(outcome === "completed" ? { completedAt: now } : {}),
       ...(outcome === "failed" ? { failedAt: now } : {}),
     })
-    .where(eq(tenderRefunds.id, id))
+    .where(eq(refunds.id, id))
     .returning();
   if (outcome === "completed")
     await recordRefund(tx, {
@@ -267,9 +257,9 @@ async function lookup(
     const current = await read(tx, refund.id);
     if (current.state === "pending")
       await tx
-        .update(tenderRefunds)
+        .update(refunds)
         .set({ lastLookupAt: deps.clock.now().instant.toISOString() })
-        .where(eq(tenderRefunds.id, refund.id));
+        .where(eq(refunds.id, refund.id));
   });
   // Refunds of one pass run side by side, so the stop can arrive while this one's stamp commits.
   deps.stopSignal?.throwIfAborted();
@@ -320,13 +310,13 @@ async function send(
     if (await clockStopsRefund(tx, deps, null, reading)) return null;
     if (await refundRefused(tx, deps)) return null;
     const [row] = await tx
-      .update(tenderRefunds)
+      .update(refunds)
       .set({
         sentAt: current.sentAt ?? reading.instant.toISOString(),
         sendCount: current.sendCount + 1,
         ...(refs === null ? {} : { refsBeforeSend: refs }),
       })
-      .where(eq(tenderRefunds.id, refund.id))
+      .where(eq(refunds.id, refund.id))
       .returning();
     return row!;
   });

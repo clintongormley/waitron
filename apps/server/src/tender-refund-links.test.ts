@@ -11,7 +11,7 @@ import {
   parties,
   saleLines,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   ticketItems,
   workingOrderLines,
@@ -156,17 +156,17 @@ async function linksOf(refundId: string) {
   const rows = await venue.db
     .select()
     .from(adjustmentRefunds)
-    .where(eq(adjustmentRefunds.tenderRefundId, refundId));
+    .where(eq(adjustmentRefunds.refundId, refundId));
   return rows.map((row) => ({ adjustmentId: row.adjustmentId, amount: row.amount }));
 }
 
 async function ledgers() {
   return {
-    refunds: await venue.db.select().from(tenderRefunds).orderBy(tenderRefunds.id),
+    refunds: await venue.db.select().from(refunds).orderBy(refunds.id),
     links: await venue.db
       .select()
       .from(adjustmentRefunds)
-      .orderBy(adjustmentRefunds.tenderRefundId, adjustmentRefunds.adjustmentId),
+      .orderBy(adjustmentRefunds.refundId, adjustmentRefunds.adjustmentId),
   };
 }
 
@@ -221,9 +221,9 @@ describe("a refund names the cancels it pays back", () => {
       { adjustmentId: burger, amount: 600 },
     ]);
     await venue.db
-      .update(tenderRefunds)
+      .update(refunds)
       .set({ state: "failed", failedAt: new Date().toISOString() })
-      .where(eq(tenderRefunds.id, held.refund.id));
+      .where(eq(refunds.id, held.refund.id));
     const answer = await refund(paid, refundBody(paid, "36.00", [burger, ham]));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await linksOf((answer.json as { id: string }).id)).toEqual([
@@ -423,7 +423,7 @@ describe("a refund names the cancels it pays back", () => {
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const id = (answer.json as { id: string }).id;
     expect(await linksOf(id)).toEqual([]);
-    const [row] = await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+    const [row] = await venue.db.select().from(refunds).where(eq(refunds.id, id));
     expect(row!.fingerprint).toBe(
       fingerprint({
         saleId: paid.saleId,
@@ -580,7 +580,7 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     const answer = await staffRefund(paid, refundBody(paid, "12.00", [burger]));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const id = (answer.json as { id: string }).id;
-    const [row] = await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+    const [row] = await venue.db.select().from(refunds).where(eq(refunds.id, id));
     expect(row).toMatchObject({ requestedBy: venue.staffId, authorizedBy: venue.managerId });
     const [drawer] = await venue.db
       .select()

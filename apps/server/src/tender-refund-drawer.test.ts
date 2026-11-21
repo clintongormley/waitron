@@ -11,14 +11,14 @@ import {
   printers,
   printJobs,
   sales,
-  tenderRefunds,
+  refunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
-import { enqueueTenderRefundDrawer } from "./receipt-print.js";
+import { enqueueRefundDrawer } from "./receipt-print.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 
 const store = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -34,6 +34,8 @@ let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
   await seedVenue(db, { name: "Returns", invoiceLocales: ["en"] });
+  await seedPerson(db, { id: PERSON, displayName: "Refund operator" });
+  await seedPerson(db, { id: AUTH.authorizedBy, displayName: "Refund authorizer" });
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;
@@ -96,9 +98,9 @@ beforeEach(async () => {
     receipt: { ids: [receiptId], defaultId: receiptId },
   });
 });
-async function refund(patch: Partial<typeof tenderRefunds.$inferInsert> = {}) {
+async function refund(patch: Partial<typeof refunds.$inferInsert> = {}) {
   const [row] = await store.db
-    .insert(tenderRefunds)
+    .insert(refunds)
     .values({
       saleId,
       tenderId,
@@ -122,7 +124,7 @@ async function refund(patch: Partial<typeof tenderRefunds.$inferInsert> = {}) {
   return row!;
 }
 const enqueue = (id: string, config: OriginConfig = cfg) =>
-  withTransaction(store.db, (tx) => enqueueTenderRefundDrawer(tx, config, id, PERSON, AUTH));
+  withTransaction(store.db, (tx) => enqueueRefundDrawer(tx, config, id, PERSON, AUTH));
 const audits = () => store.db.select().from(drawerOpens);
 const jobs = () => store.db.select().from(printJobs);
 async function empty() {
@@ -168,7 +170,7 @@ describe("settled-tender refund audited drawer", () => {
   it("records an operator's own authorization", async () => {
     const row = await refund({ authorizedBy: PERSON });
     await withTransaction(store.db, (tx) =>
-      enqueueTenderRefundDrawer(tx, cfg, row.id, PERSON, {
+      enqueueRefundDrawer(tx, cfg, row.id, PERSON, {
         authorizedBy: PERSON,
         viaOverride: false,
       }),
@@ -201,6 +203,8 @@ describe("settled-tender refund audited drawer", () => {
           .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.cash_drawer')` });
       await enqueue(row.id);
       await empty();
+      const [stored] = await store.db.select().from(refunds).where(eq(refunds.id, row.id));
+      expect(stored!.drawerOpenedAt).toBeNull();
     },
   );
   it.each(["pending", "failed"] as const)("does not open for a %s refund", async (state) => {
@@ -261,14 +265,14 @@ describe("settled-tender refund audited drawer", () => {
     await expect(
       withTransaction(store.db, async (tx) => {
         await tx
-          .update(tenderRefunds)
+          .update(refunds)
           .set({ state: "completed", completedAt: AT })
-          .where(eq(tenderRefunds.id, row.id));
-        await enqueueTenderRefundDrawer(tx, cfg, row.id, PERSON, AUTH);
+          .where(eq(refunds.id, row.id));
+        await enqueueRefundDrawer(tx, cfg, row.id, PERSON, AUTH);
         throw new Error("after drawer enqueue");
       }),
     ).rejects.toThrow("after drawer enqueue");
     await empty();
-    expect((await store.db.select().from(tenderRefunds))[0]!.state).toBe("pending");
+    expect((await store.db.select().from(refunds))[0]!.state).toBe("pending");
   });
 });

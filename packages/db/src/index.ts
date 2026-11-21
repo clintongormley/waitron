@@ -203,8 +203,6 @@ export {
   billPaymentKind,
   billPaymentLines,
   billPaymentMethod,
-  billPaymentRefunds,
-  billPaymentRefundState,
   billPayments,
   billPaymentState,
 } from "./schema/bill-payments.js";
@@ -304,8 +302,8 @@ export {
 export {
   BILL_PAYMENT_CHANGE_REFUSAL,
   BILL_PAYMENT_DELETE_REFUSAL,
-  BILL_REFUND_CHANGE_REFUSAL,
-  BILL_REFUND_DELETE_REFUSAL,
+  REFUND_CHANGE_REFUSAL,
+  REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
   DEVICE_PRINTER_KIND_REFUSAL,
   DINING_FIXED_REFUSAL,
@@ -351,7 +349,7 @@ export {
   invoiceDeliveryStatus,
 } from "./schema/invoice-deliveries.js";
 
-export { tenderRefunds, tenderRefundState } from "./schema/tender-refunds.js";
+export { refunds, refundState } from "./schema/refunds.js";
 export { nextStationColour } from "./station-colour.js";
 
 // Tables of the modules hosted in core's set, listed by hand so each module package re-exports the

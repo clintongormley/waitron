@@ -18,7 +18,7 @@ import { persons } from "./identity/persons.js";
 import { printAgents } from "./print-agents.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
-import { tenderRefunds } from "./tender-refunds.js";
+import { refunds } from "./refunds.js";
 
 /** Why the printer is holding an A4 job it has not finished, as its agent last renewed it. */
 export const printHoldCodes = [
@@ -88,7 +88,7 @@ export const printJobs = table(
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
     /* v8 ignore stop */
-    tenderRefundId: id("tender_refund_id").references(() => tenderRefunds.id),
+    tenderRefundId: id("tender_refund_id").references(() => refunds.id),
   },
   (t) => [
     index("print_jobs_pull_idx").on(t.printerId, t.status),

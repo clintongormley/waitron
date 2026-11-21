@@ -212,5 +212,5 @@ it("follows changes to a bill's recorded set-menu copies", () => {
 });
 
 it("follows a tip given back from an advance's tender, which the Pay window's tip left reads", () => {
-  expect(TILL_LIVE_TYPES.billDraft).toContain("tender_refunds");
+  expect(TILL_LIVE_TYPES.billDraft).toContain("refunds");
 });

@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   incidents,
   printJobs,
@@ -127,7 +128,7 @@ async function strandedPending(
 function stillPending(): number {
   const [row] = venue.db.all<{ n: number }>(
     sql`select (select count(*) from bill_payments where state = 'pending')
-             + (select count(*) from bill_payment_refunds where state = 'pending') as n`,
+             + (select count(*) from refunds where state = 'pending') as n`,
   );
   return row!.n;
 }
@@ -725,10 +726,11 @@ describe("rows written within one millisecond", () => {
     for (const billPaymentId of paid) {
       const [row] = await inTx(venue, (tx) =>
         tx
-          .insert(billPaymentRefunds)
+          .insert(refunds)
           .values({
             id: id(),
             billPaymentId,
+            ...billRefundFields(tx, venue.cfg.nodeId, billPaymentId),
             submissionId: randomUUID(),
             fingerprint: "f",
             appliedAmount: 100,
@@ -740,12 +742,12 @@ describe("rows written within one millisecond", () => {
             state: "pending",
             createdAt: at,
           })
-          .returning({ id: billPaymentRefunds.id }),
+          .returning({ id: refunds.id }),
       );
       asked.push(row!.id);
     }
 
-    const pass = await passRefusing("bill_payment_refunds", asked);
+    const pass = await passRefusing("refunds", asked);
 
     expect(pass.errors).toEqual(
       asked.map((refundId) => ({
@@ -1101,9 +1103,7 @@ describe("a pass while the start's time is unconfirmed", () => {
     );
     expect(asked.json).toMatchObject({ refund: { state: "pending" } });
     const rows = () =>
-      inTx(venue, (tx) =>
-        tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, paymentId)),
-      );
+      inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.billPaymentId, paymentId)));
     const [row] = await rows();
     const lookups = venue.card.lookupCalls.length;
     const state = startClockState();

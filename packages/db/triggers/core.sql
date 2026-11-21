@@ -42,50 +42,6 @@ BEGIN
   WHERE new.id IS NOT old.id;
 END;
 --> statement-breakpoint
-CREATE TRIGGER bill_payment_refunds_guard_update
-BEFORE UPDATE ON bill_payment_refunds
-FOR EACH ROW
-BEGIN
-  SELECT raise(abort, 'bill payment refund cannot make that change')
-  WHERE NOT (
-    new.id IS old.id
-    AND new.bill_payment_id IS old.bill_payment_id
-    AND new.submission_id IS old.submission_id
-    AND new.fingerprint IS old.fingerprint
-    AND new.applied_amount IS old.applied_amount
-    AND new.tip_amount IS old.tip_amount
-    AND new.reason IS old.reason
-    AND new.authorized_by IS old.authorized_by
-    AND new.requested_by IS old.requested_by
-    AND new.source IS old.source
-    AND new.device_id IS old.device_id
-    AND new.created_at IS old.created_at
-    AND (
-      (new.state IS old.state
-        AND new.sent_at IS old.sent_at
-        AND new.send_count IS old.send_count
-        AND new.provider_refund_ref IS old.provider_refund_ref
-        AND new.refs_before_send IS old.refs_before_send
-        AND new.attested_by IS old.attested_by
-        AND new.attestation_note IS old.attestation_note
-        AND new.completed_at IS old.completed_at
-        AND new.failed_at IS old.failed_at)
-      OR (old.state = 'pending'
-        AND (old.sent_at IS NULL OR new.sent_at IS old.sent_at)
-        AND (old.sent_at IS NULL OR new.refs_before_send IS old.refs_before_send)
-        AND new.send_count IN (old.send_count, old.send_count + 1)
-        AND (old.provider_refund_ref IS NULL OR new.provider_refund_ref IS old.provider_refund_ref))
-    )
-  );
-END;
---> statement-breakpoint
-CREATE TRIGGER bill_payment_refunds_no_delete
-BEFORE DELETE ON bill_payment_refunds
-FOR EACH ROW
-BEGIN
-  SELECT raise(abort, 'a bill payment refund is never deleted');
-END;
---> statement-breakpoint
 CREATE TRIGGER bill_payments_guard_update
 BEFORE UPDATE ON bill_payments
 FOR EACH ROW
@@ -307,13 +263,14 @@ BEGIN
   );
 END;
 --> statement-breakpoint
-CREATE TRIGGER tender_refunds_guard_update
-BEFORE UPDATE ON tender_refunds
+CREATE TRIGGER refunds_guard_update
+BEFORE UPDATE ON refunds
 FOR EACH ROW
 BEGIN
-  SELECT raise(abort, 'tender refund cannot make that change')
+  SELECT raise(abort, 'refund cannot make that change')
   WHERE NOT (
     new.id IS old.id
+    AND new.bill_payment_id IS old.bill_payment_id
     AND new.sale_id IS old.sale_id
     AND new.tender_id IS old.tender_id
     AND new.submission_id IS old.submission_id
@@ -331,6 +288,9 @@ BEGIN
     AND new.provider IS old.provider
     AND new.provider_payment_ref IS old.provider_payment_ref
     AND new.created_at IS old.created_at
+    AND (new.drawer_opened_at IS old.drawer_opened_at
+      OR (old.drawer_opened_at IS NULL AND new.drawer_opened_at IS NOT NULL
+        AND old.state = 'completed' AND old.method = 'cash'))
     AND (
       (new.state IS old.state
         AND new.sent_at IS old.sent_at
@@ -353,11 +313,27 @@ BEGIN
   );
 END;
 --> statement-breakpoint
-CREATE TRIGGER tender_refunds_no_delete
-BEFORE DELETE ON tender_refunds
+CREATE TRIGGER refunds_no_delete
+BEFORE DELETE ON refunds
 FOR EACH ROW
 BEGIN
-  SELECT raise(abort, 'a tender refund is never deleted');
+  SELECT raise(abort, 'a refund is never deleted');
+END;
+--> statement-breakpoint
+CREATE TRIGGER adjustment_refunds_require_sale_refund
+BEFORE INSERT ON adjustment_refunds
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM refunds WHERE id = NEW.refund_id AND bill_payment_id IS NOT NULL)
+BEGIN
+  SELECT raise(abort, 'an adjustment refund must name a sale refund');
+END;
+--> statement-breakpoint
+CREATE TRIGGER invoice_correction_refunds_require_sale_refund
+BEFORE INSERT ON invoice_correction_refunds
+FOR EACH ROW
+WHEN EXISTS (SELECT 1 FROM refunds WHERE id = NEW.tender_refund_id AND bill_payment_id IS NOT NULL)
+BEGIN
+  SELECT raise(abort, 'an invoice correction refund must name a sale refund');
 END;
 --> statement-breakpoint
 CREATE TRIGGER invoice_corrections_guard_update

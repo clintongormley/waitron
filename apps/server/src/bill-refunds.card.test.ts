@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -11,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  billPaymentRefunds,
+  refunds,
   incidents,
   printJobs,
   withTransaction,
@@ -183,9 +184,9 @@ async function refundRowsOf(paymentId: string) {
   return inTx(venue, (tx) =>
     tx
       .select()
-      .from(billPaymentRefunds)
-      .where(eq(billPaymentRefunds.billPaymentId, paymentId))
-      .orderBy(billPaymentRefunds.createdAt),
+      .from(refunds)
+      .where(eq(refunds.billPaymentId, paymentId))
+      .orderBy(refunds.createdAt),
   );
 }
 
@@ -448,7 +449,7 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
     expect(call).toEqual({
       processorRef: expect.any(String) as unknown as string,
       amount: "5.00",
-      idempotencyKey: `bpr_${row.id}`,
+      idempotencyKey: `tr_${row.id}`,
       refundId: row.id,
     });
     expect(row).toMatchObject({
@@ -752,8 +753,9 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
       const submissionId = randomUUID();
       if (entry === "never sent")
         await inTx(venue, (tx) =>
-          tx.insert(billPaymentRefunds).values({
+          tx.insert(refunds).values({
             billPaymentId: card.id,
+            ...billRefundFields(tx, venue.cfg.nodeId, card.id),
             submissionId,
             fingerprint: refundFingerprint(card.id, "5.00", "0.00", REASON),
             appliedAmount: 500,
@@ -861,7 +863,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
       expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
       expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 2 });
       expect(new Set(callsFor(refundId).map((call) => call.idempotencyKey))).toEqual(
-        new Set([`bpr_${refundId}`]),
+        new Set([`tr_${refundId}`]),
       );
       expect((await pay(billId, "cash", "1.00")).answer.json.code).toBe("bill.refund_in_progress");
     },
@@ -977,9 +979,11 @@ describe("the provider refunds another refund of the payment already accounts fo
     await refund(billId, card.id, { applied: "1.00" });
     const [completed, failed, pending] = await refundRowsOf(card.id);
     // The provider's id may arrive on a refund still pending; it is this refund's own.
-    venue.db.run(
-      sql`update bill_payment_refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`,
-    );
+    venue.db.run(sql`update refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`);
+    venue.db.run(sql`insert into payment_refunds
+      (id, payment_id, amount, state, provider_refund_ref, created_at)
+      select ${randomUUID()}, id, 100, 'failed', 'own-ref', ${new Date().toISOString()}
+      from payments where bill_payment_id = ${card.id}`);
 
     await withProvider({ lookups: { kind: "none" } }, () =>
       resumeCardRefund(
@@ -1142,9 +1146,10 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           billPaymentId: card.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, card.id),
           submissionId: randomUUID(),
           fingerprint: "stranded",
           appliedAmount: 500,
@@ -1177,9 +1182,10 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           billPaymentId: card.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, card.id),
           submissionId: randomUUID(),
           fingerprint: "stranded",
           appliedAmount: 500,
@@ -1222,8 +1228,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
 
     expect(retried.answer.json).toMatchObject({ refund: { state: "completed" } });
     expect(callsFor(refundId).map((call) => call.idempotencyKey)).toEqual([
-      `bpr_${refundId}`,
-      `bpr_${refundId}`,
+      `tr_${refundId}`,
+      `tr_${refundId}`,
     ]);
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "completed", sendCount: 2 });
   });
@@ -1321,9 +1327,10 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     const submissionId = randomUUID();
     const [stranded] = await inTx(venue, (tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           billPaymentId: card.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, card.id),
           submissionId,
           fingerprint: refundFingerprint(card.id, "5.00", "0.00", REASON),
           appliedAmount: 500,
@@ -1400,7 +1407,7 @@ describe("one resolver at a time", () => {
     const asked = refund(billId, card.id, { applied: "5.00" });
     const row = await heldSendOf(card.id);
     venue.db.run(
-      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()} where id = ${row!.id}`,
+      sql`update refunds set state = 'failed', failed_at = ${new Date().toISOString()} where id = ${row!.id}`,
     );
     release();
     await asked;
@@ -1461,7 +1468,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     expect(resolved.json).toEqual({ outcome: "completed" });
     expect(attested.json).toEqual({ outcome: "completed" });
     const stored = venue.db.all(
-      sql`select source, device_id from bill_payment_refunds
+      sql`select source, device_id from refunds
           where id in (${resolvedRefund.refundId}, ${attestedRefund.refundId})`,
     );
     expect(stored).toEqual([
@@ -1598,9 +1605,10 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           billPaymentId: card.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, card.id),
           submissionId: randomUUID(),
           fingerprint: "stranded",
           appliedAmount: 500,
@@ -1649,7 +1657,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     // case's alert, or its still-pending refund, would absorb this one's.
     venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
     venue.db.run(
-      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+      sql`update refunds set state = 'failed', failed_at = ${new Date().toISOString()}
           where state = 'pending' and id <> ${refundId}`,
     );
     const alerts = () =>
@@ -1687,12 +1695,11 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     const { billId, paymentId, refundId, row } = await pendingRefund();
     venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
     venue.db.run(
-      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+      sql`update refunds set state = 'failed', failed_at = ${new Date().toISOString()}
           where state = 'pending' and id <> ${refundId}`,
     );
     const pass = async (ms: number) => {
-      venue.db
-        .run(sql`create trigger fail_recovered_bill_refund before update of state on bill_payment_refunds
+      venue.db.run(sql`create trigger fail_recovered_bill_refund before update of state on refunds
         when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
       try {
         return await withProvider(
@@ -1750,7 +1757,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
   it("leaves a refund under an hour old alone between lookups, even once trading is refused", async () => {
     const { refundId } = await pendingRefund();
     venue.db.run(
-      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+      sql`update refunds set state = 'failed', failed_at = ${new Date().toISOString()}
           where state = 'pending' and id <> ${refundId}`,
     );
     const admission = new TradingAdmission();
@@ -1850,7 +1857,7 @@ describe("how often the loop looks a pending refund up", () => {
     expect(lookupsOf(refundId)).toBe(lookups);
     // The case at "raises the alert for a refund pending over an hour" checks the alert itself.
     const pending = venue.db.all<{ id: string }>(
-      sql`select id from bill_payment_refunds
+      sql`select id from refunds
           where state = 'pending' and created_at < ${overAnHour}`,
     );
     expect(pending.map(({ id }) => id)).toContain(refundId);
@@ -2078,9 +2085,10 @@ describe("a refund the provider here cannot answer for", () => {
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
-        .insert(billPaymentRefunds)
+        .insert(refunds)
         .values({
           billPaymentId: card.id,
+          ...billRefundFields(tx, venue.cfg.nodeId, card.id),
           submissionId: randomUUID(),
           fingerprint: "stranded",
           appliedAmount: 500,

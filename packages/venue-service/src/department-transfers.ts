@@ -11,7 +11,7 @@ import {
   orderTableLabels,
   tableInService,
   billPayments,
-  billPaymentRefunds,
+  refunds,
   deviceProfiles,
   diningTables,
   parties,
@@ -369,10 +369,10 @@ export async function acceptDepartmentTransfer(
   if (payment !== undefined)
     throw new AppError("order.payment_in_flight", { workingOrderId: tab.id });
   const [refund] = await tx
-    .select({ id: billPaymentRefunds.id })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-    .where(and(eq(billPayments.workingOrderId, tab.id), eq(billPaymentRefunds.state, "pending")))
+    .select({ id: refunds.id })
+    .from(refunds)
+    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
+    .where(and(eq(billPayments.workingOrderId, tab.id), eq(refunds.state, "pending")))
     .limit(1);
   if (refund !== undefined)
     throw new AppError("bill.refund_in_progress", { workingOrderId: tab.id });

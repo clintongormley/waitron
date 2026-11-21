@@ -13,14 +13,13 @@ import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
   billPaymentLines,
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   insertInChunks,
   invoiceCorrectionRefunds,
   invoiceCorrections,
   isUniqueViolation,
   sales,
-  tenderRefunds,
   tenders,
   withTransaction,
   workingOrderLines,
@@ -305,7 +304,7 @@ function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill
 
 type PaymentRow = typeof billPayments.$inferSelect;
 type PaymentLineRow = typeof billPaymentLines.$inferSelect;
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refundRows.$inferSelect;
 
 export interface PaymentMoney {
   row: PaymentRow;
@@ -415,16 +414,16 @@ async function readPaymentsAndRefunds(
       ? []
       : await tx
           .select()
-          .from(billPaymentRefunds)
+          .from(refundRows)
           .where(
             inArray(
-              billPaymentRefunds.billPaymentId,
+              refundRows.billPaymentId,
               rows.map((row) => row.id),
             ),
           )
           // Two refunds can share a millisecond; a tie falls back to `rowid`, the order the rows
           // were written in.
-          .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
+          .orderBy(refundRows.createdAt, sql`${refundRows}.rowid`);
   return { rows, refunds, advanced };
 }
 
@@ -679,7 +678,7 @@ async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map
 export function toRefundView(refund: RefundRow): BillRefundView {
   return {
     id: refund.id,
-    paymentId: refund.billPaymentId,
+    paymentId: refund.billPaymentId!,
     submissionId: refund.submissionId,
     appliedAmount: centsToDecimal(refund.appliedAmount),
     tipAmount: centsToDecimal(refund.tipAmount),
@@ -837,25 +836,21 @@ async function readBillFigures(
   return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
-/** The applied money the completed `tender_refunds` of filed Correct invoices gave back from the
+/** The applied money completed refunds of filed corrections gave back from the
  * tenders of the bill's payments that paid no advance; an advance's own are already out of what is
  * left of it. Until a correction files, and for a plain refund, the bill's total is as it was, so
  * those are left in. Filtered by the bill, so the values it binds do not grow with its payments. */
 async function givenBackAfterSettling(tx: Transaction, workingOrderId: string): Promise<Decimal> {
   const [row] = await tx
-    .select({ cents: sql<string>`cast(coalesce(sum(${tenderRefunds.appliedAmount}), 0) as text)` })
-    // The box collects no planner statistics; unnamed, this read searched `tender_refunds` by
-    // `state` alone, every completed refund the venue holds, on SQLite 3.54.1.
-    .from(sql`${tenderRefunds} indexed by tender_refunds_submission_key`)
+    .select({ cents: sql<string>`cast(coalesce(sum(${refundRows.appliedAmount}), 0) as text)` })
+    // Pin the sale-key index because the box collects no planner statistics.
+    .from(sql`${refundRows} indexed by refunds_sale_submission_key`)
     .innerJoin(
       tenders,
-      and(eq(tenders.id, tenderRefunds.tenderId), eq(tenderRefunds.saleId, tenders.saleId)),
+      and(eq(tenders.id, refundRows.tenderId), eq(refundRows.saleId, tenders.saleId)),
     )
     .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
-    .innerJoin(
-      invoiceCorrectionRefunds,
-      eq(invoiceCorrectionRefunds.tenderRefundId, tenderRefunds.id),
-    )
+    .innerJoin(invoiceCorrectionRefunds, eq(invoiceCorrectionRefunds.tenderRefundId, refundRows.id))
     .innerJoin(
       invoiceCorrections,
       eq(invoiceCorrections.id, invoiceCorrectionRefunds.invoiceCorrectionId),
@@ -869,7 +864,7 @@ async function givenBackAfterSettling(tx: Transaction, workingOrderId: string): 
             .from(billAdvances)
             .where(eq(billAdvances.billPaymentId, billPayments.id)),
         ),
-        eq(tenderRefunds.state, "completed"),
+        eq(refundRows.state, "completed"),
         eq(invoiceCorrections.state, "filed"),
       ),
     );
@@ -1583,13 +1578,13 @@ export async function findSubmission(
       ),
     );
   const [found] = await tx
-    .select({ refund: billPaymentRefunds })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .select({ refund: refundRows })
+    .from(refundRows)
+    .innerJoin(billPayments, eq(billPayments.id, refundRows.billPaymentId))
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
-        eq(billPaymentRefunds.submissionId, submissionId),
+        eq(refundRows.submissionId, submissionId),
       ),
     );
   return { payment, refund: found?.refund };

@@ -50,7 +50,7 @@ function facts() {
       "payments",
       "payment_refunds",
       "bill_payments",
-      "bill_payment_refunds",
+      "refunds",
       "invoice_series",
       "registros_facturacion",
       "cadenas",

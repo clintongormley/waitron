@@ -11,7 +11,7 @@ import {
   saleSettlements,
   sales,
   saleVoids,
-  tenderRefunds,
+  refunds,
   tenders,
   withTransaction,
 } from "@waitron/db";
@@ -119,7 +119,7 @@ async function accounting() {
     tenders: await tx.select().from(tenders).orderBy(tenders.id),
     settlements: await tx.select().from(saleSettlements).orderBy(saleSettlements.id),
     voids: await tx.select().from(saleVoids).orderBy(saleVoids.id),
-    refunds: await tx.select().from(tenderRefunds).orderBy(tenderRefunds.id),
+    refunds: await tx.select().from(refunds).orderBy(refunds.id),
     drawers: await tx.select().from(drawerOpens).orderBy(drawerOpens.id),
     prints: await tx.select().from(printJobs).orderBy(printJobs.id),
     series: await tx.select().from(invoiceSeries).orderBy(invoiceSeries.id),

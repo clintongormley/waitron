@@ -1,5 +1,5 @@
 import { readSettings, VENUE_SETTINGS } from "@waitron/db";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedNode, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -11,7 +11,7 @@ import {
   departmentTransferRequests,
   CORE_MIGRATIONS,
   billPayments,
-  billPaymentRefunds,
+  refunds,
   diningTables,
   parties,
   kitchenStations,
@@ -1241,13 +1241,17 @@ describe("departmental tab transfers", () => {
           source: "operator_script",
         })
         .returning();
-      await tx.insert(billPaymentRefunds).values({
+      await tx.insert(refunds).values({
         billPaymentId: payment!.id,
+        nodeId: await seedNode(tx),
+        method: "card",
+        provider: "stripe",
+        providerPaymentRef: "part-payment",
         submissionId: randomUUID(),
         fingerprint: "test",
         appliedAmount: 100,
         reason: "Return",
-        authorizedBy: "manager",
+        authorizedBy: await seedPerson(tx, { id: "manager", displayName: "Manager" }),
         requestedBy: "sender",
         source: "operator_script",
         state: "pending",

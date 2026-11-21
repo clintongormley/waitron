@@ -9,7 +9,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
-import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -29,7 +29,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
-  billPaymentRefunds,
+  refunds as refundTable,
   billPayments,
   deviceProfiles,
   devices,
@@ -3981,14 +3981,15 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
     const paymentId = (paid.json.payment as { id: string }).id;
     const refundId = randomUUID();
     await inTx((tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refundTable).values({
         billPaymentId: paymentId,
+        ...billRefundFields(tx, venue.cfg.nodeId, paymentId),
         submissionId: refundId,
         fingerprint: "f",
         appliedAmount: 500,
         reason: "error",
-        authorizedBy: randomUUID(),
-        requestedBy: randomUUID(),
+        authorizedBy: venue.adminId,
+        requestedBy: venue.staffId,
         source: "device",
         deviceId: venue.deviceId,
         state: "completed",
@@ -4072,7 +4073,7 @@ function paymentIdOf(paid: { json: Record<string, unknown> }): string {
 
 async function refundRows(paymentId: string) {
   return inTx((tx) =>
-    tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+    tx.select().from(refundTable).where(eq(refundTable.billPaymentId, paymentId)),
   );
 }
 
@@ -4143,9 +4144,7 @@ describe("the device a bill payment and its refund name", () => {
       suite.db.all(sql`select source, device_id from bill_payments where id = ${paymentId}`),
     ).toEqual([{ source: "device", device_id: venue.deviceId }]);
     expect(
-      suite.db.all(
-        sql`select source, device_id from bill_payment_refunds where bill_payment_id = ${paymentId}`,
-      ),
+      suite.db.all(sql`select source, device_id from refunds where bill_payment_id = ${paymentId}`),
     ).toEqual([{ source: "device", device_id: venue.handheldDeviceId }]);
   });
 });
@@ -4922,7 +4921,9 @@ describe("refund retries (design §8 test 15, §5.1)", () => {
       (first.json.refund as { id: string }).id,
     );
     expect(second.json).toMatchObject({ balance: { received: "30.00" } });
-    expect(await refundRows(paymentId)).toHaveLength(1);
+    const rows = await refundRows(paymentId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.drawerOpenedAt).toBe(rows[0]?.completedAt);
     expect(await refundDrawerOpens(paymentId)).toHaveLength(1);
     expect(drawerJobCount() - jobsBefore).toBe(1);
   });
@@ -5087,8 +5088,9 @@ describe("the ticket after a refund", () => {
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
     ).toBe(200);
     await inTx((tx) =>
-      tx.insert(billPaymentRefunds).values({
+      tx.insert(refundTable).values({
         billPaymentId: paymentId,
+        ...billRefundFields(tx, venue.cfg.nodeId, paymentId),
         submissionId: randomUUID(),
         fingerprint: "f",
         appliedAmount: 700,
@@ -5152,7 +5154,7 @@ describe("a payment no card provider stands behind", () => {
     });
     expect(
       await inTx((tx) =>
-        tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, row!.id)),
+        tx.select().from(refundTable).where(eq(refundTable.billPaymentId, row!.id)),
       ),
     ).toEqual([]);
     expect((await balance(billId)).json).toMatchObject({ received: "20.00" });

@@ -202,7 +202,7 @@ import {
   allocateOrderNumber,
   appendOrderAmendment,
   billPartyTables,
-  billPaymentRefunds,
+  refunds,
   billPayments,
   billSetMenuCopies,
   devices,
@@ -5893,14 +5893,9 @@ export async function refuseRefundInProgress(
 ): Promise<void> {
   const [pending] = await tx
     .select({ workingOrderId: billPayments.workingOrderId })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
-    .where(
-      and(
-        inArray(billPayments.workingOrderId, [...orderIds]),
-        eq(billPaymentRefunds.state, "pending"),
-      ),
-    )
+    .from(refunds)
+    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
+    .where(and(inArray(billPayments.workingOrderId, [...orderIds]), eq(refunds.state, "pending")))
     .orderBy(billPayments.workingOrderId)
     .limit(1);
   if (pending !== undefined) {

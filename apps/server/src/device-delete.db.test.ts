@@ -1,3 +1,4 @@
+import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { holdPrinterForTest, seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -6,7 +7,7 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
-  billPaymentRefunds,
+  refunds,
   billPayments,
   deviceApprovedProfiles,
   devices,
@@ -244,6 +245,7 @@ async function billPayment(orderId: string, deviceId: string, state: BillState) 
 }
 
 async function refund(
+  nodeId: string,
   orderId: string,
   deviceId: string,
   state: "pending" | "completed" | "failed",
@@ -251,8 +253,9 @@ async function refund(
 ) {
   const paid = await billPayment(orderId, receivedOn, "received");
   const at = new Date().toISOString();
-  await suite.db.insert(billPaymentRefunds).values({
+  await suite.db.insert(refunds).values({
     billPaymentId: paid,
+    ...billRefundFields(suite.db, nodeId, paid),
     submissionId: randomUUID(),
     fingerprint: "f",
     appliedAmount: 100,
@@ -459,23 +462,23 @@ describe("the device delete impact", () => {
     expect(await snapshot()).toEqual(before);
   });
 
-  it.each<[string, (orderId: string, deviceId: string) => Promise<unknown>]>([
+  it.each<[string, (orderId: string, deviceId: string, nodeId: string) => Promise<unknown>]>([
     ["a card payment attempting", (o, d) => cardPayment(o, d, "attempting")],
     ["a card payment initiated", (o, d) => cardPayment(o, d, "initiated")],
     ["a bill payment pending", (o, d) => billPayment(o, d, "pending")],
-    ["a refund pending", (o, d) => refund(o, d, "pending")],
+    ["a refund pending", (o, d, nodeId) => refund(nodeId, o, d, "pending")],
   ])(
     "refuses with device.payment_in_progress naming each open order with %s",
     async (_what, start) => {
       const s = await seed();
       const control = await openOrder(s.venue, "Table 2");
-      await start(control, s.pass);
+      await start(control, s.pass, s.cfg.nodeId);
       const unlabelled = await openOrder(s.venue, null);
       const orderId = await openOrder(s.venue);
       const read = () => inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
       expect((await read()).refusals).toEqual([]);
 
-      await start(orderId, s.barTill);
+      await start(orderId, s.barTill, s.cfg.nodeId);
       expect((await read()).refusals).toEqual([
         {
           code: "device.payment_in_progress",
@@ -484,7 +487,7 @@ describe("the device delete impact", () => {
         },
       ]);
 
-      await start(unlabelled, s.barTill);
+      await start(unlabelled, s.barTill, s.cfg.nodeId);
       const { rows } = await suite.db.execute<{ order_number: number }>(
         sql`select order_number from working_orders where id = ${unlabelled}`,
       );
@@ -513,7 +516,7 @@ describe("the device delete impact", () => {
     for (const state of ["received", "failed", "declined"] as const)
       await billPayment(await openOrder(s.venue), s.barTill, state);
     for (const state of ["completed", "failed"] as const)
-      await refund(await openOrder(s.venue), s.barTill, state);
+      await refund(s.cfg.nodeId, await openOrder(s.venue), s.barTill, state);
 
     const impact = await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
     expect(impact.refusals).toEqual([]);
@@ -522,7 +525,7 @@ describe("the device delete impact", () => {
   it("refuses for a pending refund on the device it was taken on, not the device that received the payment", async () => {
     const s = await seed();
     const orderId = await openOrder(s.venue);
-    await refund(orderId, s.barTill, "pending", s.pass);
+    await refund(s.cfg.nodeId, orderId, s.barTill, "pending", s.pass);
     const refusals = async (id: string) =>
       (await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, id))).refusals;
     expect(await refusals(s.barTill)).toEqual([

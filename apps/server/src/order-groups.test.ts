@@ -1,4 +1,4 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import * as lineServiceState from "./line-service-state.js";
 import type { TradingContext } from "./trading-context.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
-  billPaymentRefunds,
+  refunds,
   billPayments,
   devices,
   diningTables,
@@ -503,8 +503,9 @@ async function pendingRefund(v: Venue, billId: string): Promise<void> {
       deviceId: v.cfg.origin.deviceId,
     })
     .returning({ id: billPayments.id });
-  await db.insert(billPaymentRefunds).values({
+  await db.insert(refunds).values({
     billPaymentId: payment!.id,
+    ...billRefundFields(db, v.cfg.nodeId, payment!.id),
     submissionId: randomUUID(),
     fingerprint: "f",
     appliedAmount: 100,
@@ -519,9 +520,9 @@ async function pendingRefund(v: Venue, billId: string): Promise<void> {
 
 async function refundStates(billId: string): Promise<string[]> {
   const rows = await db
-    .select({ state: billPaymentRefunds.state })
-    .from(billPaymentRefunds)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+    .select({ state: refunds.state })
+    .from(refunds)
+    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
     .where(eq(billPayments.workingOrderId, billId));
   return rows.map((row) => row.state);
 }

@@ -2745,7 +2745,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       tx
         .select()
         .from(adjustmentRefunds)
-        .where(eq(adjustmentRefunds.tenderRefundId, (answer.json as { id: string }).id)),
+        .where(eq(adjustmentRefunds.refundId, (answer.json as { id: string }).id)),
     );
     return links.map((row) => ({ adjustmentId: row.adjustmentId, amount: row.amount }));
   }

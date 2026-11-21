@@ -2,7 +2,7 @@ import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/perso
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
+import { sales, saleSettlements, tenders, refunds, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -136,7 +136,7 @@ async function snapshot() {
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
     sales: await suite.db.select().from(sales),
     tenders: await suite.db.select().from(tenders),
-    refunds: await suite.db.select().from(tenderRefunds),
+    refunds: await suite.db.select().from(refunds),
     settlements: await suite.db.select().from(saleSettlements),
   };
 }

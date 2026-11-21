@@ -1,13 +1,12 @@
-import { asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
-  billPaymentRefunds,
+  refunds as refundRows,
   billPayments,
   drawerOpens,
   invoiceSeries,
   sales,
   saleVoids,
-  tenderRefunds,
   type Database,
 } from "@waitron/db";
 import { jsonFile, type PersonalDataFile, type PersonalDataPart } from "@waitron/module";
@@ -125,44 +124,50 @@ export function actionsPersonalData(
                 .orderBy(asc(saleVoids.voidedAt), asc(saleVoids.id));
               const refunds = await db
                 .select({
-                  id: tenderRefunds.id,
-                  saleId: tenderRefunds.saleId,
-                  amount: tenderRefunds.appliedAmount,
-                  tip: tenderRefunds.tipAmount,
-                  method: tenderRefunds.method,
-                  state: tenderRefunds.state,
-                  at: tenderRefunds.createdAt,
-                  requestedBy: tenderRefunds.requestedBy,
-                  authorizedBy: tenderRefunds.authorizedBy,
-                  attestedBy: tenderRefunds.attestedBy,
+                  id: refundRows.id,
+                  saleId: refundRows.saleId,
+                  amount: refundRows.appliedAmount,
+                  tip: refundRows.tipAmount,
+                  method: refundRows.method,
+                  state: refundRows.state,
+                  at: refundRows.createdAt,
+                  requestedBy: refundRows.requestedBy,
+                  authorizedBy: refundRows.authorizedBy,
+                  attestedBy: refundRows.attestedBy,
                 })
-                .from(tenderRefunds)
+                .from(refundRows)
                 .where(
-                  or(
-                    eq(tenderRefunds.requestedBy, person),
-                    eq(tenderRefunds.authorizedBy, person),
-                    eq(tenderRefunds.attestedBy, person),
+                  and(
+                    isNotNull(refundRows.saleId),
+                    or(
+                      eq(refundRows.requestedBy, person),
+                      eq(refundRows.authorizedBy, person),
+                      eq(refundRows.attestedBy, person),
+                    ),
                   ),
                 )
-                .orderBy(asc(tenderRefunds.createdAt), asc(tenderRefunds.id));
+                .orderBy(asc(refundRows.createdAt), asc(refundRows.id));
               const billRefunds = await db
                 .select({
-                  id: billPaymentRefunds.id,
-                  billPaymentId: billPaymentRefunds.billPaymentId,
-                  amount: billPaymentRefunds.appliedAmount,
-                  tip: billPaymentRefunds.tipAmount,
-                  state: billPaymentRefunds.state,
-                  at: billPaymentRefunds.createdAt,
-                  requestedBy: billPaymentRefunds.requestedBy,
-                  authorizedBy: billPaymentRefunds.authorizedBy,
-                  attestedBy: billPaymentRefunds.attestedBy,
+                  id: refundRows.id,
+                  billPaymentId: refundRows.billPaymentId,
+                  amount: refundRows.appliedAmount,
+                  tip: refundRows.tipAmount,
+                  state: refundRows.state,
+                  at: refundRows.createdAt,
+                  requestedBy: refundRows.requestedBy,
+                  authorizedBy: refundRows.authorizedBy,
+                  attestedBy: refundRows.attestedBy,
                 })
-                .from(billPaymentRefunds)
+                .from(refundRows)
                 .where(
-                  or(
-                    eq(billPaymentRefunds.requestedBy, person),
-                    eq(billPaymentRefunds.authorizedBy, person),
-                    eq(billPaymentRefunds.attestedBy, person),
+                  and(
+                    isNotNull(refundRows.billPaymentId),
+                    or(
+                      eq(refundRows.requestedBy, person),
+                      eq(refundRows.authorizedBy, person),
+                      eq(refundRows.attestedBy, person),
+                    ),
                   ),
                 );
               return { voids, refunds, billRefunds };
@@ -232,7 +237,7 @@ export function actionsPersonalData(
                 at: row.at,
                 entry: {
                   kind: "sale",
-                  sale: sale(row.saleId).number,
+                  sale: sale(row.saleId!).number,
                   amount: centsToDecimal(row.amount),
                   tip: centsToDecimal(row.tip),
                   method: row.method,
@@ -246,10 +251,10 @@ export function actionsPersonalData(
                 at: row.at,
                 entry: {
                   kind: "bill_payment",
-                  sale: bill(row.billPaymentId).sale,
+                  sale: bill(row.billPaymentId!).sale,
                   amount: centsToDecimal(row.amount),
                   tip: centsToDecimal(row.tip),
-                  method: bill(row.billPaymentId).method,
+                  method: bill(row.billPaymentId!).method,
                   state: row.state,
                   at: row.at,
                   yourPart: rolesOf(row),

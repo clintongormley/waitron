@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { tenderRefunds } from "./tender-refunds.js";
+import { refunds } from "./refunds.js";
 import { billPayments } from "./bill-payments.js";
 
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
@@ -209,6 +209,7 @@ describe("settled-tender refund drawer targets", () => {
       invoiceLocales: ["en"],
     });
     await seedPerson(db, { id: PERSON });
+    await seedPerson(db, { id: AUTHORIZER, displayName: "Authorizer" });
     const nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db
@@ -239,7 +240,7 @@ describe("settled-tender refund drawer targets", () => {
       .values({ saleId, method: "cash", amount: 1000, settledAt: "2026-10-16T09:00:00.000Z" })
       .returning();
     const [refund] = await db
-      .insert(tenderRefunds)
+      .insert(refunds)
       .values({
         saleId,
         tenderId: tender!.id,

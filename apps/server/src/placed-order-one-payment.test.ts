@@ -95,7 +95,7 @@ function snapshot() {
       (select count(*) from payments) as payments,
       (select count(*) from print_jobs) as printJobs,
       (select count(*) from bill_payments) as billPayments,
-      (select count(*) from bill_payment_refunds) as billRefunds
+      (select count(*) from refunds) as billRefunds
   `)[0];
 }
 
@@ -248,7 +248,7 @@ describe("giving back a part payment on a sent bill before its invoice", () => {
 
   function refundCount(paymentId: string): number {
     return venue.db.all<{ n: number }>(
-      sql`select count(*) as n from bill_payment_refunds where bill_payment_id = ${paymentId}`,
+      sql`select count(*) as n from refunds where bill_payment_id = ${paymentId}`,
     )[0]!.n;
   }
 

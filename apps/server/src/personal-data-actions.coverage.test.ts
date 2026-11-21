@@ -27,12 +27,9 @@ const ACTOR_COLUMN =
 
 const READ = [
   "sale_voids.voided_by",
-  "tender_refunds.requested_by",
-  "tender_refunds.authorized_by",
-  "tender_refunds.attested_by",
-  "bill_payment_refunds.requested_by",
-  "bill_payment_refunds.authorized_by",
-  "bill_payment_refunds.attested_by",
+  "refunds.requested_by",
+  "refunds.authorized_by",
+  "refunds.attested_by",
   "drawer_opens.person_id",
   "drawer_opens.authorized_by",
 ];
@@ -93,9 +90,10 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
     in: ["sale_id", "voided_at", "voided_by"],
     out: ["id", "reason"],
   },
-  tender_refunds: {
+  refunds: {
     in: [
       "sale_id",
+      "bill_payment_id",
       "applied_amount",
       "tip_amount",
       "method",
@@ -127,33 +125,7 @@ const COLUMNS: Record<string, { readonly in: string[]; readonly out: string[] }>
       "provider_status",
       "last_lookup_at",
       "next_retry_at",
-    ],
-  },
-  bill_payment_refunds: {
-    in: [
-      "bill_payment_id",
-      "applied_amount",
-      "tip_amount",
-      "state",
-      "created_at",
-      "requested_by",
-      "authorized_by",
-      "attested_by",
-    ],
-    out: [
-      "id",
-      "submission_id",
-      "fingerprint",
-      "reason",
-      "source",
-      "device_id",
-      "sent_at",
-      "send_count",
-      "provider_refund_ref",
-      "refs_before_send",
-      "attestation_note",
-      "completed_at",
-      "failed_at",
+      "drawer_opened_at",
     ],
   },
   drawer_opens: {

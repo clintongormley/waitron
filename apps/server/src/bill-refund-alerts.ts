@@ -1,11 +1,10 @@
-import type { billPaymentRefunds, tenderRefunds } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { refunds, Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError, centsToDecimal, jobOrigin, readOrigin, saleId } from "@waitron/shared";
 import type { Decimal, Origin } from "@waitron/shared";
 import "./errors.js";
 
-type RefundRow = typeof billPaymentRefunds.$inferSelect;
+type RefundRow = typeof refunds.$inferSelect;
 
 /** What a refund gives back: its applied money and its tip. */
 export const refundAmountOf = (refund: RefundRow): Decimal =>
@@ -23,7 +22,7 @@ export function raiseRefundOutcomeConflict(
     origin,
     error: new AppError("payment.refund_outcome_conflict", {
       refundId: refund.id,
-      billPaymentId: refund.billPaymentId,
+      billPaymentId: refund.billPaymentId!,
       workingOrderId,
       amount: refundAmountOf(refund),
       providerRefundRef,
@@ -44,7 +43,7 @@ export function raiseRefundUnresolved(
     origin: jobOrigin("payment_check"),
     error: new AppError("payment.refund_unresolved", {
       refundId: refund.id,
-      billPaymentId: refund.billPaymentId,
+      billPaymentId: refund.billPaymentId!,
       workingOrderId,
       amount: refundAmountOf(refund),
       pendingSince: refund.createdAt,
@@ -56,17 +55,17 @@ export function raiseRefundUnresolved(
 
 export function raiseTenderRefundConflict(
   tx: Transaction,
-  refund: typeof tenderRefunds.$inferSelect,
+  refund: typeof refunds.$inferSelect,
   providerRefundRef: string | null,
   now: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
     origin: readOrigin(refund.source, refund.deviceId),
-    saleId: saleId(refund.saleId),
+    saleId: saleId(refund.saleId!),
     error: new AppError("payment.tender_refund_outcome_conflict", {
       refundId: refund.id,
-      saleId: refund.saleId,
-      tenderId: refund.tenderId,
+      saleId: refund.saleId!,
+      tenderId: refund.tenderId!,
       amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
       providerRefundRef,
     }),
@@ -77,16 +76,16 @@ export function raiseTenderRefundConflict(
 
 export function raiseTenderRefundUnresolved(
   tx: Transaction,
-  refund: typeof tenderRefunds.$inferSelect,
+  refund: typeof refunds.$inferSelect,
   now: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
     origin: jobOrigin("payment_check"),
-    saleId: saleId(refund.saleId),
+    saleId: saleId(refund.saleId!),
     error: new AppError("payment.tender_refund_unresolved", {
       refundId: refund.id,
-      saleId: refund.saleId,
-      tenderId: refund.tenderId,
+      saleId: refund.saleId!,
+      tenderId: refund.tenderId!,
       amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
       pendingSince: refund.createdAt,
     }),
