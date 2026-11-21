@@ -1275,11 +1275,11 @@ it("set-clock hands the host a disagreeing device's measurement and answers what
   expect(setBoxClock).toHaveBeenCalledWith(context.binding, {
     offsetMs: 120_000,
     agreesWithinMs: 30_000,
-    measuredAt: { wallMs: expect.closeTo(now, -2), monoMs: expect.any(Number) },
+    measuredAt: { wallMs: now, monoMs: 1_000_000 },
     reading: {
       boxAt: new Date(now).toISOString(),
       witnessAt: new Date(now + 120_000).toISOString(),
-      uncertaintyMs: expect.any(Number),
+      uncertaintyMs: 0,
     },
   });
   setBoxClock.mockResolvedValueOnce({ status: "refused", reason: "synchronised" } as never);

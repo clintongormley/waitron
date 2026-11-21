@@ -3670,6 +3670,11 @@ one-line correction; every assertion and the initial date stay unchanged. The ch
 of this rule is
 [A child process that freezes `Date` freezes `performance.now` with it](#a-child-process-that-freezes-date-freezes-performancenow-with-it).
 
+The same holds for a steady clock a test injects. Measured on 21 November 2026:
+`packages/fiscal-verifactu/src/initial-hour-setup.test.ts` froze `Date`, but its injected steady
+clock added the real `performance.now`, and CI's set-clock case (job 136743487217) saw `offsetMs`
+120001 against 120000. A spy making `performance.now` gain 2 ms a call reproduced that failure.
+
 
 ## A floor test pins the till API's clock away from the day change
 
