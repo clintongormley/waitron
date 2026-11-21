@@ -17,6 +17,7 @@ export const HANDOVER_KINDS = [
   "health",
   "backup-settings",
   "switch-proof",
+  "agent-enrol",
 ] as const satisfies readonly HandoverKind[];
 
 export type { HandoverKind, HandoverPurpose, SignedHandoverEnvelope };

@@ -76,6 +76,7 @@ describe("signEnvelope", () => {
       "health",
       "backup-settings",
       "switch-proof",
+      "agent-enrol",
     ]);
   });
 

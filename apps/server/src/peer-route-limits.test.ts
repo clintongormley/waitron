@@ -17,6 +17,7 @@ import { mountHandoverPreparationApi } from "./handover-preparation.js";
 import { mountHandoverActivationApi } from "./handover-activation.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { mountSpareSettingsApi } from "./spare-settings-api.js";
+import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
@@ -55,6 +56,7 @@ function mounted() {
   mount(mountHandoverActivationApi);
   mount(mountHandoverEmergencyApi);
   mount(mountSpareSettingsApi);
+  mount(mountPrintAgentEnrolApi);
   mount(mountReturnRecordsApi);
   mount(mountPromoteApi);
   mount(mountMirrorBundleApi);

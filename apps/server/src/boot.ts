@@ -264,6 +264,7 @@ import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
@@ -3050,6 +3051,11 @@ async function bootServer(
     log,
   );
   mountHandoverStatusApi(app, peerDeps, log);
+  mountPrintAgentEnrolApi(
+    app,
+    { ...peerDeps, isPrimary: isSingletonPrimary && !fencedOrMirror },
+    log,
+  );
   const handoverDestinationDuty = await startHandoverDestinationDuty({
     ...peerDeps,
     stateDir: config.stateDir,
