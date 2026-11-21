@@ -12,8 +12,9 @@ a signed file for rollout groups (Lane F queue, A950-LATER).
    validate with `is_release_tag`, and strip the leading `v`. Main and branch builds defer.
    Numbered prereleases check for a newer stable offer.
 2. Add a verb in the already-retained `scripts/box/upgrades/cli.mjs` that branches before
-   the recovery path. In `host.mjs`, reuse Compose config and volume inspection to locate
-   the state mount without creating a volume. Share Apply's `trading.env` ID parser here
+   the recovery path. In `host.mjs`, extract the mount lookup from Apply's volume loop
+   with the same Apply behaviour. The check reuses Compose config and volume inspection
+   to find the state mount without creating it. Share Apply's `trading.env` ID parser here
    in place of the shell read named in 1d. Missing ID defers. A fresh-identity restore
    or full reset can change group membership.
 3. Resolve the retained trust directory once and use its `release-list.mjs` selector
@@ -25,13 +26,16 @@ a signed file for rollout groups (Lane F queue, A950-LATER).
    paths copied on rollback. Use `writeFileDurable` before returning a new result,
    including a pause. A missing file starts with the first verified offer. An unreadable
    or malformed file defers. The shell and CLI return one JSON line with `offered` and the
-   version, `none`, or `deferred` and the reason. The shell forwards the CLI's line
-   even when it exits nonzero. Offered and none exit zero. Deferred exits nonzero.
+   version, `none`, or `deferred` and the reason. The entry prints its deferred line and exits
+   nonzero. The shell forwards the CLI's line and exit status and prints its own deferred
+   line when the CLI returns no stdout. Offered and none exit zero.
 5. Start with failing cases in `scripts/box/upgrades/cli.test.mjs` for no recovery on a
-   missing attempt marker, the saved or missing box ID, first use, pause and replay across
-   calls, bad state and failed persistence, missing download and the 16 KiB boundary.
-   `scripts/waitron-sh.test.mjs` pins version lookup and the busy lock and held-attempt JSON
-   refusals. Group and signature tests stay in `scripts/box/release-list.test.mjs`.
+   missing attempt marker, deferral when the box ID is missing, first use, pause and replay
+   across calls, bad state and failed persistence. Curl cases check HTTPS-only, its time
+   and 16 KiB limits, the capped buffer and deferral on failed or oversized downloads.
+   Box ID read failures belong in `host.test.mjs`. Group, signature and 16 KiB boundary
+   tests stay in `scripts/box/release-list.test.mjs`. `scripts/waitron-sh.test.mjs` pins
+   version lookup, busy lock and held-attempt refusals and the empty-output fallback.
    Run those files with `pnpm exec vitest run`. Update `deploy/README.md` and
    `docs/backlog/box.md`, including that a lost state file loses replay history.
 
