@@ -36,8 +36,8 @@ y guarda. Cada destinatario necesita una dirección de correo en su cuenta y acc
 cobros**. Configura un servidor de correo en la misma página para que Waitron pueda enviar el informe.
 
 Waitron envía el informe del último día de actividad terminado cuando concluye el cierre
-automático. Tras un cierre que abarque varios días, abre **Ventas y cobros** y elige un día
-anterior para consultar sus cifras.
+automático. También puedes recibirlo después de un reinicio de la caja. Tras un cierre que abarque
+varios días, abre **Ventas y cobros** y elige un día anterior para consultar sus cifras.
 
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 

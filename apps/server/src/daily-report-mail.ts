@@ -8,6 +8,7 @@ import {
 } from "@waitron/db";
 import { resolveVenueClock } from "@waitron/reporting";
 import { formatMoney, nodeId } from "@waitron/shared";
+import { formatDecimalInput } from "@waitron/ui-core/decimal-input";
 import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
 import { readStaffEmailRecipients } from "./manager-email-recipients.js";
 import { readDailySalesFigures } from "./daily-sales-figures.js";
@@ -81,6 +82,8 @@ export function dailyReportMail(deps: {
         outsidePayments,
       } = figures;
       const money = (amount: string) => formatMoney(amount, language);
+      const number = (value: string) =>
+        formatDecimalInput(value.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ""), language);
       const tender = ({
         method,
         amount,
@@ -117,7 +120,9 @@ export function dailyReportMail(deps: {
           "",
           copy.vat,
           `${copy.rate}  ${copy.base}  ${copy.tax}`,
-          ...vat.byRate.map(({ rate, base, tax }) => `${rate}%  ${money(base)}  ${money(tax)}`),
+          ...vat.byRate.map(
+            ({ rate, base, tax }) => `${number(rate)}%  ${money(base)}  ${money(tax)}`,
+          ),
           `${copy.base}  ${money(vat.baseTotal)}  |  ${copy.tax}  ${money(vat.taxTotal)}`,
           `${copy.gross}  ${money(vat.grossTotal)}`,
           ...departmentTakings.flatMap((row) => [
@@ -129,9 +134,10 @@ export function dailyReportMail(deps: {
           "",
           copy.topSellers,
           ...topSellers.flatMap((row) => [
-            `${row.name}  ${row.quantity}  ${money(row.total)}`,
+            `${row.name}  ${number(row.quantity)}  ${money(row.total)}`,
             ...row.variants.map(
-              (variant) => `  ${variant.name}  ${variant.quantity}  ${money(variant.total)}`,
+              (variant) =>
+                `  ${variant.name}  ${number(variant.quantity)}  ${money(variant.total)}`,
             ),
           ]),
         ].join("\n"),

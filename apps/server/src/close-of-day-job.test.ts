@@ -275,6 +275,17 @@ describe("bills.close_of_day", () => {
     } finally {
       refused.delete(bill);
     }
+    onLog = (_level, event) => {
+      if (event === "close_of_day.issued") hold();
+    };
+    try {
+      await look(definition);
+      expect(issued(bill)).toBe(true);
+      expect(await queued()).toEqual([]);
+    } finally {
+      onLog = () => {};
+      seatHolds = false;
+    }
     await look(definition);
     expect(issued(bill)).toBe(true);
     expect(await queued()).toEqual([

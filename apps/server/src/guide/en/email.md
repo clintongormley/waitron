@@ -32,8 +32,9 @@ In **System → Email**, turn on **Email the daily report**, choose recipients a
 recipient needs an account email address and access to **Sales & takings**. Set up a mail server
 on the same page so Waitron can deliver the report.
 
-Waitron sends the most recently ended trading day after the automatic close completes. After a
-closure spanning several days, open **Sales & takings** and select an earlier day to see its figures.
+Waitron emails the most recently ended trading day's report after the automatic close completes.
+You can also receive that report after a box restart. After a closure spanning several days, open
+**Sales & takings** and select an earlier day to see its figures.
 
 ## Account email through test Cloud {#cloud-account-email}
 
