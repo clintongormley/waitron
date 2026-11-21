@@ -1,5 +1,7 @@
 # FULL-INVOICE-ISSUER-ADDRESS PR 2: the registered address in parts, and the A4 header line
 
+**As built (2026-11-21):** the branch removed `oneLineAddress`; a search choice fills the registered parts directly. The shared spelling, read-back check and postcode lookup live in `packages/country-packs/src/registered-address.ts` (`canonicalRegisteredParts`, `registeredLineErrors`, `provinceOfPostalCode`). The commits and the pull request say what else changed from this plan.
+
 Status: plan, revised once after a fresh reader. Branch `feat/registered-address-parts`, worktree
 `~/workspace/worktrees/waitron-feat-registered-address-parts`, on `main` at `0b1c8e3850` (PR 1, #3910, landed).
 Every line number below was read at that commit. Background: `~/waitron-campaign-l/questions.md`, from

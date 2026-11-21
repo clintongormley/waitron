@@ -342,7 +342,7 @@ Hardware and inbox checks to complete in the owner session.
   - D: profile printer switches (#3903), Email in System on every box (#3909), City on address forms (#3923).
   - F: profile default reader at Pay (#3901), receipt card details, slip venue time and receipt copy (#3904), slip button after payment (#3920), default invoice printer (#3911); open: CARD-FIELDS-MISSING, CANCEL-WAITING-CARD-PAYMENT.
   - H: A4 paper-out wording, Print Queue rows and the retired agent's alert (#3908), Delete unpairs a Bluetooth printer (#3913).
-  - L: open: FULL-INVOICE-ISSUER-ADDRESS (the issuer's postcode and town on a full invoice; fiscal, owner lands).
+  - L: the registered address edit in Venue details (#3910), then the registered address asked in parts in setup and that edit, with the A4 full invoice's address, phone and email on one line (FULL-INVOICE-ISSUER-ADDRESS PR 2).
   - B: open: PRINTER-TEST-PAGE-REAL-RECEIPT.
 
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
