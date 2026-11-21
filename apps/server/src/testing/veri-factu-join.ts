@@ -21,13 +21,32 @@ import { personIdForLoginEmail } from "@waitron/identity";
 import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
 import { ownContactUrl } from "../box-name.js";
-import type { MirrorBundle } from "../mirror-bundle.js";
+import {
+  JOIN_REVEAL_LABEL,
+  commitmentMatches,
+  joinCode,
+  revealAnswerFields,
+  verifyJoinMessage,
+} from "../box-join-code.js";
+import type { LockedJoinBundle } from "../box-join-seal.js";
+import { isMirrorBundle } from "../mirror-bundle-fetch.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
 import { generateStandbyIdentity } from "../reserved-identity.js";
 import { mintSelfSignedServerCert } from "../self-signed-cert.js";
-import { joinAsBundleAnswer, joiningBox, mountBoxJoin, signedInCookie } from "./box-join.js";
+import {
+  approveJoin,
+  boxPost,
+  helloBody,
+  joiningBox,
+  mountBoxJoin,
+  pollJoin,
+  revealBody,
+  signedInCookie,
+  unlockJoin,
+  type HelloAnswer,
+} from "./box-join.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./membership-doc-fixture.js";
 import { applyWithFirstSetup } from "./minute-first-setup.js";
@@ -48,7 +67,7 @@ export interface TwoBoxes {
 
 /**
  * A main box set up in Spain with the modules its venue database enables, signed in as its
- * administrator, its chart listing only itself, and the real bundle route mounted on `bundleApp`.
+ * administrator, its chart listing only itself, and its real box-join routes mounted on `bundleApp`.
  */
 export async function veriFactuMainBox(boxes: TwoBoxes) {
   const { mainBox, mainState, ring } = boxes;
@@ -153,12 +172,12 @@ let joinAddresses = 0;
 /**
  * The spare joins `main` by code: it asks, the administrator `email` taps its code on the main box,
  * and the bundle it collects goes to the real `adoptFromPrimary`, as `adoptJoined` hands it in
- * `boot.ts`. `primaryUrl` is not read: the main box's routes are called directly.
+ * `boot.ts`. It throws where `createBoxJoinAttempt` refuses the main box's answers.
  */
 export async function joinSpare(
   boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
   main: { bundleApp: Hono; email: string },
-  { spareUrl = SPARE_URL }: { primaryUrl?: string; spareUrl?: string } = {},
+  { spareUrl = SPARE_URL }: { spareUrl?: string } = {},
 ) {
   const { spareBox, spareState, ring } = boxes;
   const mainDb = MAIN_DATABASES.get(main.bundleApp);
@@ -172,10 +191,50 @@ export async function joinSpare(
   joinAddresses += 1;
   const box = joiningBox(`10.40.0.${joinAddresses}`, { identity, contactUrl, storeUrl });
   const cookie = await signedInCookie(mainDb, await personIdForLoginEmail(mainDb, main.email));
-  const response = await joinAsBundleAnswer(main.bundleApp, { box, sent: { cookie } });
-  const body = await response.json();
-  expect(response.status, JSON.stringify(body)).toBe(200);
-  const bundle = body as MirrorBundle;
+  const app = main.bundleApp;
+  const helloResponse = await boxPost(app, "hello", helloBody(box), box.address);
+  const answer = (await helloResponse.json()) as HelloAnswer;
+  expect(helloResponse.status, JSON.stringify(answer)).toBe(200);
+  const reveal = revealBody(box, answer.requestId);
+  const revealResponse = await boxPost(app, "reveal", reveal, box.address);
+  const revealed = (await revealResponse.json()) as { mainNonce: string; signature: string };
+  expect(revealResponse.status, JSON.stringify(revealed)).toBe(200);
+  box.seq = 1;
+  const mainNonce = Buffer.from(revealed.mainNonce, "base64");
+  if (!commitmentMatches(Buffer.from(answer.commitment, "base64"), answer.requestId, mainNonce))
+    throw new Error("the main box's nonce does not match its commitment");
+  if (
+    !verifyJoinMessage(
+      JOIN_REVEAL_LABEL,
+      answer.requestId,
+      reveal.seq as number,
+      revealAnswerFields(box.hello, box.newNonce, mainNonce),
+      revealed.signature,
+      answer.mainPublicKey,
+    )
+  )
+    throw new Error("the main box's reveal answer is not signed by its hello key");
+  const code = joinCode({
+    ...box.hello,
+    mainNodeId: answer.mainNodeId,
+    mainPublicKey: answer.mainPublicKey,
+    newNonce: box.newNonce,
+    mainNonce,
+    requestId: answer.requestId,
+  });
+  const listed = { requestId: answer.requestId, code, box, mainPublicKey: answer.mainPublicKey };
+  const approved = await approveJoin(app, answer.requestId, { code }, { cookie });
+  expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+  const polled = (await pollJoin(app, listed)) as { state: string; locked?: LockedJoinBundle };
+  if (polled.state !== "approved" || polled.locked === undefined)
+    throw new Error(`approved join not handed over: ${JSON.stringify(polled)}`);
+  const bundle = unlockJoin(listed, polled.locked);
+  if (
+    !isMirrorBundle(bundle) ||
+    bundle.primaryPublicKey !== answer.mainPublicKey ||
+    bundle.designated.nodeId !== answer.mainNodeId
+  )
+    throw new Error("the collected bundle does not name the main box that answered the hello");
   const standby = { nodeId: identity.nodeId, publicKey: identity.publicKey };
   let spareId!: string;
   await adoptFromPrimary(
