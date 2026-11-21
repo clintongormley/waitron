@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { CLOUD_SIGN_IN_CALLBACK } from "./cloud-sign-in.js";
 import { resolveLoginLocale } from "./login-locale.js";
+import { cloudSignInCallbackCopy } from "./i18n/cloud-sign-in-callback.js";
 import { isRemoteStaffRequest } from "./request-from-box.js";
 
 function callbackScript(setup: boolean) {
@@ -53,15 +54,11 @@ export function mountCloudSignInCallback(
       `default-src 'none'; script-src 'sha256-${scriptHash}'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'`,
     );
     if (isRemoteStaffRequest(c) || !isAvailable(c)) return c.notFound();
-    const spanish = resolveLoginLocale(c.req.header("accept-language"), "en-GB").startsWith("es");
-    const message = setup
-      ? spanish
-        ? "Volviendo a la configuración…"
-        : "Returning to setup…"
-      : spanish
-        ? "Volviendo a Servicios de Cloud…"
-        : "Returning to Cloud services…";
-    return c.html(`<!doctype html><html lang="${spanish ? "es" : "en"}"><meta charset="utf-8">
+    const lang = resolveLoginLocale(c.req.header("accept-language"), "en-GB").startsWith("es")
+      ? "es"
+      : "en";
+    const message = cloudSignInCallbackCopy[lang][setup ? "setup" : "installed"];
+    return c.html(`<!doctype html><html lang="${lang}"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">
 <title>${message}</title><p>${message}</p><script>${script}</script></html>`);
   });
