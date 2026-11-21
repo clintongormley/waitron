@@ -54,16 +54,16 @@ const MAIN_REFUSALS: ReadonlySet<string> = new Set([
 
 /**
  * `POST /api/node/enrol-self` — the loopback-only self-enrol a print agent running on this box
- * calls first; off a spare it then falls back to knock-and-accept. The rate limit and loopback gates refuse before
- * any database work. On a spare the token comes from the main box (`print-agent-enrol-api.ts`),
- * and any failure there answers `node.enrol_unavailable`, so the agent asks again next round.
+ * calls first; off a spare it then falls back to knock-and-accept. The rate limit and loopback
+ * gates refuse before any database work. On a spare the token comes from the main box
+ * (`print-agent-enrol-api.ts`), and any failure there answers `node.enrol_unavailable`.
  */
 export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "node.failed");
   const limiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
   const fromBox = deps.requestProvenFromBox ?? requestProvenFromBox;
-  // The agent asks again every round while refused, so the forwarding warning is written only when
-  // its main box or reason changes; the error boundary still logs each refusal it answers.
+  // A refused agent keeps asking, so the forwarding warning is written only when its main box or
+  // reason changes; the error boundary still logs each refusal it answers.
   let lastFailure: string | undefined;
 
   async function askMainBox(spare: NonNullable<NodeEnrolApiDeps["spare"]>, name: string) {

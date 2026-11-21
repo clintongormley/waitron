@@ -44,10 +44,10 @@ interface TokenRow {
 /**
  * Checks `token` against the row `readRow` finds and returns that row, or `null` when there is no
  * row, the token does not match, or `admit` turns the matched row away. `admit` runs before any
- * sighting is written, so a refused caller never looks recently seen. When a sighting is due and the read is not passive, the row is
- * read again under the venue's write lock before `recordSighting` runs, so a new token or a removal
- * committed in between refuses, and any other change is what is returned. A full disk refuses only
- * the sighting: the same re-check runs without a write.
+ * sighting is written, so a refused call writes none. When a sighting is due and the read is not
+ * passive, the row is read again under the venue's write lock before `recordSighting` runs, so a
+ * new token or a removal committed in between refuses, and any other change is what is returned. A
+ * full disk refuses only the sighting: the same re-check runs without a write.
  */
 export async function signInWithToken<Row extends TokenRow>(
   db: Database,
