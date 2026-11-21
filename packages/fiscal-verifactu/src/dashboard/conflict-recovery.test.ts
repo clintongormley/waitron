@@ -1,6 +1,7 @@
 import { active, input, committed, prepared } from "../../test/conflict-browser-fixture.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "lit";
+import { applyTokens } from "@waitron/ui";
 import {
   createRequest,
   currentLocale,
@@ -48,6 +49,15 @@ it("opens key-only recovery without a session or disclosing conflicts before key
     updateComplete: Promise<boolean>;
   };
   await screen.updateComplete;
+  applyTokens(screen.parentElement!);
+  const title = screen.shadowRoot!.querySelector("h1");
+  expect(title).not.toBeNull();
+  const xlProbe = document.createElement("span");
+  xlProbe.style.fontSize = "var(--wt-font-size-xl)";
+  screen.shadowRoot!.append(xlProbe);
+  const xl = getComputedStyle(xlProbe).fontSize;
+  xlProbe.remove();
+  expect(getComputedStyle(title!).fontSize).toBe(xl);
   expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
     "Recover from an invoice identity conflict",
   );

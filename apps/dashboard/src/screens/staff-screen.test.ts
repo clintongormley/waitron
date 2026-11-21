@@ -412,6 +412,14 @@ describe("staff-screen", () => {
 
     expect(api.listStaffPage).toHaveBeenLastCalledWith(expect.objectContaining({ page: 0 }));
     expect(list(el).people).toEqual(people);
+    const title = el.shadowRoot!.querySelector("h1");
+    expect(title).not.toBeNull();
+    const xlProbe = document.createElement("span");
+    xlProbe.style.fontSize = "var(--wt-font-size-xl)";
+    el.shadowRoot!.append(xlProbe);
+    const xl = getComputedStyle(xlProbe).fontSize;
+    xlProbe.remove();
+    expect(getComputedStyle(title!).fontSize).toBe(xl);
   });
 
   it("opens the create form when the add button is clicked", async () => {

@@ -3,19 +3,14 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { sourceFilesIn } from "./no-till-as-issuer.mjs";
 
-const excluded = new Set([
-  "apps/dashboard/src/screens/staff-screen.ts",
-  "apps/dashboard/src/screens/floor-plan-editor.ts",
-  "packages/staffing/src/dashboard/staff-roles-screen.ts",
-]);
+const excluded = new Set(["apps/dashboard/src/screens/floor-plan-editor.ts"]);
 const screen = "apps/dashboard/src/screens/content-languages-screen.ts";
 const compliant =
   'static override styles = [baseStyles, pageTitleStyles, css``]; html`<h1 class="title">Orders</h1>`';
 
 function violations(path: string, source: string): string[] {
   source = source.replace(/(^|\s)\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "$1");
-  if (excluded.has(path) || path.startsWith("packages/fiscal-verifactu/") || !/<h1\b/.test(source))
-    return [];
+  if (excluded.has(path) || !/<h1\b/.test(source)) return [];
   const failures: string[] = [];
   const styles =
     source.match(/static\s+(?:override\s+)?styles(?:\s*:[^=]+)?\s*=\s*\[([\s\S]*?)\]\s*;/)?.[1] ??
@@ -105,19 +100,23 @@ it.each([
     [],
   ],
   ["no H1", screen, "html`<h2>Calibration</h2>`", []],
-  ...[...excluded, "packages/fiscal-verifactu/src/dashboard/fiscal-filing-screen.ts"].map(
-    (path) => ["excluded page", path, "html`<h1>Title</h1>`", []],
-  ),
+  ...[...excluded].map((path) => ["excluded page", path, "html`<h1>Title</h1>`", []]),
+  [
+    "setup page",
+    "apps/setup/src/screens/live-source-screen.ts",
+    "static styles = [baseStyles]; html`<h1>Title</h1>`",
+    ["adopt pageTitleStyles"],
+  ],
 ])("%s", (_name, path, source, expected) => {
   expect(violations(path as string, source as string)).toEqual(expected);
 });
 
-it("uses the shared title style in dashboard and module literal-H1 owners", () => {
+it("uses the shared title style in dashboard, module and setup literal-H1 owners", () => {
   const root = join(import.meta.dirname, "..");
   const failures = sourceFilesIn(root)
     .filter(
       (path: string) =>
-        /^(apps\/dashboard\/src\/screens\/|packages\/[^/]+\/src\/dashboard\/).*\.ts$/.test(path) &&
+        /^(apps\/dashboard\/src\/screens\/|apps\/setup\/src\/|packages\/[^/]+\/src\/dashboard\/).*\.ts$/.test(path) &&
         !path.endsWith(".test.ts"),
     )
     .flatMap((path: string) =>

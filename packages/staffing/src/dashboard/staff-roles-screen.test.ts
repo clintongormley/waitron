@@ -195,6 +195,14 @@ async function confirmAndClose() {
 describe("the staff roles page", () => {
   it("lists each staff role's swatch and name, and who holds it, in position order", async () => {
     await mount(fakeRequest(() => [runner, waiter, cook]));
+    const title = el.shadowRoot!.querySelector("h1");
+    expect(title).not.toBeNull();
+    const xlProbe = document.createElement("span");
+    xlProbe.style.fontSize = "var(--wt-font-size-xl)";
+    el.shadowRoot!.append(xlProbe);
+    const xl = getComputedStyle(xlProbe).fontSize;
+    xlProbe.remove();
+    expect(getComputedStyle(title!).fontSize).toBe(xl);
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Staff roles");
     expect(rowKeys()).toEqual(["role-w", "role-c", "role-r"]);
     expect(
