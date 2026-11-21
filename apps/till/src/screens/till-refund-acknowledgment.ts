@@ -65,6 +65,10 @@ export class TillRefundAcknowledgment extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) canPrint = false;
 
+  focusBack(): void {
+    this.renderRoot.querySelector<HTMLElement>("[data-back-to-find-bill]")?.focus();
+  }
+
   #emit(name: string): void {
     this.dispatchEvent(new CustomEvent(name, { detail: {}, bubbles: true, composed: true }));
   }
@@ -85,8 +89,8 @@ export class TillRefundAcknowledgment extends LitElement {
               <dl>
                 <dt>${t("refund_ack.reference")}</dt>
                 <dd>${r.id}</dd>
-                <dt>${t("refund_ack.invoice")}</dt>
-                <dd>${a.invoiceNumber}</dd>
+                <dt>${t(a.parent === "sale" ? "refund_ack.invoice" : "refund_ack.payment")}</dt>
+                <dd>${a.parent === "sale" ? a.invoiceNumber : a.paymentReference}</dd>
                 <dt>${t("refund_ack.date")}</dt>
                 <dd>
                   <time datetime=${r.completedAt!}
@@ -105,7 +109,7 @@ export class TillRefundAcknowledgment extends LitElement {
                   ${money(addDecimal(decimal(r.appliedAmount), decimal(r.tipAmount)))}
                 </dd>
               </dl>
-              <p>${t("tender_refund.completed")}</p>
+              ${a.parent === "sale" ? html`<p>${t("tender_refund.completed")}</p>` : nothing}
             </article>`
           : html`<p role="status">
               ${t(r.state === "failed" ? "tender_refund.failed" : "tender_refund.pending")}
@@ -113,7 +117,7 @@ export class TillRefundAcknowledgment extends LitElement {
       }
       <div class="actions">
         ${
-          completed && this.canPrint
+          completed && this.canPrint && !a.printQueued
             ? html`<wt-button
                 data-refund-reprint
                 variant="secondary"
@@ -121,24 +125,28 @@ export class TillRefundAcknowledgment extends LitElement {
                 @click=${() => {
                   if (!this.busy) this.#emit("reprint");
                 }}
-                >${t("action.reprint")}</wt-button
+                >${t("refund_ack.print")}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          a.parent === "sale"
+            ? html`<wt-button
+                data-refund-original
+                variant="secondary"
+                ?disabled=${this.busy}
+                @click=${() => {
+                  if (!this.busy) this.#emit("refund-original");
+                }}
+                >${t("refund_ack.original")}</wt-button
               >`
             : nothing
         }
         <wt-button
-          data-refund-original
-          variant="secondary"
-          ?disabled=${this.busy}
-          @click=${() => {
-            if (!this.busy) this.#emit("refund-original");
-          }}
-          >${t("refund_ack.original")}</wt-button
-        >
-        <wt-button
           data-back-to-find-bill
           variant="secondary"
           @click=${() => this.#emit("back-to-find-bill")}
-          >${t("find_bill.back")}</wt-button
+          >${t(a.parent === "sale" ? "find_bill.back" : "action.back")}</wt-button
         >
       </div>
     `;

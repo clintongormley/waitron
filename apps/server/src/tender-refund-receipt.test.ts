@@ -4,6 +4,8 @@ import { formatTenderRefundAcknowledgment } from "./tender-refund-receipt.js";
 import type { TenderRefundAcknowledgment } from "./tender-refund-types.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 const acknowledgment: TenderRefundAcknowledgment = {
+  parent: "sale",
+  printQueued: false,
   refund: {
     id: "refund-id",
     saleId: "sale-id",

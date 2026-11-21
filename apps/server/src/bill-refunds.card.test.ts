@@ -1172,28 +1172,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect((await pay(billId, "cash", "1.00")).answer.status).toBe(200);
   });
 
-  it("leaves a sent refund it cannot find pending, sending nothing", async () => {
-    const { paymentId, refundId } = await pendingRefund();
-
-    await runLoop(clockPlus(HOUR / 2));
-
-    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
-    expect(callsFor(refundId)).toHaveLength(1);
-  });
-
-  it("resends with the same key on a retry 23 hours after the first send", async () => {
-    const { paymentId, refundId, asked } = await pendingRefund();
-
-    const retried = await asked.again(venue.appAt(clockPlus(23 * HOUR)));
-
-    expect(retried.answer.json).toMatchObject({ refund: { state: "completed" } });
-    expect(callsFor(refundId).map((call) => call.idempotencyKey)).toEqual([
-      `tr_${refundId}`,
-      `tr_${refundId}`,
-    ]);
-    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "completed", sendCount: 2 });
-  });
-
   it("sends nothing on a retry 25 hours after the first send, nor on the manager's resolve", async () => {
     const { billId, paymentId, refundId, asked } = await pendingRefund();
     const later = clockPlus(25 * HOUR);
@@ -1217,40 +1195,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect((await pay(billId, "cash", "1.00")).answer.json.code).toBe("bill.refund_in_progress");
   });
 
-  /** {@link pendingRefund}, its first send made on a clock `aheadMs` ahead, as before a backward step. */
-  async function refundSentAhead(aheadMs: number) {
-    const billId = await bill("Octopus", "Croquettes", "Croquettes");
-    const card = await pay(billId, "card", "20.00");
-    venue.card.scriptNextRefund({ made: false, answer: LOST });
-    const asked = await refund(billId, card.id, {
-      applied: "5.00",
-      app: venue.appAt(clockPlus(aheadMs)),
-    });
-    const row = await onlyRefundOf(card.id);
-    expect(Date.parse(row.sentAt!)).toBeGreaterThan(Date.now() + aheadMs / 2);
-    return { paymentId: card.id, refundId: row.id, asked };
-  }
-
-  it("sends nothing on a retry when the first send is stamped 25 hours ahead, as after a backward step", async () => {
-    const { paymentId, refundId, asked } = await refundSentAhead(25 * HOUR);
-
-    const retried = await asked.again(venue.app);
-
-    expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
-    expect(callsFor(refundId)).toHaveLength(1);
-    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
-  });
-
-  it("sends nothing on a retry when the first send is stamped a minute ahead", async () => {
-    const { paymentId, refundId, asked } = await refundSentAhead(60_000);
-
-    const retried = await asked.again(venue.app);
-
-    expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
-    expect(callsFor(refundId)).toHaveLength(1);
-    expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
-  });
-
   it("resends on the manager's resolve inside the window", async () => {
     const { paymentId, refundId } = await pendingRefund();
 
@@ -1265,21 +1209,6 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
     expect(callsFor(refundId)).toHaveLength(2);
     expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "completed", sendCount: 2 });
   });
-
-  it.each([60_000, 23 * HOUR])(
-    "never resends for a provider with no safe window, %i ms after the send",
-    async (after) => {
-      const { paymentId, refundId, asked } = await pendingRefund();
-
-      const retried = await withProvider({ window: null }, () =>
-        asked.again(venue.appAt(clockPlus(after))),
-      );
-
-      expect(retried.answer.json).toMatchObject({ refund: { state: "pending" } });
-      expect(callsFor(refundId)).toHaveLength(1);
-      expect(await onlyRefundOf(paymentId)).toMatchObject({ state: "pending", sendCount: 1 });
-    },
-  );
 
   it("sends a refund a crash left unsent when its own request is retried", async () => {
     const billId = await bill("Octopus", "Croquettes", "Croquettes");

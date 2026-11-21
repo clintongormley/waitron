@@ -10,7 +10,9 @@ afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
 });
-const acknowledgment: TenderRefundAcknowledgment = {
+const acknowledgment = {
+  parent: "sale" as const,
+  printQueued: false,
   refund: {
     id: "refund-1",
     saleId: "sale-1",
@@ -26,7 +28,7 @@ const acknowledgment: TenderRefundAcknowledgment = {
   customerName: "Original customer",
   method: "card",
   last4: "0091",
-};
+} satisfies TenderRefundAcknowledgment;
 type View = HTMLElement & {
   acknowledgment: TenderRefundAcknowledgment;
   busy: boolean;

@@ -3088,8 +3088,8 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 (`beginBillPayment`). The function `refuseUntilRecordable` (`packages/fiscal-verifactu/src/clock-behind.ts`)
 checks this rule, and the seat's
 `refuseUntilRecordable` calls it, so each route that calls the seat, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
-clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`
-(`apps/server/src/bill-refunds.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
+clock. The shared refund loop's check at the start of each pass (`refundsPaused`) and
+`clockStopsRefund` (`apps/server/src/tender-refund-sends.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
 provider nothing and an outcome the provider answers is not written
 (`apps/server/src/tender-refund-recovery.test.ts`, "refund recovery under a clock before
 28-10-2024"); and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses

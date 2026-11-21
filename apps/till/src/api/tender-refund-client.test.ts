@@ -93,6 +93,8 @@ describe("settled tender refund client", () => {
 
 it("reads the separate refund acknowledgment with cancellation and an encoded refund id", async () => {
   const body = {
+    parent: "sale",
+    printQueued: false,
     refund: { ...view, state: "completed", completedAt: "2026-10-16T12:01:00.000Z" },
     invoiceNumber: "A/12",
     issuer: { venueName: "Original issuer", nif: "61000002T" },

@@ -909,7 +909,9 @@ also qualifies the historical operation-description references in this section.
   held by its party. A party merge also moves paid bills and preserves their collection facts;
   abandoned bills stay behind.
   Bill and receipt refunds share one table. Each row points to the bill payment or receipt tender
-  and names the staff who handled it. The two refund routes still run separately until os13.
+  and names the staff who handled it. Both entry points use the same refund reservation,
+  completion, card sender and recovery. Staff can print one acknowledgment from the till
+  for either refund and get later copies in Print Queue.
 
 ### 2026-11-19 counter save-and-pay benchmark
 
