@@ -4540,7 +4540,7 @@ export class TillApp extends LitElement {
     req: Parameters<TillApi["pay"]>[0],
     here: () => boolean,
     dialogId?: number,
-  ): Promise<PayOutcome & { cancelled?: true }> {
+  ): Promise<PayOutcome & { noPaymentTaken?: true }> {
     const api = this.api;
     if (this.#cardReader() !== "sumup_cloud") return api.pay(req);
     const session = this.#operatorSession;
@@ -4567,9 +4567,9 @@ export class TillApp extends LitElement {
       });
       if (
         (out.outcome === "declined" || out.outcome === "network_unavailable") &&
-        stop?.status === "requested"
+        (stop?.status === "requested" || stop?.status === "sending")
       )
-        return { ...out, cancelled: true };
+        return { ...out, noPaymentTaken: true };
       return out;
     } finally {
       if (stop !== undefined && this.#directReaderStop === stop) {
@@ -22199,7 +22199,7 @@ export class TillApp extends LitElement {
       }
       this.#showPresentedRefusal(
         id,
-        out.cancelled
+        out.noPaymentTaken
           ? { code: "payment_failed", text: t("bill_pay.no_payment_taken") }
           : { code: PRESENTED_CARD_REFUSALS[out.outcome] },
       );

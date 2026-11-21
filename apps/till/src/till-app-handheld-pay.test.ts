@@ -483,10 +483,11 @@ describe("a presented bill on a handheld", () => {
         expect(presented(el)!.busy).toBe(false);
         expect(stop()).toBeNull();
         expect(await sheetMessage(el)).toBe(
-          t(stopOutcome === "requested" ? "bill_pay.no_payment_taken" : "bill_pay.card_declined"),
+          t(stopOutcome === "refused" ? "bill_pay.card_declined" : "bill_pay.no_payment_taken"),
         );
         expect(inPresented(el, "[data-presented-pay-take]")).toHaveProperty("disabled", false);
       }
+      expect(pay).toHaveBeenCalledOnce();
     },
   );
 

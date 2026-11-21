@@ -101,7 +101,7 @@ export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
 export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" | "partial" }> & {
-  cancelled?: true;
+  noPaymentTaken?: true;
 };
 
 const KEEP_CARD_REASONS = new Set(["lost_card", "stolen_card", "pickup_card"]);
@@ -1302,7 +1302,7 @@ export class TillTenderPay extends LitElement {
     const reason =
       this.cardOutcome?.outcome === "declined" ? this.cardOutcome.failureReason : undefined;
     const keepCard = KEEP_CARD_REASONS.has(reason ?? "");
-    const message = this.cardOutcome?.cancelled
+    const message = this.cardOutcome?.noPaymentTaken
       ? t("bill_pay.no_payment_taken")
       : this.cardOutcome?.outcome === "timeout" ||
           this.cardOutcome?.outcome === "network_unavailable" ||
