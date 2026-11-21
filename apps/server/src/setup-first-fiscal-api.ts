@@ -6,6 +6,7 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
+import { recordSetupCloudPublication } from "./setup-cloud-sign-in.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
@@ -265,7 +266,21 @@ export function mountSetupFirstFiscalApi(
               }),
             );
           }
-          await activateFirstFiscal(host, deps, owner, body, hold);
+          const persistTrading = deps.persistTrading;
+          const cloudSignIn = deps.cloudSignIn;
+          const cloudPublication =
+            cloudSignIn &&
+            persistTrading &&
+            !(await host.owner.authorize(owner)).frozen.configurationImport
+              ? {
+                  ...deps,
+                  persistTrading: async (cfg: Parameters<typeof persistTrading>[0]) => {
+                    await persistTrading(cfg);
+                    await recordSetupCloudPublication(c, cloudSignIn, cfg, log);
+                  },
+                }
+              : deps;
+          await activateFirstFiscal(host, cloudPublication, owner, body, hold);
           setTimeout(() => deps.requestRestart?.(), 0);
           return c.json({ provisioned: true, restarting: true });
         });

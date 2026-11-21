@@ -16,7 +16,7 @@ export type MachineHandler = (
 export async function cloudFixture(
   machine?: MachineHandler,
   environment: "test" | "production" = "test",
-  pairingV4?: MachineHandler,
+  accountPairing?: MachineHandler,
 ) {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-cloud-client-"));
   const requests: unknown[][] = [];
@@ -82,12 +82,12 @@ export async function cloudFixture(
         Buffer.from(signature, "base64url"),
       ),
     ).toBe(true);
-    if (values[0] === "waitron-cloud-pair-v4" && pairingV4) {
+    if (["waitron-cloud-pair-v4", "waitron-cloud-pair-v5"].includes(values[0]!) && accountPairing) {
       const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
       expect(req.url).toBe(`/api/pairing/${values[2]}`);
       expect(saved.publicKey).toBe(values[4]);
       requests.push(values);
-      await pairingV4(values, saved, req, res, sent);
+      await accountPairing(values, saved, req, res, sent);
       return;
     }
     expect(values[0]).toBe("waitron-cloud-pair-v3");

@@ -26,6 +26,7 @@ import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
 import "./screens/restore-bucket-screen.js";
 import "./screens/cloud-restore-screen.js";
+import "./screens/cloud-sign-in-screen.js";
 import { SetupLiveSourceScreen } from "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
 import "./screens/fiscal-test-screen.js";
@@ -90,6 +91,7 @@ export type Screen =
   | "restore"
   | "restore-bucket"
   | "cloud-restore"
+  | "cloud-sign-in"
   | "live-source"
   | "configuration-preview"
   | "fiscal-test"
@@ -817,6 +819,67 @@ export class SetupApp extends LitElement {
   /** Held for the page's life only: a reload goes back to the browser's languages. */
   #localeChosen = false;
 
+  #cloudSignInAvailable = false;
+  get #cloudSignInTab(): string | undefined {
+    if (this.#cloudSignInAvailable)
+      return sessionStorage.getItem("waitron-setup-cloud-signed-in") ?? undefined;
+  }
+  @state() private cloudSignInError = false;
+
+  #resumeCloudSignIn(): boolean {
+    if (!this.#cloudSignInAvailable) return false;
+    const outcome = sessionStorage.getItem("waitron-setup-cloud-result");
+    if (!outcome) return false;
+    sessionStorage.removeItem("waitron-setup-cloud-result");
+    const saved = sessionStorage.getItem("waitron-setup-cloud-return");
+    sessionStorage.removeItem("waitron-setup-cloud-return");
+    if (!saved) return false;
+    let data: { mode?: unknown; locale?: unknown };
+    try {
+      data = JSON.parse(saved);
+    } catch {
+      return false;
+    }
+    if (!data) return false;
+    const { mode, locale } = data;
+    if (mode !== "prepare" && (mode !== "live" || !this.developmentMode)) return false;
+    if (typeof locale === "string") {
+      this.#localeChosen = true;
+      setLocale(locale);
+    }
+    this.draft = { mode };
+    this.connectionAnswered = true;
+    if (outcome === "signed-in") {
+      const tab = sessionStorage.getItem("waitron-setup-cloud-tab");
+      if (tab) sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
+      this.screen = "admin";
+    } else {
+      this.cloudSignInError = outcome !== "cancelled";
+      this.screen = "cloud-sign-in";
+    }
+    return true;
+  }
+
+  async #startCloudSignIn(isCurrent: () => boolean): Promise<void> {
+    const tab = sessionStorage.getItem("waitron-setup-cloud-tab") ?? crypto.randomUUID();
+    sessionStorage.setItem("waitron-setup-cloud-tab", tab);
+    const { authorizationUrl } = await this.api.startCloudSignIn(tab);
+    if (!isCurrent()) return;
+    if (authorizationUrl === undefined) {
+      sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
+      this.#goto("admin");
+      return;
+    }
+    sessionStorage.setItem(
+      "waitron-setup-cloud-return",
+      JSON.stringify({
+        mode: this.draft.mode,
+        ...(this.#localeChosen ? { locale: currentLocale() } : {}),
+      }),
+    );
+    location.assign(authorizationUrl);
+  }
+
   readonly #theme = new ThemeChoiceController(this);
   readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
     theme: t("shell.theme.label"),
@@ -1018,6 +1081,7 @@ export class SetupApp extends LitElement {
         this.api.getDiscovery(),
       ]);
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      this.#cloudSignInAvailable = status.cloudSignInAvailable === true;
       this.installationOrigin = status.installationOrigin;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
@@ -1036,7 +1100,11 @@ export class SetupApp extends LitElement {
           }
           throw error;
         }
-      } else if (this.screen === "connection" && !discovery.caDownloadAvailable)
+      } else if (
+        !this.#resumeCloudSignIn() &&
+        this.screen === "connection" &&
+        !discovery.caDownloadAvailable
+      )
         this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
@@ -1061,6 +1129,7 @@ export class SetupApp extends LitElement {
     try {
       const status = await this.api.getStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      this.#cloudSignInAvailable = status.cloudSignInAvailable === true;
       this.installationOrigin = status.installationOrigin;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
@@ -1257,6 +1326,7 @@ export class SetupApp extends LitElement {
         "restore",
         "restore-bucket",
         "cloud-restore",
+        "cloud-sign-in",
       ].includes(destination)
     ) {
       this.firstOwnerError = this.#frozenDetailsWords();
@@ -1299,6 +1369,18 @@ export class SetupApp extends LitElement {
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
+    if (
+      destination === "admin" &&
+      this.#cloudSignInAvailable &&
+      !this.leave.coordinator.isDirty([this]) &&
+      ((this.screen === "mode" && this.draft.mode === "prepare") ||
+        (this.screen === "live-source" && this.draft.mode === "live" && this.developmentMode))
+    ) {
+      this.cloudSignInError = false;
+      destination = "cloud-sign-in";
+    }
+    if (this.#cloudSignInAvailable && (destination === "mode" || destination === "cloud-sign-in"))
+      sessionStorage.removeItem("waitron-setup-cloud-signed-in");
     this.screen = destination;
   }
 
@@ -1751,6 +1833,8 @@ export class SetupApp extends LitElement {
     try {
       const request = assembleBody(submitted);
       const locale = currentLocale();
+      const cloudSignInTab = this.#cloudSignInTab;
+      const cloudSignInArgs: [string?] = cloudSignInTab ? [cloudSignInTab] : [];
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
             {
@@ -1759,15 +1843,22 @@ export class SetupApp extends LitElement {
               email: submitted.email as ProvisionBody["email"],
             },
             locale,
+            ...cloudSignInArgs,
           )
-        : request.mode === "prepare"
-          ? this.api.provision(request, this.#localeChosen ? locale : undefined, locale)
+        : request.mode === "prepare" || cloudSignInTab
+          ? this.api.provision(
+              request,
+              this.#localeChosen ? locale : undefined,
+              request.mode === "prepare" ? locale : undefined,
+              ...cloudSignInArgs,
+            )
           : this.#localeChosen
             ? this.api.provision(request, locale)
             : this.api.provision(request));
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
+      if (cloudSignInTab) sessionStorage.removeItem("waitron-setup-cloud-signed-in");
       this.recoveryPackPdf = result.recoveryPackPdf;
       this.breakGlassSecret = result.breakGlassSecret;
       this.breakGlassKeyName = result.breakGlassKeyName;
@@ -2797,6 +2888,12 @@ export class SetupApp extends LitElement {
           .liveSince=${this.cloudLiveSince}
           .liveUnknown=${this.cloudLiveUnknown}
         ></setup-cloud-restore-screen>`;
+      case "cloud-sign-in":
+        return html`<setup-cloud-sign-in-screen
+          data-test="screen-cloud-sign-in"
+          .returnFailed=${this.cloudSignInError}
+          .start=${(isCurrent: () => boolean) => this.#startCloudSignIn(isCurrent)}
+        ></setup-cloud-sign-in-screen>`;
       case "live-source":
         return html`<setup-live-source-screen
           data-test="screen-live-source"

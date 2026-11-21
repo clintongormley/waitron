@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Socket } from "node:net";
@@ -175,8 +176,26 @@ it.each(["demo", "prepare"])(
   },
 );
 
-it("owned development Live consumes its durable hour through publication without production credentials", async () => {
-  const { app, stateDir } = await fixture();
+it("owned development Live saves its durable hour and marks the matching Cloud sign-in only after publication", async () => {
+  const { mount, stateDir } = await fixture();
+  const tab = randomUUID();
+  const session = randomBytes(32).toString("base64url");
+  const persistTrading = vi.fn<NonNullable<SetupDeps["persistTrading"]>>(async () => {});
+  const publishSetupSignIn = vi.fn(async () => {
+    expect(persistTrading).toHaveBeenCalledOnce();
+  });
+  const app = mount({
+    persistTrading,
+    cloudSignIn: {
+      origin: "https://box.test",
+      connection: {
+        setupSignInAvailable: async () => true,
+        startSignIn: async () => ({}),
+        returnSignIn: async () => {},
+        publishSetupSignIn,
+      },
+    },
+  });
   const owned = await ownedHourSetup(
     async (input, init) => app.request(String(input), init),
     "https://box.test",
@@ -186,11 +205,24 @@ it("owned development Live consumes its durable hour through publication without
     time.clock,
   );
   const before = await readFile(join(stateDir, "module-records/fiscal-verifactu.json"), "utf8");
-  const response = await app.request("https://box.test/setup-api/provision", {
-    method: "POST",
-    headers: owned.headers,
-    body: JSON.stringify({ mode: "live" }),
-  });
+  const response = await app.request(
+    "https://box.test/setup-api/provision",
+    {
+      method: "POST",
+      headers: {
+        ...owned.headers,
+        origin: "https://box.test",
+        cookie: "__Host-waitron-setup-cloud=" + session,
+        "x-waitron-setup-cloud-tab": tab,
+      },
+      body: JSON.stringify({ mode: "live" }),
+    },
+    { incoming: { socket } },
+  );
+  expect(publishSetupSignIn).toHaveBeenCalledExactlyOnceWith(
+    { tab, session, kind: "setup" },
+    persistTrading.mock.calls[0]?.[0].nodeId,
+  );
   expect({ status: response.status, body: await response.json() }).toMatchObject({
     status: 200,
     body: { provisioned: true, restarting: true },

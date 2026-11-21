@@ -24,6 +24,7 @@ export interface SetupStatus {
   provisioned: boolean;
   environment: "production" | "preproduction";
   developmentMode?: boolean;
+  cloudSignInAvailable?: boolean;
   needs: string[];
   operationBlocked?: boolean;
   operation?: {
@@ -520,6 +521,10 @@ export class SetupApi {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }
 
+  startCloudSignIn(tab: string): Promise<{ authorizationUrl?: string }> {
+    return this.#request("/setup-api/cloud/sign-in/start", "POST", { tab });
+  }
+
   /** Answered only by the page a box shows when its start failed (`recovery-surface.ts`). */
   getRecoveryStatus(): Promise<unknown> {
     return this.#request<unknown>("/recovery-api/status", "GET");
@@ -533,12 +538,14 @@ export class SetupApi {
     body: ProvisionBody,
     locale?: string,
     recoveryPackLocale?: string,
+    cloudSignInTab?: string,
   ): Promise<ProvisionResult> {
     return this.#request<ProvisionResult>("/setup-api/provision", "POST", body, {
       ...(locale === undefined ? {} : { "accept-language": locale }),
       ...(recoveryPackLocale === undefined
         ? {}
         : { "x-waitron-recovery-pack-locale": recoveryPackLocale }),
+      ...(cloudSignInTab === undefined ? {} : { "X-Waitron-Setup-Cloud-Tab": cloudSignInTab }),
     });
   }
 
@@ -945,10 +952,12 @@ export class SetupApi {
     owner: FirstSetupOwner,
     body: FirstSetupProvisionBody,
     locale?: string,
+    cloudSignInTab?: string,
   ): Promise<ProvisionResult> {
     return this.#request("/setup-api/provision", "POST", body, {
       ...firstSetupHeaders(owner),
       ...(locale === undefined ? {} : { "accept-language": locale }),
+      ...(cloudSignInTab === undefined ? {} : { "X-Waitron-Setup-Cloud-Tab": cloudSignInTab }),
     });
   }
 

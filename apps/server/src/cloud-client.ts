@@ -24,6 +24,7 @@ import {
   isPairingV4Profile,
   pairingPayload,
   pairingV4Payload,
+  pairingV5Payload,
   pairingVenueName,
   type PairingV4Operation,
 } from "@waitron/contract";
@@ -118,7 +119,12 @@ export interface CloudChoice {
 }
 export interface CloudConnectionOptions {
   managementOrigin?: string;
-  signIn?: { callback: string; readProfile(): Promise<CloudSignInProfile> };
+  signIn?: {
+    callback: string;
+    readProfile(): Promise<CloudSignInProfile>;
+    setup?: boolean;
+    currentNodeId?(): string | undefined;
+  };
   onEmergencyHintsError?: (error: unknown) => void;
   stateDir: string;
   tunnelDir?: string;
@@ -463,7 +469,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     attempt: NonNullable<CloudSignInState["attempt"]>,
     operation: PairingV4Operation,
   ) {
-    const bytes = pairingV4Payload({
+    const encode = attempt.kind === "setup" ? pairingV5Payload : pairingV4Payload;
+    const bytes = encode({
       ...operation,
       origin: state.origin,
       publicKey: state.publicKey,
@@ -559,7 +566,25 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     return state;
   }
   function sameBinding(attempt: CloudSignInBinding, binding: CloudSignInBinding) {
-    return attempt.tab === binding.tab && attempt.session === hashSessionToken(binding.session);
+    return (
+      attempt.kind === binding.kind &&
+      attempt.tab === binding.tab &&
+      attempt.session === hashSessionToken(binding.session)
+    );
+  }
+  async function bindSetupAccount(
+    state: CloudSignInState,
+    attempt: NonNullable<CloudSignInState["attempt"]>,
+    reply: Awaited<ReturnType<typeof exchangeSignIn>>,
+    authorize: () => Promise<void>,
+  ) {
+    if (reply.state !== "account_bound") throw new AppError("cloud.request_unavailable", {});
+    await authorize();
+    attempt.phase = "account_bound";
+    attempt.expiresAt = reply.expiresAt;
+    if (reply.provisionalRegistration)
+      attempt.provisionalRegistration = reply.provisionalRegistration;
+    await writeState(state);
   }
   async function finishSignIn(
     state: CloudSignInState,
@@ -708,12 +733,53 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     | undefined;
   let emergencyFacts: { registration: string; display: EmergencyDisplay } | undefined;
   return {
+    async setupSignInAvailable() {
+      return options.signIn?.setup === true && (await readState())?.version === 4;
+    },
+    async publishSetupSignIn(binding: CloudSignInBinding, nodeId: string) {
+      await run(async () => {
+        const state = await readState();
+        if (state?.version !== 4 || options.signIn?.setup !== true) return;
+        const attempt = state.attempt;
+        if (
+          attempt?.kind !== "setup" ||
+          attempt.phase !== "account_bound" ||
+          !sameBinding(attempt, binding) ||
+          Date.parse(attempt.expiresAt) <= Date.now()
+        )
+          return;
+        attempt.publishedNodeId = nodeId;
+        await writeState(state);
+      });
+    },
     async startSignIn(binding: CloudSignInBinding, authorize: () => Promise<void>) {
       return run(async () => {
         const state = await signInState();
         let attempt = state.attempt;
         await authorize();
-        if (attempt && attempt.phase !== "awaiting_cloud") {
+        const setup = binding.kind === "setup";
+        if (setup !== (options.signIn!.setup === true))
+          throw new AppError("cloud.binding_conflict", {});
+        if (attempt && attempt.kind !== binding.kind) {
+          if (setup || attempt.phase !== "awaiting_cloud")
+            throw new AppError("cloud.binding_conflict", {});
+          attempt = undefined;
+        }
+        if (
+          setup &&
+          attempt &&
+          attempt.phase !== "awaiting_cloud" &&
+          Date.parse(attempt.expiresAt) > Date.now()
+        ) {
+          if (!sameBinding(attempt, binding)) throw new AppError("cloud.binding_conflict", {});
+          if (attempt.phase === "account_bound") return {};
+          const reply = await exchangeSignIn(state, attempt, { action: "status", args: [] });
+          if (reply.state === "account_bound") {
+            await bindSetupAccount(state, attempt, reply, authorize);
+            return {};
+          }
+        }
+        if (!setup && attempt && attempt.phase !== "awaiting_cloud") {
           const ownAttempt = sameBinding(attempt, binding);
           const otherActiveAttempt = !ownAttempt && Date.parse(attempt.expiresAt) > Date.now();
           if (otherActiveAttempt && attempt.phase !== "account_bound")
@@ -727,13 +793,15 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             attempt = undefined;
           }
         }
-        if (await options.readVenueId()) throw new AppError("cloud.binding_conflict", {});
+        if (!setup && (await options.readVenueId()))
+          throw new AppError("cloud.binding_conflict", {});
         if (attempt && Date.parse(attempt.expiresAt) > Date.now()) {
           if (!sameBinding(attempt, binding)) throw new AppError("cloud.binding_conflict", {});
         } else {
           attempt = newCloudSignInAttempt({
             tab: binding.tab,
             session: hashSessionToken(binding.session),
+            ...(setup && { kind: "setup" as const }),
           });
           state.attempt = attempt;
           await writeState(state);
@@ -757,6 +825,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         const attempt = state.attempt;
         if (
           !attempt ||
+          (binding.kind === "setup") !== (options.signIn!.setup === true) ||
           !sameBinding(attempt, binding) ||
           attempt.requestId !== input.requestId ||
           attempt.state !== input.state
@@ -770,8 +839,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           }
           throw new AppError("cloud.request_unavailable", {});
         }
-        if (attempt.phase !== "awaiting_cloud" && (await recoverSignIn(state, attempt, authorize)))
-          return;
+        if (attempt.phase !== "awaiting_cloud") {
+          if (attempt.kind === "setup") {
+            if (attempt.phase === "account_bound") return;
+            const reply = await exchangeSignIn(state, attempt, { action: "status", args: [] });
+            if (reply.state === "account_bound") {
+              await bindSetupAccount(state, attempt, reply, authorize);
+              return;
+            }
+          } else if (await recoverSignIn(state, attempt, authorize)) return;
+        }
         attempt.phase = "redeeming";
         await writeState(state);
         await authorize();
@@ -779,8 +856,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           action: "redeem",
           args: [input.code, attempt.verifier],
         });
-        attempt.expiresAt = reply.expiresAt;
-        await completeSignIn(state, attempt, authorize);
+        if (attempt.kind === "setup") {
+          await bindSetupAccount(state, attempt, reply, authorize);
+        } else {
+          attempt.expiresAt = reply.expiresAt;
+          await completeSignIn(state, attempt, authorize);
+        }
       });
     },
     async emailRelayEnabled() {
@@ -1206,7 +1287,27 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       return run(async () => {
         let state: SavedCloudState | undefined;
         try {
-          state = await read();
+          const stored = await readState();
+          if (stored?.version === 4) {
+            const attempt = stored.attempt;
+            if (
+              attempt?.kind !== "setup" ||
+              !attempt.publishedNodeId ||
+              attempt.publishedNodeId !== options.signIn?.currentNodeId?.() ||
+              Date.parse(attempt.expiresAt) <= Date.now()
+            )
+              return project(undefined);
+            const authorize = async () => {
+              signal?.throwIfAborted();
+              if (attempt.publishedNodeId !== options.signIn?.currentNodeId?.())
+                throw new AppError("cloud.not_primary", {});
+            };
+            await authorize();
+            await recoverSignIn(stored, attempt, authorize);
+            state = await read();
+            return project(state);
+          }
+          state = stored;
           if (!state?.view?.registration) return project(state);
           const client = installationClient(state, save);
           await client.refresh(signal);

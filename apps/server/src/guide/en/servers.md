@@ -281,6 +281,23 @@ deletes this box's venue data even if the return has stopped or is unfinished.
 
 After a box becomes the main box, open **Backups** and check that each backup folder is on this box.
 
+## Connect a test box during setup {#setup-cloud-sign-in}
+
+On a test box prepared for Cloud sign-in, choose **Sign in to Waitron Cloud** before entering the
+administrator's details in Prepare or a development Live rehearsal. Sign in or create an account,
+then return to setup in the original tab. Waitron files the venue after you save it and the box
+restarts. Check **System → Cloud services** for the connection.
+
+Enter the address and mail server during setup. Choose **Skip** to finish setup manually.
+If you skip before opening Cloud or import a configuration, connect later from **Cloud services**.
+
+The planned address pilot will require a Cloud
+account with one Spanish business, no tax number and no venues. Adding a venue to an existing
+Cloud business will still use manual address entry.
+
+If you started Cloud sign-in and the registration did not finish, you can still save the venue.
+Ask the pilot operator to prepare a replacement key if Cloud services refuses a new sign-in.
+
 ## Turn remote staff access on or off {#remote-access}
 
 On a test box set up for Cloud sign-in, open **System → Cloud services** and choose **Sign in to

@@ -563,7 +563,11 @@ export class FirstSetupSession {
       return result;
     });
   }
-  provision(settings: Omit<FirstSetupProvisionBody, "firstSetup">, locale?: string) {
+  provision(
+    settings: Omit<FirstSetupProvisionBody, "firstSetup">,
+    locale?: string,
+    ...cloudSignInArgs: [cloudSignInTab?: string]
+  ) {
     return this.#run(async (current) => {
       const owner = this.#owner();
       try {
@@ -571,6 +575,7 @@ export class FirstSetupSession {
           owner,
           this.#publicationBody(owner, settings),
           locale,
+          ...cloudSignInArgs,
         );
         current();
         this.#needsRefresh = true;

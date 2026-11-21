@@ -1,3 +1,4 @@
+import { AppError } from "@waitron/shared";
 import { mkdir } from "node:fs/promises";
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
@@ -97,7 +98,7 @@ it("requires a pinned secure Cloud origin except explicit loopback development",
     loadCloudOrigin({ WAITRON_ENV: "production", WAITRON_CLOUD_ORIGIN: "http://127.0.0.1:8000" }),
   ).toThrow();
 });
-async function installedSignInFixture() {
+async function installedSignInFixture(setup = false, provisional = false) {
   const callback = "https://box.waitron.test/cloud/pairing/callback";
   const expiresAt = new Date(Date.now() + 600_000).toISOString();
   const code = randomBytes(32).toString("base64url");
@@ -120,6 +121,8 @@ async function installedSignInFixture() {
   ];
   let profile = validProfile;
   const publicKey = key.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
+  const nodeId = randomUUID();
+  let published = false;
   const f = await fixture(undefined, "test", async (values, _saved, _req, res) => {
     const [, origin, action, requestId, presentedKey, , , args] = values;
     if (action === "status" && (expired || presentedKey !== publicKey)) {
@@ -155,8 +158,8 @@ async function installedSignInFixture() {
       }
     }
     answer.state = attemptState;
-    if (registered)
-      answer.registration = {
+    if (registered || (provisional && attemptState === "account_bound"))
+      answer[registered ? "registration" : "provisionalRegistration"] = {
         venueId: f.venueId,
         installationId: f.installationId,
         organisationId: f.organisationId,
@@ -174,12 +177,26 @@ async function installedSignInFixture() {
   );
   const options = {
     ...f.options,
-    signIn: { callback, readProfile: async () => profile },
+    readVenueId: async () => {
+      if (setup && !published) throw new AppError("venue.not_found", {});
+      return f.options.readVenueId();
+    },
+    signIn: {
+      callback,
+      setup,
+      readProfile: async () => profile,
+      currentNodeId: () => (published ? nodeId : undefined),
+    },
   };
   return {
     ...f,
     client: (configured = true) => createCloudConnection(configured ? options : f.options),
     binding: { tab: randomUUID(), session: randomUUID() },
+    nodeId,
+    restartAsPublished: () => {
+      published = true;
+      return createCloudConnection({ ...options, signIn: { ...options.signIn, setup: false } });
+    },
     authorize: async () => {},
     code,
     loseComplete: () => {
@@ -199,6 +216,71 @@ async function installedSignInFixture() {
     },
   };
 }
+
+it.each([false, true])(
+  "files early setup only after local publication (provisional IDs: %s)",
+  async (provisional) => {
+    const f = await installedSignInFixture(true, provisional);
+    try {
+      const client = f.client();
+      const binding = { ...f.binding, kind: "setup" as const };
+      const { authorizationUrl } = await client.startSignIn(binding, f.authorize);
+      expect(f.requests[0]?.[0]).toBe("waitron-cloud-pair-v5");
+      const query = new URL(authorizationUrl!).searchParams;
+      const reply = {
+        requestId: query.get("request_id")!,
+        state: query.get("state")!,
+        code: f.code,
+      };
+      await expect(client.returnSignIn(f.binding, reply, f.authorize)).rejects.toMatchObject({
+        code: "cloud.binding_conflict",
+      });
+      await client.returnSignIn(binding, reply, f.authorize);
+      expect(f.requests.map((request) => request[2])).toEqual(["start", "redeem"]);
+      expect(await f.options.readVenueId()).toBeNull();
+
+      const restarted = f.restartAsPublished();
+      await client.publishSetupSignIn({ ...binding, tab: randomUUID() }, f.nodeId);
+      await restarted.refresh();
+      expect(f.requests.map((request) => request[2])).toEqual(["start", "redeem"]);
+
+      await client.publishSetupSignIn(binding, f.nodeId);
+      f.loseComplete();
+      await expect(restarted.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+      expect(await f.options.readVenueId()).toBeNull();
+      await restarted.refresh();
+      expect(f.requests.map((request) => request[2])).toEqual([
+        "start",
+        "redeem",
+        "status",
+        "complete",
+        "status",
+      ]);
+      expect(await f.options.readVenueId()).toBe(f.venueId);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("lets the dashboard start its own sign-in if the installer left Cloud before returning", async () => {
+  const f = await installedSignInFixture(true);
+  try {
+    await f.client().startSignIn({ ...f.binding, kind: "setup" }, f.authorize);
+    const dashboard = f.restartAsPublished();
+    const result = await dashboard.startSignIn(
+      { tab: randomUUID(), session: randomUUID() },
+      f.authorize,
+    );
+    expect(result.authorizationUrl).toContain("/login");
+    expect(f.requests.map((request) => request[0])).toEqual([
+      "waitron-cloud-pair-v5",
+      "waitron-cloud-pair-v4",
+    ]);
+  } finally {
+    await f.close();
+  }
+});
 
 it("shows a prepared Cloud sign-in key with no callback as unconfigured", async () => {
   const f = await installedSignInFixture();

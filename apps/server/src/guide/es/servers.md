@@ -314,6 +314,26 @@ terminado.
 
 Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y comprueba que cada carpeta de copias esté en este servidor.
 
+## Conectar un servidor de pruebas durante la configuración {#setup-cloud-sign-in}
+
+En un servidor de pruebas preparado para Cloud, elige **Iniciar sesión en Waitron Cloud** antes
+de introducir los datos del administrador en Preparar o en un ensayo de Puesta en marcha. Inicia
+sesión o crea una cuenta y vuelve a la configuración en la pestaña original. Waitron registra el
+local después de que lo guardes y se reinicie el servidor. Comprueba la conexión en
+**Sistema → Servicios Cloud**.
+
+Introduce la dirección y el servidor de correo durante la configuración. Elige **Omitir** para
+continuar con la configuración manual. Si omites el paso antes de abrir Cloud o importas una
+configuración, conéctate más tarde desde **Servicios Cloud**.
+
+La prueba de búsqueda de direcciones requerirá una cuenta de Cloud con una sola empresa española,
+sin NIF ni locales. Si añades un local a una empresa que ya usa Cloud, introduce la dirección
+manualmente.
+
+Si iniciaste sesión en Cloud y el registro quedó pendiente, aún puedes guardar el local. Si
+Servicios Cloud rechaza un nuevo inicio de sesión, pide al responsable de la prueba que prepare
+una clave nueva.
+
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
 En un servidor de pruebas preparado para iniciar sesión en Cloud, abre **Sistema → Servicios
