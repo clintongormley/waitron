@@ -285,6 +285,68 @@ describe("accountant workbook", () => {
   });
 
   it.each([
+    [
+      "en",
+      "Payment on account",
+      ["Cash; taken off by A/45", "Card; taken off by A/45", "Cash, card", "Takes off A/12, A/13"],
+    ],
+    [
+      "es",
+      ACCOUNTANT_EXPORT_WORDS.es.paymentOnAccountColumn,
+      [
+        "Efectivo; descontado en A/45",
+        "Tarjeta; descontado en A/45",
+        "Efectivo, tarjeta",
+        "Descuenta A/12, A/13",
+      ],
+    ],
+  ] as const)(
+    "links each part payment and the table's ticket that took it off, in %s",
+    async (language, heading, cells) => {
+      const plain = { ...invoice, invoiceType: "F2" as const, voidedAt: null, vatBreakdown: [] };
+      const files = unzipSync(
+        await renderAccountantWorkbook(
+          {
+            invoices: [
+              {
+                ...plain,
+                id: "advance-12",
+                advance: { paidBy: ["cash"], takenOffBy: "A/45" },
+              },
+              {
+                ...plain,
+                id: "advance-13",
+                saleDate: "2026-10-31",
+                advance: { paidBy: ["card"], takenOffBy: "A/45" },
+              },
+              {
+                ...plain,
+                id: "advance-14",
+                advance: { paidBy: ["cash", "card"], takenOffBy: null },
+              },
+              { ...plain, id: "table-45", takesOff: ["A/12", "A/13"] },
+              { ...plain, id: "credit-46", invoiceType: "corrective", correctsSaleId: "table-45" },
+            ],
+            purchases: [],
+            outsidePayments: [],
+          },
+          language,
+        ),
+      );
+      const xml = strFromU8(files["xl/worksheets/sheet1.xml"]!);
+      const header = row(xml, 1);
+      const column = header.indexOf(heading);
+      expect(column).toBe(header.indexOf(ACCOUNTANT_EXPORT_WORDS[language].saleDateColumn) + 1);
+      expect([2, 3, 4, 5, 6].map((number) => row(xml, number)[column] ?? "")).toEqual([
+        ...cells,
+        "",
+      ]);
+      expect(row(xml, 3)[column - 1]).toBe("2026-10-31");
+      expect(row(xml, 6)).toHaveLength(19);
+    },
+  );
+
+  it.each([
     ["en", "Replacement corrective — do not add (repeats the original)"],
     ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
   ] as const)(

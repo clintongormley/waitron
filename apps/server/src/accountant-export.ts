@@ -1,9 +1,31 @@
 import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
 import { stampDate, validatedRangeWindow } from "@waitron/reporting";
 import { readVenueClock } from "@waitron/db";
-import { and, asc, between, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  asc,
+  between,
+  eq,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
+import {
+  billAdvances,
+  invoiceSeries,
+  saleLines,
+  sales,
+  saleSubstitutions,
+  saleVoids,
+  tenders,
+  type Transaction,
+} from "@waitron/db";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
+import { advancesTakenOff } from "./advance-taken-off.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -37,12 +59,106 @@ export interface AccountantInvoice {
   correctsSaleId: string | null;
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
+  /** On a part payment's ticket: how it was paid, and the table's ticket that took it off. */
+  advance?: { paidBy: TenderMethod[]; takenOffBy: string | null };
+  /** On a table's ticket (never a corrective): the part payments it took off. */
+  takesOff?: string[];
 }
+
+type TenderMethod = (typeof tenders.$inferSelect)["method"];
+const TENDER_ORDER: readonly TenderMethod[] = ["cash", "card", "voucher", "deferred", "other"];
 
 export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
   purchases: readonly PurchaseInvoice[];
   outsidePayments: readonly OutsidePayment[];
+}
+
+function paymentOnAccount(
+  invoice: AccountantInvoice,
+  words: (typeof ACCOUNTANT_EXPORT_WORDS)["en" | "es"],
+): string | null {
+  if (invoice.takesOff !== undefined)
+    return words.takesOff.replace("{numbers}", () => invoice.takesOff!.join(", "));
+  if (invoice.advance === undefined) return null;
+  const methods = invoice.advance.paidBy.map((method) => words.tenderMethods[method]).join(", ");
+  const paid = methods.charAt(0).toUpperCase() + methods.slice(1);
+  const takenOffBy = invoice.advance.takenOffBy;
+  return takenOffBy === null
+    ? paid
+    : `${paid}; ${words.takenOffBy.replace("{number}", () => takenOffBy)}`;
+}
+
+/**
+ * The part payments among, or taken off by, the sales `saleIds`: how each was paid and the table's
+ * ticket that took it off ({@link advancesTakenOff}), and each such ticket's part payments, in
+ * the order they were issued. One read per half {@link SQL_VARIABLE_LIMIT} sales (each id is bound
+ * twice), then one per {@link SQL_VARIABLE_LIMIT} part payments.
+ */
+async function readPaymentsOnAccount(
+  tx: Transaction,
+  saleIds: readonly string[],
+): Promise<{
+  advances: Map<string, NonNullable<AccountantInvoice["advance"]>>;
+  takesOff: Map<string, string[]>;
+}> {
+  const found = new Map<string, { number: string; paidBy: Set<TenderMethod> }>();
+  const half = Math.floor(SQL_VARIABLE_LIMIT / 2);
+  for (let start = 0; start < saleIds.length; start += half) {
+    const chunk = saleIds.slice(start, start + half);
+    const rows = await tx
+      .select({
+        saleId: billAdvances.advanceSaleId,
+        code: invoiceSeries.code,
+        number: sales.invoiceNumber,
+        method: tenders.method,
+      })
+      .from(billAdvances)
+      .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+      .leftJoin(tenders, eq(tenders.saleId, billAdvances.advanceSaleId))
+      .where(
+        or(
+          inArray(billAdvances.advanceSaleId, chunk),
+          inArray(
+            billAdvances.advanceSaleId,
+            tx
+              .select({ id: saleLines.deductsSaleId })
+              .from(saleLines)
+              .where(inArray(saleLines.saleId, chunk)),
+          ),
+        ),
+      )
+      .orderBy(asc(sales.issuedAt), asc(sales.invoiceNumber));
+    for (const row of rows) {
+      const advance = found.get(row.saleId) ?? {
+        number: formatInvoiceNumber(row.code, row.number),
+        paidBy: new Set<TenderMethod>(),
+      };
+      if (row.method !== null) advance.paidBy.add(row.method);
+      found.set(row.saleId, advance);
+    }
+  }
+  const ids = [...found.keys()];
+  const taken = new Map<string, { saleId: string; invoiceNumber: string }>();
+  for (let start = 0; start < ids.length; start += SQL_VARIABLE_LIMIT)
+    for (const [id, final] of await advancesTakenOff(
+      tx,
+      ids.slice(start, start + SQL_VARIABLE_LIMIT),
+    ))
+      taken.set(id, final);
+  const advances = new Map<string, NonNullable<AccountantInvoice["advance"]>>();
+  const takesOff = new Map<string, string[]>();
+  for (const [id, advance] of found) {
+    const final = taken.get(id);
+    advances.set(id, {
+      paidBy: TENDER_ORDER.filter((method) => advance.paidBy.has(method)),
+      takenOffBy: final?.invoiceNumber ?? null,
+    });
+    if (final !== undefined)
+      takesOff.set(final.saleId, [...(takesOff.get(final.saleId) ?? []), advance.number]);
+  }
+  return { advances, takesOff };
 }
 
 export async function renderAccountantWorkbook(
@@ -54,6 +170,7 @@ export async function renderAccountantWorkbook(
   for (const [position, invoice] of data.invoices.entries()) {
     if (position % 250 === 0) await nextTurn();
     const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
+    const onAccount = paymentOnAccount(invoice, words);
     for (const [index, vat] of groups.entries()) {
       invoiceRows.push([
         invoice.id,
@@ -82,7 +199,11 @@ export async function renderAccountantWorkbook(
         invoice.voidedAt,
         null,
         // Left off rather than blank: a missing trailing cell reads as an empty one.
-        ...(invoice.saleDate === undefined ? [] : [invoice.saleDate]),
+        ...(onAccount === null
+          ? invoice.saleDate === undefined
+            ? []
+            : [invoice.saleDate]
+          : [invoice.saleDate ?? null, onAccount]),
       ]);
     }
   }
@@ -131,7 +252,10 @@ export async function renderAccountantWorkbook(
   return renderWorkbook([
     {
       name: words.invoiceSheet,
-      rows: [[...words.invoiceColumns, words.saleDateColumn], ...invoiceRows],
+      rows: [
+        [...words.invoiceColumns, words.saleDateColumn, words.paymentOnAccountColumn],
+        ...invoiceRows,
+      ],
     },
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
@@ -228,6 +352,16 @@ export async function listAccountantExport(
       total: centsToDecimal(row.total),
     }),
   );
+  const onAccount = await readPaymentsOnAccount(
+    tx,
+    invoices.map((invoice) => invoice.id),
+  );
+  for (const invoice of invoices) {
+    const advance = onAccount.advances.get(invoice.id);
+    if (advance !== undefined) invoice.advance = advance;
+    const takesOff = onAccount.takesOff.get(invoice.id);
+    if (takesOff !== undefined) invoice.takesOff = takesOff;
+  }
   const nextDay = new Date(`${range.to}T00:00:00.000Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const purchases = await listPurchaseInvoices(tx, {

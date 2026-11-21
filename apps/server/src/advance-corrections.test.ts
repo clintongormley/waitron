@@ -38,6 +38,7 @@ import {
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
+import { listAccountantExport } from "./accountant-export.js";
 import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
@@ -831,6 +832,34 @@ describe("the link between an advance and the rest's invoice that took it off", 
       saleId: finalSaleId,
       invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
     });
+  });
+
+  it("the accountant export links each advance and the rest's invoice, and a corrective of the rest's invoice to nothing", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00", "20.00"], "70.00");
+    const corrective = await correct(rest.saleId, "20.00", [
+      { rate: "10.00", base: "18.19", tax: "1.81" },
+    ]);
+    const number = async (saleId: string) => (await advanceFacts(saleId)).invoiceNumber;
+    const [first, second] = [await number(rest.advanceIds[0]!), await number(rest.advanceIds[1]!)];
+    const final = await number(rest.saleId);
+    const notYetTakenOff = await advance(await seated("Tasting menu"), "30.00");
+
+    const exported = await inTx(venue(), (tx) =>
+      listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+    );
+    const byId = new Map(exported.invoices.map((invoice) => [invoice.id, invoice]));
+    for (const advanceId of rest.advanceIds)
+      expect(byId.get(advanceId)).toMatchObject({
+        advance: { paidBy: ["cash"], takenOffBy: final },
+      });
+    expect(byId.get(notYetTakenOff)).toMatchObject({
+      advance: { paidBy: ["cash"], takenOffBy: null },
+    });
+    expect(byId.get(rest.saleId)).toMatchObject({ takesOff: [first, second] });
+    expect(byId.get(rest.saleId)).not.toHaveProperty("advance");
+    expect(byId.get(corrective)).toBeDefined();
+    expect(byId.get(corrective)).not.toHaveProperty("advance");
+    expect(byId.get(corrective)).not.toHaveProperty("takesOff");
   });
 });
 
