@@ -149,7 +149,8 @@ here is **not settled**: adviser questions A1 and A2.
    to a correction opened before the table's invoice was issued; rewrite the comment at `:214-215`.
    (As built, after review: the leg meets Design 1's check, and the stored times only choose this
    code over `advance.final_invoice_first` when it refuses, so a backward clock step cannot strand
-   a correction; a correction opened before a €0.00 table's invoice gives its money back.)
+   a correction, and a correction opened before the table's invoice gives its money back whenever
+   that invoice has nothing left to give at the advance's rate.)
    `advance.correction_open` stays: it still makes the table's invoice take off the advance as
    corrected.
 4. **Plain refunds (server).** A plain or bill refund of an advance's money keeps

@@ -877,8 +877,9 @@ declare module "@waitron/shared" {
     /** A payer asked for their own receipt for part of a bill set for a full invoice, which the
      * till cannot issue as an advance yet. */
     "advance.full_invoice_unsupported": { workingOrderId: string };
-    /** A leg of a correction of the advance `saleId` opened before the invoice `finalSaleId`,
-     * numbered `invoiceNumber`, took it off. */
+    /** A leg of a correction of the advance `saleId` opened, by stored times, before the invoice
+     * `finalSaleId`, numbered `invoiceNumber`, took it off, while that invoice can still give back
+     * money at the advance's rate. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;

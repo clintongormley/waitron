@@ -45,10 +45,10 @@ function takenOffParams(saleId: string, final: { id: string; code: string; numbe
 }
 
 /**
- * At a leg of the correction `correctionId` of the advance `saleId`, refuses what Open would refuse
- * now (`refuseFinalInvoiceFirst`), so the leg gives back only what a correction opened now could.
- * A correction opened before the invoice that took the advance off was issued is refused
- * `advance.taken_off_final_invoice` instead, read from stored times.
+ * At a leg of the correction `correctionId` of the advance `saleId`, runs Open's
+ * `refuseFinalInvoiceFirst` again. When that refuses `advance.final_invoice_first`, a correction
+ * opened before the invoice that took the advance off, by stored times, is refused
+ * `advance.taken_off_final_invoice` instead.
  */
 export async function refuseTakenOffSinceOpened(
   tx: Transaction,

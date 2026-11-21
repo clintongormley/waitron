@@ -213,7 +213,6 @@ export async function reserveTenderRefund(
     return { refund: earlier, replayed: true };
   }
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
-  // A leg gives back only what a correction opened now could.
   else await refuseTakenOffSinceOpened(tx, backend, cfg.nodeId, saleId, correctionLink.id);
   if (correctionLink === undefined && appliedAmount > 0)
     await refuseRefundOfAdvance(tx, saleId, tenderId);
