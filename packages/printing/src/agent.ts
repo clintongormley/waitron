@@ -9,9 +9,14 @@ import { signInWithToken, staleBefore } from "@waitron/identity";
 /**
  * Resolves a bearer token `${agentId}.${secret}` to its agent id. The id selects the row and the
  * secret validates it, through {@link signInWithToken}. Every refusal is the same
- * `agent.unauthorized`.
+ * `agent.unauthorized`. `admits` is asked about the box an agent runs on, never about an agent tied
+ * to no box, before the agent's sighting is written.
  */
-export async function authenticateAgent(db: Database, token: string): Promise<{ agentId: string }> {
+export async function authenticateAgent(
+  db: Database,
+  token: string,
+  options: { admits?: (nodeId: string) => Promise<boolean> } = {},
+): Promise<{ agentId: string }> {
   const dot = token.indexOf(".");
   if (dot <= 0 || dot === token.length - 1) throw new AppError("agent.unauthorized", {});
   const agentId = token.slice(0, dot);
@@ -20,14 +25,20 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
 
   const readRow = async (on: Database | Transaction) => {
     const [found] = await on
-      .select({ tokenHash: printAgents.tokenHash, lastSeenAt: printAgents.lastSeenAt })
+      .select({
+        tokenHash: printAgents.tokenHash,
+        lastSeenAt: printAgents.lastSeenAt,
+        nodeId: printAgents.nodeId,
+      })
       .from(printAgents)
       .where(and(eq(printAgents.id, agentId), eq(printAgents.active, true)));
     return found;
   };
+  const { admits } = options;
   const row = await signInWithToken(db, {
     token: secret,
     readRow,
+    admit: async ({ nodeId }) => nodeId === null || admits === undefined || (await admits(nodeId)),
     // The staleness check on the row read spares a call the write lock; the same check in this
     // update keeps calls that all read a stale row to one write.
     recordSighting: async (tx, seenAt) => {

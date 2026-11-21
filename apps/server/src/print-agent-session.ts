@@ -2,9 +2,8 @@
 // with the sibling session guards.
 import "./errors.js";
 import type { Context } from "hono";
-import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printAgents, readNodeMembership, type Database } from "@waitron/db";
+import { readNodeMembership, type Database } from "@waitron/db";
 import { standingOf } from "@waitron/membership";
 import { authenticateAgent } from "@waitron/printing";
 
@@ -25,16 +24,10 @@ export async function requireAgent(
   const header = c.req.header("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
-  const { agentId } = await authenticateAgent(deps.db, token);
-  const [row] = await deps.db
-    .select({ nodeId: printAgents.nodeId })
-    .from(printAgents)
-    .where(eq(printAgents.id, agentId));
-  const nodeId = row?.nodeId ?? null;
-  if (nodeId !== null) {
-    const held = await readNodeMembership(deps.db);
-    if (held !== null && standingOf(held, nodeId) === "evicted")
-      throw new AppError("agent.unauthorized", {});
-  }
-  return { agentId };
+  return authenticateAgent(deps.db, token, {
+    admits: async (nodeId) => {
+      const held = await readNodeMembership(deps.db);
+      return held === null || standingOf(held, nodeId) !== "evicted";
+    },
+  });
 }

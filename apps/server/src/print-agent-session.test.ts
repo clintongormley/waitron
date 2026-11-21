@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -83,6 +84,17 @@ describe("requireAgent", () => {
         });
       },
     );
+
+    it("is refused before its sighting is written, so it does not look recently seen", async () => {
+      await chart(3, "evicted");
+      const { agentId, token } = await boxToken(SPARE);
+      expect((await asAgent(suite.db, token)).status).toBe(401);
+      const [row] = await suite.db
+        .select({ lastSeenAt: printAgents.lastSeenAt })
+        .from(printAgents)
+        .where(eq(printAgents.id, agentId));
+      expect(row).toEqual({ lastSeenAt: null });
+    });
 
     it("leaves the main box's own agent and an agent tied to no box working", async () => {
       await chart(3, "serving-secondary");
