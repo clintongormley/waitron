@@ -181,8 +181,10 @@ describe("settled-tender refund ledger", () => {
     const bill = { bill_payment_id: payment!.id, provider_payment_ref: "pi_bill" };
     for (const parent of [
       bill,
+      { ...bill, tender_id: null },
       { tender_id: null },
       { ...bill, sale_id: null },
+      { sale_id: null },
       { sale_id: null, tender_id: null },
     ]) {
       const error = await captureError(() => insert(parent));
