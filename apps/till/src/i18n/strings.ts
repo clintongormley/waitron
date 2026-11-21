@@ -1680,6 +1680,8 @@ export const en = {
   "receipt_language.held_unsaved": "Parked without its receipt language: open it and choose again",
   "invoice.held_unsaved":
     "Parked without its full invoice details: open it and choose Full invoice again",
+  "invoice.held_unsaved_with_receipt_language":
+    "Parked without its full invoice details or receipt language: open it and choose both again",
   "action.choose": "Choose",
   "receipt.error": "Could not print the receipt, try again",
   "receipt.guests_none": "No line",
@@ -3894,6 +3896,8 @@ export const es: Record<StringKey, string> = {
   "receipt_language.held_unsaved": "Aparcado sin su idioma del recibo: ábrelo y vuelve a elegir",
   "invoice.held_unsaved":
     "Aparcado sin los datos de su factura completa: ábrelo y vuelve a elegir Factura completa",
+  "invoice.held_unsaved_with_receipt_language":
+    "Aparcado sin los datos de su factura completa ni su idioma del recibo: ábrelo y vuelve a elegir ambos",
   "action.choose": "Elegir",
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "receipt.guests_none": "Sin línea",

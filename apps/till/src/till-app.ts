@@ -10434,8 +10434,11 @@ export class TillApp extends LitElement {
       this.parking = false;
     }
     if (session !== this.#operatorSession) return;
-    if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
-    if (invoiceUnsaved) this.errorKey = "invoice.held_unsaved";
+    if (invoiceUnsaved)
+      this.errorKey = languageUnsaved
+        ? "invoice.held_unsaved_with_receipt_language"
+        : "invoice.held_unsaved";
+    else if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>

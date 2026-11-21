@@ -477,6 +477,83 @@ it("parks the order and says so when Hold cannot save its full invoice", async (
   expect(counter(el).store.lineCount).toBe(0);
   expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("invoice.held_unsaved"));
 });
+const tillWithReceiptLanguages = vi.fn().mockResolvedValue({
+  ...till,
+  orderFlow: "ticket_then_pay",
+  fullInvoices: true,
+  capabilities: ["print-receipt", "take-orders"],
+  receiptLanguages: ["en", "es-ES"],
+});
+/** A new Counter order holding an unsaved full invoice and an unsaved receipt language. */
+async function newOrderWithInvoiceAndLanguage(el: TillApp): Promise<string> {
+  emit(counter(el), "new-sale");
+  await flush(el);
+  counter(el).store.addProduct(counter(el).products[0]!, "1");
+  await flush(el);
+  await choice(el, confirmedRecipient);
+  emit(counter(el), "choose-receipt-language");
+  await flush(el);
+  const picker = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+  const language = picker.languages.find((code) => code !== picker.defaultLanguage)!;
+  expect(language).toBeDefined();
+  emit(picker, "reprint-language-confirm", { language });
+  await flush(el);
+  return language;
+}
+it("saves both a new order's full invoice and its receipt language on Hold, each at the revision before it", async () => {
+  const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 1 });
+  const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 2 });
+  const el = await placeCounter({
+    getTill: tillWithReceiptLanguages,
+    setOrderInvoiceChoice,
+    setOrderReceiptLanguage,
+    parkOrder: vi.fn().mockResolvedValue(undefined),
+  });
+  const language = await newOrderWithInvoiceAndLanguage(el);
+  const id = counter(el).store.id;
+  expect(setOrderInvoiceChoice).not.toHaveBeenCalled();
+  expect(setOrderReceiptLanguage).not.toHaveBeenCalled();
+
+  emit(counter(el), "park-order", {});
+  await flush(el);
+  expect(setOrderInvoiceChoice.mock.calls).toEqual([
+    [
+      id,
+      {
+        revision: 0,
+        invoiceType: "F1",
+        recipient: confirmedRecipient,
+        delivery: { medium: "receipt" },
+        expectedEdit: null,
+      },
+    ],
+  ]);
+  expect(setOrderReceiptLanguage.mock.calls).toEqual([
+    [id, { revision: 1, language, expectedEdit: null }],
+  ]);
+  expect(counter(el).store.lineCount).toBe(0);
+  expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+});
+it("says both were lost when Hold can save neither the full invoice nor the receipt language", async () => {
+  const refused = vi.fn().mockRejectedValue(new TypeError("Network down"));
+  const setOrderReceiptLanguage = vi.fn().mockRejectedValue(new TypeError("Network down"));
+  const el = await placeCounter({
+    getTill: tillWithReceiptLanguages,
+    setOrderInvoiceChoice: refused,
+    setOrderReceiptLanguage,
+    parkOrder: vi.fn().mockResolvedValue(undefined),
+  });
+  await newOrderWithInvoiceAndLanguage(el);
+
+  emit(counter(el), "park-order", {});
+  await flush(el);
+  expect(refused).toHaveBeenCalledOnce();
+  expect(setOrderReceiptLanguage).toHaveBeenCalledOnce();
+  expect(counter(el).store.lineCount).toBe(0);
+  expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
+    t("invoice.held_unsaved_with_receipt_language"),
+  );
+});
 it("offers no way back to a simplified invoice in the Counter's own invoice window", async () => {
   const el = await placeCounter({
     setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 5 }),
