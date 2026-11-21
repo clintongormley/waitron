@@ -93,10 +93,10 @@ async function calendar(directory: string) {
 }
 
 const familiesByKey: Record<string, { file: string; pattern: string; root?: string }> = {
-  "whole-order": {
+  "saved-zone-payment": {
     file: "src/till-sale-integrated.test.ts",
     pattern:
-      "whole-order saved-zone issuance|closed admission retains a completed capture|recovery checks admission inside its final transaction|collects a placed but unissued order",
+      "closed admission retains a completed capture|recovery checks admission inside its final transaction|collects a placed but unissued order",
   },
   "bill-payment": { file: "src/zone-bill-payment-boundaries.test.ts", pattern: "." },
   "auto-issue": {
