@@ -85,6 +85,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     // Default = refused: the happy path is the manual knock, so only a box that opts in self-enrols.
     // A device (till/mirror) has nothing that self-enrols it, so the loop falls through to join.
     enrolSelf: vi.fn(async () => failR({ kind: "refused" })),
+    mainServer: vi.fn(async () => okR<string | null>(null)),
     joinStatus: vi.fn(async () => okR<JoinStatus>("approved")),
     pullJobs: vi.fn(async () =>
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
@@ -446,6 +447,37 @@ describe("createAgent — phases", () => {
       expect(host.statuses.at(-1)?.phase).toBe("spare_box");
       await expect(agent.cancelNetworkReset()).resolves.toBe(true);
       expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+    });
+
+    const MAIN = "https://main.local";
+    const followsMain = (over: Partial<AgentClient> = {}) =>
+      client({
+        probeNode: vi.fn(async (url: string) => okR(url === MAIN ? primary : spare)),
+        mainServer: vi.fn(async () => okR(MAIN)),
+        ...over,
+      });
+
+    it("with no token, asks its own box to vouch for it every round and never knocks at the main box", async () => {
+      const host = fakeHost({ config: ON_BOX });
+      const c = followsMain();
+      const agent = createAgent({ host, client: c });
+      for (let round = 0; round < 3; round += 1) await agent.runOnce();
+      expect(c.join).not.toHaveBeenCalled();
+      expect(c.enrolSelf).toHaveBeenCalledTimes(3);
+      expect(c.enrolSelf).toHaveBeenLastCalledWith(LOCAL, "kitchen-pi");
+      expect(c.pullJobs).not.toHaveBeenCalled();
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", lastError: undefined });
+      expect(await host.token()).toBeNull();
+    });
+
+    it("with a token, pulls from the main box its own box names", async () => {
+      const host = fakeHost({ config: ON_BOX, token: "a1.s" });
+      const c = followsMain();
+      await createAgent({ host, client: c }).runOnce();
+      expect(c.mainServer).toHaveBeenCalledWith(LOCAL);
+      expect(c.join).not.toHaveBeenCalled();
+      expect(c.pullJobs).toHaveBeenCalledWith(MAIN, "a1.s", expect.anything());
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "running", current: MAIN });
     });
   });
 

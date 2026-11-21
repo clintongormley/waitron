@@ -218,6 +218,7 @@ export function createAgent(opts: AgentOptions): Agent {
         environment: config.environment,
         initialServers: config.servers,
         probe: client.probeNode,
+        mainServer: client.mainServer,
       });
     }
     return router;
@@ -668,6 +669,11 @@ export function createAgent(opts: AgentOptions): Agent {
 
     let token = await host.token();
     if (token === null) {
+      // Its own box vouches for it at the self-enrol step above; a knock would wait on a manager.
+      if (round.configuredIsSpare) {
+        report({ phase: "spare_box", serverUrl: config.serverUrl, current, lastError: undefined });
+        return false;
+      }
       const joined = await client.join(current, config.name);
       if (!joined.ok) {
         if (joined.failure.kind === "pairing_closed") {

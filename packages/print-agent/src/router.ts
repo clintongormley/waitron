@@ -16,14 +16,16 @@ export interface RouterOptions {
   environment?: string;
   initialServers?: ServerEntry[];
   probe: AgentClient["probeNode"];
+  /** Asked on the configured address in a round where it answers as the spare. */
+  mainServer?: AgentClient["mainServer"];
 }
 
 export interface ProbeRound {
   moved: boolean;
   anyAccepting: boolean;
   /** Set only when, in this round, the configured address is this box's own loopback and answered
-   * as the venue's spare in the pinned environment. An agent on a separate machine following the
-   * spare is not on the spare itself. */
+   * as the venue's spare in the pinned environment, whether or not the main box accepts. An agent on
+   * a separate machine following the spare is not on the spare itself. */
   configuredIsSpare?: true;
 }
 
@@ -68,6 +70,7 @@ export class Router {
   readonly #configured: string;
   readonly #configuredIsLoopback: boolean;
   readonly #probe: AgentClient["probeNode"];
+  readonly #mainServer: AgentClient["mainServer"] | undefined;
 
   constructor(opts: RouterOptions) {
     const origin = parseHttpOrigin(opts.configuredUrl);
@@ -81,6 +84,7 @@ export class Router {
     this.#current = origin;
     this.#environment = opts.environment;
     this.#probe = opts.probe;
+    this.#mainServer = opts.mainServer;
     this.merge(opts.initialServers ?? []);
   }
 
@@ -125,8 +129,31 @@ export class Router {
   }
 
   async #runRound(): Promise<ProbeRound> {
+    const configuredIsSpare = await this.#probeAll(this.#servers);
+    if (configuredIsSpare && this.#mainServer !== undefined) {
+      const main = await this.#mainServer(this.#configured);
+      const origin = main.ok && main.value !== null ? parseHttpOrigin(main.value) : undefined;
+      if (origin !== undefined && !this.#servers.some((s) => s.url === origin)) {
+        this.merge([...this.#servers, { url: origin }]);
+        await this.#probeAll(this.#servers.filter((s) => s.url === origin));
+      }
+    }
+    if (this.#environment === undefined) return { moved: false, anyAccepting: false };
+    const spare = configuredIsSpare ? { configuredIsSpare: true as const } : {};
+    const accepting = this.#servers.filter((s) => s.state === "primary");
+    if (accepting.length === 0) return { moved: false, anyAccepting: false, ...spare };
+    // Equal terms take the earlier list entry, never `#current`, to match the till's
+    // `ServerRouter`.
+    const best = accepting.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
+    const moved = best.url !== this.#current;
+    this.#current = best.url;
+    return { moved, anyAccepting: true, ...spare };
+  }
+
+  /** Returns whether the configured address answered as this box's spare. */
+  async #probeAll(servers: TrackedServer[]): Promise<boolean> {
     const results = new Map(
-      await Promise.all(this.#servers.map(async (s) => [s.url, await this.#probe(s.url)] as const)),
+      await Promise.all(servers.map(async (s) => [s.url, await this.#probe(s.url)] as const)),
     );
     let configuredIsSpare = false;
     for (const s of this.#servers) {
@@ -152,18 +179,6 @@ export class Router {
           node.standing === "serving-secondary";
       }
     }
-    if (this.#environment === undefined) return { moved: false, anyAccepting: false };
-    const accepting = this.#servers.filter((s) => s.state === "primary");
-    if (accepting.length === 0) {
-      return configuredIsSpare
-        ? { moved: false, anyAccepting: false, configuredIsSpare: true }
-        : { moved: false, anyAccepting: false };
-    }
-    // Equal terms take the earlier list entry, never `#current`, to match the till's
-    // `ServerRouter`.
-    const best = accepting.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
-    const moved = best.url !== this.#current;
-    this.#current = best.url;
-    return { moved, anyAccepting: true };
+    return configuredIsSpare;
   }
 }

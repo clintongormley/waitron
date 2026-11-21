@@ -180,6 +180,8 @@ export interface AgentClient {
   /** Enrol on THIS box's own loopback, never through a pairing window: any status but 201 is
    * `refused`. */
   enrolSelf(url: string, name: string): Promise<Result<{ token: string }>>;
+  /** Where a spare says the venue's main box is (`GET /api/node/main`, served only on a spare). */
+  mainServer(url: string): Promise<Result<string | null>>;
   joinStatus(url: string, token: string): Promise<Result<JoinStatus>>;
   pullJobs(
     url: string,
@@ -211,6 +213,10 @@ export const DEFAULT_TIMEOUT_MS = 3_000;
 /** The server renders the pages while this request waits, so it gets far longer than the other
  * calls; still inside the 60 s claim lease. */
 export const PAGE_DOCUMENT_TIMEOUT_MS = 30_000;
+
+/** A spare answers self-enrolment by asking the main box, which can take 2 s to look up and 5 s to
+ * answer (`apps/server/src/box-lookup.ts`, `apps/server/src/boot-peer-check.ts`). */
+export const ENROL_SELF_TIMEOUT_MS = 10_000;
 
 /** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not
  * escape this module. */
@@ -560,7 +566,7 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
       // NOT foldFetch, which would mislabel a self-enrol refusal as a pairing event: here every
       // non-201 means one thing — the box will not self-enrol us.
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? ENROL_SELF_TIMEOUT_MS);
       try {
         const response = await opts.fetch(`${url}/api/node/enrol-self`, {
           method: "POST",
@@ -579,6 +585,13 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
       } finally {
         clearTimeout(timer);
       }
+    },
+    mainServer(url) {
+      return foldFetch(opts.fetch, `${url}/api/node/main`, timeoutMs, {}, async (response) => {
+        const b = await readJson(response);
+        const mainUrl = b?.mainUrl;
+        return typeof mainUrl === "string" || mainUrl === null ? mainUrl : undefined;
+      });
     },
     joinStatus(url, token) {
       return foldFetch(
