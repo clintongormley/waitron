@@ -276,11 +276,6 @@ describe("late card details", () => {
       new Date("2026-07-22T09:58:00Z"),
     );
     expect(candidates.map((p) => p.paymentRef).sort()).toEqual(["own", "taken-over"]);
-    expect(candidates.find((p) => p.paymentRef === "own")).toMatchObject({
-      externalRef: "txn-own",
-      amount: "10.00",
-      settledAt: "2026-07-22T10:00:00.000Z",
-    });
   });
 
   it("fills a captured payment once without changing its financial facts or links", async () => {

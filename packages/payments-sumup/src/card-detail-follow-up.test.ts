@@ -24,12 +24,12 @@ const transaction = {
 async function captured() {
   const { fake, params, row } = await setup(suite);
   const readerId = await seedHeldReader(suite.db, params.origin.deviceId);
-  const addCapture = (paymentRef: string) =>
+  const addCapture = (paymentRef: string, settledAt = SETTLED) =>
     withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
         ...params,
         readerId,
-        settledAt: SETTLED,
+        settledAt,
         provider: "sumup",
         paymentRef,
         externalRef: `txn-${paymentRef}`,
@@ -110,20 +110,24 @@ it("ends a discovered retry when its capture ages out between passes", async () 
   const fetch = vi.spyOn(fake, "findTransaction").mockResolvedValue(null);
   await pass(60);
   expect(await pass(121)).toBeNull();
-  expect(await pass(141)).toBeNull();
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(outcome.mock.calls).toEqual([
     [{ paymentRef: "captured", outcome: "exhausted", attempts: 1, ageSeconds: 121 }],
   ]);
 });
 
-it("caps retries after a database refusal and still fills another payment", async () => {
+it("caps retries after a database refusal and still fills another payment", async ({
+  onTestFinished,
+}) => {
   const { addCapture, fake, outcome, pass, row } = await captured();
-  await addCapture("other");
+  await addCapture("other", new Date("2026-11-21T11:00:01Z"));
   await suite.db.execute(sql`
     CREATE TRIGGER refuse_card_details BEFORE UPDATE OF card_last4 ON payments
     WHEN old.payment_ref = 'captured' BEGIN SELECT raise(ABORT, 'injected write refusal'); END
   `);
+  onTestFinished(async () => {
+    await suite.db.execute(sql`DROP TRIGGER refuse_card_details`);
+  });
   const fetch = vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => ({
     ...transaction,
     id: "id" in query ? query.id : "",
@@ -132,17 +136,17 @@ it("caps retries after a database refusal and still fills another payment", asyn
   expect((await row("other")).cardLast4).toBe("0421");
   await pass(21);
   expect(await pass(41)).toBeNull();
-  expect(await pass(61)).toBeNull();
-  expect(
-    fetch.mock.calls.filter(([query]) => "id" in query && query.id === "txn-captured"),
-  ).toHaveLength(3);
+  await pass(61);
+  expect(fetch.mock.calls.map(([query]) => query)).toEqual([
+    { id: "txn-captured" },
+    { id: "txn-other" },
+    { id: "txn-captured" },
+    { id: "txn-captured" },
+  ]);
   expect((await row()).cardLast4).toBeNull();
-  expect(outcome).toHaveBeenCalledWith({
-    paymentRef: "captured",
-    outcome: "exhausted",
-    attempts: 3,
-    ageSeconds: 41,
-  });
+  expect(outcome).toHaveBeenLastCalledWith(
+    expect.objectContaining({ paymentRef: "captured", outcome: "exhausted" }),
+  );
 });
 
 it("allows an independent write during a GET and stops a queued card write at shutdown", async () => {

@@ -100,7 +100,7 @@ describe("sweepOwners", () => {
 });
 
 describe("withPendingSweep", () => {
-  it.each([10, 40])("keeps the earlier due time (%s)", async (innerSeconds) => {
+  it.each([null, 10, 40])("keeps the earlier due time (%s)", async (innerSeconds) => {
     const now = new Date("2026-11-21T11:00:00Z");
     const controller = new AbortController();
     const due = new Date("2026-11-21T11:00:20Z");
@@ -119,7 +119,10 @@ describe("withPendingSweep", () => {
       return due;
     };
     const report = await withPendingSweep(
-      async () => ({ ...REPORT, nextDueAt: new Date(now.getTime() + innerSeconds * 1_000) }),
+      async () => ({
+        ...REPORT,
+        nextDueAt: innerSeconds === null ? null : new Date(now.getTime() + innerSeconds * 1_000),
+      }),
       async () => [provider],
       () => OWNERS,
       log,
@@ -132,7 +135,7 @@ describe("withPendingSweep", () => {
     });
   });
 
-  it("logs a detail write failure without logging the failed query or its card fields", async () => {
+  it("logs only the error code when the detail pass throws", async () => {
     const log = vi.fn();
     const provider = fakeProvider("sumup", async () => ({
       forwarded: 0,
