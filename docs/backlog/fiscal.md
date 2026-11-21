@@ -1099,7 +1099,9 @@ period counts as filed on "The day it ends (Recommended)" (the corrections repor
 relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Which way a
 correction's line points, reading a void's date in its sale's offset, and putting a corrective of an
 exchange invoice on that invoice's own date are the watcher's choices (the plan's D5, D7 and D8;
-[plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). Deliberate limits:
+[plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). The plan's
+movement table, which decides how each kind of record moves VAT, and the handover limit below were
+not put to the owner. Deliberate limits:
 a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
 after a handover count on their own stamps, since nothing records when they arrived; every
 replacement and the invoice it replaces, and every invoice issued after the period, are read

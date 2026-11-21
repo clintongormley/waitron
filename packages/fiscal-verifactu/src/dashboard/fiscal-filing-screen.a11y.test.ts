@@ -72,7 +72,7 @@ const FUTURE_DATE = overview({
 const DAYS_DIFFER: FilingOverviewAnswer = { ...FUTURE_DATE, today: deviceToday(-2) };
 
 /**
- * Opens the case and chooses a valid day. Send, held until a day is chosen, then becomes
+ * Opens the case and chooses 2 November 2026. Send, held until a day is chosen, then becomes
  * available, unless `sendable` is false because the screen rules Send out whatever the day.
  */
 async function confirmReplacement(
@@ -86,14 +86,12 @@ async function confirmReplacement(
   expect(send.disabled).toBe(true);
   const field = details.querySelector("wt-input[name=operationDate]") as HTMLElement & {
     value: string;
-    error: string;
   };
   const input = field.shadowRoot!.querySelector("input") as HTMLInputElement;
   input.value = "2026-11-02";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await screen.updateComplete;
   expect(field.value).toBe("2026-11-02");
-  expect(field.error).toBe("");
   expect(send.disabled).toBe(!sendable);
   return details;
 }

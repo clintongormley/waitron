@@ -100,7 +100,7 @@ export class VatReturnScreen extends LitElement {
     this.period = `${last.quarter}T`;
   }
 
-  /** One download at a time, so what the form shows after a failure always comes from the last press. */
+  /** One download at a time. */
   get #waiting(): boolean {
     return this.busy || this.correctionsBusy;
   }
