@@ -11,13 +11,16 @@ export interface KeyboardInsets {
 
 const NONE: KeyboardInsets = { top: 0, bottom: 0 };
 
-/** How much of a full-height page a device's own keyboard hides, in whole CSS pixels. A pinch zoom
- * also shrinks the visible area, so any zoom counts as no keyboard. */
+/** How much of a full-height page lies above and below the visible area while a device's own
+ * keyboard covers it, in whole CSS pixels. A pinch zoom also shrinks the visible area, so a zoom
+ * 1% or more away from 1 counts as no keyboard. */
 export function keyboardInsets(layoutHeight: number, visible: VisibleArea): KeyboardInsets {
   if (Math.abs(visible.scale - 1) > 0.01) return NONE;
-  const bottom = Math.round(layoutHeight - visible.offsetTop - visible.height);
-  if (bottom <= 0) return NONE;
-  return { top: Math.round(visible.offsetTop), bottom };
+  if (Math.round(visible.height) >= Math.round(layoutHeight)) return NONE;
+  return {
+    top: Math.round(visible.offsetTop),
+    bottom: Math.max(0, Math.round(layoutHeight - visible.offsetTop - visible.height)),
+  };
 }
 
 export interface KeyboardWindow {
@@ -35,16 +38,40 @@ function setLength(root: HTMLElement, name: string, value: number): void {
 export function watchKeyboardInsets(win: KeyboardWindow, root: HTMLElement): () => void {
   const viewport = win.visualViewport;
   if (!viewport) return () => {};
+  let current = NONE;
+  let frame: number | undefined;
   const update = (): void => {
     const insets = keyboardInsets(win.innerHeight, viewport);
+    if (insets.top === current.top && insets.bottom === current.bottom) return;
+    const resized = insets.top + insets.bottom !== current.top + current.bottom;
+    current = insets;
     setLength(root, "--wt-keyboard-inset", insets.bottom);
     setLength(root, "--wt-keyboard-top", insets.top);
+    // A window that shrinks to the new band can leave the field being typed in hidden below its
+    // scrolled body. A pan keeps the band's height, and scrolling then would undo the person's pan.
+    if (!resized) return;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      focusedTextControl(root.ownerDocument)?.scrollIntoView({ block: "nearest" });
+    });
   };
   update();
   viewport.addEventListener("resize", update);
   viewport.addEventListener("scroll", update);
   return () => {
+    if (frame !== undefined) cancelAnimationFrame(frame);
     viewport.removeEventListener("resize", update);
     viewport.removeEventListener("scroll", update);
   };
+}
+
+const TEXT_INPUT_TYPES = new Set(["text", "search", "email", "tel", "url", "password", "number"]);
+
+function focusedTextControl(doc: Document): HTMLElement | undefined {
+  let active = doc.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  if (active instanceof HTMLTextAreaElement) return active;
+  if (active instanceof HTMLInputElement && TEXT_INPUT_TYPES.has(active.type)) return active;
+  return undefined;
 }

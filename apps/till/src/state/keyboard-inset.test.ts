@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { keyboardInsets, watchKeyboardInsets, type VisibleArea } from "./keyboard-inset.js";
 
 // Readings estimated from screenshots of the owner's Pixel tablet in landscape, 2026-11-21.
@@ -17,6 +17,20 @@ describe("keyboardInsets", () => {
     });
   });
 
+  it("the visible area panned all the way down still hides the page above it", () => {
+    expect(keyboardInsets(640, { height: 192, offsetTop: 448, scale: 1 })).toEqual({
+      top: 448,
+      bottom: 0,
+    });
+  });
+
+  it("a visible area reading past the bottom of the page hides nothing below it", () => {
+    expect(keyboardInsets(640, { height: 200, offsetTop: 450, scale: 1 })).toEqual({
+      top: 450,
+      bottom: 0,
+    });
+  });
+
   it("a page the browser really shrank leaves nothing to make room for", () => {
     expect(keyboardInsets(256, { height: 256, offsetTop: 0, scale: 1 })).toEqual({
       top: 0,
@@ -26,6 +40,13 @@ describe("keyboardInsets", () => {
 
   it("a pinch zoom is not a keyboard", () => {
     expect(keyboardInsets(640, { height: 320, offsetTop: 100, scale: 2 })).toEqual({
+      top: 0,
+      bottom: 0,
+    });
+  });
+
+  it("a zoom just over 1% away from 1 is not a keyboard", () => {
+    expect(keyboardInsets(640, { height: 256, offsetTop: 87, scale: 1.011 })).toEqual({
       top: 0,
       bottom: 0,
     });
@@ -108,5 +129,100 @@ describe("watchKeyboardInsets", () => {
     viewport.move(192, 87, "scroll");
     expect(inset()).toBe("");
     expect(top()).toBe("");
+  });
+});
+
+describe("watchKeyboardInsets and the focused field", () => {
+  let root: HTMLElement;
+  let stop: (() => void) | undefined;
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    root.remove();
+    vi.restoreAllMocks();
+  });
+
+  function start(viewport: FakeViewport, control: HTMLElement): () => HTMLElement[] {
+    root = document.createElement("div");
+    root.append(control);
+    document.body.append(root);
+    control.focus();
+    const scrolled: HTMLElement[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (
+      this: HTMLElement,
+      options?: boolean | ScrollIntoViewOptions,
+    ) {
+      expect(options).toEqual({ block: "nearest" });
+      scrolled.push(this);
+    });
+    stop = watchKeyboardInsets({ visualViewport: viewport, innerHeight: 640 }, root);
+    return () => scrolled;
+  }
+
+  const frame = (): Promise<void> =>
+    new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+  it("brings a focused text input into view once, after the last change", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    viewport.move(192, 87, "scroll");
+    await frame();
+    expect(scrolled()).toEqual([input]);
+  });
+
+  it("finds the focused field inside a shadow root", async () => {
+    const viewport = new FakeViewport();
+    const holder = document.createElement("div");
+    const textarea = document.createElement("textarea");
+    holder.attachShadow({ mode: "open" }).append(textarea);
+    const scrolled = start(viewport, holder);
+    textarea.focus();
+    viewport.move(256, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([textarea]);
+  });
+
+  it("leaves a focused control that takes no text where it is", async () => {
+    const viewport = new FakeViewport();
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    const scrolled = start(viewport, box);
+    viewport.move(256, 0, "resize");
+    await frame();
+    expect(scrolled()).toEqual([]);
+  });
+
+  it("does not scroll when a reading leaves the values as they were", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(640, 0, "scroll");
+    await frame();
+    expect(scrolled()).toEqual([]);
+  });
+
+  it("does not scroll when the person pans the visible area without it changing height", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(192, 87, "resize");
+    await frame();
+    scrolled().length = 0;
+    viewport.move(192, 120, "scroll");
+    await frame();
+    expect(scrolled()).toEqual([]);
+  });
+
+  it("does not scroll after being stopped with a change waiting", async () => {
+    const viewport = new FakeViewport();
+    const input = document.createElement("input");
+    const scrolled = start(viewport, input);
+    viewport.move(256, 0, "resize");
+    stop!();
+    stop = undefined;
+    await frame();
+    expect(scrolled()).toEqual([]);
   });
 });
