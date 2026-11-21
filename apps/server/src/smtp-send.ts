@@ -15,6 +15,11 @@ export type SmtpSendOutcome =
   | { status: "rejected"; reason: SmtpTestCode; serverRefused: boolean }
   | { status: "unknown"; reason: SmtpTestCode };
 
+type SmtpSendOptions = { timeoutMs?: number; ca?: string } & (
+  | { transport?: SmtpTransport; requireLogin?: never }
+  | { transport?: never; requireLogin?: boolean }
+);
+
 export function statusAsBefore(outcome: SmtpSendOutcome): "sent" | "rejected" | "unknown" {
   return outcome.status === "rejected" && !outcome.serverRefused ? "unknown" : outcome.status;
 }
@@ -22,7 +27,7 @@ export function statusAsBefore(outcome: SmtpSendOutcome): "sent" | "rejected" | 
 export async function sendSmtpMessage(
   config: SmtpConnection,
   message: Omit<SendMailOptions, "from">,
-  options: { timeoutMs?: number; ca?: string; transport?: SmtpTransport } = {},
+  options: SmtpSendOptions = {},
 ): Promise<SmtpSendOutcome> {
   const socket = new Socket();
   let connection: SMTPConnection | undefined;
@@ -57,6 +62,12 @@ export async function sendSmtpMessage(
     const mail = new MailComposer({ ...message, from: config.from }).compile();
     const envelope = mail.getEnvelope();
     if (envelope.to.length !== 1) return failure(undefined);
+    const loginMissing: SmtpSendOutcome = {
+      status: "rejected",
+      reason: "email.test_login_required",
+      serverRefused: false,
+    };
+    if (options.requireLogin && !auth) return loginMissing;
     const timeout = new Promise<SmtpSendOutcome>((resolve) => {
       timer = setTimeout(() => resolve(failure(undefined, true)), options.timeoutMs ?? 30_000);
     });
@@ -104,7 +115,8 @@ export async function sendSmtpMessage(
           connection.connect(() => {
             if (auth && connection!.allowsAuth) {
               connection!.login(auth, (error) => (error ? resolve(failure(error)) : send()));
-            } else send();
+            } else if (options.requireLogin) resolve(loginMissing);
+            else send();
           });
         });
       });

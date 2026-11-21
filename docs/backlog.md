@@ -1301,9 +1301,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   paired test Cloud takes invitations, resets and email changes ahead of a saved mail server
   (`apps/server/src/mail-sender.ts`, the `accountDelivery` choice), so that order flips. [Cloud's note](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog/venue-email.md)
 
-- **The setup wizard's email test connects wherever an unauthenticated caller points it (A987
-  review, 2026-10-22) — OPEN.**
-  [Detail](backlog/box.md#the-setup-wizards-email-test-connects-wherever-an-unauthenticated-caller-points-it-a987-review-2026-10-22--open)
+- **A box in first setup still sends a test email through a mail server whose login the caller
+  holds (A987 review, 2026-10-22) — OPEN.**
+  [Detail](backlog/box.md#a-box-in-first-setup-still-sends-a-test-email-through-a-mail-server-whose-login-the-caller-holds-a987-review-2026-10-22--open)
 
 ### Replication, failover and the cloud
 

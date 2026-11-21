@@ -2,6 +2,11 @@
 
 > **2026-11-14:** [A1308 env4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-env4-unsealed-settings.md) supersedes the SMTP terminal instructions below: save or remove SMTP through dashboard Email settings; the generic credentials CLI refuses SMTP set/delete.
 
+> **2026-11-21:** setup's email test now refuses a mail server with no login. In setup,
+> `email.test_login_required` now answers a server that offers no login, marks the port and says to
+> check it or use another mail server, so §6.5's 7 November note no longer describes setup and
+> §6.5's row for that code describes the dashboard only. §7's backlog entry is now [this one](../../backlog/box.md#a-box-in-first-setup-still-sends-a-test-email-through-a-mail-server-whose-login-the-caller-holds-a987-review-2026-10-22--open).
+
 
 2026-11-08: the watcher released A739 for invoice-envelope naming and narrowed this cut to ordinary SMTP and the Settings test, without setup naming or a preview; see the [sender-naming plan](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-08-a987-sender-naming.md).
 

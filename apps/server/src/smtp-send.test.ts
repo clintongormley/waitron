@@ -495,6 +495,60 @@ it("sends without login when a relay offers none despite URL credentials", async
     });
     expect(rig.authentications).toEqual([]);
     expect(rig.messages).toHaveLength(1);
+    expect(rig.commands).toContain("MAIL");
+  } finally {
+    await rig.close();
+  }
+});
+
+it("refuses a relay that offers no login when a login is required, sending nothing", async () => {
+  const rig = await smtpRig("no-login");
+  try {
+    const url = new URL(rig.config.url);
+    url.username = "operator";
+    url.password = "secret-smtp-password";
+    expect(
+      await sendSmtpMessage({ ...rig.config, url: url.href }, message, { requireLogin: true }),
+    ).toEqual({ status: "rejected", reason: "email.test_login_required", serverRefused: false });
+    expect(rig.authentications).toEqual([]);
+    expect(rig.messages).toEqual([]);
+    expect(rig.commands).toContain("EHLO");
+    expect(rig.commands).not.toContain("MAIL");
+  } finally {
+    await rig.close();
+  }
+});
+
+it("refuses to send without credentials when a login is required", async () => {
+  const rig = await smtpRig("accepted");
+  try {
+    expect(await sendSmtpMessage(rig.config, message, { requireLogin: true })).toEqual({
+      status: "rejected",
+      reason: "email.test_login_required",
+      serverRefused: false,
+    });
+    expect(rig.connections).toBe(0);
+    expect(rig.messages).toEqual([]);
+  } finally {
+    await rig.close();
+  }
+});
+
+it("still logs in and sends when a login is required and the relay offers one", async () => {
+  const rig = await smtpRig("accepted", false, { starttls: true });
+  try {
+    const url = new URL(rig.config.url);
+    url.username = "operator";
+    url.password = "secret-smtp-password";
+    url.searchParams.set("requireTLS", "true");
+    expect(
+      await sendSmtpMessage({ ...rig.config, url: url.href }, message, {
+        ca: smtpTestTls.caCertPem,
+        requireLogin: true,
+      }),
+    ).toEqual({ status: "sent" });
+    expect(rig.authentications).toEqual(["\u0000operator\u0000secret-smtp-password"]);
+    expect(rig.messages).toHaveLength(1);
   } finally {
     await rig.close();
   }

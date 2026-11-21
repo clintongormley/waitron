@@ -15,6 +15,8 @@ const email = {
   port: 465,
   encryption: "tls",
   from: "venue@example.test",
+  user: "venue",
+  password: "secret-smtp-password",
 };
 function request(app: Hono, body: unknown) {
   return app.request("/setup-api/email-test", {
@@ -149,7 +151,7 @@ describe("setup wizard email test", () => {
     const { app, logs } = mount(async () => {
       throw new Error("must not send");
     });
-    const res = await request(app, body({ ...email, password: "secret-smtp-password" }));
+    const res = await request(app, body({ ...email, user: "" }));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: { code: "email.settings_invalid", params: { field: "user" } },
@@ -198,6 +200,40 @@ it("refuses overlapping email and fiscal tests and releases the setup latch afte
     expect(rig.messages).toHaveLength(2);
   } finally {
     if (first !== undefined) await first;
+    await rig.close();
+  }
+});
+
+it("refuses a mail server with no login before any SMTP contact", async () => {
+  let contacted = false;
+  const { app } = mount(async () => {
+    contacted = true;
+    return { accepted: true };
+  });
+  const response = await request(app, body({ ...email, user: "", password: "" }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "user" } },
+  });
+  expect(contacted).toBe(false);
+});
+
+it("refuses a mail server that offers no login despite a username, through the real sender", async () => {
+  const rig = await smtpRig("no-login", true);
+  try {
+    const { app } = mount((config, recipient, options) =>
+      sendSmtpTestMessage(config, recipient, { ...options, ca: smtpTestTls.caCertPem }),
+    );
+    const response = await request(
+      app,
+      body({ ...email, port: Number(new URL(rig.config.url).port) }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ accepted: false, code: "email.test_login_required" });
+    expect(rig.commands).toContain("EHLO");
+    expect(rig.commands).not.toContain("MAIL");
+    expect(rig.messages).toEqual([]);
+  } finally {
     await rig.close();
   }
 });

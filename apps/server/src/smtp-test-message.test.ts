@@ -82,4 +82,19 @@ describe("SMTP setup test message", () => {
       await rig.close();
     }
   });
+  it("passes a required login through to the sender", async () => {
+    const rig = await smtpRig("no-login");
+    try {
+      expect(
+        await sendSmtpTestMessage(
+          { ...rig.config, url: rig.config.url.replace("://", "://operator:secret@") },
+          "admin@example.test",
+          { requireLogin: true },
+        ),
+      ).toEqual({ accepted: false, code: "email.test_login_required" });
+      expect(rig.messages).toEqual([]);
+    } finally {
+      await rig.close();
+    }
+  });
 });

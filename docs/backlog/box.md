@@ -409,23 +409,26 @@ continue and linked Demo priority. Cloud's published interface is #1254 at
 joint test. In configured test-box Prepare, you can choose Cloud for staff email and leave the
 venue's mail server blank. Setup can finish with a notice if the Cloud grant is unconfirmed.
 The hosted test release and live Google qualification remain open.
-The setup-test network-target issue below remains separate open work.
+The setup email test issue below remains separate open work.
 
-## The setup wizard's email test connects wherever an unauthenticated caller points it (A987 review, 2026-10-22) — OPEN
+## A box in first setup still sends a test email through a mail server whose login the caller holds (A987 review, 2026-10-22) — OPEN
 
-The owner chose “Leave it for now” on 2026-11-16 (relayed by the watcher at 02:25), accepting the exposure during first setup on the venue’s own network. The authentication fix remains deferred.
+During setup, both email test routes refuse a mail server with no username before connecting
+(`assertSetupMailLogin`), and send nothing through a server that does not offer a login
+(`requireLogin` in `apps/server/src/smtp-send.ts`, answering `email.test_login_required`). The
+dashboard's Email page still accepts a server with no login.
 
-While a box is in setup mode, `POST /setup-api/email-test` without the setup
-owner's header (`apps/server/src/setup-first-fiscal-api.ts:182-184`) reaches a route that checks no
-sign-in, takes the recipient from the request's `venue.admin.email` and connects to whatever host and
-port the request names (`apps/server/src/setup-email-api.ts:25-38`). Anyone who can reach such a box
-can make it send a short test message to any address through any mail server it can reach, including
-one on the venue's network that accepts local mail without a login. Run 2026-10-22: a preproduction
-setup-mode boot answered a no-header request with 200 and a local Mailpit received the message; with
-an owner-held setup claimed the same request was refused 409 `setup.attempt_conflict`. The wizard's
-Live path has it today;
-A987's design does not change the route
-([§7](../superpowers/specs/2026-10-22-a987-prepare-venue-email-design.md#7-security)).
+What remains open: the route without the owner's header checks no sign-in and takes the recipient
+from the request, so anyone who can reach a box during first setup can still make it send a short
+test message to an address they choose, through a mail server whose login they hold. With any
+username, the route also still connects to whatever server and port the request names, and its
+answer says whether that name exists and whether the port answers.
+
+The owner put this on hold on 2026-11-16 and took it off hold on 2026-11-21. Requiring a login
+during setup is the watcher's choice (2026-11-21), not the owner's, and the owner may overrule it;
+the watcher dropped the setup-claim build because a claim needs no sign-in either. Cost: a venue
+whose only mail server takes mail with no login uses one with a login during setup, then saves its
+own on the dashboard's Email page.
 
 ## Authenticated server-certificate recovery
 

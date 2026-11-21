@@ -8,6 +8,8 @@ import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { sendSmtpTestMessage } from "./smtp-test-message.js";
+import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -823,6 +825,8 @@ it("keeps email testing inside the claimed owner and uses its frozen administrat
     port: 465,
     encryption: "tls",
     from: "owner@example.test",
+    user: "owner",
+    password: "mail-password",
   };
   const response = await f.post("/setup-api/email-test", { email }, f.headers());
   expect({ status: response.status, body: await response.json() }).toEqual({
@@ -963,4 +967,63 @@ it("refuses a claimed-owner sender that named delivery cannot use before SMTP co
     error: { code: "email.settings_invalid", params: { field: "from" } },
   });
   expect(contacted).toBe(false);
+});
+
+it("refuses a claimed-owner mail server with no login before SMTP contact", async () => {
+  let contacted = false;
+  const f = await fixture(async () => {
+    contacted = true;
+    return { accepted: true };
+  });
+  const response = await f.post(
+    "/setup-api/email-test",
+    {
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        from: "owner@example.test",
+        user: "",
+        password: "",
+      },
+    },
+    f.headers(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "user" } },
+  });
+  expect(contacted).toBe(false);
+});
+
+it("refuses a claimed-owner mail server that offers no login, through the real sender", async () => {
+  const rig = await smtpRig("no-login", true);
+  try {
+    const f = await fixture((settings, recipient, options) =>
+      sendSmtpTestMessage(settings, recipient, { ...options, ca: smtpTestTls.caCertPem }),
+    );
+    const response = await f.post(
+      "/setup-api/email-test",
+      {
+        email: {
+          server: "127.0.0.1",
+          port: Number(new URL(rig.config.url).port),
+          encryption: "tls",
+          from: "owner@example.test",
+          user: "owner",
+          password: "mail-password",
+        },
+      },
+      f.headers(),
+    );
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: { accepted: false, code: "email.test_login_required" },
+    });
+    expect(rig.commands).toContain("EHLO");
+    expect(rig.commands).not.toContain("MAIL");
+    expect(rig.messages).toEqual([]);
+  } finally {
+    await rig.close();
+  }
 });

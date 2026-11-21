@@ -219,7 +219,7 @@ describe("wizard Email step", () => {
     setLocale("es-ES");
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Configura el correo electrónico");
-    for (const field of ["server", "port", "from"]) {
+    for (const field of ["server", "port", "user", "password", "from"]) {
       const input = el.shadowRoot!.querySelector(`[data-test=${field}]`)!;
       expect(input.hasAttribute("required")).toBe(true);
       expect(input.getAttribute("name")).toBe(`smtp-${field}`);
@@ -265,14 +265,31 @@ it.each([
   expect(runEmailTest).not.toHaveBeenCalled();
   expect(el.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error")).toBeTruthy();
 });
-it("accepts a server without authentication and a TLS selection", async () => {
+it("refuses a mail server with no login without sending the test", async () => {
   const { el, runEmailTest } = await mount();
   await change(el, "user", "");
   await change(el, "password", "");
+  button(el, "test").click();
+  await el.updateComplete;
+  expect(runEmailTest).not.toHaveBeenCalled();
+  for (const [key, message] of [
+    ["user", "Enter your mail server's username."],
+    ["password", "Enter your mail server's password."],
+  ]) {
+    const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      `[data-test=${key}]`,
+    )!;
+    await control.updateComplete;
+    expect(control.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+    expect(control.error).toBe(message);
+  }
+});
+it("accepts a TLS selection", async () => {
+  const { el, runEmailTest } = await mount();
   await change(el, "encryption", "tls");
   await test(el);
   expect(runEmailTest).toHaveBeenCalledWith(
-    { ...email, user: "", password: "", encryption: "tls" },
+    { ...email, encryption: "tls" },
     "admin@example.com",
     "live",
   );
@@ -392,8 +409,8 @@ const diagnostics = [
   ],
   [
     "email.test_login_required",
-    null,
-    "This mail server needs a user and password. Enter both, then send the test again.",
+    "port",
+    "This mail server does not offer a username-and-password login on this port. Check the port (usually 587 or 465). If it takes mail without a login, use another mail server for setup, then switch to this one later in System → Email on the dashboard.",
   ],
   [
     "email.test_timeout",

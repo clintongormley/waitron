@@ -1084,8 +1084,8 @@ it("tests email as the current owner without sending a replacement administrator
     port: 465,
     encryption: "tls" as const,
     from: "owner@example.test",
-    user: "",
-    password: "",
+    user: "owner",
+    password: "mail-password",
   };
   const { app, requests } = await mount({
     intercept(path) {

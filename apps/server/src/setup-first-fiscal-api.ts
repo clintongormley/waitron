@@ -8,6 +8,7 @@ import {
 import type { SetupDeps } from "./setup-api.js";
 import { recordSetupCloudPublication } from "./setup-cloud-sign-in.js";
 import { parseEmailSettings } from "./email-settings-api.js";
+import { assertSetupMailLogin } from "./setup-email-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
 import { isSecure } from "./encrypted-connection.js";
@@ -252,8 +253,11 @@ export function mountSetupFirstFiscalApi(
             if (Object.keys(body).length !== 1 || !("email" in body)) invalid();
             const settings = parseEmailSettings(object(body.email));
             validateSmtpTestFrom(settings.from);
+            assertSetupMailLogin(settings);
             const send = deps.sendEmailTest ?? sendSmtpTestMessage;
-            return c.json(await send(settings, state.frozen.request.admin.email));
+            return c.json(
+              await send(settings, state.frozen.request.admin.email, { requireLogin: true }),
+            );
           }
           if (path.endsWith("fiscal-test")) {
             const state = await host.owner.authorize(owner);
