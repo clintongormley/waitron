@@ -13,7 +13,7 @@ import { createSetupOperationStore, type SetupOperationStore } from "./setup-ope
 
 const PRIMARY_URL = "https://main.deli.test:8443";
 const ADDRESSES = ["192.168.1.20"];
-const EXPIRES_AT = "2026-11-21T10:15:00.000Z";
+const TIME_LEFT_MS = 900_000;
 
 /** Stands in for the attempt, whose own behaviour `box-join-attempt.test.ts` covers. */
 function fakeAttempt() {
@@ -26,8 +26,8 @@ function fakeAttempt() {
     await gate;
     started += 1;
     const code = String(100000 + started);
-    state = { state: "waiting", code, addresses: ADDRESSES, primaryUrl, expiresAt: EXPIRES_AT };
-    return { code, addresses: ADDRESSES, expiresAt: EXPIRES_AT };
+    state = { state: "waiting", code, addresses: ADDRESSES, primaryUrl, timeLeftMs: TIME_LEFT_MS };
+    return { code, addresses: ADDRESSES, timeLeftMs: TIME_LEFT_MS };
   };
   const attempt = {
     start: vi.fn(async (primaryUrl: string) => {
@@ -126,7 +126,7 @@ describe("the setup page's join routes", () => {
     expect(answer).toEqual({
       code: "100001",
       addresses: ADDRESSES,
-      expiresAt: EXPIRES_AT,
+      timeLeftMs: TIME_LEFT_MS,
       handle: expect.stringMatching(/^[\w-]{43}$/),
     });
     expect(fake.attempt.start).toHaveBeenCalledWith(PRIMARY_URL);
@@ -135,7 +135,7 @@ describe("the setup page's join routes", () => {
       code: "100001",
       addresses: ADDRESSES,
       primaryUrl: PRIMARY_URL,
-      expiresAt: EXPIRES_AT,
+      timeLeftMs: TIME_LEFT_MS,
     });
     expect(await read()).toEqual({ state: "elsewhere" });
     expect(await read("")).toEqual({ state: "elsewhere" });
@@ -277,7 +277,7 @@ describe("the setup page's join routes", () => {
         code: "100001",
         addresses: ADDRESSES,
         primaryUrl: PRIMARY_URL,
-        expiresAt: EXPIRES_AT,
+        timeLeftMs: TIME_LEFT_MS,
       },
       { state: "approved", code: "100001" },
       { state: "ended", reason: "dismissed" },

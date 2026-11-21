@@ -196,6 +196,8 @@ export class SetupConnectScreen extends LitElement {
   /** Bumped by every start, cancel and disconnect, so a read sent before it is dropped. */
   #generation = 0;
   #timer?: ReturnType<typeof setTimeout>;
+  /** When the view's `timeLeftMs` was taken, on `performance.now()`. */
+  #shownAt = 0;
 
   #baseline?: { primaryUrl: string };
   #scope?: DraftScope<{ primaryUrl: string }>;
@@ -289,6 +291,7 @@ export class SetupConnectScreen extends LitElement {
       this.#baseline = { primaryUrl: shown.primaryUrl };
       this.#scope?.commit(this.#baseline);
     }
+    this.#shownAt = performance.now();
     this.view = shown.state === "none" ? { state: "address" } : shown;
     if (shown.state === "waiting" || shown.state === "approved") this.#readLater(this.#generation);
   }
@@ -448,7 +451,10 @@ export class SetupConnectScreen extends LitElement {
   #waiting(): TemplateResult | typeof nothing {
     const view = this.view;
     if (view.state !== "waiting") return nothing;
-    const minutes = Math.max(0, Math.ceil((Date.parse(view.expiresAt) - Date.now()) / 60_000));
+    const minutes = Math.max(
+      0,
+      Math.ceil((view.timeLeftMs - (performance.now() - this.#shownAt)) / 60_000),
+    );
     return html`<p class="code" data-test="code">${grouped(view.code)}</p>
       <p class="detail" data-test="addresses">
         ${format("connect.waiting.addresses", { addresses: view.addresses.join(", ") })}

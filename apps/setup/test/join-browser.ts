@@ -7,7 +7,7 @@ export const MAIN = "https://waitron.local";
 export const STARTED: JoinStarted = {
   code: "482913",
   addresses: ["192.168.1.23"],
-  expiresAt: new Date(Date.now() + 14 * 60_000).toISOString(),
+  timeLeftMs: 14 * 60_000,
   handle: JOIN_HANDLE,
 };
 export const WAITING: JoinState & { state: "waiting" } = {
@@ -15,7 +15,7 @@ export const WAITING: JoinState & { state: "waiting" } = {
   code: "482913",
   addresses: STARTED.addresses,
   primaryUrl: MAIN,
-  expiresAt: STARTED.expiresAt,
+  timeLeftMs: STARTED.timeLeftMs,
 };
 export const APPROVED: JoinState = { state: "approved", code: "482913" };
 

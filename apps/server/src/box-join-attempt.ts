@@ -19,7 +19,12 @@ import {
   type JoinField,
   type JoinHelloFields,
 } from "./box-join-code.js";
-import { JOIN_END_REASONS, JOIN_LIMITS, type JoinEndReason } from "./box-join-requests.js";
+import {
+  JOIN_END_REASONS,
+  JOIN_LIMITS,
+  JOIN_REQUEST_TTL_MS,
+  type JoinEndReason,
+} from "./box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
 import { ownContactUrl } from "./box-name.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -56,6 +61,8 @@ export interface BoxJoinAttemptDeps {
   /** This box's store port; the store address is its contact name on this port. */
   spareStorePort: number;
   now: () => Date;
+  /** The clock the time left is measured on, so a wall-clock step cannot change it. */
+  steadyNow?: () => number;
   /** This box's own network addresses; by default every interface address that is not loopback. */
   addresses?: () => string[];
   exchange?: typeof boxExchange;
@@ -63,7 +70,7 @@ export interface BoxJoinAttemptDeps {
 }
 
 export type JoinAttemptState =
-  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; expiresAt: string }
+  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; timeLeftMs: number }
   | { state: "approved"; code: string }
   /** `unknown`: the main box ended the request for a reason this box does not know. */
   | { state: "ended"; reason: JoinEndReason | "unknown" }
@@ -92,6 +99,11 @@ interface Attempt {
   seq: number;
   /** The code this attempt shows, once revealed. */
   code: string;
+  /**
+   * When the main box ends the request, on `steadyNow`: it ends one `JOIN_REQUEST_TTL_MS` after
+   * the hello arrives, and this is measured from before it was sent, so it is never later.
+   */
+  deadline: number;
   state: JoinAttemptState;
   bundle?: MirrorBundle;
   timer?: ReturnType<typeof setTimeout>;
@@ -148,6 +160,9 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     ((url, options, maxBytes) => boxExchange(url, { ...options, lookup: deps.lookup }, maxBytes));
   const ownAddresses =
     deps.addresses ?? (() => ownInterfaceAddresses().filter((a) => !isLoopbackHost(a)));
+  const steadyNow = deps.steadyNow ?? (() => performance.now());
+  const timeLeft = (attempt: Pick<Attempt, "deadline">) =>
+    Math.max(0, attempt.deadline - steadyNow());
   let current: Attempt | null = null;
   let starting: Promise<unknown> | null = null;
 
@@ -312,6 +327,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       addresses,
     };
     const at = deps.now().getTime();
+    const deadline = steadyNow() + JOIN_REQUEST_TTL_MS;
 
     let helloAnswer: { status: number; text: string };
     try {
@@ -347,7 +363,8 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       mainPublicKey: answered.mainPublicKey,
       seq: 0,
       code: "",
-      state: { state: "waiting", code: "", addresses, primaryUrl, expiresAt: answered.expiresAt },
+      deadline,
+      state: { state: "waiting", code: "", addresses, primaryUrl, timeLeftMs: 0 },
     };
     const newNonce = randomBytes(32);
     // Every try is the same message, so the main box answers a repeat with its stored answer.
@@ -408,17 +425,22 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       code,
       addresses,
       primaryUrl,
-      expiresAt: answered.expiresAt,
+      timeLeftMs: 0,
     };
     current = attempt;
     schedulePoll(attempt);
-    return { code, addresses, expiresAt: answered.expiresAt };
+    return { code, addresses, timeLeftMs: timeLeft(attempt) };
   }
 
   return {
     start,
     cancel,
-    current: (): JoinAttemptState | null => current?.state ?? null,
+    current: (): JoinAttemptState | null =>
+      current === null
+        ? null
+        : current.state.state === "waiting"
+          ? { ...current.state, timeLeftMs: timeLeft(current) }
+          : current.state,
     joined: (): JoinedBox | null =>
       current?.bundle === undefined
         ? null

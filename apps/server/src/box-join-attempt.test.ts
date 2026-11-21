@@ -73,6 +73,7 @@ describe("the new box's join attempt", () => {
     advertisedOrigin: "https://waitron.local:8443",
     spareStorePort: 9000,
     now: () => new Date(NOW),
+    steadyNow: () => 0,
     ...overrides,
   });
 
@@ -201,7 +202,7 @@ describe("the new box's join attempt", () => {
       code: shown.code,
       addresses: [FROM, "10.0.0.9"],
       primaryUrl: MAIN_URL,
-      expiresAt: shown.expiresAt,
+      timeLeftMs: 15 * 60_000,
     });
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -228,6 +229,20 @@ describe("the new box's join attempt", () => {
     expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
     await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
     expect(attempt.joined()).toEqual(joined);
+  });
+
+  it("reports the time left on its own steady clock, from just before the hello", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let steady = 50_000;
+    const attempt = createBoxJoinAttempt(
+      deps({ steadyNow: () => steady, now: () => new Date(NOW + 8 * 60_000) }),
+    );
+    const shown = await attempt.start(MAIN_URL);
+    expect(shown.timeLeftMs).toBe(15 * 60_000);
+    steady += 5 * 60_000;
+    expect(attempt.current()).toMatchObject({ state: "waiting", timeLeftMs: 10 * 60_000 });
+    steady += 11 * 60_000;
+    expect(attempt.current()).toMatchObject({ state: "waiting", timeLeftMs: 0 });
   });
 
   it("sends its own clock, contact address and store address in the hello", async () => {

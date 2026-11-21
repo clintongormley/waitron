@@ -36,7 +36,7 @@ export function approvedJoinAttempt(joined: () => JoinedBox | Promise<JoinedBox>
     start: async () => {
       held = await joined();
       state = { state: "approved", code: CODE };
-      return { code: CODE, addresses: [], expiresAt: new Date(Date.now() + 900_000).toISOString() };
+      return { code: CODE, addresses: [], timeLeftMs: 900_000 };
     },
     cancel: async () => {
       state = null;

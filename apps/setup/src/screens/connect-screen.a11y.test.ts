@@ -33,7 +33,7 @@ const LAYOUTS: [string, JoinState, string][] = [
       code: "482913",
       addresses: ["192.168.1.23"],
       primaryUrl: "https://waitron.local",
-      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      timeLeftMs: 600_000,
     },
     "code",
   ],

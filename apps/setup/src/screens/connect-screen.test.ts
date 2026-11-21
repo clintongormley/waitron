@@ -32,7 +32,7 @@ const MAIN = "https://waitron.local";
 const STARTED: JoinStarted = {
   code: "482913",
   addresses: ["192.168.1.23", "fd00::23"],
-  expiresAt: new Date(Date.now() + 14.5 * 60_000).toISOString(),
+  timeLeftMs: 14.5 * 60_000,
   handle: "h1",
 };
 const WAITING: JoinState = {
@@ -40,7 +40,7 @@ const WAITING: JoinState = {
   code: "482913",
   addresses: ["192.168.1.23", "fd00::23"],
   primaryUrl: MAIN,
-  expiresAt: STARTED.expiresAt,
+  timeLeftMs: STARTED.timeLeftMs,
 };
 
 function stubApi(state: JoinState = { state: "none" }) {
@@ -163,17 +163,20 @@ describe("setup-connect-screen: waiting", () => {
   );
 
   it("keeps the time left moving while its reads fail", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    const api = stubApi({
-      ...WAITING,
-      expiresAt: new Date(Date.now() + 3 * 60_000).toISOString(),
-    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const api = stubApi({ ...WAITING, timeLeftMs: 3 * 60_000 });
     const { el } = await mount(api, { handle: "h1" });
     expect(text(el, "[data-test=time-left]")).toBe("Time left: 3 min");
     api.joinState.mockRejectedValue({ code: "server.internal" });
     await vi.advanceTimersByTimeAsync(2 * 60_000 + 1_000);
     await el.updateComplete;
     expect(text(el, "[data-test=time-left]")).toBe("Time left: 1 min");
+  });
+
+  it("counts the time left from this box's answer, whatever the browser's clock says", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 8 * 60_000 });
+    const { el } = await mount(stubApi({ ...WAITING, timeLeftMs: 15 * 60_000 }), { handle: "h1" });
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 15 min");
   });
 
   it("treats a reopened tab's address, filled in by its read, as unchanged", async () => {
