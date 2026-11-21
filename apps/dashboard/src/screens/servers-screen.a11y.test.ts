@@ -417,3 +417,73 @@ describe.each(["light", "dark"] as const)("a former main box's row and dialogs (
     await expectNoA11yViolations(host);
   });
 });
+
+const JOIN = "66666666-6666-4666-8666-666666666666";
+const asking: ServerListing = {
+  ...listing,
+  joinRequests: [
+    {
+      id: JOIN,
+      address: "192.168.1.23",
+      askedAt: "2026-11-21T10:00:00.000Z",
+      expiresAt: "2026-11-21T10:15:00.000Z",
+      startedAgain: true,
+    },
+  ],
+};
+
+async function openJoin(el: ServersScreen): Promise<HTMLElementTagNameMap["wt-dialog"]> {
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="join-check-${JOIN}"]`)!.click();
+  await flush(el);
+  await flush(el);
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    "wt-dialog[data-test=join-dialog]",
+  )!;
+  expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  return dialog;
+}
+
+describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) => {
+  const mountAsking = (overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) =>
+    mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(asking),
+          checkBoxJoin: vi.fn().mockResolvedValue({
+            address: "192.168.1.23",
+            askedAt: "2026-11-21T10:00:00.000Z",
+            startedAgain: true,
+            choices: ["482913", "105770", "930264"],
+          }),
+          ...overrides,
+        }),
+      },
+      theme,
+    );
+
+  it("renders the request in the list accessibly", async () => {
+    const { el, host } = await mountAsking();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector(`[data-test="join-row-${JOIN}"]`)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the codes dialog accessibly", async () => {
+    const { el, host } = await mountAsking();
+    await flush(el);
+    const dialog = await openJoin(el);
+    expect(dialog.querySelectorAll("[data-choice]")).toHaveLength(3);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused Check accessibly", async () => {
+    const { el, host } = await mountAsking({
+      checkBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.spare_already_joined", status: 409 }),
+    });
+    await flush(el);
+    const dialog = await openJoin(el);
+    expect(await formMessageOf(dialog.querySelector("wt-form-actions")!)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+});

@@ -1,5 +1,8 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 
+/** Routes the server checks with `allowRecoveryCode: false`. */
+const NO_RECOVERY_CODE = /^\/management-api\/(handover|box-joins\/[^/]+\/(check|approve))$/;
+
 export function createFreshSignInGate(options: {
   sessionGeneration: () => number;
   prompt: (signal: AbortSignal, context: { allowRecoveryCode: boolean }) => Promise<boolean>;
@@ -57,7 +60,7 @@ export function createFreshSignInGate(options: {
           try {
             if (
               (proofAtStart === proofVersion &&
-                !(await ask(generation, path !== "/management-api/handover"))) ||
+                !(await ask(generation, !NO_RECOVERY_CODE.test(path)))) ||
               init?.signal?.aborted ||
               generation !== options.sessionGeneration()
             )

@@ -4,6 +4,7 @@ import {
   registerCodeMessages,
 } from "@waitron/dashboard-kit";
 import { formatBytes } from "@waitron/shared";
+import { formatRecentMinute } from "../date-utils.js";
 import { t, currentLocale, pickLocale } from "./t.js";
 import { en, es } from "./strings.js";
 
@@ -1632,6 +1633,62 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The list of servers this server holds is not valid, so it cannot be changed here.",
     es: "La lista de servidores que tiene este servidor no es válida, así que no se puede cambiar aquí.",
   },
+  "membership.held_untrusted": {
+    en: "This box cannot check its own list of servers, so it cannot add a box. Nothing was changed.",
+    es: "Este servidor no puede comprobar su propia lista de servidores, así que no puede añadir otro. No se ha cambiado nada.",
+  },
+  "mirror.join_not_found": {
+    en: "This box is no longer asking to join: it ran out of time, or someone chose Start again on it.",
+    es: "Este servidor ya no está pidiendo unirse: se agotó el tiempo o alguien eligió Empezar de nuevo en él.",
+  },
+  "mirror.join_wrong_code": {
+    en: "That is not the code the new box shows, so this request has ended and nothing was sent. If you are adding a box now, choose Start again on it and check its new code.",
+    es: "Ese no es el código que muestra el servidor nuevo, así que esta solicitud ha terminado y no se ha enviado nada. Si estás añadiendo un servidor ahora, elige Empezar de nuevo en él y comprueba su código nuevo.",
+  },
+  "mirror.join_in_progress": {
+    en: "This box's copy is already being prepared. Wait a moment.",
+    es: "Ya se está preparando la copia para este servidor. Espera un momento.",
+  },
+  "mirror.join_stopped_after_listing": {
+    en: "The new box stopped asking to join while its copy was being prepared, so nothing was sent. Remove it from the list on this page, then choose Start again on the new box.",
+    es: "El servidor nuevo dejó de pedir unirse mientras se preparaba su copia, así que no se ha enviado nada. Retíralo de la lista de esta página y elige Empezar de nuevo en el servidor nuevo.",
+  },
+  "mirror.spare_already_joined": {
+    en: "This venue already has a spare box. Remove it on this page before adding another.",
+    es: "Este local ya tiene un servidor de reserva. Retíralo en esta página antes de añadir otro.",
+  },
+  "mirror.bucket_stream_active": {
+    en: "Continuous copy to your bucket is on. Turn it off under Backups to add a spare; your bucket then stops receiving the venue's changes.",
+    es: "La copia continua a tu bucket está activada. Desactívala en Copias de seguridad para añadir un servidor de reserva; tu bucket dejará de recibir los cambios del local.",
+  },
+  "mirror.clocks_apart": {
+    en: "The two boxes' clocks are more than 10 minutes apart (this box {primaryAt}, the new box {standbyAt}). Correct the new box's time, then choose Start again on it.",
+    es: "Los relojes de los dos servidores se separan más de 10 minutos (este {primaryAt}, el nuevo {standbyAt}). Corrige la hora del servidor nuevo y elige Empezar de nuevo en él.",
+  },
+  "mirror.standby_name_taken": {
+    en: "Another box here has the same short name as the new box. Choose Start again on the new box; it picks a new name.",
+    es: "Otro servidor de este local tiene el mismo nombre corto que el nuevo. Elige Empezar de nuevo en el servidor nuevo; tomará otro nombre.",
+  },
+  "mirror.membership_full": {
+    en: "This venue's list of servers already holds {limit} boxes, the most it can hold. Clear a removed box from the list on this page before adding another.",
+    es: "La lista de servidores de este local ya tiene {limit} servidores, el máximo que admite. Quita de la lista en esta página un servidor retirado antes de añadir otro.",
+  },
+  "mirror.standby_removed": {
+    en: "The new box asked under the name of a box removed from this venue. Choose Start again on the new box; it picks a new name.",
+    es: "El servidor nuevo lo pidió con el nombre de un servidor retirado de este local. Elige Empezar de nuevo en el servidor nuevo; tomará otro nombre.",
+  },
+  "mirror.standby_invalid": {
+    en: "The new box's request could not be read, so nothing was sent. Choose Start again on the new box.",
+    es: "No se ha podido leer la solicitud del servidor nuevo, así que no se ha enviado nada. Elige Empezar de nuevo en el servidor nuevo.",
+  },
+  "mirror.not_provisioned": {
+    en: "This box has not been set up as a venue yet, so it has nothing to copy to a spare.",
+    es: "Este servidor aún no se ha configurado como local, así que no tiene nada que copiar a un servidor de reserva.",
+  },
+  "module.config_invalid": {
+    en: "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
+    es: "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
+  },
   "membership.write_contended": {
     en: "The list of servers was being changed at the same moment. Try again.",
     es: "La lista de servidores se estaba cambiando en ese mismo momento. Vuelve a intentarlo.",
@@ -1985,8 +2042,21 @@ export function codeMessage(
     freeBytes?: unknown;
     neededBytes?: unknown;
     writtenBytes?: unknown;
+    primaryAt?: unknown;
+    standbyAt?: unknown;
+    limit?: unknown;
   },
 ): string {
+  if (
+    code === "mirror.clocks_apart" &&
+    typeof params?.primaryAt === "string" &&
+    typeof params.standbyAt === "string"
+  )
+    return registeredCodeMessage(code, locale)
+      .replace("{primaryAt}", formatRecentMinute(params.primaryAt))
+      .replace("{standbyAt}", formatRecentMinute(params.standbyAt));
+  if (code === "mirror.membership_full" && typeof params?.limit === "number")
+    return registeredCodeMessage(code, locale).replace("{limit}", String(params.limit));
   if (
     code === "printer.bluetooth_command_busy" &&
     typeof params?.seconds === "number" &&

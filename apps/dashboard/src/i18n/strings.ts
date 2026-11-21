@@ -2327,6 +2327,21 @@ export const en = {
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
   "servers.empty": "This server holds no list of the venue's servers.",
+  "servers.joins_heading": "Boxes asking to join",
+  "servers.join_asking": "A box at {address} is asking to join",
+  "servers.join_started_again": "This box started again. Tap only a code it showed after that.",
+  "servers.join_check": "Check",
+  "servers.join_check_again": "Check again",
+  "servers.join_dismiss": "Dismiss",
+  "servers.join_dialog_title": "Add this box as a spare",
+  "servers.join_checking": "Checking the request…",
+  "servers.join_match_prompt": "Tap the code the new box shows",
+  "servers.join_compare":
+    "Check that the address is the one the new box shows and the code is the one it shows now. A wrong tap ends the request; choose Start again on the new box.",
+  "servers.join_choice_label": "Code {code}",
+  "servers.join_approved": "Approved; the new box is fetching its copy",
+  "servers.join_recovery_key_missing":
+    "This box has no backup encryption key, which a spare needs. Choose Turn on backups under Backups, then choose Check again.",
   "servers.no_address": "No address",
   "servers.machine": "Machine",
   "servers.not_primary":
@@ -7012,6 +7027,22 @@ export const es: Record<StringKey, string> = {
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
   "servers.empty": "Este servidor no tiene la lista de servidores del local.",
+  "servers.joins_heading": "Servidores que piden unirse",
+  "servers.join_asking": "Un servidor en {address} está pidiendo unirse",
+  "servers.join_started_again":
+    "Este servidor empezó de nuevo. Toca solo un código que haya mostrado después.",
+  "servers.join_check": "Comprobar",
+  "servers.join_check_again": "Comprobar",
+  "servers.join_dismiss": "Descartar",
+  "servers.join_dialog_title": "Añadir este servidor como reserva",
+  "servers.join_checking": "Comprobando la solicitud…",
+  "servers.join_match_prompt": "Toca el código que muestra el servidor nuevo",
+  "servers.join_compare":
+    "Comprueba que la dirección es la que muestra el servidor nuevo y que el código es el que muestra ahora. Un toque equivocado termina la solicitud; elige Empezar de nuevo en el servidor nuevo.",
+  "servers.join_choice_label": "Código {code}",
+  "servers.join_approved": "Aprobado; el servidor nuevo está descargando su copia",
+  "servers.join_recovery_key_missing":
+    "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar copias en Copias de seguridad y vuelve a elegir Comprobar.",
   "servers.no_address": "Sin dirección",
   "servers.machine": "Máquina",
   "servers.not_primary":

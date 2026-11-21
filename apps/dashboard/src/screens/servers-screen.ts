@@ -5,17 +5,47 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, pageTitleStyles, breakAfterColons, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "../widgets/switch-label.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { spareDetails, spareLine, spareNeedsAttention } from "./box-status-rows.js";
-import type { DashboardApi, ServerRow, SpareFollowView } from "../api/client.js";
+import { formatRecentMinute } from "../date-utils.js";
+import type {
+  BoxJoinRequestRow,
+  DashboardApi,
+  ServerListing,
+  ServerRow,
+  SpareFollowView,
+} from "../api/client.js";
+
+/** How often the list is read again while it shows a box asking to join, which sends no event. */
+const JOIN_POLL_MS = 5000;
+
+/** Refusals after which the request no longer exists, so no code may be tapped again. */
+const JOIN_ENDED = new Set([
+  "mirror.join_wrong_code",
+  "mirror.join_not_found",
+  "mirror.join_stopped_after_listing",
+]);
+
+/** Six digits in two groups of three, as the new box shows them. */
+function grouped(code: string): string {
+  return `${code.slice(0, 3)} ${code.slice(3)}`;
+}
+
+/** A join refusal in words; the key code is the general one elsewhere, so it is reworded here. */
+function joinRefusal(error: unknown): string {
+  const code = codeOf(error);
+  if (code === "backup.recovery_key_missing") return t("servers.join_recovery_key_missing");
+  return codeMessage(code, undefined, (error as { params?: Record<string, unknown> }).params);
+}
 
 const STANDING_KEY: Record<ServerRow["standing"], StringKey> = {
   "serving-primary": "servers.standing.primary",
@@ -180,6 +210,55 @@ export class ServersScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
+      .joins {
+        list-style: none;
+        margin: 0 0 var(--wt-space-4);
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+        max-width: 70ch;
+      }
+      .joins-heading {
+        margin: 0 0 var(--wt-space-3);
+        font-size: var(--wt-font-size-lg);
+        color: var(--wt-color-text);
+      }
+      .join-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2) var(--wt-space-3);
+      }
+      .join-details {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        margin-right: auto;
+        overflow-wrap: anywhere;
+      }
+      .join-asking {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text);
+      }
+      .join-meta {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .join-again {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-warning);
+      }
+      .join-list-error {
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-danger);
+      }
+      .choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        margin-top: var(--wt-space-3);
+      }
       .declarations {
         display: flex;
         flex-direction: column;
@@ -202,6 +281,19 @@ export class ServersScreen extends LitElement {
   @state() private servers: ServerRow[] = [];
   @state() private spare: SpareFollowView | null = null;
   @state() private authorityFingerprint: string | null = null;
+  @state() private joinRequests: BoxJoinRequestRow[] = [];
+  @state() private joinListError = "";
+  /** The request whose Check dialog is open, with what Check answered. */
+  @state() private join: {
+    request: BoxJoinRequestRow;
+    choices: string[] | null;
+    error: string;
+    ended: boolean;
+    approved: boolean;
+  } | null = null;
+  /** `"check"` while Check reads, or the code being sent. */
+  @state() private joinBusy: string | null = null;
+  #joinPoll?: ReturnType<typeof setInterval>;
   @state() private loading = true;
   @state() private loadErrorKey: string | null = null;
   @state() private target: { action: Action; row: ServerRow } | null = null;
@@ -259,7 +351,222 @@ export class ServersScreen extends LitElement {
   }
   override disconnectedCallback(): void {
     this.#closeHandover();
+    this.#syncJoinPoll(false);
     super.disconnectedCallback();
+  }
+
+  #applyListing(listing: ServerListing): void {
+    this.servers = inStandingOrder(listing.nodes);
+    this.spare = listing.spare ?? null;
+    this.authorityFingerprint = listing.authorityFingerprint;
+    this.joinRequests = listing.joinRequests ?? [];
+    this.loadErrorKey = null;
+    this.#syncJoinPoll(this.joinRequests.length > 0);
+  }
+
+  #syncJoinPoll(on: boolean): void {
+    if (!on || !this.isConnected) {
+      clearInterval(this.#joinPoll);
+      this.#joinPoll = undefined;
+      return;
+    }
+    this.#joinPoll ??= setInterval(() => void this.#reread(true), JOIN_POLL_MS);
+  }
+
+  async #reread(passive = false): Promise<void> {
+    try {
+      this.#applyListing(
+        await (passive ? (this.api.background ?? this.api) : this.api).listServers(),
+      );
+    } catch (error) {
+      this.loadErrorKey = codeOf(error);
+    }
+  }
+
+  async #checkJoin(request: BoxJoinRequestRow): Promise<void> {
+    if (this.joinBusy !== null) return;
+    this.join = { request, choices: null, error: "", ended: false, approved: false };
+    this.joinBusy = "check";
+    try {
+      const checked = await this.api.checkBoxJoin(request.id);
+      if (this.join?.request !== request) return;
+      this.join = { ...this.join, choices: checked.choices };
+    } catch (error) {
+      if (this.join?.request !== request) return;
+      this.join = { ...this.join, error: joinRefusal(error), ended: JOIN_ENDED.has(codeOf(error)) };
+    } finally {
+      this.joinBusy = null;
+    }
+  }
+
+  async #approveJoin(code: string): Promise<void> {
+    const join = this.join;
+    if (join === null || this.joinBusy !== null) return;
+    this.joinBusy = code;
+    this.join = { ...join, error: "" };
+    try {
+      await this.api.approveBoxJoin(join.request.id, code);
+      if (this.join?.request !== join.request) return;
+      this.join = { ...this.join, approved: true, choices: null };
+    } catch (error) {
+      if (this.join?.request !== join.request) return;
+      const ended = JOIN_ENDED.has(codeOf(error));
+      this.join = {
+        ...this.join,
+        error: joinRefusal(error),
+        ended,
+        choices: ended ? null : this.join.choices,
+      };
+      if (!ended) return;
+    } finally {
+      this.joinBusy = null;
+    }
+    await this.#reread();
+  }
+
+  async #dismissJoin(request: BoxJoinRequestRow): Promise<void> {
+    this.joinListError = "";
+    try {
+      await this.api.dismissBoxJoin(request.id);
+    } catch (error) {
+      if (codeOf(error) !== "mirror.join_not_found") {
+        this.joinListError = joinRefusal(error);
+        return;
+      }
+    }
+    await this.#reread();
+  }
+
+  #closeJoin(): void {
+    this.join = null;
+  }
+
+  #renderJoinRequests(): TemplateResult | typeof nothing {
+    if (this.joinRequests.length === 0) return nothing;
+    return html`<section data-test="join-requests" aria-labelledby="joins-heading">
+      <h2 class="joins-heading" id="joins-heading">${t("servers.joins_heading")}</h2>
+      ${
+        this.joinListError === ""
+          ? nothing
+          : html`<p class="join-list-error" role="alert" data-test="join-list-error">
+              ${this.joinListError}
+            </p>`
+      }
+      <ul class="joins">
+        ${this.joinRequests.map((request) => {
+          const asking = fill("servers.join_asking", { address: request.address });
+          return html`<li data-test="join-row-${request.id}">
+            <wt-card>
+              <div class="join-row">
+                <div class="join-details">
+                  <span class="join-asking">${asking}</span>
+                  <span class="join-meta">${formatRecentMinute(request.askedAt)}</span>
+                  ${
+                    request.startedAgain
+                      ? html`<span class="join-again" data-test="join-started-again-${request.id}"
+                          >${t("servers.join_started_again")}</span
+                        >`
+                      : nothing
+                  }
+                </div>
+                <wt-button
+                  variant="primary"
+                  size="sm"
+                  data-test="join-check-${request.id}"
+                  aria-label=${`${t("servers.join_check")}: ${asking}`}
+                  ?disabled=${this.joinBusy !== null}
+                  @click=${() => void this.#checkJoin(request)}
+                  >${t("servers.join_check")}</wt-button
+                >
+                <wt-button
+                  variant="secondary"
+                  size="sm"
+                  data-test="join-dismiss-${request.id}"
+                  aria-label=${`${t("servers.join_dismiss")}: ${asking}`}
+                  @click=${() => void this.#dismissJoin(request)}
+                  >${t("servers.join_dismiss")}</wt-button
+                >
+              </div>
+            </wt-card>
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
+  /** Tapping a code is the approval, so there is no separate Approve control. */
+  #renderJoinDialog(): TemplateResult {
+    const join = this.join;
+    const checking = this.joinBusy === "check";
+    const canCheckAgain =
+      join !== null && !checking && join.choices === null && !join.approved && !join.ended;
+    return html`<wt-dialog
+      data-test="join-dialog"
+      heading=${t("servers.join_dialog_title")}
+      .open=${join !== null}
+      @wt-close=${() => this.#closeJoin()}
+    >
+      ${
+        join === null
+          ? nothing
+          : html`<p class="target" data-test="join-dialog-address">
+                ${fill("servers.join_asking", { address: join.request.address })}
+              </p>
+              ${
+                join.request.startedAgain
+                  ? html`<p class="explanation">${t("servers.join_started_again")}</p>`
+                  : nothing
+              }
+              ${checking ? html`<p class="explanation">${t("servers.join_checking")}</p>` : nothing}
+              ${
+                join.approved
+                  ? html`<p class="explanation" role="status" data-test="join-approved">
+                      ${t("servers.join_approved")}
+                    </p>`
+                  : nothing
+              }
+              ${
+                join.choices === null
+                  ? nothing
+                  : html`<p class="explanation">${t("servers.join_compare")}</p>
+                      <p class="target" id="join-match-prompt">${t("servers.join_match_prompt")}</p>
+                      <div class="choices" role="group" aria-labelledby="join-match-prompt">
+                        ${join.choices.map(
+                          (code) =>
+                            html`<wt-button
+                              variant="secondary"
+                              size="lg"
+                              data-choice=${code}
+                              ?disabled=${this.joinBusy !== null}
+                              ?loading=${this.joinBusy === code}
+                              aria-label=${fill("servers.join_choice_label", { code: grouped(code) })}
+                              @click=${() => void this.#approveJoin(code)}
+                              >${grouped(code)}</wt-button
+                            >`,
+                        )}
+                      </div>`
+              }`
+      }
+      <wt-form-actions slot="footer" .error=${join?.error ?? ""}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="join-close"
+          @click=${() => this.#closeJoin()}
+          >${t("action.close")}</wt-button
+        >
+        ${
+          canCheckAgain
+            ? html`<wt-button
+                variant="primary"
+                data-test="join-check-again"
+                @click=${() => void this.#checkJoin(join.request)}
+                >${t("servers.join_check_again")}</wt-button
+              >`
+            : nothing
+        }
+      </wt-form-actions>
+    </wt-dialog>`;
   }
   #openHandoverPage(url: string): void {
     this.#closeHandover();
@@ -416,12 +723,7 @@ export class ServersScreen extends LitElement {
 
   async #load(): Promise<void> {
     try {
-      await this.#queries.watch("listServers", [], (listing) => {
-        this.servers = inStandingOrder(listing.nodes);
-        this.spare = listing.spare ?? null;
-        this.authorityFingerprint = listing.authorityFingerprint;
-        this.loadErrorKey = null;
-      });
+      await this.#queries.watch("listServers", [], (listing) => this.#applyListing(listing));
     } catch {
       // The query's error callback has already recorded the failure.
     } finally {
@@ -506,15 +808,7 @@ export class ServersScreen extends LitElement {
     // leaves the list) and the refresh below may land after the dialog has closed.
     this.#focusTarget = null;
     this.target = null;
-    try {
-      const listing = await this.api.listServers();
-      this.servers = inStandingOrder(listing.nodes);
-      this.spare = listing.spare ?? null;
-      this.authorityFingerprint = listing.authorityFingerprint;
-      this.loadErrorKey = null;
-    } catch (error) {
-      this.loadErrorKey = codeOf(error);
-    }
+    await this.#reread();
   }
 
   #address(row: ServerRow): string {
@@ -806,6 +1100,7 @@ export class ServersScreen extends LitElement {
           ? nothing
           : html`<p class="note" data-test="not-primary">${t("servers.not_primary")}</p>`
       }
+      ${this.#renderJoinRequests()}
       <wt-data-table
         noMatchesMessage=${tableNoMatches()}
         aria-label=${t("servers.title")}
@@ -818,7 +1113,7 @@ export class ServersScreen extends LitElement {
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
       ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
-      ${this.#renderDialog("abandon")} ${this.#renderHandover()}
+      ${this.#renderDialog("abandon")} ${this.#renderHandover()} ${this.#renderJoinDialog()}
       ${
         this.switchLabel === null
           ? nothing
