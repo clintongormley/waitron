@@ -116,7 +116,7 @@ code, not run again here.
   A788's finish review, which ran it. Next: teach the paint layer a day longer than 1440
   minutes, or decide the cut is the intended drawing.
 - **A877, one write gate for waiting starts.** Each hours writer derives its clocks and calls
-  `assertWaitingChangeFits` itself. Move that check into the shared write gate.
+  `assertWaitingChangeFits` itself. Build one write gate that runs the check for all hours writers.
 
 ## Loose ends left by A720.
 

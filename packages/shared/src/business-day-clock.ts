@@ -123,7 +123,7 @@ export function businessDayAt(clock: BusinessDayClock, at: Date): string {
   return invalid("outside_boundaries");
 }
 
-/** Use the business day resolved from this clock's ordered changes. */
+/** The business day must come from `businessDayAt` on this same clock. */
 export function splitBusinessDayChanges(
   clock: BusinessDayClock,
   currentBusinessDay: string,
