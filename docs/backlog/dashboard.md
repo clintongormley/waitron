@@ -89,12 +89,7 @@ Not observed in a real password manager — the tests replace the browser's meth
 
 ## Shared database-backed table paging, search and sorting
 
-- **Measure Print Queue before moving it to shared table requests.** Measure the current response
-  on a busy queue, including unfinished jobs and the two capped recent histories. Adopt the same
-  50-row server pages, search, sort and passive refresh used by Users, Orders and returned invoices
-  if the measurement shows a worthwhile reduction. Preserve the current history limits and
-  search across that same set of jobs. Large datasets keep SQL sorting unless a measurement
-  justifies sorting matching keys in memory.
+- Large datasets keep SQL sorting unless a measurement justifies sorting matching keys in memory.
 - Products stays on its current read. The nested extras editor uses the whole catalogue for its
   picker and for saved items. Folder counts, move selections and archive warnings also use
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
@@ -228,6 +223,28 @@ Retiring the summary once its last consumer moves away remains open.
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+### Print Queue keeps its current read
+
+On 21 November 2026, a disposable Print Queue database held 4,800 completed jobs and 200 exhausted
+failures across two thermal printers and one office printer. The current read returned each of
+the two capped histories alongside 0, 60 or 300 unfinished jobs. The probe applied a 50-row SQL
+limit and computed the exact total from the same set of jobs.
+
+| Unfinished jobs | JSON bytes, current / first page | Median read and JSON parse, current / first page |
+| --- | --- | --- |
+| 0 | 70,771 / 17,801 | 7.8 / 12.3 ms |
+| 60 | 92,950 / 18,552 | 9.6 / 12.5 ms |
+| 300 | 181,562 / 18,670 | 10.7 / 11.6 ms |
+
+The route probe used 60 warm reads per variant on macOS Node 26.13.1. A separate Chromium probe
+opened the current table with fixed responses. The median time through layout of the last row
+was 12.6, 16.6 and 28.2 ms at 200, 260 and 500 rows, and 4.3 ms at 50 rows. The probes did not
+measure network transfer, search or production box hardware.
+
+Showing 50 rows saved 8–24 ms in the browser probe. The server read took 0.9–4.5 ms longer in
+the route probe. Keep the current read and local search. Revisit paging if repeated queue reads
+show a cost during service.
 
 - **Dashboard empty-value fallbacks (D-DASHBOARD-TEST-LOOSE-ENDS, 2026-11-17):** keep the
   remaining `?? []` and `?? null` in `dashboard-app.ts`, `login-screen.ts`, `extra-list-form.ts`
