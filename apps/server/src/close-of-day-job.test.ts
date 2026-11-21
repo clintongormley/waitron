@@ -45,7 +45,8 @@ vi.mock("./till-sale.js", async (importOriginal) => {
   return {
     ...original,
     refuseBillPaymentInFlight: (...args: Parameters<typeof original.refuseBillPaymentInFlight>) => {
-      const refusal = refused.get(args[2]);
+      const [, billId] = args;
+      const refusal = refused.get(billId);
       return refusal === undefined
         ? original.refuseBillPaymentInFlight(...args)
         : Promise.reject(refusal);

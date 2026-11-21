@@ -32,6 +32,7 @@ import {
   carveOffLines,
   createOpenOrder,
   moveOrderLines,
+  refusePendingPartPayment,
   type OrderAttendance,
 } from "./working-order.js";
 import "./errors.js";
@@ -130,6 +131,7 @@ export async function mergeBills(
   const path = await guardPathParty(tx, intoBillId, command);
   if (path.partyId === null) throw new AppError("bill.other_party", { workingOrderId: fromBillId });
   await requireBillOfParty(tx, path.partyId, fromBillId);
+  await refusePendingPartPayment(tx, [fromBillId], "any");
   await refuseBillWithPayments(tx, fromBillId);
   refuseClosedBill(intoBillId, path.status);
   await assertServiceModesMatch(tx, fromBillId, intoBillId);

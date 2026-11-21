@@ -3,8 +3,7 @@
 With the payment simulator, the counter payment controls and bill-payment window offer
 **Approve**, **Decline** or **No answer** before you press **Card**. No real card is charged. **No answer** keeps the payment
 blocked so you can practise recovery. In the dashboard's **Payments**, a manager chooses
-**Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
-contribution, and confirms. This ends the practice attempt without recording a charge.
+**Check with provider** and confirms. This ends the practice attempt without recording a charge.
 
 ## Give a comp or discount {#comps-and-discounts}
 
@@ -619,9 +618,8 @@ If a payment is recorded as not taken, you can try it again. If its result is un
 may charge the card or record the cash payment.
 If a payment stays pending, or the card was charged but the payment was not recorded, choose
 **Check card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
-record the provider’s confirmed outcome. Reopen the bill payment after it is recorded to see the
-result. If Check card payments says **Payment recorded. The rest is still due.**, reopen the bill and
-collect only its outstanding balance.
+record the provider’s confirmed outcome under **Bill payments**. After recording it, reopen the
+bill and collect only its outstanding balance.
 
 If that check fails, follow [A card-payment check failed](table-service.md#card-check-failed) below.
 
@@ -659,23 +657,7 @@ Take payment with **Pay** as usual, in one go or in parts.
 
 ## A card-payment check failed {#card-check-failed}
 
-If **Check with the card provider** fails, keep the order and payment details shown on Card
-payments and check the payment in the provider's dashboard. Do not charge again. If the payment
-stays listed, Waitron may still check it automatically. You can choose **Check with the card
-provider** again after checking the provider. If the check keeps failing, this is a fault whose
-cause is not yet known. Keep the order and payment details.
-
-If it is no longer listed, that alone does not confirm a charge. If the check confirmed the
-charge but recording failed, Waitron does not retry that recording automatically. If the
-provider confirms payment, first check whether the original order is already paid. If it is,
-nothing more is needed. If it was a Counter order and is still unpaid, find the original order
-at the **Counter** and choose **Card** using the same provider. Waitron records a matching saved
-charge. For a table bill already presented to the guests, reopen the original bill and choose
-**Pay**, then **Card** using the same provider. If the reader asks for the card, cancel without
-presenting it. If recording keeps failing, this is a fault in Waitron or this box. Keep the
-order and payment details and do not charge again.
-
-For a table payment listed under **Bill payments and refunds awaiting a card provider**,
+For a payment listed under **Bill payments and refunds awaiting a card provider**,
 choose **Check with provider** there. Once it is recorded, reopen the bill to see what remains
 to pay. Waitron also retries these payments automatically. If recording keeps failing, keep
 the order and payment details and do not charge again; this is a fault in Waitron or this box.

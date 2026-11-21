@@ -13,7 +13,6 @@ import { loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { paymentAttemptIsLive } from "./till-sale.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -386,13 +385,12 @@ it.each(
     ]);
     expect(written.sales).toHaveLength(1);
     expect(written.payments).toMatchObject([{ state, amount: 1200, device_id: venue.deviceId }]);
-    expect(written.orders).toMatchObject([{ status: "settled", payment_attempt_at: null }]);
+    expect(written.orders).toMatchObject([{ status: "settled" }]);
     expect(written.settlements).toHaveLength(1);
     if (issued) {
       expect(written.sales).toEqual(original.sales);
       expect(written.lines).toEqual(original.lines);
     } else expect(written.lines).toMatchObject([{ credited_to: venue.adminId }]);
-    expect(paymentAttemptIsLive(suite.db, request.id)).toBe(false);
     expect(venue.card.collectCalls).toHaveLength(calls + 1);
   },
 );

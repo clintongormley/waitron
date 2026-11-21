@@ -37,8 +37,8 @@ const loop = vi.hoisted(() => ({ passesFinished: 0 }));
 
 // A sweep that must not happen has no call to wait for, so every case waits for a whole pass of the
 // pending-card loop, which holds the sweep, to finish.
-vi.mock("./pending-card-recovery.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
   return {
     ...actual,
     runPendingCardLoop: (...[deps]: Parameters<typeof actual.runPendingCardLoop>) =>

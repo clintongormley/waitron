@@ -12,7 +12,6 @@ import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
-import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, deleteCredential } from "@waitron/credentials";
 import { resolveMailDeliveryIn } from "./email-delivery.js";
@@ -58,7 +57,6 @@ import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import {
   captureAttempting,
   cardReaders,
-  insertCapturedPayment,
   payments,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
@@ -77,7 +75,6 @@ import { planVenue } from "@waitron/provisioning";
 import {
   basisPointsToDecimal,
   centsToDecimal,
-  decimal,
   nodeId as brandNodeId,
   thousandthsToDecimal,
   deviceOrigin,
@@ -505,11 +502,7 @@ async function request(
             await observedPaymentBody(
               suite.db,
               path,
-              await observedGroupSubmitBody(
-                suite.db,
-                path,
-                observedWholePaymentBody(suite.db, path, body),
-              ),
+              await observedGroupSubmitBody(suite.db, path, body),
             ),
           ),
         }),
@@ -706,27 +699,6 @@ describe("the balance", () => {
       total: "18.00",
       received: "0.00",
       outstanding: "18.00",
-    });
-  });
-
-  it("reads a bill settled in one whole payment as owing nothing, though no bill payment records it", async () => {
-    const billId = await tabWith("Cake");
-    expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
-    const collected = await request("POST", "/api/pay", {
-      dining: "eat_in",
-      id: billId,
-      lines: [],
-      simulationOutcome: "captured",
-    });
-    expect(collected.status).toBe(200);
-
-    const { json } = await balance(billId);
-
-    expect(json).toMatchObject({
-      status: "settled",
-      total: "18.00",
-      received: "0.00",
-      outstanding: "0.00",
     });
   });
 
@@ -4036,32 +4008,6 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
 });
 
 describe("the single-payment routes on a bill holding bill payments (design §7)", () => {
-  it("refuses a card pay before filing a capture the bill payment already took", async () => {
-    const billId = await bill120();
-    expect((await contribute(billId, "50.00")).status).toBe(200);
-    // A capture with no sale, as a card bill payment leaves one until the bill is invoiced: the
-    // integrated pay's own recovery would otherwise file the whole bill from it.
-    const [paymentRow] = await paymentRows(billId);
-    await inTx((tx) =>
-      insertCapturedPayment(tx, {
-        origin: deviceOrigin(venue.deviceId),
-        workingOrderId: billId,
-        nodeId: venue.cfg.nodeId,
-        provider: "simulator",
-        paymentRef: randomUUID(),
-        amount: decimal("50.00"),
-        settledAt: new Date(),
-        billPaymentId: paymentRow!.id,
-      }),
-    );
-
-    const refused = await request("POST", "/api/pay", { dining: "eat_in", id: billId, lines: [] });
-
-    expect(refused.status).toBe(409);
-    expect(refused.json).toMatchObject({ code: "bill.payments_received" });
-    expect(await saleOf(billId)).toEqual([]);
-  });
-
   it("refuses abandoning or placing a bill holding money", async () => {
     const billId = await tabWith("Cake");
     expect((await contribute(billId, "5.00")).status).toBe(200);

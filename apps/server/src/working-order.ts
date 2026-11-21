@@ -362,7 +362,6 @@ import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.
 import {
   type TillSaleResult,
   ordersWithUnfiledPayment,
-  paymentAttemptIsLive,
   refusePlacedPaymentInFlight,
 } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -4680,7 +4679,6 @@ export async function refuseUnavailableFullInvoice(
  * order holding a sale refuses an invoice-type change as `invoice.choice_locked`.
  */
 async function readChoiceChangeableOrder(
-  db: Database,
   tx: Transaction,
   orderId: string,
   expectedRevision: number,
@@ -4717,7 +4715,7 @@ async function readChoiceChangeableOrder(
   await refusePaymentInFlight(tx, [orderId]);
   if (order.status === "placed") {
     await refusePendingPartPayment(tx, [orderId], "any");
-    await refusePlacedPaymentInFlight(db, tx, [orderId]);
+    await refusePlacedPaymentInFlight(tx, [orderId]);
   }
   return order;
 }
@@ -4743,7 +4741,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision, "invoice");
+    const order = await readChoiceChangeableOrder(tx, orderId, request.revision, "invoice");
     await requireOrderBillEditor(tx, orderId, request);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       // An advance's money is on its own ticket, so it does not hold the rest to a full invoice.
@@ -4804,7 +4802,6 @@ export async function setOrderReceiptLanguage(
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
     const order = await readChoiceChangeableOrder(
-      db,
       tx,
       orderId,
       request.revision,
@@ -5913,9 +5910,8 @@ export async function refuseRefundInProgress(
 
 /**
  * Refuse while money on any of these OPEN orders is moving: `bill.refund_in_progress` for a pending
- * card refund, else `order.payment_in_flight` for a card at the reader — a payment of the whole
- * order between pricing and filing (plan D22's mark), or a pending card payment of part of the bill
- * (bill payments design §5.2). Every line write that can change the bill's total stops here,
+ * card refund, else `order.payment_in_flight` for a pending card payment. Every line write
+ * that can change the bill's total stops here,
  * because the capture that completes the bill invoices it from that total; a served mark
  * (`writeServed`) does not.
  */
@@ -5924,7 +5920,6 @@ export async function refusePaymentInFlight(
   orderIds: readonly string[],
 ): Promise<void> {
   await refuseRefundInProgress(tx, orderIds);
-  await refuseOrderPaymentMarked(tx, orderIds);
   await refusePendingPartPayment(tx, orderIds, "open");
 }
 
@@ -5950,28 +5945,6 @@ export async function refusePendingPartPayment(
     .limit(1);
   if (pending !== undefined) {
     throw new AppError("order.payment_in_flight", { workingOrderId: pending.workingOrderId });
-  }
-}
-
-/** The whole-order mark also covers providers without attempt rows. */
-export async function refuseOrderPaymentMarked(
-  tx: Transaction,
-  orderIds: readonly string[],
-): Promise<void> {
-  const [paying] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(
-      and(
-        inArray(workingOrders.id, [...orderIds]),
-        eq(workingOrders.status, "open"),
-        isNotNull(workingOrders.paymentAttemptAt),
-      ),
-    )
-    .orderBy(workingOrders.id)
-    .limit(1);
-  if (paying !== undefined) {
-    throw new AppError("order.payment_in_flight", { workingOrderId: paying.id });
   }
 }
 
@@ -7914,7 +7887,7 @@ export async function cancelPlacedOrder(
       if (invoice !== undefined) {
         await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
       }
-      await refusePlacedOrderMoney(tx, deps, id);
+      await refusePlacedOrderMoney(tx, id);
       if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
       await abandonPlacedOrder(tx, cfg, id);
       if (partyId !== null && (await ensureFamilyBill(tx, cfg, partyId))) {
@@ -7971,16 +7944,10 @@ export async function lockPlacedOrder(
 }
 
 /** Refuses a placed order holding money, or with a payment on its way. */
-export async function refusePlacedOrderMoney(
-  tx: Transaction,
-  deps: Pick<TillSaleDeps, "db">,
-  id: string,
-): Promise<void> {
+export async function refusePlacedOrderMoney(tx: Transaction, id: string): Promise<void> {
   await refusePendingPartPayment(tx, [id], "any");
   await refuseBillHoldingMoney(tx, [id]);
-  // A placed order's card collection writes no mark, and its provider may write no payment row
-  // until the card resolves, so only this process's own record of the attempt shows it.
-  if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
+  if ((await ordersWithUnfiledPayment(tx, [id])).has(id)) {
     throw new AppError("order.payment_in_flight", { workingOrderId: id });
   }
 }

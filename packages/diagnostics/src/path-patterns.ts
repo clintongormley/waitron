@@ -69,7 +69,6 @@ export const PATH_PATTERNS = [
   "/management-api/payments/reader-holders",
   "/management-api/payments/readers",
   "/management-api/payments/readers/adopt",
-  "/management-api/payments/stuck",
   "/management-api/payments/tender-refunds",
   "/management-api/print-agents",
   "/management-api/print-jobs",

@@ -12,7 +12,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { workingOrders } from "@waitron/db";
 import { SimulatorPaymentProvider, payments } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import {
@@ -314,48 +313,6 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(venue.card.collectCalls).toHaveLength(calls);
     expect(await paymentRows(venue, billId)).toEqual([]);
   });
-
-  it.each([
-    ["declined", "declined", "failed"],
-    ["attempting", "timeout", "attempting"],
-  ] as const)(
-    "keeps the whole-order practice %s result on its own order",
-    async (simulationOutcome, outcome, state) => {
-      const billId = await tabWithDishes("Paella");
-      const app = new Hono();
-      mountTillApi(
-        app,
-        {
-          admission: testTradingAdmission(),
-          db: venue.db,
-          backend: venue.backend,
-          clock: venue.clock,
-          cfg: venue.cfg,
-          secureCookies: false,
-          venueLocale: "es-ES",
-          cardProvider: new SimulatorPaymentProvider(venue.db),
-        },
-        () => {},
-      );
-      const paid = await send(app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id: billId,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        lines: [],
-        simulationOutcome,
-      });
-      expect(paid).toEqual({ status: 200, json: { outcome } });
-      expect(
-        await inTx(venue, (tx) =>
-          tx.select().from(payments).where(eq(payments.workingOrderId, billId)),
-        ),
-      ).toMatchObject([{ state, saleId: null }]);
-      const [order] = await inTx(venue, (tx) =>
-        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-      );
-      expect(order!.paymentAttemptAt === null).toBe(simulationOutcome === "declined");
-    },
-  );
 
   it.each([
     ["captured", "received", "received", "0.00"],
@@ -793,6 +750,35 @@ describe("retries (design §8 test 10, §5.1)", () => {
     expect(await paymentRows(venue, billId)).toHaveLength(1);
     expect(await tendersOfBill(venue, billId)).toHaveLength(1);
     expect(fiscalRecordCount(venue, billId)).toBe(1);
+  });
+
+  it("recovers through a second till without moving the payment to its reader", async () => {
+    const billId = await tabWithDishes("Tarta");
+    const body: Body = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "18.00",
+      tip: "0.00",
+    };
+    const calls = venue.card.collectCalls.length;
+    venue.card.crashNextCollect("captured");
+    expect((await pay(billId, body)).status).toBe(500);
+    const retried = await pay(billId, body, { cookie: venue.cookie2 });
+    expect(retried.json).toMatchObject({ outcome: "received", invoice: { total: "18.00" } });
+    expect(venue.card.collectCalls.length).toBe(calls + 1);
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
+    expect(
+      venue.db.all(sql`
+      select r.provider_ref, p.sale_id = s.id as linked
+      from payments p join card_readers r on r.id = p.reader_id
+      join sales s on s.working_order_id = p.working_order_id
+      where p.working_order_id = ${billId}
+    `),
+    ).toEqual([{ provider_ref: "reader-1", linked: 1 }]);
   });
 
   it("answers a retry of a card still at the reader 'pending' and starts no second collect", async () => {

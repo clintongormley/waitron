@@ -156,8 +156,8 @@ const outside = vi.hoisted(() => ({
 
 // The pending-card loop sleeps at most 50 ms between passes, so a box that sweeps does so inside the
 // run, and a sweep count that stays put is a loop that stopped.
-vi.mock("./pending-card-recovery.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
   return {
     ...actual,
     runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {
@@ -1464,7 +1464,7 @@ function caught(error: unknown) {
   return { code: e.code ?? null, params: e.params ?? null, message: String(error) };
 }
 
-/** What a bill route is sent as `expectedEdit`, read the way `whole-payment-fixture.ts` reads it. */
+/** The bill edit observation to send with the payment. */
 function editOf(file: string, billId: string) {
   const [row] = readRows<{
     editorVersion: number;
@@ -2249,13 +2249,16 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     const m1Batch = on.heard.find((batch) => batch.venueFile === b.m1.venueFile)!;
     const m1Identity = m1Batch.numeroInstalacion[0]!;
     expect(m1Identity).not.toBe(on.selected.identity);
-    expect(on.heard.filter((batch) => batch.venueFile === b.m2.venueFile)).toEqual([
+    const heard = on.heard.filter((batch) => batch.venueFile === b.m2.venueFile);
+    expect(heard.filter((batch) => batch.numeroInstalacion[0] === m1Identity)).toEqual([
       {
         venueFile: b.m2.venueFile,
         recordIds: [run.records.waiting],
         idSistemaInformatico: m1Batch.idSistemaInformatico,
         numeroInstalacion: [m1Identity],
       },
+    ]);
+    expect(heard.filter((batch) => batch.numeroInstalacion[0] !== m1Identity)).toEqual([
       {
         venueFile: b.m2.venueFile,
         recordIds: [on.cardSale[0]!.record_id],

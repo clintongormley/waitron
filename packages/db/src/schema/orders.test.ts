@@ -556,38 +556,30 @@ describe("working_orders", () => {
     expect(withNode.nodeId).toBe(node);
   });
 
-  it("opens an order at revision 0 with no card payment in flight", async () => {
+  it("opens an order at revision 0 without the retired payment mark", async () => {
     const id = await openOrder(db);
     const [row] = await db
       .select({
         revision: workingOrders.revision,
-        paymentAttemptAt: workingOrders.paymentAttemptAt,
       })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
-    expect(row).toEqual({ revision: 0, paymentAttemptAt: null });
+    expect(row).toEqual({ revision: 0 });
     // The default is the database's, not drizzle's: a row written by raw SQL gets it too.
     const meta = await rows<{ name: string; notnull: number; dflt_value: string | null }>(
       db,
       sql`select name, "notnull", dflt_value from pragma_table_info('working_orders')
            where name in ('revision', 'payment_attempt_at') order by name`,
     );
-    expect(meta).toEqual([
-      { name: "payment_attempt_at", notnull: 0, dflt_value: null },
-      { name: "revision", notnull: 1, dflt_value: "0" },
-    ]);
-    await db
-      .update(workingOrders)
-      .set({ revision: 1, paymentAttemptAt: AT })
-      .where(eq(workingOrders.id, id));
+    expect(meta).toEqual([{ name: "revision", notnull: 1, dflt_value: "0" }]);
+    await db.update(workingOrders).set({ revision: 1 }).where(eq(workingOrders.id, id));
     const [changed] = await db
       .select({
         revision: workingOrders.revision,
-        paymentAttemptAt: workingOrders.paymentAttemptAt,
       })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
-    expect(changed).toEqual({ revision: 1, paymentAttemptAt: AT });
+    expect(changed).toEqual({ revision: 1 });
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {

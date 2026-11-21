@@ -103,7 +103,6 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import {
-  issueIfFullyPaid,
   readBillBalance,
   billPaymentIsLive,
   completeBillPayment,
@@ -121,11 +120,6 @@ import {
   resumeCardRefund,
 } from "./bill-refunds.js";
 import {
-  clearPaymentAttemptMark,
-  paymentAttemptIsLive,
-  payWorkingOrderIntegratedOrchestration,
-} from "./till-sale.js";
-import {
   attestTenderRefundIn,
   readStuckTenderRefund,
   claimTenderRefund,
@@ -133,7 +127,6 @@ import {
   tenderRefundIsLive,
 } from "./tender-refund-sends.js";
 import { toTenderRefundView } from "./tender-refunds.js";
-import { storedDeviceOrigin } from "./request-config.js";
 import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js";
 import {
   deleteCardReader,
@@ -208,7 +201,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "device_profile.invalid": 400,
   "payment.not_stuck": 409,
-  "stuck_payment.not_found": 404,
   "payment.hold_not_found": 404,
   "payment.hold_already_recorded": 409,
   "payment.resolve_unsupported": 409,
@@ -312,22 +304,6 @@ async function joinReaderTakingProfiles(tx: Transaction, readerId: string): Prom
   );
 }
 
-/** `provider` with a `collect` that refuses, so a pay through it can file a payment already
- * captured but can never charge a card. */
-function withoutCollect(provider: PaymentProvider): PaymentProvider {
-  return new Proxy(provider, {
-    get: (target, prop) => {
-      if (prop === "collect") {
-        return () =>
-          Promise.reject(new Error("a stuck payment's resolve must never collect a new payment"));
-      }
-      const value: unknown = Reflect.get(target, prop, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-}
-
-/** The request fields of a manager's confirmed outcome, before the PIN is checked. */
 function parseAttestation<O extends string>(
   body: Record<string, unknown>,
   outcomes: readonly O[],
@@ -1317,7 +1293,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       inArray(payments.state, replay ? ["partially_refunded", "refunded"] : ["partially_refunded"]),
       isNull(payments.saleId),
       inArray(workingOrders.status, ["open", "placed"]),
-      or(isNull(billPayments.id), ne(billPayments.state, "received")),
+      ne(billPayments.state, "received"),
     )!;
   const refundFacts = async (tx: Transaction, paymentId: string, amount: number) => {
     const refunds = await tx
@@ -1504,7 +1480,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .select({ payment: payments, bill: billPayments, order: workingOrders })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
+          .innerJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
           .where(and(eq(payments.id, paymentId), await collectionScope(tx)));
         if (!row) {
           await refuseUntilRecordable(tx);
@@ -1512,7 +1488,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         }
         const { payment, bill, order } = row;
         if (
-          bill?.state === "received" &&
+          bill.state === "received" &&
           bill.attestationNote === "Retained confirmed remaining money"
         ) {
           if (
@@ -1533,9 +1509,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           payment.state !== "partially_refunded" ||
           payment.saleId !== null ||
           !["open", "placed"].includes(order.status) ||
-          (bill !== null && bill.state !== "pending") ||
-          paymentAttemptIsLive(deps.db, payment.workingOrderId) ||
-          (bill && billPaymentIsLive(deps.db, bill.id))
+          bill.state !== "pending" ||
+          billPaymentIsLive(deps.db, bill.id)
         )
           throw new AppError("payment.not_stuck", { paymentId });
         const facts = await refundFacts(tx, paymentId, payment.amount);
@@ -1567,7 +1542,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         gated(sessionId, async (tx, personId) => {
           const current = await read(tx);
           if (current.replay) return current.allocation;
-          const { payment, bill, order, allocation, refunds } = current;
+          const { payment, bill, allocation, refunds } = current;
           await acceptRefundEvidence(tx, payment, refunds, evidence, personId, false);
           const nowFacts = await refundFacts(tx, paymentId, payment.amount);
           if (compareDecimal(nowFacts.partialRefund.remaining, allocation.remaining) !== 0) {
@@ -1580,51 +1555,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           }
           const attestation = { attestedBy: personId, note: "Retained confirmed remaining money" };
           const receivedAt = new Date(payment.settledAt!);
-          if (bill) {
-            await completeBillPayment(tx, fiscal, deps.cfg, bill.id, receivedAt, {
-              attestation,
-              confirmedNet: { applied: allocation.applied, tip: allocation.tip },
-              datedByLatestAcceptance: true,
-            });
-            await print(tx, bill.id);
-            if (order.paymentAttemptAt !== null)
-              await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
-          } else {
-            const [part] = await tx
-              .insert(billPayments)
-              .values({
-                workingOrderId: payment.workingOrderId,
-                submissionId: `capture:${paymentId}`,
-                fingerprint: paymentId,
-                kind: "contribution",
-                method: "card",
-                state: "received",
-                applied: decimalToCents(allocation.applied),
-                tip: decimalToCents(allocation.tip),
-                remainingAfter: decimalToCents(allocation.outstanding),
-                requestedBy: personId,
-                ...storedDeviceOrigin(payment),
-                receivedAt: receivedAt.toISOString(),
-                attestedBy: personId,
-                attestationNote: attestation.note,
-              })
-              .returning();
-            await tx
-              .update(payments)
-              .set({ billPaymentId: part!.id })
-              .where(eq(payments.id, paymentId));
-
-            if (order.paymentAttemptAt !== null)
-              await clearPaymentAttemptMark(tx, payment.workingOrderId, order.paymentAttemptAt);
-            await issueIfFullyPaid(
-              tx,
-              fiscal,
-              { ...deps.cfg, origin: storedDeviceOrigin(payment) },
-              payment.workingOrderId,
-              personId,
-              { moneyMoved: true, datedByLatestAcceptance: true },
-            );
-          }
+          await completeBillPayment(tx, fiscal, deps.cfg, bill.id, receivedAt, {
+            attestation,
+            confirmedNet: { applied: allocation.applied, tip: allocation.tip },
+            datedByLatestAcceptance: true,
+          });
+          await print(tx, bill.id);
           return allocation;
         }),
       );
@@ -1642,21 +1578,16 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [row] = await tx
           .select({
             payment: payments,
-            mark: workingOrders.paymentAttemptAt,
+            billId: billPayments.id,
             billState: billPayments.state,
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
+          .innerJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
           .where(
             and(eq(payments.id, paymentId), partialRefundEligible(true), await collectionScope(tx)),
           );
-        if (
-          !row ||
-          paymentAttemptIsLive(deps.db, row.payment.workingOrderId) ||
-          (row.payment.billPaymentId !== null &&
-            billPaymentIsLive(deps.db, row.payment.billPaymentId))
-        )
+        if (!row || billPaymentIsLive(deps.db, row.billId))
           throw new AppError("payment.not_stuck", { paymentId });
         const refunds =
           row.payment.state === "partially_refunded"
@@ -1682,188 +1613,14 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           : await provider.lookupCompletedRefunds(before.payment.externalRef);
       await withSettledSlip((print) =>
         gated(sessionId, async (tx, personId) => {
-          const { payment, mark, billState, refunds } = await read(tx);
+          const { payment, billId, billState, refunds } = await read(tx);
           if (payment.state === "refunded") return;
           await acceptRefundEvidence(tx, payment, refunds, evidence, personId, true);
-          if (payment.billPaymentId !== null && billState === "pending")
-            await settleFromProviderRow(
-              tx,
-              fiscal,
-              payment.billPaymentId,
-              deps.clock.now().instant,
-              print,
-            );
-          if (mark !== null) await clearPaymentAttemptMark(tx, payment.workingOrderId, mark);
+          if (billState === "pending")
+            await settleFromProviderRow(tx, fiscal, billId, deps.clock.now().instant, print);
         }),
       );
       return c.json({ outcome: "released" });
-    }),
-  );
-
-  app.get("/management-api/payments/stuck", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, async (tx) => {
-        const rows = await tx
-          .select({
-            partial: partialRefundEligible(),
-            paymentId: payments.id,
-            workingOrderId: workingOrders.id,
-            orderNumber: workingOrders.orderNumber,
-            label: workingOrders.label,
-            source: payments.source,
-            deviceId: payments.deviceId,
-            deviceName: devices.label,
-            provider: payments.provider,
-            amount: payments.amount,
-            startedAt: payments.createdAt,
-          })
-          .from(payments)
-          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
-          // No `active` filter: a device revoked since it started the payment is still named.
-          .leftJoin(devices, eq(devices.id, payments.deviceId))
-          .where(
-            and(
-              isNull(payments.billPaymentId),
-              or(
-                partialRefundEligible(),
-                and(
-                  eq(payments.state, "attempting"),
-                  or(
-                    and(
-                      eq(workingOrders.status, "open"),
-                      isNotNull(workingOrders.paymentAttemptAt),
-                    ),
-                    eq(workingOrders.status, "placed"),
-                  ),
-                ),
-              ),
-              await collectionScope(tx),
-            ),
-          )
-          .orderBy(payments.createdAt, sql`${payments}.rowid`);
-        const result = [];
-        for (const { partial, ...row } of rows)
-          result.push({
-            ...row,
-            ...(partial ? await partialView(tx, row.paymentId, row.amount) : {}),
-          });
-        return result;
-      });
-      return c.json(
-        rows
-          .filter((row) => !paymentAttemptIsLive(deps.db, row.workingOrderId))
-          .map((row) => ({ ...row, amount: centsToDecimal(row.amount) })),
-      );
-    }),
-  );
-
-  // Asks the provider what became of a stuck payment. A capture is filed through the till's own
-  // recovery path, over a provider whose `collect` refuses (`withoutCollect`), so the card is never
-  // charged again.
-  app.post("/management-api/payments/stuck/:id/resolve", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
-      const stuck = await gated(sessionId, async (tx, personId) => {
-        await refuseUntilRecordable(tx);
-        const [row] = await tx
-          .select({
-            paymentRef: payments.paymentRef,
-            provider: payments.provider,
-            state: payments.state,
-            workingOrderId: workingOrders.id,
-            orderStatus: workingOrders.status,
-            attemptAt: workingOrders.paymentAttemptAt,
-            source: payments.source,
-            deviceId: payments.deviceId,
-          })
-          .from(payments)
-          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .where(
-            and(
-              eq(payments.id, paymentId),
-              isNull(payments.billPaymentId),
-              await collectionScope(tx),
-            ),
-          );
-        if (row === undefined) {
-          // Only an id naming no payment at all is missing; another box's payment, or a bill's,
-          // exists and is not stuck here.
-          const [exists] = await tx
-            .select({ id: payments.id })
-            .from(payments)
-            .where(eq(payments.id, paymentId));
-          if (exists === undefined) throw new AppError("stuck_payment.not_found", { paymentId });
-        }
-        if (
-          row?.state !== "attempting" ||
-          (row.orderStatus !== "open" && row.orderStatus !== "placed") ||
-          (row.orderStatus === "open" && row.attemptAt === null) ||
-          paymentAttemptIsLive(deps.db, row.workingOrderId)
-        ) {
-          throw new AppError("payment.not_stuck", { paymentId });
-        }
-        // The sale is filed under the device that started the payment, never the dashboard.
-        const origin = storedDeviceOrigin(row);
-        if (row.provider !== "simulator")
-          await requireConnected(tx, cardProviderById(deps.providers, row.provider));
-
-        return { ...row, attemptAt: row.attemptAt, personId, origin };
-      });
-
-      const { provider, resolved } = await resolveAtProvider(
-        stuck,
-        stuck.personId,
-        () => new AppError("payment.not_stuck", { paymentId }),
-      );
-      if (resolved.outcome === "unknown") {
-        throw new AppError("payment.outcome_unknown", { paymentId, ...unknownOutcome(resolved) });
-      }
-
-      if (resolved.outcome === "failed") {
-        // Apart from the provider's write on purpose: a crash between the two leaves a mark that the
-        // work loop's next `releaseStalePaymentAttempts` pass clears.
-        // Only the mark read above: an attempt started since has written its own.
-        // Read back rather than trusting the update: the work loop may have cleared the mark first.
-        const orderUnlocked = await gated(sessionId, async (tx) => {
-          if (stuck.attemptAt !== null)
-            await clearPaymentAttemptMark(tx, stuck.workingOrderId, stuck.attemptAt);
-
-          const [order] = await tx
-            .select({ mark: workingOrders.paymentAttemptAt })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, stuck.workingOrderId));
-          return order?.mark === null;
-        });
-        return c.json({ outcome: "not_charged", orderUnlocked });
-      }
-
-      // The payment is captured with no sale, so the pay takes its recovery branch and files it.
-      const paid = await payWorkingOrderIntegratedOrchestration(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          admission: deps.admission,
-          clock: deps.clock,
-          provider: withoutCollect(provider),
-          log,
-          attendance: deps.attendance,
-        },
-        { ...deps.cfg, origin: stuck.origin },
-        { id: stuck.workingOrderId, lines: [], expectedEdit: null },
-        stuck.personId,
-      );
-      if (paid.outcome === "partial")
-        return c.json({ outcome: "partial", outstanding: paid.balance.outstanding });
-      /* v8 ignore start -- unreachable: every path that returns another outcome goes through
-         `collect`, which `withoutCollect` makes throw. */
-      if (paid.outcome !== "captured") {
-        throw new Error(`a stuck payment's resolve returned ${paid.outcome}`);
-      }
-      /* v8 ignore stop */
-      return c.json({ outcome: "filed", invoiceNumber: paid.ticket.invoiceNumber });
     }),
   );
 

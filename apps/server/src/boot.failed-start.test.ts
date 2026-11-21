@@ -43,7 +43,7 @@ import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
 import { createJobRunner } from "./job-runner.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
-import { runPendingCardLoop } from "./pending-card-recovery.js";
+import { runPendingCardLoop } from "./bill-payments-loop.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
@@ -165,8 +165,8 @@ vi.mock("./sealed-state.js", async (importOriginal) => {
   return { ...actual, createSealedStateRefresher: vi.fn(actual.createSealedStateRefresher) };
 });
 
-vi.mock("./pending-card-recovery.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bill-payments-loop.js")>();
   return { ...actual, runPendingCardLoop: vi.fn(actual.runPendingCardLoop) };
 });
 

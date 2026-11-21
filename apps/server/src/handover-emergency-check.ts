@@ -37,7 +37,6 @@ export async function checkEmergencyCopy(deps: {
       union all select opened_at from working_orders
       union all select settled_at from working_orders
       union all select collected_at from working_orders
-      union all select payment_attempt_at from working_orders
       union all select sent_at from working_order_lines
       union all select served_at from working_order_lines
     `)) {

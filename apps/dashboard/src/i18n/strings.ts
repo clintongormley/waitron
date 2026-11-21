@@ -3346,20 +3346,11 @@ export const en = {
   "payments.reader_status_loading": "Checking…",
   "payments.reader_status_unknown": "Unknown",
   "payments.reader_pairing_processing": "Pairing…",
-  "payments.stuck.heading": "Card payments needing attention",
-  "payments.stuck.intro":
-    "Check these card payments before charging again. Use the action beside each payment to check its outcome, retain confirmed remaining money on the bill, or confirm its full refund.",
   "payments.stuck.order": "Order {number}",
   "payments.stuck.device": "Device",
   "payments.stuck.provider": "Provider",
   "payments.stuck.amount": "Amount",
   "payments.stuck.started": "Started",
-  "payments.stuck.check": "Check with the card provider",
-  "payments.stuck.confirm_heading": "Check this payment with {provider}?",
-  "payments.stuck.confirm_body":
-    "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
-  "payments.stuck.confirm": "Check now",
-  "payments.stuck.partial": "Payment recorded. The rest is still due.",
   "payments.partial.retain_unconfirmed":
     "The provider could not confirm this allocation. The money stays held. Check its refunds at the provider and try again.",
   "payments.partial.retain": "Retain on this bill",
@@ -3379,25 +3370,10 @@ export const en = {
     "Payment fully refunded. You can continue with the order once its other payments are resolved.",
   "payments.partial.unconfirmed":
     "The provider could not confirm a full refund. The payment stays held. Check its refunds at the provider and try again.",
-  "payments.stuck.filed": "Payment went through — the sale has been recorded.",
-  "payments.stuck.not_charged_unlocked":
-    "Payment did not go through — nothing was charged, and the order is unlocked.",
-  "payments.stuck.not_charged_locked":
-    "Payment did not go through — nothing was charged. The order stays locked while another card payment on it is still in progress or unresolved.",
-  "payments.stuck.unknown_unreachable":
-    "Could not reach the card provider; the order stays locked. Try again in a minute.",
-  "payments.stuck.unknown_ambiguous":
-    "The card provider's answer is unclear; the order stays locked. Check the payment in the provider's dashboard.",
   "payments.stuck.provider_disconnected":
     "This card provider is no longer connected. Connect it again, then check the payment.",
   "payments.partial.failed":
     "Waitron could not confirm this action. Check the payment in the provider's dashboard.",
-  "payments.stuck.failed":
-    "The payment check failed. Do not charge again. Check the payment in the provider's dashboard. If the check keeps failing, this is a fault whose cause is not yet known. Keep the order and payment details.",
-  "payments.stuck.failed_listed":
-    "The payment check failed and the payment is still listed. Waitron may still check an unresolved payment automatically. Do not charge again. Check the payment in the provider's dashboard, then choose Check with the card provider again. If the check keeps failing, this is a fault whose cause is not yet known. Keep the order and payment details.",
-  "payments.stuck.failed_removed":
-    "The payment check failed and the payment is no longer listed; that alone does not confirm a charge. If this check confirmed the charge but recording failed, Waitron does not retry the recording automatically. Do not charge again. Check the provider's dashboard. If the original order is already paid, nothing more is needed. If it confirms payment and this was a Counter order, find the original order at the Counter and choose Card using the same provider. Waitron records a matching saved charge. If this was a table bill already presented to the guests, reopen the original bill and choose Pay, then Card using the same provider. If the reader asks for the card, cancel without presenting it. If the check keeps failing, this is a fault whose cause is not yet known. Keep the order and payment details.",
   "payments.tender.heading": "Refunds after invoicing",
   "payments.tender.completed": "Refund completed. The original invoice is unchanged.",
   "payments.tender.failed": "Refund not made. The original invoice is unchanged.",
@@ -8035,20 +8011,11 @@ export const es: Record<StringKey, string> = {
   "payments.reader_status_loading": "Comprobando…",
   "payments.reader_status_unknown": "Desconocido",
   "payments.reader_pairing_processing": "Emparejando…",
-  "payments.stuck.heading": "Cobros con tarjeta pendientes de revisión",
-  "payments.stuck.intro":
-    "Revisa estos cobros con tarjeta antes de volver a cobrar. Usa la acción junto a cada pago para consultar su resultado, conservar el dinero restante confirmado en la cuenta o confirmar la devolución completa.",
   "payments.stuck.order": "Pedido {number}",
   "payments.stuck.device": "Dispositivo",
   "payments.stuck.provider": "Proveedor",
   "payments.stuck.amount": "Importe",
   "payments.stuck.started": "Iniciado",
-  "payments.stuck.check": "Consultar con el proveedor de pagos",
-  "payments.stuck.confirm_heading": "¿Consultar este cobro con {provider}?",
-  "payments.stuck.confirm_body":
-    "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
-  "payments.stuck.confirm": "Consultar ahora",
-  "payments.stuck.partial": "Pago registrado. Queda parte de la cuenta por cobrar.",
   "payments.partial.retain_unconfirmed":
     "El proveedor no ha podido confirmar este reparto. El dinero sigue retenido. Comprueba las devoluciones en el proveedor e inténtalo de nuevo.",
   "payments.partial.retain": "Conservar en esta cuenta",
@@ -8068,25 +8035,10 @@ export const es: Record<StringKey, string> = {
     "Pago devuelto por completo. Puedes continuar con el pedido cuando se hayan resuelto sus demás pagos.",
   "payments.partial.unconfirmed":
     "El proveedor no ha podido confirmar una devolución completa. El pago sigue retenido. Comprueba sus devoluciones en el proveedor e inténtalo de nuevo.",
-  "payments.stuck.filed": "El pago se completó: la venta ha quedado registrada.",
-  "payments.stuck.not_charged_unlocked":
-    "El pago no se completó: no se ha cobrado nada y el pedido está desbloqueado.",
-  "payments.stuck.not_charged_locked":
-    "El pago no se completó: no se ha cobrado nada. El pedido sigue bloqueado mientras otro cobro con tarjeta del mismo pedido siga en curso o sin resolver.",
-  "payments.stuck.unknown_unreachable":
-    "No se pudo contactar con el proveedor de pagos; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
-  "payments.stuck.unknown_ambiguous":
-    "La respuesta del proveedor de pagos no es clara; el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",
   "payments.stuck.provider_disconnected":
     "Este proveedor de pagos ya no está conectado. Vuelve a conectarlo y consulta de nuevo el cobro.",
   "payments.partial.failed":
     "Waitron no pudo confirmar esta acción. Consulta el cobro en el panel del proveedor.",
-  "payments.stuck.failed":
-    "Falló la comprobación del cobro. No vuelvas a cobrar. Consulta el cobro en el panel del proveedor. Si la comprobación sigue fallando, es un fallo cuya causa aún no se conoce. Conserva los datos del pedido y del cobro.",
-  "payments.stuck.failed_listed":
-    "Falló la comprobación y el cobro sigue en la lista. Waitron puede seguir consultando un cobro sin resolver automáticamente. No vuelvas a cobrar. Consulta el cobro en el panel del proveedor y después elige Consultar con el proveedor de pagos de nuevo. Si la comprobación sigue fallando, es un fallo cuya causa aún no se conoce. Conserva los datos del pedido y del cobro.",
-  "payments.stuck.failed_removed":
-    "Falló la comprobación y el cobro ya no está en la lista; eso por sí solo no confirma que se haya cobrado. Si esta comprobación confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. No vuelvas a cobrar. Consulta el panel del proveedor. Si el pedido original ya está pagado, no hace falta hacer nada más. Si confirma el cobro y era un pedido del Mostrador, busca el pedido original en Mostrador y elige Tarjeta con el mismo proveedor. Waitron registra un cobro guardado que coincida. Si era una cuenta de mesa ya presentada al cliente, vuelve a abrir la cuenta original y elige Cobrar y después Tarjeta con el mismo proveedor. Si el lector pide la tarjeta, cancela sin presentarla. Si la comprobación sigue fallando, es un fallo cuya causa aún no se conoce. Conserva los datos del pedido y del cobro.",
   "payments.tender.heading": "Devoluciones después de facturar",
   "payments.tender.completed": "Devolución realizada. La factura original no cambia.",
   "payments.tender.failed": "Devolución no realizada. La factura original no cambia.",

@@ -104,7 +104,6 @@ import {
   readTenderBlock,
   receiptQr,
   refuseUnavailableInvoiceRequest,
-  refusePlacedPaymentInFlight,
   settleIssuedOrder,
   storeSentReceiptLanguage,
 } from "./till-sale.js";
@@ -124,7 +123,6 @@ import {
   priceOrderInvoice,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
-  refuseOrderPaymentMarked,
   refusePaymentInFlight,
   refuseRefundInProgress,
   refuseUnavailableFullInvoice,
@@ -1454,9 +1452,6 @@ export async function previewBillPayment(
   return withTransaction(deps.db, async (tx) => {
     const payable = await requirePayableBill(tx, workingOrderId);
     refuseOtherDining(workingOrderId, payable, ask.dining);
-    if (payable.status === "placed") {
-      await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
-    }
     await requireOrderBillEditor(tx, workingOrderId, {
       operatorId,
       expectedEdit: ask.expectedEdit,
@@ -1552,7 +1547,6 @@ export async function findSubmission(
 
 async function requireReadyForPayment(
   tx: Transaction,
-  db: Database,
   workingOrderId: string,
   payable: PayableBill,
   operator: { personId: string },
@@ -1566,11 +1560,6 @@ async function requireReadyForPayment(
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseSetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
-  await refuseOrderPaymentMarked(tx, [workingOrderId]);
-  // A part payment's card reserves its share, as on an open bill (design §5.2).
-  if (payable.status === "placed") {
-    await refusePlacedPaymentInFlight(db, tx, [workingOrderId], { wholeOrderOnly: true });
-  }
 }
 
 /** Close a zero bill through Pay using the same issuance transaction as a money payment. */
@@ -1633,7 +1622,7 @@ async function closeZeroBillIn(
   }
 
   const payable = await requirePayableBill(tx, workingOrderId);
-  await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
+  await requireReadyForPayment(tx, workingOrderId, payable, operator, req);
   if (diskFull) refuseForDiskStop(deps.log, workingOrderId);
   const reading = deps.clock.now();
   await deps.backend.refuseUntilRecordable(tx, reading);
@@ -1815,7 +1804,7 @@ async function beginBillPayment(
     );
   }
   const payable = await requirePayableBill(tx, workingOrderId);
-  await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
+  await requireReadyForPayment(tx, workingOrderId, payable, operator, req);
   if (req.ownReceipt === true && !payable.invoiced)
     await refuseFullInvoiceAdvance(tx, workingOrderId);
   const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));

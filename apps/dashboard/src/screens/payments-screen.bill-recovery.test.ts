@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -50,7 +50,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue([]),
     listReaderHolders: vi.fn().mockResolvedValue([]),
-    listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([REFUND]),
@@ -109,6 +108,20 @@ function chooseOutcome(el: PaymentsScreen, value: string): void {
 }
 
 describe("bill payment recovery on the Payments screen", () => {
+  it("opens payment checks without an error after the whole-order route is retired", async () => {
+    const api = new DashboardApi("", async (path) => {
+      if (path === "/management-api/payments/bill-payments") return Response.json([PAYMENT]);
+      if (path === "/management-api/payments/stuck") {
+        return new Response("404 Not Found", { status: 404 });
+      }
+      return Response.json([]);
+    });
+    const el = await mount(api);
+
+    expect(q(el, "[data-test=bill-payment-bp-1]")!.textContent).toContain("Order 12 · Terrace 3");
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
   it("lists pending payments and refunds separately with their order, till and amounts", async () => {
     const el = await mount();
     expect(q(el, "[data-test=bill-payment-bp-1]")!.textContent).toContain("Order 12 · Terrace 3");
@@ -179,6 +192,39 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(api.resolveStuckBillPayment).toHaveBeenCalledWith("bp-1");
     expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("status");
     expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
+  });
+
+  it("asks the provider once and disables other checks while a check is running", async () => {
+    let finishCheck!: (value: { outcome: "not_charged" }) => void;
+    const pending = new Promise<{ outcome: "not_charged" }>((resolve) => {
+      finishCheck = resolve;
+    });
+    const api = stubApi({
+      listStuckBillPayments: vi
+        .fn()
+        .mockResolvedValue([
+          PAYMENT,
+          { ...PAYMENT, billPaymentId: "bp-2", workingOrderId: "wo-2", orderNumber: 13 },
+        ]),
+      resolveStuckBillPayment: vi.fn().mockReturnValueOnce(pending),
+    });
+    const el = await mount(api);
+    q(el, "[data-test=check-bill-payment-bp-1]")!.click();
+    await flush(el);
+    const confirm = q(el, "[data-test=confirm-bill-check]")!;
+    confirm.click();
+    confirm.click();
+    await flush(el);
+    const otherCheck = q(el, "[data-test=check-bill-payment-bp-2]")!;
+    expect(otherCheck.hasAttribute("disabled")).toBe(true);
+    otherCheck.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-check-dialog]")).toBeNull();
+
+    finishCheck({ outcome: "not_charged" });
+    await flush(el);
+    expect(api.resolveStuckBillPayment).toHaveBeenCalledExactlyOnceWith("bp-1");
+    expect(otherCheck.hasAttribute("disabled")).toBe(false);
   });
 
   it("names an order label holding a replacement pattern as written in the check and record windows", async () => {

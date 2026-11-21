@@ -157,10 +157,7 @@ A requested line carries two optional fields, `options` and `extras`. These rout
 each threading them into `priceOrderLines` (`apps/server/src/working-order.ts`):
 `POST /api/working-orders` to park an order, the held-order edit
 `PUT /api/working-orders/:id`, the one-line edit `PUT /api/working-orders/:id/lines/:lineNo`
-(through `applyLineEdits`), a seated party's group submission `POST /api/parties/:id/groups`,
-and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch only, since a retrieved or
-placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
-`apps/server/src/till-sale.ts`).
+(through `applyLineEdits`) and a seated party's group submission `POST /api/parties/:id/groups`.
 
 `POST /api/working-orders/:id/payments` takes the selections in the counter basket. A fresh basket
 uses the park route’s order creation. An edited basket uses the held-order edit’s line changes.

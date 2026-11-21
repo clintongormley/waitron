@@ -42,7 +42,6 @@ const EXPECTED_OPEN = new Set([
   "POST /api/session",
   "DELETE /api/session",
   "PUT /api/session/locale",
-  "POST /api/pay",
   "POST /api/working-orders/:id/payments",
   "POST /api/dead-ends/sale",
   "POST /api/dead-ends/draft",

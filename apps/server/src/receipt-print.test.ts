@@ -91,12 +91,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
-import {
-  payWorkingOrderIntegratedOrchestration as readerPay,
-  printSaleReceipt,
-  readSettledTicket,
-  reprintSale,
-} from "./testing/whole-payment-fixture.js";
+import { printSaleReceipt, readSettledTicket, reprintSale } from "./till-sale.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -104,6 +99,7 @@ import {
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,
+  takeReaderPaymentWithRecovery,
 } from "./testing/bill-payment-fixture.js";
 import {
   DRAWER_KICK,
@@ -1133,7 +1129,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       const printerId = await makePrinter();
       await configureReceipt(cfg, { printerId });
       const orderId = randomUUID();
-      const result = await readerPay(
+      const result = await takeReaderPaymentWithRecovery(
         {
           ...deps(),
           admission: testTradingAdmission(),
@@ -1143,16 +1139,24 @@ describe("receipt commands and cash drawer jobs after filing", () => {
               : new FakePaymentProvider(suite.db),
         },
         cfg,
+        orderId,
         {
-          id: orderId,
+          submissionId: orderId,
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "reader",
+          applied: "0.00",
+          tip: "0.00",
+        },
+        await counterOperator(cfg),
+        {
           zoneId: base.zoneId,
           lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
         },
-        OPERATOR,
       );
-      expect(result.outcome).toBe("captured");
-      if (result.outcome === "captured")
-        expect(result.ticket.simulatedCardPayment).toBe(provider === "simulator");
+      expect(result.outcome).toBe("received");
+      expect(result.invoice?.simulatedCardPayment).toBe(provider === "simulator");
       await printSaleReceipt(deps(), cfg, orderId, "original");
       const receipt = (await printJobsFor(cfg)).find((job) =>
         decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),

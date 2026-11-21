@@ -81,7 +81,7 @@ it("keeps selected-archive provenance while binding the current copy, and refuse
   }
 });
 
-it.each(["openedAt", "settledAt", "collectedAt", "paymentAttemptAt"] as const)(
+it.each(["openedAt", "settledAt", "collectedAt"] as const)(
   "includes %s and compares instants rather than timestamp spellings",
   async (field) => {
     await seedWorkingOrder(venue.db, { openedAt: "2026-11-11T10:30:00+01:00" });

@@ -12,10 +12,8 @@ import {
   printAgents,
   printJobs,
   printers,
-  saleSettlements,
   sales,
   taxpayer,
-  tenders,
   withTransaction,
 } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -27,7 +25,7 @@ import { enqueueRequestedPaymentSlip } from "./payment-slip-print.js";
 import { AppError, decimal } from "@waitron/shared";
 import type { DiskFullState } from "./disk-full-state.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { cardReaders, payments } from "@waitron/payments";
+import { cardReaders } from "@waitron/payments";
 import { validateCapabilities } from "@waitron/layouts";
 import {
   claimPrintJobs,
@@ -390,16 +388,6 @@ it("keeps the order language chosen before the reader answers", async () => {
 });
 
 const readerPayments = [
-  [
-    "a first reader Pay",
-    (id: string) =>
-      send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id,
-        lines: [],
-        printCardSlip: true,
-      }),
-  ],
   [
     "a reader bill payment",
     (id: string) =>
@@ -1770,7 +1758,7 @@ describe("a payment after the ticket was issued", () => {
     ["a reader part payment", /Tarjeta\s+10,00/u, "20,00"],
     ["a reader payment the recovery loop records", /Tarjeta\s+10,00/u, "20,00"],
     ["a cash bill payment", /Efectivo\s+30,00/u, null],
-    ["a reader Pay of the whole bill", /^Tarjeta$/mu, null],
+    ["a reader payment of the whole bill", /Tarjeta\s+30,00/u, null],
   ] as const)("an original still waiting to print lists %s", async (path, listed, owed) => {
     const bill = await billPrintedByPrintTheBill();
 
@@ -1803,11 +1791,13 @@ describe("a payment after the ticket was issued", () => {
               `/api/working-orders/${bill.id}/payments`,
               billShare("cash", "30.00"),
             )
-          : await send(venue.app, venue.cookie, "POST", "/api/pay", {
-              dining: "eat_in",
-              id: bill.id,
-              lines: [],
-            });
+          : await send(
+              venue.app,
+              venue.cookie,
+              "POST",
+              `/api/working-orders/${bill.id}/payments`,
+              billShare("card", "30.00", { entry: "reader" }),
+            );
       expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     }
     const claimed = await claimOriginal(bill.saleId);
@@ -1924,96 +1914,6 @@ describe("a payment after the ticket was issued", () => {
     },
   );
 
-  /** Pays an issued ticket by reader, crashing after the capture so the next Pay files it. */
-  async function readerCaptureLeftUnfiled(
-    bill: { id: string },
-    kind: "whole" | "short",
-  ): Promise<() => ReturnType<typeof send>> {
-    if (kind === "short") {
-      const collect = venue.card.collect.bind(venue.card);
-      vi.spyOn(venue.card, "collect").mockImplementationOnce((params) =>
-        collect({ ...params, amount: decimal("10.00") }),
-      );
-    }
-    venue.card.crashNextCollect("captured");
-    const pay = () =>
-      send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id: bill.id,
-        lines: [],
-        printCardSlip: true,
-      });
-    expect((await pay()).status).toBe(500);
-    return pay;
-  }
-
-  async function capturedPayment(id: string) {
-    const [payment] = await venue.db
-      .select()
-      .from(payments)
-      .where(and(eq(payments.workingOrderId, id), eq(payments.state, "captured")));
-    return payment!;
-  }
-
-  it.each(["whole", "short"] as const)(
-    "a %s reader payment of an issued ticket, filed when the till pays again, prints no slip",
-    async (kind) => {
-      const bill = await billPrintedByPrintTheBill();
-      const before = await jobCount();
-      const pay = await readerCaptureLeftUnfiled(bill, kind);
-      const charges = venue.card.collectCalls.length;
-
-      const recovered = await pay();
-
-      expect(recovered.status, JSON.stringify(recovered.json)).toBe(200);
-      expect(recovered.json).toMatchObject({ outcome: kind === "short" ? "partial" : "captured" });
-      expect(recovered.json).not.toHaveProperty("slipPrintFailed");
-      expect(await slipsSince(before)).toHaveLength(0);
-      expect((await pay()).status).toBe(200);
-      expect(await slipsSince(before)).toHaveLength(0);
-      expect(venue.card.collectCalls).toHaveLength(charges);
-
-      const payment = await capturedPayment(bill.id);
-      if (kind === "whole") {
-        expect(payment.saleId).toBe(bill.saleId);
-        const [order] = await venue.db
-          .select({ status: workingOrders.status })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, bill.id));
-        expect(order!.status).toBe("settled");
-        expect(
-          await venue.db
-            .select({ method: tenders.method, amount: tenders.amount, tip: tenders.tipAmount })
-            .from(tenders)
-            .where(eq(tenders.saleId, bill.saleId)),
-        ).toEqual([{ method: "card", amount: 3000, tip: 0 }]);
-        expect(
-          await venue.db
-            .select({ saleId: saleSettlements.saleId })
-            .from(saleSettlements)
-            .where(eq(saleSettlements.saleId, bill.saleId)),
-        ).toHaveLength(1);
-        const { ticket } = recovered.json as { ticket: Record<string, unknown> };
-        expect(ticket).toMatchObject({ tender: { method: "card" } });
-        expect(ticket).not.toHaveProperty("payments");
-      } else {
-        expect(payment.saleId).toBeNull();
-        const bills = await send(
-          venue.app,
-          venue.cookie,
-          "GET",
-          `/api/working-orders/${bill.id}/payments`,
-        );
-        const { received, payments: listed } = bills.json as {
-          received: string;
-          payments: { id: string }[];
-        };
-        expect(received).toBe("10.00");
-        expect(listed).toEqual([expect.objectContaining({ id: payment.billPaymentId })]);
-      }
-    },
-  );
-
   it("prints its requested slip in the sale's language after the venue's changes", async () => {
     const id = await issuedBill();
     restoreVenueLanguageAfterTest();
@@ -2041,197 +1941,6 @@ describe("a payment after the ticket was issued", () => {
       expect(await slipLanguagesSince(before)).toEqual(["es-ES"]);
     },
   );
-
-  it("two simultaneous retries of a short reader capture file it once and print no slip", async () => {
-    const bill = await billPrintedByPrintTheBill();
-    const before = await jobCount();
-    const pay = await readerCaptureLeftUnfiled(bill, "short");
-
-    const answers = await Promise.all([pay(), pay()]);
-
-    for (const answer of answers) {
-      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-      expect(answer.json).toMatchObject({ outcome: "partial" });
-    }
-    const retained = await venue.db
-      .select()
-      .from(billPayments)
-      .where(
-        and(
-          eq(billPayments.workingOrderId, bill.id),
-          sql`${billPayments.submissionId} like 'capture:%'`,
-        ),
-      );
-    expect(retained).toHaveLength(1);
-    expect(await slipsSince(before)).toHaveLength(0);
-  });
-
-  it("a retry that files a short capture before its own attempt does prints one slip", async () => {
-    const bill = await billPrintedByPrintTheBill();
-    const before = await jobCount();
-    const pay = () =>
-      send(venue.app, venue.cookie, "POST", "/api/pay", {
-        dining: "eat_in",
-        id: bill.id,
-        lines: [],
-        printCardSlip: true,
-      });
-    let retry: Awaited<ReturnType<typeof send>> | undefined;
-    const collect = venue.card.collect.bind(venue.card);
-    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
-      const result = await collect({ ...params, amount: decimal("10.00") });
-      retry = await pay();
-      return result;
-    });
-
-    const attempt = await pay();
-
-    for (const answer of [retry!, attempt]) {
-      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-      expect(answer.json).toMatchObject({ outcome: "partial" });
-    }
-    const slips = await slipsSince(before);
-    expect(slips).toHaveLength(1);
-    expectPaymentSlip(slips[0]!, "10,00", bill.invoiceNumber);
-  });
-
-  describe("a second Pay while the first is still at the reader", () => {
-    /** The reader takes the money, then the second Pay runs before the first hears back from it. */
-    async function payWithRetryAtReader(
-      id: string,
-      capture: "whole" | "short",
-      asked: { first: boolean; retry: boolean },
-    ) {
-      const pay = (printCardSlip: boolean) =>
-        send(venue.app, venue.cookie, "POST", "/api/pay", {
-          dining: "eat_in",
-          id,
-          lines: [],
-          ...(printCardSlip ? { printCardSlip: true } : {}),
-        });
-      let retry: Awaited<ReturnType<typeof send>> | undefined;
-      const collect = venue.card.collect.bind(venue.card);
-      vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
-        const result = await collect(
-          capture === "short" ? { ...params, amount: decimal("10.00") } : params,
-        );
-        retry = await pay(asked.retry);
-        return result;
-      });
-
-      const attempt = await pay(asked.first);
-
-      const outcome = capture === "short" ? "partial" : "captured";
-      for (const answer of [retry!, attempt]) {
-        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-        expect(answer.json).toMatchObject({ outcome });
-      }
-      return { attempt: attempt.json, retry: retry!.json };
-    }
-
-    it("a whole capture of an issued ticket that both asked a slip for prints one", async () => {
-      const bill = await billPrintedByPrintTheBill();
-      const before = await jobCount();
-
-      const { attempt, retry } = await payWithRetryAtReader(bill.id, "whole", {
-        first: true,
-        retry: true,
-      });
-
-      const slips = await slipsSince(before);
-      expect(slips).toHaveLength(1);
-      expectPaymentSlip(slips[0]!, "30,00", bill.invoiceNumber);
-      expect(retry).not.toHaveProperty("slipPrintFailed");
-      expect(attempt).not.toHaveProperty("slipPrintFailed");
-    });
-
-    it.each([true, false])(
-      "a short capture with no ticket issued prints the first attempt's slip (retry asked: %s)",
-      async (retryAsked) => {
-        const id = await tabWith(venue, "Red wine bottle");
-        const before = await jobCount();
-
-        const { attempt, retry } = await payWithRetryAtReader(id, "short", {
-          first: true,
-          retry: retryAsked,
-        });
-
-        const slips = await slipsSince(before);
-        expect(slips).toHaveLength(1);
-        expect(decodeTicket(slips[0]!.payload)).toContain("10,00");
-        expect(attempt).not.toHaveProperty("slipPrintFailed");
-        expect(retry).not.toHaveProperty("slipPrintFailed");
-      },
-    );
-
-    it.each(["whole", "short"] as const)(
-      "a %s capture of an issued ticket filed by a retry that asked no slip prints the first attempt's slip",
-      async (capture) => {
-        const bill = await billPrintedByPrintTheBill();
-        const before = await jobCount();
-
-        const { attempt, retry } = await payWithRetryAtReader(bill.id, capture, {
-          first: true,
-          retry: false,
-        });
-
-        expect(await slipsSince(before)).toHaveLength(1);
-        expect(attempt).not.toHaveProperty("slipPrintFailed");
-        expect(retry).not.toHaveProperty("slipPrintFailed");
-      },
-    );
-
-    it("a short capture of an issued ticket that both asked a slip for prints one", async () => {
-      const bill = await billPrintedByPrintTheBill();
-      const before = await jobCount();
-
-      const { attempt, retry } = await payWithRetryAtReader(bill.id, "short", {
-        first: true,
-        retry: true,
-      });
-
-      expect(await slipsSince(before)).toHaveLength(1);
-      expect(attempt).not.toHaveProperty("slipPrintFailed");
-      expect(retry).not.toHaveProperty("slipPrintFailed");
-    });
-
-    it.each([
-      ["whole", true],
-      ["whole", false],
-      ["short", true],
-      ["short", false],
-    ] as const)(
-      "a first attempt that asked no slip prints none and is not warned: %s capture, retry asked: %s",
-      async (capture, retryAsked) => {
-        const bill = await billPrintedByPrintTheBill();
-        const before = await jobCount();
-
-        const { attempt } = await payWithRetryAtReader(bill.id, capture, {
-          first: false,
-          retry: retryAsked,
-        });
-
-        expect(await slipsSince(before)).toHaveLength(0);
-        expect(attempt).not.toHaveProperty("slipPrintFailed");
-      },
-    );
-
-    it("a first attempt on a reader that prints its own slip is not warned", async () => {
-      const bill = await billPrintedByPrintTheBill();
-      await withTransaction(venue.db, (tx) =>
-        tx.update(cardReaders).set({ printsOwnSlipAutomatically: true }),
-      );
-      const before = await jobCount();
-
-      const { attempt } = await payWithRetryAtReader(bill.id, "whole", {
-        first: true,
-        retry: true,
-      });
-
-      expect(await slipsSince(before)).toHaveLength(0);
-      expect(attempt).not.toHaveProperty("slipPrintFailed");
-    });
-  });
 
   it.each(["counter sale", "bill payment"] as const)(
     "a cash %s queues its drawer ahead of its slip on a shared printer",
@@ -2425,20 +2134,6 @@ describe("a payment after the ticket was issued", () => {
     expect(paid.status).toBe(200);
     expect(paid.json).not.toHaveProperty("slipPrintFailed");
     expect(await slipsSince(before)).toHaveLength(0);
-  });
-
-  it("a payment filed when the till pays again on a reader that prints its own slip gets no slip", async () => {
-    const bill = await billPrintedByPrintTheBill();
-    await withTransaction(venue.db, (tx) =>
-      tx.update(cardReaders).set({ printsOwnSlipAutomatically: true }),
-    );
-    const before = await jobCount();
-    const pay = await readerCaptureLeftUnfiled(bill, "whole");
-
-    const recovered = await pay();
-
-    expect(recovered.json).toMatchObject({ outcome: "captured" });
-    expect(await jobCount()).toBe(before);
   });
 
   it("keeps a cash payment when enqueueing its slip fails", async () => {

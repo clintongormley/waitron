@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3cb3afa1-57d6-4077-ab8c-91d5e10db2a1",
+  "id": "0784d697-3410-42e8-b98a-eba7d20f224d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1330,13 +1330,6 @@
         },
         "receipt_locale": {
           "name": "receipt_locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "payment_attempt_at": {
-          "name": "payment_attempt_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

@@ -83,11 +83,6 @@ it("words the office-printer refusals in both languages", () => {
   );
 });
 
-it("words an unknown stuck payment in both languages", () => {
-  expect(codeMessage("stuck_payment.not_found", "en")).toBe("There is no such stuck payment.");
-  expect(codeMessage("stuck_payment.not_found", "es")).toBe("No existe ese cobro pendiente.");
-});
-
 it("words a Cloud connection with nothing left to finish in both languages, naming Connect to Cloud", () => {
   expect(codeMessage("cloud.request_not_found", "en")).toBe(
     "This server has no Cloud connection request waiting to finish. Choose Connect to Cloud to start again.",

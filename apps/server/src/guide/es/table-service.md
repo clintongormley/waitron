@@ -3,9 +3,8 @@
 Con el simulador de pagos, los controles de cobro del mostrador y la ventana de pago de
 cuentas ofrecen **Aprobar**, **Rechazar** o **Sin respuesta** antes de pulsar **Tarjeta**. No se cobra ninguna tarjeta real. **Sin respuesta**
 mantiene el pago bloqueado para que puedas practicar su recuperación. En **Pagos** del panel,
-un encargado elige **Consultar con el proveedor de pagos** para un pago del pedido completo,
-o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
-de práctica sin registrar un cobro.
+un encargado elige **Consultar al proveedor** y confirma. Así termina el intento de práctica sin
+registrar un cobro.
 
 ## Invitar o aplicar un descuento {#comps-and-discounts}
 
@@ -661,9 +660,8 @@ elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro
 registrado, puede cobrar la tarjeta o registrar el efectivo.
 Si un pago sigue pendiente, o la tarjeta ya se ha cobrado pero el pago no se ha registrado, elige
 **Comprobar pagos con tarjeta / acceder**. No vuelvas a cobrar una tarjeta ya cobrada. Inicia sesión para
-consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir el cobro de la
-cuenta cuando esté registrado para ver el resultado. Si Comprobar pagos con tarjeta indica **Pago registrado.
-Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
+consultar o registrar el resultado confirmado por el proveedor en **Pagos de cuentas**. Después
+de registrarlo, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
 
 Si falla esa comprobación, sigue [Falló la comprobación de un cobro con tarjeta](table-service.md#card-check-failed).
 
@@ -704,24 +702,7 @@ Cobra con **Cobrar** como siempre, de una vez o por partes.
 
 ## Falló la comprobación de un cobro con tarjeta {#card-check-failed}
 
-Si falla **Consultar con el proveedor de pagos**, conserva los datos del pedido y del cobro que
-muestra Pagos con tarjeta y consulta el cobro en el panel del proveedor. No vuelvas a cobrar. Si
-el cobro sigue en la lista, Waitron puede seguir consultándolo automáticamente. Puedes elegir
-**Consultar con el proveedor de pagos** de nuevo después de consultar al proveedor. Si la
-comprobación sigue fallando, es un fallo cuya causa aún no se conoce. Conserva los datos del
-pedido y del cobro.
-
-Si ya no está en la lista, eso por sí solo no confirma que se haya cobrado. Si la comprobación
-confirmó el cobro pero falló su registro, Waitron no reintenta el registro automáticamente. Si
-el proveedor confirma el cobro, comprueba primero si el pedido original ya está pagado. Si lo
-está, no hace falta hacer nada más. Si era un pedido del Mostrador y sigue sin pagar, busca el
-pedido original en **Mostrador** y elige **Tarjeta** con el mismo proveedor. Waitron registra un
-cobro guardado que coincida. Para una cuenta de mesa ya presentada al cliente, vuelve a abrir
-la cuenta original y elige **Cobrar** y después **Tarjeta** con el mismo proveedor. Si el lector
-pide la tarjeta, cancela sin presentarla. Si el registro sigue fallando, es un fallo de Waitron
-o de este servidor. Conserva los datos del pedido y del cobro y no vuelvas a cobrar.
-
-Para un pago de mesa que aparezca en **Pagos de cuentas y devoluciones pendientes del proveedor
+Para un pago que aparezca en **Pagos de cuentas y devoluciones pendientes del proveedor
 de tarjetas**, elige **Consultar al proveedor** allí. Una vez registrado, vuelve a abrir la cuenta
 para ver cuánto queda por pagar. Waitron también reintenta estos pagos automáticamente. Si el
 registro sigue fallando, conserva los datos del pedido y del cobro y no vuelvas a cobrar; es un

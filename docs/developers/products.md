@@ -275,7 +275,7 @@ menu is published again. A blank prep station name shows the staff name, includi
 name on a variant line.
 
 A venue with no service zone sells nothing. When the request supplies lines without a zone,
-`POST /api/working-orders`, `POST /api/pay` and `POST /api/working-orders/:id/payments` with a
+`POST /api/working-orders` and `POST /api/working-orders/:id/payments` with a
 basket use the device profile's starting zone if the profile has a department. If that zone is
 switched off or has left the department, they use the first usable zone in the profile's list
 and refuse `device_profile.no_service_zone` if there is none. A profile with no department uses

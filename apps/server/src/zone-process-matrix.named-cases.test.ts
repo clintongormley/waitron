@@ -1,3 +1,3 @@
 import { defineZoneProcessMatrix } from "./testing/zone-process-matrix.js";
 
-defineZoneProcessMatrix(["whole-order", "auto-issue", "readiness"], true);
+defineZoneProcessMatrix(["saved-zone-payment", "auto-issue", "readiness"], true);

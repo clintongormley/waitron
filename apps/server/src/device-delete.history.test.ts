@@ -2,14 +2,13 @@ import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   billPaymentRefunds,
   billPayments,
   printers,
   withTransaction,
-  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,7 +18,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { setProfilePrinterLists } from "@waitron/layouts";
-import { cardReaders, payments, setProfileReaderList } from "@waitron/payments";
+import { cardReaders, setProfileReaderList } from "@waitron/payments";
 import { AppError, deviceOrigin } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { deleteDevice } from "./device-delete.js";
@@ -40,7 +39,6 @@ const noopLog: Logger = () => {};
 // Midday UTC, clear of the venue's 05:00 Madrid cutover, so the business day is the date.
 const BUSINESS_DAY = "2026-10-09";
 const SOLD_AT = new Date(`${BUSINESS_DAY}T12:00:00.000Z`);
-const NOW = new Date("2026-10-10T10:00:00.000Z");
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 const clock: TrustedClock = {
@@ -230,23 +228,6 @@ describe("a deleted device's history", () => {
   it("backstop: written straight into the database, each stuck payment list names the deleted device", async () => {
     const { venue, barTill } = await seedDeleted();
 
-    const cardOrder = await openOrder(venue);
-    await suite.db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: NOW.toISOString() })
-      .where(eq(workingOrders.id, cardOrder));
-    const [card] = await suite.db
-      .insert(payments)
-      .values({
-        workingOrderId: cardOrder,
-        source: "device",
-        deviceId: barTill,
-        provider: "stripe",
-        paymentRef: randomUUID(),
-        amount: 150,
-        state: "attempting",
-      })
-      .returning({ id: payments.id });
     const pending = await billPayment(await openOrder(venue), barTill, "pending");
     const received = await billPayment(await openOrder(venue), barTill, "received");
     const [refund] = await suite.db
@@ -267,9 +248,6 @@ describe("a deleted device's history", () => {
 
     const app = paymentsApp(venue);
     const cookie = venue.managerCookie;
-    const stuck = (await getJson(app, "/management-api/payments/stuck", cookie)) as Rows;
-    expect(stuck.map((row) => row.paymentId)).toEqual([card!.id]);
-    expect(stuck[0]).toMatchObject({ deviceId: barTill, deviceName: "Bar till" });
     const bills = (await getJson(app, "/management-api/payments/bill-payments", cookie)) as Rows;
     expect(bills.map((row) => row.billPaymentId)).toEqual([pending]);
     expect(bills[0]).toMatchObject({ deviceId: barTill, deviceName: "Bar till" });

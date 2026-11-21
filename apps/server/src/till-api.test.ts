@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { fixturePinHash, fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { departmentCourses } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
@@ -90,7 +91,7 @@ import { fireDishesAtPayment } from "./till-sale.js";
 import { mountTillApi, resolveCardCollector, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -2542,71 +2543,14 @@ describe("the device checks read the session's device, not the device cookie", (
   });
 });
 
-describe("POST /api/pay (session-guarded integrated card pay)", () => {
-  it("REJECTS (401 session.required) when no cookie is present — a pay never runs unauthenticated", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-
-    // The guard runs BEFORE the body is even read. The capture/decline paths are covered in
-    // `till-api.fiscal-sale-paths.test.ts`.
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("401s device.unauthorized on /api/pay from a session whose device has been revoked", async () => {
-    const cookie = await revokedDeviceSessionCookie(suite.db, anna.id, "5555");
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
-  });
-
-  it("refuses a browser-selected simulation outcome for a real provider", async () => {
-    const token = await openSession(suite.db);
-    const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cardProvider: { provider: "stripe" } as PaymentProvider },
-      collect([]),
-    );
-
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        simulationOutcome: "captured",
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "simulationOutcome" } },
-    });
-  });
-
-  it("POST with a malformed id is 400 shared.invalid_id", async () => {
+describe("reader bill payments", () => {
+  it("refuses a malformed bill id before a reader payment", async () => {
     const token = await openSession(suite.db);
     const app = new Hono();
     // The route screen refuses the malformed id 400 before the empty stub provider is invoked.
     mountTillApi(app, { ...deps(suite.db), cardProvider: {} as PaymentProvider }, collect([]));
 
-    const res = await app.request("/api/pay", {
+    const res = await app.request("/api/working-orders/not-a-uuid/payments", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -2614,13 +2558,17 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
       },
       body: JSON.stringify({
         dining: "eat_in",
-        id: "not-a-uuid",
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: { lines: [{ menuItemId: waterOfferId, quantity: "1" }] },
       }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({
-      error: { code: "shared.invalid_id", params: { kind: "WorkingOrderId", value: "not-a-uuid" } },
+      error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
     });
   });
 });
@@ -2820,66 +2768,6 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
       error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
     });
   });
-
-  it("POST /api/pay with a malformed zoneId is 400 shared.invalid_id", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-        zoneId: "not-a-zone",
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId", value: "not-a-zone" } },
-    });
-  });
-
-  it("the practice simulator takes its three outcomes and refuses any other", async () => {
-    const app = new Hono();
-    mountTillApi(
-      app,
-      { ...deps(suite.db), cardProvider: { provider: "simulator" } as PaymentProvider },
-      collect([]),
-    );
-    const token = await openSession(suite.db);
-    const pay = (simulationOutcome: string) =>
-      app.request("/api/pay", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
-        },
-        body: JSON.stringify({
-          dining: "eat_in",
-          id: randomUUID(),
-          lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-          simulationOutcome,
-          // A malformed zone makes an ACCEPTED outcome stop at the next screen, before any sale.
-          zoneId: "not-a-zone",
-        }),
-      });
-
-    for (const accepted of ["captured", "declined", "attempting"]) {
-      expect(await (await pay(accepted)).json()).toMatchObject({
-        error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId" } },
-      });
-    }
-    const refused = await pay("exploded");
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "simulationOutcome" } },
-    });
-  });
 });
 
 // Park a fresh order for the logged-in operator over the real HTTP surface (never the working-order
@@ -2919,10 +2807,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
         await suite.db.execute(
           sql`update working_orders set status = 'abandoned' where id = ${id}`,
         );
-      if (state === "paying")
-        await suite.db.execute(
-          sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
-        );
+      if (state === "paying") await seedPendingCardPayment(suite.db, id);
       const before = await suite.db.execute(sql`select * from working_orders where id = ${id}`);
       const response = await app.request(`/api/working-orders/${id}/label`, {
         method: "PUT",
@@ -2937,7 +2822,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     },
   );
 
-  it("renames a held order while a card is at the reader, keeping the payment's mark", async () => {
+  it("renames a held order while a card is at the reader, keeping the card payment pending", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -2947,9 +2832,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       lines: [{ menuItemId: waterOfferId, quantity: "2" }],
       label: "Mesa 7",
     });
-    await suite.db.execute(
-      sql`update working_orders set payment_attempt_at = '2026-10-12T10:00:00Z' where id = ${id}`,
-    );
+    const paymentId = await seedPendingCardPayment(suite.db, id);
     const response = await app.request(`/api/working-orders/${id}/label`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -2958,12 +2841,12 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(response.status, await response.clone().text()).toBe(200);
     expect(await response.json()).toEqual({ revision: 1 });
     expect(
-      (
-        await suite.db.execute(
-          sql`select label, revision, payment_attempt_at from working_orders where id = ${id}`,
-        )
-      ).rows,
-    ).toEqual([{ label: "Ana", revision: 1, payment_attempt_at: "2026-10-12T10:00:00Z" }]);
+      (await suite.db.execute(sql`select label, revision from working_orders where id = ${id}`))
+        .rows,
+    ).toEqual([{ label: "Ana", revision: 1 }]);
+    expect(suite.db.all(sql`select state from bill_payments where id = ${paymentId}`)).toEqual([
+      { state: "pending" },
+    ]);
   });
 
   it("saves only a held order label and retains its stored lines", async () => {
@@ -4998,32 +4881,4 @@ describe("settling edit answers", () => {
       });
     },
   );
-});
-
-it("refuses integrated reader pay while Payments is Off before any collection", async () => {
-  const token = await openSession(suite.db);
-  const app = new Hono();
-  mountTillApi(
-    app,
-    {
-      ...deps(suite.db),
-      paymentsEnabled: false,
-      cardProvider: { provider: "simulator" } as PaymentProvider,
-    },
-    collect([]),
-  );
-  const response = await app.request("/api/pay", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      cookie: `${SESSION_COOKIE}=${token}; ${sessionDeviceCookie}`,
-    },
-    body: JSON.stringify({
-      dining: "eat_in",
-      id: randomUUID(),
-      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-    }),
-  });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: { code: "module.disabled" } });
 });

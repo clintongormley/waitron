@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { stampDeployment } from "@waitron/db";
 import { setSingletonRole } from "@waitron/node-db";
-import { runPendingCardLoop } from "./pending-card-recovery.js";
+import { runPendingCardLoop } from "./bill-payments-loop.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu/src/slot.js";
 import { freePort } from "./testing/free-ports.js";
@@ -21,10 +21,10 @@ vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
   return ephemeralHttpMock();
 });
-vi.mock("./pending-card-recovery.js", async (original) => ({
-  ...(await original<typeof import("./pending-card-recovery.js")>()),
+vi.mock("./bill-payments-loop.js", async (original) => ({
+  ...(await original<typeof import("./bill-payments-loop.js")>()),
   runPendingCardLoop: vi.fn(
-    (await original<typeof import("./pending-card-recovery.js")>()).runPendingCardLoop,
+    (await original<typeof import("./bill-payments-loop.js")>()).runPendingCardLoop,
   ),
 }));
 const { startServer, httpPort } = ephemeralServerFixture();

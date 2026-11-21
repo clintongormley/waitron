@@ -27,7 +27,7 @@ import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { TRADING_STATE_DIR, withMockedKill } from "./testing/boot-harness.js";
-import { runPendingCardLoop } from "./pending-card-recovery.js";
+import { runPendingCardLoop } from "./bill-payments-loop.js";
 import { attendanceJob } from "./attendance-loop.js";
 import type { StartedServer } from "./boot.js";
 
@@ -44,8 +44,8 @@ vi.mock("@hono/node-server", async (load) => {
     }),
   };
 });
-vi.mock("./pending-card-recovery.js", async (load) => {
-  const a = await load<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (load) => {
+  const a = await load<typeof import("./bill-payments-loop.js")>();
   return { ...a, runPendingCardLoop: vi.fn(a.runPendingCardLoop) };
 });
 vi.mock("./attendance-loop.js", async (load) => {

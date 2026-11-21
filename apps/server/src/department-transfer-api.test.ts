@@ -45,7 +45,7 @@ import {
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
-import { settleIssuedOwingNothing } from "./testing/whole-payment-fixture.js";
+import { settleIssuedOwingNothing } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./testing/party-close-fixture.js";

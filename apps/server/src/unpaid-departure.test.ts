@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -1810,11 +1811,9 @@ describe("what is refused", () => {
     },
   );
 
-  it("refuses a bill being paid in full by card at the reader, and writes nothing", async () => {
+  it("refuses a bill with a pending reader payment, and writes nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
-    venue.db.run(
-      sql`update working_orders set payment_attempt_at = ${new Date().toISOString()} where id = ${party.tabId}`,
-    );
+    const paymentId = await inTx(venue, (tx) => seedPendingCardPayment(tx, party.tabId));
     try {
       const answer = await depart(party.partyId, {
         expectedPartyRevision: party.revision,
@@ -1827,8 +1826,11 @@ describe("what is refused", () => {
       });
       await expectNothingWritten(party.partyId, party.tabId);
     } finally {
-      venue.db.run(
-        sql`update working_orders set payment_attempt_at = null where id = ${party.tabId}`,
+      await inTx(venue, (tx) =>
+        tx
+          .update(billPayments)
+          .set({ state: "failed", failedAt: new Date().toISOString() })
+          .where(eq(billPayments.id, paymentId)),
       );
     }
   });

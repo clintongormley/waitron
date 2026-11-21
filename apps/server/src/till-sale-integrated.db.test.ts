@@ -1,18 +1,18 @@
 import {
+  billShare,
   closeZeroBill,
+  takeReaderPaymentWithRecovery,
   payCounterBasket,
   payFreshCounterInCash,
   paySavedBillInCash,
 } from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
-import { takeReaderBillPayment } from "./bill-payments.js";
+import type { CounterPaymentBasket, ReaderBillPaymentDeps } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
-import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { departments } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
@@ -32,16 +32,11 @@ import type { AvailableProduct } from "@waitron/menu";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { openFilingCase, recordCaseEvent } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-// Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
-import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
-  allocateInvoiceNumber,
-  billPayments,
-  drawerOpens,
   invoiceSeries,
   parties,
   persons,
@@ -52,7 +47,6 @@ import {
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { createPrinter } from "@waitron/printing";
 import {
   decimal,
   nodeId as brandNodeId,
@@ -62,20 +56,11 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import {
-  cardReaders,
-  insertAttempting,
-  insertCapturedPayment,
-  insertFailedPayment,
-  recordRefund,
-  SimulatorPaymentProvider,
-} from "@waitron/payments";
-import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
+import { SimulatorPaymentProvider } from "@waitron/payments";
+import type { PaymentProvider } from "@waitron/payments";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
-import { SumUpCloudProvider } from "@waitron/payments-sumup";
-import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
@@ -83,41 +68,19 @@ import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
-import {
-  createOpenOrder,
-  listStationQueue,
-  listTablesWithState,
-  parkOrder,
-} from "./working-order.js";
+import { createOpenOrder, listTablesWithState, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
-import {
-  printSaleReceipt,
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  releaseStalePaymentAttempts,
-} from "./testing/whole-payment-fixture.js";
-import {
-  ordersWithUnfiledPayment,
-  type IntegratedPayDeps,
-  type IntegratedPayOutcome,
-} from "./till-sale.js";
-import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
-import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
+import { ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import {
-  ensureFixtureJobRole,
-  seedNode,
-  seedVenueSettings,
-  seedDepartmentReceipt,
-} from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import {
   counterFixtureOperator,
   seedSessionDevice,
   openTillSession,
   deviceRequestCfg,
-  orderDeviceOrigin,
 } from "./testing/session-device.js";
 
 /** `quantity` of one offer as request lines of at most {@link PORTIONS_AT_ONCE}, the most
@@ -282,17 +245,12 @@ async function anotherNodeSeries(): Promise<void> {
   });
 }
 
-async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
-  const venue = await setupVenue(mode);
-  return { ...venue, cfg: { ...venue.cfg } };
-}
-
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
  * overrides `cfg.tipsEnabled`. */
 function integratedDeps(
   app: Database,
   client = new FakeStripe(),
-): { deps: IntegratedPayDeps; client: FakeStripe } {
+): { deps: ReaderBillPaymentDeps; client: FakeStripe } {
   const provider = new StripeTerminalProvider({
     captureAlerts,
     client,
@@ -312,66 +270,26 @@ function integratedDeps(
   };
 }
 
-function cannedProvider(
-  onCollect: () => Promise<void>,
-  state: PaymentResultState,
-): PaymentProvider {
-  return {
-    provider: "stripe",
-    capabilities: { partialRefund: true },
-    async collect(params): Promise<PaymentResult> {
-      await onCollect();
-      return {
-        provider: "stripe",
-        paymentRef: randomUUID(),
-        state,
-        amount: params.amount,
-        settledAt: state === "captured" ? new Date() : null,
-      };
-    },
-    resolvePending: () =>
-      Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
-    void: () => Promise.reject(new Error("cannedProvider: void unused")),
-    refund: () => Promise.reject(new Error("cannedProvider: refund unused")),
-    partialRefund: () => Promise.reject(new Error("cannedProvider: partialRefund unused")),
-  };
-}
-
-/**
- * A reader that writes its captured row, then, before its own pay's P3 runs, has a second Pay of the
- * same order find that charge unfiled and file it (`recover` / `recover-settle`). `second()` is that
- * Pay's outcome; `reader` is the client it would have asked.
- */
-function chargedThenFiledBySecondPay(cfg: DeviceRequestConfig) {
-  const { deps, client: reader } = integratedDeps(suite.db);
-  let second: IntegratedPayOutcome | undefined;
-  const provider: PaymentProvider = {
-    ...cannedProvider(() => Promise.resolve(), "captured"),
-    async collect(params): Promise<PaymentResult> {
-      const paymentRef = `pi-ref-${randomUUID()}`;
-      const settledAt = new Date();
-      await withTransaction(suite.db, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: params.origin,
-          nodeId: params.nodeId,
-          workingOrderId: params.workingOrderId,
-          provider: "stripe",
-          paymentRef,
-          amount: params.amount,
-          settledAt,
-        }),
-      );
-      second = await payWorkingOrderIntegrated(deps, cfg, { id: params.workingOrderId, lines: [] });
-      return {
-        provider: "stripe",
-        paymentRef,
-        state: "captured",
-        amount: params.amount,
-        settledAt,
-      };
-    },
-  };
-  return { provider, reader, second: () => second };
+async function payReader(
+  deps: ReaderBillPaymentDeps,
+  cfg: DeviceRequestConfig,
+  input: CounterPaymentBasket & { id: string; simulationOutcome?: "captured" },
+  personId?: string,
+) {
+  const { id, simulationOutcome, ...basket } = input;
+  const request = billShare("card", "1.50", {
+    entry: "reader",
+    submissionId: id,
+    simulationOutcome,
+  });
+  return takeReaderPaymentWithRecovery(
+    deps,
+    cfg,
+    id,
+    request,
+    await paymentOperator(cfg, personId),
+    basket.lines.length === 0 ? undefined : basket,
+  );
 }
 
 // --- verification reads (not part of the behaviour under test) -----------------------------------
@@ -393,76 +311,12 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-async function preparationTicketCount(workingOrderId: string): Promise<number> {
-  const rows = suite.db.all<{ count: string }>(sql`
-    select cast(count(*) as text) as count from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${workingOrderId})
-  `);
-  return Number(rows[0]!.count);
-}
-
-async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
-  return withTransaction(suite.db, async (tx) => {
-    const { id } = await createPrinter(tx, {
-      name: "Recibos",
-      transport: "cloud_poll",
-      pollId: `poll-${randomUUID()}`,
-      hasCashDrawer: true,
-    });
-    tx.run(
-      sql`update devices set receipt_printer_id = ${id}, cash_drawer_printer_id = ${id} where id = ${cfg.origin.deviceId}`,
-    );
-    return id;
-  });
-}
-
-/** The receipt payloads enqueued to `printerId`, as the shared `binary` column hands them back. */
-async function printJobPayloads(printerId: string): Promise<Uint8Array[]> {
-  return withTransaction(suite.db, async (tx) => {
-    const rows = await tx
-      .select({ payload: printJobs.payload })
-      .from(printJobs)
-      .where(eq(printJobs.printerId, printerId));
-    return rows.map((r) => r.payload!);
-  });
-}
-
-/** The count of `drawer_opens` rows. */
-async function drawerOpenCount(): Promise<number> {
-  return withTransaction(suite.db, async (tx) => {
-    const rows = await tx.select().from(drawerOpens);
-    return rows.length;
-  });
-}
-
 async function orderState(id: string): Promise<{ status: string; settledAtSet: boolean }> {
   // A raw comparison arrives as the number 1 or 0: this engine has no boolean type.
   const rows = suite.db.all<{ status: string; settled: number }>(sql`
     select status, (settled_at is not null) as settled from working_orders where id = ${id}
   `);
   return { status: rows[0]!.status, settledAtSet: rows[0]!.settled === 1 };
-}
-
-/** Whether this order's `collected_at` handover marker is set. */
-async function collectedAtSet(id: string): Promise<boolean> {
-  const rows = suite.db.all<{ collected: number }>(sql`
-    select (collected_at is not null) as collected from working_orders where id = ${id}
-  `);
-  return rows[0]!.collected === 1; // 0/1, not a boolean — see `orderState`
-}
-
-async function defaultStationId(): Promise<string> {
-  const rows = suite.db.all<{ id: string }>(sql`
-    select id from kitchen_stations where is_default and active
-  `);
-  return rows[0]!.id;
-}
-
-/** The order ids on a station's queue (`listStationQueue`); a collected order drops out. */
-async function stationQueueOrderIds(stationId: string): Promise<string[]> {
-  return withTransaction(suite.db, async (tx) => {
-    const groups = await listStationQueue(tx, stationId);
-    return groups.map((g) => g.orderId);
-  });
 }
 
 /** The tender(s) filed for this order's sale — method, amount, tip. */
@@ -479,59 +333,6 @@ async function tendersFor(
     method: r.method,
     amount: rawCentsToDecimal(r.amount),
     tipAmount: rawCentsToDecimal(r.tip),
-  }));
-}
-
-/** The filed `sales.total` (ex-tip) for this order's sale. */
-async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  const rows = suite.db.all<{ total: string }>(
-    sql`select cast(total as text) as total from sales where working_order_id = ${workingOrderId}`,
-  );
-  return rawCentsToDecimal(rows[0]!.total);
-}
-
-/** Each filed line's total and unit price before any comp or discount, in cents, in line order. */
-function filedListPrices(workingOrderId: string) {
-  return suite.db.all<{ list_gross: number | null; list_unit_price_gross: number | null }>(
-    sql`select l.list_gross, l.list_unit_price_gross from sale_lines l
-        join sales s on s.id = l.sale_id
-        where s.working_order_id = ${workingOrderId} order by l.line_no`,
-  );
-}
-
-/** Store a price before any discount above the line's charged price. */
-function setListUnitPrice(workingOrderId: string, lineNo: number, cents: number): void {
-  suite.db.run(
-    sql`update working_order_lines set list_unit_price_gross = ${cents}
-        where working_order_id = ${workingOrderId} and line_no = ${lineNo}`,
-  );
-}
-
-/** The `payments` rows for this order — provider/state/external_ref, plus whether `sale_id` points at
- *  the filed sale (the association witness). */
-async function paymentsFor(
-  workingOrderId: string,
-): Promise<
-  { provider: string; state: string; externalRef: string | null; linkedToSale: boolean }[]
-> {
-  const rows = suite.db.all<{
-    provider: string;
-    state: string;
-    external_ref: string | null;
-    linked: number;
-  }>(sql`
-    select p.provider, p.state, p.external_ref,
-           (p.sale_id is not null and p.sale_id = s.id) as linked
-    from payments p join sales s on s.working_order_id = p.working_order_id
-    where p.working_order_id = ${workingOrderId}
-    order by p.provider, p.external_ref
-  `);
-  // 0/1, not a boolean — see `orderState`.
-  return rows.map((r) => ({
-    provider: r.provider,
-    state: r.state,
-    externalRef: r.external_ref,
-    linkedToSale: r.linked === 1,
   }));
 }
 
@@ -685,7 +486,7 @@ describe("active fiscal conflict stops new money", () => {
                 { zoneId: coffee.zoneId, lines: lines },
                 "1.50",
               )
-            : payWorkingOrderIntegrated(
+            : payReader(
                 { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
                 cfg,
                 {
@@ -726,7 +527,7 @@ describe("active fiscal conflict stops new money", () => {
         const records = await suite.db.execute(sql`select * from registros_facturacion`);
         const jobs = await suite.db.select().from(printJobs);
         const provider = new FakePaymentProvider(suite.db);
-        const refusal = await payWorkingOrderIntegrated(
+        const refusal = await payReader(
           {
             admission: testTradingAdmission(),
             db: suite.db,
@@ -787,7 +588,7 @@ describe("active fiscal conflict stops new money", () => {
       zoneId: coffee.zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     };
-    await expect(payWorkingOrderIntegrated(deps, cfg, request)).rejects.toMatchObject({
+    await expect(payReader(deps, cfg, request)).rejects.toMatchObject({
       code: "sale.charged_not_recorded",
       params: { reason: "issuance_refused" },
     });
@@ -795,7 +596,7 @@ describe("active fiscal conflict stops new money", () => {
       suite.db.all(sql`select state, amount, sale_id from payments where working_order_id = ${id}`),
     ).toEqual([{ state: "captured", amount: 150, sale_id: null }]);
     expect(await saleCount(id)).toBe(0);
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+    await expect(payReader(deps, cfg, request)).rejects.toMatchObject({
       code: "sale.charged_not_recorded",
     });
     expect(provider.collectCalls).toHaveLength(1);
@@ -901,7 +702,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
     const id = randomUUID();
 
     await expect(
-      payWorkingOrderIntegrated(
+      payReader(
         {
           admission: testTradingAdmission(),
           db: suite.db,
@@ -931,7 +732,7 @@ describe("a box the held chart does not name primary takes no new money", () => 
     const id = randomUUID();
 
     await expect(
-      payWorkingOrderIntegrated(
+      payReader(
         {
           admission: testTradingAdmission(),
           db: suite.db,
@@ -1185,167 +986,7 @@ describe("walk-up invoice preparation", () => {
   });
 });
 
-describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 2)", () => {
-  it("snapshots the zone department's receipt header with a captured card sale", async () => {
-    const { cfg, coffee } = await setupVenue();
-    suite.db.run(sql`update departments set trading_name = 'Deli Counter' `);
-    const id = randomUUID();
-    const provider = new SimulatorPaymentProvider(suite.db);
-
-    const out = await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-      cfg,
-      {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        simulationOutcome: "captured",
-      },
-    );
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.receiptHeader).toMatchObject({
-      tradingName: "Deli Counter",
-      printTradingName: true,
-    });
-    const saleId = await saleIdFor(id);
-    const receiptHeader = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readSaleReceiptHeader(tx, saleId),
-    );
-    expect(receiptHeader).toMatchObject({
-      tradingName: "Deli Counter",
-      printTradingName: true,
-    });
-  });
-
-  it("runs a simulated approval through capture, fiscal filing and payment association", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const provider = new SimulatorPaymentProvider(app);
-    const id = randomUUID();
-    const out = await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: app, backend, clock, provider },
-      cfg,
-      {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        simulationOutcome: "captured",
-      },
-    );
-
-    expect(out.outcome).toBe("captured");
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await paymentsFor(id)).toMatchObject([
-      { provider: "simulator", state: "captured", linkedToSale: true },
-    ]);
-  });
-
-  it("credits a card walk-up's lines to the operator who rang it", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const provider = new SimulatorPaymentProvider(app);
-    const id = randomUUID();
-    const operatorId = await withTransaction(app, (tx) => ensureOperator(tx, OPERATOR));
-    await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: app, backend, clock, provider },
-      cfg,
-      {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        simulationOutcome: "captured",
-      },
-      operatorId,
-    );
-
-    expect(
-      await app
-        .select({ creditedTo: workingOrderLines.creditedTo })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id)),
-    ).toEqual([{ creditedTo: operatorId }]);
-  });
-
-  it("runs a simulated decline through payment handling without filing a sale", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const provider = new SimulatorPaymentProvider(app);
-    const id = randomUUID();
-    const out = await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: app, backend, clock, provider },
-      cfg,
-      {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        simulationOutcome: "declined",
-      },
-    );
-
-    expect(out).toEqual({ outcome: "declined" });
-    expect(await saleCount(id)).toBe(0);
-    expect(await fiscalRecordCount(id)).toBe(0);
-    expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
-  });
-
-  it("walk-up: captures, files an immediate card sale, links the payment, settles the order", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps } = integratedDeps(app);
-    const id = randomUUID();
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.invoiceNumber).toBe("A/1");
-    expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.tender.method).toBe("card"); // a card is charged the exact total — no cash change block
-
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await preparationTicketCount(id)).toBe(1);
-    // A walk-up is not a collect, so its handover marker stays NULL.
-    expect(await collectedAtSet(id)).toBe(false);
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    const payments = await paymentsFor(id);
-    expect(payments).toHaveLength(1);
-    expect(payments[0]!.provider).toBe("stripe");
-    expect(payments[0]!.state).toBe("captured");
-    expect(payments[0]!.linkedToSale).toBe(true);
-    expect(payments[0]!.externalRef).toMatch(/^pi_/);
-  });
-
-  it("a declined card files nothing and leaves the order open (retryable)", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const client = new FakeStripe();
-    client.declineNext();
-    const { deps } = integratedDeps(app, client);
-    const id = randomUUID();
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-
-    expect(out.outcome).toBe("declined");
-    // Nothing filed; the order stays `open`, so the till can retry.
-    expect(await saleCount(id)).toBe(0);
-    expect(await fiscalRecordCount(id)).toBe(0);
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
-  });
-
+describe("invoice series during reader payment", () => {
   it("reads the active series after a card capture that overlaps a series switch", async () => {
     const { cfg, coffee, seriesId } = await setupVenue();
     await anotherNodeSeries();
@@ -1382,12 +1023,12 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       partialRefund: (...args) => provider.partialRefund!(...args),
     };
     const id = randomUUID();
-    const result = await payWorkingOrderIntegrated({ ...deps, provider: switchingProvider }, cfg, {
+    const result = await payReader({ ...deps, provider: switchingProvider }, cfg, {
       id,
       zoneId: coffee.zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
-    expect(result.outcome).toBe("captured");
+    expect(result.outcome).toBe("received");
     expect(activeId).toBeDefined();
     const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
     expect(sale!.seriesId).toBe(activeId);
@@ -1415,12 +1056,13 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         .returning();
     });
     const { deps } = integratedDeps(suite.db);
-    const first = await payWorkingOrderIntegrated(deps, cfg, {
+    const input = {
       id,
       zoneId: coffee.zoneId,
       lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    expect(first.outcome).toBe("captured");
+    };
+    const first = await payReader(deps, cfg, input);
+    expect(first.outcome).toBe("received");
     const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
     expect(sale!.seriesId).toBe(fresh!.id);
     expect(sale!.invoiceNumber).toBe(7);
@@ -1433,2081 +1075,12 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         .insert(invoiceSeries)
         .values({ nodeId: cfg.nodeId, code: "A-P000043", purpose: "standard" });
     });
-    const retry = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+    const retry = await payReader(deps, cfg, input);
     expect(retry).toEqual(first);
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
     const [unchanged] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
     expect(unchanged).toEqual(sale);
-  });
-
-  it("a settled order replays its ticket without re-collecting", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    const id = randomUUID();
-    const req = {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    };
-
-    const first = await payWorkingOrderIntegrated(deps, cfg, req);
-    expect(first.outcome).toBe("captured");
-    if (first.outcome !== "captured") throw new Error("unreachable");
-
-    // Same id → replays, files nothing, and never drives the reader again.
-    const firstIntent = client.lastCreateIntent;
-    const second = await payWorkingOrderIntegrated(deps, cfg, req);
-    expect(second.outcome).toBe("captured");
-    if (second.outcome !== "captured") throw new Error("unreachable");
-    expect(second.ticket.invoiceNumber).toBe(first.ticket.invoiceNumber);
-    expect(second.ticket.qr).toBe(first.ticket.qr);
-    expect(first.ticket.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
-    expect(second.ticket.qrText).toEqual(first.ticket.qrText);
-    expect(client.lastCreateIntent).toBe(firstIntent); // no second createPaymentIntent
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await preparationTicketCount(id)).toBe(1);
-    expect(await paymentCount(id)).toBe(1);
-  });
-
-  it("prints an explicitly requested integrated-card receipt without a drawer kick, and a replay does not print again", async () => {
-    // An integrated card's receipt carries no drawer kick and records no `drawer_opens` row; a
-    // replay prints nothing more.
-    const { cfg, coffee } = await setupVenue();
-    const printerId = await makeReceiptPrinter(cfg);
-    const app = suite.db;
-    const { deps } = integratedDeps(app);
-    const id = randomUUID();
-    const req = {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    };
-
-    const first = await payWorkingOrderIntegrated(deps, cfg, req);
-    expect(first.outcome).toBe("captured");
-
-    expect(await printJobPayloads(printerId)).toHaveLength(0);
-    await printSaleReceipt(deps, cfg, id, "original");
-    const afterFirst = await printJobPayloads(printerId);
-    expect(afterFirst).toHaveLength(1);
-    const payload = new Uint8Array(afterFirst[0]!);
-    expect(decodeTicket(payload)).toContain("VERI*FACTU");
-    expect(opensDrawer(payload)).toBe(false);
-    expect(await drawerOpenCount()).toBe(0);
-    expect(await fiscalRecordCount(id)).toBe(1);
-
-    // A lost-response retry replays and never prints a second receipt.
-    const second = await payWorkingOrderIntegrated(deps, cfg, req);
-    expect(second.outcome).toBe("captured");
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await printJobPayloads(printerId)).toHaveLength(1);
-    expect(await drawerOpenCount()).toBe(0);
-  });
-
-  it("tips on: charges total+tip, files the sale at the total, records the tip on the tender", async () => {
-    const { cfg: baseCfg, coffee } = await setupVenue();
-    const cfg = { ...baseCfg, tipsEnabled: true };
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    const id = randomUUID();
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      tip: "0.30",
-    });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent?.amount).toBe("1.80");
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
-  });
-
-  it("tips off: a client-supplied tip is clamped to 0 — charges and settles at the exact total", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app); // cfg.tipsEnabled: false (setupVenue's default)
-    const id = randomUUID();
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      tip: "5.00", // ignored — tips are disabled on this till
-    });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent?.amount).toBe("1.50"); // the tip was NOT added
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-  });
-
-  it("retrieved (open) order: files the STORED locked lines at pay, links the payment, settles", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "2" }],
-      label: "Mesa 4",
-    });
-
-    const { deps } = integratedDeps(app);
-    // No client basket — a retrieved order files from its stored lock (2 × 1.50 = 3.00).
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.total).toBe("3.00");
-    expect(await filedSaleTotal(id)).toBe("3.00");
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "3.00", tipAmount: "0.00" }]);
-    const payments = await paymentsFor(id);
-    expect(payments).toHaveLength(1);
-    expect(payments[0]!.linkedToSale).toBe(true);
-  });
-
-  it("retrieved (open) order: a captured card stores each line's unit price before any discount", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [
-        { menuItemId: coffee.menuItemId, quantity: "1" },
-        { menuItemId: coffee.menuItemId, quantity: "2" },
-      ],
-    });
-    setListUnitPrice(id, 1, 200);
-    const { deps } = integratedDeps(suite.db);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(filedListPrices(id)).toEqual([
-      { list_gross: 200, list_unit_price_gross: 200 },
-      { list_gross: null, list_unit_price_gross: null },
-    ]);
-  });
-
-  it("a sold-out open ticket_then_pay counter order paid by card sends its dish once, and a replay sends nothing more", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId();
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    suite.db.run(sql`update products set available = 0 where id = ${coffee.id}`);
-    const { deps } = integratedDeps(suite.db);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await preparationTicketCount(id)).toBe(1);
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-
-    const replay = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-    expect(replay.outcome).toBe("captured");
-    expect(await preparationTicketCount(id)).toBe(1);
-    expect(await saleCount(id)).toBe(1);
-  });
-
-  it("placed (ticket_then_pay) order: ISSUES the invoice AT PAY from the frozen lines (ordering 2), records no handover, stays on the station queue", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId();
-    const app = suite.db;
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    // Placing files no fiscal document under ticket_then_pay, and fires the order to the default
-    // station.
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-    expect(await saleCount(id)).toBe(0);
-    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-    expect(await collectedAtSet(id)).toBe(false);
-
-    const { deps } = integratedDeps(app);
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    const payments = await paymentsFor(id);
-    expect(payments).toHaveLength(1);
-    expect(payments[0]!.linkedToSale).toBe(true);
-    // Paying records no handover, so the order stays on its station queue until it is handed over.
-    expect(await collectedAtSet(id)).toBe(false);
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-  });
-
-  it("refuses an ABANDONED order (working_order.not_open) and never touches the reader", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${id}`);
-
-    const { deps, client } = integratedDeps(app);
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-      code: "working_order.not_open",
-      params: { workingOrderId: id },
-    });
-
-    // Refused in P1, before P2: no sale, no payment, and the reader was never driven.
-    expect(await saleCount(id)).toBe(0);
-    expect(await paymentCount(id)).toBe(0);
-    expect(client.lastCreateIntent).toBeUndefined();
-  });
-
-  it("refuses an empty walk-up basket (sale.empty_basket) before any DB write or collect", async () => {
-    const { cfg } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    const id = randomUUID();
-
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-      code: "sale.empty_basket",
-    });
-
-    expect(await paymentCount(id)).toBe(0);
-    expect(client.lastCreateIntent).toBeUndefined();
-  });
-
-  it("a second Pay that files the first card's charge before the first finalises makes P3 REPLAY it, filing nothing (settled-order replay)", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const app = suite.db;
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-
-    const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
-    const deps: IntegratedPayDeps = {
-      admission: testTradingAdmission(),
-      db: app,
-      backend,
-      clock,
-      provider,
-    };
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    const filed = second();
-    expect(filed?.outcome).toBe("captured");
-    if (filed?.outcome !== "captured") throw new Error("unreachable");
-    expect(reader.lastCreateIntent).toBeUndefined();
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.invoiceNumber).toBe(filed.ticket.invoiceNumber);
-    expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.tender.method).toBe("card");
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    expect(await paymentsFor(id)).toEqual([
-      { provider: "stripe", state: "captured", externalRef: null, linkedToSale: true },
-    ]);
-  });
-
-  it("a capture whose payment cannot be associated rolls back the whole sale (P3 is atomic)", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const id = randomUUID();
-    // The provider reports `captured` but wrote no `payments` row, so the association throws
-    // `payment.not_found`: P3 must re-raise it, and the sale must roll back.
-    const provider = cannedProvider(() => Promise.resolve(), "captured");
-    const deps: IntegratedPayDeps = {
-      admission: testTradingAdmission(),
-      db: app,
-      backend,
-      clock,
-      provider,
-    };
-
-    await expect(
-      payWorkingOrderIntegrated(deps, cfg, {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      }),
-    ).rejects.toMatchObject({ code: "payment.not_found" });
-
-    // Rolled back; the walk-up order committed in P1 stays `open`.
-    expect(await saleCount(id)).toBe(0);
-    expect(await fiscalRecordCount(id)).toBe(0);
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-  });
-
-  it("returns an empty qr when the fiscal backend offers no verification url", async () => {
-    // `FakeFiscalBackend`'s records carry no verification link, so the ticket's `qr` default of ""
-    // is exercised.
-    const { cfg, coffee } = await setupVenue();
-    await FakeFiscalBackend.install(suite.db);
-    const fake = new FakeFiscalBackend(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      await fake.registerNode(tx, cfg.nodeId);
-    });
-    const app = suite.db;
-    const provider = new StripeTerminalProvider({
-      captureAlerts,
-      client: new FakeStripe(),
-      db: app,
-      poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
-    });
-    const deps: IntegratedPayDeps = {
-      admission: testTradingAdmission(),
-      db: app,
-      backend: fake,
-      clock,
-      provider,
-      readerRef: "reader_1",
-    };
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, {
-      id: randomUUID(),
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.qr).toBe("");
-    expect(out.ticket.qrText).toBeUndefined();
-  });
-});
-
-// A captured payment with no sale (P2 committed, P3 has not run) must be finished WITHOUT charging
-// again. The state is seeded directly, as the row `collect` leaves behind.
-describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
-  /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is
-   *  NULL. `capturedAmount` is the gross the card was charged. */
-  async function seedLostCapture(
-    cfg: DeviceRequestConfig,
-    coffee: OfferedProduct,
-    quantity: string,
-    capturedAmount: string,
-  ): Promise<{ id: string; externalRef: string }> {
-    const id = randomUUID();
-    // Payment refs are unique per provider across the database.
-    const externalRef = `pi_lost_${randomUUID()}`;
-    await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, linesOf(coffee.menuItemId, quantity), null, {
-        zoneId: coffee.zoneId,
-      });
-      await insertCapturedPayment(tx, {
-        origin: cfg.origin,
-        nodeId: cfg.nodeId,
-        workingOrderId: id,
-        provider: "stripe",
-        paymentRef: `pi-ref-${randomUUID()}`,
-        amount: decimal(capturedAmount),
-        settledAt: new Date(),
-        externalRef,
-      });
-    });
-    return { id, externalRef };
-  }
-
-  it.each([
-    ["captured", "1", "1.50"],
-    ["captured", "2001", "3001.50"],
-  ] as const)(
-    "retains an unfiled F1 %s payment of %s coffees while public issuance is disabled",
-    async (state, quantity, amount) => {
-      const { cfg, coffee } = await setupVenue();
-      suite.db.run(
-        sql`update taxpayer set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
-      );
-      const id = randomUUID();
-      await withTransaction(suite.db, async (tx) => {
-        await createOpenOrder(tx, cfg, id, linesOf(coffee.menuItemId, quantity), null, {
-          zoneId: coffee.zoneId,
-          invoiceChoice: {
-            invoiceType: "F1",
-            recipient: {
-              taxId: "B12345674",
-              legalName: "Cliente SL",
-              address: "2 Main Street, 28013 Madrid, Madrid",
-              countryCode: "ES",
-            },
-            recipientNameMaxLength: backend.recipientNameMaxLength,
-          },
-        });
-        const insert = insertCapturedPayment;
-        await insert(tx, {
-          origin: cfg.origin,
-          nodeId: cfg.nodeId,
-          workingOrderId: id,
-          provider: "stripe",
-          paymentRef: `pi-ref-${randomUUID()}`,
-          amount: decimal(amount),
-          settledAt: new Date(),
-          externalRef: `pi_lost_${randomUUID()}`,
-        });
-      });
-      const before = {
-        orders: suite.db.all(sql`select * from working_orders order by id`),
-        lines: suite.db.all(sql`select * from working_order_lines order by id`),
-        payments: suite.db.all(sql`select * from payments order by id`),
-        series: suite.db.all(sql`select * from invoice_series order by id`),
-        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-        jobs: suite.db.all(sql`select * from print_jobs order by id`),
-      };
-      const { deps, client } = integratedDeps(suite.db);
-
-      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-        code: "sale.full_invoice_unavailable",
-        params: {},
-      });
-
-      expect(client.lastCreateIntent).toBeUndefined();
-      expect(await saleCount(id)).toBe(0);
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await paymentCount(id)).toBe(1);
-      expect(
-        suite.db.all(sql`select state, sale_id from payments where working_order_id = ${id}`),
-      ).toEqual([{ state, sale_id: null }]);
-      expect({
-        orders: suite.db.all(sql`select * from working_orders order by id`),
-        lines: suite.db.all(sql`select * from working_order_lines order by id`),
-        payments: suite.db.all(sql`select * from payments order by id`),
-        series: suite.db.all(sql`select * from invoice_series order by id`),
-        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-        jobs: suite.db.all(sql`select * from print_jobs order by id`),
-      }).toEqual(before);
-    },
-  );
-
-  it("snapshots the original zone department when a captured card payment is recovered", async () => {
-    const { cfg, coffee } = await setupVenue();
-    suite.db.run(sql`update departments set trading_name = 'Deli Counter' `);
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-    const { deps } = integratedDeps(suite.db);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.receiptHeader).toMatchObject({
-      tradingName: "Deli Counter",
-      printTradingName: true,
-    });
-    const saleId = await saleIdFor(id);
-    const receiptHeader = await withTransaction(suite.db, (tx) =>
-      VENUE_SERVICE.readSaleReceiptHeader(tx, saleId),
-    );
-    expect(receiptHeader).toMatchObject({
-      tradingName: "Deli Counter",
-      printTradingName: true,
-    });
-  });
-
-  it("recovers a lost capture: files from locked lines, no re-charge, links the existing row", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    // Locked total 1.50; the captured charge was exactly the total (no tip).
-    const { id, externalRef } = await seedLostCapture(cfg, coffee, "1", "1.50");
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.qrText).toEqual({ caption: "QR tributario:", legend: "VERI*FACTU" });
-    // Recovery skips P2: no second PaymentIntent, and still ONE payment row, now linked.
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(await paymentCount(id)).toBe(1);
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await preparationTicketCount(id)).toBe(1);
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    // A recovered walk-up is still a walk-up: its handover marker stays NULL.
-    expect(await collectedAtSet(id)).toBe(false);
-    const payments = await paymentsFor(id);
-    expect(payments).toHaveLength(1);
-    expect(payments[0]!.state).toBe("captured");
-    expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING row, not a fresh one
-    expect(payments[0]!.linkedToSale).toBe(true);
-  });
-
-  it("recovers a lost capture, storing each line's unit price before any discount", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const { deps, client } = integratedDeps(suite.db);
-    const id = randomUUID();
-    await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(
-        tx,
-        cfg,
-        id,
-        [
-          { menuItemId: coffee.menuItemId, quantity: "1" },
-          { menuItemId: coffee.menuItemId, quantity: "2" },
-        ],
-        null,
-        { zoneId: coffee.zoneId },
-      );
-      await insertCapturedPayment(tx, {
-        origin: cfg.origin,
-        nodeId: cfg.nodeId,
-        workingOrderId: id,
-        provider: "stripe",
-        paymentRef: `pi-ref-${randomUUID()}`,
-        amount: decimal("4.50"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      });
-    });
-    setListUnitPrice(id, 1, 200);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(filedListPrices(id)).toEqual([
-      { list_gross: 200, list_unit_price_gross: 200 },
-      { list_gross: null, list_unit_price_gross: null },
-    ]);
-  });
-
-  it("files a recovered capture under the device that took the card, not the one retrying", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const { deps } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-    const retrying = await deviceRequestCfg(suite.db, cfg);
-    expect(retrying.origin.deviceId).not.toBe(cfg.origin.deviceId);
-
-    const out = await payWorkingOrderIntegrated(deps, retrying, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(
-      suite.db.all(sql`select source, device_id from sales where working_order_id = ${id}`),
-    ).toEqual([{ source: "device", device_id: cfg.origin.deviceId }]);
-  });
-
-  it("a recovery Pay on another reader settles and keeps reader A", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const retrying = await deviceRequestCfg(suite.db, cfg);
-    const [readerA, readerB] = await suite.db
-      .insert(cardReaders)
-      .values([
-        { provider: "stripe", providerRef: "reader_a", name: "Reader A" },
-        { provider: "stripe", providerRef: "reader_b", name: "Reader B" },
-      ])
-      .returning();
-    await suite.db
-      .update(cardReaders)
-      .set({ heldByDeviceId: cfg.origin.deviceId })
-      .where(eq(cardReaders.id, readerA!.id));
-    await suite.db
-      .update(cardReaders)
-      .set({ heldByDeviceId: retrying.origin.deviceId })
-      .where(eq(cardReaders.id, readerB!.id));
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-    suite.db.run(sql`update payments set reader_id = ${readerA!.id}
-      where working_order_id = ${id}`);
-    const { deps, client } = integratedDeps(suite.db);
-
-    const out = await payWorkingOrderIntegrated(
-      { ...deps, readerId: readerB!.id, readerRef: readerB!.providerRef },
-      retrying,
-      { id, lines: [] },
-    );
-
-    expect(out.outcome).toBe("captured");
-    expect(await saleCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(
-      suite.db.all(sql`select reader_id, sale_id from payments where working_order_id = ${id}`),
-    ).toEqual([{ reader_id: readerA!.id, sale_id: await saleIdFor(id) }]);
-  });
-
-  it("recovers a lost capture on an open ticket_then_pay counter order: sends its dish once", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const { deps, client } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(await saleCount(id)).toBe(1);
-    expect(await preparationTicketCount(id)).toBe(1);
-  });
-
-  it("recovers a lost capture whose product has since been archived: the card was charged, so it files", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const { deps } = integratedDeps(suite.db);
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-    suite.db.run(sql`update products set active = 0 where id = ${coffee.id}`);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(await filedSaleTotal(id)).toBe("1.50");
-  });
-
-  it("refuses a fresh card payment before the reader is asked when a line never sent was archived", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const { deps, client } = integratedDeps(suite.db);
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    suite.db.run(sql`update products set active = 0 where id = ${coffee.id}`);
-
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-      code: "product.unavailable",
-      params: { productId: coffee.id },
-    });
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(await saleCount(id)).toBe(0);
-  });
-
-  it("recovers a lost capture on a PLACED order: files, records no handover, stays on the station queue", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId();
-    const app = suite.db;
-    // A placed ticket_then_pay order whose card collect captured but lost P3. With no outstanding
-    // invoice this is `recover`, not `recover-settle`.
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-    await withTransaction(suite.db, async (tx) => {
-      await insertCapturedPayment(tx, {
-        origin: cfg.origin,
-        nodeId: cfg.nodeId,
-        workingOrderId: id,
-        provider: "stripe",
-        paymentRef: `pi-ref-${randomUUID()}`,
-        amount: decimal("1.50"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      });
-    });
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-    expect(await collectedAtSet(id)).toBe(false);
-
-    const { deps, client } = integratedDeps(app);
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent).toBeUndefined(); // recovery skips P2 — no re-charge
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await paymentCount(id)).toBe(1);
-    expect(await preparationTicketCount(id)).toBe(1); // placement fired it; recovery did not re-fire
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await collectedAtSet(id)).toBe(false);
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-  });
-
-  it("recovers with a reconstructed tip when the captured amount exceeds the locked total", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    // Locked total 1.50, captured 1.80 → the tip is reconstructed as 1.80 − 1.50 = 0.30.
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.80");
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
-    // The fiscal total stays ex-tip; the tender carries the whole charge with the tip.
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
-    expect(await paymentCount(id)).toBe(1);
-    expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
-  });
-
-  it("retains a recovered short capture as a contribution without filing the unpaid bill", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const app = suite.db;
-    const { deps, client } = integratedDeps(app);
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.00");
-
-    await expect(
-      payWorkingOrderIntegrated(deps, cfg, { id, lines: [] }, OPERATOR),
-    ).resolves.toMatchObject({
-      outcome: "partial",
-      balance: { received: "1.00", outstanding: "0.50" },
-    });
-
-    expect(
-      suite.db.get(
-        sql`select remaining_after as remaining from bill_payments where working_order_id = ${id}`,
-      ),
-    ).toEqual({ remaining: 50 });
-    expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
-    expect(await saleCount(id)).toBe(0);
-    expect(await fiscalRecordCount(id)).toBe(0);
-    expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
-    expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
-  });
-
-  it("two concurrent pays for one placed order: one is captured, the other is refused before asking its reader, and ONE sale is filed", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      label: "Mesa 7",
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-
-    const readers = [new FakePaymentProvider(suite.db), new FakePaymentProvider(suite.db)];
-    const releases = readers.map((reader) => reader.holdNextCollect());
-    const req = { id, lines: [] };
-    const paying = Promise.allSettled(
-      readers.map((provider) =>
-        payWorkingOrderIntegrated(
-          { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-          cfg,
-          req,
-        ),
-      ),
-    );
-    await expect.poll(() => readers.map((reader) => reader.collectCalls.length)).toContain(1);
-    const winner = readers.findIndex((reader) => reader.collectCalls.length === 1);
-    releases.forEach((release) => release());
-    const settled = await paying;
-
-    expect(readers[1 - winner]!.collectCalls).toHaveLength(0);
-    expect(settled[winner]).toMatchObject({ status: "fulfilled", value: { outcome: "captured" } });
-    expect(settled[1 - winner]).toMatchObject({
-      status: "rejected",
-      reason: { code: "order.payment_in_flight", params: { workingOrderId: id } },
-    });
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-  });
-
-  it("two concurrent recoveries of one lost capture file ONE sale; the loser replays", async () => {
-    const { cfg, coffee } = await setupVenue();
-    // ONE lost capture, TWO retries: one recovers, and the other's transaction runs after that
-    // commit, reads `settled`, and replays — no second filing, no second association.
-    const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
-
-    const { deps: depsA } = integratedDeps(suite.db);
-    const { deps: depsB } = integratedDeps(suite.db);
-    const req = { id, lines: [] };
-
-    const [a, b] = await Promise.allSettled([
-      payWorkingOrderIntegrated(depsA, cfg, req),
-      payWorkingOrderIntegrated(depsB, cfg, req),
-    ]);
-
-    if (a.status !== "fulfilled" || b.status !== "fulfilled") {
-      throw new Error(
-        `both recoveries should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`,
-      );
-    }
-    expect(a.value.outcome).toBe("captured");
-    expect(b.value.outcome).toBe("captured");
-    if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
-      throw new Error("unreachable");
-    }
-    expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await paymentCount(id)).toBe(1);
-    expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
-  });
-});
-
-describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
-  /** Place an order and seed an unpaid invoice for the settlement tests. */
-  async function placedIssuedBill(
-    cfg: DeviceRequestConfig,
-    coffee: OfferedProduct,
-    quantity = "1",
-  ): Promise<{ id: string; saleId: string }> {
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity }],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-    await issueOrderInvoice(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-    return { id, saleId: await saleIdFor(id) };
-  }
-
-  it("settles the already-issued outstanding invoice on capture (settleSale, not recordSale), records no handover, stays on the station queue", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId();
-    const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, coffee);
-    // The seeded invoice is outstanding; placement fired the order to the default station.
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-    expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-    expect(await collectedAtSet(id)).toBe(false);
-
-    const { deps, client } = integratedDeps(app);
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
-    expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.tender.method).toBe("card");
-    // Settled, not re-filed.
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await outstandingSalesFor()).toEqual([]);
-    expect(await collectedAtSet(id)).toBe(false);
-    expect(await stationQueueOrderIds(station)).toEqual([id]);
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    const payments = await paymentsFor(id);
-    expect(payments).toHaveLength(1);
-    expect(payments[0]!.state).toBe("captured");
-    expect(payments[0]!.linkedToSale).toBe(true);
-    expect(payments[0]!.externalRef).toMatch(/^pi_/);
-    expect(client.lastCreateIntent?.amount).toBe("1.50");
-  });
-
-  it("tips on: charges amountDue+tip, settles the invoice at the total, records the tip on the tender", async () => {
-    const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
-    const cfg = { ...baseCfg, tipsEnabled: true };
-    const app = suite.db;
-    const { id } = await placedIssuedBill(cfg, coffee);
-    const { deps, client } = integratedDeps(app);
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
-
-    expect(out.outcome).toBe("captured");
-    expect(client.lastCreateIntent?.amount).toBe("1.80");
-    expect(await filedSaleTotal(id)).toBe("1.50");
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-  });
-
-  it("a decline leaves the invoice OUTSTANDING — nothing re-filed or voided; listOutstandingSales still lists it", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, coffee);
-
-    const client = new FakeStripe();
-    client.declineNext();
-    const { deps } = integratedDeps(app, client);
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    expect(out.outcome).toBe("declined");
-    // A decline files and voids NOTHING: the invoice stays outstanding, retryable.
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-    expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
-    expect(await tendersFor(id)).toEqual([]);
-    expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
-  });
-
-  it("a second Pay that settles the invoice from the first card's charge before the first finalises makes finalizeSettle REPLAY via sale.already_settled", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const app = suite.db;
-    const { id } = await placedIssuedBill(cfg, coffee);
-
-    // The second Pay settles the invoice from the first card's charge; the first's `settleSale`
-    // then refuses with `sale.already_settled`, and it replays rather than settling twice.
-    const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
-    const deps: IntegratedPayDeps = {
-      admission: testTradingAdmission(),
-      db: app,
-      backend,
-      clock,
-      provider,
-    };
-
-    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-    const settled = second();
-    expect(settled?.outcome).toBe("captured");
-    if (settled?.outcome !== "captured") throw new Error("unreachable");
-    expect(reader.lastCreateIntent).toBeUndefined();
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.invoiceNumber).toBe(settled.ticket.invoiceNumber);
-    expect(out.ticket.total).toBe("1.50");
-    expect(await saleCount(id)).toBe(1);
-    expect(await fiscalRecordCount(id)).toBe(1);
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-    expect(await paymentsFor(id)).toEqual([
-      { provider: "stripe", state: "captured", externalRef: null, linkedToSale: true },
-    ]);
-  });
-
-  it("a settle whose payment cannot be associated rolls back — the invoice stays OUTSTANDING (P3 is atomic)", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const app = suite.db;
-    const { id, saleId } = await placedIssuedBill(cfg, coffee);
-
-    // The provider reports `captured` but wrote no `payments` row, so the association throws
-    // `payment.not_found`: it must be re-raised, and the settlement rolled back.
-    const provider = cannedProvider(() => Promise.resolve(), "captured");
-    const deps: IntegratedPayDeps = {
-      admission: testTradingAdmission(),
-      db: app,
-      backend,
-      clock,
-      provider,
-    };
-
-    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-      code: "payment.not_found",
-    });
-
-    // The settlement rolled back: no tender, the order stays PLACED, the invoice is still outstanding.
-    expect(await tendersFor(id)).toEqual([]);
-    expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-    expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
-  });
-
-  describe("a bill whose corrections leave nothing owed", () => {
-    it("closes the bill without asking the reader, writing no tender and no payment", async () => {
-      const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
-      const cfg = { ...baseCfg, tipsEnabled: true };
-      const station = await defaultStationId();
-      const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      await correctToZero(cfg, saleId);
-      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
-      expect(await stationQueueOrderIds(station)).toEqual([id]);
-      expect(await collectedAtSet(id)).toBe(false);
-      const { deps, client } = integratedDeps(suite.db);
-
-      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
-
-      expect(client.lastCreateIntent).toBeUndefined();
-      expect(out.outcome).toBe("captured");
-      if (out.outcome !== "captured") throw new Error("unreachable");
-      expect(out.ticket.invoiceNumber).toBe("A/1");
-      expect(out.ticket.total).toBe("1.50");
-      expect(out.ticket.tender).toEqual({ method: "unpaid" });
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await paymentCount(id)).toBe(0);
-      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await collectedAtSet(id)).toBe(false);
-      expect(await stationQueueOrderIds(station)).toEqual([id]);
-      expect(await outstandingSalesFor()).toEqual([]);
-      expect(await saleCount(id)).toBe(1);
-      expect(await fiscalRecordCount(id)).toBe(1);
-    });
-
-    it("refuses a malformed tip without asking the reader, and leaves the bill open", async () => {
-      const { cfg: baseCfg, coffee } = await modeVenue("ticket_then_pay");
-      const cfg = { ...baseCfg, tipsEnabled: true };
-      const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      await correctToZero(cfg, saleId);
-      const { deps, client } = integratedDeps(suite.db);
-
-      await expect(
-        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "not-money" }),
-      ).rejects.toMatchObject({ code: "shared.invalid_decimal", params: { value: "not-money" } });
-
-      expect(client.lastCreateIntent).toBeUndefined();
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await paymentCount(id)).toBe(0);
-      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await collectedAtSet(id)).toBe(false);
-      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
-    });
-
-    it("two pays at once close the bill once, and neither asks the reader", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      await correctToZero(cfg, saleId);
-      const { deps: depsA, client: clientA } = integratedDeps(suite.db);
-      const { deps: depsB, client: clientB } = integratedDeps(suite.db);
-      const req = { id, lines: [] };
-
-      const [a, b] = await Promise.allSettled([
-        payWorkingOrderIntegrated(depsA, cfg, req),
-        payWorkingOrderIntegrated(depsB, cfg, req),
-      ]);
-
-      if (a.status !== "fulfilled" || b.status !== "fulfilled") {
-        throw new Error(`both pays should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`);
-      }
-      expect(a.value.outcome).toBe("captured");
-      expect(b.value.outcome).toBe("captured");
-      if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
-        throw new Error("unreachable");
-      }
-      expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
-      expect(clientA.lastCreateIntent).toBeUndefined();
-      expect(clientB.lastCreateIntent).toBeUndefined();
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await paymentCount(id)).toBe(0);
-      expect(await saleCount(id)).toBe(1);
-      expect(await fiscalRecordCount(id)).toBe(1);
-      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await outstandingSalesFor()).toEqual([]);
-    });
-
-    it("refuses a bill already below zero with the domain code, without asking the reader", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
-      // bill below zero must still be refused at collection. No fiscal record is written for it.
-      await withTransaction(suite.db, async (tx) => {
-        const seriesId = rectificativeSeries(cfg);
-        const now = clock.now();
-        await tx.insert(sales).values({
-          source: cfg.origin.source,
-          deviceId: cfg.origin.deviceId,
-          nodeId: cfg.nodeId,
-          seriesId,
-          invoiceNumber: await allocateInvoiceNumber(tx, seriesId),
-          issuedAt: now.instant.toISOString(),
-          issuedOffsetMinutes: now.offsetMinutes,
-          total: -200,
-          vatBreakdown: [{ rate: "21.00", base: "-1.65", tax: "-0.35" }],
-          locale: LOCALE,
-          invoiceLocales: [LOCALE],
-          fiscalBackend: backend.id,
-          fiscalState: "recorded",
-          correctsSaleId: saleId,
-        });
-      });
-      const { deps, client } = integratedDeps(suite.db);
-
-      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
-        code: "sale.tender_shortfall",
-        params: { due: "-0.50", charged: "0" },
-      });
-
-      expect(client.lastCreateIntent).toBeUndefined();
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await paymentCount(id)).toBe(0);
-      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await collectedAtSet(id)).toBe(false);
-      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "-0.50" }]);
-    });
-  });
-
-  describe("recovering a captured card payment on an issued bill settles it (never re-files)", () => {
-    async function seedLostCaptureOnPlaced(
-      cfg: DeviceRequestConfig,
-      id: string,
-      capturedAmount: string,
-    ): Promise<string> {
-      const externalRef = `pi_lost_${randomUUID()}`;
-      const origin = await orderDeviceOrigin(suite.db);
-      await withTransaction(suite.db, async (tx) => {
-        await insertCapturedPayment(tx, {
-          origin,
-          workingOrderId: id,
-          nodeId: cfg.nodeId,
-          provider: "stripe",
-          paymentRef: `pi-ref-${randomUUID()}`,
-          amount: decimal(capturedAmount),
-          settledAt: new Date(),
-          externalRef,
-        });
-      });
-      return externalRef;
-    }
-
-    it("recovers by settling the issued invoice: no re-charge, no second file, links the existing row, records no handover, stays on the station queue", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const station = await defaultStationId();
-      const app = suite.db;
-      const { id } = await placedIssuedBill(cfg, coffee); // placing fires the ticket item to the station
-      const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
-      expect(await stationQueueOrderIds(station)).toEqual([id]);
-      expect(await collectedAtSet(id)).toBe(false);
-
-      const { deps, client } = integratedDeps(app);
-      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-      expect(out.outcome).toBe("captured");
-      // Recovery skips P2: no second charge.
-      expect(client.lastCreateIntent).toBeUndefined();
-      expect(await saleCount(id)).toBe(1);
-      expect(await fiscalRecordCount(id)).toBe(1);
-      expect(await paymentCount(id)).toBe(1);
-      expect(await filedSaleTotal(id)).toBe("1.50");
-      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await outstandingSalesFor()).toEqual([]);
-      expect(await collectedAtSet(id)).toBe(false);
-      expect(await stationQueueOrderIds(station)).toEqual([id]);
-      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-      const payments = await paymentsFor(id);
-      expect(payments).toHaveLength(1);
-      expect(payments[0]!.externalRef).toBe(externalRef); // the EXISTING lost row, not a fresh one
-      expect(payments[0]!.linkedToSale).toBe(true);
-    });
-
-    it("reconstructs a tip when the captured amount exceeds the amount due", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const app = suite.db;
-      const { id } = await placedIssuedBill(cfg, coffee);
-      await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
-
-      const { deps, client } = integratedDeps(app);
-      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
-
-      expect(out.outcome).toBe("captured");
-      expect(client.lastCreateIntent).toBeUndefined(); // no re-charge
-      // The fiscal total stays ex-tip; the tender carries the whole charge with the tip.
-      expect(await filedSaleTotal(id)).toBe("1.50");
-      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.80", tipAmount: "0.30" }]);
-      expect(await paymentCount(id)).toBe(1);
-      expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
-    });
-
-    it("keeps a recovered short capture on its issued bill without a second invoice", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const app = suite.db;
-      const { id, saleId } = await placedIssuedBill(cfg, coffee);
-      await seedLostCaptureOnPlaced(cfg, id, "1.00");
-
-      const { deps, client } = integratedDeps(app);
-      await expect(
-        payWorkingOrderIntegrated(deps, cfg, { id, lines: [] }, OPERATOR),
-      ).resolves.toMatchObject({
-        outcome: "partial",
-        balance: { received: "1.00", outstanding: "0.50" },
-      });
-
-      expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
-      expect(await tendersFor(id)).toEqual([]);
-      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
-      expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
-    });
-
-    it("two concurrent recoveries settle the invoice ONCE; the loser replays", async () => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const { id } = await placedIssuedBill(cfg, coffee);
-      await seedLostCaptureOnPlaced(cfg, id, "1.50");
-
-      // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
-      // commit, reads `settled`, and replays — one settlement, no second association.
-      const { deps: depsA } = integratedDeps(suite.db);
-      const { deps: depsB } = integratedDeps(suite.db);
-      const req = { id, lines: [] };
-
-      const [a, b] = await Promise.allSettled([
-        payWorkingOrderIntegrated(depsA, cfg, req),
-        payWorkingOrderIntegrated(depsB, cfg, req),
-      ]);
-
-      if (a.status !== "fulfilled" || b.status !== "fulfilled") {
-        throw new Error(
-          `both recoveries should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`,
-        );
-      }
-      expect(a.value.outcome).toBe("captured");
-      expect(b.value.outcome).toBe("captured");
-      if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
-        throw new Error("unreachable");
-      }
-      expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
-      expect(await saleCount(id)).toBe(1);
-      expect(await fiscalRecordCount(id)).toBe(1);
-      expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
-      expect(await paymentCount(id)).toBe(1);
-      expect((await paymentsFor(id))[0]!.linkedToSale).toBe(true);
-    });
-  });
-});
-
-describe("an order being paid by card cannot be changed from another device (plan D22)", () => {
-  /** The simulator, held in P2 until `release`: it writes no payment row until it is released, which
-   * is what shows the guard reads the order's own mark and not the payments store. */
-  class PausedSimulator extends SimulatorPaymentProvider {
-    readonly entered: Promise<void>;
-    release!: () => void;
-    private signal!: () => void;
-    private readonly gate: Promise<void>;
-
-    constructor(db: Database) {
-      super(db);
-      this.entered = new Promise((resolve) => (this.signal = resolve));
-      this.gate = new Promise((resolve) => (this.release = resolve));
-    }
-
-    override async collect(params: Parameters<PaymentProvider["collect"]>[0]) {
-      this.signal();
-      await this.gate;
-      return super.collect(params);
-    }
-  }
-
-  /** Two open tabs in a tables zone, each with one café line. */
-  async function twoTabs() {
-    const venue = await setupVenue();
-    const { cfg, coffee } = venue;
-    const { tabId, otherId, menuItemId } = await withTransaction(suite.db, async (tx) => {
-      const offers = await offerProducts(tx, cfg, { zone: "tables" });
-      const offer = offers.offerFor(coffee.id);
-      const tab = async (label: string) => {
-        const table = await createTable(tx, cfg, { label, zoneId: offers.zoneId });
-        const { tabId: id } = await openPartyTab(tx, cfg, { tableId: table.id });
-        await addTabRound(tx, cfg, id, [{ menuItemId: offer, quantity: "2" }]);
-        return id;
-      };
-      return { tabId: await tab("T1"), otherId: await tab("T2"), menuItemId: offer };
-    });
-    return { ...venue, tabId, otherId, menuItemId };
-  }
-  type Tabs = Awaited<ReturnType<typeof twoTabs>>;
-
-  async function markOf(id: string): Promise<string | null> {
-    const [row] = await suite.db
-      .select({ at: workingOrders.paymentAttemptAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    return row!.at;
-  }
-
-  /** One pass of the server loop's release. */
-  async function releaseLoopPass(): Promise<number> {
-    return releaseStalePaymentAttempts(suite.db);
-  }
-
-  async function setMark(id: string, at: string): Promise<void> {
-    await suite.db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: at })
-      .where(eq(workingOrders.id, id));
-  }
-
-  async function revisionOf(id: string): Promise<number> {
-    const [row] = await suite.db
-      .select({ revision: workingOrders.revision })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    return row!.revision;
-  }
-
-  /** A new round, a line edit and a void, each in its own transaction, on `id`. */
-  function writes(t: Tabs, id: string): (() => Promise<unknown>)[] {
-    return [
-      () =>
-        withTransaction(suite.db, (tx) =>
-          addTabRound(tx, t.cfg, id, [{ menuItemId: t.menuItemId, quantity: "1" }]),
-        ),
-      async () => {
-        const revision = await revisionOf(id);
-        return withTransaction(suite.db, (tx) =>
-          updateOrderLine(tx, t.cfg, id, 1, { portionLineNos: [], quantity: "3" }, revision),
-        );
-      },
-      () => withTransaction(suite.db, (tx) => cancelLine(tx, t.cfg, id, 1, "1")),
-    ];
-  }
-
-  it("refuses a round, a line edit and a void while the reader runs; the capture then files and clears the mark", async () => {
-    const t = await twoTabs();
-    const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-      t.cfg,
-      {
-        id: t.tabId,
-        lines: [],
-        simulationOutcome: "captured",
-      },
-    );
-    await provider.entered;
-
-    expect(await markOf(t.tabId)).not.toBeNull();
-    // The control: nothing is in the payments store while the reader runs.
-    expect(await paymentCount(t.tabId)).toBe(0);
-    const before = await revisionOf(t.tabId);
-    for (const write of writes(t, t.tabId)) {
-      await expect(write()).rejects.toMatchObject({
-        code: "order.payment_in_flight",
-        params: { workingOrderId: t.tabId },
-      });
-    }
-    expect(await revisionOf(t.tabId)).toBe(before);
-    // A different order is never blocked.
-    for (const write of writes(t, t.otherId)) await write();
-    expect(await markOf(t.otherId)).toBeNull();
-
-    provider.release();
-    const out = await paying;
-
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    // P3 files what P1 priced: the two cafés the order held when Pay was pressed.
-    expect(out.ticket.total).toBe("3.00");
-    expect(await orderState(t.tabId)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await markOf(t.tabId)).toBeNull();
-    // The settled order is closed to writes, and says so rather than that a payment is running.
-    await expect(writes(t, t.tabId)[0]!()).rejects.toMatchObject({ code: "tab.not_open" });
-  });
-
-  it("a declined card clears the mark, and the order takes a round, an edit and a void again", async () => {
-    const t = await twoTabs();
-    const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-      t.cfg,
-      {
-        id: t.tabId,
-        lines: [],
-        simulationOutcome: "declined",
-      },
-    );
-    await provider.entered;
-    expect(await markOf(t.tabId)).not.toBeNull();
-    provider.release();
-
-    expect(await paying).toEqual({ outcome: "declined" });
-    expect(await markOf(t.tabId)).toBeNull();
-    const before = await revisionOf(t.tabId);
-    for (const write of writes(t, t.tabId)) await write();
-    expect(await revisionOf(t.tabId)).toBe(before + 3);
-  });
-
-  it("a reader that throws clears the mark before the error reaches the till", async () => {
-    const t = await twoTabs();
-    const provider = new PausedSimulator(suite.db);
-    provider.collect = () => Promise.reject(new Error("reader unreachable"));
-
-    await expect(
-      payWorkingOrderIntegrated(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-        t.cfg,
-        {
-          id: t.tabId,
-          lines: [],
-        },
-      ),
-    ).rejects.toThrow("reader unreachable");
-    expect(await markOf(t.tabId)).toBeNull();
-    for (const write of writes(t, t.tabId)) await write();
-  });
-
-  it("a second card payment of the order from another till is refused while the first runs, and never reaches its reader", async () => {
-    const t = await twoTabs();
-    const first = new PausedSimulator(suite.db);
-    const firstPay = payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider: first },
-      t.cfg,
-      { id: t.tabId, lines: [], simulationOutcome: "captured" },
-    );
-    await first.entered;
-
-    let secondReaderAsked = false;
-    const second = cannedProvider(() => {
-      secondReaderAsked = true;
-      return Promise.resolve();
-    }, "captured");
-    await expect(
-      payWorkingOrderIntegrated(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock, provider: second },
-        t.cfg,
-        {
-          id: t.tabId,
-          lines: [],
-        },
-      ),
-    ).rejects.toMatchObject({
-      code: "order.payment_in_flight",
-      params: { workingOrderId: t.tabId },
-    });
-    expect(secondReaderAsked).toBe(false);
-
-    first.release();
-    const out = await firstPay;
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    expect(out.ticket.total).toBe("3.00");
-    expect(await saleCount(t.tabId)).toBe(1);
-    expect(await markOf(t.tabId)).toBeNull();
-  });
-
-  it("the loop never releases the mark of an attempt still running in this process, however old", async () => {
-    const t = await twoTabs();
-    const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-      t.cfg,
-      {
-        id: t.tabId,
-        lines: [],
-        simulationOutcome: "captured",
-      },
-    );
-    await provider.entered;
-    // Far older than any reader waits: only the attempt being live can keep it.
-    await setMark(t.tabId, "2020-01-01T00:00:00.000Z");
-
-    await releaseLoopPass();
-
-    expect(await markOf(t.tabId)).toBe("2020-01-01T00:00:00.000Z");
-    const before = await revisionOf(t.tabId);
-    await expect(writes(t, t.tabId)[0]!()).rejects.toMatchObject({
-      code: "order.payment_in_flight",
-    });
-    provider.release();
-    const out = await paying;
-    expect(out.outcome).toBe("captured");
-    if (out.outcome !== "captured") throw new Error("unreachable");
-    // The two cafés the order held at Pay, and no round added while the reader ran.
-    expect(out.ticket.total).toBe("3.00");
-    expect(await revisionOf(t.tabId)).toBe(before);
-  });
-
-  describe("a SumUp reader that stops polling before the card is resolved", () => {
-    /** Pay by SumUp with the checkout left pending, so `collect` returns `attempting` with the
-     * payment row still `attempting`. */
-    async function timedOut() {
-      const t = await twoTabs();
-      const client = new FakeSumUp();
-      const provider = new SumUpCloudProvider({
-        captureAlerts,
-        client,
-        db: suite.db,
-        incidents: () => Promise.resolve(false),
-        poll: { maxAttempts: 2, intervalMs: 0, sleep: () => Promise.resolve() },
-      });
-      const deps: IntegratedPayDeps = {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        provider,
-        readerRef: "rdr",
-      };
-      client.stallNext();
-      expect(await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] })).toEqual({
-        outcome: "timeout",
-      });
-      const [row] = suite.db.all<{ ref: string }>(
-        sql`select external_ref as ref from payments where working_order_id = ${t.tabId}`,
-      );
-      return { t, client, provider, deps, checkout: row!.ref };
-    }
-
-    it("keeps the mark, so edits and a second Pay are refused while SumUp may still capture it", async () => {
-      const { t, deps } = await timedOut();
-
-      expect(await markOf(t.tabId)).not.toBeNull();
-      await releaseLoopPass();
-      expect(await markOf(t.tabId)).not.toBeNull();
-      for (const write of writes(t, t.tabId)) {
-        await expect(write()).rejects.toMatchObject({ code: "order.payment_in_flight" });
-      }
-      await expect(
-        payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] }),
-      ).rejects.toMatchObject({ code: "order.payment_in_flight" });
-      expect(await rawPaymentsFor(t.tabId)).toEqual([{ state: "attempting", hasSale: false }]);
-    });
-
-    it("is released by the loop once the sweep resolves the attempt as failed", async () => {
-      const { t, client, provider, checkout } = await timedOut();
-
-      client.decline(checkout);
-      await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
-      await releaseLoopPass();
-
-      expect(await markOf(t.tabId)).toBeNull();
-      for (const write of writes(t, t.tabId)) await write();
-    });
-
-    it("stays after the sweep captures it, until Pay files the captured payment", async () => {
-      const { t, client, provider, deps, checkout } = await timedOut();
-
-      client.settle(checkout);
-      await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
-      await releaseLoopPass();
-
-      expect(await markOf(t.tabId)).not.toBeNull();
-      await expect(writes(t, t.tabId)[2]!()).rejects.toMatchObject({
-        code: "order.payment_in_flight",
-      });
-      const out = await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] });
-      expect(out.outcome).toBe("captured");
-      if (out.outcome !== "captured") throw new Error("unreachable");
-      expect(out.ticket.total).toBe("3.00");
-      expect(await tendersFor(t.tabId)).toEqual([
-        { method: "card", amount: "3.00", tipAmount: "0.00" },
-      ]);
-      expect(await markOf(t.tabId)).toBeNull();
-    });
-  });
-
-  describe("when clearing the mark after an attempt that filed nothing fails", () => {
-    /** Refuse, until dropped, any write that clears this order's mark. */
-    function refuseRelease(id: string): () => void {
-      const name = `test_refuse_release_${id.replaceAll("-", "_")}`;
-      suite.db.run(
-        sql.raw(`create trigger ${name} before update of payment_attempt_at on working_orders
-          when old.id = '${id}' and new.payment_attempt_at is null
-          begin select raise(abort, 'release refused'); end`),
-      );
-      return () => suite.db.run(sql.raw(`drop trigger ${name}`));
-    }
-
-    it("a decline is still reported as a decline, and the failure is logged", async () => {
-      const t = await twoTabs();
-      const logged: unknown[][] = [];
-      const log: Logger = (...args) => void logged.push(args);
-      const drop = refuseRelease(t.tabId);
-      try {
-        expect(
-          await payWorkingOrderIntegrated(
-            {
-              admission: testTradingAdmission(),
-              db: suite.db,
-              backend,
-              clock,
-              provider: new SimulatorPaymentProvider(suite.db),
-              log,
-            },
-            t.cfg,
-            { id: t.tabId, lines: [], simulationOutcome: "declined" },
-          ),
-        ).toEqual({ outcome: "declined" });
-      } finally {
-        drop();
-      }
-      expect(logged).toEqual([
-        [
-          "warn",
-          "payment_attempt.release_failed",
-          { workingOrderId: t.tabId, error: expect.stringContaining("release refused") },
-        ],
-      ]);
-      // The next loop pass clears what this release could not.
-      expect(await markOf(t.tabId)).not.toBeNull();
-      await releaseLoopPass();
-      expect(await markOf(t.tabId)).toBeNull();
-    });
-
-    it("a reader that throws still reaches the till with its own error", async () => {
-      const t = await twoTabs();
-      const logged: unknown[][] = [];
-      const log: Logger = (...args) => void logged.push(args);
-      const provider = new PausedSimulator(suite.db);
-      provider.collect = () => Promise.reject(new Error("reader unreachable"));
-      const drop = refuseRelease(t.tabId);
-      try {
-        await expect(
-          payWorkingOrderIntegrated(
-            { admission: testTradingAdmission(), db: suite.db, backend, clock, provider, log },
-            t.cfg,
-            {
-              id: t.tabId,
-              lines: [],
-            },
-          ),
-        ).rejects.toThrow("reader unreachable");
-      } finally {
-        drop();
-      }
-      expect(logged.map((entry) => entry[1])).toEqual(["payment_attempt.release_failed"]);
-    });
-  });
-
-  it("a pay pressed again over a mark a crash left is not refused by it, and clears it", async () => {
-    const t = await twoTabs();
-    await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
-
-    const out = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        provider: new SimulatorPaymentProvider(suite.db),
-      },
-      t.cfg,
-      { id: t.tabId, lines: [], simulationOutcome: "captured" },
-    );
-
-    expect(out.outcome).toBe("captured");
-    expect(await markOf(t.tabId)).toBeNull();
-  });
-
-  it("a cash payment of an order a card is paying is refused, filing nothing", async () => {
-    const t = await twoTabs();
-    await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
-
-    await expect(
-      paySavedBillInCash(
-        { admission: testTradingAdmission(), db: suite.db, backend, clock },
-        t.cfg,
-        await paymentOperator(t.cfg),
-        t.tabId,
-        "10.00",
-      ),
-    ).rejects.toMatchObject({
-      code: "order.payment_in_flight",
-      params: { workingOrderId: t.tabId },
-    });
-    expect(await saleCount(t.tabId)).toBe(0);
-    expect(await orderState(t.tabId)).toEqual({ status: "open", settledAtSet: false });
-  });
-
-  describe("a mark left by a crash after the card was captured", () => {
-    /** The crash: P1 marked the order and P2 captured, and P3 never ran. */
-    async function crashedAfterCapture(capturedAmount: string) {
-      const t = await twoTabs();
-      await setMark(t.tabId, "2026-09-26T10:00:00.000Z");
-      await withTransaction(suite.db, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: t.cfg.origin,
-          nodeId: t.cfg.nodeId,
-          workingOrderId: t.tabId,
-          provider: "stripe",
-          paymentRef: `pi-ref-${randomUUID()}`,
-          amount: decimal(capturedAmount),
-          settledAt: new Date(),
-          externalRef: `pi_lost_${randomUUID()}`,
-        }),
-      );
-      return t;
-    }
-
-    it("is cleared by the recovery that files the sale", async () => {
-      const t = await crashedAfterCapture("3.00");
-      const { deps } = integratedDeps(suite.db);
-
-      const out = await payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] });
-
-      expect(out.outcome).toBe("captured");
-      expect(await orderState(t.tabId)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await markOf(t.tabId)).toBeNull();
-    });
-
-    it("is cleared when a short capture becomes a bill contribution", async () => {
-      const t = await crashedAfterCapture("1.00");
-      const { deps } = integratedDeps(suite.db);
-
-      await expect(
-        payWorkingOrderIntegrated(deps, t.cfg, { id: t.tabId, lines: [] }),
-      ).resolves.toMatchObject({
-        outcome: "partial",
-        balance: { received: "1.00", outstanding: "2.00" },
-      });
-
-      expect(await saleCount(t.tabId)).toBe(0);
-      await releaseLoopPass();
-      expect(await markOf(t.tabId)).toBeNull();
-      expect(await ordersWithUnfiledPayment(suite.db, [t.tabId])).toEqual(new Set());
-      await writes(t, t.tabId)[0]!();
-      expect(
-        suite.db.all(
-          sql`select sum(quantity) as quantity from working_order_lines where working_order_id = ${t.tabId}`,
-        ),
-      ).toEqual([{ quantity: 3000 }]);
-    });
-  });
-
-  it.each(["open", "placed"] as const)(
-    "retains a partially refunded unfiled %s charge without issuing or charging again",
-    async (status) => {
-      const { cfg, coffee } = await modeVenue("ticket_then_pay");
-      const id = randomUUID();
-      await parkOrder({ db: suite.db }, cfg, {
-        id,
-        zoneId: coffee.zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      });
-      if (status === "placed")
-        await placeOrder(
-          { admission: testTradingAdmission(), db: suite.db, backend, clock },
-          cfg,
-          id,
-          OPERATOR,
-        );
-      let calls = 0;
-      class RefundedSimulator extends SimulatorPaymentProvider {
-        override async collect(
-          params: Parameters<PaymentProvider["collect"]>[0],
-        ): Promise<PaymentResult> {
-          calls++;
-          const result = await super.collect(params);
-          await withTransaction(suite.db, (tx) =>
-            recordRefund(tx, {
-              provider: result.provider,
-              paymentRef: result.paymentRef,
-              amount: decimal("0.40"),
-              providerRefundRef: "observed-refund",
-            }),
-          );
-          return { ...result, state: "partially_refunded" };
-        }
-      }
-      const provider = new RefundedSimulator(suite.db);
-      const deps = { admission: testTradingAdmission(), db: suite.db, backend, clock, provider };
-      await expect(
-        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], simulationOutcome: "captured" }),
-      ).rejects.toMatchObject({
-        code: "sale.charged_not_recorded",
-        params: { reason: "partial_refund" },
-      });
-      await releaseLoopPass();
-      expect(await orderState(id)).toEqual({ status, settledAtSet: false });
-      expect(suite.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual([]);
-      if (status === "open") expect(await markOf(id)).not.toBeNull();
-      await expect(
-        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], simulationOutcome: "captured" }),
-      ).rejects.toMatchObject({ code: "order.payment_in_flight" });
-      expect(calls).toBe(1);
-      expect(await tendersFor(id)).toEqual([]);
-    },
-  );
-
-  it.each(["0.40", "1.50"])(
-    "handles a pending bill payment refund of %s without allocating or issuing",
-    async (refund) => {
-      const t = await twoTabs();
-      const ref = randomUUID();
-      const billId = await withTransaction(suite.db, async (tx) => {
-        const [bill] = await tx
-          .insert(billPayments)
-          .values({
-            workingOrderId: t.tabId,
-            submissionId: randomUUID(),
-            fingerprint: "pending",
-            kind: "contribution",
-            method: "card",
-            applied: 150,
-            state: "pending",
-            requestedBy: OPERATOR,
-            source: "device",
-            deviceId: t.cfg.origin.deviceId,
-          })
-          .returning({ id: billPayments.id });
-        await insertCapturedPayment(tx, {
-          origin: t.cfg.origin,
-          workingOrderId: t.tabId,
-          nodeId: t.cfg.nodeId,
-          provider: "sumup",
-          paymentRef: ref,
-          amount: decimal("1.50"),
-          settledAt: clock.now().instant,
-          billPaymentId: bill!.id,
-        });
-        await recordRefund(tx, {
-          provider: "sumup",
-          paymentRef: ref,
-          amount: decimal(refund),
-          providerRefundRef: "partial",
-        });
-        return bill!.id;
-      });
-      const result = await withTransaction(suite.db, (tx) =>
-        settleFromProviderRow(
-          tx,
-          { admission: testTradingAdmission(), db: suite.db, backend, clock, cfg: t.cfg },
-          billId,
-          clock.now().instant,
-          async () => ({}),
-        ),
-      );
-      expect(result).toEqual(
-        refund === "1.50"
-          ? { settled: "failed" }
-          : { settled: "left", providerState: "partially_refunded" },
-      );
-      const [bill] = await suite.db
-        .select({ state: billPayments.state })
-        .from(billPayments)
-        .where(eq(billPayments.id, billId));
-      expect(bill?.state).toBe(refund === "1.50" ? "failed" : "pending");
-      expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual(
-        [],
-      );
-      expect(await tendersFor(t.tabId)).toEqual([]);
-    },
-  );
-
-  it.each(["0.40", "1.50"])(
-    "answers a live bill reader refund of %s without timeout or issuance",
-    async (refund) => {
-      const t = await twoTabs();
-      const personId = suite.db.all<{ id: string }>(
-        sql`select id from persons where email = 'owner@example.test'`,
-      )[0]!.id;
-      const sessionId = await openTillSession(suite.db, {
-        personId,
-        deviceId: t.cfg.origin.deviceId,
-      });
-      class RefundedReader extends SimulatorPaymentProvider {
-        override async collect(
-          params: Parameters<PaymentProvider["collect"]>[0],
-        ): Promise<PaymentResult> {
-          const result = await super.collect(params);
-          return this.partialRefund(result.paymentRef, decimal(refund));
-        }
-      }
-      const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId));
-      const taking = takeReaderBillPayment(
-        {
-          admission: testTradingAdmission(),
-          db: suite.db,
-          backend,
-          clock,
-          provider: new RefundedReader(suite.db),
-        },
-        t.cfg,
-        t.tabId,
-        {
-          expectedEdit,
-          submissionId: randomUUID(),
-          kind: "contribution",
-          amount: "1.50",
-          applied: "1.50",
-          tip: "0.00",
-          method: "card",
-          entry: "reader",
-          simulationOutcome: "captured",
-        },
-        { personId, sessionId },
-      );
-      if (refund === "0.40")
-        await expect(taking).rejects.toMatchObject({
-          code: "sale.charged_not_recorded",
-          params: { reason: "partial_refund" },
-        });
-      else expect((await taking).outcome).toBe("declined");
-      const [bill] = await suite.db
-        .select({ state: billPayments.state })
-        .from(billPayments)
-        .where(eq(billPayments.workingOrderId, t.tabId));
-      expect(bill?.state).toBe(refund === "1.50" ? "failed" : "pending");
-      expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual(
-        [],
-      );
-      expect(await tendersFor(t.tabId)).toEqual([]);
-      if (refund === "1.50") {
-        const retry = await takeReaderBillPayment(
-          {
-            admission: testTradingAdmission(),
-            db: suite.db,
-            backend,
-            clock,
-            provider: new SimulatorPaymentProvider(suite.db),
-          },
-          t.cfg,
-          t.tabId,
-          {
-            expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId)),
-            submissionId: randomUUID(),
-            kind: "contribution",
-            amount: "1.50",
-            applied: "1.50",
-            tip: "0.00",
-            method: "card",
-            entry: "reader",
-            simulationOutcome: "captured",
-          },
-          { personId, sessionId },
-        );
-        expect(retry.payment.state).toBe("received");
-      }
-    },
-  );
-
-  it("the loop releases a mark no attempt in this process and no unfiled payment stands behind, on open orders only", async () => {
-    const t = await twoTabs();
-    const [crashed, attempting, failed, abandoned] = [
-      randomUUID(),
-      randomUUID(),
-      randomUUID(),
-      randomUUID(),
-    ];
-    await withTransaction(suite.db, async (tx) => {
-      for (const id of [crashed, attempting, failed, abandoned]) {
-        await createOpenOrder(
-          tx,
-          t.cfg,
-          id,
-          [{ menuItemId: t.coffee.menuItemId, quantity: "1" }],
-          null,
-          {
-            zoneId: t.coffee.zoneId,
-          },
-        );
-      }
-      const payment = (workingOrderId: string) => ({
-        origin: t.cfg.origin,
-        workingOrderId,
-        nodeId: t.cfg.nodeId,
-        provider: "sumup",
-        paymentRef: randomUUID(),
-        amount: decimal("1.50"),
-      });
-      await insertAttempting(tx, payment(attempting));
-      await insertFailedPayment(tx, payment(failed));
-      // An unresolved attempt on ANOTHER order does not hold `crashed`'s mark.
-      await insertAttempting(tx, payment(t.otherId));
-    });
-    const mark = "2026-09-26T10:00:00.000Z";
-    // A crash's mark with no payment row behind it: the simulator's, or one written before collect.
-    await setMark(crashed, mark);
-    // A reader attempt the provider has not resolved yet.
-    await setMark(attempting, mark);
-    // An attempt the provider resolved as failed.
-    await setMark(failed, mark);
-    // A mark on an order that left `open` cannot be cleared: the transition trigger refuses it.
-    await setMark(abandoned, mark);
-    suite.db.run(sql`update working_orders set status = 'abandoned' where id = ${abandoned}`);
-
-    await releaseLoopPass();
-
-    expect(await markOf(crashed)).toBeNull();
-    expect(await markOf(failed)).toBeNull();
-    expect(await markOf(attempting)).toBe(mark);
-    expect(await markOf(abandoned)).toBe(mark);
-  });
-
-  it("clears a stale payment mark when a free order settles by reader", async () => {
-    const { cfg, coffee } = await setupVenue();
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(workingOrderLines)
-        .set({ unitPriceGross: 0, lineTotal: 0 })
-        .where(eq(workingOrderLines.workingOrderId, id));
-      await tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: "2020-01-01T00:00:00.000Z" })
-        .where(eq(workingOrders.id, id));
-    });
-    const { deps, client } = integratedDeps(suite.db);
-
-    await expect(
-      closeZeroBill(
-        deps,
-        cfg,
-        id,
-        {
-          expectedEdit: null,
-          submissionId: id,
-          kind: "contribution",
-          amount: "0.00",
-          method: "cash",
-          tendered: "0.00",
-          applied: "0.00",
-          tip: "0.00",
-        },
-        await paymentOperator(cfg),
-      ),
-    ).rejects.toMatchObject({ code: "order.payment_in_flight", params: { workingOrderId: id } });
-    expect(await markOf(id)).toBe("2020-01-01T00:00:00.000Z");
-
-    expect((await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).outcome).toBe(
-      "captured",
-    );
-
-    expect(await markOf(id)).toBeNull();
-    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(client.lastCreateIntent).toBeUndefined();
-    expect(await paymentCount(id)).toBe(0);
-    expect(await tendersFor(id)).toEqual([]);
-    expect(await filedSaleTotal(id)).toBe("0.00");
-  });
-
-  it("never writes the mark on a placed order it collects", async () => {
-    const { cfg, coffee } = await modeVenue("ticket_then_pay");
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId: coffee.zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    );
-    const provider = new PausedSimulator(suite.db);
-    const paying = payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock, provider },
-      cfg,
-      {
-        id,
-        lines: [],
-        simulationOutcome: "captured",
-      },
-    );
-    await provider.entered;
-
-    expect(await markOf(id)).toBeNull();
-    provider.release();
-    expect((await paying).outcome).toBe("captured");
-    expect(await markOf(id)).toBeNull();
   });
 });
 
@@ -3565,28 +1138,21 @@ describe("a party's bill request goes when a card or collect settles its last ow
     expect(await outstandingSalesFor()).toHaveLength(1);
   }
 
-  /** A captured card payment of the tab's 1.50 that no sale was filed for. */
-  async function lostCapture(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
-    const origin = await orderDeviceOrigin(suite.db);
-    await withTransaction(suite.db, (tx) =>
-      insertCapturedPayment(tx, {
-        origin,
-        workingOrderId: tabId,
-        nodeId: cfg.nodeId,
-        provider: "stripe",
-        paymentRef: `pi-ref-${randomUUID()}`,
-        amount: decimal("1.50"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      }),
-    );
-  }
-
-  async function payByCard(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
-    const { deps } = integratedDeps(suite.db);
-    expect(
-      (await payWorkingOrderIntegrated({ ...deps, log }, cfg, { id: tabId, lines: [] })).outcome,
-    ).toBe("captured");
+  async function payByCard(
+    cfg: DeviceRequestConfig,
+    tabId: string,
+    log?: Logger,
+    recover = false,
+  ): Promise<void> {
+    const provider = new FakePaymentProvider(suite.db);
+    const deps = { db: suite.db, backend, clock, admission: testTradingAdmission(), provider, log };
+    const pay = () => payReader(deps, cfg, { id: tabId, lines: [] }, OPERATOR);
+    if (recover) {
+      provider.crashNextCollect("captured");
+      await expect(pay()).rejects.toThrow("process stopped");
+    }
+    expect((await pay()).outcome).toBe("received");
+    expect(provider.collectCalls).toHaveLength(1);
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
@@ -3640,8 +1206,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       "the recovery of a card capture never filed",
       "table_tab",
       async (cfg, tabId, log) => {
-        await lostCapture(cfg, tabId);
-        await payByCard(cfg, tabId, log);
+        await payByCard(cfg, tabId, log, true);
       },
     ],
     [
@@ -3657,8 +1222,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
-        await lostCapture(cfg, tabId);
-        await payByCard(cfg, tabId, log);
+        await payByCard(cfg, tabId, log, true);
       },
     ],
     [
@@ -3669,7 +1233,16 @@ describe("a party's bill request goes when a card or collect settles its last ow
         const saleId = await saleIdFor(tabId);
         await correctToZero(cfg, saleId);
         expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
-        await payByCard(cfg, tabId, log);
+        await closeZeroBill(
+          { db: suite.db, backend, clock, admission: testTradingAdmission(), log },
+          cfg,
+          tabId,
+          {
+            ...billShare("card", "0.00", { entry: "reader", submissionId: tabId }),
+            expectedEdit: await readBillEditState(suite.db, tabId),
+          },
+          await paymentOperator(cfg, OPERATOR),
+        );
         // No card tender, so the reader was never asked for the 1.50.
         expect(await tendersFor(tabId)).toEqual([]);
       },
@@ -3774,177 +1347,18 @@ describe("integrated answer receipt presentation", () => {
       simulationOutcome: "captured" as const,
     };
     const deps = { db: suite.db, backend, clock, provider };
-    const first = await payWorkingOrderIntegrated(
-      { ...deps, admission: testTradingAdmission() },
-      cfg,
-      req,
-    );
-    expect(first.outcome).toBe("captured");
-    if (first.outcome !== "captured") throw new Error("Expected capture");
-    expect(first.ticket.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
-    expect(first.ticket.receiptSettings).toEqual({ printAddress: true });
+    const first = await payReader({ ...deps, admission: testTradingAdmission() }, cfg, req);
+    expect(first.outcome).toBe("received");
+    expect(first.invoice!.receiptTrim).toEqual({ headerSubtitle: "Connected subtitle" });
+    expect(first.invoice!.receiptSettings).toEqual({ printAddress: true });
     suite.db.run(sql`update departments set receipt_text = '{}' where id = ${departmentId}`);
-    const replay = await payWorkingOrderIntegrated(
-      { ...deps, admission: testTradingAdmission() },
-      cfg,
-      req,
-    );
-    expect(replay.outcome).toBe("captured");
-    if (replay.outcome !== "captured") throw new Error("Expected replay");
-    expect(replay.ticket.receiptTrim).toEqual({});
-    expect(replay.ticket.receiptSettings).toEqual({ printAddress: false });
-    expect(replay.ticket.invoiceNumber).toBe(first.ticket.invoiceNumber);
-    expect(replay.ticket.tender).toEqual(first.ticket.tender);
+    const replay = await payReader({ ...deps, admission: testTradingAdmission() }, cfg, req);
+    expect(replay.outcome).toBe("received");
+    expect(replay.invoice!.receiptTrim).toEqual({});
+    expect(replay.invoice!.receiptSettings).toEqual({ printAddress: false });
+    expect(replay.invoice!.invoiceNumber).toBe(first.invoice!.invoiceNumber);
+    expect(replay.invoice!.tender).toEqual(first.invoice!.tender);
     expect(await saleCount(req.id)).toBe(1);
     expect(await paymentCount(req.id)).toBe(1);
   });
-});
-
-describe("receipt presentation across invoice-first and recovery paths", () => {
-  it.each([
-    ["fresh capture", false, false],
-    ["unfiled capture recovery", false, true],
-    ["issued invoice capture", true, false],
-    ["issued invoice recovery", true, true],
-  ] as const)(
-    "refreshes the saved department on %s without repeating payment or filing",
-    async (_, issued, recovered) => {
-      const { cfg: original, coffee } = await setupVenue(issued ? "ticket_then_pay" : "prepay");
-      const cfg = { ...original, invoiceLocales: ["ca-ES", "es-ES"] };
-      suite.db.run(
-        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["ca-ES","es-ES"]')) where module = 'venue'`,
-      );
-      const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
-        sql`select department_id from floor_zones where id = ${coffee.zoneId}`,
-      );
-      const otherId = randomUUID();
-      suite.db
-        .run(sql`insert into departments (id, name, trading_name, is_default, active, created_at)
-      values (${otherId}, 'Other dining', 'Other brand', 0, 1, '2026-10-10T00:00:00Z')`);
-      suite.db.run(
-        sql`update departments set trading_name = 'Recorded counter' where id = ${departmentId}`,
-      );
-      await suite.db
-        .update(departments)
-        .set({
-          receiptText: null,
-          receiptLogoImageId: null,
-          receiptLogoRasters: null,
-          receiptUpdatedAt: null,
-        })
-        .where(eq(departments.id, departmentId));
-      suite.db.run(
-        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${departmentId}`,
-      );
-      suite.db.run(
-        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', receipt_updated_at = '2026-10-10T00:00:00Z' where id = ${otherId}`,
-      );
-
-      await makeReceiptPrinter(cfg);
-      const id = randomUUID();
-      if (issued) {
-        await parkOrder({ db: suite.db }, cfg, {
-          id,
-          zoneId: coffee.zoneId,
-          lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        });
-        await placeOrder(
-          { admission: testTradingAdmission(), db: suite.db, backend, clock },
-          cfg,
-          id,
-          OPERATOR,
-        );
-        await issueOrderInvoice(
-          { admission: testTradingAdmission(), db: suite.db, backend, clock },
-          cfg,
-          id,
-          OPERATOR,
-        );
-      } else if (recovered) {
-        await withTransaction(suite.db, (tx) =>
-          createOpenOrder(tx, cfg, id, [{ menuItemId: coffee.menuItemId, quantity: "1" }], null, {
-            zoneId: coffee.zoneId,
-          }),
-        );
-      }
-      if (recovered) {
-        await withTransaction(suite.db, (tx) =>
-          insertCapturedPayment(tx, {
-            origin: cfg.origin,
-            nodeId: cfg.nodeId,
-            workingOrderId: id,
-            provider: "stripe",
-            paymentRef: randomUUID(),
-            amount: decimal("1.50"),
-            settledAt: new Date(),
-            externalRef: `pi_lost_${randomUUID()}`,
-          }),
-        );
-      }
-      const { deps, client } = integratedDeps(suite.db);
-      const req = {
-        id,
-        zoneId: coffee.zoneId,
-        lines: issued || recovered ? [] : [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-      };
-      const first = await payWorkingOrderIntegrated(deps, cfg, req);
-      expect(first.outcome).toBe("captured");
-      if (first.outcome !== "captured") throw new Error("Expected capture");
-      expect(first.ticket.locale).toBe("ca-ES");
-      expect(first.ticket.receiptHeader).toEqual({
-        departmentId,
-        tradingName: "Recorded counter",
-        printTradingName: true,
-      });
-      expect(first.ticket.receiptTrim).toEqual({
-        headerSubtitle: "Bon dia",
-        email: "counter@example.test",
-      });
-      expect(first.ticket.venueAddress).toEqual(["Calle Mayor 1", "28013 Madrid"]);
-      expect(first.ticket.receiptSettings).toEqual({ printAddress: true });
-      if (recovered) expect(client.lastCreateIntent).toBeUndefined();
-      const before = {
-        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-        payments: suite.db.all(sql`select * from payments order by id`),
-        drawer: suite.db.all(sql`select * from drawer_opens order by id`),
-        jobs: suite.db.all(sql`select * from print_jobs order by id`),
-      };
-      suite.db.run(
-        sql`update floor_zones set department_id = ${otherId} where id = ${coffee.zoneId}`,
-      );
-      suite.db.run(
-        sql`update departments set trading_name = 'Changed brand' where id = ${departmentId}`,
-      );
-      suite.db.run(
-        sql`update departments set operation_description = 'Venta en establecimiento', receipt_text = '{"headerSubtitle":{"es-ES":"Texto actual"}}' where id = ${departmentId}`,
-      );
-
-      suite.db.run(
-        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
-      );
-      await seedVenueSettings(suite.db, { addressLine1: "Current street" });
-      const replay = await payWorkingOrderIntegrated(deps, cfg, req);
-      expect(replay.outcome).toBe("captured");
-      if (replay.outcome !== "captured") throw new Error("Expected replay");
-      expect(replay.ticket.receiptTrim).toEqual({ headerSubtitle: "Texto actual" });
-      expect(replay.ticket.venueAddress).toEqual(["Current street", "28013 Madrid"]);
-      expect(replay.ticket.receiptSettings).toEqual({ printAddress: false });
-      expect({
-        ...replay.ticket,
-        receiptTrim: first.ticket.receiptTrim,
-        venueAddress: first.ticket.venueAddress,
-        receiptSettings: first.ticket.receiptSettings,
-      }).toEqual(first.ticket);
-      expect(await saleCount(id)).toBe(1);
-      expect(await fiscalRecordCount(id)).toBe(1);
-      expect(await paymentCount(id)).toBe(1);
-      expect(before.drawer).toEqual([]);
-      expect({
-        fiscal: suite.db.all(sql`select * from registros_facturacion order by id`),
-        payments: suite.db.all(sql`select * from payments order by id`),
-        drawer: suite.db.all(sql`select * from drawer_opens order by id`),
-        jobs: suite.db.all(sql`select * from print_jobs order by id`),
-      }).toEqual(before);
-    },
-  );
 });

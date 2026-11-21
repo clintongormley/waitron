@@ -1143,7 +1143,9 @@ describe("the start check on a real start", () => {
       await inside;
       const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
       expect(await asked.json()).toEqual({ restarting: true, replayed: false });
-      const refused = await fetch(`${base}/api/pay`, { method: "POST" });
+      const refused = await fetch(`${base}/api/working-orders/${randomUUID()}/payments`, {
+        method: "POST",
+      });
       expect(refused.status).toBe(503);
       await refused.text();
       mdns.clear();

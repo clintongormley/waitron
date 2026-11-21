@@ -314,7 +314,6 @@ import { invoiceMail } from "./invoice-mail.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceJob } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
-import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
 import { boxAlertMail } from "./box-alert-mail.js";
 import { attendanceReminderMail } from "./attendance-email.js";
 import { mountModulesApi } from "./modules-api.js";
@@ -399,8 +398,7 @@ import { certificateReminderJob } from "./certificate-reminder-worker.js";
 import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
-import { releaseStalePaymentAttempts } from "./till-sale.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
@@ -688,17 +686,11 @@ export function withPendingSweep(
   };
 }
 
-/** The pending-card loop's pass: the card sweep, then automatic card recovery, the release of
- * stale payment marks and the settling of pending bill payments, in that order. Once `signal` is
- * aborted no later step starts, and the settle step asks the card provider about no further bill
- * refund. Exported for a direct test
- * (`boot-pending-sweep.test.ts`). */
+/** Sweep the providers before bill settlement. An abort during the sweep skips settlement. */
 export function pendingCardPass(
   parts: {
     sweepProviders: () => Promise<readonly PaymentProvider[]>;
     owners: () => CollectionOwners;
-    recover: () => ReturnType<typeof recoverAutomaticCardPayments>;
-    release: () => Promise<number>;
     settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>;
     getRole: () => SingletonRole;
     log: Logger;
@@ -707,21 +699,10 @@ export function pendingCardPass(
 ): (now: Date) => Promise<PassReport> {
   const { getRole, log } = parts;
   return withPendingBillPayments(
-    withStalePaymentRelease(
-      withAutomaticCardRecovery(
-        withPendingSweep(
-          async () => ({ duties: [], nextDueAt: null }),
-          parts.sweepProviders,
-          parts.owners,
-          log,
-          signal,
-        ),
-        parts.recover,
-        getRole,
-        log,
-        signal,
-      ),
-      parts.release,
+    withPendingSweep(
+      async () => ({ duties: [], nextDueAt: null }),
+      parts.sweepProviders,
+      parts.owners,
       log,
       signal,
     ),
@@ -730,53 +711,6 @@ export function pendingCardPass(
     log,
     signal,
   );
-}
-
-export function withAutomaticCardRecovery(
-  inner: (now: Date) => Promise<PassReport>,
-  recover: () => ReturnType<typeof recoverAutomaticCardPayments>,
-  getRole: () => SingletonRole,
-  log: Logger,
-  signal?: AbortSignal,
-): (now: Date) => Promise<PassReport> {
-  return async (now) => {
-    const report = await inner(now);
-    if (signal?.aborted || getRole() !== "primary") return report;
-    try {
-      const result = await recover();
-      if (result.filed > 0) log("info", "payment.automatic_recovery", { filed: result.filed });
-      for (const failure of result.errors)
-        log("warn", "payment.automatic_recovery_failed", failure);
-    } catch (error) {
-      log("warn", "payment.automatic_recovery_failed", { error: String(error) });
-    }
-    return report;
-  };
-}
-
-/**
- * After each pass, release the in-flight marks (plan D22) no payment attempt is still behind
- * (`releaseStalePaymentAttempts`). After the inner pass, so a card attempt its sweep resolved in
- * this pass is judged on the resolved row. Like {@link withPendingSweep} it is log-only: a failure
- * never changes the inner report. Exported for a direct test (`boot-pending-sweep.test.ts`).
- */
-export function withStalePaymentRelease(
-  inner: (now: Date) => Promise<PassReport>,
-  release: () => Promise<number>,
-  log: Logger,
-  signal?: AbortSignal,
-): (now: Date) => Promise<PassReport> {
-  return async (now) => {
-    const report = await inner(now);
-    if (signal?.aborted) return report;
-    try {
-      const released = await release();
-      if (released > 0) log("info", "payment_attempt.released", { released });
-    } catch (error) {
-      log("warn", "payment_attempt.release_failed", { error: String(error) });
-    }
-    return report;
-  };
 }
 
 /** How soon the loop comes back while a bill payment or refund is pending: a bill stays locked
@@ -4741,18 +4675,6 @@ async function bootServer(
             }),
         owners: () =>
           sweepOwners(tradingContext.nodeId, holders.singletonRole.current, takenOverFrom),
-        recover: () =>
-          recoverAutomaticCardPayments({
-            db,
-            backend: nodeBackend,
-            admission: tradingAdmission,
-            clock: tillClock,
-            cfg: tradingContext,
-            pool: cardPool,
-            attendance: attendanceRecorder,
-            log,
-          }),
-        release: () => releaseStalePaymentAttempts(db),
         settle: (signal) =>
           settlePendingBillPayments(
             {

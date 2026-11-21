@@ -12052,7 +12052,7 @@ describe("till-app", () => {
       emit(counter(el)!, "collect-card", {});
     };
 
-    it("forwards the selected simulator outcome to POST /api/pay", async () => {
+    it("forwards the selected simulator outcome when paying the bill", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountWidget<TillApp>("till-app", {
         api: stubApi({

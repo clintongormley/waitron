@@ -696,7 +696,6 @@ WHEN new.dining IS NOT old.dining
 BEGIN
   SELECT raise(abort, 'an order''s way of selling is fixed once the kitchen has it or money is taken')
   WHERE old.status <> 'open'
-    OR old.payment_attempt_at IS NOT NULL
     OR exists (SELECT 1 FROM working_order_lines WHERE working_order_id = old.id AND sent_at IS NOT NULL)
     OR exists (
       SELECT 1 FROM ticket_items
@@ -741,7 +740,6 @@ BEGIN
         AND new.before_restore IS old.before_restore
         AND new.settled_at IS old.settled_at
         AND new.collected_at IS old.collected_at
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.dining IS old.dining
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
@@ -770,7 +768,6 @@ BEGIN
         AND new.settled_at IS old.settled_at
         AND new.delivery_table_id IS old.delivery_table_id
         AND new.revision IS old.revision
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.invoice_type IS old.invoice_type
         AND new.recipient_tax_id IS old.recipient_tax_id
         AND new.recipient_legal_name IS old.recipient_legal_name
@@ -804,7 +801,6 @@ BEGIN
         AND new.settled_at IS old.settled_at
         AND new.delivery_table_id IS old.delivery_table_id
         AND new.revision IS old.revision
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.invoice_type IS old.invoice_type
         AND new.recipient_tax_id IS old.recipient_tax_id
         AND new.recipient_legal_name IS old.recipient_legal_name
@@ -849,7 +845,6 @@ BEGIN
         AND new.delivery_table_id IS old.delivery_table_id
         AND new.delivery_table_label IS old.delivery_table_label
         AND new.revision IS old.revision
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.invoice_type IS old.invoice_type
         AND new.recipient_tax_id IS old.recipient_tax_id
         AND new.recipient_legal_name IS old.recipient_legal_name
@@ -885,7 +880,6 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.dining IS old.dining
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
         AND new.service_mode IS old.service_mode
@@ -918,7 +912,6 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -952,7 +945,6 @@ BEGIN
         AND new.recipient_identifier_country_code IS old.recipient_identifier_country_code
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
-        AND new.payment_attempt_at IS old.payment_attempt_at
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

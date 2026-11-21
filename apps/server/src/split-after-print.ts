@@ -58,7 +58,7 @@ export async function splitAfterPrint(
       const authz = { sessionId: operator.sessionId, override: checkedOverride };
       const placed = await lockPlacedOrder(tx, deps, cfg, id);
       const { partyId, invoice } = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
-      await refusePlacedOrderMoney(tx, deps, id);
+      await refusePlacedOrderMoney(tx, id);
       await refuseUnservedDishes(tx, id);
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
       const creditNoteId = await creditWholeInvoice(tx, deps, cfg, invoice, authz);

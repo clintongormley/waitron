@@ -142,7 +142,6 @@ async function mount(
     listPaymentProviders: async () => [],
     listReaders: async () => [],
     listReaderHolders: async () => [],
-    listStuckPayments: async () => [],
     listStuckBillPayments: async () => [],
     listStuckTenderRefunds: async () => [],
     listStuckBillRefunds: async () => [],

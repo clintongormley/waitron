@@ -282,7 +282,6 @@ it.each([true, false])(
       "listPaymentProviders",
       "listReaders",
       "listReaderHolders",
-      "listStuckPayments",
       "listStuckBillPayments",
       "listStuckTenderRefunds",
       "listStuckBillRefunds",
@@ -348,7 +347,6 @@ async function mountForCardSetup(path: string) {
   for (const name of [
     "listReaders",
     "listReaderHolders",
-    "listStuckPayments",
     "listStuckBillPayments",
     "listStuckTenderRefunds",
     "listStuckBillRefunds",

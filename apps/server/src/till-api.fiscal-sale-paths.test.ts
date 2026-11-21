@@ -82,7 +82,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 
-// `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
+// The bill payment and working-order routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
 // and file no second record. Route logic that needs no real fiscal write lives in the
 // hermetic `till-api.test.ts`, whose fiscal seat is an empty object.
@@ -369,10 +369,15 @@ function payFreshBasket(
   billId: string,
   lines: unknown[],
   tender: Record<string, unknown>,
+  requestId?: string,
 ) {
   return app.request(`/api/working-orders/${billId}/payments`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie },
+    headers: {
+      "content-type": "application/json",
+      cookie,
+      ...(requestId === undefined ? {} : { "x-request-id": requestId }),
+    },
     body: JSON.stringify({
       dining: "eat_in",
       submissionId: billId,
@@ -432,7 +437,7 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
 
 /**
  * Enrol a `till` device and return its `waitron_device=<id>.<token>` cookie. Its default profile
- * takes cash; the `/api/pay` cases pass a profile declaring `integrated-card-payment`.
+ * takes cash; reader-payment cases pass a profile declaring `integrated-card-payment`.
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
@@ -524,6 +529,21 @@ describe("POST /api/session (PIN login body handling)", () => {
 });
 
 describe("the fiscal sale path over HTTP", () => {
+  it("returns 404 for the retired reader payment writer", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const response = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({ id: randomUUID(), dining: "eat_in", lines: [] }),
+    });
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("404 Not Found");
+  });
+
   it("returns 404 for the retired sale writer", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
@@ -1546,26 +1566,24 @@ describe("reader payments over HTTP", () => {
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
 
     const workingOrderId = randomUUID();
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: `${cookie}; ${deviceCookie}`,
-        "x-request-id": "whole-order-decline",
-      },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const payRes = await payFreshBasket(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      [{ menuItemId: each.menuItemId, quantity: "1" }],
+      { method: "card", entry: "reader" },
+      "reader-decline",
+    );
 
     expect(payRes.status).toBe(200);
-    expect(await payRes.json()).toEqual({ outcome: "declined" });
+    expect(await payRes.json()).toMatchObject({
+      outcome: "declined",
+      payment: { state: "failed" },
+    });
     expect(log).toHaveBeenCalledWith("warn", "payment.collection_failed", {
       orderId: workingOrderId,
       outcome: "declined",
-      requestId: "whole-order-decline",
+      requestId: "reader-decline",
     });
 
     const after = await withTransaction(suite.db, async (tx) => {
@@ -1579,95 +1597,6 @@ describe("reader payments over HTTP", () => {
     });
     expect(after.fiscalRecords).toHaveLength(0);
     expect(after.wo).toEqual([{ status: "open" }]);
-  });
-
-  describe("a decline whose in-flight mark cannot be cleared is still a decline, and is logged", () => {
-    /** Refuse, until dropped, any write that clears order `id`'s in-flight mark. */
-    function refuseRelease(id: string): () => void {
-      const name = `test_refuse_release_${id.replaceAll("-", "_")}`;
-      suite.db.run(
-        sql.raw(`create trigger ${name} before update of payment_attempt_at on working_orders
-          when old.id = '${id}' and new.payment_attempt_at is null
-          begin select raise(abort, 'release refused'); end`),
-      );
-      return () => suite.db.run(sql.raw(`drop trigger ${name}`));
-    }
-
-    async function declinedPay(
-      mount: (cfg: TradingContext, log: Logger) => Hono,
-      prepare: (deviceCookie: string) => Promise<void>,
-      body: Record<string, unknown>,
-    ) {
-      const { cfg, available, operatorId } = await setupVenue();
-      const each = available.find((p) => p.pricingUnit === "each")!;
-      const logged: string[] = [];
-      const app = mount(cfg, (_level, event) => void logged.push(event));
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-      await prepare(deviceCookie);
-      const workingOrderId = randomUUID();
-      const drop = refuseRelease(workingOrderId);
-      try {
-        const payRes = await app.request("/api/pay", {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-          body: JSON.stringify({
-            dining: "eat_in",
-            id: workingOrderId,
-            lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-            ...body,
-          }),
-        });
-        expect(payRes.status).toBe(200);
-        expect(await payRes.json()).toEqual({ outcome: "declined" });
-      } finally {
-        drop();
-      }
-      expect(logged).toContain("payment_attempt.release_failed");
-    }
-
-    it("through a reader", async () => {
-      const client = new FakeStripe();
-      client.declineNext();
-      await declinedPay(
-        (cfg, log) => {
-          const app = new Hono();
-          mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), log);
-          return app;
-        },
-        async (deviceCookie) => {
-          await connectStripe();
-          const reader = await seedReader();
-          await setChosenReader(deviceIdOf(deviceCookie), reader.id);
-        },
-        {},
-      );
-    });
-
-    it("through the practice simulator", async () => {
-      await declinedPay(
-        (cfg, log) => {
-          const app = new Hono();
-          mountTillApi(
-            app,
-            {
-              admission: testTradingAdmission(),
-              db: suite.db,
-              backend,
-              clock,
-              cfg,
-              secureCookies: false,
-              venueLocale: cfg.locale,
-              cardProvider: new SimulatorPaymentProvider(suite.db),
-            },
-            log,
-          );
-          return app;
-        },
-        () => Promise.resolve(),
-        { simulationOutcome: "declined" },
-      );
-    });
   });
 
   it("reserves the fresh basket's reader payment and records it under this box's node id", async () => {
@@ -2495,11 +2424,7 @@ describe("handheld sales and device capability gates", () => {
   });
 
   // Each device capability gate runs after requireSession and before provider, id, or printer checks.
-  // A handheld profile without the corresponding capability is refused regardless of card
-  // config, order existence, or printer state. Plain `apiDeps(cfg)` (no card provider) suffices for the
-  // pay case precisely because the guard short-circuits ahead of the provider check.
   it.each([
-    ["POST /api/pay", "/api/pay", { dining: "eat_in", id: randomUUID() }],
     ["POST /api/sales/:id/reprint", `/api/sales/${randomUUID()}/reprint`, {}],
     ["POST /api/drawer/open", "/api/drawer/open", {}],
   ])(
@@ -2522,9 +2447,7 @@ describe("handheld sales and device capability gates", () => {
     },
   );
 
-  // The firewall on `/api/pay` is capability-based: a device is refused unless its profile declares
-  // `integrated-card-payment`, whatever its kind.
-  it("refuses /api/pay from a device whose assigned PROFILE LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
+  it("refuses a reader bill payment from a device whose assigned PROFILE LACKS integrated-card-payment (403 device.forbidden_action)", async () => {
     const { cfg, operatorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2543,10 +2466,9 @@ describe("handheld sales and device capability gates", () => {
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
 
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${sessionPair}; ${deviceCookie}` },
-      body: JSON.stringify({ dining: "eat_in", id: randomUUID() }),
+    const res = await payFreshBasket(app, `${sessionPair}; ${deviceCookie}`, randomUUID(), [], {
+      method: "card",
+      entry: "reader",
     });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe("device.forbidden_action");
@@ -3804,112 +3726,106 @@ describe("a sale cannot hand over settled extras or options", () => {
     ).rows[0];
   }
 
-  it.each([
-    ["bill payments", "frozenExtras"],
-    ["bill payments", "frozenOptions"],
-    ["/api/pay", "frozenExtras"],
-    ["/api/pay", "frozenOptions"],
-  ] as const)("%s refuses a line carrying %s and files nothing", async (path, key) => {
-    const { cfg, menuId, available, operatorId } = await setupVenue();
-    const product = available.find((item) => item.pricingUnit === "each")!;
-    const lists = await withTransaction(suite.db, async (tx) => {
-      const cheese = await createProduct(tx, {
-        categoryId: null,
-        name: "Queso",
-        pricingUnit: "each",
-        unitPrice: "9.00",
-        vatClass: "general",
-      });
-      const extras = await createExtraList(
-        tx,
-        {
-          name: "Extras",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 2,
-          active: true,
-          items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "0.35" }],
-        },
-        LOCALE,
-      );
-      const options = await createOptionList(
-        tx,
-        {
-          name: "Preparación",
-          customerName: null,
-          kitchenName: null,
-          defaultLabelId: null,
-          active: true,
-          labels: [{ name: "Frío", customerName: null, kitchenName: null, available: true }],
-        },
-        LOCALE,
-      );
-      await writeProductModifiers(tx, product.id, [
-        { kind: "extras", id: extras.id },
-        { kind: "options", id: options.id },
-      ]);
-      await publishWorkingMenu(tx, menuId);
-      return { cheese, extras, options };
-    });
-    // The list sells this cheese at 0.35, two at most.
-    const settled = {
-      frozenExtras: [
-        {
-          productId: lists.cheese.id,
+  it.each(["frozenExtras", "frozenOptions"] as const)(
+    "refuses a line carrying %s and files nothing",
+    async (key) => {
+      const { cfg, menuId, available, operatorId } = await setupVenue();
+      const product = available.find((item) => item.pricingUnit === "each")!;
+      const lists = await withTransaction(suite.db, async (tx) => {
+        const cheese = await createProduct(tx, {
+          categoryId: null,
           name: "Queso",
-          descriptions: {},
-          kitchenName: null,
-          price: "0.00",
-          listId: lists.extras.id,
+          pricingUnit: "each",
+          unitPrice: "9.00",
           vatClass: "general",
-          quantity: 7,
-        },
-      ],
-      frozenOptions: [
+        });
+        const extras = await createExtraList(
+          tx,
+          {
+            name: "Extras",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: 2,
+            active: true,
+            items: [{ productId: cheese.id, maxQuantity: 2, preselected: false, price: "0.35" }],
+          },
+          LOCALE,
+        );
+        const options = await createOptionList(
+          tx,
+          {
+            name: "Preparación",
+            customerName: null,
+            kitchenName: null,
+            defaultLabelId: null,
+            active: true,
+            labels: [{ name: "Frío", customerName: null, kitchenName: null, available: true }],
+          },
+          LOCALE,
+        );
+        await writeProductModifiers(tx, product.id, [
+          { kind: "extras", id: extras.id },
+          { kind: "options", id: options.id },
+        ]);
+        await publishWorkingMenu(tx, menuId);
+        return { cheese, extras, options };
+      });
+      // The list sells this cheese at 0.35, two at most.
+      const settled = {
+        frozenExtras: [
+          {
+            productId: lists.cheese.id,
+            name: "Queso",
+            descriptions: {},
+            kitchenName: null,
+            price: "0.00",
+            listId: lists.extras.id,
+            vatClass: "general",
+            quantity: 7,
+          },
+        ],
+        frozenOptions: [
+          {
+            listName: { [LOCALE]: "Preparación" },
+            listCustomerName: null,
+            listKitchenName: null,
+            labelName: { [LOCALE]: "Frío" },
+            labelCustomerName: null,
+            labelKitchenName: null,
+          },
+        ],
+      };
+      expect(lists.extras.items.map((item) => item.productId)).toEqual([
+        settled.frozenExtras[0]!.productId,
+      ]);
+      const app = new Hono();
+      mountTillApi(
+        app,
+        { ...apiDeps(cfg), cardProvider: new SimulatorPaymentProvider(suite.db) },
+        noopLog,
+      );
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+      const before = await recorded();
+      const id = randomUUID();
+      const lines = [
         {
-          listName: { [LOCALE]: "Preparación" },
-          listCustomerName: null,
-          listKitchenName: null,
-          labelName: { [LOCALE]: "Frío" },
-          labelCustomerName: null,
-          labelKitchenName: null,
+          menuItemId: product.menuItemId,
+          quantity: "1",
+          options: [{ listId: lists.options.id, labelId: lists.options.labels[0]!.id }],
+          [key]: settled[key],
         },
-      ],
-    };
-    expect(lists.extras.items.map((item) => item.productId)).toEqual([
-      settled.frozenExtras[0]!.productId,
-    ]);
-    const app = new Hono();
-    mountTillApi(
-      app,
-      { ...apiDeps(cfg), cardProvider: new SimulatorPaymentProvider(suite.db) },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const before = await recorded();
-    const id = randomUUID();
-    const lines = [
-      {
-        menuItemId: product.menuItemId,
-        quantity: "1",
-        options: [{ listId: lists.options.id, labelId: lists.options.labels[0]!.id }],
-        [key]: settled[key],
-      },
-    ];
-    const response =
-      path === "bill payments"
-        ? await payFreshBasket(app, cookie, id, lines, { method: "cash", tendered: "10.00" })
-        : await app.request(path, {
-            method: "POST",
-            headers: { "content-type": "application/json", cookie },
-            body: JSON.stringify({ id, lines, simulationOutcome: "captured", dining: "eat_in" }),
-          });
-    expect(response.status, await response.clone().text()).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "lines" } },
-    });
-    expect(await recorded()).toEqual(before);
-  });
+      ];
+      const response = await payFreshBasket(app, cookie, id, lines, {
+        method: "cash",
+        tendered: "10.00",
+      });
+      expect(response.status, await response.clone().text()).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "lines" } },
+      });
+      expect(await recorded()).toEqual(before);
+    },
+  );
 });

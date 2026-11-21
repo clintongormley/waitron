@@ -1,4 +1,3 @@
-import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { liftPaymentGuard } from "@waitron/payments/src/testing/lift-payment-guard.js";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
@@ -7,7 +6,7 @@ import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,7 +15,6 @@ import {
   tenders,
   billPayments,
   devices,
-  incidents,
   withTransaction,
   saveSettings,
   workingOrders,
@@ -34,7 +32,6 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   hashPassword,
-  loginWithPin,
   hashPin,
   persons,
   PIN_THROTTLE_FREE_ATTEMPTS,
@@ -59,7 +56,6 @@ import {
   insertFailedPayment,
   recordRefund,
   payments,
-  cardReaders,
   stampAttemptingRef,
   type CardProviderContribution,
   type PaymentProvider,
@@ -72,12 +68,7 @@ import {
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { readBillEditState } from "./bill-editing.js";
-import { createTable } from "./testing/live-table.js";
-import { openPartyTab } from "./testing/serve-line.js";
 import { takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
-import { mountTillApi } from "./till-api.js";
-import { sessionCookieForTest } from "./testing/session-device.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
@@ -91,7 +82,6 @@ import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { completeBillPayment, readBillBalance } from "./bill-payments.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import "./errors.js";
@@ -109,9 +99,8 @@ import { promoteLocalSecondaryToPrimary } from "./promote.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { seedDevice, seedNode } from "@waitron/db/testing/seed.js";
-import { placeOrder } from "./testing/order-writer-fixture.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
-import { deviceRequestCfg, openTillSession, orderDeviceOrigin } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -341,73 +330,6 @@ async function openOrder(v: Venue, id: string = randomUUID()): Promise<string> {
   return id;
 }
 
-/**
- * What a server crash in the middle of a Stripe Terminal collect leaves behind: the order marked
- * in flight, and an `attempting` payment carrying its PaymentIntent, with nothing in this process
- * driving it. Returns the payment's id.
- */
-async function strandPayment(
-  v: Venue,
-  orderId: string,
-  intent: { status: string; amountReceived?: number },
-  opts: { amount?: string; mark?: string | null; deviceId?: string } = {},
-): Promise<{ paymentId: string; piId: string }> {
-  const paymentRef = randomUUID();
-  const piId = `pi_stuck_${randomUUID()}`;
-  const amount = opts.amount ?? "1.50";
-  v.client.setIntent(piId, {
-    status: intent.status,
-    amount: Math.round(Number(amount) * 100),
-    ...(intent.amountReceived === undefined ? {} : { amountReceived: intent.amountReceived }),
-  });
-  await withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, {
-      origin: deviceOrigin(opts.deviceId ?? v.deviceId),
-      workingOrderId: brandWorkingOrderId(orderId),
-      nodeId: v.cfg.nodeId,
-      provider: "stripe",
-      paymentRef,
-      amount: decimal(amount),
-    });
-    await stampAttemptingRef(tx, { provider: "stripe", paymentRef }, piId);
-  });
-  const mark = opts.mark === undefined ? MARK : opts.mark;
-  await suite.db
-    .update(workingOrders)
-    .set({ paymentAttemptAt: mark })
-    .where(eq(workingOrders.id, orderId));
-  const [row] = await suite.db
-    .select({ id: payments.id })
-    .from(payments)
-    .where(eq(payments.paymentRef, paymentRef));
-  return { paymentId: row!.id, piId };
-}
-
-/** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
-async function strandBarePayment(v: Venue, orderId: string, provider: string): Promise<string> {
-  const paymentRef = randomUUID();
-  const origin = await orderDeviceOrigin(suite.db);
-  await withTransaction(suite.db, (tx) =>
-    insertAttempting(tx, {
-      origin,
-      workingOrderId: brandWorkingOrderId(orderId),
-      nodeId: v.cfg.nodeId,
-      provider,
-      paymentRef,
-      amount: decimal("1.50"),
-    }),
-  );
-  await suite.db
-    .update(workingOrders)
-    .set({ paymentAttemptAt: MARK })
-    .where(eq(workingOrders.id, orderId));
-  const [row] = await suite.db
-    .select({ id: payments.id })
-    .from(payments)
-    .where(eq(payments.paymentRef, paymentRef));
-  return row!.id;
-}
-
 async function send(
   v: Venue,
   method: "GET" | "POST",
@@ -421,6 +343,20 @@ async function send(
 }
 
 const resolvePath = (paymentId: string) => `/management-api/payments/stuck/${paymentId}/resolve`;
+
+describe("retired whole-order payment recovery", () => {
+  it("returns 404 for the old list", async () => {
+    const venue = await setup();
+    expect((await send(venue, "GET", "/management-api/payments/stuck")).status).toBe(404);
+  });
+
+  it("returns the router's 404 for the old resolve action", async () => {
+    const venue = await setup();
+    const response = await send(venue, "POST", resolvePath(randomUUID()));
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("404 Not Found");
+  });
+});
 
 describe("A1381 manager collection ownership", () => {
   it.each([true, false])(
@@ -444,24 +380,14 @@ describe("A1381 manager collection ownership", () => {
     "handles provider rows naming no box only as primary (%s)",
     async (isPrimary) => {
       const v = await setup({ isPrimary });
-      const orderId = await openOrder(v);
-      const whole = await strandPayment(v, orderId, { status: "requires_payment_method" });
       const billOrderId = await openOrder(v);
       const bill = await strandBillPayment(v, billOrderId, { kind: "failed" });
       await liftPaymentGuard(suite.db, () => suite.db.update(payments).set({ nodeId: null }));
-      const wholeList = await send(v, "GET", "/management-api/payments/stuck");
-      expect(wholeList.status).toBe(200);
-      expect(
-        ((await wholeList.json()) as { paymentId: string }[]).map((row) => row.paymentId),
-      ).toEqual(isPrimary ? [whole.paymentId] : []);
       const billList = await send(v, "GET", "/management-api/payments/bill-payments");
       expect(billList.status).toBe(200);
       expect(
         ((await billList.json()) as { billPaymentId: string }[]).map((row) => row.billPaymentId),
       ).toEqual(isPrimary ? [bill] : []);
-      const wholeResult = await send(v, "POST", resolvePath(whole.paymentId));
-      expect(wholeResult.status).toBe(isPrimary ? 200 : 409);
-      if (!isPrimary) expect((await errorOf(wholeResult)).code).toBe("payment.not_stuck");
       const attested = await post(v, attestPath(bill), {
         outcome: "failed",
         note: "Provider confirmed no charge",
@@ -469,11 +395,7 @@ describe("A1381 manager collection ownership", () => {
       });
       expect(attested.status).toBe(isPrimary ? 200 : 409);
       if (!isPrimary) expect((await errorOf(attested)).code).toBe("bill.payment_not_stuck");
-      expect((await paymentRow(whole.paymentId)).state).toBe(isPrimary ? "failed" : "attempting");
-      expect((await orderOf(orderId)).mark).toBe(isPrimary ? null : MARK);
       expect((await billPaymentOf(bill)).state).toBe(isPrimary ? "failed" : "pending");
-      expect(v.client.cancelledIntents).toHaveLength(isPrimary ? 1 : 0);
-      expect(saleIdsFor(orderId)).toEqual([]);
       expect(saleIdsFor(billOrderId)).toEqual([]);
     },
   );
@@ -509,7 +431,10 @@ describe("A1381 manager collection ownership", () => {
       const previous = await seedNode(suite.db);
       const old = { ...v, cfg: { ...v.cfg, nodeId: previous } };
       const orderId = await openOrder(v);
-      const whole = await strandPayment(old, orderId, { status: "requires_payment_method" });
+      const bill = await strandBillPayment(old, orderId, {
+        kind: "attempting",
+        intent: { status: "requires_payment_method" },
+      });
       const chartPrimary = caseName === "other-primary" ? await seedNode(suite.db) : v.cfg.nodeId;
       const chart = signedMembershipDoc(2, {
         signerNodeId: chartPrimary,
@@ -539,16 +464,18 @@ describe("A1381 manager collection ownership", () => {
           : chart,
       );
       const owned = caseName === "evicted" || caseName === "revoked";
-      const listed = await send(v, "GET", "/management-api/payments/stuck");
+      const listed = await send(v, "GET", "/management-api/payments/bill-payments");
       expect(listed.status).toBe(200);
       expect(
-        ((await listed.json()) as { paymentId: string }[]).map(({ paymentId }) => paymentId),
-      ).toEqual(owned ? [whole.paymentId] : []);
-      const res = await send(v, "POST", resolvePath(whole.paymentId));
+        ((await listed.json()) as { billPaymentId: string }[]).map(
+          ({ billPaymentId }) => billPaymentId,
+        ),
+      ).toEqual(owned ? [bill] : []);
+      const res = await send(v, "POST", billResolvePath(bill));
       expect(res.status).toBe(owned ? 200 : 409);
-      if (!owned) expect((await errorOf(res)).code).toBe("payment.not_stuck");
-      expect((await paymentRow(whole.paymentId)).state).toBe(owned ? "failed" : "attempting");
-      expect(v.client.cancelledIntents).toEqual(owned ? [whole.piId] : []);
+      if (!owned) expect((await errorOf(res)).code).toBe("bill.payment_not_stuck");
+      expect((await billPaymentOf(bill)).state).toBe(owned ? "failed" : "pending");
+      expect(v.client.cancelledIntents).toHaveLength(owned ? 1 : 0);
       expect(saleIdsFor(orderId)).toEqual([]);
     },
   );
@@ -559,18 +486,13 @@ describe("A1381 manager collection ownership", () => {
     const previous = await seedNode(suite.db);
     const other = await seedNode(suite.db);
     const old = { ...v, cfg: { ...v.cfg, nodeId: previous } };
-    const oldOrder = await openOrder(v);
-    const whole = await strandPayment(old, oldOrder, { status: "succeeded", amountReceived: 150 });
     const billOrder = await openOrder(v);
     const bill = await strandBillPayment(old, billOrder, { kind: "captured" });
     const attested = await strandBillPayment(old, await openOrder(v), { kind: "failed" });
-    const oldFailedOrder = await openOrder(v);
-    const oldFailed = await strandPayment(old, oldFailedOrder, {
-      status: "requires_payment_method",
-    });
     const peer = { ...v, cfg: { ...v.cfg, nodeId: other } };
-    const peerPayment = await strandPayment(peer, await openOrder(v), {
-      status: "requires_payment_method",
+    const peerPayment = await strandBillPayment(peer, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
     });
     const key = generateNodeKeyPair();
     await stampDeployment(suite.db, "preproduction");
@@ -598,9 +520,13 @@ describe("A1381 manager collection ownership", () => {
         ],
       }),
     );
-    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    expect(await (await send(v, "GET", "/management-api/payments/bill-payments")).json()).toEqual(
+      [],
+    );
     role.isPrimary = true;
-    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
+    expect(await (await send(v, "GET", "/management-api/payments/bill-payments")).json()).toEqual(
+      [],
+    );
     role.isPrimary = false;
     const holders = createDeploymentHolders("primary", "secondary");
     await promoteLocalSecondaryToPrimary(
@@ -626,16 +552,13 @@ describe("A1381 manager collection ownership", () => {
       { nodeId: other, standing: "serving-secondary" },
     ]);
     role.isPrimary = false;
-    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
-    const refused = await send(v, "POST", resolvePath(whole.paymentId));
+    expect(await (await send(v, "GET", "/management-api/payments/bill-payments")).json()).toEqual(
+      [],
+    );
+    const refused = await send(v, "POST", billResolvePath(bill));
     expect(refused.status).toBe(409);
-    expect((await errorOf(refused)).code).toBe("payment.not_stuck");
+    expect((await errorOf(refused)).code).toBe("bill.payment_not_stuck");
     role.isPrimary = true;
-    const wholeList = await send(v, "GET", "/management-api/payments/stuck");
-    expect(wholeList.status).toBe(200);
-    expect(
-      ((await wholeList.json()) as { paymentId: string }[]).map(({ paymentId }) => paymentId),
-    ).toEqual([whole.paymentId, oldFailed.paymentId]);
     const billList = await send(v, "GET", "/management-api/payments/bill-payments");
     expect(billList.status).toBe(200);
     expect(
@@ -643,12 +566,10 @@ describe("A1381 manager collection ownership", () => {
         ({ billPaymentId }) => billPaymentId,
       ),
     ).toEqual([bill, attested]);
-    expect((await send(v, "POST", resolvePath(whole.paymentId))).status).toBe(200);
     expect((await send(v, "POST", billResolvePath(bill))).status).toBe(200);
-    expect((await send(v, "POST", resolvePath(oldFailed.paymentId))).status).toBe(200);
-    const peerRefused = await send(v, "POST", resolvePath(peerPayment.paymentId));
+    const peerRefused = await send(v, "POST", billResolvePath(peerPayment));
     expect(peerRefused.status).toBe(409);
-    expect((await errorOf(peerRefused)).code).toBe("payment.not_stuck");
+    expect((await errorOf(peerRefused)).code).toBe("bill.payment_not_stuck");
     expect(
       (
         await post(v, attestPath(attested), {
@@ -659,21 +580,16 @@ describe("A1381 manager collection ownership", () => {
       ).status,
     ).toBe(200);
     expect((await billPaymentOf(attested)).state).toBe("failed");
-    expect((await paymentRow(peerPayment.paymentId)).state).toBe("attempting");
-    expect((await orderOf(oldOrder)).status).toBe("settled");
-    expect(saleIdsFor(oldOrder)).toHaveLength(1);
+    expect((await billPaymentOf(peerPayment)).state).toBe("pending");
     expect((await billPaymentOf(bill)).state).toBe("received");
     expect(saleIdsFor(billOrder)).toHaveLength(1);
-    expect((await orderOf(oldFailedOrder)).mark).toBeNull();
-    expect(v.client.cancelledIntents).toEqual([oldFailed.piId]);
+    expect(v.client.cancelledIntents).toEqual([]);
   });
 
   it("collects a predecessor's payments after a recorded handover", async () => {
     const v = await setup();
     const previous = await seedNode(suite.db);
     const old = { ...v, cfg: { ...v.cfg, nodeId: previous } };
-    const orderId = await openOrder(v);
-    const whole = await strandPayment(old, orderId, { status: "requires_payment_method" });
     const bill = await strandBillPayment(old, await openOrder(v), {
       kind: "attempting",
       intent: { status: "requires_payment_method" },
@@ -689,46 +605,13 @@ describe("A1381 manager collection ownership", () => {
         activatedAt: new Date().toISOString(),
       }),
     );
-    const wholeList = await send(v, "GET", "/management-api/payments/stuck");
-    expect(
-      ((await wholeList.json()) as { paymentId: string }[]).map((row) => row.paymentId),
-    ).toEqual([whole.paymentId]);
     const billList = await send(v, "GET", "/management-api/payments/bill-payments");
     expect(
       ((await billList.json()) as { billPaymentId: string }[]).map((row) => row.billPaymentId),
     ).toEqual([bill]);
-    expect((await send(v, "POST", resolvePath(whole.paymentId))).status).toBe(200);
     expect((await send(v, "POST", billResolvePath(bill))).status).toBe(200);
-    expect(v.client.cancelledIntents).toHaveLength(2);
+    expect(v.client.cancelledIntents).toHaveLength(1);
   });
-  it("lists this box's whole-order payment and omits another box's payment", async () => {
-    const v = await setup();
-    const other = { ...v, cfg: { ...v.cfg, nodeId: await seedNode(suite.db) } };
-    const own = await strandPayment(v, await openOrder(v), { status: "requires_payment_method" });
-    await strandPayment(other, await openOrder(v), { status: "requires_payment_method" });
-    const res = await send(v, "GET", "/management-api/payments/stuck");
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { paymentId: string }[]).map((row) => row.paymentId)).toEqual([
-      own.paymentId,
-    ]);
-  });
-
-  it("refuses another box's whole-order resolution before asking Stripe", async () => {
-    const v = await setup();
-    const other = { ...v, cfg: { ...v.cfg, nodeId: await seedNode(suite.db) } };
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(other, orderId, {
-      status: "requires_payment_method",
-    });
-    const res = await send(v, "POST", resolvePath(paymentId));
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("payment.not_stuck");
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect((await orderOf(orderId)).mark).toBe(MARK);
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
   it("lists this box's bill payment and omits another box's payment", async () => {
     const v = await setup();
     const other = { ...v, cfg: { ...v.cfg, nodeId: await seedNode(suite.db) } };
@@ -763,102 +646,6 @@ describe("A1381 manager collection ownership", () => {
   );
 });
 
-describe("A1381 placed whole-order payments", () => {
-  it("refuses a stranded payment on an abandoned order before asking Stripe", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(
-      v,
-      orderId,
-      { status: "requires_payment_method" },
-      { mark: null },
-    );
-    await suite.db
-      .update(workingOrders)
-      .set({ status: "abandoned" })
-      .where(eq(workingOrders.id, orderId));
-    const res = await send(v, "POST", resolvePath(paymentId));
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("payment.not_stuck");
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "abandoned", mark: null });
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
-  it("keeps a placed bill contribution out of the whole-order fallback", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    await placeOrder(
-      { db: suite.db, backend, admission: testTradingAdmission(), clock },
-      v.cfg,
-      orderId,
-      v.managerId,
-    );
-    const id = await strandBillPayment(v, orderId, {
-      kind: "attempting",
-      intent: { status: "requires_payment_method" },
-    });
-    const [provided] = await suite.db
-      .select({ id: payments.id })
-      .from(payments)
-      .where(eq(payments.billPaymentId, id));
-    const listed = await send(v, "GET", "/management-api/payments/stuck");
-    expect(await listed.json()).toEqual([]);
-    const res = await send(v, "POST", resolvePath(provided!.id));
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("payment.not_stuck");
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect((await billPaymentOf(id)).state).toBe("pending");
-  });
-  it.each([
-    ["requires_payment_method", 150, 200, "not_charged"],
-    ["succeeded", 150, 200, "filed"],
-    ["succeeded", 100, 200, "partial"],
-  ] as const)(
-    "offers a manager fallback for a placed order with Stripe status %s",
-    async (status, amountReceived, http, outcome) => {
-      const v = await setup();
-      const orderId = await openOrder(v);
-      await placeOrder(
-        { db: suite.db, backend, admission: testTradingAdmission(), clock },
-        v.cfg,
-        orderId,
-        v.managerId,
-      );
-      const { paymentId } = await strandPayment(
-        v,
-        orderId,
-        { status, amountReceived },
-        { mark: null },
-      );
-      const listed = await send(v, "GET", "/management-api/payments/stuck");
-      expect(listed.status).toBe(200);
-      expect(
-        ((await listed.json()) as { paymentId: string }[]).map((row) => row.paymentId),
-      ).toEqual([paymentId]);
-      const res = await send(v, "POST", resolvePath(paymentId));
-      expect(res.status).toBe(http);
-      expect(((await res.json()) as { outcome: string }).outcome).toBe(outcome);
-      expect((await orderOf(orderId)).status).toBe(outcome === "filed" ? "settled" : "placed");
-      expect(saleIdsFor(orderId)).toHaveLength(outcome === "filed" ? 1 : 0);
-      if (outcome === "partial") {
-        const [evidence] = await suite.db
-          .select({ params: incidents.params })
-          .from(incidents)
-          .where(eq(incidents.code, "payment.capture_mismatch"));
-        expect(evidence?.params.payments).toEqual([
-          expect.objectContaining({
-            workingOrderId: orderId,
-            requestedAmount: "1.50",
-            reportedAmount: "1.00",
-          }),
-        ]);
-      }
-    },
-  );
-});
-
 async function errorOf(res: Response): Promise<{ code: string; params?: unknown }> {
   return ((await res.json()) as { error: { code: string; params?: unknown } }).error;
 }
@@ -881,983 +668,13 @@ async function paymentRow(
   return row!;
 }
 
-async function orderOf(id: string): Promise<{ status: string; mark: string | null }> {
+async function orderOf(id: string): Promise<{ status: string }> {
   const [row] = await suite.db
-    .select({ status: workingOrders.status, mark: workingOrders.paymentAttemptAt })
+    .select({ status: workingOrders.status })
     .from(workingOrders)
     .where(eq(workingOrders.id, id));
-  return { status: row!.status, mark: row!.mark };
+  return { status: row!.status };
 }
-
-async function resolutionsFor(paymentId: string) {
-  return suite.db
-    .select({
-      personId: payments.resolvedBy,
-      workingOrderId: payments.workingOrderId,
-      outcome: payments.resolutionOutcome,
-      cancelledAtProvider: payments.resolutionCancelledAtProvider,
-    })
-    .from(payments)
-    .where(and(eq(payments.id, paymentId), isNotNull(payments.resolutionOutcome)));
-}
-
-// --- the list -------------------------------------------------------------------------------
-
-describe("GET /management-api/payments/stuck", () => {
-  it("lists a stranded payment, and omits one on an order that carries no mark", async () => {
-    const v = await setup();
-    const stuckOrder = await openOrder(v);
-    const unmarkedOrder = await openOrder(v);
-    const { paymentId } = await strandPayment(v, stuckOrder, { status: "requires_payment_method" });
-    await strandPayment(v, unmarkedOrder, { status: "requires_payment_method" }, { mark: null });
-
-    const res = await send(v, "GET", "/management-api/payments/stuck");
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>[];
-    expect(body).toHaveLength(1);
-    expect(body[0]).toMatchObject({
-      paymentId,
-      workingOrderId: stuckOrder,
-      source: "device",
-      deviceId: v.deviceId,
-      deviceName: "Barra 1",
-      provider: "stripe",
-      amount: "1.50",
-      label: null,
-    });
-    expect(typeof body[0]!.orderNumber).toBe("number");
-    expect(typeof body[0]!.startedAt).toBe("string");
-  });
-
-  it("names the device that started the payment, even after it was revoked", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    await strandPayment(
-      v,
-      orderId,
-      { status: "requires_payment_method" },
-      { deviceId: v.otherDeviceId },
-    );
-    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.otherDeviceId));
-
-    const res = await send(v, "GET", "/management-api/payments/stuck");
-
-    const body = (await res.json()) as Record<string, unknown>[];
-    expect(body.map((row) => [row.deviceId, row.deviceName])).toEqual([
-      [v.otherDeviceId, "Barra 2"],
-    ]);
-  });
-
-  it("is refused to a staff session and to no session", async () => {
-    const v = await setup();
-    const staff = await send(v, "GET", "/management-api/payments/stuck", v.staffCookie);
-    expect(staff.status).toBe(403);
-    expect((await errorOf(staff)).code).toBe("authorization.not_permitted");
-    const none = await send(v, "GET", "/management-api/payments/stuck", null);
-    expect(none.status).toBe(401);
-    expect((await errorOf(none)).code).toBe("management_session.required");
-  });
-});
-
-// --- resolving ------------------------------------------------------------------------------
-
-describe("POST /management-api/payments/stuck/:id/resolve", () => {
-  it("files the sale under the device that started the payment, not the dashboard", async () => {
-    // The payment was started on the venue's second device; nothing else names that device.
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(
-      v,
-      orderId,
-      { status: "succeeded", amountReceived: 150 },
-      { deviceId: v.otherDeviceId },
-    );
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(200);
-    const expected = [{ source: "device", device_id: v.otherDeviceId }];
-    expect(
-      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
-    ).toEqual(expected);
-    expect(
-      suite.db.all(sql`
-        select r.source, r.device_id from registros_facturacion r
-        join sales s on s.id = r.sale_id where s.working_order_id = ${orderId}`),
-    ).toEqual(expected);
-  });
-
-  it("refuses a stuck payment that names no device, asking nobody and filing nothing", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    // A source with no device: the sale tables accept it, but only a device starts a payment.
-    await liftPaymentGuard(suite.db, () =>
-      suite.db.execute(
-        sql`update payments set source = 'demo_seed', device_id = null where id = ${paymentId}`,
-      ),
-    );
-    const retrieve = vi.spyOn(v.client, "retrievePaymentIntent");
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(400);
-    expect(await errorOf(res)).toMatchObject({ code: "origin.invalid" });
-    expect(retrieve).not.toHaveBeenCalled();
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
-  it("files a captured payment after its original till was switched off and its session ended", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    const tillSession = await openTillSession(suite.db, {
-      deviceId: v.deviceId,
-      personId: v.managerId,
-    });
-    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
-    await suite.db.execute(
-      sql`update till_sessions set ended_at = ${new Date().toISOString()} where id = ${tillSession}`,
-    );
-
-    const result = await send(v, "POST", resolvePath(paymentId));
-
-    expect(result.status).toBe(200);
-    expect(await result.json()).toMatchObject({ outcome: "filed" });
-    expect(saleIdsFor(orderId)).toHaveLength(1);
-    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
-    expect(
-      suite.db.all(sql`select device_id from sales where working_order_id = ${orderId}`),
-    ).toEqual([{ device_id: v.deviceId }]);
-    expect(await resolutionsFor(paymentId)).toMatchObject([
-      { personId: v.managerId, outcome: "captured" },
-    ]);
-    expect(v.client.lastCreateIntent).toBeUndefined();
-    expect(v.client.processedReaders).toEqual([]);
-  });
-
-  it("refuses to file a captured payment on a box the held chart does not name primary", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    await writeNodeMembership(suite.db, {
-      body: {
-        term: 2,
-        nodes: [
-          { nodeId: v.cfg.nodeId, contactUrl: "https://this-box", standing: "sell-only" },
-          { nodeId: randomUUID(), contactUrl: "https://new-box", standing: "serving-primary" },
-        ],
-      },
-      signerNodeId: "new-box",
-      signature: "sig-2",
-      endorsements: [],
-    });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toMatchObject({
-      code: "fiscal.chain_handed_over",
-      params: { nodeId: v.cfg.nodeId },
-    });
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
-  it("(a) files ONE captured sale while the provider is Off, settles the order, and refuses a second resolve", async () => {
-    const v = await setup();
-    await withTransaction(suite.db, (tx) =>
-      saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { stripe: false } },
-        expectedRevision: 0,
-        personId: v.managerId,
-      }),
-    );
-    const orderId = await openOrder(v);
-    const { paymentId, piId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { outcome: string; invoiceNumber: string };
-    expect(body.outcome).toBe("filed");
-    expect(body.invoiceNumber).toMatch(/^A\//);
-    const sales = saleIdsFor(orderId);
-    expect(sales).toHaveLength(1);
-    expect(await paymentRow(paymentId)).toEqual({
-      state: "captured",
-      saleId: sales[0],
-      externalRef: piId,
-    });
-    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
-    expect(await resolutionsFor(paymentId)).toEqual([
-      {
-        personId: v.managerId,
-        workingOrderId: orderId,
-        outcome: "captured",
-        cancelledAtProvider: false,
-      },
-    ]);
-    // The card was never driven again: no new PaymentIntent, no reader asked.
-    expect(v.client.lastCreateIntent).toBeUndefined();
-    expect(v.client.processedReaders).toEqual([]);
-
-    const again = await send(v, "POST", resolvePath(paymentId));
-    expect(again.status).toBe(409);
-    expect(await errorOf(again)).toEqual({ code: "payment.not_stuck", params: { paymentId } });
-    expect(saleIdsFor(orderId)).toHaveLength(1);
-    expect(await resolutionsFor(paymentId)).toHaveLength(1);
-  });
-
-  it.each(["Counter", "table"] as const)(
-    "keeps a manager-confirmed %s capture when recording fails, then recovers through Pay without collection",
-    checkSavedCapture,
-  );
-
-  async function checkSavedCapture(surface: "Counter" | "table") {
-    const v = await setup();
-    const orderId =
-      surface === "Counter"
-        ? await openOrder(v)
-        : await withTransaction(suite.db, async (tx) => {
-            const offers = await offerProducts(tx, v.cfg, { zone: "tables" });
-            const table = await createTable(tx, v.cfg, {
-              zoneId: offers.zoneId,
-              label: "Terrace 3",
-            });
-            return (
-              await openPartyTab(tx, v.cfg, {
-                tableId: table.id,
-                lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
-              })
-            ).tabId;
-          });
-    if (surface === "table")
-      await placeOrder(
-        { db: suite.db, backend, admission: testTradingAdmission(), clock },
-        v.cfg,
-        orderId,
-        v.managerId,
-      );
-    const { paymentId, piId } = await strandPayment(
-      v,
-      orderId,
-      {
-        status: "succeeded",
-        amountReceived: 150,
-      },
-      surface === "table" ? { mark: null } : {},
-    );
-    const spy = vi
-      .spyOn(backend, "recordSale")
-      .mockRejectedValueOnce(new Error("recording unavailable"));
-    try {
-      const failed = await send(v, "POST", resolvePath(paymentId));
-      expect(failed.status).toBe(500);
-      expect((await errorOf(failed)).code).toBe("server.internal");
-    } finally {
-      spy.mockRestore();
-    }
-    expect(await paymentRow(paymentId)).toEqual({
-      state: "captured",
-      saleId: null,
-      externalRef: piId,
-    });
-    expect(await resolutionsFor(paymentId)).toEqual([
-      {
-        personId: v.managerId,
-        workingOrderId: orderId,
-        outcome: "captured",
-        cancelledAtProvider: false,
-      },
-    ]);
-    expect(saleIdsFor(orderId)).toEqual([]);
-    expect(await orderOf(orderId)).toEqual(
-      surface === "table" ? { status: "placed", mark: null } : { status: "open", mark: MARK },
-    );
-    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
-    expect(await (await send(v, "GET", "/management-api/payments/held")).json()).toEqual([]);
-    expect((await errorOf(await send(v, "POST", resolvePath(paymentId)))).code).toBe(
-      "payment.not_stuck",
-    );
-
-    const otherProvider = new FakePaymentProvider(suite.db);
-    await expect(
-      payWorkingOrderIntegrated(
-        {
-          admission: testTradingAdmission(),
-          db: suite.db,
-          backend,
-          clock,
-          provider: otherProvider,
-        },
-        v.cfg,
-        { id: orderId, lines: [] },
-      ),
-    ).rejects.toMatchObject({ code: "order.payment_in_flight" });
-    expect(otherProvider.collectCalls).toEqual([]);
-
-    const tillDevice = v.cfg.origin.deviceId;
-    const session = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId: tillDevice, personId: v.managerId, pin: "1234" }),
-    );
-    const cookie = await sessionCookieForTest(suite.db, session.token);
-    const tillApp = new Hono();
-    mountTillApi(
-      tillApp,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg: v.cfg,
-        secureCookies: false,
-        venueLocale: LOCALE,
-        providers: CARD_PROVIDERS,
-        pool: { get: async () => v.provider, evict: () => {} },
-      },
-      noopLog,
-    );
-    if (surface === "Counter") {
-      const listed = await tillApp.request("/api/working-orders", { headers: { cookie } });
-      expect(listed.status).toBe(200);
-      expect(((await listed.json()) as { id: string }[]).map((row) => row.id)).toContain(orderId);
-      const retrieved = await tillApp.request(`/api/working-orders/${orderId}`, {
-        headers: { cookie },
-      });
-      expect(retrieved.status).toBe(200);
-      expect(await retrieved.json()).toMatchObject({ id: orderId });
-    } else {
-      const [order] = await suite.db
-        .select({ partyId: workingOrders.partyId })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, orderId));
-      const retrieved = await tillApp.request(`/api/parties/${order!.partyId}/bills`, {
-        headers: { cookie },
-      });
-      expect(retrieved.status).toBe(200);
-      expect(await retrieved.json()).toMatchObject([{ workingOrderId: orderId, status: "placed" }]);
-    }
-    const [reader] = await suite.db
-      .insert(cardReaders)
-      .values({ provider: "stripe", providerRef: "reader_recovery", name: "Recovery reader" })
-      .returning();
-    await suite.db
-      .update(cardReaders)
-      .set({ heldByDeviceId: tillDevice })
-      .where(eq(cardReaders.id, reader!.id));
-    const expectedEdit =
-      surface === "table"
-        ? await withTransaction(suite.db, (tx) => readBillEditState(tx, orderId))
-        : null;
-    const pay = () =>
-      tillApp.request("/api/pay", {
-        method: "POST",
-        headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({
-          id: orderId,
-          dining: "eat_in",
-          lines: [],
-          expectedEdit,
-          readerId: reader!.id,
-          ...(surface === "Counter" ? { zoneId: v.zoneId } : {}),
-        }),
-      });
-    if (surface === "table") {
-      const blocked = vi
-        .spyOn(backend, "recordSale")
-        .mockRejectedValue(new Error("recording unavailable"));
-      try {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const refused = await pay();
-          expect(refused.status).toBe(500);
-          expect((await errorOf(refused)).code).toBe("server.internal");
-        }
-      } finally {
-        blocked.mockRestore();
-      }
-      expect(await paymentRow(paymentId)).toEqual({
-        state: "captured",
-        saleId: null,
-        externalRef: piId,
-      });
-      expect(saleIdsFor(orderId)).toEqual([]);
-    }
-    const paid = await pay();
-    expect(paid.status).toBe(200);
-    expect(await paid.json()).toMatchObject({ outcome: "captured" });
-    const sales = saleIdsFor(orderId);
-    expect(sales).toHaveLength(1);
-    expect(await paymentRow(paymentId)).toEqual({
-      state: "captured",
-      saleId: sales[0],
-      externalRef: piId,
-    });
-    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
-    expect(v.client.lastCreateIntent).toBeUndefined();
-    expect(v.client.processedReaders).toEqual([]);
-  }
-
-  it("continues provider recovery after a manual check failed before confirming the charge", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    const spy = vi
-      .spyOn(v.provider, "resolveAbandonedAttempt")
-      .mockRejectedValueOnce(new Error("check unavailable"));
-    try {
-      const failed = await send(v, "POST", resolvePath(paymentId));
-      expect(failed.status).toBe(500);
-      expect((await errorOf(failed)).code).toBe("server.internal");
-    } finally {
-      spy.mockRestore();
-    }
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await resolutionsFor(paymentId)).toEqual([]);
-    expect(
-      await v.provider.resolvePending(new Date(), await ownsEveryPayment(suite.db)),
-    ).toMatchObject({ forwarded: 1 });
-    expect(await paymentRow(paymentId)).toMatchObject({ state: "captured", saleId: null });
-    expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toEqual([]);
-    expect(v.client.lastCreateIntent).toBeUndefined();
-    expect(v.client.processedReaders).toEqual([]);
-  });
-
-  it("answers a full disk while filing a captured payment as storage.disk_full, not the till's charged-card answer", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    const spy = vi
-      .spyOn(backend, "recordSale")
-      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
-    try {
-      const res = await send(v, "POST", resolvePath(paymentId));
-
-      expect(res.status).toBe(507);
-      expect(await errorOf(res)).toEqual({ code: "storage.disk_full", params: {} });
-      expect(saleIdsFor(orderId)).toHaveLength(0);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it("(b) cancels a PaymentIntent still waiting for a card, fails the row, clears the mark, and the order's next card pay uses a NEW PaymentIntent", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId, piId } = await strandPayment(v, orderId, {
-      status: "requires_payment_method",
-    });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
-    expect(v.client.cancelledIntents).toEqual([piId]);
-    expect((await paymentRow(paymentId)).state).toBe("failed");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
-    expect(await resolutionsFor(paymentId)).toEqual([
-      {
-        personId: v.managerId,
-        workingOrderId: orderId,
-        outcome: "failed",
-        cancelledAtProvider: true,
-      },
-    ]);
-    expect(saleIdsFor(orderId)).toEqual([]);
-
-    const paid = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        provider: v.provider,
-        readerRef: "reader_1",
-      },
-      v.cfg,
-      { id: orderId, lines: [] },
-    );
-    expect(paid.outcome).toBe("captured");
-    expect(v.client.lastCreateIntent?.idempotencyKey).toBe(`wo_${orderId}_r1`);
-    const captured = await suite.db
-      .select({ externalRef: payments.externalRef })
-      .from(payments)
-      .where(eq(payments.state, "captured"));
-    expect(captured).toHaveLength(1);
-    expect(captured[0]!.externalRef).not.toBe(piId);
-  });
-
-  it("reports the order still locked, and keeps its mark, while another card payment on it is unresolved", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const first = await strandPayment(v, orderId, { status: "requires_payment_method" });
-    const second = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(first.paymentId));
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: false });
-    expect((await paymentRow(first.paymentId)).state).toBe("failed");
-    expect((await paymentRow(second.paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-
-    const list = (await (await send(v, "GET", "/management-api/payments/stuck")).json()) as {
-      paymentId: string;
-    }[];
-    expect(list.map((row) => row.paymentId)).toEqual([second.paymentId]);
-  });
-
-  it("reports the order unlocked when the work loop cleared its mark before the resolve's own clear", async () => {
-    let orderId = "";
-    const v = await setup({
-      providerFor: (p) =>
-        new Proxy(p, {
-          get: (target, prop) =>
-            prop === "resolveAbandonedAttempt"
-              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
-                  const resolved = await target.resolveAbandonedAttempt(paymentRef, now, audit);
-                  // What `releaseStalePaymentAttempts` does between the two transactions.
-                  await suite.db
-                    .update(workingOrders)
-                    .set({ paymentAttemptAt: null })
-                    .where(eq(workingOrders.id, orderId));
-                  return resolved;
-                }
-              : Reflect.get(target, prop),
-        }),
-    });
-    orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
-  });
-
-  it("releases no mark when the manager loses the permission during the provider call", async () => {
-    let managerId = "";
-    const v = await setup({
-      providerFor: (p) =>
-        new Proxy(p, {
-          get: (target, prop) =>
-            prop === "resolveAbandonedAttempt"
-              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
-                  const resolved = await target.resolveAbandonedAttempt(paymentRef, now, audit);
-                  await suite.db
-                    .update(persons)
-                    .set(withFoldedPersonChanges({ status: "suspended" }))
-                    .where(eq(persons.id, managerId));
-                  return resolved;
-                }
-              : Reflect.get(target, prop),
-        }),
-    });
-    managerId = v.managerId;
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(403);
-    expect((await errorOf(res)).code).toBe("person.suspended");
-    expect((await paymentRow(paymentId)).state).toBe("failed");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-  });
-
-  it("never asks the provider to collect: a capture it reports but did not record files nothing", async () => {
-    const fake = new FakePaymentProvider(suite.db);
-    // The row ends failed, so nothing stops a pay at its in-flight check, while the answer says
-    // captured.
-    fake.scriptAbandonedAttempt({ outcome: "failed", cancelledAtProvider: false });
-    let collects = 0;
-    const misreporting = new Proxy(fake, {
-      get: (target, prop) => {
-        if (prop === "resolveAbandonedAttempt") {
-          return async (paymentRef: string, now: Date, audit: { personId: string }) => {
-            await target.resolveAbandonedAttempt(paymentRef, now, audit);
-            return { outcome: "captured" };
-          };
-        }
-        if (prop === "collect") {
-          return (params: Parameters<PaymentProvider["collect"]>[0]) => {
-            collects += 1;
-            return target.collect(params);
-          };
-        }
-        const value: unknown = Reflect.get(target, prop, target);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-    const v = await setup({ extra: misreporting });
-    const orderId = await openOrder(v);
-    const paymentId = await strandBarePayment(v, orderId, fake.provider);
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(500);
-    expect((await errorOf(res)).code).toBe("server.internal");
-    expect(collects).toBe(0);
-    expect(saleIdsFor(orderId)).toEqual([]);
-    expect((await orderOf(orderId)).status).toBe("open");
-  });
-
-  it("(c) refuses outcome_unknown when Stripe cannot be reached, leaving the row attempting and the order locked", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-    v.client.unreachableNext();
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
-      params: { paymentId, reason: "unreachable" },
-    });
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-    expect(await resolutionsFor(paymentId)).toEqual([]);
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
-  it("records a short whole-order recovery without collecting or filing the unpaid bill", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 100,
-    });
-    const collect = vi.spyOn(v.provider, "collect");
-    const res = await send(v, "POST", resolvePath(paymentId));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ outcome: "partial", outstanding: "0.50" });
-    expect(
-      await suite.db
-        .select({
-          state: payments.state,
-          amount: payments.amount,
-          requestedAmount: payments.requestedAmount,
-        })
-        .from(payments)
-        .where(eq(payments.id, paymentId)),
-    ).toEqual([{ state: "captured", amount: 100, requestedAmount: 150 }]);
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
-    expect(await resolutionsFor(paymentId)).toHaveLength(1);
-    expect(saleIdsFor(orderId)).toEqual([]);
-    expect(collect).not.toHaveBeenCalled();
-    expect(
-      await suite.db
-        .select({ applied: billPayments.applied })
-        .from(billPayments)
-        .where(eq(billPayments.workingOrderId, orderId)),
-    ).toEqual([{ applied: 100 }]);
-  });
-
-  it("(d) refuses not_stuck for an attempt still running in this process, which the list omits", async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    let entered!: () => void;
-    const reached = new Promise<void>((resolve) => (entered = resolve));
-    // The reader is still waiting for the card while the manager looks.
-    class WaitingStripe extends FakeStripe {
-      override async readerOutcome(readerId: string) {
-        entered();
-        await gate;
-        return super.readerOutcome(readerId);
-      }
-    }
-    const v = await setup({ client: new WaitingStripe() });
-    const orderId = await openOrder(v);
-    const paying = payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        provider: v.provider,
-        readerRef: "reader_1",
-      },
-      v.cfg,
-      { id: orderId, lines: [] },
-    );
-    await reached;
-    const [row] = await suite.db
-      .select({ id: payments.id, state: payments.state })
-      .from(payments)
-      .where(eq(payments.workingOrderId, orderId));
-    expect(row!.state).toBe("attempting");
-    expect((await orderOf(orderId)).mark).not.toBeNull();
-
-    const list = await send(v, "GET", "/management-api/payments/stuck");
-    expect(await list.json()).toEqual([]);
-    const res = await send(v, "POST", resolvePath(row!.id));
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "payment.not_stuck",
-      params: { paymentId: row!.id },
-    });
-    expect(v.client.cancelledIntents).toEqual([]);
-
-    release();
-    expect((await paying).outcome).toBe("captured");
-    expect(saleIdsFor(orderId)).toHaveLength(1);
-  });
-
-  it("(e) refuses a staff session and touches nothing", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId), v.staffCookie);
-
-    expect(res.status).toBe(403);
-    expect((await errorOf(res)).code).toBe("authorization.not_permitted");
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-  });
-
-  it("refuses not_stuck for an attempting payment whose order carries no mark, and not_found for an unknown id", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(
-      v,
-      orderId,
-      { status: "requires_payment_method" },
-      { mark: null },
-    );
-
-    const unmarked = await send(v, "POST", resolvePath(paymentId));
-    expect(unmarked.status).toBe(409);
-    expect((await errorOf(unmarked)).code).toBe("payment.not_stuck");
-    expect(v.client.cancelledIntents).toEqual([]);
-
-    const unknownId = randomUUID();
-    const unknown = await send(v, "POST", resolvePath(unknownId));
-    expect(unknown.status).toBe(404);
-    expect(await errorOf(unknown)).toEqual({
-      code: "stuck_payment.not_found",
-      params: { paymentId: unknownId },
-    });
-  });
-
-  it("refuses not_stuck when a concurrent resolve settles the payment before this one's provider call", async () => {
-    const v = await setup({
-      providerFor: (p) =>
-        new Proxy(p, {
-          get: (target, prop) =>
-            prop === "resolveAbandonedAttempt"
-              ? async (paymentRef: string, now: Date, audit: { personId: string }) => {
-                  // The other resolve won: the row is no longer attempting.
-                  await withTransaction(suite.db, (tx) =>
-                    failAttempting(tx, { provider: "stripe", paymentRef }),
-                  );
-                  return target.resolveAbandonedAttempt(paymentRef, now, audit);
-                }
-              : Reflect.get(target, prop),
-        }),
-    });
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({ code: "payment.not_stuck", params: { paymentId } });
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect(await resolutionsFor(paymentId)).toEqual([]);
-  });
-
-  it("answers an error and records nothing when the provider's resolve throws something else", async () => {
-    const v = await setup({
-      providerFor: (p) =>
-        new Proxy(p, {
-          get: (target, prop) =>
-            prop === "resolveAbandonedAttempt"
-              ? () => Promise.reject(new Error("database is locked"))
-              : Reflect.get(target, prop),
-        }),
-    });
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(500);
-    expect((await errorOf(res)).code).toBe("server.internal");
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-    expect(await resolutionsFor(paymentId)).toEqual([]);
-  });
-
-  it("leaves the payment attempting and the order locked when the resolution cannot be recorded, and a later resolve still releases it", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId, piId } = await strandPayment(v, orderId, {
-      status: "requires_payment_method",
-    });
-    await suite.db.execute(
-      sql`create trigger refuse_resolutions before update of resolution_outcome on payments when old.resolution_outcome is null and new.resolution_outcome is not null
-          begin select raise(abort, 'probe: resolution refused'); end`,
-    );
-    let res: Response;
-    try {
-      res = await send(v, "POST", resolvePath(paymentId));
-    } finally {
-      await suite.db.execute(sql`drop trigger refuse_resolutions`);
-    }
-
-    expect(res.status).toBe(500);
-    expect((await errorOf(res)).code).toBe("server.internal");
-    expect(v.client.cancelledIntents).toEqual([piId]);
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-    expect(await resolutionsFor(paymentId)).toEqual([]);
-
-    const again = await send(v, "POST", resolvePath(paymentId));
-    expect(again.status).toBe(200);
-    expect(await again.json()).toEqual({ outcome: "not_charged", orderUnlocked: true });
-    expect(await resolutionsFor(paymentId)).toEqual([
-      {
-        personId: v.managerId,
-        workingOrderId: orderId,
-        outcome: "failed",
-        cancelledAtProvider: true,
-      },
-    ]);
-  });
-
-  it("refuses resolve_unsupported when the payment's provider cannot resolve an abandoned attempt", async () => {
-    const v = await setup({
-      providerFor: (p) =>
-        new Proxy(p, {
-          get: (target, prop) =>
-            prop === "resolveAbandonedAttempt" ? undefined : Reflect.get(target, prop),
-        }),
-    });
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "payment.resolve_unsupported",
-      params: { providerId: "stripe" },
-    });
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-  });
-
-  it("refuses 409 provider_unknown when the payment's provider is no longer served", async () => {
-    const v = await setup({ withoutStripeSeat: true });
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "payment.provider_unknown",
-      params: { providerId: "stripe" },
-    });
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-  });
-
-  it("refuses provider_disconnected when the payment's provider has no credential any more", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, { status: "requires_payment_method" });
-    await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { personId: null, purpose: "payments.stripe" }),
-    );
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "reader.provider_disconnected",
-      params: { providerId: "stripe" },
-    });
-    expect(v.client.cancelledIntents).toEqual([]);
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-  });
-
-  it("answers sale.number_reused with 409 when the series hands out a number a sale already holds", async () => {
-    const v = await setup();
-    const firstOrder = await openOrder(v);
-    const first = await strandPayment(v, firstOrder, { status: "succeeded", amountReceived: 150 });
-    expect((await send(v, "POST", resolvePath(first.paymentId))).status).toBe(200);
-    // Wind the counter back so the next sale draws the number the first one holds.
-    await suite.db.execute(sql`
-      update invoice_series set next_number = next_number - 1
-      where id = (select series_id from sales where working_order_id = ${firstOrder})`);
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(v, orderId, {
-      status: "succeeded",
-      amountReceived: 150,
-    });
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect((await errorOf(res)).code).toBe("sale.number_reused");
-    expect(saleIdsFor(orderId)).toEqual([]);
-  });
-
-  it("records a short capture even when it exactly matches the original request", async () => {
-    const v = await setup();
-    const orderId = await openOrder(v);
-    const { paymentId } = await strandPayment(
-      v,
-      orderId,
-      { status: "succeeded", amountReceived: 100 },
-      { amount: "1.00" },
-    );
-
-    const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ outcome: "partial", outstanding: "0.50" });
-    expect(await paymentRow(paymentId)).toMatchObject({ state: "captured", saleId: null });
-    expect(saleIdsFor(orderId)).toEqual([]);
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
-    expect(await resolutionsFor(paymentId)).toEqual([
-      {
-        personId: v.managerId,
-        workingOrderId: orderId,
-        outcome: "captured",
-        cancelledAtProvider: false,
-      },
-    ]);
-  });
-});
-
-// --- bill payments (bill payments design §5.4) ------------------------------------------------
 
 type Provided =
   | { kind: "none" }
@@ -2076,8 +893,15 @@ describe("GET /management-api/payments/bill-payments", () => {
 });
 
 describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
-  it("completes a payment Stripe captured through the bill's own P3, issuing the invoice once", async () => {
+  it("records a captured payment once while its provider is turned off for new charges", async () => {
     const v = await setup();
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: { providers: { stripe: false } },
+        expectedRevision: 0,
+        personId: v.managerId,
+      }),
+    );
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, {
       kind: "attempting",
@@ -2092,9 +916,18 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(body.outcome).toBe("received");
     expect(body.invoiceNumber).toMatch(/^A\//);
     expect((await billPaymentOf(id)).state).toBe("received");
-    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(await orderOf(orderId)).toEqual({ status: "settled" });
     expect(saleIdsFor(orderId)).toHaveLength(1);
     expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(v.client.processedReaders).toEqual([]);
+    const [provider] = await suite.db.select().from(payments).where(eq(payments.billPaymentId, id));
+    expect(provider).toMatchObject({
+      state: "captured",
+      saleId: saleIdsFor(orderId)[0],
+      resolvedBy: v.managerId,
+      resolutionOutcome: "captured",
+      resolutionCancelledAtProvider: false,
+    });
     expect(again.status).toBe(409);
     expect(await errorOf(again)).toEqual({
       code: "bill.payment_not_stuck",
@@ -2133,6 +966,25 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
       code: "bill.payment_outcome_unconfirmed",
       params: { paymentId: id, reason: "unreachable" },
     });
+    expect((await billPaymentOf(id)).state).toBe("pending");
+  });
+
+  it("refuses to check a pending bill payment when the provider has been disconnected", async () => {
+    const v = await setup();
+    const id = await strandBillPayment(v, await openOrder(v), {
+      kind: "attempting",
+      intent: { status: "requires_payment_method" },
+    });
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { personId: null, purpose: "payments.stripe" }),
+    );
+    const refused = await send(v, "POST", billResolvePath(id));
+    expect(refused.status).toBe(409);
+    expect(await errorOf(refused)).toEqual({
+      code: "reader.provider_disconnected",
+      params: { providerId: "stripe" },
+    });
+    expect(v.client.cancelledIntents).toEqual([]);
     expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
@@ -2294,6 +1146,9 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "captured" }, "1.50", v.otherDeviceId);
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.otherDeviceId));
+    const list = await send(v, "GET", "/management-api/payments/bill-payments");
+    expect(await list.json()).toMatchObject([{ billPaymentId: id, deviceName: "Barra 2" }]);
 
     const res = await send(v, "POST", billResolvePath(id));
 
@@ -2305,6 +1160,48 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(
       suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
     ).toEqual(expected);
+    expect(
+      suite.db.all(sql`
+        select r.source, r.device_id from registros_facturacion r
+        join sales s on s.id = r.sale_id where s.working_order_id = ${orderId}`),
+    ).toEqual(expected);
+  });
+
+  it("answers a full disk when filing a captured bill payment", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" });
+    const recordSale = vi
+      .spyOn(backend, "recordSale")
+      .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
+    try {
+      const res = await send(v, "POST", billResolvePath(id));
+      expect(res.status).toBe(507);
+      expect(await errorOf(res)).toEqual({ code: "storage.disk_full", params: {} });
+      expect(saleIdsFor(orderId)).toHaveLength(0);
+      expect((await billPaymentOf(id)).state).toBe("pending");
+    } finally {
+      recordSale.mockRestore();
+    }
+  });
+
+  it("keeps a captured bill payment pending when its invoice number is already taken", async () => {
+    const v = await setup();
+    const firstOrder = await openOrder(v);
+    const first = await strandBillPayment(v, firstOrder, { kind: "captured" });
+    expect((await send(v, "POST", billResolvePath(first))).status).toBe(200);
+    await suite.db.execute(sql`
+      update invoice_series set next_number = next_number - 1
+      where id = (select series_id from sales where working_order_id = ${firstOrder})`);
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" });
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("sale.number_reused");
+    expect(saleIdsFor(orderId)).toEqual([]);
+    expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
   it("completes a payment that leaves the bill owing, answering no invoice", async () => {
@@ -2316,7 +1213,7 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ outcome: "received" });
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
+    expect(await orderOf(orderId)).toEqual({ status: "open" });
   });
 
   it("fails a payment no provider was asked to charge", async () => {
@@ -2424,7 +1321,7 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       attestedBy: v.managerId,
       attestationNote: NOTE,
     });
-    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(await orderOf(orderId)).toEqual({ status: "settled" });
     const [tender] = suite.db.all<{ bill_payment_id: string; method: string }>(
       sql`select t.bill_payment_id, t.method from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${orderId}`,
     );
@@ -2852,41 +1749,6 @@ describe("the manager's lists, of rows written within one millisecond", () => {
     return written;
   }
 
-  it("lists the stuck card payments in the order they were started", async () => {
-    const v = await setup();
-    const orders = await ordersOpenedBackwards(v);
-    const id = descendingIds();
-    const started: string[] = [];
-    for (const workingOrderId of orders) {
-      const [row] = await suite.db
-        .insert(payments)
-        .values({
-          id: id(),
-          workingOrderId,
-          source: v.cfg.origin.source,
-          deviceId: v.cfg.origin.deviceId,
-          provider: "stripe",
-          paymentRef: randomUUID(),
-          amount: 150,
-          state: "attempting",
-          createdAt: AT,
-          updatedAt: AT,
-        })
-        .returning({ id: payments.id });
-      started.push(row!.id);
-      await suite.db
-        .update(workingOrders)
-        .set({ paymentAttemptAt: MARK })
-        .where(eq(workingOrders.id, workingOrderId));
-    }
-
-    const res = await send(v, "GET", "/management-api/payments/stuck");
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { paymentId: string }[];
-    expect(body.map((row) => row.paymentId)).toEqual(started);
-  });
-
   it("lists the pending bill payments in the order they were taken", async () => {
     const v = await setup();
     const taken = await writeBillPayments(v, await ordersOpenedBackwards(v));
@@ -2955,68 +1817,12 @@ describe("the manager's lists, of rows written within one millisecond", () => {
   });
 });
 
-describe("whole-order attendance on manager recovery", () => {
-  it.each(["captured", "failed", "unknown"] as const)(
-    "%s settles only the original worker request",
-    async (outcome) => {
-      const fake = new FakePaymentProvider(suite.db);
-      const v = await setup({ extra: fake, attendance: recordAttendanceFact });
-      const [worker] = await seedPersons(suite.db, {
-        displayName: "Original whole-order collector",
-        pinHash: "scrypt$00$00",
-      });
-      const orderId = await openOrder(v);
-      const reading = clock.now();
-      const originalClock = vi
-        .spyOn(clock, "now")
-        .mockReturnValue({ ...reading, instant: new Date(MARK) });
-      try {
-        fake.stallNextCollect();
-        expect(
-          await payWorkingOrderIntegrated(
-            {
-              admission: testTradingAdmission(),
-              db: suite.db,
-              backend,
-              clock,
-              provider: fake,
-              attendance: recordAttendanceFact,
-            },
-            v.cfg,
-            { id: orderId, lines: [] },
-            worker!.id,
-          ),
-        ).toEqual({ outcome: "timeout" });
-
-        const [payment] = await suite.db
-          .select()
-          .from(payments)
-          .where(eq(payments.workingOrderId, orderId));
-        fake.scriptAbandonedAttempt(
-          outcome === "unknown"
-            ? { outcome: "unknown", reason: "unreachable" }
-            : { outcome, cancelledAtProvider: false },
-        );
-        originalClock.mockReturnValue({ ...reading, instant: new Date("2026-10-14T18:00:00Z") });
-        const res = await send(v, "POST", resolvePath(payment!.id));
-        expect(res.status).toBe(outcome === "unknown" ? 409 : 200);
-
-        expect(fake.collectCalls).toHaveLength(1);
-        expect(saleIdsFor(orderId)).toHaveLength(outcome === "captured" ? 1 : 0);
-      } finally {
-        originalClock.mockRestore();
-      }
-    },
-  );
-});
-
 describe("provider-confirmed partial-refund release", () => {
   const releasePath = (id: string) => `/management-api/payments/partial-refunds/${id}/release`;
   async function partial(
     options: {
       bill?: "pending" | "failed";
       placed?: boolean;
-      mark?: boolean;
       unidentified?: boolean;
       supported?: boolean;
       amount?: string;
@@ -3043,7 +1849,7 @@ describe("provider-confirmed partial-refund release", () => {
           v,
           orderId,
           { kind: "captured" },
-          undefined,
+          options.amount,
           undefined,
           undefined,
           options.slipWanted,
@@ -3079,13 +1885,11 @@ describe("provider-confirmed partial-refund release", () => {
           .update(billPayments)
           .set({ state: "failed", failedAt: MARK })
           .where(eq(billPayments.id, bill));
-      await tx
-        .update(workingOrders)
-        .set({
-          ...(options.placed ? { status: "placed" as const } : {}),
-          paymentAttemptAt: options.mark ? MARK : null,
-        })
-        .where(eq(workingOrders.id, orderId));
+      if (options.placed)
+        await tx
+          .update(workingOrders)
+          .set({ status: "placed" })
+          .where(eq(workingOrders.id, orderId));
     });
     const [payment] = await suite.db
       .select()
@@ -3096,83 +1900,90 @@ describe("provider-confirmed partial-refund release", () => {
 
   const retainPath = (id: string) => `/management-api/payments/partial-refunds/${id}/retain`;
   const allocation = { remaining: "1.10", applied: "1.10", tip: "0.00" };
-  it.each([undefined, "pending"] as const)(
-    "retains net money for %s and collects only the remainder",
-    async (bill) => {
-      const { v, orderId, payment, evidence, lookup } = await partial({ bill, mark: !bill });
-      evidence.refunds.pop();
-      const result = await post(v, retainPath(payment.id), allocation);
-      expect(result.status).toBe(200);
-      expect(await result.json()).toMatchObject({
-        outcome: "retained",
-        applied: "1.10",
+  it("refuses partial-refund recovery for a payment without a bill payment", async () => {
+    const { v, payment, lookup } = await partial();
+    const retained = await post(v, retainPath(payment.id), allocation);
+    const released = await send(v, "POST", releasePath(payment.id));
+    for (const response of [retained, released]) {
+      expect(response.status).toBe(409);
+      expect(await errorOf(response)).toMatchObject({ code: "payment.not_stuck" });
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+  it("retains net money and collects only the remainder", async () => {
+    const { v, orderId, payment, evidence, lookup } = await partial({ bill: "pending" });
+    evidence.refunds.pop();
+    const result = await post(v, retainPath(payment.id), allocation);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({
+      outcome: "retained",
+      applied: "1.10",
+      tip: "0.00",
+      outstanding: "0.40",
+    });
+    const [saved] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(saved).toMatchObject({
+      amount: 150,
+      state: "partially_refunded",
+      externalRef: "partial-txn",
+      billPaymentId: expect.any(String),
+    });
+    const [received] = await suite.db
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.id, saved!.billPaymentId!));
+    expect(received).toMatchObject({
+      state: "received",
+      applied: 110,
+      tip: 0,
+      attestedBy: v.managerId,
+    });
+    expect(
+      (await withTransaction(suite.db, (tx) => readBillBalance(tx, orderId))).outstanding,
+    ).toBe("0.40");
+    expect(await orderOf(orderId)).toEqual({ status: "open" });
+    expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(
+      await post(v, retainPath(payment.id), { ...allocation, tip: "0.10" }).then((r) => r.status),
+    ).toBe(400);
+    await takeReaderBillPayment(
+      {
+        db: suite.db,
+        backend,
+        clock,
+        provider: new FakePaymentProvider(suite.db),
+        admission: testTradingAdmission(),
+      },
+      v.cfg,
+      orderId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "0.40",
+        method: "card",
+        applied: "0.40",
         tip: "0.00",
-        outstanding: "0.40",
-      });
-      const [saved] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
-      expect(saved).toMatchObject({
-        amount: 150,
-        state: "partially_refunded",
-        externalRef: "partial-txn",
-        billPaymentId: expect.any(String),
-      });
-      const [received] = await suite.db
-        .select()
-        .from(billPayments)
-        .where(eq(billPayments.id, saved!.billPaymentId!));
-      expect(received).toMatchObject({
-        state: "received",
-        applied: 110,
-        tip: 0,
-        attestedBy: v.managerId,
-      });
-      expect(
-        (await withTransaction(suite.db, (tx) => readBillBalance(tx, orderId))).outstanding,
-      ).toBe("0.40");
-      expect((await orderOf(orderId)).mark).toBeNull();
-      expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
-      expect(lookup).toHaveBeenCalledTimes(1);
-      expect(
-        await post(v, retainPath(payment.id), { ...allocation, tip: "0.10" }).then((r) => r.status),
-      ).toBe(400);
-      await takeReaderBillPayment(
-        {
-          db: suite.db,
-          backend,
-          clock,
-          provider: new FakePaymentProvider(suite.db),
-          admission: testTradingAdmission(),
-        },
-        v.cfg,
-        orderId,
-        {
-          submissionId: randomUUID(),
-          kind: "contribution",
-          amount: "0.40",
-          method: "card",
-          applied: "0.40",
-          tip: "0.00",
-        },
-        {
+      },
+      {
+        personId: v.managerId,
+        sessionId: await openTillSession(suite.db, {
+          deviceId: v.cfg.origin.deviceId,
           personId: v.managerId,
-          sessionId: await openTillSession(suite.db, {
-            deviceId: v.cfg.origin.deviceId,
-            personId: v.managerId,
-          }),
-        },
-      );
-      const [linked] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
-      expect(linked!.saleId).not.toBeNull();
-      expect(
-        await suite.db
-          .select({ amount: tenders.amount })
-          .from(tenders)
-          .where(eq(tenders.saleId, linked!.saleId!)),
-      ).toEqual([{ amount: 110 }, { amount: 40 }]);
-      expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
-      expect(lookup).toHaveBeenCalledTimes(1);
-    },
-  );
+        }),
+      },
+    );
+    const [linked] = await suite.db.select().from(payments).where(eq(payments.id, payment.id));
+    expect(linked!.saleId).not.toBeNull();
+    expect(
+      await suite.db
+        .select({ amount: tenders.amount })
+        .from(tenders)
+        .where(eq(tenders.saleId, linked!.saleId!)),
+    ).toEqual([{ amount: 110 }, { amount: 40 }]);
+    expect(await post(v, retainPath(payment.id), allocation).then((r) => r.status)).toBe(200);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
 
   it("retaining a pending bill payment's money prints its asked-for slip once", async () => {
     const { v, payment, evidence } = await partial({ bill: "pending", slipWanted: true });
@@ -3206,14 +2017,17 @@ describe("provider-confirmed partial-refund release", () => {
   });
 
   it("shows a bill-first excess as tip and issues net tenders, refusing it when tips are off", async () => {
-    const { v, orderId, payment, evidence, lookup } = await partial({ amount: "2.00", mark: true });
+    const { v, orderId, payment, evidence, lookup } = await partial({
+      amount: "2.00",
+      bill: "pending",
+    });
     evidence.refunds.pop();
     const seen = { remaining: "1.60", applied: "1.50", tip: "0.10" };
     const refused = await post(v, retainPath(payment.id), seen);
     expect((await errorOf(refused)).code).toBe("bill.tip_not_allowed");
     expect(lookup).not.toHaveBeenCalled();
     v.cfg.tipsEnabled = true;
-    const list = await send(v, "GET", "/management-api/payments/stuck");
+    const list = await send(v, "GET", "/management-api/payments/bill-payments");
     expect(await list.json()).toMatchObject([{ retention: { ...seen, outstanding: "0.00" } }]);
     const result = await post(v, retainPath(payment.id), seen);
     expect(result.status).toBe(200);
@@ -3225,7 +2039,7 @@ describe("provider-confirmed partial-refund release", () => {
         .from(tenders)
         .where(eq(tenders.saleId, saved!.saleId!)),
     ).toEqual([{ amount: 160, tip: 10 }]);
-    expect((await orderOf(orderId)).mark).toBeNull();
+    expect(await orderOf(orderId)).toEqual({ status: "settled" });
   });
 
   it("keeps failed-linked money on the full-refund route", async () => {
@@ -3243,7 +2057,7 @@ describe("provider-confirmed partial-refund release", () => {
   it.each(["evidence changed", "another box", "permission lost"])(
     "retains the hold when %s during confirmation",
     async (problem) => {
-      const { v, payment, evidence, lookup } = await partial({ mark: true });
+      const { v, bill, payment, evidence, lookup } = await partial({ bill: "pending" });
       evidence.refunds.pop();
       lookup.mockImplementation(async () => {
         if (problem === "evidence changed")
@@ -3277,14 +2091,14 @@ describe("provider-confirmed partial-refund release", () => {
           .from(paymentRefunds)
           .where(eq(paymentRefunds.paymentId, payment.id)),
       ).toHaveLength(problem === "evidence changed" ? 2 : 1);
-      expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+      expect((await billPaymentOf(bill!)).state).toBe("pending");
       if (problem === "evidence changed") {
         expect(refusal.params).toMatchObject({
           preview: { kind: "allocated", applied: "1.00", charged: "1.00", tip: "0.00" },
         });
-        expect(await (await send(v, "GET", "/management-api/payments/stuck")).json()).toMatchObject(
-          [{ partialRefund: { remaining: "1.00" } }],
-        );
+        expect(
+          await (await send(v, "GET", "/management-api/payments/bill-payments")).json(),
+        ).toMatchObject([{ partialRefund: { remaining: "1.00" } }]);
         lookup.mockResolvedValue(evidence);
         expect(
           (
@@ -3316,19 +2130,13 @@ describe("provider-confirmed partial-refund release", () => {
   });
 
   it.each([
-    { bill: undefined, placed: false, mark: true },
-    { bill: undefined, placed: true, mark: false },
-    { bill: "pending" as const, placed: false, mark: false },
-    { bill: "failed" as const, placed: false, mark: false },
+    { bill: "pending" as const, placed: false },
+    { bill: "failed" as const, placed: false },
   ])(
     "lists and releases $bill/$placed with only session authorization, preserving the capture",
     async (options) => {
       const { v, orderId, bill, payment, lookup } = await partial(options);
-      const list = await send(
-        v,
-        "GET",
-        bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
-      );
+      const list = await send(v, "GET", "/management-api/payments/bill-payments");
       expect(list.status).toBe(200);
       expect(await list.json()).toEqual([
         expect.objectContaining({
@@ -3365,7 +2173,6 @@ describe("provider-confirmed partial-refund release", () => {
       ]);
       expect(await orderOf(orderId)).toEqual({
         status: options.placed ? "placed" : "open",
-        mark: null,
       });
       if (bill) expect((await billPaymentOf(bill)).state).toBe("failed");
       expect(saleIdsFor(orderId)).toEqual([]);
@@ -3383,15 +2190,9 @@ describe("provider-confirmed partial-refund release", () => {
           .from(paymentRefunds)
           .where(eq(paymentRefunds.paymentId, payment.id)),
       ).toHaveLength(2);
-      expect(
-        await (
-          await send(
-            v,
-            "GET",
-            bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
-          )
-        ).json(),
-      ).toEqual([]);
+      expect(await (await send(v, "GET", "/management-api/payments/bill-payments")).json()).toEqual(
+        [],
+      );
     },
   );
 
@@ -3404,8 +2205,8 @@ describe("provider-confirmed partial-refund release", () => {
     "unidentified",
     "unidentified-partial",
   ])("keeps the capture held for %s evidence", async (problem) => {
-    const { v, payment, evidence, lookup } = await partial({
-      mark: true,
+    const { v, bill, payment, evidence, lookup } = await partial({
+      bill: "pending",
       unidentified: problem.startsWith("unidentified"),
     });
     if (problem === "partial" || problem === "unidentified-partial") evidence.refunds.pop();
@@ -3430,11 +2231,11 @@ describe("provider-confirmed partial-refund release", () => {
     expect(
       await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
     ).toHaveLength(1);
-    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
   });
 
   it("refuses with 409 provider refunds that, stored in whole cents, would exceed the capture, changing nothing", async () => {
-    const { v, payment, evidence } = await partial({ mark: true });
+    const { v, bill, payment, evidence } = await partial({ bill: "pending" });
     // 0.40 + 0.555 + 0.545 is the 1.50 captured, but 0.555 is stored as 0.56, so 0.545 more
     // would take the stored refunds to 1.505.
     evidence.refunds.splice(
@@ -3462,7 +2263,7 @@ describe("provider-confirmed partial-refund release", () => {
     expect(
       await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
     ).toEqual(before);
-    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
   });
 
   it("refuses ordinary received and failed attestations over partially refunded money", async () => {
@@ -3481,7 +2282,7 @@ describe("provider-confirmed partial-refund release", () => {
   });
 
   it("requires management permission before reading the provider and rechecks it after the read", async () => {
-    const { v, payment, lookup, evidence } = await partial({ mark: true });
+    const { v, bill, payment, lookup, evidence } = await partial({ bill: "pending" });
     for (const cookie of [null, v.staffCookie]) {
       const result = await send(v, "POST", releasePath(payment.id), cookie);
       expect([401, 403]).toContain(result.status);
@@ -3501,11 +2302,12 @@ describe("provider-confirmed partial-refund release", () => {
     expect(result.status).toBe(403);
     expect((await errorOf(result)).code).toBe("person.suspended");
     expect((await paymentRow(payment.id)).state).toBe("partially_refunded");
-    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
   });
 
   it("uses the production SumUp contribution to enable the manager release", async () => {
     const { v, payment } = await partial({
+      bill: "pending",
       supported:
         CARD_PROVIDERS.find((p) => p.providerId === "sumup")?.partialRefundRelease ?? false,
     });
@@ -3513,16 +2315,14 @@ describe("provider-confirmed partial-refund release", () => {
     expect((await paymentRow(payment.id)).state).toBe("refunded");
   });
 
-  it.each([undefined, "failed"] as const)(
+  it.each(["pending", "failed"] as const)(
     "leaves an unflagged provider's %s payment out of release",
     async (bill) => {
       const { v, payment, lookup } = await partial({ supported: false, bill });
-      const list = await send(
-        v,
-        "GET",
-        bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
-      );
-      expect(await list.json()).toEqual([]);
+      const list = await send(v, "GET", "/management-api/payments/bill-payments");
+      const rows = (await list.json()) as Array<{ partialRefund?: unknown }>;
+      expect(rows).toHaveLength(bill === "pending" ? 1 : 0);
+      expect(rows[0]?.partialRefund).toBeUndefined();
       const result = await send(v, "POST", releasePath(payment.id));
       expect(result.status).toBe(409);
       expect((await errorOf(result)).code).toBe("payment.not_stuck");
@@ -3530,16 +2330,17 @@ describe("provider-confirmed partial-refund release", () => {
     },
   );
 
-  it("rolls refunds and the order mark back together when releasing the mark fails", async () => {
-    const { v, payment } = await partial({ mark: true });
+  it("rolls provider refunds back when the linked bill payment cannot be released", async () => {
+    const { v, bill, payment } = await partial({ bill: "pending" });
     await suite.db
-      .execute(sql`create trigger refuse_partial_mark before update of payment_attempt_at on working_orders
+      .execute(sql`create trigger refuse_partial_release before update of state on bill_payments
+      when old.state = 'pending' and new.state = 'failed'
       begin select raise(abort, 'probe: release refused'); end`);
     let result: Response;
     try {
       result = await send(v, "POST", releasePath(payment.id));
     } finally {
-      await suite.db.execute(sql`drop trigger refuse_partial_mark`);
+      await suite.db.execute(sql`drop trigger refuse_partial_release`);
     }
     expect(result.status).toBe(500);
     expect((await errorOf(result)).code).toBe("server.internal");
@@ -3547,11 +2348,11 @@ describe("provider-confirmed partial-refund release", () => {
     expect(
       await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
     ).toHaveLength(1);
-    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
   });
 
   it("does not release another box's charge", async () => {
-    const { v, payment, lookup } = await partial();
+    const { v, payment, lookup } = await partial({ bill: "pending" });
     await liftPaymentGuard(suite.db, async () =>
       suite.db
         .update(payments)

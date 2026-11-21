@@ -169,7 +169,7 @@ type PaymentRoute = "bill-counter" | "reader" | "bill-cash" | "bill-manual" | "b
 async function paymentRequest(kind: PaymentRoute) {
   const id = randomUUID();
   const lines = [{ menuItemId: venue.counterItem("Burger"), quantity: "1" }];
-  if (kind === "bill-counter")
+  if (kind === "bill-counter" || kind === "reader")
     return {
       id,
       path: `/api/working-orders/${id}/payments`,
@@ -177,23 +177,11 @@ async function paymentRequest(kind: PaymentRoute) {
         submissionId: id,
         kind: "share",
         shareOf: 1,
-        method: "cash",
-        tendered: "12.00",
+        ...(kind === "reader"
+          ? { method: "card", entry: "reader", simulationOutcome: "captured" }
+          : { method: "cash", tendered: "12.00" }),
         dining: "eat_in",
         basket: { zoneId: venue.counter.zoneId, lines },
-      },
-    };
-  if (kind === "reader")
-    return {
-      id,
-      path: "/api/pay",
-      body: {
-        dining: "eat_in",
-        id,
-        expectedEdit: null,
-        zoneId: venue.counter.zoneId,
-        lines,
-        simulationOutcome: "captured",
       },
     };
   const order = await place(`${sessionCookie}; ${deviceCookie}`, id);
@@ -257,7 +245,7 @@ describe("till payment device proof over HTTP", () => {
     const answer = await post(request.path, `${sessionCookie}; ${deviceCookie}`, request.body);
     const body = (await answer.json()) as { error?: unknown; outcome?: string };
     expect({ status: answer.status, error: body.error }).toEqual({ status: 200, error: undefined });
-    if (kind === "reader") expect(body.outcome).toBe("captured");
+    if (kind === "reader") expect(body.outcome).toBe("received");
     expect(
       await suite.db.all(sql`select total from sales where working_order_id = ${request.id}`),
     ).toEqual([{ total: 1200 }]);

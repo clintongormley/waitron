@@ -28,7 +28,6 @@ function stub(over: Partial<DashboardApi> = {}): DashboardApi {
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue([]),
     listReaderHolders: vi.fn().mockResolvedValue([]),
-    listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listAbandonedRefunds: vi.fn().mockResolvedValue([]),

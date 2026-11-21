@@ -29,7 +29,6 @@ function client(rows = [reader], canUnpair = true, overrides: Partial<DashboardA
     listReaders: vi.fn().mockResolvedValue(rows),
     listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: false }),
-    listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),

@@ -44,7 +44,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { attendanceJob } from "./attendance-loop.js";
 import { mailSendJob } from "./mail-sender.js";
-import { runPendingCardLoop } from "./pending-card-recovery.js";
+import { runPendingCardLoop } from "./bill-payments-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
@@ -108,8 +108,8 @@ vi.mock("./mail-sender.js", async (load) => {
     }),
   };
 });
-vi.mock("./pending-card-recovery.js", async (load) => {
-  const a = await load<typeof import("./pending-card-recovery.js")>();
+vi.mock("./bill-payments-loop.js", async (load) => {
+  const a = await load<typeof import("./bill-payments-loop.js")>();
   return { ...a, runPendingCardLoop: vi.fn(a.runPendingCardLoop) };
 });
 vi.mock("./tender-refund-recovery.js", async (load) => {

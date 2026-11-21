@@ -841,18 +841,6 @@ The ones worth grepping for:
   This box logs an empty card sweep at `debug`. Pending work, captures, failures and incidents
   appear at `info`. The incidents are `payment.pending_outcome_unactionable` and
   `payment.capture_mismatch`.
-- **`payment_attempt.released`** (`info`) — `{ released }`. After a pass, the loop cleared the "a
-  card is paying this order" mark on that many open orders: each one's card attempt is not running
-  in this process, and the order has no payment still `attempting`, nor a `captured` one without a sale or received bill contribution (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
-  `withStalePaymentRelease`, `src/boot.ts`). The loop's first pass runs at start, before any sleep;
-  after that, its independent card loop sleeps at most 60 seconds between passes. Until its mark is cleared,
-  the server refuses changes to what that order charges with `order.payment_in_flight`; marking its
-  lines served or taking that back, and the other writes listed in `docs/backlog/payments.md` →
-  Decisions and deliberate limits, still go through.
-- **`payment_attempt.release_failed`** (`warn`) — `{ error }`, plus `workingOrderId` when it is the
-  clear that follows a card attempt which filed nothing (`releasePaymentAttempt`,
-  `src/till-sale.ts`). That clear threw; the till still gets the attempt's own outcome, and the
-  loop's next release tries again. It does not flip `/health`.
 - **`bill_request.clear_failed`** (`warn`) — `{ billId, partyId, error }`. A payment left nothing of
   the party's family to pay, but taking away the party's bill request was refused
   (`clearBillRequestIfPaid`, `src/bill-request.ts`). The payment went through; the bill request
@@ -870,9 +858,6 @@ The ones worth grepping for:
   recorded refusal code include it at warn. Other request lines are debug.
 - **`payment.collection_failed`** (`warn`) records the order ID, request ID and fixed payment outcome
   when a till's card collection answers with a decline, failure, timeout or network unavailability.
-- **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the
-  existing till recovery path. `payment.automatic_recovery_failed` (`warn`) names a retained payment
-  and its error, or a failure reading the recovery set. Captured payments stay available for retry.
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.

@@ -522,7 +522,7 @@ async function cashSaleAskingSlip(app: Hono, cookie: string, menuItemId: string)
 }
 
 /**
- * The slip a payer asked for at a reader payment, printed as `/api/pay` prints it once the card is
+ * The slip a payer asked for at a reader payment, printed once the card is
  * captured: from the sale's `payments` row, on the paying device's slip printer.
  */
 async function slipAskedAtPayment(cfg: TradingContext, workingOrderId: string, log?: Logger) {

@@ -20,17 +20,22 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCategory, createProduct } from "@waitron/menu";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
-import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
+import { payments } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
+import type { CounterPaymentBasket } from "./bill-payments.js";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
-import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import {
+  billShare,
+  seedPendingCardPayment,
+  takeBillPayment,
+  takeReaderPaymentWithRecovery,
+} from "./testing/bill-payment-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import {
   OPERATOR,
   inTx,
@@ -206,6 +211,29 @@ async function park(id: string, dishes: Dish[], label = "Mesa 3"): Promise<void>
     }),
   });
   expect(res.status).toBe(200);
+}
+
+function readerPay(
+  id: string,
+  provider = new FakePaymentProvider(suite.db),
+  log?: Logger,
+  basket?: CounterPaymentBasket,
+) {
+  return takeReaderPaymentWithRecovery(
+    {
+      admission: testTradingAdmission(),
+      db: suite.db,
+      backend: v.backend,
+      clock: v.clock,
+      provider,
+      log,
+    },
+    v.cfg,
+    id,
+    billShare("card", "4.00", { entry: "reader", submissionId: id }),
+    v.operator,
+    basket,
+  );
 }
 
 async function payCash(
@@ -557,19 +585,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const id = randomUUID();
     await park(id, [made], "Terraza");
 
-    const out = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend: v.backend,
-        clock: v.clock,
-        provider: new SimulatorPaymentProvider(suite.db),
-      },
-      v.cfg,
-      { id, lines: [], simulationOutcome: "captured" },
-    );
+    const out = await readerPay(id);
 
-    expect(out.outcome).toBe("captured");
+    expect(out.outcome).toBe("received");
     expect(await statusOf(id)).toBe("settled");
     expect(await filedFor(id)).toBe(1);
     expect(await kitchenItems(id)).toEqual([]);
@@ -582,33 +600,12 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const made = await strandedDish("Boquerones");
     const id = randomUUID();
     await park(id, [made], "Barra");
-    const provider = new SimulatorPaymentProvider(suite.db);
-    await inTx(v, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: v.cfg.origin,
-        nodeId: v.cfg.nodeId,
-        workingOrderId: id,
-        provider: provider.provider,
-        paymentRef: `sim-${randomUUID()}`,
-        amount: decimal("4.00"),
-        settledAt: new Date(),
-        externalRef: `sim-${randomUUID()}`,
-      }),
-    );
+    const provider = new FakePaymentProvider(suite.db);
+    provider.crashNextCollect("captured");
+    await expect(readerPay(id, provider)).rejects.toThrow("process stopped");
+    const out = await readerPay(id, provider);
 
-    const out = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend: v.backend,
-        clock: v.clock,
-        provider,
-      },
-      v.cfg,
-      { id, lines: [] },
-    );
-
-    expect(out.outcome).toBe("captured");
+    expect(out.outcome).toBe("received");
     expect(await statusOf(id)).toBe("settled");
     expect(await filedFor(id)).toBe(1);
     expect(await kitchenItems(id)).toEqual([]);
@@ -724,22 +721,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await park(id, [made]);
       const log = vi.fn<Logger>();
 
-      const out = await withAlertRefused(() =>
-        payWorkingOrderIntegrated(
-          {
-            admission: testTradingAdmission(),
-            db: suite.db,
-            backend: v.backend,
-            clock: v.clock,
-            log,
-            provider: new SimulatorPaymentProvider(suite.db),
-          },
-          v.cfg,
-          { id, lines: [], simulationOutcome: "captured" },
-        ),
-      );
+      const out = await withAlertRefused(() => readerPay(id, undefined, log));
 
-      expect(out.outcome).toBe("captured");
+      expect(out.outcome).toBe("received");
       await expectSettledWithoutAlert(id);
       expect(await paymentSaleIds(id)).toEqual([{ state: "captured", saleId: await saleOf(id) }]);
       expect(log).toHaveBeenCalledWith(
@@ -758,35 +742,12 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       const made = await strandedDish("Refused recovery");
       const id = randomUUID();
       await park(id, [made], "Barra");
-      const provider = new SimulatorPaymentProvider(suite.db);
-      await inTx(v, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: v.cfg.origin,
-          nodeId: v.cfg.nodeId,
-          workingOrderId: id,
-          provider: provider.provider,
-          paymentRef: `sim-${randomUUID()}`,
-          amount: decimal("4.00"),
-          settledAt: new Date(),
-          externalRef: `sim-${randomUUID()}`,
-        }),
-      );
+      const provider = new FakePaymentProvider(suite.db);
+      provider.crashNextCollect("captured");
+      await expect(readerPay(id, provider)).rejects.toThrow("process stopped");
+      const out = await withAlertRefused(() => readerPay(id, provider));
 
-      const out = await withAlertRefused(() =>
-        payWorkingOrderIntegrated(
-          {
-            admission: testTradingAdmission(),
-            db: suite.db,
-            backend: v.backend,
-            clock: v.clock,
-            provider,
-          },
-          v.cfg,
-          { id, lines: [] },
-        ),
-      );
-
-      expect(out.outcome).toBe("captured");
+      expect(out.outcome).toBe("received");
       await expectSettledWithoutAlert(id);
       expect(await paymentSaleIds(id)).toEqual([{ state: "captured", saleId: await saleOf(id) }]);
     });
@@ -1247,18 +1208,12 @@ describe("paying a pay-first order, or an open counter order in a zone that send
   /** Leaves card money on the bill unresolved; the check reads that it still is. */
   const unresolvedCard = {
     "a card is at the reader": async (id: string) => {
-      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
-      await inTx(v, (tx) =>
-        tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, id)),
-      );
+      const paymentId = await inTx(v, (tx) => seedPendingCardPayment(tx, id));
       return async () => {
-        const [order] = await inTx(v, (tx) =>
-          tx
-            .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, id)),
+        const [payment] = await inTx(v, (tx) =>
+          tx.select().from(billPayments).where(eq(billPayments.id, paymentId)),
         );
-        expect(order?.paymentAttemptAt).toBe(paymentAttemptAt);
+        expect(payment?.state).toBe("pending");
       };
     },
     "a card refund waits": async (id: string) => {
@@ -1436,23 +1391,11 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const closed = await station("Card bar");
     await switchOff(closed);
     const id = randomUUID();
-    const out = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend: v.backend,
-        clock: v.clock,
-        provider: new SimulatorPaymentProvider(suite.db),
-      },
-      v.cfg,
-      {
-        id,
-        zoneId: v.counter.zoneId,
-        lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
-        simulationOutcome: "captured",
-      },
-    );
-    expect(out.outcome).toBe("captured");
+    const out = await readerPay(id, undefined, undefined, {
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1", makeAt: closed }],
+    });
+    expect(out.outcome).toBe("received");
     const [stored] = await inTx(v, (tx) =>
       tx
         .select({ makeAt: workingOrderLines.makeAtStationId })
