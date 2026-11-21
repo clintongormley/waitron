@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import {
   modalClosed,
   modalOpen,
@@ -235,4 +235,46 @@ test("a dialog shown without being modal is not in front", () => {
   document.body.appendChild(dialog);
   dialog.show();
   expect(surfaceOutside(box())).toBe(false);
+});
+
+/** A component drawing its own modal `<dialog>` around a slot, as a wt-dialog does, opened as a
+ * tracked window. */
+function trackedWindow(order: number): { host: HTMLElement; dialog: HTMLDialogElement } {
+  const host = box();
+  const dialog = document.createElement("dialog");
+  dialog.appendChild(document.createElement("slot"));
+  host.attachShadow({ mode: "open" }).appendChild(dialog);
+  dialog.showModal();
+  onTestFinished(() => dialog.close());
+  open(host, order);
+  return { host, dialog };
+}
+
+test("an earlier tracked window's dialog is not in front of what is inside the later one", () => {
+  trackedWindow(1);
+  const { host } = trackedWindow(2);
+  expect(surfaceOutside(box(host))).toBe(false);
+});
+
+test("an open popup outside the later tracked window is still in front of what is inside it", () => {
+  trackedWindow(1);
+  const { host } = trackedWindow(2);
+  openPopover();
+  expect(surfaceOutside(box(host))).toBe(true);
+});
+
+test("an open popup drawn inside an earlier tracked window's component is in front", () => {
+  const earlier = trackedWindow(1);
+  openPopover(earlier.host.shadowRoot!);
+  const { host } = trackedWindow(2);
+  expect(surfaceOutside(box(host))).toBe(true);
+});
+
+test("a modal dialog no tracked window draws is in front, even with tracked windows open", () => {
+  const { host } = trackedWindow(1);
+  const dialog = document.createElement("dialog");
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  onTestFinished(() => dialog.close());
+  expect(surfaceOutside(box(host))).toBe(true);
 });

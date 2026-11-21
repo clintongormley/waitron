@@ -43,9 +43,19 @@ export function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElemen
     if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
 }
 
-/** Whether an open popover or modal dialog that `node` is not drawn inside is in front of it. */
+/** Whether `dialog` is the one an open tracked window draws in its own shadow root. */
+function drawnByOpenModal(dialog: HTMLDialogElement): boolean {
+  const root = dialog.getRootNode();
+  for (const modal of openModals.keys()) if (modal.shadowRoot === root) return true;
+  return false;
+}
+
+/** Whether an open popover or modal dialog that `node` is not drawn inside is in front of it,
+ * manual popovers included: they are menus drawn in front. The dialogs of tracked windows are left
+ * out, since `underModal` knows which of those is latest and an earlier one is not in front. */
 export function surfaceOutside(node: Node): boolean {
   outer: for (const surface of openSurfaces(document)) {
+    if (surface instanceof HTMLDialogElement && drawnByOpenModal(surface)) continue;
     for (let at: Node | null = node; at; at = renderedParent(at))
       if (at === surface) continue outer;
     return true;

@@ -575,6 +575,32 @@ describe("till-app: an adjustment someone must approve", () => {
     expect(api.openDrawer).not.toHaveBeenCalled();
   });
 
+  it("takes the approver's PIN and Enter from a keyboard, over the adjustment window", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    const override = approval(el)!;
+    override.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!.click();
+    await override.updateComplete;
+
+    await userEvent.keyboard("7777{Enter}");
+    await flush(el);
+
+    expect(applied()).toEqual([
+      {
+        orderId: "wo-4",
+        command: {
+          ...ask,
+          submissionId: expect.any(String),
+          approver: { personId: "m-1", pin: "7777" },
+        },
+      },
+    ]);
+  });
+
   it("keeps the PIN prompt open after a wrong PIN, saying so", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: byReason })),
