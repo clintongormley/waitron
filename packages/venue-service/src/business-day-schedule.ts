@@ -226,7 +226,7 @@ export async function businessDayClockConflicts(
         ownership(endsAt, oldCutover, true) !== ownership(endsAt, newCutover, true)
       )
         reason = "endpoint_day";
-      else if (inStrip(minutes(startsAt)) || inStrip(minutes(endsAt))) reason = "transition_strip";
+      else if (inStrip(minutes(endsAt))) reason = "transition_strip";
       const seasonName = seasonById.get(p.seasonId)?.name;
       if (reason !== null)
         conflicts.push({
