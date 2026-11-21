@@ -483,8 +483,9 @@ address has not been looked at.
 
 **Design approved by the owner, 2026-11-06:** [closing a drawer](../superpowers/specs/2026-11-06-a1325-close-a-drawer-design.md).
 A close is a counted withdrawal from one drawer, at any time, covering everything since that drawer's
-last close. It takes in A239, so the two are built together, and A240 can land after them. It replaces
-`daily_closes`, and no plan exists yet.
+last close. It takes in A239, so the two are built together, and A240 can land after them. The
+[implementation plan](../superpowers/plans/2026-11-21-a1325-close-a-drawer.md) replaces `daily_closes`
+and starts building after A1308 os13.
 Sales shows frozen figures once a node's day has a saved close. The closer must decide where a later
 write dated to that day goes; A897 does not settle that rule (watcher, 2026-11-11 22:09).
 
@@ -1201,7 +1202,7 @@ Printer identity is separate from the till route inventory.
 3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1325. Close the day: count the cash and save the day's close — OPEN, design approved
-  2026-11-06, no plan yet.** The north star's "closing". A close is a counted withdrawal from one
+  2026-11-06, planned.** The north star's "closing". A close is a counted withdrawal from one
   drawer, built together with A239, and A240 can land after it.
   [Detail](till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
 - **Recorded cash in and out of a till's drawer (A239) — OPEN, covered by A1325's approved design.**
