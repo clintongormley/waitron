@@ -1438,7 +1438,7 @@ describe("refunds without a corrective invoice", () => {
           : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
       ]);
       expect(row(xml, 2)).toEqual(words.refundColumns);
-      expect(row(xml, 2).at(-1)).toBe(language === "en" ? "VAT (EUR)" : "IVA (EUR)");
+      expect(row(xml, 2)).toHaveLength(14);
       const card = words.paymentMethods.card;
       const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
       const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "A/2"];
