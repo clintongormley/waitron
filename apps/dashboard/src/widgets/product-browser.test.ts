@@ -576,16 +576,115 @@ it("a drag that ends on a category's row does not also open it", async () => {
   await table.updateComplete;
   expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "bread"]);
 });
-it("drags the whole selected group and clears selection after moving", async () => {
+it("previews a mixed drop in Food before moving the selected group", async () => {
   const el = await mountBrowser();
+  let resolvePreview!: (
+    preview: Awaited<ReturnType<DashboardApi["previewProductItemsRouting"]>>,
+  ) => void;
+  vi.mocked(el.api.previewProductItemsRouting).mockReturnValueOnce(
+    new Promise((resolve) => (resolvePreview = resolve)),
+  );
   await selectKeys(el, ["bread", "folder:d"]);
-  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await dragAndClick(el, "bread", "folder:f");
+  await el.updateComplete;
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
+  expect(dialog(el)!.querySelector("wt-combobox")!.value).toBe("f");
+  const confirm =
+    dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!;
+  expect(confirm.disabled).toBe(true);
+  expect(el.api.previewProductItemsRouting).toHaveBeenCalledExactlyOnceWith({
+    kind: "move",
+    selection: { productIds: ["bread"], categoryIds: ["d"] },
+    to: "f",
+  });
+  resolvePreview({
+    moves: [
+      {
+        productId: "cola",
+        productName: "Cola",
+        zoneId: "z",
+        zoneName: "Patio",
+        from: { kind: "station", stationId: "bar" },
+        to: { kind: "station", stationId: "kitchen" },
+        toNoReplacement: false,
+        periodIds: ["lunch"],
+      },
+    ],
+    stations: [
+      { id: "bar", name: "Bar" },
+      { id: "kitchen", name: "Kitchen" },
+    ],
+    periods: [{ id: "lunch", name: "Lunch", departmentName: "Dining" }],
+  });
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  const changes = dialog(el)!.querySelector('[data-test="routing-preview-table"]')!;
+  expect(changes.textContent).toContain("Cola");
+  expect(changes.textContent).toContain("Bar");
+  expect(changes.textContent).toContain("Kitchen");
+  await press(el, "confirm");
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
   expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: ["bread"], categoryIds: ["d"] },
     "f",
   );
 });
+
+it("confirms an empty top-level folder preview and keeps unrelated ticks", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["bread"]);
+  const root = (await tableOf(el)).shadowRoot!;
+  drag(
+    await nameCell(el, "folder:b"),
+    root.querySelector(`tr[data-row-key="${ROOT_KEY}"] [part~="folder-cell"]`)!,
+  );
+  await el.updateComplete;
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
+  expect(dialog(el)!.querySelector("wt-combobox")!.value).toBe("top");
+  expect(el.api.previewProductItemsRouting).toHaveBeenCalledExactlyOnceWith({
+    kind: "move",
+    selection: { productIds: [], categoryIds: ["b"] },
+    to: null,
+  });
+  const confirm = dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=confirm]",
+  )!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await confirm.updateComplete;
+  await userEvent.click(confirm);
+  expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
+    { productIds: [], categoryIds: ["b"] },
+    null,
+  );
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  expect(count(el)).toBe("1 selected");
+  expect((await nameCell(el, "bread")).closest("tr")!.querySelector("input")!.checked).toBe(true);
+});
+
+it("a toolbar move uses its own selection after a folder drop was cancelled", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await dragAndClick(el, "folder:d", "folder:f");
+  const drop = dialog(el)!;
+  await drop.updateComplete;
+  const closed = dialogClosed(drop);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
+  await press(el, "move");
+  await destination(el, "f");
+  const confirm =
+    dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await confirm.updateComplete;
+  await userEvent.click(confirm);
+  expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
+    { productIds: ["bread"], categoryIds: [] },
+    "f",
+  );
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+});
+
 it("refuses a folder over itself or its descendants but highlights a sibling", async () => {
   const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
   await toggleCategory(el, "d");
@@ -886,6 +985,13 @@ it("a selection holding a category and a product inside it moves the category al
   await toggleCategory(el, "d");
   await selectKeys(el, ["folder:d", "cola"]);
   drag(await nameCell(el, "cola"), await nameCell(el, "folder:f"));
+  await el.updateComplete;
+  const confirm = dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=confirm]",
+  )!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await confirm.updateComplete;
+  await userEvent.click(confirm);
   await vi.waitFor(() =>
     expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
@@ -1136,6 +1242,13 @@ it("a rename sends the name only, so renaming a category just dragged elsewhere 
   target.dispatchEvent(
     new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
   );
+  await el.updateComplete;
+  const confirm = dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "wt-button[data-test=confirm]",
+  )!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await confirm.updateComplete;
+  await userEvent.click(confirm);
   await vi.waitFor(() =>
     expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["b"] },
@@ -1461,20 +1574,6 @@ it("keeps a move made while a category's colour chooser is open: the colour goes
   await toggleCategory(el, "d");
   await menuAction(el, "color-b");
   await colorChooser(el);
-  // A drag under the open modal reaches no row, so the list's own drop event stands in for one.
-  el.shadowRoot!.querySelector("dashboard-product-list")!.dispatchEvent(
-    new CustomEvent("drop-items", {
-      detail: { keys: ["folder:b"], folderId: "f" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await vi.waitFor(() =>
-    expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
-      { productIds: [], categoryIds: ["b"] },
-      "f",
-    ),
-  );
   el.categories = [
     folder("d", "Drinks", null),
     folder("b", "Beer", "f"),
@@ -2131,19 +2230,34 @@ it.each([
     expect(combo.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe(noResults);
   },
 );
-it("moves products to the explicitly chosen top level", async () => {
+it("previews a product-only Move to the top level before allowing confirmation", async () => {
   const el = await mountBrowser();
-  await selectKeys(el, ["bread"]);
+  let resolvePreview!: (
+    preview: Awaited<ReturnType<DashboardApi["previewProductItemsRouting"]>>,
+  ) => void;
+  vi.mocked(el.api.previewProductItemsRouting).mockReturnValueOnce(
+    new Promise((resolve) => (resolvePreview = resolve)),
+  );
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["cola"]);
   await press(el, "move");
   await destination(el, "top");
+  const confirm =
+    dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="confirm"]')!;
+  expect(confirm.disabled).toBe(true);
+  expect(el.api.previewProductItemsRouting).toHaveBeenCalledExactlyOnceWith({
+    kind: "move",
+    selection: { productIds: ["cola"], categoryIds: [] },
+    to: null,
+  });
+  resolvePreview({ moves: [], stations: [], periods: [] });
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
   await press(el, "confirm");
-  await vi.waitFor(() =>
-    expect(el.api.moveProductItems).toHaveBeenCalledWith(
-      { productIds: ["bread"], categoryIds: [] },
-      null,
-    ),
+  expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
+    { productIds: ["cola"], categoryIds: [] },
+    null,
   );
-  expect(el.api.previewProductItemsRouting).not.toHaveBeenCalled();
 });
 it("deletes only completely summarised empty folders without asking", async () => {
   const el = await mountBrowser();

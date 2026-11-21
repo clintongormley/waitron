@@ -98,7 +98,9 @@ categoría superior. También puedes mover el producto a otra categoría en la p
 activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
 en qué estación de preparación recibe un plato, como se explica más abajo.
 
-Antes de confirmar **Mover a…** para una categoría o eliminarla, revisa qué productos cambian de estación de preparación.
+Al soltar una categoría, revisa los cambios de estación de preparación y elige **Mover a…** para
+guardar. Revisa también esos cambios al usar **Mover a…** para un producto o una categoría, o al
+eliminar una categoría.
 
 Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
 color, o el que hereda de la categoría superior más cercana que tenga color y, después, el

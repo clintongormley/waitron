@@ -516,6 +516,9 @@ removed, but neither action lists products whose station changes._
 
 _2026-11-17: folder Move to/delete previews are implemented by the [folder preview plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-17-d-folder-routing-preview.md); dragging remains outside that change._
 
+_2026-11-21. The [follow-up plan](../plans/2026-11-21-d-product-folder-routing-preview.md)
+covers product-only Move to… and drops that include a category._
+
 **Prep Stations** replaces two things: the Kitchen screen's station list, and Venue operations ›
 Preparation routing. It holds:
 
