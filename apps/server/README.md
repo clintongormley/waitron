@@ -408,7 +408,8 @@ including when no relay is saved. `POST /management-api/email/settings/test` req
 `system.manage` and sends a test to the signed-in person's address without saving the proposal.
 The read omits authentication secrets and shows saved settings even when development invoice email
 is captured locally. Demo refuses settings changes, including removal.
-The Prepare and Live setup test endpoint is `POST /setup-api/email-test`. Outside development, Prepare and Live provisioning require an `email` object with
+The Prepare and Live setup test endpoint is `POST /setup-api/email-test`; it refuses settings with no
+`user` (`email.settings_invalid`, field `user`) before connecting. Outside development, Prepare and Live provisioning require an `email` object with
 `server`, numeric `port`, `encryption` (`starttls` or `tls`), `from`, and optional `user` and
 `password`. Use the same values you tested. Before publishing the trading configuration, the
 server seals the connection URL under `email.smtp` and saves the sender address in the `mail`

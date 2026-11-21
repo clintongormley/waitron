@@ -78,8 +78,8 @@ check the port in your provider's settings.
 For an encryption refusal, follow the result's suggested encryption and port, then send another
 test. Changing encryption leaves the port you entered in place, so change that too when needed.
 
-If the server needs a login, enter both the username and password. On the dashboard, turn on
-**Use authentication** first. If it refuses them, check both before testing again. For a timeout
+Setup needs the mail server's username and password. On the dashboard, a login is optional: turn
+on **Use authentication** to enter one. If the server refuses them, check both before testing again. For a timeout
 or another refusal, check the port and encryption, then retry.
 
 If setup asks you to test email, test again after changing the settings or administrator address.

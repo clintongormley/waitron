@@ -150,8 +150,8 @@ export class SetupEmailScreen extends LitElement {
     const port = Number(v.port);
     if (!/^\d+$/.test(v.port) || port < 1 || port > 65535) invalid.add("port");
     if (v.encryption !== "tls" && v.encryption !== "starttls") invalid.add("encryption");
-    if (v.user === "" && v.password !== "") invalid.add("user");
-    if (v.user !== "" && v.password === "") invalid.add("password");
+    if (v.user === "") invalid.add("user");
+    if (v.password === "") invalid.add("password");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.from)) invalid.add("from");
     return invalid;
   }
@@ -265,7 +265,7 @@ export class SetupEmailScreen extends LitElement {
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
-      ?required=${!this.#canSkipMailServer() && ["server", "port", "from"].includes(field)}
+      ?required=${!this.#canSkipMailServer() && ["server", "port", "user", "password", "from"].includes(field)}
       ?invalid=${invalid}
       error=${this.refusedField === field && this.outcome && this.outcome !== "accepted" && this.outcome !== "failed" ? t(this.outcome) : invalid ? t(`email.${field}.error`) : ""}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=test]"))}

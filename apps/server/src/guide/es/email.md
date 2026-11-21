@@ -84,9 +84,9 @@ Si Waitron marca **Puerto**, revisa el puerto en la configuración de tu proveed
 Si rechaza el cifrado, sigue la sugerencia de cifrado y puerto del resultado y envía otra prueba.
 Cambiar el cifrado conserva el puerto que has escrito, así que cámbialo también cuando haga falta.
 
-Si el servidor necesita iniciar sesión, introduce el nombre de usuario y la contraseña. En el
-panel, activa primero **Usar autenticación**. Si los rechaza, revisa ambos antes de repetir la
-prueba. Si no responde a tiempo o rechaza la prueba por otro motivo, revisa el puerto y el cifrado
+La configuración necesita el nombre de usuario y la contraseña del servidor de correo. En el
+panel, iniciar sesión es opcional: activa **Usar autenticación** para introducirlos. Si el servidor
+los rechaza, revisa ambos antes de repetir la prueba. Si no responde a tiempo o rechaza la prueba por otro motivo, revisa el puerto y el cifrado
 y vuelve a intentarlo.
 
 Si la configuración te pide probar el correo, repite la prueba después de cambiar los ajustes o
