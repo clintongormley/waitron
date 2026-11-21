@@ -75,7 +75,8 @@ When nothing is wrong, each row says:
   the box has put the 8 MB aside again.
 
 Check **Last offered upgrade** to see when the attempt finished and whether your box installed
-the offered version or went back to the previous one.
+the offered version or went back to the previous one. If you receive an email about an upgrade
+that rolled back, open **System → Box status** and check this row.
 
 After a send to the tax agency has failed, the **Tax agency** row says how many records are
 waiting, and whether the box is retrying them by itself or a manager needs to sort some of them

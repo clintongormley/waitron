@@ -100,3 +100,14 @@ export const BACKUP_REFUSED_EMAIL_WORDS = {
     text: "Copia no hecha: necesita {needed} libres y el disco tiene {available}.",
   },
 } as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+
+export const UPGRADE_ROLLBACK_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the box rolled back an upgrade",
+    text: "The upgrade to {toVersion} did not complete. The box is back on {fromVersion}. Open System → Box status to review the result.",
+  },
+  es: {
+    subject: "{venue}: el servidor ha revertido una actualización",
+    text: "La actualización a {toVersion} no se completó. El servidor ha vuelto a la versión {fromVersion}. Abre Sistema → Estado del servidor para consultar el resultado.",
+  },
+} as const satisfies Record<"en" | "es", { subject: string; text: string }>;

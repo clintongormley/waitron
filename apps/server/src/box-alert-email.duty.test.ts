@@ -12,10 +12,12 @@ import {
   boxEmailMessage,
   createBoxEmailDuty,
   boxAlertMailJob,
+  transientBoxAlertMail,
   type BoxEmailCode,
   type BoxEmailContext,
   type EmailedIncident,
 } from "./box-alert-email.js";
+import type { LastOfferedUpgrade } from "./box-host-client.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { EmailDelivery } from "./email-delivery.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
@@ -58,10 +60,7 @@ function duty({ startedAt = at(0) } = {}) {
   const controller = new AbortController();
   const previousEpisodeMailIds = new Set(
     suite.db
-      .all<{ id: string }>(
-        sql`select id from outgoing_mail
-    where kind = 'box_alert' and subject_id is null and status in ('pending', 'rejected') and finished_at is null`,
-      )
+      .all<{ id: string }>(sql`select id from outgoing_mail where ${transientBoxAlertMail()}`)
       .map((row) => row.id),
   );
   const owner = boxAlertMail({
@@ -125,6 +124,7 @@ function duty({ startedAt = at(0) } = {}) {
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     incidents: [] as readonly EmailedIncident[],
     backupStopped: undefined as BackupOutcomeHolder["runStopped"],
+    lastOfferedUpgrade: null as LastOfferedUpgrade | null,
     primary: true,
   };
   const context = vi.fn(async (): Promise<BoxEmailContext> => ({
@@ -140,6 +140,7 @@ function duty({ startedAt = at(0) } = {}) {
     ) => Promise<"sent" | "rejected" | "unknown" | "uncertain">
   >(async () => "sent");
   const handle = runBoxEmailDuty({
+    lastOfferedUpgrade: async () => state.lastOfferedUpgrade,
     db: suite.db,
     now: () => now,
     disk: { since: () => state.diskSince },
@@ -1146,6 +1147,93 @@ describe("runBoxEmailDuty for backups", () => {
     await d.tick();
     expect(d.send).not.toHaveBeenCalled();
     expect(d.context).not.toHaveBeenCalled();
+  });
+});
+
+const ROLLBACK = {
+  attemptId: "first-offer",
+  status: "rolled-back",
+  fromVersion: "1.2.0",
+  toVersion: "1.3.0",
+  finishedAt: at(0).toISOString(),
+} satisfies LastOfferedUpgrade;
+
+describe("offered rollback email queue", () => {
+  it("queues each manager once per attempt and keeps earlier mail when the host result changes", async () => {
+    const a = duty();
+    a.state.lastOfferedUpgrade = ROLLBACK;
+    await a.check();
+    const first = await a.rows();
+    expect(
+      first.map(({ personId, params, notAfter, status }) => [
+        personId,
+        params.code,
+        notAfter,
+        status,
+      ]),
+    ).toEqual([
+      [ANNA.personId, "upgrade.rolled_back", "2026-10-24T12:00:00.000Z", "pending"],
+      [BEN.personId, "upgrade.rolled_back", "2026-10-24T12:00:00.000Z", "pending"],
+    ]);
+
+    a.state.lastOfferedUpgrade = null;
+    await a.check();
+    expect(await a.rows()).toEqual(first);
+    await a.handle.stop();
+
+    const b = duty({ startedAt: at(2) });
+    b.state.lastOfferedUpgrade = ROLLBACK;
+    await b.check();
+    expect(await b.rows()).toEqual(first);
+    b.state.lastOfferedUpgrade = {
+      ...ROLLBACK,
+      attemptId: "second-offer",
+      finishedAt: at(3).toISOString(),
+    };
+    await b.check();
+    await b.check();
+    const rows = await b.rows();
+    expect(rows.filter((row) => row.notAfter === "2026-10-24T12:00:00.000Z")).toEqual(first);
+    expect(
+      rows
+        .filter((row) => row.notAfter === "2026-10-24T12:03:00.000Z")
+        .map(({ personId, status }) => [personId, status]),
+    ).toEqual([
+      [ANNA.personId, "pending"],
+      [BEN.personId, "pending"],
+    ]);
+    expect(rows).toHaveLength(4);
+  });
+
+  it.each([
+    [
+      "a successful upgrade",
+      { ...ROLLBACK, status: "upgraded" } satisfies LastOfferedUpgrade,
+      at(0),
+    ],
+    ["a rollback at its deadline", ROLLBACK, at(24 * 60 - 1)],
+  ])("does not queue mail for %s", async (_label, result, startedAt) => {
+    const d = duty({ startedAt });
+    d.state.lastOfferedUpgrade = result;
+    await d.check();
+    await d.check();
+    expect(await d.rows()).toEqual([]);
+    expect(d.context).not.toHaveBeenCalled();
+  });
+
+  it("still queues a disk warning if a rollback reaches its deadline before the write", async () => {
+    const d = duty({ startedAt: at(24 * 60 - 2) });
+    d.state.lastOfferedUpgrade = ROLLBACK;
+    d.state.lowSince = at(1);
+    d.context.mockImplementationOnce(async () => {
+      d.advance(60_000);
+      return { venue: VENUE, recipients: [ANNA, BEN], delivery: d.state.delivery };
+    });
+    await d.check();
+    expect((await d.rows()).map((row) => row.params.code)).toEqual([
+      "storage.space_low",
+      "storage.space_low",
+    ]);
   });
 });
 

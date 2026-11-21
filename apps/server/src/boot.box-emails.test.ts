@@ -44,6 +44,9 @@ import { freePorts } from "./testing/free-ports.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { loadKeyRing } from "@waitron/credentials";
+import { boxHostClient, type LastOfferedUpgrade } from "./box-host-client.js";
+import { UPGRADE_ROLLBACK_EMAIL_WORDS } from "./i18n/box-emails.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 useTestProducer();
 
@@ -787,6 +790,102 @@ describe("the running server's notice and email checks", () => {
       });
 
       await tick();
+      expect(holder.sent).toHaveLength(1);
+    } finally {
+      await shutDown(booted);
+    }
+  });
+
+  it("emails the rollback written after the restored server starts, in the manager's language", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    holder.pauseMail = true;
+    let result: LastOfferedUpgrade | null = null;
+    const lastOfferedUpgrade = vi.fn(async () => result);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await bootServer(booted, venue, undefined, undefined, {
+        boxHost: { ...synchronisedBoxHost(), lastOfferedUpgrade },
+      });
+      await tick();
+      result = {
+        attemptId: "nightly-offer",
+        status: "rolled-back",
+        finishedAt: new Date().toISOString(),
+        fromVersion: "1.2.0",
+        toVersion: "1.3.0",
+      };
+      await tick();
+      expect(await holder.mail!.db.select().from(outgoingMail)).toEqual([]);
+      vi.setSystemTime(Date.now() + 60_000);
+      await tick();
+      await runMailPass({
+        ...holder.mail!,
+        resolveDelivery: async () => ({
+          mode: "smtp",
+          smtp: { url: "smtp://127.0.0.1:1", from: "box@example.test" },
+        }),
+      });
+      const words = UPGRADE_ROLLBACK_EMAIL_WORDS.es;
+      expect(holder.sent).toEqual([
+        expect.objectContaining({
+          recipient: "owner@example.test",
+          subject: words.subject.replace("{venue}", await venueName()),
+          text: words.text.replace("{toVersion}", "1.3.0").replace("{fromVersion}", "1.2.0"),
+        }),
+      ]);
+      expect(lastOfferedUpgrade).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      await shutDown(booted);
+    }
+  });
+
+  it("sends a saved rollback email after restart while the host socket is unavailable", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    holder.pauseMail = true;
+    const [admin] = await suite.db
+      .select()
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    const queued = await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "box_alert",
+        dedupeKey: `alert:upgrade.rolled_back:nightly-offer:${admin!.id}`,
+        personId: admin!.id,
+        params: {
+          code: "upgrade.rolled_back",
+          wording: JSON.stringify({ fromVersion: "1.2.0", toVersion: "1.3.0" }),
+        },
+        notAfter: new Date(Date.now() + 86_400_000),
+      }),
+    );
+    const lastOfferedUpgrade = vi.fn(() =>
+      boxHostClient({ socketPath: join(booted.scratch!, "box.sock") }).lastOfferedUpgrade(),
+    );
+    try {
+      await bootServer(booted, venue, undefined, undefined, {
+        boxHost: { ...synchronisedBoxHost(), lastOfferedUpgrade },
+      });
+      await tick();
+      expect(lastOfferedUpgrade).toHaveBeenCalledTimes(1);
+      await expect(lastOfferedUpgrade.mock.results[0]!.value).resolves.toBeNull();
+      const pass = () =>
+        runMailPass({
+          ...holder.mail!,
+          resolveDelivery: async () => ({
+            mode: "smtp",
+            smtp: { url: "smtp://127.0.0.1:1", from: "box@example.test" },
+          }),
+        });
+      await pass();
+      await pass();
+      const [mail] = await holder
+        .mail!.db.select()
+        .from(outgoingMail)
+        .where(eq(outgoingMail.id, queued.id));
+      expect(mail?.status).toBe("sent");
       expect(holder.sent).toHaveLength(1);
     } finally {
       await shutDown(booted);
