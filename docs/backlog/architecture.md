@@ -1066,15 +1066,14 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 1 entry, size S.
 
-- **Unread configuration parameters remain in `apps/server/src`.** Test helpers still use
-  `void cfg;` (`git grep -n 'void cfg;' apps/server/src`), and the functions named in the size line
-  below keep an unread `_cfg` parameter (`git grep -n '_cfg:' apps/server/src`). Left open by
-  SQLite slice 1 (#490 and the preparation tasks) and A1308 5f-ii's five-function scope. Size on
-  2026-11-18, counted as lines matching `<name>(` in `apps/server/src` with `git grep -c`
-  (declarations and same-named test wrappers included): `offerProducts` 286, `createTable` 195,
-  `defaultLayout` 71 (these three are test helpers in `apps/server/src/testing/`), `saveDraft` 68,
-  `setLineCourse` 20, `takeOverDraft` 20, `readPartyAllergyView` 12 and `readAllergySendView` 5,
-  mostly in tests, plus 11 `void cfg;` lines.
+- **Unread configuration parameters remain in `apps/server/src` test code.** The test helpers
+  `offerProducts`, `createTable` and `defaultLayout` (in `apps/server/src/testing/`) keep an unread
+  `_cfg` parameter (`git grep -n '_cfg:' apps/server/src`); the `asApp`, `printJobsFor`,
+  `drawerOpensFor` and `fiscalRecordCount` helpers in eight test files take a `cfg` they only
+  discard (`git grep -n 'void cfg;' apps/server/src`). Each is mechanical but touches every call
+  site: on 2026-11-22, from about 40 (`fiscalRecordCount`) to about 760 (`asApp`), counted as lines
+  matching `<name>(` with `git grep -c`, counting `asApp`, `printJobsFor`, `drawerOpensFor` and
+  `fiscalRecordCount` only in the files whose copy discards `cfg`.
 
 ## Bundle: Printer, reader and device delete wording and tidying
 
