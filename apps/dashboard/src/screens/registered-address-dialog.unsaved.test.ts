@@ -7,6 +7,7 @@ import {
   type WtAddressLookup,
   type WtDialog,
   type WtInput,
+  type WtSwitch,
 } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
@@ -113,6 +114,38 @@ it("a typed address asks before Escape, and Discard closes without changing the 
   expect(dialog.open).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(changeTaxpayerDomicile).not.toHaveBeenCalled();
+});
+
+it("turning Same as the venue's address on asks before Escape", async () => {
+  const { app, dialog, changeTaxpayerDomicile } = await fixture();
+  const toggle = dialog.querySelector<WtSwitch>("wt-switch[name=registeredSameAsVenue]")!;
+  expect(toggle.checked).toBe(false);
+  await userEvent.click(toggle);
+  await expect.poll(() => toggle.checked).toBe(true);
+  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(async () => (await question(app)).open).toBe(true);
+  expect(dialog.open).toBe(true);
+  await choose(app, "keep");
+  await expect.poll(async () => (await question(app)).open).toBe(false);
+  expect(dialog.open).toBe(true);
+  expect(toggle.checked).toBe(true);
+  expect(changeTaxpayerDomicile).not.toHaveBeenCalled();
+});
+
+it("turning Same as the venue's address on and back off closes on Escape without asking", async () => {
+  const { app, dialog } = await fixture();
+  const toggle = dialog.querySelector<WtSwitch>("wt-switch[name=registeredSameAsVenue]")!;
+  await userEvent.click(toggle);
+  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.click(toggle);
+  await expect.poll(() => toggle.checked).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  const closed = dialogClosed(dialog);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(dialog.open).toBe(false);
+  expect((await question(app)).open).toBe(false);
 });
 
 it("the panel being hidden closes the dialog and releases its draft", async () => {
