@@ -239,6 +239,7 @@ If the card provider cannot refund the payment yet, this attempt returned no mon
 You can close the window and start a new refund later.
 
 Once the refund is complete, choose **View acknowledgment** next to it in the bill’s payments.
+After invoicing, you can open the refund from **Transactions** in **Find a bill**.
 Choose **Print** for the first copy. You can reprint it from the dashboard’s **Print Queue** for seven days.
 
 ## Cancel a dish on a saved Counter bill {#counter-cancel-item}
@@ -329,7 +330,7 @@ you to refund it at a till.
 If the card provider cannot refund the payment yet, this attempt returned no money.
 You can close the window and start a new refund later.
 
-To print an acknowledgment after invoicing, find the completed refund on the **Transactions** tab
+To print an acknowledgment for a receipt refund, find the completed refund on the **Transactions** tab
 in **Find a bill** and choose **Print**. You can reprint it from the dashboard’s **Print Queue** for seven days.
 
 ## Correct an invoice {#correct-invoice}

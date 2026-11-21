@@ -95,7 +95,8 @@ Si el original ya se imprimió, obtendrás un duplicado. Para una copia en A4, a
 También puedes reimprimir una comanda de estación o un justificante de devolución en una
 impresora al menos igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
 ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora. Reimprime un justificante
-de pago desde aquí mientras sus datos sigan disponibles. Elige **Trabajos de impresión anteriores**
+de pago desde aquí mientras sus datos sigan disponibles. Puedes reimprimir un justificante de
+devolución durante siete días. Elige **Trabajos de impresión anteriores**
 para encontrar un trabajo anterior a los últimos 100.
 
 Si la cola indica que los datos guardados de una impresión han caducado, abre **Pedidos**

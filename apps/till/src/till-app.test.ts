@@ -25684,6 +25684,7 @@ describe("A737 Find a bill page", () => {
   it("prints a bill refund from Transactions after the bill was invoiced", async () => {
     const reprintTenderRefund = vi.fn().mockResolvedValue(undefined);
     const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES", "en-GB"] }),
       getTenderRefundAcknowledgment: vi.fn().mockResolvedValue({
         parent: "bill",
         workingOrderId: "working-1",
@@ -25701,7 +25702,9 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
     const receipt = refundView(el)!;
     receipt.shadowRoot!.querySelector<HTMLElement>("[data-refund-reprint]")!.click();
-    await vi.waitFor(() => expect(reprintTenderRefund).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(reprintTenderRefund).toHaveBeenCalledExactlyOnceWith("refund-1", undefined),
+    );
     await flush(el);
     expect(receipt.shadowRoot!.querySelector("[data-refund-reprint]")).toBeNull();
   });
