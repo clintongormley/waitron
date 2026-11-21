@@ -55,7 +55,8 @@
       "ssh2"
     ],
     "patchedDependencies": {
-      "@vitest/browser@4.1.12": "patches/@vitest__browser@4.1.12.patch"
+      "@vitest/browser@4.1.12": "patches/@vitest__browser@4.1.12.patch",
+      "@vitest/browser-playwright@4.1.12": "patches/@vitest__browser-playwright@4.1.12.patch"
     }
   }
 }

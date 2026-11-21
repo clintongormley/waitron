@@ -1066,6 +1066,33 @@ instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.te
 `src/theme/sources.test.ts` the same way, and `src/theme/*.sweep.test.ts` so a theme mutant does
 not rerun the sweeps. Only `packages/shared` was checked.
 
+### A browser command left by a run Stryker stopped fails instead of acting in the next run
+
+Stryker stops a mutant's test run at its first failing test: `packages/ui/stryker.config.json`
+leaves `disableBail` unset, so Stryker's default of stopping at the first failure applies. A
+browser test cut off there can leave a Playwright click still waiting for its element, and
+`@vitest/browser-playwright@4.1.12` found the test page by `[data-vitest="true"]` each time it
+retried, a marker every run's page carries. The leftover click could then land in the next
+mutant's run and fail a test that mutant had nothing to do with. Some ui mutants were killed on one
+night and survived the next (nightlies 44241780388, 44462750256, 44678716690 and 44869195665, 18 to
+21 November); the reproduction below shows this mechanism, and those runs were not checked for it.
+`patches/@vitest__browser-playwright@4.1.12.patch` binds each command to the named test frame
+(`page.frame("vitest-iframe")`) present when it starts, and fails every command that starts while
+there is none (`@vitest/browser` copies the context for each command, which reads it), so a
+leftover command acting through the test frame fails rather than acting in the next run. A command
+already running that acts on the whole page, such as keyboard or mouse moves, is not bound. Measured 2026-11-21 with two test
+files run in one browser, the first starting a click on a button that does not exist yet and
+failing, the second drawing that button and counting clicks: unpatched, the second file saw the
+click in 2 of 4 runs; with the committed patch, in none of 6. The command, from `packages/ui`,
+with the two files copied in from a scratch reproduction (not committed), was
+`pnpm exec vitest run src/zz-stale --project chromium --no-file-parallelism`.
+`@vitest/browser-playwright` 5.1.1 (read with `npm pack` on 2026-11-21) still has
+`page.frameLocator('[data-vitest="true"]')` at its `dist/index.js:1454`, so a move to Vitest 5
+re-checks this. Guard: `scripts/browser-playwright-frame.test.mjs`, weaker than its name: a fake
+page, not Chromium, and it reads the getter directly rather than through `@vitest/browser`'s
+per-command copy (`Object.assign` in `triggerCommand`), which is what reads it as each command
+starts.
+
 ### Shared mutation work is split across four whole-file shards
 
 A slow runner can use the whole ten-minute job budget while still making progress. On
