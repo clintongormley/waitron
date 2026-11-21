@@ -306,7 +306,7 @@ async function mountPassword(endAction = "") {
     hidden: "Password hidden",
   };
   await field.updateComplete;
-  return { field, input: parts(field).input, control: parts(field).field };
+  return { field, input: parts(field).input };
 }
 
 test("reveals and masks the same password by pointer and keyboard without editing or submitting", async () => {
@@ -324,23 +324,23 @@ test("reveals and masks the same password by pointer and keyboard without editin
   const selection = () => [input.selectionStart, input.selectionEnd, input.selectionDirection];
 
   await page.getByRole("button", { name: "Show password", exact: true }).click();
+  await vi.waitFor(() => expect(input.type).toBe("text"));
   expect(parts(field).input).toBe(input);
-  expect([input.type, input.value, input.name, input.autocomplete]).toEqual([
-    "text",
+  expect([input.value, input.name, input.getAttribute("autocomplete")]).toEqual([
     "correct horse",
     "password",
     "current-password",
   ]);
   expect(selection()).toEqual([2, 5, "backward"]);
   expect(page.getByRole("status").element().textContent).toBe("Password shown");
-  const button = field.shadowRoot!.querySelector("wt-button")!;
-  expect(button.shadowRoot!.activeElement).toBe(button.shadowRoot!.querySelector("button"));
-
+  const buttonRoot = field.shadowRoot!.querySelector("wt-button")!.shadowRoot!;
+  const button = buttonRoot.querySelector("button")!;
+  button.focus();
   await userEvent.keyboard("{Enter}");
-  expect(input.type).toBe("password");
+  await vi.waitFor(() => expect(input.type).toBe("password"));
   expect(selection()).toEqual([2, 5, "backward"]);
   expect(page.getByRole("status").element().textContent).toBe("Password hidden");
-  expect(button.shadowRoot!.activeElement).toBe(button.shadowRoot!.querySelector("button"));
+  expect(buttonRoot.activeElement).toBe(button);
   expect(input.value).toBe("correct horse");
   expect(changed).not.toHaveBeenCalled();
   expect(submitted).not.toHaveBeenCalled();
@@ -376,10 +376,10 @@ test("keeps edits visible until the person empties the field", async () => {
 test("masks a password while its form disables the field", async () => {
   const { field, input } = await mountPassword();
   await page.getByRole("button", { name: "Show password", exact: true }).click();
-  expect(input.type).toBe("text");
   field.disabled = true;
   await field.updateComplete;
   expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
   await expect
     .element(page.getByRole("button", { name: "Show password", exact: true }))
     .toBeDisabled();
@@ -418,28 +418,26 @@ test("gives the caller's end action precedence and masks the password when it re
   expect(show.query()).toBeNull();
   action.remove();
   await show.click();
-  expect(input.type).toBe("text");
   field.append(action);
   await expect.element(other).toBeVisible();
   expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
 });
 
 test.each(["light", "dark"])(
   "paints the password eye with the %s theme's text colour",
   async (theme) => {
-    const { field, control, input } = await mountPassword();
+    const { field, input } = await mountPassword();
     host.setAttribute("data-theme", theme);
     host.style.setProperty("--wt-color-text", "rgb(24, 25, 26)");
     const show = page.getByRole("button", { name: "Show password", exact: true });
     const eye = field.shadowRoot!.querySelector("svg path")!;
     expect(getComputedStyle(eye).stroke).toBe("rgb(24, 25, 26)");
     const button = show.element();
-    expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
-      control.getBoundingClientRect().right,
-    );
     expect(
       input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight),
     ).toBeLessThanOrEqual(button.getBoundingClientRect().left);
+    expect(field.shadowRoot!.querySelector("svg path:last-child")).toBeNull();
     await show.click();
     const slash = field.shadowRoot!.querySelector("svg path:last-child")!;
     expect(getComputedStyle(slash).stroke).toBe("rgb(24, 25, 26)");

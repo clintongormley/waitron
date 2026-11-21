@@ -341,14 +341,17 @@ export async function verifyPackage(
     assert.equal(await single.evaluate(() => !!customElements.get("wt-button")), false);
     await single.evaluate(() => {
       const field = document.querySelector("wt-input");
-      field.type = "password";
-      field.value = "consumer password";
       field.passwordVisibility = {
         show: "Show password",
         hide: "Hide password",
         shown: "Password shown",
         hidden: "Password hidden",
       };
+    });
+    assert.equal(await single.evaluate(() => !!customElements.get("wt-button")), false);
+    await single.locator("wt-input").evaluate((field) => {
+      field.type = "password";
+      field.value = "consumer password";
     });
     const field = single.locator("wt-input input");
     assert.equal(await field.getAttribute("type"), "password");
