@@ -793,7 +793,7 @@ describe("an advance in Find a bill (ruling L2)", () => {
     const [job] = (await jobsSince(before)).filter((row) => row.saleId === correction);
     const lines = printedLines(job!.payload);
     expect(lines.join("\n")).not.toContain(renamed);
-    expect(lines.find((line) => line.includes("Pedido"))).toContain(tableLabel);
+    expect(lines.find((line) => line.includes(spanish.order))).toContain(tableLabel);
     const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
     const again = await send(
       venue.app,
