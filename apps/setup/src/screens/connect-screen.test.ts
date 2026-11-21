@@ -267,8 +267,9 @@ describe("setup-connect-screen", () => {
     expect(input.type).toBe("text");
     expect(input.value).toBe("correct horse");
     expect(events).toEqual([]);
-    await page.getByRole("button", { name: "Hide password", exact: true }).click();
+    await userEvent.keyboard("{Enter}");
     expect(input.type).toBe("password");
+    expect(events).toEqual([]);
   });
 
   it("asks for the admin's sign-in email in a named email field with login autocomplete", async () => {

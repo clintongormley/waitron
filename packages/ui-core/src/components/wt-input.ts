@@ -116,27 +116,31 @@ export class WtInput extends LitElement {
     const input = event.target as HTMLInputElement;
     this.value = this.decimalLocale ? readDecimalInput(input, this.decimalLocale) : input.value;
     this.#typedValue = this.value;
-    if (!this.value) this.visibility = undefined;
+    if (!this.value) this.maskPassword();
     if (this.decimalLocale) this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
   }
 
   private onEndSlotChange(event: Event): void {
     this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
-    if (this.hasEnd) this.visibility = undefined;
+    if (this.hasEnd) this.maskPassword();
+  }
+
+  private get visibilityText(): PasswordVisibilityText | undefined {
+    return this.type === "password" && !this.decimalLocale ? this.passwordVisibility : undefined;
+  }
+
+  private maskPassword(): void {
+    if (this.visibility === "shown") this.visibility = "hidden";
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    const text = this.visibilityText;
     // Importing a plain wt-input must not register an unrelated element.
-    if (
-      changed.has("passwordVisibility") &&
-      this.passwordVisibility &&
-      !customElements.get("wt-button")
-    )
-      void import("./wt-button.js");
-    // A form replacing the value must start masked even if the previous password was revealed.
-    if (changed.has("type") || (changed.has("value") && this.value !== this.#typedValue))
-      this.visibility = undefined;
+    if (text && !customElements.get("wt-button")) void import("./wt-button.js");
+    // Replacing the value or taking away its hide action must leave it masked.
+    if (this.disabled || !text || (changed.has("value") && this.value !== this.#typedValue))
+      this.maskPassword();
     this.#typedValue = undefined;
   }
 
@@ -166,8 +170,7 @@ export class WtInput extends LitElement {
       type: this.type,
     });
     const showLabel = this.label !== "" && !this.hideLabel;
-    const passwordVisibility =
-      this.type === "password" && !this.decimalLocale ? this.passwordVisibility : undefined;
+    const passwordVisibility = this.visibilityText;
     const revealed = passwordVisibility !== undefined && this.visibility === "shown";
     return html`
       <div class="row">

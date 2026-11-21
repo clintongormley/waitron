@@ -355,6 +355,7 @@ test("masks a password when its form replaces or clears it", async () => {
     await field.updateComplete;
     expect(input.type).toBe("password");
     expect(input.value).toBe(value);
+    expect(page.getByRole("status").element().textContent).toBe("Password hidden");
   }
 });
 
@@ -369,15 +370,31 @@ test("keeps edits visible until the person empties the field", async () => {
   await userEvent.keyboard("{Backspace}");
   expect(input.value).toBe("");
   expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
 });
 
-test("disables the visibility button when the field is disabled", async () => {
+test("masks a password while its form disables the field", async () => {
   const { field, input } = await mountPassword();
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  expect(input.type).toBe("text");
   field.disabled = true;
   await field.updateComplete;
+  expect(input.type).toBe("password");
   await expect
     .element(page.getByRole("button", { name: "Show password", exact: true }))
     .toBeDisabled();
+});
+
+test("stays masked when the visibility option is removed and restored", async () => {
+  const { field, input } = await mountPassword();
+  const text = field.passwordVisibility;
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  expect(input.type).toBe("text");
+  field.passwordVisibility = undefined;
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+  field.passwordVisibility = text;
+  await field.updateComplete;
   expect(input.type).toBe("password");
 });
 
