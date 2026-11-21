@@ -938,14 +938,7 @@ export async function importConfigurationTables(
         row.pending_email = null;
         row.status = "suspended";
       }
-      if (declaration.name === "print_agents") {
-        row.token_hash = `disabled-import:${randomUUID()}`;
-        row.active = false;
-      }
-      if (declaration.name === "printers") {
-        row.active = false;
-        if (row.kind === "a4") row.agent_id = null;
-      }
+      if (declaration.name === "printers") row.active = false;
       // Every key was checked against `pragma_table_info` above, so `sql.identifier` names a real
       // column of a real table; the values bind.
       const fields = Object.keys(row);

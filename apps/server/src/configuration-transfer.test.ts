@@ -785,8 +785,7 @@ describe("configuration transfer database path", () => {
       active: false,
       agentId: null,
     });
-    // The agent itself travels, so a kept key would have been remapped to the imported agent.
-    expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toHaveLength(1);
+    expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toEqual([]);
     expect(imported!.id).not.toBe("55555555-aaaa-aaaa-aaaa-555555555555");
     expect(await listPagePrinters(targetSuite.db)).toEqual([]);
     const [localAgent] = await targetSuite.db
@@ -1087,8 +1086,7 @@ describe("configuration transfer database path", () => {
       expect(person).not.toHaveProperty("passkey_offered_at");
     }
     expect(transferred.tables).not.toHaveProperty("sales");
-    expect(transferred.tables.print_agents).toHaveLength(1);
-    expect(transferred.tables.print_agents![0]).not.toHaveProperty("host");
+    expect(transferred.tables).not.toHaveProperty("print_agents");
 
     const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
@@ -1138,7 +1136,7 @@ describe("configuration transfer database path", () => {
       secret_hits: number;
       status: string;
       target_sales: number;
-      inactive_agents: number;
+      agents: number;
       inactive_printers: number;
       source_agent_secrets: number;
       employments: number;
@@ -1156,8 +1154,7 @@ describe("configuration transfer database path", () => {
         (select count(*) from persons where (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
         (select status from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'manager')) as status,
         (select count(*) from sales ) as target_sales,
-        (select count(*) from print_agents
-          where not active) as inactive_agents,
+        (select count(*) from print_agents) as agents,
         (select count(*) from printers
           where not active and local_key = 'B120300001') as inactive_printers,
         (select count(*) from print_agents
@@ -1177,7 +1174,7 @@ describe("configuration transfer database path", () => {
       secret_hits: 0,
       status: "suspended",
       target_sales: 0,
-      inactive_agents: 1,
+      agents: 0,
       inactive_printers: 1,
       source_agent_secrets: 0,
       employments: 1,
@@ -3932,14 +3929,21 @@ it("carries a department's course firing and reminder minutes to remapped rows i
   expect(imported).toEqual({ minutes: 25, heldUntilFired: false, course: "House mains" });
 });
 
-it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {
+it("carries no print agent and no printer's agent, so the importing box lists only the agent it enrols itself", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  await withTransaction(suite.db, (tx) =>
-    selfEnrolNodeAgent(tx, { nodeId: source.nodeId, name: "Source box" }),
-  );
+  await withTransaction(suite.db, async (tx) => {
+    const agent = await selfEnrolNodeAgent(tx, { nodeId: source.nodeId, name: "Source box" });
+    await tx.insert(printAgents).values({
+      name: "Bar agent",
+      tokenHash: "source-agent-token",
+      setupUrl: "http://192.168.10.40:9310",
+      setupPort: 9210,
+    });
+    await insertA4Printer(tx, { name: "Office A4", host: "192.0.2.41", agentId: agent.agentId });
+  });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -3948,8 +3952,10 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
     new Date("2026-10-05T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.print_agents).toHaveLength(1);
-  expect(transferred.tables.print_agents![0]).not.toHaveProperty("node_id");
+  expect(transferred.tables).not.toHaveProperty("print_agents");
+  expect(transferred.tables.printers).toHaveLength(1);
+  for (const printer of transferred.tables.printers!)
+    expect(printer).not.toHaveProperty("agent_id");
   const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -3957,93 +3963,29 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
       await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
     },
   });
+  expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toEqual([]);
+  expect(
+    await targetSuite.db.select({ name: printers.name, agentId: printers.agentId }).from(printers),
+  ).toEqual([{ name: "Office A4", agentId: null }]);
 
-  const imported = await targetSuite.db
-    .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })
-    .from(printAgents);
-  expect(imported).toEqual([{ name: "Source box", nodeId: null, active: false }]);
-
-  // The box's own agent still enrols as a new row beside the imported one; had the imported row held
-  // this node, self-enrolment would find it inactive and refuse it as revoked.
   await withTransaction(targetSuite.db, (tx) =>
     selfEnrolNodeAgent(tx, { nodeId: target.nodeId, name: "Target box" }),
   );
-  const enrolled = await targetSuite.db
-    .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })
-    .from(printAgents)
-    .where(eq(printAgents.nodeId, target.nodeId));
-  expect(enrolled).toEqual([{ name: "Target box", nodeId: target.nodeId, active: true }]);
+  expect(
+    await targetSuite.db
+      .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })
+      .from(printAgents),
+  ).toEqual([{ name: "Target box", nodeId: target.nodeId, active: true }]);
 
-  const carryingNode: ConfigurationBundle = {
-    ...transferred,
-    tables: {
-      ...transferred.tables,
-      print_agents: [{ ...transferred.tables.print_agents![0], node_id: source.nodeId }],
-    },
-  };
-  expect(() => validateConfigurationBundle(carryingNode, ALL_MODULES, versions)).toThrowError(
-    expect.objectContaining({
-      code: "setup.request_invalid",
-      params: { field: "print_agents.node_id" },
-    }),
-  );
-});
-
-it("leaves out a print agent's setup page address and port, so the import links to no old machine", async () => {
-  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
-    db: suite.db,
-    modules: ALL_MODULES,
-  });
-  await withTransaction(suite.db, async (tx) => {
-    await tx.insert(printAgents).values({
-      name: "Bar agent",
-      tokenHash: "source-agent-token",
-      setupUrl: "http://192.168.10.40:9310",
-      setupPort: 9210,
-    });
-  });
-  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
-  const transferred = await buildConfigurationBundle(
-    suite.db,
-    source,
-    ALL_MODULES,
-    new Date("2026-10-05T12:00:00Z"),
-    versions,
-  );
-  expect(transferred.tables.print_agents).toHaveLength(1);
-  expect(transferred.tables.print_agents![0]).not.toHaveProperty("setup_url");
-  expect(transferred.tables.print_agents![0]).not.toHaveProperty("setup_port");
-  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
-    db: targetSuite.db,
-    modules: ALL_MODULES,
-    beforeCommit: async (tx) => {
-      await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
-    },
-  });
-
-  const imported = await targetSuite.db
-    .select({
-      name: printAgents.name,
-      setupUrl: printAgents.setupUrl,
-      setupPort: printAgents.setupPort,
-    })
-    .from(printAgents);
-  expect(imported).toEqual([{ name: "Bar agent", setupUrl: null, setupPort: null }]);
-
-  // The last two cases list the columns empty, as an export made before this change did: an omitted
-  // column is refused even when it holds null, and one made before W72c names node_id first.
-  for (const [carried, field] of [
-    [{ setup_url: "http://192.168.10.40:9310" }, "print_agents.setup_url"],
-    [{ setup_port: 9210 }, "print_agents.setup_port"],
-    [{ setup_url: null, setup_port: null }, "print_agents.setup_url"],
-    [{ node_id: source.nodeId, setup_url: null, setup_port: null }, "print_agents.node_id"],
-  ] as const) {
+  const [printer] = transferred.tables.printers!;
+  const carried: Array<[ConfigurationBundle["tables"], string]> = [
+    [{ print_agents: [{ id: "old-agent", name: "Source box", active: 1 }] }, "tables"],
+    [{ printers: [{ ...printer, agent_id: null }] }, "printers.agent_id"],
+  ];
+  for (const [tables, field] of carried) {
     const carrying: ConfigurationBundle = {
       ...transferred,
-      tables: {
-        ...transferred.tables,
-        print_agents: [{ ...transferred.tables.print_agents![0], ...carried }],
-      },
+      tables: { ...transferred.tables, ...tables },
     };
     expect(() => validateConfigurationBundle(carrying, ALL_MODULES, versions)).toThrowError(
       expect.objectContaining({ code: "setup.request_invalid", params: { field } }),

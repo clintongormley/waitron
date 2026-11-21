@@ -241,15 +241,8 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "floor_plan_tables" },
     { name: "floor_plan_placements" },
     {
-      name: "print_agents",
-      // `node_id` names a node of the exporting venue; the importing venue makes its own. The setup
-      // page's address and port are the exporting machine's; the agent reports its own with each pull.
-      omit: ["token_hash", "last_seen_at", "host", "node_id", "setup_url", "setup_port"],
-      reconnect: true,
-    },
-    {
       name: "printers",
-      omit: ["poll_token_hash", "held_by_device_id", "held_at"],
+      omit: ["poll_token_hash", "held_by_device_id", "held_at", "agent_id"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     },

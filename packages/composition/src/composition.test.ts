@@ -299,24 +299,17 @@ describe("ALL_MODULES configuration transfer contribution", () => {
     );
   });
 
-  it("removes clearing marks, hardware authenticators, and the exporting machine's node, addresses and last-seen time from copied configuration", () => {
+  it("removes clearing marks, hardware authenticators, and the exporting box's print agents from copied configuration", () => {
     const tables = ALL_MODULES.flatMap((module) =>
       module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],
     );
     expect(tables.find((table) => table.name === "dining_tables")?.omit).toContain(
       "needs_clearing_since",
     );
-    expect(tables.find((table) => table.name === "print_agents")?.omit).toEqual(
-      expect.arrayContaining([
-        "token_hash",
-        "last_seen_at",
-        "host",
-        "node_id",
-        "setup_url",
-        "setup_port",
-      ]),
+    expect(tables.map((table) => table.name)).not.toContain("print_agents");
+    expect(tables.find((table) => table.name === "printers")?.omit).toEqual(
+      expect.arrayContaining(["poll_token_hash", "agent_id"]),
     );
-    expect(tables.find((table) => table.name === "printers")?.omit).toContain("poll_token_hash");
   });
 
   it("the core module refuses an invalid theme row and still runs its own checks", () => {
