@@ -16,6 +16,7 @@ import {
   billPaymentRefunds,
   billPayments,
   insertInChunks,
+  invoiceCorrectionRefunds,
   isUniqueViolation,
   sales,
   tenderRefunds,
@@ -270,7 +271,8 @@ export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: Decimal;
-  /** The net applied of the received payments. */
+  /** The net applied of the received payments; on a settled bill, less what Correct invoice gave
+   * back on its payments that paid no advance. */
   received: Decimal;
   /** The applied amount of the pending payments. */
   reserved: Decimal;
@@ -835,9 +837,9 @@ async function readBillFigures(
   return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
-/** The applied money the completed `tender_refunds` (Correct invoice and plain refunds) gave back
- * from the tenders of these payments that paid no advance; an advance's own are already out of
- * what is left of it. Reported only: no refusal or balance check reads it. */
+/** The applied money the completed `tender_refunds` of Correct invoice gave back from the tenders
+ * of these payments that paid no advance; an advance's own are already out of what is left of it.
+ * A plain refund leaves the invoice, so the bill's total, as it was, and is left in. */
 async function givenBackAfterSettling(
   tx: Transaction,
   held: readonly PaymentMoney[],
@@ -849,6 +851,10 @@ async function givenBackAfterSettling(
     .select({ cents: sql<string>`cast(coalesce(sum(${tenderRefunds.appliedAmount}), 0) as text)` })
     .from(tenderRefunds)
     .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+    .innerJoin(
+      invoiceCorrectionRefunds,
+      eq(invoiceCorrectionRefunds.tenderRefundId, tenderRefunds.id),
+    )
     .where(and(inArray(tenders.billPaymentId, ids), eq(tenderRefunds.state, "completed")));
   return rawCentsToDecimal(row!.cents);
 }

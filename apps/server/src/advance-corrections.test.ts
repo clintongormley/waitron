@@ -88,7 +88,7 @@ useVenueDb({
 });
 
 const venue = () => advanceVenue.venue;
-const { seated, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
+const { seated, cash, advance, payRest, restId, advanceFacts, caption, readTicket } = advanceBills(
   () => advanceVenue,
 );
 const supervisor = () => ({ personId: venue().adminId, pin: "1234" });
@@ -137,6 +137,33 @@ async function correct(
     tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, saleId)),
   );
   return rows.at(-1)!.id;
+}
+
+/** Gives `amount` of the rest's invoice's cash back by a plain refund, filing no corrective. */
+async function refundRest(finalSaleId: string, amount: string) {
+  const [tender] = await inTx(venue(), (tx) =>
+    tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, finalSaleId)),
+  );
+  const refunded = await send(
+    venue().app,
+    venue().cookie,
+    "POST",
+    `/api/transactions/${finalSaleId}/refunds`,
+    {
+      submissionId: randomUUID(),
+      tenderId: tender!.id,
+      appliedAmount: amount,
+      tipAmount: "0.00",
+      reason: "Paid too much",
+      override: supervisor(),
+    },
+  );
+  expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+  expect(
+    await inTx(venue(), (tx) =>
+      tx.select().from(sales).where(eq(sales.correctsSaleId, finalSaleId)),
+    ),
+  ).toEqual([]);
 }
 
 /** The one filed record of `saleId`, refused by none of AEAT's checks, as rate/base/tax rows. */
@@ -593,33 +620,6 @@ describe("an advance once the rest's invoice has taken it off", () => {
       topSellers: [["Tasting menu", "1.000", "27.27"]],
     });
   });
-
-  /** Gives `amount` of the rest's invoice's cash back by a plain refund, filing no corrective. */
-  async function refundRest(finalSaleId: string, amount: string) {
-    const [tender] = await inTx(venue(), (tx) =>
-      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, finalSaleId)),
-    );
-    const refunded = await send(
-      venue().app,
-      venue().cookie,
-      "POST",
-      `/api/transactions/${finalSaleId}/refunds`,
-      {
-        submissionId: randomUUID(),
-        tenderId: tender!.id,
-        appliedAmount: amount,
-        tipAmount: "0.00",
-        reason: "Paid too much",
-        override: supervisor(),
-      },
-    );
-    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
-    expect(
-      await inTx(venue(), (tx) =>
-        tx.select().from(sales).where(eq(sales.correctsSaleId, finalSaleId)),
-      ),
-    ).toEqual([]);
-  }
 
   it("example 1: once a plain refund gave back the rest's whole €90, the advance's preview goes ahead while the rest's 10% dish still shows €90 left", async () => {
     const { advanceId, finalSaleId } = await takenOff();
@@ -1105,6 +1105,49 @@ describe("a settled bill's received, once Correct invoice gave money back", () =
     await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
 
     expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("a plain refund of €90 of the settled €120, which leaves the invoice as it was, shows €120 received of €120", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    await refundRest(await restId(billId), "90.00");
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "120.00", received: "120.00" });
+  });
+
+  it("€50 paid and €20 of it refunded while the bill was open, €90 for the rest and €90 back by Correct invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    const paid = await cash(billId, "50.00");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const paymentId = (paid.json as { payment: { id: string } }).payment.id;
+    const refunded = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: supervisor(),
+      },
+    );
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    await payRest(billId, "90.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("example 1: €90 back on the rest's invoice, then the advance's €30 back on its own ticket, shows nothing received of nothing", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    await correct(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "0.00", received: "0.00" });
   });
 });
 
