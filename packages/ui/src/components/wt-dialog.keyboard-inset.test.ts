@@ -6,7 +6,10 @@ import type { WtDialog } from "./wt-dialog.js";
 import "./wt-dialog.js";
 import "./wt-modal.js";
 
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  await page.viewport(1280, 900);
+});
 
 const WINDOWS = [
   ["a plain wt-dialog", "wt-dialog", ""],
@@ -63,6 +66,18 @@ test.each(WINDOWS)(
     const footer = button.getBoundingClientRect();
     expect(footer.top).toBeGreaterThanOrEqual(87);
     expect(footer.bottom).toBeLessThanOrEqual(279);
+  },
+);
+
+test.each(WINDOWS)(
+  "%s fits the visible area panned to the bottom of the page with 8px margins",
+  async (_, tag, attributes) => {
+    await page.viewport(1280, 640);
+    const { dialog, button } = await openTall(tag, attributes, { inset: "0px", top: "448px" });
+    const rect = dialog.getBoundingClientRect();
+    expect(rect.top).toBeCloseTo(456, 0);
+    expect(rect.bottom).toBeCloseTo(632, 0);
+    expect(button.getBoundingClientRect().bottom).toBeLessThanOrEqual(640);
   },
 );
 

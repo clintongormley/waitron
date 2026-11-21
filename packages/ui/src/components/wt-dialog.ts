@@ -48,7 +48,10 @@ export class WtDialog extends LitElement {
         max-width: var(--wt-dialog-max-width);
         /* Declared on each dialog rather than inherited, so a dialog nested in another reads its
            own. While a keyboard covers the page, the margin shrinks to leave the room to content. */
-        --wt-dialog-margin: max(var(--wt-space-2), var(--wt-space-5) - var(--wt-keyboard-inset));
+        --wt-dialog-margin: max(
+          var(--wt-space-2),
+          var(--wt-space-5) - var(--wt-keyboard-inset) - var(--wt-keyboard-top)
+        );
         --wt-dialog-band: calc(100dvh - var(--wt-keyboard-top) - var(--wt-keyboard-inset));
         /* The auto margins centre the window inside the visible part of the page. */
         margin: auto;
@@ -57,7 +60,7 @@ export class WtDialog extends LitElement {
         max-height: calc(var(--wt-dialog-band) - 2 * var(--wt-dialog-margin));
       }
 
-      /* The native modal dialog's own height limit bounds this column, so a long body scrolls
+      /* The dialog's max-height bounds this column, so a long body scrolls
          inside it and the footer stays in view. */
       dialog[open] {
         display: flex;

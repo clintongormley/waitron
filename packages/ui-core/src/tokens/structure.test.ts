@@ -56,6 +56,8 @@ test("defines the structural contract", () => {
     "--wt-modal-medium-height",
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
+    "--wt-keyboard-inset",
+    "--wt-keyboard-top",
     "--wt-form-max-width",
     "--wt-field-max-width",
     "--wt-cell-name-max-width",
