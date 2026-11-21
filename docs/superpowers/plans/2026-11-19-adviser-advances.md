@@ -1359,6 +1359,10 @@ corrective, learn the line that takes an advance off. `recordCorrection` itself 
   own dish lines. Task 1.6b's reviewer ran it on b73e75b18f, through the till's routes: a bill with an
   advance for two of its dishes listed only those two dish lines, before and after the rest's
   invoice, never the advance's or the deduction's line.
+  **Changed 2026-11-21 (owner, O3/O4, via the watcher's 13:25 note):** category sales now counts an
+  advance's line, its deduction line and their correctives under a row of their own, Payments on
+  account / Pagos a cuenta, so it agrees with the VAT summary
+  (`packages/reporting/src/category-sales.ts`). Top sellers still leaves them out.
 - [ ] **Step 1: Failing tests:** "category sales count example 1's dishes once and leave out the
   advance's line and the deduction line"; the same for top sellers.
 - [ ] **Steps 2–5:** run, implement, run with `scripts/corrective-sums.test.ts` and the reporting

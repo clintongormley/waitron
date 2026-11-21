@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
+  billPayments,
   captureError,
+  insertInChunks,
   invoiceCorrections,
   readHistoryNodes,
   readLiveSeriesIdTx,
@@ -861,6 +863,72 @@ describe("a settled bill's received, once Correct invoice gave money back", () =
     expect(await balanceOf(billId)).toMatchObject({ total: "120.00", received: "120.00" });
 
     await giveCash("50.00");
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("a replay of the €120 cash payment after €90 back by Correct invoice answers the payment and its invoice as taken, and the bill's €30 received of €30 now", async () => {
+    const billId = await seated("Tasting menu");
+    const submissionId = randomUUID();
+    const paid = await cash(billId, "120.00", { submissionId });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const first = paid.json as {
+      payment: { id: string; applied: string; tendered: string; change: string };
+      balance: { total: string; received: string };
+      invoice: { invoiceNumber: string; total: string };
+    };
+    expect(first.balance).toMatchObject({ total: "120.00", received: "120.00" });
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    const replayed = await cash(billId, "120.00", { submissionId });
+
+    expect(replayed.status, JSON.stringify(replayed.json)).toBe(200);
+    expect(replayed.json).toMatchObject({
+      outcome: "received",
+      payment: {
+        id: first.payment.id,
+        applied: "120.00",
+        tendered: "120.00",
+        change: first.payment.change,
+      },
+      invoice: { invoiceNumber: first.invoice.invoiceNumber, total: first.invoice.total },
+      balance: { total: "30.00", received: "30.00" },
+    });
+  });
+
+  it("reads its balance when the given-back sum alone would bind 32,767 values, one past SQLite's limit", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+    const at = new Date().toISOString();
+    await inTx(venue(), (tx) =>
+      insertInChunks(
+        tx,
+        billPayments,
+        // 32,765 ids plus the two state values exceeded the old query's limit; readPaymentsAndRefunds still binds every id.
+        Array.from({ length: 32_764 }, () => ({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          kind: "contribution" as const,
+          method: "cash" as const,
+          applied: 100,
+          tendered: 100,
+          state: "failed" as const,
+          failedAt: at,
+          requestedBy: venue().operatorId,
+          ...venue().cfg.origin,
+        })),
+      ),
+    );
+    expect(
+      await inTx(venue(), (tx) =>
+        tx
+          .select({ count: sql<number>`count(*)` })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, billId)),
+      ),
+    ).toEqual([{ count: 32_765 }]);
+
     expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
   });
 

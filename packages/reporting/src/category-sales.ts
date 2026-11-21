@@ -109,9 +109,11 @@ interface Node {
 
 const UNCATEGORISED: Segment = { kind: "uncategorised", id: "uncategorised", name: "" };
 const NOT_RECORDED: Segment = { kind: "not_recorded", id: "not_recorded", name: "" };
-const PAYMENTS_ON_ACCOUNT: Segment[] = [
-  { kind: "payments_on_account", id: "payments_on_account", name: "" },
-];
+const PAYMENTS_ON_ACCOUNT: Segment = {
+  kind: "payments_on_account",
+  id: "payments_on_account",
+  name: "",
+};
 
 /** The path a line is counted along, root first. */
 function pathOf(
@@ -301,7 +303,7 @@ export async function computeCategorySales(
     const { row } = line;
     // An advance's line, its deduction and their correctives are money paid ahead, not dishes,
     // whatever product or category they recorded.
-    const path = row.advance_role === null ? classify(line) : PAYMENTS_ON_ACCOUNT;
+    const path = row.advance_role === null ? classify(line) : [PAYMENTS_ON_ACCOUNT];
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
     const gross = row.gross === null ? null : cents(row.gross);

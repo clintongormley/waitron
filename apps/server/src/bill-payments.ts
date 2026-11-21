@@ -9,7 +9,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
   billPaymentLines,
@@ -838,20 +838,20 @@ async function readBillFigures(
 }
 
 /** The applied money the completed `tender_refunds` of filed Correct invoices gave back from the
- * tenders of these payments that paid no advance; an advance's own are already out of what is left
- * of it. Until a correction files, and for a plain refund, the bill's total is as it was, so those
- * are left in. */
-async function givenBackAfterSettling(
-  tx: Transaction,
-  held: readonly PaymentMoney[],
-  advances: BillAdvances,
-): Promise<Decimal> {
-  const ids = held.filter(({ row }) => !advances.payments.has(row.id)).map(({ row }) => row.id);
-  if (ids.length === 0) return ZERO;
+ * tenders of the bill's payments that paid no advance; an advance's own are already out of what is
+ * left of it. Until a correction files, and for a plain refund, the bill's total is as it was, so
+ * those are left in. Filtered by the bill, so the values it binds do not grow with its payments. */
+async function givenBackAfterSettling(tx: Transaction, workingOrderId: string): Promise<Decimal> {
   const [row] = await tx
     .select({ cents: sql<string>`cast(coalesce(sum(${tenderRefunds.appliedAmount}), 0) as text)` })
-    .from(tenderRefunds)
-    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+    // The box collects no planner statistics; unnamed, this read searched `tender_refunds` by
+    // `state` alone, every completed refund the venue holds, on SQLite 3.54.1.
+    .from(sql`${tenderRefunds} indexed by tender_refunds_submission_key`)
+    .innerJoin(
+      tenders,
+      and(eq(tenders.id, tenderRefunds.tenderId), eq(tenderRefunds.saleId, tenders.saleId)),
+    )
+    .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
     .innerJoin(
       invoiceCorrectionRefunds,
       eq(invoiceCorrectionRefunds.tenderRefundId, tenderRefunds.id),
@@ -862,7 +862,13 @@ async function givenBackAfterSettling(
     )
     .where(
       and(
-        inArray(tenders.billPaymentId, ids),
+        eq(billPayments.workingOrderId, workingOrderId),
+        notExists(
+          tx
+            .select({ id: billAdvances.id })
+            .from(billAdvances)
+            .where(eq(billAdvances.billPaymentId, billPayments.id)),
+        ),
         eq(tenderRefunds.state, "completed"),
         eq(invoiceCorrections.state, "filed"),
       ),
@@ -910,7 +916,7 @@ export async function readBillBalance(
     total: money(funds.total),
     received: money(
       order.status === "settled"
-        ? subtractDecimal(funds.received, await givenBackAfterSettling(tx, held, advances))
+        ? subtractDecimal(funds.received, await givenBackAfterSettling(tx, workingOrderId))
         : funds.received,
     ),
     reserved: money(funds.reserved),
