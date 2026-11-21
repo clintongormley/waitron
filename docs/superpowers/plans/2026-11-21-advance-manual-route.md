@@ -158,13 +158,15 @@ payment on its ticket, as it opens Correct invoice before.
 
 **(b) The link.** The part payment's ticket in the ticket view (reached from Find bills) shows
 "Taken off by receipt A/45" above its actions, on screen only; the printed ticket is unchanged. The
-part payment's row on the Pay window adds its ticket number, date and VAT ("A/12 · 19/11 · 10%:
-€27.27 + €2.73"; how it was paid is already shown), "Taken off on A/45" and any money given back
-by Refund a payment; this row serves the printed bill still being paid, the only case where the
-Pay window lists a part payment after its table's ticket. The export's invoice sheet gains a
-column "Payment on account": "Cash; taken off by A/45" (or "Card; …") on the part payment's rows,
+part payment's row on the Pay window adds its ticket as printed: number, date with year, total and
+VAT ("Receipt A/12, 19/11/2026: €30.00 · VAT 10%: base €27.27, VAT €2.73"; how it was paid is
+already shown, and "Paid off the bill" stays what is still applied), "Taken off on A/45" and any
+money given back by Refund a payment; this row serves the printed bill still being paid, the only
+case where the Pay window lists a part payment after its table's ticket. The export's invoice sheet
+gains a column "Payment on account": "Cash; taken off by A/45" (or "Card; …") on the part payment's rows,
 "Takes off A/12, A/13" on the table's ticket. All read only deduction lines of sales that correct
-nothing, so a credit note or a replacement shows no link of its own.
+nothing and are not a full invoice issued in substitution, so a credit note, a replacement or a
+substitution shows no link of its own.
 
 **(c) The record** is the refund row itself. Cash and card both come off the cash-up by method, as
 every refund does today; that goes beyond the proposal's "a card one is marked as refunded in the
@@ -264,7 +266,7 @@ recommend the owner lands both.
    `apps/till/src/api/client.ts:4388`) answers `takenOffBy: { saleId, invoiceNumber }` for a part
    payment's ticket the table's ticket took off, and nothing for any other ticket or a corrective.
 3. **Till, the link shown.** The ticket view shows "Taken off by receipt A/45" (`till-ticket-view`
-   test); the Pay window row shows number, date, VAT and "Taken off on A/45" (`bill-pay-dialog`
+   test); the Pay window row shows number, date with year, total, VAT and "Taken off on A/45" (`bill-pay-dialog`
    test).
 4. **Server, export link column.** `accountant-export.test.ts`: both rows carry it, with cash or card
    on the part payment's; a corrective none.

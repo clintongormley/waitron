@@ -145,6 +145,7 @@ import {
   readBillAdvances,
   refuseWhileAdvanceCorrectionOpen,
   type AdvancePaymentMoney,
+  type AdvanceTicket,
   type BillAdvances,
 } from "./bill-advances.js";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
@@ -244,10 +245,7 @@ export interface BillPaymentView extends OutsideCardDetails {
    * invoice on that ticket has not given back. */
   hasTicket?: true;
   saleId?: string;
-  /** The advance's ticket: its number, local issue day and VAT breakdown. */
-  invoiceNumber?: string;
-  issuedOn?: string;
-  vatBreakdown?: { rate: string; base: string; tax: string }[];
+  ticket?: AdvanceTicket;
   /** The bill's invoice that took the advance off, once issued; never a corrective of it. */
   takenOffBy?: TakenOffBy;
   left?: Decimal;
@@ -704,7 +702,7 @@ function toView(
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
   advance:
     | (PaymentMoney &
-        Pick<AdvancePaymentMoney, "saleId" | "invoiceNumber" | "issuedOn" | "vatBreakdown"> & {
+        Pick<AdvancePaymentMoney, "saleId" | "ticket"> & {
           takenOffBy: TakenOffBy | undefined;
         })
     | undefined,
@@ -718,9 +716,7 @@ function toView(
       : {
           hasTicket: true as const,
           saleId: advance.saleId,
-          invoiceNumber: advance.invoiceNumber,
-          issuedOn: advance.issuedOn,
-          vatBreakdown: advance.vatBreakdown,
+          ticket: advance.ticket,
           ...(advance.takenOffBy === undefined ? {} : { takenOffBy: advance.takenOffBy }),
           left: money(advance.netApplied),
           tipLeft: money(advance.netTip),
@@ -926,9 +922,7 @@ export async function readBillBalance(
       : {
           ...payment,
           saleId: advance.saleId,
-          invoiceNumber: advance.invoiceNumber,
-          issuedOn: advance.issuedOn,
-          vatBreakdown: advance.vatBreakdown,
+          ticket: advance.ticket,
           takenOffBy: takenOff.get(advance.saleId),
         };
   };

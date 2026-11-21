@@ -1,11 +1,12 @@
 import { billUnsentOf } from "./bill-unsent.js";
-import { parseDecimalInput } from "@waitron/ui";
+import { formatDecimalInput, parseDecimalInput } from "@waitron/ui";
 import {
   MONEY_SCALE,
   addDecimal,
   compareDecimal,
   divideDecimal,
   decimal,
+  formatMoney,
   subtractDecimal,
   sumDecimals,
   toScale,
@@ -23,7 +24,9 @@ import {
   type BillPaymentView,
   type BillRefundRequest,
   type TabLine,
+  type VatBreakdownEntry,
 } from "../api/client.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
 import { trimQuantity } from "../widgets/dish-format.js";
@@ -397,4 +400,13 @@ export function payLines(lines: readonly TabLine[], name: (line: TabLine) => str
             : null,
       };
     });
+}
+
+/** One VAT rate's base and tax, worded as Correct invoice and the Pay window both show them. */
+export function vatSplitText(split: VatBreakdownEntry): string {
+  const locale = currentLocale();
+  return t("invoice_correction.split")
+    .replace("{rate}", () => formatDecimalInput(String(Number(split.rate)), locale))
+    .replace("{base}", () => formatMoney(split.base, locale))
+    .replace("{tax}", () => formatMoney(split.tax, locale));
 }

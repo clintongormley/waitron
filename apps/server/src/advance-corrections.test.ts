@@ -804,9 +804,12 @@ describe("the link between an advance and the rest's invoice that took it off", 
     const facts = await advanceFacts(advanceId);
     const ticket = {
       saleId: advanceId,
-      invoiceNumber: facts.invoiceNumber,
-      issuedOn: facts.issuedOn,
-      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+      ticket: {
+        invoiceNumber: facts.invoiceNumber,
+        issuedOn: facts.issuedOn,
+        total: "30.00",
+        vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+      },
     };
     const before = (await billPaymentsOf(billId))[0]!;
     expect(before).toMatchObject(ticket);
@@ -823,8 +826,18 @@ describe("the link between an advance and the rest's invoice that took it off", 
         invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
       },
     });
-    for (const key of ["invoiceNumber", "issuedOn", "vatBreakdown", "takenOffBy"])
-      expect(rest).not.toHaveProperty(key);
+    for (const key of ["ticket", "takenOffBy"]) expect(rest).not.toHaveProperty(key);
+  });
+
+  it("after a part correction, the bill's payment keeps the advance's ticket as printed, and what is left of it apart", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await correct(advanceId, "10.00", [{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+
+    expect((await billPaymentsOf(billId))[0]).toMatchObject({
+      ticket: { total: "30.00", vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }] },
+      left: "20.00",
+    });
   });
 
   it("the advance's ticket names the rest's invoice that took it off; the rest's invoice and a ticket with no advance name none", async () => {

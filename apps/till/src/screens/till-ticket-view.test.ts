@@ -530,7 +530,7 @@ describe("till-ticket-view", () => {
       } as Partial<TillSaleResult>);
       const note = el.shadowRoot!.querySelector("[data-taken-off-by]");
       expect(note?.textContent?.trim()).toBe(
-        uiText("ticket_view.taken_off_by").replace("{number}", "A/45"),
+        uiText("document.taken_off_by").replace("{number}", "A/45"),
       );
       expect(
         note!.compareDocumentPosition(el.shadowRoot!.querySelector(".receipt-actions")!) &

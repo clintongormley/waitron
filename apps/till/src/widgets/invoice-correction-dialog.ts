@@ -5,7 +5,6 @@ import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shar
 import {
   baseStyles,
   draftScopeFor,
-  formatDecimalInput,
   focusFirstInvalid,
   submitOnEnter,
   type DraftScope,
@@ -33,7 +32,7 @@ import type {
 import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
-import { REASON_MAX, refusalOf, typedMoney } from "../state/bill-payment.js";
+import { REASON_MAX, refusalOf, typedMoney, vatSplitText } from "../state/bill-payment.js";
 import { refundMethodAllowed } from "../state/tender-refund.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -693,15 +692,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       </wt-form-actions>`;
   }
   #split(lines: readonly CorrectionSplitLine[]) {
-    return lines.map(
-      (line) =>
-        html`<p data-split>
-          ${t("invoice_correction.split")
-            .replace("{rate}", () => formatDecimalInput(String(Number(line.rate)), currentLocale()))
-            .replace("{base}", () => this.#money(line.base))
-            .replace("{tax}", () => this.#money(line.tax))}
-        </p>`,
-    );
+    return lines.map((line) => html`<p data-split>${vatSplitText(line)}</p>`);
   }
   #cancelButton() {
     return html`<wt-button

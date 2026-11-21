@@ -3657,9 +3657,10 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     );
   });
 
+  // A €30.00 part payment of which Correct invoice gave €10.00 back.
   const takenOffRow = balanceOf({
-    received: "30.00",
-    outstanding: "90.00",
+    received: "20.00",
+    outstanding: "100.00",
     payments: [
       {
         ...pendingCard,
@@ -3669,28 +3670,34 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
         tip: "0.00",
         hasTicket: true,
         saleId: "advance-sale",
-        invoiceNumber: "A/12",
-        issuedOn: "2026-11-19",
-        vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+        ticket: {
+          invoiceNumber: "A/12",
+          issuedOn: "2026-11-19",
+          total: "30.00",
+          vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+        },
         takenOffBy: { saleId: "table-sale", invoiceNumber: "A/45" },
-        left: "30.00",
+        left: "20.00",
         tipLeft: "0.00",
       },
     ],
   });
 
-  it("names its ticket, date and VAT, and the table's ticket that took it off", async () => {
+  it("names its ticket with its date, year included, its own total and VAT, beside what is left of it on the bill, and the table's ticket that took it off", async () => {
     const el = await mount({ balance: takenOffRow });
 
     const date = new Intl.DateTimeFormat(currentLocale(), {
       day: "2-digit",
       month: "2-digit",
+      year: "numeric",
       timeZone: "UTC",
     }).format(Date.UTC(2026, 10, 19));
-    expect(text(root(el).querySelector("[data-payment-ticket]"))).toBe(
-      `A/12 · ${date} · 10%: ${money("27.27")} + ${money("2.73")}`,
+    const row = root(el).querySelector("[data-payment]")!;
+    expect(text(row.querySelector("[data-payment-ticket]"))).toBe(
+      `Receipt A/12, ${date}: ${money("30.00")} · VAT 10%: base ${money("27.27")}, VAT ${money("2.73")}`,
     );
-    expect(text(root(el).querySelector("[data-payment-taken-off]"))).toBe(
+    expect(text(row)).toContain(`${t("bill_pay.applied")} ${money("20.00")}`);
+    expect(text(row.querySelector("[data-payment-taken-off]"))).toBe(
       t("bill_pay.taken_off_on").replace("{number}", "A/45"),
     );
   });
@@ -3700,7 +3707,10 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     try {
       const el = await mount({ balance: takenOffRow });
       expect(text(root(el).querySelector("[data-payment-ticket]"))).toBe(
-        `A/12 · 19/11 · 10 %: ${money("27.27")} + ${money("2.73")}`.replace(/\s+/g, " "),
+        `Ticket A/12, 19/11/2026: ${money("30.00")} · IVA 10 %: base ${money("27.27")}, IVA ${money("2.73")}`.replace(
+          /\s+/g,
+          " ",
+        ),
       );
       expect(text(root(el).querySelector("[data-payment-taken-off]"))).toBe("Descontado en A/45");
     } finally {

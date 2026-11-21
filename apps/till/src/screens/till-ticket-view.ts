@@ -1045,7 +1045,7 @@ export class TillTicketView extends LitElement {
         r.takenOffBy === undefined
           ? nothing
           : html`<p class="taken-off-by" data-taken-off-by>
-              ${t("ticket_view.taken_off_by").replace("{number}", () => r.takenOffBy!.invoiceNumber)}
+              ${t("document.taken_off_by").replace("{number}", () => r.takenOffBy!.invoiceNumber)}
             </p>`
       }
       <div class="receipt-actions">

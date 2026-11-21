@@ -440,6 +440,7 @@ export const en = {
     "Full invoice replacement is not available yet. You can print the receipt.",
   "document.receipt": "Receipt",
   "document.invoice": "Invoice",
+  "document.taken_off_by": "Taken off by receipt {number}",
   "document.printer_read_failed": "Could not read the receipt printers. Refresh to try again.",
   "document.no_printers": "No receipt printers are available. Refresh after changing Equipment.",
   "document.no_receipt_printer":
@@ -1957,9 +1958,8 @@ export const en = {
   "bill_pay.pending_where":
     "If it does not finish, it can be cleared in the dashboard, under Check card payments.",
   "bill_pay.refunded": "Refunded: {amount}",
-  "bill_pay.payment_vat": "{rate}%: {base} + {tax}",
+  "bill_pay.payment_ticket": "Receipt {number}, {date}: {total}",
   "bill_pay.taken_off_on": "Taken off on {number}",
-  "ticket_view.taken_off_by": "Taken off by receipt {number}",
   "bill_pay.refund_waiting": "Refund of {amount} waiting for the card provider",
   "bill_pay.refund_failed_row": "Refund of {amount} did not go through",
   "bill_pay.refund": "Refund",
@@ -2696,6 +2696,7 @@ export const es: Record<StringKey, string> = {
     "El cambio por una factura completa aún no está disponible. Puedes imprimir el recibo.",
   "document.receipt": "Recibo",
   "document.invoice": "Factura",
+  "document.taken_off_by": "Descontado en el ticket {number}",
   "document.printer_read_failed":
     "No se han podido cargar las impresoras de recibos. Pulsa Actualizar para volver a intentarlo.",
   "document.no_printers":
@@ -4183,9 +4184,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.pending_where":
     "Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
   "bill_pay.refunded": "Devuelto: {amount}",
-  "bill_pay.payment_vat": "{rate} %: {base} + {tax}",
+  "bill_pay.payment_ticket": "Ticket {number}, {date}: {total}",
   "bill_pay.taken_off_on": "Descontado en {number}",
-  "ticket_view.taken_off_by": "Descontado en el ticket {number}",
   "bill_pay.refund_waiting": "Devolución de {amount} esperando al proveedor de pagos",
   "bill_pay.refund_failed_row": "La devolución de {amount} no se completó",
   "bill_pay.refund": "Devolver",

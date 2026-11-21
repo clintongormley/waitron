@@ -1063,6 +1063,14 @@ export interface TakenOffBy {
   invoiceNumber: string;
 }
 
+/** A part payment's own ticket, as printed: its local issue day is `YYYY-MM-DD`. */
+export interface AdvanceTicket {
+  invoiceNumber: string;
+  issuedOn: string;
+  total: string;
+  vatBreakdown: VatBreakdownEntry[];
+}
+
 /** A ticket as the ticket view reads it. */
 export interface TransactionReceipt extends TillSaleResult {
   /** On a part payment's ticket, the table's ticket that took it off; absent on any other ticket
@@ -1215,10 +1223,7 @@ export interface BillPaymentView extends OutsideCardDetails {
    * Correct invoice on that ticket has not given back. */
   hasTicket?: true;
   saleId?: string;
-  /** The advance's ticket: its number, local issue day (`YYYY-MM-DD`) and VAT breakdown. */
-  invoiceNumber?: string;
-  issuedOn?: string;
-  vatBreakdown?: { rate: string; base: string; tax: string }[];
+  ticket?: AdvanceTicket;
   /** The bill's invoice that took the advance off, once issued; never a corrective of it. */
   takenOffBy?: TakenOffBy;
   left?: string;

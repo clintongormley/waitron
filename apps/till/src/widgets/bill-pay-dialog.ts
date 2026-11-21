@@ -58,6 +58,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
+  AdvanceTicket,
   AllocationChoice,
   AllocationPreview,
   BillBalance,
@@ -74,6 +75,7 @@ import {
   refundableOf,
   typedAmount,
   typedMoney,
+  vatSplitText,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
@@ -1403,26 +1405,23 @@ export class TillBillPayDialog extends LitElement {
       : message;
   }
 
-  /** A part payment's own ticket: number, issue day and each VAT rate's base and tax. */
-  #advanceTicket(payment: BillPaymentView): string {
-    const [year, month, day] = (payment.issuedOn ?? "").split("-").map(Number);
-    const date =
-      payment.issuedOn === undefined
-        ? []
-        : [
-            new Intl.DateTimeFormat(currentLocale(), {
-              day: "2-digit",
-              month: "2-digit",
-              timeZone: "UTC",
-            }).format(Date.UTC(year!, month! - 1, day!)),
-          ];
-    const vat = (payment.vatBreakdown ?? []).map((part) =>
-      t("bill_pay.payment_vat")
-        .replace("{rate}", () => formatDecimalInput(String(Number(part.rate)), currentLocale()))
-        .replace("{base}", () => this.#money(part.base))
-        .replace("{tax}", () => this.#money(part.tax)),
-    );
-    return [payment.invoiceNumber!, ...date, ...vat].join(" · ");
+  /** A part payment's own ticket as printed: number, issue day, total and each VAT rate's split. */
+  #advanceTicket(ticket: AdvanceTicket): string {
+    const [year, month, day] = ticket.issuedOn.split("-").map(Number);
+    const date = new Intl.DateTimeFormat(currentLocale(), {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(Date.UTC(year!, month! - 1, day!));
+    return [
+      fill(t("bill_pay.payment_ticket"), {
+        number: ticket.invoiceNumber,
+        date,
+        total: this.#money(ticket.total),
+      }),
+      ...ticket.vatBreakdown.map(vatSplitText),
+    ].join(" · ");
   }
 
   /** The bill's payments, oldest first, each with a Refund while it has money to give back. */
@@ -1458,7 +1457,7 @@ export class TillBillPayDialog extends LitElement {
             .replace("{method}", () => method)}
           · ${t(PAYMENT_STATES[payment.state])}
         </span>
-        ${payment.invoiceNumber === undefined ? nothing : html`<p data-payment-ticket>${this.#advanceTicket(payment)}</p>`}
+        ${payment.ticket === undefined ? nothing : html`<p data-payment-ticket>${this.#advanceTicket(payment.ticket)}</p>`}
         ${
           payment.takenOffBy === undefined
             ? nothing
