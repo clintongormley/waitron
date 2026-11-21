@@ -5,6 +5,7 @@ import { businessDayWindow, nodeScopeClause } from "./business-day.js";
 import type { DailyCloseInput } from "./types.js";
 
 export async function computeDepartmentClosedBills(tx: Transaction, input: DailyCloseInput) {
+  // The automatic close settles zero-total bills in the same transaction that issues them.
   const window = businessDayWindow(input);
   const { rows } = await tx.execute<{
     department_id: string | null;

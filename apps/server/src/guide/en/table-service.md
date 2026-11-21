@@ -597,11 +597,13 @@ from **Find a bill** and take the rest there. The table stays open while another
 or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
 everyone has finished.
 
-A bill still open when the business day ends gets its receipt then, without printing. To find a sale
-issued at automatic close, choose the day the bill opened in **Sales & takings**. Take its payment
-with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays open.
+A bill still open when the business day ends gets its receipt then, without printing. Take its
+payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
+open.
 
-For tax reporting, use the VAT return, which follows the dates recorded on invoices.
+To find a bill issued when the business day ended, choose the day it opened in **Sales & takings**.
+For tax reporting, use **VAT return (modelo 303)**. The dates recorded on invoices can place a
+bill in a different period.
 
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
