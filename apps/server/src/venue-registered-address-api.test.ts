@@ -25,6 +25,7 @@ import { readVenueDetails } from "./venue-details.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const ORIGINAL = "2º 1ª";
+const COMPLETE = "Calle Mayor 1, 28013 Madrid, Madrid";
 
 function appWith(): Hono {
   const app = new Hono();
@@ -67,7 +68,7 @@ describe("changing the taxpayer's registered address", () => {
       setFreshManagementSignIn(tx, venue.managerCookie, false),
     );
     const before = await taxpayerRow();
-    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: ORIGINAL });
+    const response = await put({ taxpayerDomicile: COMPLETE, expected: ORIGINAL });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "management_session.proof_required", params: {} },
@@ -76,7 +77,7 @@ describe("changing the taxpayer's registered address", () => {
   });
 
   it("requires a session and the venue configuration permission", async () => {
-    const body = { taxpayerDomicile: "Calle Mayor 1", expected: ORIGINAL };
+    const body = { taxpayerDomicile: COMPLETE, expected: ORIGINAL };
     const absent = await put(body, null);
     expect(absent.status).toBe(401);
     expect(await absent.json()).toEqual({
@@ -127,9 +128,16 @@ describe("changing the taxpayer's registered address", () => {
   it("fills an address that was never stored when the page showed none", async () => {
     await suite.db.execute(sql`update taxpayer set taxpayer_domicile = null where id = 1`);
     expect((await model()).taxpayerDomicile).toBeNull();
-    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: "" });
+    const response = await put({ taxpayerDomicile: COMPLETE, expected: "" });
     expect(response.status).toBe(200);
-    expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(COMPLETE);
+  });
+
+  it("leaves the line unchecked for a country whose pack has no postcode rule", async () => {
+    await suite.db.execute(sql`update taxpayer set country = 'GB' where id = 1`);
+    const response = await put({ taxpayerDomicile: "1 High Street", expected: ORIGINAL });
+    expect(response.status).toBe(200);
+    expect((await taxpayerRow()).taxpayerDomicile).toBe("1 High Street");
   });
 
   it.each([
@@ -140,25 +148,25 @@ describe("changing the taxpayer's registered address", () => {
       sql`update taxpayer set taxpayer_domicile = ${"Pla\u00e7a 1"} where id = 1`,
     );
     const response = await put({
-      taxpayerDomicile: "Calle Mayor 1",
+      taxpayerDomicile: COMPLETE,
       expected: copy("Pla\u00e7a 1"),
     });
     expect(response.status).toBe(200);
-    expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(COMPLETE);
   });
 
   it("accepts the composed spelling as the expected address for one stored decomposed", async () => {
     await suite.db.execute(
       sql`update taxpayer set taxpayer_domicile = ${"Plac\u0327a 1"} where id = 1`,
     );
-    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: "Pla\u00e7a 1" });
+    const response = await put({ taxpayerDomicile: COMPLETE, expected: "Pla\u00e7a 1" });
     expect(response.status).toBe(200);
-    expect((await taxpayerRow()).taxpayerDomicile).toBe("Calle Mayor 1");
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(COMPLETE);
   });
 
   it("stores the composed spelling and calls a decomposed spelling of the same address unchanged", async () => {
-    const composed = "Pla\u00e7a 1";
-    const decomposed = "Plac\u0327a 1";
+    const composed = "Pla\u00e7a 1, 28013 Madrid, Madrid";
+    const decomposed = "Plac\u0327a 1, 28013 Madrid, Madrid";
     expect((await put({ taxpayerDomicile: decomposed, expected: ORIGINAL })).status).toBe(200);
     expect((await taxpayerRow()).taxpayerDomicile).toBe(composed);
     const response = await put({ taxpayerDomicile: decomposed, expected: composed });
@@ -172,7 +180,7 @@ describe("changing the taxpayer's registered address", () => {
   });
 
   it("refuses a stale expected address and writes nothing", async () => {
-    const response = await put({ taxpayerDomicile: "Calle Mayor 1", expected: "Somewhere else" });
+    const response = await put({ taxpayerDomicile: COMPLETE, expected: "Somewhere else" });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_changed", params: { field: "taxpayerDomicile" } },
@@ -182,7 +190,8 @@ describe("changing the taxpayer's registered address", () => {
   });
 
   it("calls an address typed over a stale view changed, not unchanged", async () => {
-    const response = await put({ taxpayerDomicile: ORIGINAL, expected: "Somewhere else" });
+    await suite.db.execute(sql`update taxpayer set taxpayer_domicile = ${COMPLETE} where id = 1`);
+    const response = await put({ taxpayerDomicile: COMPLETE, expected: "Somewhere else" });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_changed", params: { field: "taxpayerDomicile" } },
@@ -192,26 +201,42 @@ describe("changing the taxpayer's registered address", () => {
   it.each([
     ["empty", "", "required"],
     ["whitespace-only", "   ", "required"],
-    ["unchanged", ` ${ORIGINAL} `, "unchanged"],
+    ["without a postcode", "Calle Mayor 1, Madrid", "incomplete"],
+    ["the box's own floor and door alone", ORIGINAL, "incomplete"],
+    ["with a postcode outside its province", "Calle Mayor 1, 08010 Madrid, Madrid", "postal_code"],
   ])("refuses an address that is %s and writes nothing", async (_label, value, reason) => {
-    const response = await put({ taxpayerDomicile: value, expected: ORIGINAL });
+    await suite.db.execute(sql`update taxpayer set taxpayer_domicile = ${COMPLETE} where id = 1`);
+    const response = await put({ taxpayerDomicile: value, expected: COMPLETE });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "venue.detail_invalid", params: { field: "taxpayerDomicile", reason } },
     });
-    expect((await taxpayerRow()).taxpayerDomicile).toBe(ORIGINAL);
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(COMPLETE);
+  });
+
+  it("refuses an unchanged address and writes nothing", async () => {
+    await suite.db.execute(sql`update taxpayer set taxpayer_domicile = ${COMPLETE} where id = 1`);
+    const response = await put({ taxpayerDomicile: ` ${COMPLETE} `, expected: COMPLETE });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "venue.detail_invalid",
+        params: { field: "taxpayerDomicile", reason: "unchanged" },
+      },
+    });
+    expect((await taxpayerRow()).taxpayerDomicile).toBe(COMPLETE);
   });
 
   it.each([
-    ["a non-object body", ["Calle Mayor 1"], "body", "type"],
+    ["a non-object body", [COMPLETE], "body", "type"],
     [
       "an unknown key",
-      { taxpayerDomicile: "Calle Mayor 1", expected: "", colour: "red" },
+      { taxpayerDomicile: COMPLETE, expected: "", colour: "red" },
       "body",
       "unknown_field",
     ],
     ["a non-string address", { taxpayerDomicile: 7, expected: "" }, "taxpayerDomicile", "type"],
-    ["a missing expected address", { taxpayerDomicile: "Calle Mayor 1" }, "expected", "type"],
+    ["a missing expected address", { taxpayerDomicile: COMPLETE }, "expected", "type"],
   ])("refuses %s", async (_label, body, field, reason) => {
     const response = await put(body);
     expect(response.status).toBe(400);
@@ -225,7 +250,7 @@ describe("changing the taxpayer's registered address", () => {
     "refuses a body carrying the read-only %s by name and writes nothing",
     async (field) => {
       const response = await put({
-        taxpayerDomicile: "Calle Mayor 1",
+        taxpayerDomicile: COMPLETE,
         expected: ORIGINAL,
         [field]: "ES",
       });

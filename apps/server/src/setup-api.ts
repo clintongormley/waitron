@@ -29,6 +29,7 @@ import {
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
+import { registeredAddressRefusal } from "./registered-address-check.js";
 import {
   foldedLoginEmail,
   hashPassword,
@@ -655,7 +656,11 @@ async function parseProvisionPayload(
           ...parsedVenue,
           name: identity.venueName,
         };
-  if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
+  if (
+    mode !== "demo" &&
+    (!venue.taxpayerDomicile?.trim() ||
+      registeredAddressRefusal(venue.taxpayerDomicile, pack) !== undefined)
+  ) {
     invalidRequest("taxpayerDomicile");
   }
   const environment: DeploymentEnvironment =

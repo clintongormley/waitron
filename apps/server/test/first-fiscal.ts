@@ -21,7 +21,7 @@ import { createFirstSetupOwner } from "../src/first-setup-owner.js";
 export const PASSWORD = "SYNTHETIC-owner-password";
 export const MODULE = "fiscal-verifactu";
 export const request = {
-  taxpayerDomicile: "Mayor 1, Madrid",
+  taxpayerDomicile: "Mayor 1, 28013 Madrid, Madrid",
   country: "ES",
   taxId: "50000000R",
   legalName: "Olivo SL",

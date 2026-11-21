@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { readMenuSettings, saveMenuSettings } from "@waitron/menu";
 import {
+  readTaxpayer,
   readVenue,
   saveVenueFields,
   taxpayer,
@@ -11,6 +12,7 @@ import {
   type Venue,
 } from "@waitron/db";
 import type { ReceiptLanguageRules } from "@waitron/country";
+import { getCountryPack } from "@waitron/country-packs";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import {
@@ -32,6 +34,7 @@ import {
 import { previewBusinessDayStart, writeBusinessDayStart } from "./business-day-start.js";
 
 import { venueClockPreview } from "./venue-clock-preview.js";
+import { registeredAddressRefusal } from "./registered-address-check.js";
 import { privacyContactRequest } from "./venue-privacy.js";
 import type { VenueClockPreview, VenueDefaults, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -275,7 +278,7 @@ export function mountVenueSettingsApi(
     path: string;
     field: F;
     /** The refusal reason for a value this field's own rules refuse, if any. */
-    check?: (value: string) => string | undefined;
+    check?: (value: string, tx: Transaction) => Promise<string | undefined> | string | undefined;
     write: (
       tx: Transaction,
       change: { expected: StoredTaxpayerFields[F] | string; value: string; personId: string },
@@ -291,7 +294,7 @@ export function mountVenueSettingsApi(
           const refuse = (reason: string) =>
             new AppError("venue.detail_invalid", { field: route.field, reason });
           if (value === "") throw refuse("required");
-          const refused = route.check?.(value);
+          const refused = await route.check?.(value, tx);
           if (refused !== undefined) throw refuse(refused);
           const [row] = await tx
             .select({ legalName: taxpayer.legalName, taxpayerDomicile: taxpayer.taxpayerDomicile })
@@ -337,6 +340,10 @@ export function mountVenueSettingsApi(
   taxpayerFieldRoute({
     path: "/management-api/venue-details/registered-address",
     field: "taxpayerDomicile",
+    check: async (line, tx) => {
+      const pack = getCountryPack((await readTaxpayer(tx))?.country ?? "");
+      return pack === undefined ? undefined : registeredAddressRefusal(line, pack);
+    },
     write: async (tx, { expected, value, personId }) =>
       (await changeTaxpayerDomicile(tx, { expected, taxpayerDomicile: value, personId })).changed,
   });

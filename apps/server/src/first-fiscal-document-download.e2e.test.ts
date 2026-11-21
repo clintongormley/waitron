@@ -192,7 +192,7 @@ it.each(["en", "es"] as const)(
       for (const [key, value] of Object.entries({
         taxId: "50000000R",
         legalName: "Olivo SL",
-        taxpayerDomicile: "Mayor 1, Madrid",
+        taxpayerDomicile: "Mayor 1, 28013 Madrid, Madrid",
         name: "Olivo",
         addressLine1: "Mayor 1",
         postalCode: "28001",
