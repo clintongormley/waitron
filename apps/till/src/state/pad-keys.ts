@@ -69,15 +69,11 @@ function editsText(path: EventTarget[]): boolean {
   );
 }
 
-function visible(pad: PadKeyTarget): boolean {
-  // Older browsers lack checkVisibility.
-  return pad.checkVisibility ? pad.checkVisibility() : pad.getClientRects().length > 0;
-}
-
 function padInFront(): PadKeyTarget | undefined {
   for (let at = pads.length - 1; at >= 0; at--) {
     const pad = pads[at]!;
-    if (pad.isConnected && visible(pad) && !inInertTree(pad) && !underModal(pad)) return pad;
+    if (pad.isConnected && pad.checkVisibility() && !inInertTree(pad) && !underModal(pad))
+      return pad;
   }
   return undefined;
 }

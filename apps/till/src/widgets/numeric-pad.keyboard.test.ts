@@ -145,23 +145,6 @@ describe("a keyboard on the number pad", () => {
     expect(second.seen.values).toEqual(["1", "12"]);
   });
 
-  it("a browser without checkVisibility judges a pad by its boxes", async () => {
-    const own = Object.getOwnPropertyDescriptor(Element.prototype, "checkVisibility")!;
-    Object.defineProperty(Element.prototype, "checkVisibility", {
-      value: undefined,
-      configurable: true,
-    });
-    onTestFinished(() => {
-      Object.defineProperty(Element.prototype, "checkVisibility", own);
-    });
-    const shown = await mountPad();
-    const hidden = await mountPad();
-    hidden.pad.style.display = "none";
-    await userEvent.keyboard("3");
-    expect(hidden.seen.values).toEqual([]);
-    expect(shown.seen.values).toEqual(["3"]);
-  });
-
   it("tapping the earlier pad brings it to the front", async () => {
     const first = await mountPad();
     const second = await mountPad();
