@@ -3,6 +3,12 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, dispatchWtChange, decimalMark } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import {
+  bringPadToFront,
+  registerPad,
+  type PadInput,
+  type PadKeyTarget,
+} from "../state/pad-keys.js";
 
 /**
  * A PARTIAL number the parent normalises before it reaches `decimal()`: never a leading zero
@@ -47,7 +53,7 @@ interface PadKey {
  * `wt-change` with the string that key produces; the parent holds the value and passes it back down.
  */
 @customElement("till-numeric-pad")
-export class TillNumericPad extends LitElement {
+export class TillNumericPad extends LitElement implements PadKeyTarget {
   static override styles = [
     baseStyles,
     css`
@@ -86,9 +92,35 @@ export class TillNumericPad extends LitElement {
 
   @property() mode: "decimal" | "pin" = "decimal";
 
+  #unregister?: () => void;
+
   constructor() {
     super();
     new LocaleChangeController(this);
+    this.addEventListener("pointerdown", () => bringPadToFront(this));
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#unregister = registerPad(this);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#unregister?.();
+    this.#unregister = undefined;
+  }
+
+  /** A key the keyboard router hands this pad, the one in front. */
+  receiveKey(input: PadInput, event: KeyboardEvent): void {
+    if (input.kind === "key") this.#press(input.key, event);
+    else
+      this.dispatchEvent(
+        new CustomEvent(input.kind === "enter" ? "pad-enter" : "pad-escape", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
   }
 
   #keys(): PadKey[] {

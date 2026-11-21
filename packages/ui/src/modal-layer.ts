@@ -61,8 +61,11 @@ export function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElemen
     if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
 }
 
-/** Whether an open popover or modal dialog that does not hold `node` is drawn in front of it. */
+/** Whether an open popover or modal dialog that `node` is not drawn inside is in front of it. */
 export function surfaceOutside(node: Node): boolean {
-  for (const surface of openSurfaces(document)) if (!composedContains(surface, node)) return true;
+  outer: for (const surface of openSurfaces(document)) {
+    for (let at: Node | null = node; at; at = flatParent(at)) if (at === surface) continue outer;
+    return true;
+  }
   return false;
 }

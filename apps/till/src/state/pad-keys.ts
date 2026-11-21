@@ -1,4 +1,10 @@
-import { belongsToComposition } from "@waitron/ui";
+import {
+  belongsToComposition,
+  inInertTree,
+  modalOpen,
+  surfaceOutside,
+  underModal,
+} from "@waitron/ui";
 
 export type PadInput = { kind: "key"; key: string } | { kind: "enter" } | { kind: "escape" };
 
@@ -16,4 +22,87 @@ export function padInputFor(event: KeyboardEvent, mode: "decimal" | "pin"): PadI
   if (key === "Escape") return { kind: "escape" };
   if (mode === "decimal") return key === "." || key === "," ? { kind: "key", key: "." } : null;
   return key === "Delete" ? { kind: "key", key: "clear" } : null;
+}
+
+export interface PadKeyTarget extends HTMLElement {
+  mode: "decimal" | "pin";
+  receiveKey(input: PadInput, event: KeyboardEvent): void;
+}
+
+/** Registered pads, the one in front last. */
+const pads: PadKeyTarget[] = [];
+
+/** Every key a pad takes passes through this one listener. */
+export function registerPad(pad: PadKeyTarget): () => void {
+  pads.push(pad);
+  if (pads.length === 1) document.addEventListener("keydown", routeKey);
+  return () => {
+    const at = pads.indexOf(pad);
+    if (at < 0) return;
+    pads.splice(at, 1);
+    if (pads.length === 0) document.removeEventListener("keydown", routeKey);
+  };
+}
+
+export function bringPadToFront(pad: PadKeyTarget): void {
+  const at = pads.indexOf(pad);
+  if (at < 0) return;
+  pads.splice(at, 1);
+  pads.push(pad);
+}
+
+/** Clicks `button` unless it is missing, disabled or busy. */
+export function pressIfEnabled(button: HTMLElement | null): void {
+  if (!button) return;
+  const state = button as HTMLElement & { disabled?: boolean; loading?: boolean };
+  if (state.disabled === true || state.loading === true) return;
+  button.click();
+}
+
+function editsText(path: EventTarget[]): boolean {
+  return path.some(
+    (each) =>
+      each instanceof HTMLInputElement ||
+      each instanceof HTMLTextAreaElement ||
+      each instanceof HTMLSelectElement ||
+      (each instanceof HTMLElement && each.isContentEditable),
+  );
+}
+
+function visible(pad: PadKeyTarget): boolean {
+  // Older browsers lack checkVisibility.
+  return pad.checkVisibility ? pad.checkVisibility() : pad.getClientRects().length > 0;
+}
+
+function padInFront(): PadKeyTarget | undefined {
+  for (let at = pads.length - 1; at >= 0; at--) {
+    const pad = pads[at]!;
+    if (pad.isConnected && visible(pad) && !inInertTree(pad) && !underModal(pad)) return pad;
+  }
+  return undefined;
+}
+
+/** A focused control in the pad's own screen, outside the pad, keeps its own Enter. */
+function enterBelongsToFocus(pad: PadKeyTarget, path: EventTarget[]): boolean {
+  const first = path[0];
+  if (!(first instanceof Element)) return false;
+  if (!first.matches('button, a[href], [role="button"]')) return false;
+  return path.includes(pad.getRootNode()) && !path.includes(pad);
+}
+
+function routeKey(event: KeyboardEvent): void {
+  if (event.defaultPrevented) return;
+  const path = event.composedPath();
+  if (editsText(path)) return;
+  const pad = padInFront();
+  if (!pad) return;
+  const input = padInputFor(event, pad.mode);
+  if (!input) return;
+  // Walks the page, so it waits until the key means something to the pad.
+  if (surfaceOutside(pad)) return;
+  if (input.kind === "enter" && enterBelongsToFocus(pad, path)) return;
+  // A pad under a window was passed over above, so this pad is inside it: the window closes itself.
+  if (input.kind === "escape" && modalOpen()) return;
+  event.preventDefault();
+  pad.receiveKey(input, event);
 }

@@ -248,6 +248,21 @@ test("an open modal dialog inside a component's drawing, not holding the element
   }
 });
 
+test("an open modal dialog drawn around the element's slot, as a wt-dialog draws it, is not in front", () => {
+  const host = box();
+  const root = host.attachShadow({ mode: "open" });
+  const dialog = document.createElement("dialog");
+  dialog.appendChild(document.createElement("slot"));
+  root.appendChild(dialog);
+  const slotted = box(host);
+  dialog.showModal();
+  try {
+    expect(surfaceOutside(slotted)).toBe(false);
+  } finally {
+    dialog.close();
+  }
+});
+
 test("a dialog shown without being modal is not in front", () => {
   const dialog = document.createElement("dialog");
   document.body.appendChild(dialog);
