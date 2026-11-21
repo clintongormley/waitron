@@ -1,5 +1,5 @@
 import { foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { id, newId, nowIso, table, tsString } from "./columns.js";
+import { id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
 import { workingOrders } from "./orders.js";
 import { sales } from "./sales.js";
@@ -15,6 +15,9 @@ export const billAdvances = table(
     workingOrderId: id("working_order_id").notNull(),
     advanceSaleId: id("advance_sale_id").notNull(),
     billPaymentId: id("bill_payment_id").notNull(),
+    /** The bill's receipt heading as the advance was issued, which every print of its ticket
+     * keeps; null where the bill had none. */
+    orderLabel: label("order_label"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

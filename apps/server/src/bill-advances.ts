@@ -36,6 +36,7 @@ import { money } from "./bill-allocation.js";
 import { pinnedAt, type IssueAdvances } from "./issue-moment.js";
 import { saleReceiptFacts } from "./receipt-guests.js";
 import { enqueueOriginalReceipt, type PrinterLookup } from "./receipt-print.js";
+import { readReceiptOrder } from "./receipt-order.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { saleLanguageFor } from "./venue-locale.js";
@@ -192,9 +193,10 @@ export async function issueAdvance(
       },
     ],
   });
+  const { orderLabel } = await readReceiptOrder(tx, workingOrderId, { atIssuance: true });
   await tx
     .insert(billAdvances)
-    .values({ workingOrderId, advanceSaleId: saleId, billPaymentId: payment.id });
+    .values({ workingOrderId, advanceSaleId: saleId, billPaymentId: payment.id, orderLabel });
   if (payment.method === "card") {
     const card = await findPaymentByBillPayment(tx, payment.id);
     if (card !== undefined)

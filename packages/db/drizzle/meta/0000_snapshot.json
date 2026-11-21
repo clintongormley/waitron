@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f6f11d80-e6ef-4abb-9e03-8facae2be571",
+  "id": "3cb3afa1-57d6-4077-ab8c-91d5e10db2a1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8864,6 +8864,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "order_label": {
+          "name": "order_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "created_at": {

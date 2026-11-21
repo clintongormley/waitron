@@ -9,6 +9,7 @@ import { loginWithPin } from "@waitron/identity";
 import {
   billAdvances,
   deviceProfiles,
+  diningTables,
   devices,
   floorZones,
   printJobs,
@@ -652,6 +653,34 @@ describe("an advance in Find a bill (ruling L2)", () => {
     ]);
     expect(originalLines.filter((line) => !copyLines.includes(line))).toEqual([]);
     expect(originalLines.join("\n")).toContain(tableLabel);
+  });
+
+  it("a duplicate printed after table 7 is renamed still heads the ticket with table 7, as its line does", async () => {
+    const before = await jobCount();
+    const { tableLabel, saleId } = await advanceAt();
+    await allowPrintReceipt();
+    const renamed = `Renamed ${randomUUID().slice(0, 8)}`;
+    await inTx(venue, (tx) =>
+      tx.update(diningTables).set({ label: renamed }).where(eq(diningTables.label, tableLabel)),
+    );
+
+    const reprinted = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/reprint`,
+      {},
+    );
+
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    const [original, copy] = (await jobsSince(before)).filter((job) => job.saleId === saleId);
+    const originalLines = printedLines(original!.payload);
+    const copyLines = printedLines(copy!.payload);
+    expect(copyLines.filter((line) => !originalLines.includes(line))).toEqual([
+      expect.stringContaining("DUPLICADO"),
+    ]);
+    expect(originalLines.filter((line) => !copyLines.includes(line))).toEqual([]);
+    expect(copyLines.join("\n")).not.toContain(renamed);
   });
 
   const supervisor = () => ({ personId: venue.adminId, pin: "1234" });

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
+  billAdvances,
   invoiceSeries,
   readTaxpayer,
   saleLines,
@@ -123,10 +124,17 @@ export async function readTransactionReceipt(
   const groupId =
     sale.workingOrderId ??
     (scope.workingOrderIds.length === 1 ? scope.workingOrderIds[0] : undefined);
+  // An advance keeps the heading its line was worded under; its bill's may move until the bill's
+  // own invoice.
+  const [advance] = await tx
+    .select({ orderLabel: billAdvances.orderLabel })
+    .from(billAdvances)
+    .where(eq(billAdvances.advanceSaleId, saleId));
   return {
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
       : await readReceiptOrder(tx, groupId)),
+    ...(advance === undefined ? {} : { orderLabel: advance.orderLabel }),
     ...(await readReceiptPresentation(tx, saleId, sale.locale, cfg.practiceMode === true)),
     ...issuer,
     ...(issuer.issuer === undefined && taxpayer !== null

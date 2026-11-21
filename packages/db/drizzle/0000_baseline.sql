@@ -1373,6 +1373,7 @@ CREATE TABLE `bill_advances` (
 	`working_order_id` text NOT NULL,
 	`advance_sale_id` text NOT NULL,
 	`bill_payment_id` text NOT NULL,
+	`order_label` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`advance_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,

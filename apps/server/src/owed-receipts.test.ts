@@ -5,6 +5,7 @@ import {
   billAdvances,
   deviceProfiles,
   devices,
+  diningTables,
   invoiceDeliveries,
   invoiceSeries,
   nodes,
@@ -1176,7 +1177,7 @@ describe("printOwedTickets", () => {
     return copy!.id;
   }
 
-  it("prints an advance's own ticket that never printed, with the bytes its payment printed", async () => {
+  it("prints an advance's own ticket that never printed, with the bytes its payment printed, though its table was renamed since", async () => {
     const { venue, cfg, ring } = await till();
     const sale = await ring();
     const orderId = await tabWith(venue, "Croquettes");
@@ -1203,6 +1204,7 @@ describe("printOwedTickets", () => {
       .where(eq(billAdvances.workingOrderId, orderId));
     const [printedAtOnce] = await jobsOf(advance!.saleId);
     await suite.db.delete(printJobs).where(eq(printJobs.id, printedAtOnce!.id));
+    await suite.db.update(diningTables).set({ label: sql`${diningTables.label} || ' renamed'` });
 
     expect((await pass(cfg, after(sale, 11))).queued).toEqual([sale.saleId, advance!.saleId]);
     const [owed] = await jobsOf(advance!.saleId);
