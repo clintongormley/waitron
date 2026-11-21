@@ -90,6 +90,12 @@ export class VatReturnScreen extends LitElement {
    * over a mark an earlier press left.
    */
   @state() private refusal = "";
+  #presses = 0;
+  /**
+   * The press whose failure is shown, or 0 when none has been since the last press. Both downloads
+   * can be waiting at once: a failure replaces an earlier press's, never a later one's.
+   */
+  #failureFrom = 0;
 
   constructor() {
     super();
@@ -111,7 +117,13 @@ export class VatReturnScreen extends LitElement {
     this.refused = refused;
   }
 
-  /** Clears the last refusal: the bottom one, and those under `fields`. */
+  /** Clears the last refusal, the bottom one and those under `fields`, and numbers the press. */
+  #press(fields: readonly Field[]): number {
+    this.#clearRefusals(fields);
+    this.#failureFrom = 0;
+    return ++this.#presses;
+  }
+
   #clearRefusals(fields: readonly Field[]): void {
     this.refusal = "";
     const refused = { ...this.refused };
@@ -129,7 +141,10 @@ export class VatReturnScreen extends LitElement {
   }
 
   /** A refusal naming a field that was sent, and is still as sent, goes under that field. */
-  #refuse(error: unknown, sent: Partial<Record<Field, string>>): void {
+  #refuse(error: unknown, sent: Partial<Record<Field, string>>, press: number): void {
+    if (press < this.#failureFrom) return;
+    if (this.#failureFrom !== 0) this.#clearRefusals(Object.keys(sent) as Field[]);
+    this.#failureFrom = press;
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (
@@ -146,7 +161,7 @@ export class VatReturnScreen extends LitElement {
   async #download(): Promise<void> {
     if (this.busy) return;
     this.#feedback.press();
-    this.#clearRefusals(["year", "period", "declarationType"]);
+    const press = this.#press(["year", "period", "declarationType"]);
     if (this.declarationType === "") {
       void this.#feedback.focus(this.shadowRoot!);
       return;
@@ -159,7 +174,7 @@ export class VatReturnScreen extends LitElement {
       this.#save(file, `modelo-303-${sent.year}-${sent.period}.txt`);
       this.#feedback.reset();
     } catch (error) {
-      this.#refuse(error, sent);
+      this.#refuse(error, sent, press);
     } finally {
       this.busy = false;
     }
@@ -168,14 +183,14 @@ export class VatReturnScreen extends LitElement {
   /** Needs year and period only, so it leaves the declaration type and its mark alone. */
   async #downloadCorrections(): Promise<void> {
     if (this.correctionsBusy) return;
-    this.#clearRefusals(["year", "period"]);
+    const press = this.#press(["year", "period"]);
     const sent = { year: this.year, period: this.period };
     this.correctionsBusy = true;
     try {
       const file = await this.api.downloadVatCorrections({ ...sent, year: Number(sent.year) });
       this.#save(file, `corrections-${sent.year}-${sent.period}.xlsx`);
     } catch (error) {
-      this.#refuse(error, sent);
+      this.#refuse(error, sent, press);
     } finally {
       this.correctionsBusy = false;
     }

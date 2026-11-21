@@ -2,7 +2,7 @@ import { formMessageOf, chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtButton, WtCombobox, WtFormActions } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi } from "../api/client.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./vat-return-screen.js";
@@ -57,6 +57,16 @@ const correctionsButton = (el: VatReturnScreen) =>
 async function pressCorrections(el: VatReturnScreen): Promise<void> {
   correctionsButton(el).click();
   await flush(el);
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function captureDownloads(): HTMLAnchorElement[] {
@@ -401,6 +411,133 @@ describe("dashboard-vat-return-screen", () => {
         expect(field(el, other).error).toBe(other === name ? t(sentence) : "");
       }
       expect(await bottom(el)).toBe(t("form.fix_fields"));
+    });
+
+    describe("with both downloads asked for at once", () => {
+      const NOT_PERMITTED = { code: "authorization.not_permitted" };
+      const OLDER_FAILURES = [
+        ["a failure naming no field", new TypeError("Failed to fetch")],
+        [
+          "a refusal naming the period",
+          { code: "management.request_invalid", params: { field: "period" } },
+        ],
+      ] as const;
+
+      async function bothInFlight(first: "file" | "corrections") {
+        const file = deferred<Blob>();
+        const corrections = deferred<Blob>();
+        const clicked = captureDownloads();
+        const el = await mount(
+          stubApi(
+            () => file.promise,
+            () => corrections.promise,
+          ),
+        );
+        await chooseOption(field(el, "declarationType"), "I");
+        if (first === "file") {
+          await press(el);
+          await pressCorrections(el);
+          return { el, clicked, older: file, newer: corrections };
+        }
+        await pressCorrections(el);
+        await press(el);
+        return { el, clicked, older: corrections, newer: file };
+      }
+
+      it("shows the file's failure once a later press has cleared the workbook's refusal", async () => {
+        const { el, older, newer } = await bothInFlight("file");
+        const api = el.api;
+        newer.reject(NOT_PERMITTED);
+        await flush(el);
+        vi.mocked(api.downloadVatCorrections).mockImplementation(() => new Promise<Blob>(() => {}));
+        await pressCorrections(el);
+        expect(await bottom(el)).toBeNull();
+
+        older.reject(new TypeError("Failed to fetch"));
+        await flush(el);
+
+        expect(await bottom(el)).toBe(codeMessage(codeOf(new TypeError("Failed to fetch"))));
+      });
+
+      describe.each(["file", "corrections"] as const)(
+        "when the %s was asked for first",
+        (first) => {
+          it.each(OLDER_FAILURES)(
+            "keeps the later press's refusal when the earlier request then fails with %s",
+            async (_, failure) => {
+              const { el, older, newer } = await bothInFlight(first);
+
+              newer.reject(NOT_PERMITTED);
+              await flush(el);
+              expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+
+              older.reject(failure);
+              await flush(el);
+
+              expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+              for (const name of ["year", "period", "declarationType"]) {
+                expect(field(el, name).error).toBe("");
+              }
+              expect(button(el).loading).toBe(false);
+              expect(correctionsButton(el).loading).toBe(false);
+            },
+          );
+
+          it("keeps the later press's field mark when the earlier request then fails", async () => {
+            const { el, older, newer } = await bothInFlight(first);
+
+            newer.reject({ code: "management.request_invalid", params: { field: "year" } });
+            await flush(el);
+            older.reject(NOT_PERMITTED);
+            await flush(el);
+
+            expect(field(el, "year").error).toBe(t("vat_return.year_refused"));
+            expect(await bottom(el)).toBe(t("form.fix_fields"));
+          });
+
+          it("keeps the later press's refusal when the earlier request then succeeds, and saves its download", async () => {
+            const { el, clicked, older, newer } = await bothInFlight(first);
+
+            newer.reject(NOT_PERMITTED);
+            await flush(el);
+            older.resolve(first === "file" ? FILE : WORKBOOK);
+            await flush(el);
+
+            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+            expect(clicked.map((link) => link.download)).toEqual([
+              first === "file" ? "modelo-303-2026-3T.txt" : "corrections-2026-3T.xlsx",
+            ]);
+            expect(button(el).loading).toBe(false);
+            expect(correctionsButton(el).loading).toBe(false);
+          });
+
+          it("shows the earlier request's failure when the later press succeeded, so no failure goes unsaid", async () => {
+            const { el, clicked, older, newer } = await bothInFlight(first);
+
+            newer.resolve(first === "file" ? WORKBOOK : FILE);
+            await flush(el);
+            older.reject(NOT_PERMITTED);
+            await flush(el);
+
+            expect(clicked).toHaveLength(1);
+            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+          });
+
+          it("shows the earlier request's failure while the later one is still waiting, until the later one fails", async () => {
+            const { el, older, newer } = await bothInFlight(first);
+
+            older.reject(NOT_PERMITTED);
+            await flush(el);
+            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+
+            newer.reject({ code: "management.request_invalid", params: { field: "period" } });
+            await flush(el);
+
+            expect(field(el, "period").error).toBe(t("vat_return.period_refused"));
+            expect(await bottom(el)).toBe(t("form.fix_fields"));
+          });
+        },
+      );
     });
 
     it("shows its own action busy, and sends one request however often it is pressed", async () => {
