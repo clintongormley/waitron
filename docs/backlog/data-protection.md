@@ -87,7 +87,7 @@ by the answers):
     `authorized_by`, `ended_by`: who asked for, approved and ended a correction); `unpaid_departures` (`authorized_by`,
     `recorded_by`); `receipt_reprints.person_id`; `invoice_pdf_downloads.person_id`;
     `invoice_deliveries.person_id`; `bill_payments` (`requested_by`, `attested_by`);
-    `drawer_entries.person_id`, who recorded the entry;
+    `drawer_entries.person_id`, who asked for the payment or refund;
     `order_amendments.actor_id`; `ticket_item_moves.moved_by_person_id`; `order_drafts.owner_id`;
     `order_events` (`actor_id`, `from_person`, `to_person`);
     `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
