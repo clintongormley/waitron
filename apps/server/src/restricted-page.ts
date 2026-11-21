@@ -1,10 +1,11 @@
 import type { ReturnState } from "./return-records.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { nodes, readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
+import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { initialState } from "@waitron/handover";
 import {
   nodeHandoverEvents,
+  readHandoverEvents,
   readHandoverOperation,
   readHandoverRestriction,
 } from "@waitron/node-db";
@@ -18,6 +19,7 @@ import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import {
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RETURN_WORDS,
+  RESTRICTED_MAIN_BOX_WORDS,
   RESTRICTED_STEP_WORDS,
   type RestrictedStepKind,
 } from "./i18n/restricted-page.js";
@@ -37,9 +39,11 @@ interface Step {
   at: Date;
 }
 
+export type Successor = { kind: "id"; id: string } | { kind: "host"; host: string; main: boolean };
+
 interface RestrictedView {
   returnState: ReturnState;
-  successor: string;
+  successor: Successor;
   successorUrl?: string;
   steps: Step[];
   timeZone: string;
@@ -52,13 +56,68 @@ function stepText(kind: string, locale: SupportedLocale): string {
   return RESTRICTED_STEP_WORDS[kind as RestrictedStepKind][locale];
 }
 
+function webHost(contactUrl: string): string | undefined {
+  if (!URL.canParse(contactUrl)) return undefined;
+  const url = new URL(contactUrl);
+  if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+  return url.host === "" ? undefined : url.host;
+}
+
+/** Each box by its address in the held chart, or null where the chart has no usable address. */
+export async function readBoxAddresses(
+  venue: Database,
+  ids: readonly string[],
+): Promise<(string | null)[]> {
+  if (ids.length === 0) return [];
+  const chart = await readNodeMembership(venue);
+  return ids.map((id) => {
+    const entry = chart?.body.nodes.find((node) => node.nodeId === id);
+    return (entry === undefined ? undefined : webHost(entry.contactUrl)) ?? null;
+  });
+}
+
+/**
+ * The box this one handed over to, named by its address in the held chart, never its venue name
+ * (a spare's is "<main box's name> (standby)"), or by its id where the chart has no usable address.
+ * It is called the main box when the chart lists it as the serving primary, or lists it as standby
+ * (`serving-secondary`, a chart older than the takeover) while this box holds a confirmed return to
+ * it: the receiver confirms only while its own chart names it main (`return-clash-acceptance.ts`).
+ * Listed `sell-only` or `evicted`, it gets no role, whatever this box holds.
+ */
+export async function readSuccessor(
+  deps: Pick<RestrictedPageDeps, "venue" | "node" | "nodeId">,
+  successorNodeId: string,
+): Promise<Successor> {
+  const entry = (await readNodeMembership(deps.venue))?.body.nodes.find(
+    (node) => node.nodeId === successorNodeId,
+  );
+  const host = entry === undefined ? undefined : webHost(entry.contactUrl);
+  if (host === undefined || entry === undefined) return { kind: "id", id: successorNodeId };
+  if (entry.standing === "serving-primary") return { kind: "host", host, main: true };
+  if (entry.standing !== "serving-secondary") return { kind: "host", host, main: false };
+  const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
+  const confirmed =
+    restriction !== null &&
+    (
+      await readHandoverEvents(deps.node, deps.nodeId, restriction.operationId, "return_confirmed")
+    ).some((event) => event.detail.destinationNodeId === successorNodeId);
+  return { kind: "host", host, main: confirmed };
+}
+
+/** The successor as HTML: its address in bold, then its role where it is known to be main. */
+export function successorText(successor: Successor, locale: SupportedLocale): string {
+  if (successor.kind === "id") return `<strong>${escapeHtml(successor.id)}</strong>`;
+  const role = successor.main ? ` (${escapeHtml(RESTRICTED_MAIN_BOX_WORDS[locale])})` : "";
+  return `<strong>${escapeHtml(successor.host)}</strong>${role}`;
+}
+
 /** A link's address, or none when reading it fails: the page stands without its links. */
-async function linkOrNone(
+async function linkOrNone<T>(
   deps: RestrictedPageDeps,
   requestId: string,
   event: string,
-  read: () => Promise<string | undefined>,
-): Promise<string | undefined> {
+  read: () => Promise<T | undefined>,
+): Promise<T | undefined> {
   try {
     return await read();
   } catch (error) {
@@ -71,10 +130,6 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
-  const [row] = await deps.venue
-    .select({ name: nodes.name })
-    .from(nodes)
-    .where(eq(nodes.id, restriction.successorNodeId));
   const steps: Step[] = [];
   const operation =
     restriction.operationId === null
@@ -99,18 +154,20 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     steps.push(...events);
   }
   // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
-  const successorUrl = await linkOrNone(
+  const found = await linkOrNone(
     deps,
     requestId,
     "restricted_page.successor_link_failed",
-    async () =>
-      (await readNodeMembership(deps.venue))?.body.nodes.find(
+    async () => ({
+      successor: await readSuccessor(deps, restriction.successorNodeId),
+      url: (await readNodeMembership(deps.venue))?.body.nodes.find(
         (entry) => entry.nodeId === restriction.successorNodeId,
       )?.contactUrl,
+    }),
   );
   return {
-    successorUrl,
-    successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
+    successorUrl: found?.url,
+    successor: found?.successor ?? { kind: "id", id: restriction.successorNodeId },
     steps,
     // Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and
     // this box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
@@ -148,7 +205,7 @@ ${view.steps
     locale,
     text.title,
     `<h1>${escapeHtml(text.title)}</h1>
-<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(view.successor)}</strong>${escapeHtml(text.body[1])}</p>
+<p>${escapeHtml(text.body[0])}${successorText(view.successor, locale)}${escapeHtml(text.body[1])}</p>
 ${httpsLinkLine(view.successorUrl, text.openSuccessor)}
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${steps}

@@ -40,6 +40,12 @@ export interface SeenRequest {
   body: string;
 }
 
+export interface BoxAnswer {
+  status: number;
+  body: string;
+  contentType?: string;
+}
+
 export interface BoxServer {
   url: string;
   requests: SeenRequest[];
@@ -52,7 +58,7 @@ export interface BoxServer {
  */
 export async function startBoxServer(
   authority: BoxAuthority,
-  answer: (req: SeenRequest) => { status: number; body: string; contentType?: string },
+  answer: (req: SeenRequest) => BoxAnswer | Promise<BoxAnswer>,
 ): Promise<BoxServer> {
   const requests: SeenRequest[] = [];
   const server: Server = createServer(
@@ -68,9 +74,20 @@ export async function startBoxServer(
           body: Buffer.concat(chunks).toString("utf8"),
         };
         requests.push(seen);
-        const out = answer(seen);
-        res.writeHead(out.status, { "content-type": out.contentType ?? "application/json" });
-        res.end(out.body);
+        void Promise.resolve()
+          .then(() => answer(seen))
+          .then(
+            (out) => {
+              res.writeHead(out.status, {
+                "content-type": out.contentType ?? "application/json",
+              });
+              res.end(out.body);
+            },
+            (error: unknown) => {
+              res.writeHead(500, { "content-type": "text/plain" });
+              res.end(String(error));
+            },
+          );
       });
     },
   );

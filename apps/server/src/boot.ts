@@ -249,7 +249,7 @@ import { mountDiskStopApi } from "./disk-stop-api.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
 import { mainServerUrl, mountMainServerApi, mountNodeApi } from "./node-api.js";
-import { restrictedPageRoute } from "./restricted-page.js";
+import { readBoxAddresses, restrictedPageRoute } from "./restricted-page.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { startRestricted } from "./restricted-start.js";
@@ -273,7 +273,6 @@ import {
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
-import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
 import {
   deviceClockNoticeSource,
@@ -2146,6 +2145,8 @@ async function bootServer(
       ring,
       nodeId: node.nodeId,
       modules: enabledAtStart,
+      stateDir: config.stateDir,
+      lookup: seams.boxLookup,
       log,
     });
     undoOnFailure.push(() => returnRecords.stop());
@@ -2258,7 +2259,7 @@ async function bootServer(
         cors: corsForVenue(allowOrigin),
         pageCheck: ownPageCheck,
         waitingOn: outcome.waitingOn ?? [],
-        namesOf: (ids) => readPeerNames(db, ids),
+        addressesOf: (ids) => readBoxAddresses(db, ids),
         carryOn: {
           db,
           credentialKeyRing: ring,

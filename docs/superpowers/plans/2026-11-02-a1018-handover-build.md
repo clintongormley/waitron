@@ -3,6 +3,10 @@
 _2026-11-16: [The bucket stop-order change](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bucket-pointer-and-stop.md) moves only
 the Cloud snapshot wait after the stream stop; venue-database writers still stop before the stream._
 
+_2026-11-21: A1561 built point 14's close as **Will not return** on Servers, which needs
+`node.manage` and a fresh sign-in, not `node.promote`; the operation also closes as
+`return_complete` once the old box's records are confirmed._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

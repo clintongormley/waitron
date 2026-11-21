@@ -48,6 +48,7 @@ import {
   type NodeStanding,
 } from "@waitron/membership";
 import {
+  beginHandoverOperationTx,
   NODE_MIGRATIONS,
   nodeHandoverEvents,
   nodeHandoverOperations,
@@ -908,6 +909,39 @@ describe("the checks before anything is recorded", () => {
     expect(exchanged).toEqual([QUERY_PATH]);
     await expectStillSelling();
   });
+
+  it.each(["activated", "return_pending"] as const)(
+    "refuses as handover.return_outstanding while its own takeover in %s waits for the old main box, asking nothing",
+    async (state) => {
+      const oldMain = crypto.randomUUID();
+      await withNodeTransaction(mainBox.node, (tx) =>
+        beginHandoverOperationTx(tx, {
+          nodeId: self,
+          operationId: NEXT_OP,
+          role: "destination",
+          scenario: "emergency",
+          sourceNodeId: oldMain,
+          destinationNodeId: self,
+          binding: {},
+          fingerprint: "f",
+          state,
+          waitingReason: null,
+        }),
+      );
+
+      expect(await start()).toEqual(
+        refusal(409, "handover.return_outstanding", {
+          operationId: NEXT_OP,
+          sourceNodeId: oldMain,
+        }),
+      );
+
+      expect(operations().map((row) => [row.operationId, row.state])).toEqual([[NEXT_OP, state]]);
+      expect(events()).toEqual([]);
+      expect(exchanged).toEqual([]);
+      await expectStillSelling();
+    },
+  );
 });
 
 function bindingFor(operationId: string): HandoverBinding {

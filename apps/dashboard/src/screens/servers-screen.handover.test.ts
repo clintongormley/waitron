@@ -19,6 +19,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: "new",
@@ -28,6 +30,8 @@ const listing: ServerListing = {
       removable: true,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
   ],
 };
@@ -218,6 +222,57 @@ it.each([
   await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
   expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
 });
+it("shows an in-progress refusal naming another operation without reading status", async () => {
+  const { el, start, status } = await mount();
+  start.mockRejectedValue({
+    code: "handover.operation_in_progress",
+    status: 409,
+    params: { operationId: "33333333-3333-4333-8333-333333333333" },
+  });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      codeMessage("handover.operation_in_progress"),
+    ),
+  );
+  expect(status).not.toHaveBeenCalled();
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+  expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
+});
+it("shows a waiting-return refusal naming the open takeover without reading status", async () => {
+  const { el, start, status } = await mount();
+  start.mockRejectedValue({
+    code: "handover.return_outstanding",
+    status: 409,
+    params: { operationId: "33333333-3333-4333-8333-333333333333", sourceNodeId: "gone" },
+  });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      codeMessage("handover.return_outstanding"),
+    ),
+  );
+  expect(status).not.toHaveBeenCalled();
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+  expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
+});
+it.each(["handover.operation_in_progress", "handover.return_outstanding"])(
+  "reads its own operation's status after %s naming that operation",
+  async (code) => {
+    const { el, start, status } = await mount();
+    start.mockImplementation(({ operationId }: { operationId: string }) =>
+      Promise.reject({ code, status: 409, params: { operationId } }),
+    );
+    await open(el);
+    q(el, "[data-test=confirm-handover]").click();
+    await vi.waitFor(() => expect(status).toHaveBeenCalledOnce());
+    expect(status).toHaveBeenCalledWith(start.mock.calls[0]![0].operationId);
+  },
+);
 it("keeps an unproved or cancelled shared sign-in available for retry without polling status", async () => {
   const { el, start, status } = await mount();
   start.mockRejectedValue({ code: "management_session.proof_required", status: 400 });

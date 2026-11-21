@@ -1,7 +1,9 @@
 import { peerBodyLimit } from "./peer-route-limits.js";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { readOpenHandoverOperation } from "@waitron/node-db";
-import { recordReturnBatchTx } from "./return-completion.js";
+import { BEFORE_ACTIVATION } from "@waitron/handover";
+import { recordReturnBatchTx, returnCompletedFor } from "./return-completion.js";
+import { advanceHandoverTx } from "./handover-store.js";
 import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import {
@@ -9,6 +11,7 @@ import {
   readNodeMembership,
   withNodeTransaction,
   withTransaction,
+  type Transaction,
 } from "@waitron/db";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { createErrorBoundary, readJsonBody, type Logger } from "@waitron/server-kit";
@@ -66,39 +69,54 @@ export function mountReturnRecordsApi(
             accepted,
           );
           if (typeof complete !== "boolean") return complete;
-          if (complete && operation) {
-            const [activation] = await tx
-              .select({ operationId: handoverActivations.operationId })
-              .from(handoverActivations)
-              .where(
-                and(
-                  eq(handoverActivations.operationId, operation.operationId),
-                  eq(handoverActivations.scenario, "emergency"),
-                  eq(handoverActivations.sourceNodeId, source),
-                  eq(handoverActivations.destinationNodeId, deps.nodeId),
-                ),
-              );
-            if (activation)
-              await recordReturnBatchTx(tx, {
-                operationId: activation.operationId,
-                inventory: body.inventory as string,
-                index: body.index as number,
-                count: body.count as number,
-                digest: returnDigest({ module: body.module!, payload: body.payload! }),
-              });
-          }
+          const open =
+            operation?.role === "destination" && operation.sourceNodeId === source
+              ? operation
+              : undefined;
+          // With no open takeover from this box, a late return still proves it came back, so it is
+          // recorded against this box's latest activation from it; no node.db state moves.
+          const takeover = open
+            ? await matchingActivation(tx, open.operationId, source, deps.nodeId)
+            : await latestActivation(tx, source, deps.nodeId);
+          if (takeover !== undefined && complete)
+            await recordReturnBatchTx(tx, {
+              operationId: takeover,
+              inventory: body.inventory as string,
+              index: body.index as number,
+              count: body.count as number,
+              digest: returnDigest({ module: body.module!, payload: body.payload! }),
+            });
           return {
             complete,
+            takeover,
+            open: open !== undefined,
+            returned: takeover !== undefined && (await returnCompletedFor(tx, takeover)),
             clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
           };
         });
         if ("refusal" in result) return result;
         // Venue facts commit first; an unanswered batch is resent if retaining its evidence fails.
         await retainReturnClashes(deps, node, raw, body, result.clashes);
+        const state = operation?.state;
+        // Venue saved the activation but node.db has not yet: no receipt, so the old box resends
+        // once this operation is activated and the replay takes the steps below.
+        if (result.open && BEFORE_ACTIVATION.some((step) => step === state))
+          return "before activation";
+        // A failure here sends no receipt, so the old box resends and the replay takes these steps.
+        if (
+          result.open &&
+          result.takeover !== undefined &&
+          (state === "activated" || state === "return_pending")
+        ) {
+          await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_pending", {});
+          if (result.returned)
+            await advanceHandoverTx(node, deps.nodeId, result.takeover, "return_complete", {});
+        }
         return result.complete;
       });
       deps.wake();
       // A refusal must not undo facts the venue transaction has already accounted for.
+      if (outcome === "before activation") refuseReturn("activating");
       if (typeof outcome !== "boolean") throw new AppError(outcome.refusal, {});
       const digest = returnDigest({ module: body.module!, payload: body.payload! });
       c.header("Cache-Control", "no-store");
@@ -117,4 +135,42 @@ export function mountReturnRecordsApi(
       );
     }),
   );
+}
+
+async function matchingActivation(
+  tx: Transaction,
+  operationId: string,
+  sourceNodeId: string,
+  destinationNodeId: string,
+): Promise<string | undefined> {
+  const [activation] = await tx
+    .select({ operationId: handoverActivations.operationId })
+    .from(handoverActivations)
+    .where(
+      and(
+        eq(handoverActivations.operationId, operationId),
+        eq(handoverActivations.sourceNodeId, sourceNodeId),
+        eq(handoverActivations.destinationNodeId, destinationNodeId),
+      ),
+    );
+  return activation?.operationId;
+}
+
+async function latestActivation(
+  tx: Transaction,
+  sourceNodeId: string,
+  destinationNodeId: string,
+): Promise<string | undefined> {
+  const [activation] = await tx
+    .select({ operationId: handoverActivations.operationId })
+    .from(handoverActivations)
+    .where(
+      and(
+        eq(handoverActivations.sourceNodeId, sourceNodeId),
+        eq(handoverActivations.destinationNodeId, destinationNodeId),
+      ),
+    )
+    .orderBy(desc(handoverActivations.activatedAt), desc(handoverActivations.operationId))
+    .limit(1);
+  return activation?.operationId;
 }

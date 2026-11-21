@@ -4,6 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
+import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
   clearRemovedMachine,
@@ -12,6 +13,7 @@ import {
   removeStandby,
 } from "./membership-removal.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
+import { abandonReturn } from "./return-abandoned.js";
 import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
@@ -33,10 +35,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "membership.node_not_found": 404,
   "membership.not_primary": 409,
   "membership.node_is_primary": 409,
-  "membership.node_has_served": 409,
+  "membership.reset_statement_required": 409,
   "membership.standby_joined": 409,
   "membership.node_not_removed": 409,
   "handover.operation_in_progress": 409,
+  "handover.return_outstanding": 409,
+  "handover.return_not_outstanding": 409,
+  "management.request_invalid": 400,
   ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
@@ -48,6 +53,7 @@ export function mountMembershipRemovalApi(
 ): void {
   const run = createErrorBoundary(STATUS, "membership.removal_failed");
   const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
+  const runAbandon = createErrorBoundary(STATUS, "handover.return_abandon_failed");
 
   // Admin-only, the same permission that hands a standby its bundle.
   const authorize = (sessionId: string, fresh = false): Promise<string> =>
@@ -63,7 +69,7 @@ export function mountMembershipRemovalApi(
   app.get("/management-api/servers", (c) =>
     run(c, log, async () => {
       await authorize(requireManagementSession(c));
-      const listing = await listServers(deps.db, deps.nodeId);
+      const listing = await listServers(deps.db, deps.node, deps.nodeId);
       return c.json({
         term: listing.term,
         authorityFingerprint: await deps.authorityFingerprint(),
@@ -82,17 +88,33 @@ export function mountMembershipRemovalApi(
       const body = await readJsonBody<{
         spareSwitchedOff?: unknown;
         noParallelRecovery?: unknown;
+        resetStatement?: unknown;
       }>(c);
+      if (body.resetStatement !== undefined && typeof body.resetStatement !== "boolean") {
+        throw new AppError("management.request_invalid", { field: "resetStatement" });
+      }
       const result = await removeStandby(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         {
           targetNodeId,
           personId,
           declared: body.spareSwitchedOff === true && body.noParallelRecovery === true,
+          resetStatement: body.resetStatement === true,
         },
       );
       await reloadAfterRemoval({ log, reloadStream: deps.reloadStream }, targetNodeId);
       return c.json(result);
+    }),
+  );
+
+  app.post("/management-api/servers/:nodeId/return-abandoned", (c) =>
+    runAbandon(c, log, async () => {
+      const personId = await authorize(requireManagementSession(c), true);
+      const body = await readJsonBody<{ confirmed?: unknown }>(c);
+      if (body.confirmed !== true) {
+        throw new AppError("management.request_invalid", { field: "confirmed" });
+      }
+      return c.json(await abandonReturn(deps, { sourceNodeId: c.req.param("nodeId"), personId }));
     }),
   );
 

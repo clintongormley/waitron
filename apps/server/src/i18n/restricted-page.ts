@@ -8,7 +8,7 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
     SupportedLocale,
     {
       title: string;
-      /** The body's words before and after the successor's name. */
+      /** The body's words before and after the successor. */
       body: readonly [string, string];
       progress: string;
       openSuccessor: string;
@@ -39,8 +39,18 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
   },
 };
 
-/** Every event kind a source operation records: its states, the offer's event and the final copy's. */
-export type RestrictedStepKind = HandoverOperationState | "offer" | "final_state";
+/** The successor's role, after its address, where this box knows it is the main box. */
+export const RESTRICTED_MAIN_BOX_WORDS: Readonly<Record<SupportedLocale, string>> = {
+  "en-GB": "main box",
+  "es-ES": "equipo principal",
+};
+
+/**
+ * Every event kind a source operation records: its states, the offer's event, the final copy's and
+ * the confirmed return's.
+ */
+export type RestrictedStepKind =
+  HandoverOperationState | "offer" | "final_state" | "return_confirmed";
 
 /** Keyed by every kind, so a new state with no wording fails the typecheck. */
 export const RESTRICTED_STEP_WORDS: Readonly<
@@ -90,6 +100,10 @@ export const RESTRICTED_STEP_WORDS: Readonly<
   final_state: {
     "en-GB": "Final copy of the venue taken",
     "es-ES": "Copia final del local hecha",
+  },
+  return_confirmed: {
+    "en-GB": "Invoice records confirmed by the main box",
+    "es-ES": "Registros de facturación confirmados por el equipo principal",
   },
 };
 

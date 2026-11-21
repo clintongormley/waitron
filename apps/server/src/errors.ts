@@ -40,6 +40,8 @@ declare module "@waitron/shared" {
     "module.disabled": { module: string };
     "handover.return_refused": { reason: string };
     "handover.return_clash_not_found": { clashId: string };
+    "handover.return_outstanding": { operationId: string; sourceNodeId: string };
+    "handover.return_not_outstanding": { sourceNodeId: string };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };
@@ -1540,8 +1542,12 @@ declare module "@waitron/shared" {
     "membership.not_primary": Record<string, never>;
     /** The machine asked to be removed or cleared is the serving primary, this node. */
     "membership.node_is_primary": Record<string, never>;
-    /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
-    "membership.node_has_served": Record<string, never>;
+    /**
+     * The machine asked to be removed is a former main box (`sell-only`), this venue holds no
+     * completed return of its invoice records, and the request did not state, as exact `true`, that
+     * it has been reset or will never be switched on again.
+     */
+    "membership.reset_statement_required": Record<string, never>;
     /**
      * The standby asked to be removed has a `nodes` row in this database (its store answered,
      * `spare-join.ts`) and the request did not carry both retirement declarations as exact `true`.

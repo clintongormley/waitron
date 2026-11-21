@@ -537,11 +537,22 @@ it("has a sentence in both languages for each refusal of a server's removal", ()
     "membership.node_not_found",
     "membership.not_primary",
     "membership.node_is_primary",
-    "membership.node_has_served",
+    "membership.reset_statement_required",
     "membership.standby_joined",
     "membership.write_contended",
     "handover.operation_in_progress",
+    "handover.return_outstanding",
   ]) {
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+  }
+});
+
+it("has a sentence in both languages for each refusal of Will not return", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of ["handover.return_not_outstanding"]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));

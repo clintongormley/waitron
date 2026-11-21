@@ -1330,6 +1330,13 @@ async function switchOnToSelling(boxes: Boxes, stepdown: StepdownSeen): Promise<
       interval: 100,
     })
     .catch(() => {});
+  // Not fatal: the switch-on case reads the state, which closes once M1's return is accounted.
+  await vi
+    .waitFor(() => expect(operationRow(m2)?.state).toBe("return_complete"), {
+      timeout: 10_000,
+      interval: 100,
+    })
+    .catch(() => {});
   const orders = await ask(m2, "/api/working-orders", { cookie: boxes.venue.cookie });
   const ordersText = await orders.text();
   expect(orders.status, ordersText).toBe(200);
@@ -2203,7 +2210,7 @@ describe("a controlled handover between two boxes, simulated in one process", ()
   it("the switch-on makes M2 the main box, selling on a new series named for its own minute", () => {
     const { b, on } = sold();
     expect(on.activated).toEqual({ activated: true, restarting: true });
-    expect(on.m2OperationState).toBe("activated");
+    expect(on.m2OperationState).toBe("return_complete");
     expect(on.m2).toMatchObject({
       nodeId: b.m2.nodeId,
       term: 4,

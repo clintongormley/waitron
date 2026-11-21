@@ -1,4 +1,4 @@
-import { and, asc, eq, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, notInArray, sql } from "drizzle-orm";
 import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -124,26 +124,44 @@ export async function appendHandoverEventTx(
   await tx.insert(nodeHandoverEvents).values(row);
 }
 
-/** The first event of `kind` this box recorded for the operation, or `null`. */
-export async function readHandoverEvent(
-  node: NodeHandle,
-  nodeId: string,
-  operationId: string,
-  kind: string,
-): Promise<HandoverEvent | null> {
-  const [row] = await node
+function eventsOfKind(node: NodeHandle, nodeId: string, operationId: string | null, kind: string) {
+  return node
     .select()
     .from(nodeHandoverEvents)
     .where(
       and(
         eq(nodeHandoverEvents.nodeId, nodeId),
-        eq(nodeHandoverEvents.operationId, operationId),
+        operationId === null
+          ? isNull(nodeHandoverEvents.operationId)
+          : eq(nodeHandoverEvents.operationId, operationId),
         eq(nodeHandoverEvents.kind, kind),
       ),
     )
-    .orderBy(asc(sql`rowid`))
-    .limit(1);
+    .orderBy(asc(sql`rowid`));
+}
+
+/**
+ * The first event of `kind` this box recorded for the operation, or `null`. A null `operationId`
+ * reads an event that belongs to no operation.
+ */
+export async function readHandoverEvent(
+  node: NodeHandle,
+  nodeId: string,
+  operationId: string | null,
+  kind: string,
+): Promise<HandoverEvent | null> {
+  const [row] = await eventsOfKind(node, nodeId, operationId, kind).limit(1);
   return row ?? null;
+}
+
+/** Every event of `kind` this box recorded for the operation, in the order recorded. */
+export async function readHandoverEvents(
+  node: NodeHandle,
+  nodeId: string,
+  operationId: string | null,
+  kind: string,
+): Promise<HandoverEvent[]> {
+  return await eventsOfKind(node, nodeId, operationId, kind);
 }
 
 /**

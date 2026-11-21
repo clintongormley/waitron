@@ -30,6 +30,7 @@ import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { isSecure } from "./encrypted-connection.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
+import { readSuccessor, successorText } from "./restricted-page.js";
 import { knownHandoverSuccessor, type StartPeerCheckOutcome } from "./start-peer-check.js";
 import {
   failureFields,
@@ -78,7 +79,7 @@ export interface CarryOnDeps {
   secure?: (c: Context) => boolean;
   /** The boxes the latest check waited on. */
   peerNodeIds: () => readonly string[];
-  namesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
+  addressesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
   chartTerm: () => Promise<number>;
   /** Takes the one carry-on turn, after any re-ask in flight has settled. */
   beginCarryOn: () => Promise<CarryOnTurn>;
@@ -109,6 +110,7 @@ const BLANK: FormView = {
 
 class NoLongerWaiting extends Error {}
 
+/** `successor` is HTML, from `successorText`. */
 function knownBody(
   successor: string,
   words: CarryOnWords,
@@ -118,7 +120,7 @@ function knownBody(
   const link = back
     ? `<p><a href="${escapeHtml(destination)}">${escapeHtml(words.back)}</a></p>\n`
     : "";
-  return `<p role="alert">${escapeHtml(words.knownHandover[0])}<strong>${escapeHtml(successor)}</strong>${escapeHtml(words.knownHandover[1])}</p>
+  return `<p role="alert">${escapeHtml(words.knownHandover[0])}${successor}${escapeHtml(words.knownHandover[1])}</p>
 ${link}`;
 }
 
@@ -200,14 +202,22 @@ const refresh = (destination: string) =>
 export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
   const passwordThrottle = createPasswordThrottle();
   const successorName = async (id: string | null, locale: SupportedLocale) =>
-    otherBoxPhrase(id === null ? [null] : await deps.namesOf([id]), locale);
+    id === null
+      ? `<strong>${escapeHtml(otherBoxPhrase([null], locale))}</strong>`
+      : successorText(
+          await readSuccessor({ venue: deps.db, node: deps.node, nodeId: deps.nodeId }, id),
+          locale,
+        );
 
   app.post("/carry-on", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     const words = WAITING_PAGE_WORDS[locale].carryOn;
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    const other = otherBoxPhrase(await deps.namesOf(deps.peerNodeIds()).catch(() => []), locale);
+    const other = otherBoxPhrase(
+      await deps.addressesOf(deps.peerNodeIds()).catch(() => []),
+      locale,
+    );
     let destination = "/";
     const page = (section: string, status: 200 | 400 | 401 | 403 | 409 | 429 | 500) =>
       c.html(renderWaitingPage(other, locale, section, destination), status);

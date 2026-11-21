@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  handoverActivations,
   readMembershipTrustSet,
   readNodeMembership,
   withNodeTransaction,
@@ -38,6 +39,8 @@ import {
   type MembershipRemovalApiDeps,
 } from "./membership-removal-api.js";
 import { createTurns } from "./backup-turns.js";
+import { recordReturnBatchTx } from "./return-completion.js";
+import { returnDigest } from "./return-records.js";
 import { mountStreamApi } from "./stream-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -240,6 +243,70 @@ async function linkTo(p: Primary, peerNodeId: string): Promise<void> {
   );
 }
 
+async function takeover(
+  p: Primary,
+  sourceNodeId: string,
+  state: "activated" | "return_pending" | "return_complete" = "activated",
+  scenario: "controlled" | "emergency" = "emergency",
+): Promise<string> {
+  const operationId = randomUUID();
+  await withNodeTransaction(suite.node, (tx) =>
+    beginHandoverOperationTx(tx, {
+      nodeId: p.nodeId,
+      operationId,
+      role: "destination",
+      scenario,
+      sourceNodeId,
+      destinationNodeId: p.nodeId,
+      binding: {},
+      fingerprint: "f",
+      state,
+      waitingReason: null,
+    }),
+  );
+  return operationId;
+}
+
+function former(nodeId: string = randomUUID()): MembershipNode {
+  return { nodeId, contactUrl: "https://old.deli.test", standing: "sell-only" };
+}
+
+/**
+ * An activation from `sourceNodeId` to `destinationNodeId` in this venue, with its return batches:
+ * all of them, or all but the last.
+ */
+async function returnFrom(
+  db: Database,
+  sourceNodeId: string,
+  destinationNodeId: string,
+  batches: "complete" | "one missing" = "complete",
+  operationId: string = randomUUID(),
+): Promise<string> {
+  const digests = ["first", "second"].map((payload) => returnDigest({ module: "m", payload }));
+  const inventory = returnDigest(digests);
+  await withTransaction(db, async (tx) => {
+    await tx.insert(handoverActivations).values({
+      operationId,
+      sourceNodeId,
+      destinationNodeId,
+      scenario: "emergency",
+      evidence: {
+        purpose: "waitron.handover.declaration.v1",
+        body: {},
+        signerNodeId: destinationNodeId,
+        signature: "signature",
+      },
+      personId: "person",
+      activatedAt: "2026-11-12T10:00:00.000Z",
+    });
+    const sent = batches === "complete" ? digests : digests.slice(0, -1);
+    for (const [index, digest] of sent.entries()) {
+      await recordReturnBatchTx(tx, { operationId, inventory, index, count: 2, digest });
+    }
+  });
+  return operationId;
+}
+
 it.each(["remove", "clear"] as const)(
   "requires confirmation before a server %s changes the chart",
   async (action) => {
@@ -351,7 +418,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       await expectRefused(p, p.nodeId, 409, "membership.node_is_primary");
     });
 
-    it("refuses a former primary (sell-only) as membership.node_has_served (409)", async () => {
+    it("refuses a former primary (sell-only) with no completed return and no statement as membership.reset_statement_required (409)", async () => {
       const p = await primary();
       const former: MembershipNode = {
         nodeId: randomUUID(),
@@ -359,7 +426,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
         standing: "sell-only",
       };
       await holdChart(p, [self(p), former]);
-      await expectRefused(p, former.nodeId, 409, "membership.node_has_served");
+      await expectRefused(p, former.nodeId, 409, "membership.reset_statement_required");
     });
 
     it("refuses a standby this database holds a node row for as membership.standby_joined (409)", async () => {
@@ -831,6 +898,27 @@ describe("retiring a spare that finished joining", () => {
       expect(await removals(p.db)).toEqual([]);
       expect((await readPairLink(suite.node, p.nodeId))?.peerNodeId).toBe(joinedId);
       expect(p.reloadStream).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["source", "destination"] as const)(
+    "lists the spare as not removable while an open handover names it as its %s, and another spare as removable",
+    async (side) => {
+      const p = await primary();
+      const joinedId = await seedNode(p.db);
+      const other = standby();
+      await holdChart(p, [self(p), standby(joinedId), other]);
+      if (side === "source") await openHandover(p, joinedId, p.nodeId);
+      else await openHandover(p, p.nodeId, joinedId);
+
+      const body = (await (await list(p, p.adminCookie)).json()) as {
+        nodes: { nodeId: string; removable: boolean }[];
+      };
+      expect(body.nodes.map((n) => [n.nodeId, n.removable])).toEqual([
+        [p.nodeId, false],
+        [joinedId, false],
+        [other.nodeId, true],
+      ]);
     },
   );
 
@@ -1322,6 +1410,8 @@ describe("GET /management-api/servers", () => {
           removable: false,
           canClear: false,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
         {
           ...neverJoined,
@@ -1329,6 +1419,8 @@ describe("GET /management-api/servers", () => {
           removable: true,
           canClear: false,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
         {
           ...joined,
@@ -1336,13 +1428,17 @@ describe("GET /management-api/servers", () => {
           removable: true,
           canClear: false,
           requiresRetirementConfirmation: true,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
         {
           ...former,
           isSelf: false,
-          removable: false,
+          removable: true,
           canClear: false,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: true,
         },
         {
           ...evicted,
@@ -1350,6 +1446,8 @@ describe("GET /management-api/servers", () => {
           removable: false,
           canClear: true,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
       ],
     });
@@ -1494,4 +1592,386 @@ describe("GET /management-api/servers", () => {
     expect(manager.status).toBe(403);
     expect((await errorOf(manager)).code).toBe("authorization.not_permitted");
   });
+});
+
+describe("POST /management-api/servers/:nodeId/return-abandoned", () => {
+  async function abandon(
+    p: Primary,
+    nodeId: string,
+    cookie?: string,
+    body: unknown = { confirmed: true },
+  ): Promise<Response> {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (cookie !== undefined) headers["cookie"] = cookie;
+    return p.app.request(`/management-api/servers/${nodeId}/return-abandoned`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function abandonments(db: Database): Promise<Record<string, unknown>[]> {
+    const { rows } = await db.execute<Record<string, unknown>>(
+      sql`select subject_id, person_id, data from activity_log where kind = 'handover.return_abandoned' order by at, rowid`,
+    );
+    return rows;
+  }
+
+  /** The operation's state and every event recorded for it, oldest first. */
+  async function operationTrail(p: Primary, operationId: string) {
+    const states = suite.node.all<{ state: string }>(
+      sql`select state from node_handover_operations where node_id = ${p.nodeId} and operation_id = ${operationId}`,
+    );
+    const events = suite.node.all<{ kind: string }>(
+      sql`select kind from node_handover_events where node_id = ${p.nodeId} and operation_id = ${operationId} order by rowid`,
+    );
+    return { states: states.map((r) => r.state), events: events.map((r) => r.kind) };
+  }
+
+  it.each(["activated", "return_pending"] as const)(
+    "closes a takeover in %s as return_abandoned, stepping through return_pending, with one activity entry naming ids only",
+    async (state) => {
+      const p = await primary();
+      const oldMain = randomUUID();
+      const operationId = await takeover(p, oldMain, state);
+
+      const res = await abandon(p, oldMain, p.adminCookie);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ operationId, state: "return_abandoned" });
+      expect(await operationTrail(p, operationId)).toEqual({
+        states: ["return_abandoned"],
+        events:
+          state === "activated" ? ["return_pending", "return_abandoned"] : ["return_abandoned"],
+      });
+      const entries = await abandonments(p.db);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ subject_id: oldMain, person_id: p.adminPersonId });
+      expect(JSON.parse(entries[0]!.data as string)).toEqual({
+        operationId,
+        sourceNodeId: oldMain,
+      });
+    },
+  );
+
+  it("logs its own failure and writes one activity entry when a retry follows a failure after the venue commit", async () => {
+    const p = await primary();
+    const oldMain = randomUUID();
+    const operationId = await takeover(p, oldMain);
+    suite.node.run(
+      sql`create trigger refuse_return_abandoned before update on node_handover_operations when new.state = 'return_abandoned' begin select raise(abort, 'test node write failed'); end`,
+    );
+    try {
+      expect((await abandon(p, oldMain, p.adminCookie)).status).toBe(500);
+      expect(errorEvents(p)).toEqual(["handover.return_abandon_failed"]);
+      expect(await abandonments(p.db)).toHaveLength(1);
+      expect((await operationTrail(p, operationId)).states).toEqual(["activated"]);
+    } finally {
+      suite.node.run(sql`drop trigger refuse_return_abandoned`);
+    }
+
+    expect((await abandon(p, oldMain, p.adminCookie)).status).toBe(200);
+    expect((await operationTrail(p, operationId)).states).toEqual(["return_abandoned"]);
+    expect(await abandonments(p.db)).toHaveLength(1);
+  });
+
+  it("closes a controlled takeover too", async () => {
+    const p = await primary();
+    const oldMain = randomUUID();
+    const operationId = await takeover(p, oldMain, "activated", "controlled");
+
+    expect((await abandon(p, oldMain, p.adminCookie)).status).toBe(200);
+    expect((await operationTrail(p, operationId)).states).toEqual(["return_abandoned"]);
+  });
+
+  async function expectNothingWritten(p: Primary, operationId: string | null, before: unknown) {
+    expect(await abandonments(p.db)).toEqual([]);
+    if (operationId !== null) expect(await operationTrail(p, operationId)).toEqual(before);
+  }
+
+  it("refuses no session (401), a manager (403) and a stale sign-in (400), writing nothing", async () => {
+    const p = await primary();
+    const oldMain = randomUUID();
+    const operationId = await takeover(p, oldMain);
+    const before = await operationTrail(p, operationId);
+
+    const anonymous = await abandon(p, oldMain);
+    expect(anonymous.status).toBe(401);
+    expect((await errorOf(anonymous)).code).toBe("management_session.required");
+
+    const manager = await abandon(p, oldMain, p.managerCookie);
+    expect(manager.status).toBe(403);
+    expect((await errorOf(manager)).code).toBe("authorization.not_permitted");
+
+    await withTransaction(p.db, (tx) => setFreshManagementSignIn(tx, p.adminCookie, false));
+    const stale = await abandon(p, oldMain, p.adminCookie);
+    expect(stale.status).toBe(400);
+    expect(await errorOf(stale)).toEqual({ code: "management_session.proof_required", params: {} });
+
+    await expectNothingWritten(p, operationId, before);
+  });
+
+  it.each([
+    ["no body field", {}],
+    ["false", { confirmed: false }],
+    ['"true"', { confirmed: "true" }],
+  ])("refuses without confirmation (%s), writing nothing", async (_, body) => {
+    const p = await primary();
+    const oldMain = randomUUID();
+    const operationId = await takeover(p, oldMain);
+    const before = await operationTrail(p, operationId);
+
+    const res = await abandon(p, oldMain, p.adminCookie, body);
+
+    expect(res.status).toBe(400);
+    expect(await errorOf(res)).toEqual({
+      code: "management.request_invalid",
+      params: { field: "confirmed" },
+    });
+    await expectNothingWritten(p, operationId, before);
+  });
+
+  it.each([
+    ["no open operation", null],
+    ["a takeover from another box", "other"],
+    ["a takeover that already closed", "return_complete"],
+    ["a handover this box is the source of", "source"],
+  ] as const)(
+    "refuses as handover.return_not_outstanding (409) with %s, writing nothing",
+    async (_, kind) => {
+      const p = await primary();
+      const oldMain = randomUUID();
+      let operationId: string | null = null;
+      if (kind === "other") operationId = await takeover(p, randomUUID());
+      if (kind === "return_complete") operationId = await takeover(p, oldMain, "return_complete");
+      if (kind === "source") {
+        operationId = randomUUID();
+        await withNodeTransaction(suite.node, (tx) =>
+          beginHandoverOperationTx(tx, {
+            nodeId: p.nodeId,
+            operationId: operationId!,
+            role: "source",
+            scenario: "emergency",
+            sourceNodeId: oldMain,
+            destinationNodeId: p.nodeId,
+            binding: {},
+            fingerprint: "f",
+            state: "return_pending",
+            waitingReason: null,
+          }),
+        );
+      }
+      const before = operationId === null ? null : await operationTrail(p, operationId);
+
+      const res = await abandon(p, oldMain, p.adminCookie);
+
+      expect(res.status).toBe(409);
+      expect(await errorOf(res)).toEqual({
+        code: "handover.return_not_outstanding",
+        params: { sourceNodeId: oldMain },
+      });
+      await expectNothingWritten(p, operationId, before);
+    },
+  );
+
+  it("refuses removing the old main box as handover.return_outstanding (409) while its return is outstanding", async () => {
+    const p = await primary();
+    const oldMain = former();
+    await holdChart(p, [self(p), oldMain]);
+    const operationId = await takeover(p, oldMain.nodeId, "return_pending");
+    const before = await readNodeMembership(p.db);
+
+    const res = await remove(p, oldMain.nodeId, p.adminCookie, {
+      ...DECLARED,
+      resetStatement: true,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({
+      code: "handover.return_outstanding",
+      params: { operationId, sourceNodeId: oldMain.nodeId },
+    });
+    expect(await readNodeMembership(p.db)).toEqual(before);
+    expect(await removals(p.db)).toEqual([]);
+  });
+});
+
+describe("removing a former main box", () => {
+  async function expectRemoved(p: Primary, nodeId: string, body?: unknown): Promise<void> {
+    const before = (await readNodeMembership(p.db))!;
+    const res = await remove(p, nodeId, p.adminCookie, body);
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(await res.json()).toEqual({ removed: true, term: before.body.term + 1 });
+    const after = (await readNodeMembership(p.db))!;
+    expect(after.body.nodes.find((n) => n.nodeId === nodeId)?.standing).toBe("evicted");
+    expect((await removals(p.db)).map((r) => r.removed_node_id)).toEqual([nodeId]);
+  }
+
+  async function expectRefused(
+    p: Primary,
+    nodeId: string,
+    body: unknown,
+    status: number,
+    error: { code: string; params: unknown },
+  ): Promise<void> {
+    const before = await readNodeMembership(p.db);
+    const res = await remove(p, nodeId, p.adminCookie, body);
+    expect(res.status).toBe(status);
+    expect(await errorOf(res)).toEqual(error);
+    expect(await readNodeMembership(p.db)).toEqual(before);
+    expect(await removals(p.db)).toEqual([]);
+  }
+
+  async function listed(p: Primary) {
+    const body = (await (await list(p, p.adminCookie)).json()) as {
+      nodes: {
+        nodeId: string;
+        removable: boolean;
+        returnOutstanding: boolean;
+        needsResetStatement: boolean;
+      }[];
+    };
+    return body.nodes.map(({ nodeId, removable, returnOutstanding, needsResetStatement }) => ({
+      nodeId,
+      removable,
+      returnOutstanding,
+      needsResetStatement,
+    }));
+  }
+
+  it("refuses a former main box as handover.return_outstanding (409) while its return is outstanding, even with the statement", async () => {
+    const p = await primary();
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    const operationId = await takeover(p, oldMain.nodeId, "activated");
+
+    await expectRefused(p, oldMain.nodeId, { resetStatement: true }, 409, {
+      code: "handover.return_outstanding",
+      params: { operationId, sourceNodeId: oldMain.nodeId },
+    });
+    expect(await listed(p)).toContainEqual({
+      nodeId: oldMain.nodeId,
+      removable: false,
+      returnOutstanding: true,
+      needsResetStatement: false,
+    });
+  });
+
+  it("removes a former main box whose return this venue holds complete, with no statement", async () => {
+    const p = await primary();
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    await returnFrom(p.db, oldMain.nodeId, p.nodeId);
+    await takeover(p, oldMain.nodeId, "return_complete");
+
+    expect(await listed(p)).toContainEqual({
+      nodeId: oldMain.nodeId,
+      removable: true,
+      returnOutstanding: false,
+      needsResetStatement: false,
+    });
+    await expectRemoved(p, oldMain.nodeId);
+  });
+
+  it("removes a box whose completed return another box received: A to B, then B to A2, removing A on A2", async () => {
+    const p = await primary();
+    const a = former(await seedNode(p.db));
+    const b = { ...former(await seedNode(p.db)), contactUrl: "https://b.deli.test" };
+    await holdChart(p, [self(p), a, b]);
+    await returnFrom(p.db, a.nodeId, b.nodeId);
+    await returnFrom(p.db, b.nodeId, p.nodeId, "one missing");
+
+    expect(await listed(p)).toEqual([
+      { nodeId: p.nodeId, removable: false, returnOutstanding: false, needsResetStatement: false },
+      { nodeId: a.nodeId, removable: true, returnOutstanding: false, needsResetStatement: false },
+      { nodeId: b.nodeId, removable: true, returnOutstanding: false, needsResetStatement: true },
+    ]);
+    await expectRemoved(p, a.nodeId);
+  });
+
+  it("refuses a former main box whose return is incomplete without the statement", async () => {
+    const p = await primary();
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    await returnFrom(p.db, oldMain.nodeId, p.nodeId, "one missing");
+
+    await expectRefused(p, oldMain.nodeId, undefined, 409, {
+      code: "membership.reset_statement_required",
+      params: {},
+    });
+  });
+
+  it("after Will not return, refuses without the statement and removes with it", async () => {
+    const p = await primary();
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    await takeover(p, oldMain.nodeId, "activated");
+    const abandoned = await p.app.request(
+      `/management-api/servers/${oldMain.nodeId}/return-abandoned`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: p.adminCookie },
+        body: JSON.stringify({ confirmed: true }),
+      },
+    );
+    expect(abandoned.status).toBe(200);
+    expect(await listed(p)).toContainEqual({
+      nodeId: oldMain.nodeId,
+      removable: true,
+      returnOutstanding: false,
+      needsResetStatement: true,
+    });
+
+    for (const body of [undefined, {}, DECLARED, { resetStatement: false }]) {
+      await expectRefused(p, oldMain.nodeId, body, 409, {
+        code: "membership.reset_statement_required",
+        params: {},
+      });
+    }
+    await expectRemoved(p, oldMain.nodeId, { resetStatement: true });
+  });
+
+  it("after Will not return and a late complete return, removes with no statement", async () => {
+    const p = await primary();
+    const oldMain = former(await seedNode(p.db));
+    await holdChart(p, [self(p), oldMain]);
+    const operationId = await takeover(p, oldMain.nodeId, "activated");
+    const abandoned = await p.app.request(
+      `/management-api/servers/${oldMain.nodeId}/return-abandoned`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: p.adminCookie },
+        body: JSON.stringify({ confirmed: true }),
+      },
+    );
+    expect(abandoned.status).toBe(200);
+    // The rows the receive route records for a late return, against the closed takeover.
+    await returnFrom(p.db, oldMain.nodeId, p.nodeId, "complete", operationId);
+
+    expect(await listed(p)).toContainEqual({
+      nodeId: oldMain.nodeId,
+      removable: true,
+      returnOutstanding: false,
+      needsResetStatement: false,
+    });
+    await expectRemoved(p, oldMain.nodeId);
+  });
+
+  it.each([
+    ['"true"', "true"],
+    ["1", 1],
+    ["null", null],
+  ])(
+    "refuses a statement that is not true or false (%s) as management.request_invalid",
+    async (_, value) => {
+      const p = await primary();
+      const oldMain = former();
+      await holdChart(p, [self(p), oldMain]);
+
+      await expectRefused(p, oldMain.nodeId, { resetStatement: value }, 400, {
+        code: "management.request_invalid",
+        params: { field: "resetStatement" },
+      });
+    },
+  );
 });

@@ -21,8 +21,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverBinding } from "@waitron/handover";
 import { endorseKey, routableServers } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { enabledModules } from "@waitron/module";
-import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
+import { enabledModules, type WaitronModule } from "@waitron/module";
+import { readHandoverOperation, readHandoverRestriction, readNodeMode } from "@waitron/node-db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { MODULE_RECORDS_DIR } from "@waitron/store";
 import {
@@ -43,7 +43,13 @@ import { advanceHandover } from "./handover-store.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
+import { removeStandby } from "./membership-removal.js";
+import { mountMembershipRemovalApi } from "./membership-removal-api.js";
+import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountReturnRecordsApi } from "./return-records-api.js";
+import { runReturnRecordsPass } from "./return-records.js";
+import { knownHandoverSuccessor } from "./start-peer-check.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { fiscalRows } from "./testing/fiscal-rows.js";
 import {
@@ -304,6 +310,184 @@ async function joined() {
   };
 }
 
+type OpenStore = Awaited<ReturnType<typeof openVenueDatabase>>;
+
+/** The controlled handover of `joined()` carried through to the spare selling on its placed copy. */
+async function controlledTakeover(
+  waitUntil: (targetMs: number) => void,
+  opened: Array<{ close(): Promise<void> }>,
+) {
+  const boxes = await joined();
+  const { mainId, spareId } = boxes;
+  await saleOn(mainBox.db, mainId);
+  await boxes.writeSpareRow();
+  const started = await boxes.start();
+  expect(started.status, JSON.stringify(started.body)).toBe(200);
+  await boxes.acceptOnTheSpare();
+  const cVenue = join(scratch, "c-venue");
+  await mkdir(cVenue);
+  const c = await placeCopy({
+    spare: { venue: spareBox.db, node: spareBox.node },
+    venueDir: cVenue,
+    stateDir: spareState,
+    nodeId: spareId,
+    operationId: OP,
+  });
+  opened.push(c);
+  const modules = enabledModules(ALL_MODULES, await readModuleConfig(spareBox.db));
+  await takeoverRoutes({
+    store: c,
+    nodeId: spareId,
+    sourceId: mainId,
+    operationId: OP,
+    stateDir: spareState,
+    venueDir: cVenue,
+    modules,
+    ring: RING,
+    signIn: { email: boxes.main.email, password: ADMIN_PASSWORD },
+    waitUntil,
+  }).takeOver();
+  return { boxes, mainId, spareId, c, cVenue, modules };
+}
+
+/** The new main box's real receive route. */
+function returnReceiver(store: OpenStore, nodeId: string, modules: readonly WaitronModule[]) {
+  const receiver = new Hono();
+  mountReturnRecordsApi(
+    receiver,
+    {
+      db: store.venue,
+      node: store.node,
+      ring: RING,
+      nodeId,
+      modules,
+      requireWritable: () => {},
+      wake: () => {},
+    },
+    () => undefined,
+  );
+  return receiver;
+}
+
+/** The old box's real return pass, its posts answered by `receiver`. */
+function oldBoxReturnPass(
+  boxes: Awaited<ReturnType<typeof joined>>,
+  receiver: Hono,
+  sentTo: string[] = [],
+) {
+  return runReturnRecordsPass({
+    db: mainBox.db,
+    node: mainBox.node,
+    ring: RING,
+    nodeId: boxes.mainId,
+    modules: boxes.main.modules,
+    fetch: ((url: string, init: RequestInit) => {
+      sentTo.push(url);
+      return receiver.request(new URL(url).pathname, init);
+    }) as typeof fetch,
+    stopped: () => false,
+  });
+}
+
+/**
+ * A third box, both databases new, joins the main box `store` (whose id is `nodeId`) through the
+ * real bundle route; the main box's file is given its row. `start` is the main box's real start
+ * route, posting to the new spare's real peer status and destination routes.
+ */
+async function newSpareJoins(args: {
+  store: OpenStore;
+  nodeId: string;
+  stateDir: string;
+  venueDir: string;
+  advertisedOrigin: string;
+  email: string;
+  sessionToken: string;
+}) {
+  const { store, nodeId } = args;
+  const newState = join(scratch, "new-spare-state");
+  await mkdir(newState);
+  const joinedSpare = await joinSpare(
+    { spareBox: resetBox, spareState: newState, ring: RING },
+    {
+      bundleApp: mirrorBundleApp(
+        { db: store.venue, node: store.node, stateDir: args.stateDir, ring: RING },
+        nodeId,
+        args.advertisedOrigin,
+      ),
+      email: args.email,
+    },
+    { primaryUrl: args.advertisedOrigin, spareUrl: "https://new-spare.test" },
+  );
+  const newId = joinedSpare.spareId;
+  // As in `joined()`: the taxpayer and the chart its first copy would bring.
+  await seedVenue(resetBox.db);
+  const taxpayer = await readTaxpayer(store.venue);
+  await resetBox.db.run(
+    sql`update taxpayer set country = ${taxpayer!.country}, tax_id = ${taxpayer!.taxId}`,
+  );
+  await writeNodeMembership(resetBox.db, (await readNodeMembership(store.venue))!);
+  const key = await readNodeIdentityKey(store.node, RING, nodeId);
+  const [row] = await store.venue.select().from(nodes).where(eq(nodes.id, nodeId));
+  await withTransaction(store.venue, (tx) =>
+    insertReservedNodeTx(tx, {
+      id: newId,
+      name: `${row!.name} (standby)`,
+      filingModule: row!.filingModule,
+      taxModule: row!.taxModule,
+      publicKey: joinedSpare.standby.publicKey,
+      endorsement: endorseKey(newId, joinedSpare.standby.publicKey, nodeId, key),
+    }),
+  );
+
+  const newSpareApp = new Hono();
+  const newSpareDeps = { db: resetBox.db, node: resetBox.node, ring: RING, nodeId: newId };
+  mountPeerStatusApi(newSpareApp, newSpareDeps, () => undefined);
+  mountHandoverDestinationApi(
+    newSpareApp,
+    { ...newSpareDeps, stateDir: newState, venueDir: newState, migrationsRoot: null },
+    () => undefined,
+  );
+  const sourceApp = new Hono();
+  mountHandoverSourceStartApi(
+    sourceApp,
+    {
+      db: store.venue,
+      node: store.node,
+      ring: RING,
+      nodeId,
+      stateDir: args.stateDir,
+      venueDir: args.venueDir,
+      migrationsRoot: null,
+      advertisedOrigin: args.advertisedOrigin,
+      venueCanPromote: true,
+      gate: createHandoverGate(),
+      stepDownAfterOffer: async () => {},
+      peerTimeoutMs: 5000,
+      fetch: ((url: string, init: RequestInit) =>
+        newSpareApp.request(new URL(url).pathname, init)) as typeof fetch,
+    },
+    () => undefined,
+  );
+  const start = async (operationId: string) => {
+    // A following spare holds the main box's latest chart, as its copy would bring it.
+    await writeNodeMembership(resetBox.db, (await readNodeMembership(store.venue))!);
+    const response = await sourceApp.request(
+      "/management-api/handover",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${MANAGEMENT_COOKIE}=${args.sessionToken}`,
+        },
+        body: JSON.stringify({ operationId, destinationNodeId: newId }),
+      },
+      { incoming: { socket } },
+    );
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  };
+  return { newId, start };
+}
+
 describe("a main box and a spare on two separate databases", () => {
   it("refuses while selling until the main box's file holds the spare's row, and then the copy is accepted", async () => {
     const boxes = await joined();
@@ -521,6 +705,277 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const bFiscalAfter = await fiscalRows(b.venue);
       for (const [table, rows] of Object.entries(bFiscalAtCopy))
         for (const row of rows) expect(bFiscalAfter[table]).toContainEqual(row);
+    } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+});
+
+describe("a former main box removed after its return arrived", () => {
+  // A restricted start is run in boot.restricted-quiet.test.ts, and a carry-on refused
+  // handover.known_handover in waiting-start.test.ts ("a box with a restriction refuses").
+  it("the new main box removes it with no statement, and the old box's next start reads a restriction naming the successor", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    try {
+      const { boxes, mainId, spareId, c, modules } = await controlledTakeover(waitUntil, opened);
+
+      const returned = await oldBoxReturnPass(boxes, returnReceiver(c, spareId, modules));
+      expect(returned).toBe("confirmed");
+      expect((await readHandoverOperation(c.node, spareId, OP))?.state).toBe("return_complete");
+
+      const [person] = c.venue.all<{ id: string }>(
+        sql`select id from persons where email = ${boxes.main.email}`,
+      );
+      const removal = await removeStandby(
+        { db: c.venue, node: c.node, ring: RING, nodeId: spareId, log: () => undefined },
+        { targetNodeId: mainId, personId: person!.id },
+      );
+      expect(removal.removed).toBe(true);
+      expect(
+        (await readNodeMembership(c.venue))!.body.nodes.find((n) => n.nodeId === mainId)?.standing,
+      ).toBe("evicted");
+
+      // The reads boot's restricted start and carry-on's refusal take.
+      expect(await readHandoverRestriction(mainBox.node, mainId)).toMatchObject({
+        successorNodeId: spareId,
+      });
+      expect(await knownHandoverSuccessor(mainBox.node, mainId)).toBe(spareId);
+    } finally {
+      for (const store of opened) await store.close();
+    }
+  }, 120_000);
+});
+
+const NEXT_OP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+describe("a controlled handover closed by the old box's return", () => {
+  it.each([
+    ["the new main box's chart reached the old box", true],
+    ["the new main box's chart never reached the old box", false],
+  ])(
+    "%s: the old box's real pass closes the operation, and a handover to a newly joined spare is then accepted",
+    async (_, chartPosted) => {
+      const realNow = Date.now();
+      vi.useFakeTimers({ toFake: ["Date", "performance"] });
+      vi.setSystemTime(realNow);
+      const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+      const opened: Array<{ close(): Promise<void> }> = [];
+      try {
+        const { boxes, mainId, spareId, c, cVenue, modules } = await controlledTakeover(
+          waitUntil,
+          opened,
+        );
+        if (chartPosted) {
+          const oldBox = new Hono();
+          mountNodeMembershipApi(
+            oldBox,
+            { db: mainBox.db, node: mainBox.node, nodeId: mainId },
+            () => undefined,
+          );
+          const posted = await oldBox.request("/api/node/membership", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ document: await readNodeMembership(c.venue) }),
+          });
+          expect(await posted.json()).toEqual({ accepted: true });
+        }
+        const heldMain = routableServers(await readNodeMembership(mainBox.db)).find(
+          ({ standing }) => standing === "serving-primary",
+        );
+        expect(heldMain?.nodeId).toBe(chartPosted ? spareId : mainId);
+        expect(await readHandoverRestriction(mainBox.node, mainId)).toMatchObject({
+          successorNodeId: spareId,
+        });
+
+        const newSpare = await newSpareJoins({
+          store: c,
+          nodeId: spareId,
+          stateDir: spareState,
+          venueDir: cVenue,
+          advertisedOrigin: SPARE_URL,
+          email: boxes.main.email,
+          sessionToken: boxes.main.session.token,
+        });
+        expect(await newSpare.start(NEXT_OP)).toMatchObject({
+          status: 409,
+          body: { error: { code: "handover.return_outstanding" } },
+        });
+
+        const sentTo: string[] = [];
+        expect(await oldBoxReturnPass(boxes, returnReceiver(c, spareId, modules), sentTo)).toBe(
+          "confirmed",
+        );
+        expect(sentTo).not.toEqual([]);
+        for (const url of sentTo)
+          expect(new URL(url)).toMatchObject({
+            host: new URL(SPARE_URL).host,
+            port: "",
+            pathname: "/api/node/return-records",
+          });
+        expect(await readHandoverOperation(c.node, spareId, OP)).toMatchObject({
+          scenario: "controlled",
+          state: "return_complete",
+        });
+
+        const next = await newSpare.start(NEXT_OP);
+        expect(next.status, JSON.stringify(next.body)).toBe(200);
+        expect(await readHandoverOperation(resetBox.node, newSpare.newId, NEXT_OP)).toMatchObject({
+          state: "prepared",
+        });
+      } finally {
+        for (const store of opened) await store.close();
+      }
+    },
+    120_000,
+  );
+});
+
+describe("the owner's case: an emergency switch while the old main box stays off", () => {
+  it("Will not return closes the operation, Remove needs the reset statement, and a handover to a newly joined spare is accepted", async () => {
+    const realNow = Date.now();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(realNow);
+    const waitUntil = (targetMs: number) => vi.advanceTimersByTime(targetMs + 1 - Date.now());
+    const opened: Array<{ close(): Promise<void> }> = [];
+    try {
+      const boxes = await joined();
+      const { mainId, spareId } = boxes;
+      const signIn = { email: boxes.main.email, password: ADMIN_PASSWORD };
+      await saleOn(mainBox.db, mainId);
+      await boxes.writeSpareRow();
+      // The spare's copy of the venue is a vacuum of the main box's file.
+      const bVenue = join(scratch, "b-venue");
+      await mkdir(bVenue);
+      mainBox.db.run(sql`vacuum into ${join(bVenue, "venue.db")}`);
+      spareBox.node.run(sql`vacuum into ${join(bVenue, "node.db")}`);
+      const b = await openVenueDatabase(bVenue);
+      opened.push(b);
+      const modules = enabledModules(ALL_MODULES, await readModuleConfig(b.venue));
+
+      const declaration = new Hono();
+      const emergency = mountHandoverEmergencyApi(declaration, {
+        db: b.venue,
+        node: b.node,
+        nodeId: spareId,
+        ring: RING,
+        stateDir: spareState,
+        venueDir: bVenue,
+        modules,
+        origin: "https://box.test",
+        rpId: "box.test",
+        credentialKeyRing: TOTP_KEY_RING,
+        fetch: async () => {
+          throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
+        },
+      });
+      const preview = await boxRequest(declaration, "/api/node/handover/emergency/preview", {
+        signIn,
+      });
+      expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+      const { copy } = preview.body as { copy: { identifier: string; lastChangeAtMs: number } };
+      const declared = await boxRequest(declaration, "/api/node/handover/emergency/declare", {
+        operationId: EMERGENCY_OP,
+        expectedCopy: copy,
+        signIn,
+        statements: {
+          sourceSwitchedOff: true,
+          noParallelRecovery: true,
+          missingTailAccepted: true,
+        },
+        reason: "The main box is switched off",
+        locale: "en",
+      });
+      expect(declared.status, JSON.stringify(declared.body)).toBe(200);
+      await takeoverRoutes({
+        store: b,
+        nodeId: spareId,
+        sourceId: mainId,
+        operationId: EMERGENCY_OP,
+        stateDir: spareState,
+        venueDir: bVenue,
+        modules,
+        ring: RING,
+        signIn,
+        emergency,
+        waitUntil,
+      }).takeOver();
+      expect(await readHandoverOperation(b.node, spareId, EMERGENCY_OP)).toMatchObject({
+        scenario: "emergency",
+        state: "activated",
+      });
+
+      const servers = new Hono();
+      mountMembershipRemovalApi(
+        servers,
+        {
+          db: b.venue,
+          node: b.node,
+          ring: RING,
+          nodeId: spareId,
+          reloadStream: async () => {},
+          authorityFingerprint: async () => null,
+        },
+        () => undefined,
+      );
+      const serversRequest = async (path: string, body: unknown) => {
+        const response = await servers.request(path, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${MANAGEMENT_COOKIE}=${boxes.main.session.token}`,
+          },
+          body: JSON.stringify(body),
+        });
+        return { status: response.status, body: (await response.json()) as unknown };
+      };
+      const remove = `/management-api/servers/${mainId}/remove`;
+
+      const newSpare = await newSpareJoins({
+        store: b,
+        nodeId: spareId,
+        stateDir: spareState,
+        venueDir: bVenue,
+        advertisedOrigin: SPARE_URL,
+        email: boxes.main.email,
+        sessionToken: boxes.main.session.token,
+      });
+      expect(await newSpare.start(NEXT_OP)).toMatchObject({
+        status: 409,
+        body: { error: { code: "handover.return_outstanding" } },
+      });
+      expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe("activated");
+
+      const abandoned = await serversRequest(`/management-api/servers/${mainId}/return-abandoned`, {
+        confirmed: true,
+      });
+      expect(abandoned).toEqual({
+        status: 200,
+        body: { operationId: EMERGENCY_OP, state: "return_abandoned" },
+      });
+      expect((await readHandoverOperation(b.node, spareId, EMERGENCY_OP))?.state).toBe(
+        "return_abandoned",
+      );
+
+      expect(await serversRequest(remove, {})).toMatchObject({
+        status: 409,
+        body: { error: { code: "membership.reset_statement_required" } },
+      });
+      const removed = await serversRequest(remove, { resetStatement: true });
+      expect(removed.status, JSON.stringify(removed.body)).toBe(200);
+      expect(removed.body).toMatchObject({ removed: true });
+      expect(
+        (await readNodeMembership(b.venue))!.body.nodes.find((n) => n.nodeId === mainId)?.standing,
+      ).toBe("evicted");
+
+      const next = await newSpare.start(NEXT_OP);
+      expect(next.status, JSON.stringify(next.body)).toBe(200);
+      expect(await readHandoverOperation(resetBox.node, newSpare.newId, NEXT_OP)).toMatchObject({
+        state: "prepared",
+      });
     } finally {
       for (const store of opened) await store.close();
     }

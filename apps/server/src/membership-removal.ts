@@ -22,15 +22,19 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { deletePairLinkTx, type KeyRing } from "@waitron/credentials";
-import { readOpenHandoverOperation, readPairLink } from "@waitron/node-db";
+import { readOpenHandoverOperation, readPairLink, type HandoverOperation } from "@waitron/node-db";
 import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
+import { awaitsReturn, refuseReturnOutstanding } from "./return-abandoned.js";
+import { holdsCompletedReturnFrom, sourcesWithCompletedReturn } from "./return-completion.js";
 
 type ChartRefusal =
   | "membership.node_not_found"
   | "membership.not_primary"
   | "membership.node_is_primary"
-  | "membership.node_has_served"
+  | "handover.return_outstanding"
+  | "handover.operation_in_progress"
+  | "membership.reset_statement_required"
   | "membership.standby_joined"
   | "membership.node_not_removed";
 
@@ -42,9 +46,24 @@ export type RemovalVerdict =
 export type ClearanceVerdict =
   { readonly kind: "clearable" } | { readonly kind: "already_cleared" } | Refused;
 
+/** What removing a box depends on beyond the chart. */
+export interface RemovalFacts {
+  /** An open takeover here still waits for this box to return its invoice records. */
+  readonly returnOutstanding: boolean;
+  /** This box's open handover operation names this box, as its source or its destination. */
+  readonly inOpenOperation: boolean;
+  /** This venue holds a completed return from this box. */
+  readonly returnCompleted: boolean;
+  /** The person stated that the box has been reset or will never be switched on again. */
+  readonly resetStatement: boolean;
+}
+
 /**
- * Whether the serving primary may remove `targetNodeId` from its chart. The rule: the target is
- * `serving-secondary`, and one that finished joining (it has a `nodes` row) only once `declared`.
+ * Whether the serving primary may remove `targetNodeId` from its chart. The rule: no return from it
+ * is outstanding here and no open handover here names it; a `serving-secondary` that finished joining (it has a `nodes` row) only once
+ * `declared`; a former main box (`sell-only`) once its return is complete here or the person states
+ * it is reset or will never be switched on again, because a former main box switched on again with
+ * its data could sell beside this one.
  */
 export function judgeRemoval(
   held: SignedMembershipDocument | null,
@@ -52,23 +71,23 @@ export function judgeRemoval(
   targetNodeId: string,
   targetHasNodeRow: boolean,
   declared: boolean,
+  facts: RemovalFacts,
 ): RemovalVerdict {
   const found = locate(held, selfNodeId, targetNodeId);
   if (found.kind === "refused") return found;
   if (found.kind === "cleared") return { kind: "already_removed" };
   const target = found.node;
-  switch (target.standing) {
-    case "evicted":
-      return { kind: "already_removed" };
-    case "serving-primary":
-      return refused("membership.node_is_primary");
-    case "sell-only":
-      return refused("membership.node_has_served");
-    case "serving-secondary":
-      return targetHasNodeRow && !declared
-        ? refused("membership.standby_joined")
-        : { kind: "removable", node: target };
+  if (target.standing === "evicted") return { kind: "already_removed" };
+  if (target.standing === "serving-primary") return refused("membership.node_is_primary");
+  if (facts.returnOutstanding) return refused("handover.return_outstanding");
+  if (target.standing === "sell-only" && !facts.returnCompleted && !facts.resetStatement) {
+    return refused("membership.reset_statement_required");
   }
+  if (target.standing === "serving-secondary" && targetHasNodeRow && !declared) {
+    return refused("membership.standby_joined");
+  }
+  if (facts.inOpenOperation) return refused("handover.operation_in_progress");
+  return { kind: "removable", node: target };
 }
 
 /**
@@ -141,30 +160,60 @@ export interface ServerListing {
     readonly removable: boolean;
     readonly canClear: boolean;
     readonly requiresRetirementConfirmation: boolean;
+    readonly returnOutstanding: boolean;
+    /** A former main box whose removal needs the reset statement: no return from it is held. */
+    readonly needsResetStatement: boolean;
   }[];
 }
 
-export async function listServers(db: Database, selfNodeId: string): Promise<ServerListing> {
+function openFacts(open: HandoverOperation | null, nodeId: string) {
+  return {
+    returnOutstanding: awaitsReturn(open) && open.sourceNodeId === nodeId,
+    inOpenOperation:
+      open !== null && (open.sourceNodeId === nodeId || open.destinationNodeId === nodeId),
+  };
+}
+
+export async function listServers(
+  db: Database,
+  node: NodeDatabase,
+  selfNodeId: string,
+): Promise<ServerListing> {
   const held = await readNodeMembership(db);
   if (held === null) return { term: null, nodes: [] };
   const withRows = await nodeIdsWithRows(
     db,
     held.body.nodes.map((n) => n.nodeId),
   );
+  const open = await readOpenHandoverOperation(node, selfNodeId);
+  const completed = await sourcesWithCompletedReturn(db);
   return {
     term: held.body.term,
-    nodes: held.body.nodes.map((n) => ({
-      nodeId: n.nodeId,
-      contactUrl: n.contactUrl,
-      standing: n.standing,
-      isSelf: n.nodeId === selfNodeId,
-      removable:
-        judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId), true).kind === "removable",
-      canClear: judgeClearance(held, selfNodeId, n.nodeId).kind === "clearable",
-      requiresRetirementConfirmation:
-        n.standing === "serving-secondary" && withRows.has(n.nodeId) && n.nodeId !== selfNodeId,
-    })),
+    nodes: held.body.nodes.map((n) => {
+      const facts = { ...openFacts(open, n.nodeId), returnCompleted: completed.has(n.nodeId) };
+      const judge = (resetStatement: boolean) =>
+        judgeRemoval(held, selfNodeId, n.nodeId, withRows.has(n.nodeId), true, {
+          ...facts,
+          resetStatement,
+        });
+      return {
+        nodeId: n.nodeId,
+        contactUrl: n.contactUrl,
+        standing: n.standing,
+        isSelf: n.nodeId === selfNodeId,
+        removable: judge(true).kind === "removable",
+        canClear: judgeClearance(held, selfNodeId, n.nodeId).kind === "clearable",
+        requiresRetirementConfirmation:
+          n.standing === "serving-secondary" && withRows.has(n.nodeId) && n.nodeId !== selfNodeId,
+        returnOutstanding: facts.returnOutstanding,
+        needsResetStatement: refusalOf(judge(false)) === "membership.reset_statement_required",
+      };
+    }),
   };
+}
+
+function refusalOf(verdict: RemovalVerdict): ChartRefusal | null {
+  return verdict.kind === "refused" ? verdict.code : null;
 }
 
 export interface RemovalDeps {
@@ -247,11 +296,13 @@ export async function removeStandby(
     readonly personId: string;
     /** Both retirement declarations were made; required for a standby that finished joining. */
     readonly declared?: boolean;
+    /** The person stated the box is reset or will never be switched on again. */
+    readonly resetStatement?: boolean;
   },
 ): Promise<RemovalResult> {
   const declared = args.declared === true;
   return withNodeTransaction(deps.node, async (nodeTx) => {
-    const result = await writeRemoval(deps, nodeTx, args, declared);
+    const result = await writeRemoval(deps, nodeTx, args, declared, args.resetStatement === true);
     await unlinkTx(nodeTx, deps, args.targetNodeId);
     return result;
   });
@@ -262,34 +313,44 @@ function writeRemoval(
   nodeTx: NodeTransaction,
   args: { readonly targetNodeId: string; readonly personId: string },
   declared: boolean,
+  resetStatement: boolean,
 ): Promise<RemovalResult> {
   return writeChartInRounds<RemovalResult>(deps, async (held) => {
     const withRows = await nodeIdsWithRows(deps.db, [args.targetNodeId]);
+    const open = await readOpenHandoverOperation(nodeTx, deps.nodeId);
     const verdict = judgeRemoval(
       held,
       deps.nodeId,
       args.targetNodeId,
       withRows.has(args.targetNodeId),
       declared,
+      {
+        ...openFacts(open, args.targetNodeId),
+        returnCompleted: await holdsCompletedReturnFrom(deps.db, args.targetNodeId),
+        resetStatement,
+      },
     );
-    if (verdict.kind === "refused") throw new AppError(verdict.code, {});
+    if (verdict.kind === "refused") {
+      if (verdict.code === "handover.return_outstanding") refuseReturnOutstanding(open!);
+      if (verdict.code === "handover.operation_in_progress") {
+        throw new AppError(verdict.code, { operationId: open!.operationId });
+      }
+      throw new AppError(verdict.code, {});
+    }
     // `held` is non-null past `judgeRemoval`: a null chart is refused as not found.
     if (verdict.kind === "already_removed") {
       return { write: false, result: { removed: false, term: held!.body.term } };
-    }
-    const open = await readOpenHandoverOperation(nodeTx, deps.nodeId);
-    if (
-      open !== null &&
-      (open.sourceNodeId === args.targetNodeId || open.destinationNodeId === args.targetNodeId)
-    ) {
-      throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
     }
     return {
       write: true,
       nodes: evictNode(held!.body.nodes, args.targetNodeId),
       record: async (tx, term) => {
         // Checked again under the write lock: the check above ran outside this transaction.
-        if (!declared && (await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)) {
+        if (
+          verdict.node.standing === "serving-secondary" &&
+          !declared &&
+          (await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)
+        ) {
           throw new AppError("membership.standby_joined", {});
         }
         await recordActivity(tx, {

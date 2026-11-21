@@ -1,5 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
-import { handoverReturnBatches, type Transaction } from "@waitron/db";
+import { handoverActivations, handoverReturnBatches, type Transaction } from "@waitron/db";
 import { returnDigest } from "./return-records.js";
 
 export async function recordReturnBatchTx(
@@ -42,14 +42,59 @@ export async function recordReturnBatchTx(
 }
 
 export async function readCompletedReturns(tx: Transaction): Promise<Set<string>> {
+  return completedIn(
+    await tx
+      .select()
+      .from(handoverReturnBatches)
+      .orderBy(
+        asc(handoverReturnBatches.operationId),
+        asc(handoverReturnBatches.inventory),
+        asc(handoverReturnBatches.batchIndex),
+      ),
+  );
+}
+
+/** The boxes this venue holds a completed return from, whichever box received it. */
+export async function sourcesWithCompletedReturn(tx: Transaction): Promise<Set<string>> {
+  const completed = await readCompletedReturns(tx);
+  const activations = await tx
+    .select({
+      operationId: handoverActivations.operationId,
+      sourceNodeId: handoverActivations.sourceNodeId,
+    })
+    .from(handoverActivations);
+  return new Set(
+    activations.filter((a) => completed.has(a.operationId)).map((a) => a.sourceNodeId),
+  );
+}
+
+/** Whether this venue holds a completed return from `sourceNodeId`, whichever box received it. */
+export async function holdsCompletedReturnFrom(
+  tx: Transaction,
+  sourceNodeId: string,
+): Promise<boolean> {
+  const activations = await tx
+    .select({ operationId: handoverActivations.operationId })
+    .from(handoverActivations)
+    .where(eq(handoverActivations.sourceNodeId, sourceNodeId));
+  for (const { operationId } of activations) {
+    if (await returnCompletedFor(tx, operationId)) return true;
+  }
+  return false;
+}
+
+/** Whether every batch of one inventory recorded for `operationId` is accounted. */
+export async function returnCompletedFor(tx: Transaction, operationId: string): Promise<boolean> {
   const rows = await tx
     .select()
     .from(handoverReturnBatches)
-    .orderBy(
-      asc(handoverReturnBatches.operationId),
-      asc(handoverReturnBatches.inventory),
-      asc(handoverReturnBatches.batchIndex),
-    );
+    .where(eq(handoverReturnBatches.operationId, operationId))
+    .orderBy(asc(handoverReturnBatches.inventory), asc(handoverReturnBatches.batchIndex));
+  return completedIn(rows).has(operationId);
+}
+
+/** `rows` ordered by operation, inventory and batch index. */
+function completedIn(rows: (typeof handoverReturnBatches.$inferSelect)[]): Set<string> {
   const completed = new Set<string>();
   let group: typeof rows = [];
   const check = () => {

@@ -35,6 +35,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: STANDBY,
@@ -44,6 +46,8 @@ const listing: ServerListing = {
       removable: true,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: FORMER,
@@ -53,6 +57,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: REMOVED,
@@ -62,6 +68,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: true,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
   ],
 };
@@ -394,6 +402,8 @@ describe("servers screen list", () => {
           removable: true,
           canClear: false,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
       ],
     };
@@ -588,9 +598,10 @@ describe("servers screen removal", () => {
     "membership.node_not_found",
     "membership.not_primary",
     "membership.node_is_primary",
-    "membership.node_has_served",
+    "membership.reset_statement_required",
     "membership.standby_joined",
     "membership.write_contended",
+    "handover.return_outstanding",
   ])("shows the refusal %s in its own words inside the confirmation", async (code) => {
     const api = stubApi({ removeServer: vi.fn().mockRejectedValue({ code, status: 409 }) });
     const el = await mount(api);
@@ -1245,8 +1256,13 @@ describe("servers screen order, addresses and the replaced box", () => {
     }
   });
 
-  it("names a replaced box as not selling and says to keep it on, with the guide link", async () => {
-    const el = await mount();
+  const returning: ServerListing = {
+    ...listing,
+    nodes: listing.nodes.map((n) => (n.nodeId === FORMER ? { ...n, returnOutstanding: true } : n)),
+  };
+
+  it("names a replaced box as not selling and, while it still owes its records, says to keep it on, with the guide link", async () => {
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(returning) }));
     expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Replaced; not selling");
     const note = inTable(el, `replaced-note-${FORMER}`)!;
     expect(note.textContent).toContain("Keep it switched on while it returns its invoice records.");
@@ -1259,9 +1275,15 @@ describe("servers screen order, addresses and the replaced box", () => {
       expect(inTable(el, `replaced-note-${id}`)).toBeNull();
   });
 
+  it("drops the keep-it-on line once the replaced box's return is complete or abandoned", async () => {
+    const el = await mount();
+    expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Replaced; not selling");
+    expect(inTable(el, `replaced-note-${FORMER}`)).toBeNull();
+  });
+
   it("words the replaced box in Spanish", async () => {
     setLocale("es-ES");
-    const el = await mount();
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(returning) }));
     expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Sustituido; no vende");
     const note = inTable(el, `replaced-note-${FORMER}`)!;
     expect(note.textContent).toContain(

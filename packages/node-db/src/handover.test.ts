@@ -18,6 +18,7 @@ import {
   appendHandoverEventTx,
   beginHandoverOperationTx,
   readHandoverEvent,
+  readHandoverEvents,
   readHandoverOperation,
   readHandoverRestriction,
   readOpenHandoverOperation,
@@ -362,6 +363,37 @@ describe("node.db's handover tables", () => {
         expect(await readHandoverEvent(suite.node, NODE, OP_Y, "final_state")).toBeNull();
         expect(await readHandoverEvent(suite.node, NODE, OP_X, "relinquished")).toBeNull();
       });
+
+      it("reads an event that belongs to no operation, and only such an event, by a null id", async () => {
+        await append(NODE, OP_X, "return_confirmed", "with an operation");
+        expect(await readHandoverEvent(suite.node, NODE, null, "return_confirmed")).toBeNull();
+        await append(NODE, null, "return_confirmed", "no operation");
+        expect(await readHandoverEvent(suite.node, NODE, null, "return_confirmed")).toMatchObject({
+          operationId: null,
+          envelope: "no operation",
+        });
+        expect(await readHandoverEvent(suite.node, NODE, OP_X, "return_confirmed")).toMatchObject({
+          envelope: "with an operation",
+        });
+      });
+
+      it("answers every event of that kind for that box and operation, in the order recorded", async () => {
+        await append(OTHER, OP_X, "return_confirmed", "another box");
+        await append(NODE, OP_Y, "return_confirmed", "another operation");
+        await append(NODE, OP_X, "final_state", "another kind");
+        await append(NODE, null, "return_confirmed", "no operation");
+        await append(NODE, OP_X, "return_confirmed", "first");
+        await append(NODE, OP_X, "return_confirmed", "second");
+
+        const events = await readHandoverEvents(suite.node, NODE, OP_X, "return_confirmed");
+        expect(events.map((event) => event.envelope)).toEqual(["first", "second"]);
+        expect(
+          (await readHandoverEvents(suite.node, NODE, null, "return_confirmed")).map(
+            (event) => event.envelope,
+          ),
+        ).toEqual(["no operation"]);
+        expect(await readHandoverEvents(suite.node, NODE, OP_X, "relinquished")).toEqual([]);
+      });
     });
 
     it("an event is never updated: the module exports no update or delete", () => {
@@ -372,6 +404,7 @@ describe("node.db's handover tables", () => {
           "appendHandoverEventTx",
           "beginHandoverOperationTx",
           "readHandoverEvent",
+          "readHandoverEvents",
           "readHandoverOperation",
           "readHandoverRestriction",
           "readOpenHandoverOperation",

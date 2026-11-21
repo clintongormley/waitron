@@ -279,7 +279,7 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "handover_return_batches",
     "state",
-    "accounted batch digests for an emergency takeover; copied with the venue",
+    "accounted batch digests for a takeover; copied with the venue",
   ),
 
   // menu

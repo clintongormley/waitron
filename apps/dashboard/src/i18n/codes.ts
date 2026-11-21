@@ -1608,9 +1608,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The primary server cannot be removed or cleared from the list.",
     es: "El servidor principal no se puede retirar ni quitar de la lista.",
   },
-  "membership.node_has_served": {
-    en: "This server has worked as the primary before, so it cannot be removed.",
-    es: "Este servidor ya ha funcionado como principal, así que no se puede retirar.",
+  "membership.reset_statement_required": {
+    en: "This server was the main server before and has not returned its invoice records, so it was not removed. Confirm that it has been reset or will never be switched on again: switched on with its data, it could sell beside the main server.",
+    es: "Este servidor fue el servidor principal y no ha devuelto sus registros de facturación, así que no se ha retirado. Confirma que se ha restablecido o que no se volverá a encender nunca: encendido con sus datos, podría vender a la vez que el servidor principal.",
   },
   "membership.standby_joined": {
     en: "Confirm that this spare is switched off, and that nobody is restoring this venue from a backup or switching it to another server right now.",
@@ -1659,6 +1659,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "handover.operation_in_progress": {
     en: "A handover is already in progress. Keep both boxes connected, and wait for it to finish before starting another handover or removing a server.",
     es: "Ya hay un traspaso en curso. Mantén los dos servidores conectados y espera a que termine antes de iniciar otro traspaso o retirar un servidor.",
+  },
+  "handover.return_outstanding": {
+    en: "The last handover is still waiting for the former main server to return its invoice records. Switch it on, or choose Will not return for it under Servers. Will not return stops the wait; invoice records the former main server made after the copy this main server started from stay only on it.",
+    es: "El último traspaso sigue esperando a que el antiguo servidor principal devuelva sus registros de facturación. Enciéndelo, o elige No volverá en su fila de Servidores. No volverá deja de esperar; los registros de facturación que el antiguo servidor principal hizo después de la copia con la que empezó este servidor principal se quedan solo en él.",
+  },
+  "handover.return_not_outstanding": {
+    en: "No handover here is waiting for that server to return its invoice records, so nothing was changed. Refresh the list.",
+    es: "Ningún traspaso de este servidor está esperando a que ese servidor devuelva sus registros de facturación, así que no se ha cambiado nada. Actualiza la lista.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.
