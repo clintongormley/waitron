@@ -1,8 +1,10 @@
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
+  type AdministrativeArea,
   type CountryPack,
 } from "@waitron/country";
+import { postalPlace, trailingProvince } from "./address-line.js";
 
 export interface RegisteredAddressParts {
   street: string;
@@ -14,48 +16,40 @@ export interface RegisteredAddressParts {
 
 export type RegisteredAddressError = "required" | "invalid" | "mismatch";
 
-/** "street, line 2, postcode city, province", leaving blank parts out. */
-export function joinRegisteredAddress(parts: RegisteredAddressParts): string {
-  const place = [parts.postalCode.trim(), parts.city.trim()].filter(Boolean).join(" ");
-  return [parts.street.trim(), parts.line2.trim(), place, parts.province.trim()]
+/** "street, line 2, postcode city, province", leaving blank parts out; with a pack, in the
+ *  pack's own spelling (`canonicalRegisteredParts`). */
+export function joinRegisteredAddress(parts: RegisteredAddressParts, pack?: CountryPack): string {
+  const spelt = canonicalRegisteredParts(parts, pack);
+  const place = [spelt.postalCode.trim(), spelt.city.trim()].filter(Boolean).join(" ");
+  return [spelt.street.trim(), spelt.line2.trim(), place, spelt.province.trim()]
     .filter(Boolean)
     .join(", ");
 }
 
-function isPostalCode(pack: CountryPack, value: string): boolean {
-  return pack.postalCode?.validate(value).valid === true;
+/** The postcode as the pack's check writes it and the province as the pack's area name, since
+ *  `registeredAddressParts` reads back only those. A part the pack does not recognise is kept. */
+export function canonicalRegisteredParts(
+  parts: RegisteredAddressParts,
+  pack: CountryPack | undefined,
+): RegisteredAddressParts {
+  if (pack === undefined) return parts;
+  const postal = pack.postalCode?.validate(parts.postalCode.trim());
+  return {
+    ...parts,
+    postalCode: postal?.valid === true ? postal.normalized : parts.postalCode,
+    province: findAdministrativeArea(pack, parts.province)?.name ?? parts.province,
+  };
 }
 
-/** A comma part split at its first space, when both sides are non-blank. */
-export function firstWordAndRest(part: string): { first: string; rest: string } | undefined {
-  const words = /^(\S+) (\S.*)$/su.exec(part);
-  return words === null ? undefined : { first: words[1]!, rest: words[2]! };
-}
-
-/** "postcode city" when its first word passes the pack's postcode check. */
-function postalPlace(
-  pack: CountryPack,
-  part: string,
-): { postalCode: string; city: string } | undefined {
-  const words = firstWordAndRest(part);
-  return words !== undefined && isPostalCode(pack, words.first)
-    ? { postalCode: words.first, city: words.rest }
+/** The area a postcode the pack accepts lies in. */
+export function provinceOfPostalCode(
+  pack: CountryPack | undefined,
+  postalCode: string,
+): AdministrativeArea | undefined {
+  const postal = pack?.postalCode?.validate(postalCode);
+  return pack !== undefined && postal?.valid === true
+    ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
     : undefined;
-}
-
-/** The longest of the pack's area names the line ends with after a comma, when the comma part
- *  before it is "postcode city". Aliases are not matched, as an alias can also be a city's name. */
-export function trailingProvince(
-  line: string,
-  pack: CountryPack,
-): { rest: string; province: string } | undefined {
-  let found: { rest: string; province: string } | undefined;
-  for (const { name } of pack.administrativeAreas) {
-    if (!line.endsWith(`, ${name}`) || name.length <= (found?.province.length ?? -1)) continue;
-    const rest = line.slice(0, -(name.length + 2));
-    if (postalPlace(pack, rest.split(", ").pop()!) !== undefined) found = { rest, province: name };
-  }
-  return found;
 }
 
 /** Parts that `joinRegisteredAddress` turns back into the trimmed line, plus a province filled
@@ -93,4 +87,14 @@ export function registeredAddressErrors(
       errors.province = "mismatch";
   }
   return errors;
+}
+
+/** The errors of the parts `line` reads back into, which is how the server checks a registered
+ *  address. Without a postcode rule a line cannot be split, so nothing is checked. */
+export function registeredLineErrors(
+  line: string,
+  pack: CountryPack | undefined,
+): Partial<Record<keyof RegisteredAddressParts, RegisteredAddressError>> {
+  if (pack?.postalCode === undefined) return {};
+  return registeredAddressErrors(registeredAddressParts(line, pack), pack);
 }

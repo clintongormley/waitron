@@ -1,6 +1,7 @@
 import { getCountryPack } from "./registry.js";
 import { normalizeRecipientCountryCode } from "./recipient-countries.js";
-import { firstWordAndRest, joinRegisteredAddress, trailingProvince } from "./registered-address.js";
+import { firstWordAndRest, trailingProvince } from "./address-line.js";
+import { joinRegisteredAddress } from "./registered-address.js";
 
 export interface RecipientAddressDraft {
   countryCode: string;

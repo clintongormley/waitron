@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import * as countryPacks from "./index.js";
 import {
+  canonicalRegisteredParts,
   getCountryPack,
   joinRegisteredAddress,
+  provinceOfPostalCode,
   registeredAddressErrors,
   registeredAddressParts,
+  registeredLineErrors,
 } from "./index.js";
 
 const spain = getCountryPack("ES")!;
@@ -201,5 +205,123 @@ describe("registeredAddressErrors", () => {
         gb,
       ),
     ).toEqual({});
+  });
+});
+
+describe("canonicalRegisteredParts", () => {
+  it("writes the postcode as the pack's check does and the province as the pack names it", () => {
+    expect(
+      canonicalRegisteredParts({ ...madrid, postalCode: " 28013 ", province: "madrid" }, spain),
+    ).toEqual({ ...madrid, postalCode: "28013" });
+    expect(canonicalRegisteredParts({ ...madrid, province: "28" }, spain).province).toBe("Madrid");
+    expect(
+      canonicalRegisteredParts(
+        { ...madrid, postalCode: "15001", province: coruna.aliases![0]! },
+        spain,
+      ).province,
+    ).toBe(coruna.name);
+  });
+
+  it("takes the postcode the pack's check gives back, not the one typed", () => {
+    const pack = {
+      ...spain,
+      postalCode: {
+        validate: (value: string) => ({
+          valid: true as const,
+          normalized: value.trim().toUpperCase(),
+          kind: "postal-code" as const,
+        }),
+      },
+    };
+    expect(canonicalRegisteredParts({ ...madrid, postalCode: "ab1" }, pack).postalCode).toBe("AB1");
+  });
+
+  it("keeps a postcode the pack refuses and a province it does not know as given", () => {
+    const parts = { ...madrid, postalCode: "99999", province: "Atlantis" };
+    expect(canonicalRegisteredParts(parts, spain)).toEqual(parts);
+    expect(canonicalRegisteredParts({ ...madrid, province: " " }, spain).province).toBe(" ");
+  });
+
+  it("changes nothing without a pack", () => {
+    const parts = { ...madrid, postalCode: " 28013 ", province: "madrid" };
+    expect(canonicalRegisteredParts(parts, undefined)).toEqual(parts);
+  });
+});
+
+describe("joinRegisteredAddress with a pack", () => {
+  it.each(["07", "15", "26", "35"])(
+    "joins comma province %s, typed in another case, into a line that reads back",
+    (code) => {
+      const parts = {
+        street: "Calle Real 1",
+        line2: "",
+        postalCode: `${code}001`,
+        city: "Somewhere",
+        province: area(code).name.toLocaleUpperCase(),
+      };
+      const line = joinRegisteredAddress(parts, spain);
+      expect(line).toBe(`Calle Real 1, ${code}001 Somewhere, ${area(code).name}`);
+      expect(registeredLineErrors(line, spain)).toEqual({});
+    },
+  );
+
+  it("joins as without a pack when the pack is left out", () => {
+    expect(joinRegisteredAddress({ ...madrid, province: "madrid" })).toBe(
+      "Calle Mayor 1, 28013 Madrid, madrid",
+    );
+  });
+});
+
+describe("registeredLineErrors", () => {
+  it("finds nothing wrong with a line that reads back into good parts", () => {
+    expect(registeredLineErrors("Calle Mayor 1, 28013 Madrid, Madrid", spain)).toEqual({});
+    expect(registeredLineErrors("Calle Mayor 1, 28013 Madrid", spain)).toEqual({});
+  });
+
+  it.each(["2º 1ª", "Mayor 1, Madrid", ""])("finds no postcode or city in %j", (line) => {
+    expect(registeredLineErrors(line, spain)).toEqual({
+      ...(line === "" ? { street: "required" } : {}),
+      postalCode: "required",
+      city: "required",
+    });
+  });
+
+  it("cannot read back a city holding a comma", () => {
+    const line = joinRegisteredAddress({ ...madrid, city: "Madrid, Centro" }, spain);
+    expect(registeredLineErrors(line, spain)).toEqual({
+      postalCode: "required",
+      city: "required",
+    });
+  });
+
+  it("finds a postcode outside the province the line names", () => {
+    expect(registeredLineErrors("Calle Mayor 1, 28013 Madrid, Barcelona", spain)).toEqual({
+      province: "mismatch",
+    });
+  });
+
+  it("checks nothing where the pack has no postcode rule, or there is no pack", () => {
+    expect(registeredLineErrors("2º 1ª", { ...spain, postalCode: undefined })).toEqual({});
+    expect(registeredLineErrors("2º 1ª", undefined)).toEqual({});
+  });
+});
+
+describe("provinceOfPostalCode", () => {
+  it("names the area a valid postcode lies in", () => {
+    expect(provinceOfPostalCode(spain, "28013")).toBe(area("28"));
+    expect(provinceOfPostalCode(spain, " 07001 ")).toBe(area("07"));
+  });
+
+  it("names none for a postcode the pack refuses, a pack with no postcode rule, or no pack", () => {
+    expect(provinceOfPostalCode(spain, "99999")).toBeUndefined();
+    expect(provinceOfPostalCode({ ...spain, postalCode: undefined }, "28013")).toBeUndefined();
+    expect(provinceOfPostalCode(undefined, "28013")).toBeUndefined();
+  });
+});
+
+describe("the package's exports", () => {
+  it("keeps the line-reading helpers inside the package", () => {
+    expect(Object.keys(countryPacks)).not.toContain("firstWordAndRest");
+    expect(Object.keys(countryPacks)).not.toContain("trailingProvince");
   });
 });
