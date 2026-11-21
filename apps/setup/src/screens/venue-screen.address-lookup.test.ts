@@ -376,6 +376,27 @@ describe("the venue screen's address search", () => {
     }
   });
 
+  it("keeps the latest switch choice when a registered address arrives after it", async () => {
+    const answers: ((address: AddressLookupResult) => void)[] = [];
+    const el = await mount({
+      addressProvider: {
+        ...providerFor(MADRID),
+        resolve: () => new Promise((resolve) => answers.push(resolve)),
+      },
+    });
+    await type(el, "registeredSameAsVenue", "off");
+    await type(el, "registeredStreet", "Mine");
+    await startChoosing(el, "domicile-lookup");
+    await type(el, "registeredSameAsVenue", "on");
+    answers[0]!(MADRID);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(sameAsVenue(el)).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
+    expect(value(el, "registeredStreet")).toBe("Mine");
+    expect(value(el, "registeredCity")).toBe("");
+  });
+
   it("drops a chosen address still on its way once the person picks a province", async () => {
     const answers: ((address: AddressLookupResult) => void)[] = [];
     const el = await mount({

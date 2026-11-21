@@ -715,7 +715,7 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
-  /** So an address still on its way cannot overwrite what the person typed. */
+  /** So an address still on its way cannot overwrite what the person typed or switched. */
   #cancelAddressSearch(which: AddressSearch | undefined): void {
     if (which === undefined) return;
     this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
@@ -767,6 +767,7 @@ export class SetupVenueScreen extends LitElement {
 
   #onSameAsVenue(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
+    this.#cancelAddressSearch("domicile");
     this.sameAsVenue = event.detail.checked;
     this.#scope?.changed();
   }

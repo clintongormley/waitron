@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type {
   AddressLookupProvider,
   AddressLookupResult,
@@ -902,6 +903,32 @@ it("stops a search still on its way when the person types the address", async ()
   const cancel = vi.spyOn(search(panel)!, "cancelSearch");
   await type(panel, NEW_PARTS);
   expect(cancel).toHaveBeenCalled();
+});
+
+it("keeps the latest switch choice when a chosen address arrives after it", async () => {
+  const answers: ((address: AddressLookupResult) => void)[] = [];
+  const panel = await mountSearching(stubApi(), {
+    ...provider,
+    resolve: () => new Promise((resolve) => answers.push(resolve)),
+  });
+  await open(panel);
+  expect(same(panel).checked).toBe(false);
+  const lookup = search(panel)!;
+  lookup.delay = 0;
+  const input = lookup.shadowRoot!.querySelector("input")!;
+  input.value = "Calle Mayor";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await vi.waitFor(() =>
+    expect(lookup.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
+  );
+  await userEvent.click(lookup.shadowRoot!.querySelector('[role="option"]')!);
+  await turn(panel, true);
+  answers[0]!(MADRID);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await dialogHost(panel).updateComplete;
+  expect(same(panel).checked).toBe(true);
+  await turn(panel, false);
+  expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
 });
 
 it("shows no address search without a provider, and none in the legal-name dialog", async () => {
