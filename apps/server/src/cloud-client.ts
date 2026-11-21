@@ -598,7 +598,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       return { state, attempt, registration: attempt.provisionalRegistration };
   }
   // An address lookup never holds the connection turn used by Provision.
-  const setupServiceTurn = Symbol();
+  const setupAddressTurn = Symbol();
   let setupServiceLease:
     { requestId: string; credentials: CloudInstallationCredentials } | undefined;
 
@@ -802,7 +802,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         },
         true,
         signal,
-        setupServiceTurn,
+        setupAddressTurn,
       ).catch((error: unknown) => {
         if (error instanceof AppError || !signal.aborted) throw error;
         throw new AppError("cloud.unavailable", {});
@@ -828,16 +828,16 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if (!attempt.publishedNodeId && staffEmail) {
           const held = provisionalSetupAttempt(state, binding);
           if (held) {
-            const { credentials } = setupServiceAccess(state, attempt, held.registration);
+            const { credentials: cached } = setupServiceAccess(state, attempt, held.registration);
+            // Reuse a live lease without sharing an address search's pending renewal.
+            const credentials = {
+              ...cached,
+              lifecycle: hasLiveLease(cached) ? structuredClone(cached.lifecycle) : undefined,
+            };
             try {
               const signal = AbortSignal.timeout(8000);
-              await run(
-                () => installationClient(credentials, async () => {}).ensureLease(signal),
-                true,
-                signal,
-                setupServiceTurn,
-              );
-              if (await requestSetupCloudEmailGrant(credentials, attempt.requestId))
+              await installationClient(credentials, async () => {}).ensureLease(signal);
+              if (await requestSetupCloudEmailGrant(credentials, attempt.requestId, signal))
                 attempt.emailRelayEnabled = true;
             } catch {
               // Mail server settings are already saved when this optional Cloud request runs.

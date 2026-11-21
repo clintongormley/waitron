@@ -222,6 +222,13 @@ async function installedSignInFixture(setup = false, provisional = false) {
   };
 }
 
+async function rememberSetupStaffEmail(stateDir: string) {
+  const path = join(stateDir, "cloud/connection.json");
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  saved.attempt.emailRelayEnabled = true;
+  await writeFile(path, JSON.stringify(saved), { mode: 0o600 });
+}
+
 it.each([false, true])(
   "files early setup only after local publication (provisional IDs: %s)",
   async (provisional) => {
@@ -250,6 +257,7 @@ it.each([false, true])(
       expect(f.requests.map((request) => request[2])).toEqual(["start", "redeem"]);
 
       await client.publishSetupSignIn(binding, f.nodeId);
+      if (provisional) await rememberSetupStaffEmail(f.stateDir);
       f.loseComplete();
       await expect(restarted.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
       expect(await f.options.readVenueId()).toBeNull();
@@ -262,6 +270,7 @@ it.each([false, true])(
         "status",
       ]);
       expect(await f.options.readVenueId()).toBe(f.venueId);
+      expect(await restarted.emailRelayEnabled()).toBe(provisional);
     } finally {
       await f.close();
     }
@@ -309,6 +318,7 @@ it.each([
     };
     if (beforeSave) invalidateCloudSignIn();
     await setup.publishSetupSignIn(setupBinding, f.nodeId);
+    if (provisional) await rememberSetupStaffEmail(f.stateDir);
     if (!beforeSave) invalidateCloudSignIn();
     const dashboard = f.restartAsPublished();
     if (provisional)
@@ -353,6 +363,7 @@ it.each([
     ]);
     expect((await dashboard.status()).registration?.installationId).toBe(f.installationId);
     expect(await f.options.readVenueId()).toBe(f.venueId);
+    expect(await dashboard.emailRelayEnabled()).toBe(provisional);
   } finally {
     vi.useRealTimers();
     await f.close();

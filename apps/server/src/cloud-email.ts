@@ -106,6 +106,7 @@ export async function fetchCloudEmailGrant(
 export async function requestSetupCloudEmailGrant(
   state: CloudInstallationCredentials,
   requestId: string,
+  signal = AbortSignal.timeout(8000),
 ): Promise<boolean> {
   try {
     const { response, value } = await emailExchange(
@@ -118,7 +119,7 @@ export async function requestSetupCloudEmailGrant(
         consent: true,
         consentVersion: "local-v1",
       }),
-      undefined,
+      AbortSignal.any([signal, AbortSignal.timeout(4000)]),
       "/api/pairing/email-grant",
     );
     if (response.ok) return readCloudEmailGrant(record(value) && value.emailRelay) !== null;
@@ -127,7 +128,7 @@ export async function requestSetupCloudEmailGrant(
     // Cloud may have saved the choice before the reply was lost.
   }
   try {
-    return (await fetchCloudEmailGrant(state)) !== null;
+    return (await fetchCloudEmailGrant(state, signal)) !== null;
   } catch {
     return false;
   }

@@ -1088,7 +1088,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
-        await operation?.advance("publishing", { cloudStaffEmailUnavailable });
+        await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
 
       const publicResult = {

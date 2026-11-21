@@ -230,7 +230,7 @@ export class SetupEmailScreen extends LitElement {
     dispatchSetupPatch(this, {
       email: this.#settings(),
       ...((this.cloudStaffEmailAvailable || this.cloudStaffEmail) && {
-        cloudStaffEmail: this.cloudStaffEmailAvailable && this.staffEmail,
+        cloudStaffEmail: this.staffEmail,
       }),
     });
     this.#baseline = { ...this.values, staffEmail: this.staffEmail };

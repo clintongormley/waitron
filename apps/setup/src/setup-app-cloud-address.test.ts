@@ -182,9 +182,7 @@ it("shows the mail-server fallback after a checked Prepare request completes", a
   dispatchProvisionRequested(screen("review")!);
   const notice = () =>
     screen("done")?.shadowRoot?.querySelector('[data-test="cloud-staff-email-unavailable"]');
-  await expect
-    .poll(() => notice()?.textContent)
-    .toContain("Your mail server is available for staff email");
+  await expect.poll(() => notice()?.textContent).toContain("Your mail server settings were saved");
   expect(notice()?.querySelector("a")?.getAttribute("href")).toBe(
     "/help/en/email#cloud-staff-email",
   );

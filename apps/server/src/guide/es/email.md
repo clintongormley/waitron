@@ -41,15 +41,16 @@ varios días, abre **Ventas y cobros** y elige un día anterior para consultar s
 
 ## Elegir el correo del personal durante la configuración de prueba {#cloud-staff-email}
 
-En Preparar, inicia sesión en Waitron Cloud en el servidor de pruebas y marca **Enviar el correo
-del personal a través de Waitron Cloud** en el paso de correo. Prueba tu servidor de correo antes
-de continuar. La elección se aplica al completar la configuración. Cloud podrá enviar invitaciones
-al personal, mensajes para restablecer contraseñas y cambios de correo. Tu servidor de correo
-seguirá enviando las facturas y los avisos.
+En un servidor de pruebas, abre Preparar e inicia sesión en Waitron Cloud. En el paso de correo,
+marca **Enviar el correo del personal a través de Waitron Cloud**. Prueba tu servidor de correo
+antes de continuar. **Configurar este servidor** envía tu elección a Cloud. Cuando el equipo se
+reinicie y se conecte, Cloud podrá enviar invitaciones al personal, mensajes para restablecer
+contraseñas y cambios de correo. Tu servidor de correo seguirá enviando las facturas y los avisos.
 
-Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, puedes
-usar tu servidor de correo para esos mensajes. Si ha caducado la sesión de Cloud, termina de
+Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, se han
+guardado los ajustes de tu servidor de correo. Si ha caducado tu sesión, termina de
 [conectar el servidor de pruebas](servers.md#setup-cloud-sign-in) desde **Sistema → Servicios Cloud**.
+El correo del personal usa [Cloud](email.md#cloud-account-email) cuando está activado el envío.
 
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 

@@ -82,6 +82,21 @@ describe("wizard Email step", () => {
     expect(patch.mock.calls[0]![0].detail.patch).toEqual({ email, cloudStaffEmail: true });
   });
 
+  it("keeps a previous choice while the availability check is unanswered", async () => {
+    const { el, host } = await mountWidget<SetupEmailScreen>("setup-email-screen", {
+      email,
+      adminEmail: "admin@example.com",
+      mode: "prepare",
+      cloudStaffEmail: true,
+      api: { runEmailTest: vi.fn().mockResolvedValue({ accepted: true }) },
+    });
+    const patch = vi.fn();
+    host.addEventListener("setup-patch", patch);
+    await test(el);
+    button(el, "next").click();
+    expect(patch.mock.calls[0]![0].detail.patch).toEqual({ email, cloudStaffEmail: true });
+  });
+
   it("tests Prepare mode and invalidates acceptance if the mode changes", async () => {
     const { el, runEmailTest } = await mount();
     Object.assign(el, { mode: "prepare" });
