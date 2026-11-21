@@ -805,6 +805,8 @@ describe("backup-screen", () => {
     await flush(el);
     expect(api.mintBackupKey).toHaveBeenCalled();
     expect(q(el, "[data-test=minted-key]")!.textContent).toContain("MINTED-KEY-abcdef012345");
+    expect(el.shadowRoot!.textContent).toContain("Conserva también tu clave del servidor.");
+
     expect(q(el, "[data-test=copy-key]")).not.toBeNull();
     const download = q(el, "[data-test=download-key]") as HTMLAnchorElement;
     expect(download).not.toBeNull();

@@ -16,7 +16,7 @@ To reuse your setup for a new venue, enter and confirm an export passphrase of a
 
 For a **folder on this box**, enter a full path. The example `/var/lib/waitron/backups` is the box's own backup folder. If its disk fails, a copy there goes with it. Choose a bucket or Waitron Cloud to keep a copy off the box.
 
-For an **S3-compatible bucket**, enter the bucket name, region, access key ID and secret access key from your storage provider. Add a custom endpoint or folder prefix if your provider or setup needs one. You can choose the bucket on its own or keep the folder and bucket together.
+For an **S3-compatible bucket**, enter the bucket name, region, access key ID and secret access key from your storage provider. Enter an **Endpoint** or a **Folder inside the bucket** if needed. You can choose the bucket on its own or keep the folder and bucket together.
 
 Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the backup encryption key as described below, then choose **Turn on backups**.
 

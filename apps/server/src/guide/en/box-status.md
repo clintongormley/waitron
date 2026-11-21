@@ -168,8 +168,8 @@ While a backup is running, **Free** leaves the backup's working folder alone, in
 cut-off backup left there, and the page says those files are not counted.
 
 The sizes under **Disk space** show what is filling the disk. On **Backups**, you can choose how
-many archives to keep. Leave without changing the settings to stop. Keep your database, recovery
-keys and saved backups.
+many archives to keep. Leave without changing the settings to stop. Keep your database, server key, backup
+encryption key and saved backups.
 
 Before each backup, when the disk is short of space, the box can delete its oldest backups on that
 disk to make room. It never deletes the newest backup in a folder, a backup from before the box's

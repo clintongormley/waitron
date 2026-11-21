@@ -1613,7 +1613,7 @@ export const en = {
     "Recovery pack {number}, made on {date}: the emergency code could not be checked.",
   "recovery_pack.title": "Recovery pack",
   "recovery_pack.intro":
-    "Keep this pack locked away, off the box. It can hold the emergency-start code, restore codes and keys. The backup encryption key opens encrypted copies. The server key authorises restore or takeover.",
+    "Keep this pack locked away, off the box. It can hold the emergency code, restore codes and keys. The backup encryption key opens encrypted copies. The server key authorises restore or takeover.",
   "recovery_pack.none": "No recovery pack has been made on this box.",
   "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
   "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
@@ -2454,7 +2454,7 @@ export const en = {
   "backup.destination.title": "Where to save backups",
   "backup.destination.label": "Backup folder",
   "backup.destination.folder_help":
-    "Enter a full path. Copies in the example folder are lost if this box’s disk fails.",
+    "Enter a full path. Copies saved on this box’s disk are lost if that disk fails.",
   "backup.destination.bucket_help":
     "Keep a copy off the box. Enter the bucket name, region, access key ID and secret access key from your S3 provider. Add an endpoint or a folder inside the bucket if needed.",
   "backup.destination.cloud_help": "Uses this box’s Waitron Cloud connection.",
@@ -2490,7 +2490,7 @@ export const en = {
   "backup.key.too_short":
     "The backup encryption key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
-    "Save this key now. It opens encrypted backups. Keep the pack that holds your server key too. You need it to authorise restore or takeover.",
+    "Save this key now. It opens encrypted backups. Keep your server key too. You need it to authorise restore or takeover.",
   "backup.key.copy": "Copy",
   "backup.key.download": "Download key file",
   "backup.key.paste_label": "Your own backup encryption key",
@@ -6219,7 +6219,7 @@ export const es: Record<StringKey, string> = {
     "Paquete de recuperación {number}, hecho el {date}: no se pudo comprobar el código de emergencia.",
   "recovery_pack.title": "Paquete de recuperación",
   "recovery_pack.intro":
-    "Guarda este paquete bajo llave, fuera del servidor. Puede contener el código de inicio de emergencia, los códigos de restauración y las claves. La clave de cifrado de copias abre las copias cifradas. La clave del servidor autoriza la restauración o el traspaso a otro servidor.",
+    "Guarda este paquete bajo llave, fuera del servidor. Puede contener el código de emergencia, los códigos de restauración y las claves. La clave de cifrado de copias abre las copias cifradas. La clave del servidor autoriza la restauración o el traspaso a otro servidor.",
   "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en este servidor.",
   "recovery_pack.up_to_date":
     "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
@@ -7083,7 +7083,7 @@ export const es: Record<StringKey, string> = {
   "backup.destination.title": "Dónde guardar las copias",
   "backup.destination.label": "Carpeta de copias",
   "backup.destination.folder_help":
-    "Escribe una ruta completa. Si falla el disco del servidor, perderás las copias guardadas en la carpeta de ejemplo.",
+    "Escribe una ruta completa. Si falla el disco del servidor, perderás las copias guardadas en ese disco.",
   "backup.destination.bucket_help":
     "Guarda una copia fuera del servidor. Introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor S3. Si hace falta, añade un endpoint o una carpeta dentro del bucket.",
   "backup.destination.cloud_help": "Usa la conexión de este servidor con Waitron Cloud.",
@@ -7121,7 +7121,7 @@ export const es: Record<StringKey, string> = {
   "backup.key.too_short":
     "La clave de cifrado de copias que tiene este servidor es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
-    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también el paquete que contiene tu clave del servidor. La necesitas para autorizar la restauración o el traspaso a otro servidor.",
+    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también tu clave del servidor. La necesitas para autorizar la restauración o el traspaso a otro servidor.",
   "backup.key.copy": "Copiar",
   "backup.key.download": "Descargar archivo de clave",
   "backup.key.paste_label": "Tu propia clave de cifrado de copias",

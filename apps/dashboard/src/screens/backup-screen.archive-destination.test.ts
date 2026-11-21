@@ -538,7 +538,7 @@ describe("choosing where backups go", () => {
       const { el } = await mount({ ...OFF_WITH_KEY, cloudBackups: "available" });
       await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
       expect(el.shadowRoot!.textContent).toContain(
-        "Copies in the example folder are lost if this box’s disk fails.",
+        "Copies saved on this box’s disk are lost if that disk fails.",
       );
       expect(el.shadowRoot!.textContent).toContain("Uses this box’s Waitron Cloud connection.");
       await choose(el, "custom-s3");

@@ -16,7 +16,7 @@ Para reutilizar tu configuración en un local nuevo, introduce y confirma una co
 
 Para guardar copias en **Una carpeta de este servidor**, escribe una ruta completa. El ejemplo `/var/lib/waitron/backups` es la carpeta de copias del propio servidor. Si falla su disco, perderás la copia guardada allí. Elige un bucket o Waitron Cloud para guardar una copia fuera del servidor.
 
-Para usar **Un bucket compatible con S3**, introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor. Añade una dirección personalizada o un prefijo de carpeta si hace falta. Puedes elegir solo el bucket o guardar copias tanto en la carpeta como en el bucket.
+Para usar **Un bucket compatible con S3**, introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor. Indica un **Endpoint** o una **Carpeta dentro del bucket** si hace falta. Puedes elegir solo el bucket o guardar copias tanto en la carpeta como en el bucket.
 
 Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de cifrado de copias como se indica abajo y elige **Activar las copias**.
 
