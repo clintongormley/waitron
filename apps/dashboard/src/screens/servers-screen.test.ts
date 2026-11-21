@@ -147,16 +147,6 @@ afterEach(() => {
 });
 
 describe("servers screen list", () => {
-  it("draws no fingerprint row: a joining box is checked by its code", async () => {
-    for (const locale of ["en", "es-ES"]) {
-      setLocale(locale);
-      const el = await mount();
-      expect(el.shadowRoot!.querySelector("[data-test=authority-fingerprint]")).toBeNull();
-      expect(el.shadowRoot!.textContent).not.toMatch(/fingerprint|huella/i);
-      cleanupWidgets();
-    }
-  });
-
   it("names each machine's role in words and marks which one is this server", async () => {
     const el = await mount();
     expect(inTable(el, `role-${SELF}`)!.textContent!.trim()).toBe(t("servers.standing.primary"));

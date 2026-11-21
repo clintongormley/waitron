@@ -121,7 +121,6 @@ export type {
 export { UndoHistory } from "./history.js";
 export { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
 export { FormFeedback, bottomMessage } from "./form-feedback.js";
-export { breakAfterColons } from "./fingerprint.js";
 export {
   ContentLanguageController,
   currentContentLanguages,

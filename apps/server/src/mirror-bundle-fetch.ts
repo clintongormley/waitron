@@ -571,7 +571,7 @@ export async function boxDownload(
 export async function fetchPrimaryCertificate(
   primaryUrl: string,
   { timeoutMs = CERTIFICATE_READ_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
-): Promise<{ pem: string; fingerprint256: string } | null> {
+): Promise<{ pem: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
   // A main box's address is its origin: a typed path, query or fragment is not sent to it.
@@ -594,7 +594,7 @@ export async function fetchPrimaryCertificate(
   if (answer.status !== 200) throw new AppError("mirror.bundle_fetch_failed", {});
   const certificate = authorityCertificate(answer.text);
   if (certificate === null) throw new AppError("mirror.bundle_fetch_failed", {});
-  return { pem: certificate.toString(), fingerprint256: certificate.fingerprint256 };
+  return { pem: certificate.toString() };
 }
 
 /** One PEM certificate that is an authority, or `null`. */

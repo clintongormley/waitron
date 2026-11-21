@@ -1562,16 +1562,6 @@ describe("GET /management-api/servers", () => {
     expect(await res.json()).toEqual({ term: null, nodes: [] });
   });
 
-  it("answers no authority fingerprint: a joining box is checked by its code", async () => {
-    const p = await primary();
-    await holdChart(p, [self(p)]);
-
-    const res = await list(p, p.adminCookie);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).not.toHaveProperty("authorityFingerprint");
-  });
-
   it("refuses no session with 401 and a manager with 403", async () => {
     const p = await primary();
     await holdChart(p, [self(p), standby()]);

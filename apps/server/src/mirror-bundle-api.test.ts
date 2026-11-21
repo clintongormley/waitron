@@ -436,7 +436,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(200);
@@ -482,7 +481,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         standbyNodeId,
         standbyPublicKey: STANDBY_PUB,
         standbyContactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
@@ -507,7 +505,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     await db.execute(sql`delete from deployment where id = 1`);
     const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(409);
@@ -521,7 +518,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     );
     const res = await approvedJoin(mountApp(designated), {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(500);
@@ -535,7 +531,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -574,7 +569,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test",
@@ -610,7 +604,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     // A re-adopt of the same node refreshes its entry in place rather than adding a second.
     const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud2.deli.test",
@@ -651,7 +644,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(res.status).toBe(200);
@@ -720,7 +712,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       const app = mountApp(designated);
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(200);
@@ -767,7 +758,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     try {
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(503);
@@ -793,7 +783,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     try {
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...standby,
       });
       expect(res.status).toBe(503);
@@ -807,7 +796,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const again = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...standby,
     });
 
@@ -828,7 +816,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -848,11 +835,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     const before = await allocationSnapshot();
     const standby = validStandby();
 
-    const res = await approvedJoin(
-      app,
-      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby },
-      { plain: true },
-    );
+    const res = await approvedJoin(app, { email: ADMIN_EMAIL, ...standby }, { plain: true });
 
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     const reserved = (await res.json()).reservedIdentity;
@@ -874,7 +857,7 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(
       app,
-      { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() },
+      { email: ADMIN_EMAIL, ...validStandby() },
       { veriFactu: true },
     );
 
@@ -894,7 +877,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -924,7 +906,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       for (let i = 0; i < 2; i += 1) {
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
         expect(res.status).toBe(200);
@@ -943,7 +924,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...standby,
       });
 
@@ -966,7 +946,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyStoreUrl: "http://cloud.deli.test:7443",
       });
@@ -975,7 +954,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
       expect(res.status).toBe(200);
@@ -995,7 +973,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyStoreUrl,
       });
@@ -1037,7 +1014,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1085,7 +1061,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...standby,
       });
 
@@ -1146,7 +1121,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...standby,
         });
 
@@ -1165,7 +1139,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1187,7 +1160,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const { res, fixture } = await allocatedReply(app, designated, adminPersonId, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://cloud.deli.test",
@@ -1244,14 +1216,13 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     const { designated } = await setupVenue();
     const app = mountApp(designated);
 
-    const res = await approvedJoin(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+    const res = await approvedJoin(app, { email: ADMIN_EMAIL });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("mirror.standby_invalid");
 
     // Every field but the one under test is well-formed; `""` is a valid contact URL.
     const res2 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: "not-a-uuid",
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "",
@@ -1262,7 +1233,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res3 = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: "",
       standbyContactUrl: "",
@@ -1279,7 +1249,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     // Not a bare origin: tills concatenate paths onto it.
     const slash = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test/",
@@ -1290,7 +1259,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const script = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "javascript:alert(1)",
@@ -1307,7 +1275,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyContactUrl: "",
     });
@@ -1341,7 +1308,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyNodeId: removedId,
     });
@@ -1354,7 +1320,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
     // A fresh id through the same app reaches the signed outside reservation.
     const fresh = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
     expect(fresh.status).toBe(200);
@@ -1386,7 +1351,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
       standbyNodeId: clearedId,
     });
@@ -1421,7 +1385,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -1468,7 +1431,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1488,7 +1450,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1506,7 +1467,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
 
@@ -1522,7 +1482,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1540,7 +1499,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1569,7 +1527,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1604,7 +1561,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1656,7 +1612,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       try {
         res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
         });
       } finally {
@@ -1698,7 +1653,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1716,7 +1670,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
       });
@@ -1737,7 +1690,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: `${listed.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
       });
@@ -1774,7 +1726,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -1799,7 +1750,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
         const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
-          password: ADMIN_PASSWORD,
           ...validStandby(),
           standbyAt,
         });
@@ -1825,7 +1775,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyAt: primaryAt + minutes * 60_000,
       });
@@ -1905,7 +1854,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyAt,
       });
@@ -1936,7 +1884,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -1969,7 +1916,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2007,7 +1953,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2026,7 +1971,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2045,7 +1989,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...validStandby(),
     });
 
@@ -2081,7 +2024,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2107,7 +2049,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2149,7 +2090,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       ...standby,
     });
 
@@ -2217,7 +2157,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2237,7 +2176,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
       const newcomer = validStandby();
       const refused = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...newcomer,
       });
       expect(refused.status).toBe(409);
@@ -2250,7 +2188,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const joined = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...newcomer,
       });
       expect(joined.status).toBe(200);
@@ -2261,7 +2198,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const returning = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: removed,
       });
@@ -2279,7 +2215,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId: listed,
       });
@@ -2303,7 +2238,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
       });
 
@@ -2337,7 +2271,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId,
       });
@@ -2379,7 +2312,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
       const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
-        password: ADMIN_PASSWORD,
         ...validStandby(),
         standbyNodeId,
       });
@@ -2402,7 +2334,6 @@ describe("issueMirrorBundle, through the box-join routes", () => {
 
     const res = await approvedJoin(app, {
       email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: 42,

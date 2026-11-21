@@ -260,7 +260,6 @@ describe("the main box's authority certificate, and a request pinned to it", () 
     while (boxServers.length > 0) await boxServers.pop()!.close();
   });
 
-  // A pin, not a failing test: today's default trust refuses Y as well.
   it("sends nothing to a box whose certificate is not the pinned authority, and reaches one that is", async () => {
     const [other, pinned] = await Promise.all([
       startBoxServer(y, () => ({ status: 200, body: "{}" })),
@@ -313,7 +312,7 @@ describe("the main box's authority certificate, and a request pinned to it", () 
     const read = await fetchPrimaryCertificate(server.url);
 
     const expected = new X509Certificate(x.caPem);
-    expect(read).toEqual({ pem: expected.toString(), fingerprint256: expected.fingerprint256 });
+    expect(read).toEqual({ pem: expected.toString() });
     expect(server.requests).toHaveLength(1);
     const [seen] = server.requests;
     expect(seen!.method).toBe("GET");
@@ -1307,7 +1306,7 @@ describe("a box named on the venue's network is found by asking it", () => {
           }),
       });
 
-      expect(read?.fingerprint256).toBe(new X509Certificate(other.caPem).fingerprint256);
+      expect(read).toEqual({ pem: new X509Certificate(other.caPem).toString() });
     },
   );
 });

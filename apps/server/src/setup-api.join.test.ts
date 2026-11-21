@@ -414,7 +414,7 @@ describe("the setup page's join routes", () => {
   });
 
   it.each(["adopt", "reset-incomplete-adopt"] as const)(
-    "refuses %s without a proof from another page or over plain http",
+    "refuses %s from another page or over plain http",
     async (path) => {
       const operations = { read: async () => null } as unknown as SetupOperationStore;
       const { adoptJoined, stageReset } = mountAdopt({ operations });
