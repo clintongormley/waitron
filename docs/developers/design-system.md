@@ -2703,8 +2703,12 @@ focus; the table's filter-count badge keeps its number without a new border beca
 filtered-heading line already marks that state; the column being dragged gains no decoration
 because it still moves under the pointer (watcher clearance, 2026-11-16).
 
-The floor map and the floor plan's rings (`floor-ring.ts`) remain open; see
-[the backlog](../backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives).
+The shared floor rings also serve till cards and table tokens. A thick solid ring marks overdue
+and a thinner one marks waiting. Forgotten uses dots and time to fire uses dashes. The map
+keeps the table edge and its outer forgotten ring stays visible with reduced motion, even on a
+table too small for a caption. Gaps separate the outer state mark, dashed selection and solid
+keyboard focus. Till zone tabs and overflow buttons use the same outer patterns for their
+pulsing states. With reduced motion, a dotted border marks a forgotten zone.
 
 The sibling `*.forced-colors.test.ts` files turn the theme on with `emulateForcedColours` from the package's `src/test-helpers.ts`,
 which calls the `emulateForcedColors` browser command in the package's `vitest.config.ts`, checks

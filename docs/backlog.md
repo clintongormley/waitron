@@ -1034,10 +1034,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   one has not.**
   [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
 
-- **Contrast-theme styles for the remaining primitives** (size M). The floor map and its overdue
-  and forgotten rings remain.
-  [Detail](backlog/dashboard.md#contrast-theme-styles-for-the-remaining-primitives)
-
 - **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 
 - **The new key and passkey icons draw lines at width 2** while the change-account icon beside them

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
+import { elementPixels, emulateForcedColours } from "@waitron/ui/src/test-helpers.js";
 import type { TableSignal } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -370,6 +371,32 @@ describe("till-floor-screen: zone tabs", () => {
     expect(getComputedStyle(buttonOf(el, "z3")).backgroundColor).toBe("rgb(1, 2, 3)");
   });
 
+  it.each(["light", "dark"] as const)(
+    "paints a dotted edge on the still forgotten tab in %s forced colours",
+    async (theme) => {
+      await commands.emulateColorScheme(theme);
+      await emulateForcedColours("active");
+      try {
+        const { el } = await mount([
+          seated("t1", "z1"),
+          seated("t2", "z2", { timingBand: "forgotten" }),
+        ]);
+        const button = buttonOf(el, "z2");
+        const tab = tabOf(el, "z2").closest(".filled-forgotten")!;
+        expect(getComputedStyle(tab, "::after").borderTopStyle).toBe("dotted");
+        const marked = button.getBoundingClientRect();
+        const sample = [marked.left + 8, marked.top + 8] as const;
+        const markedFill = (await elementPixels(button))(...sample);
+        tab.classList.remove("filled-forgotten");
+        expect(button.getBoundingClientRect().toJSON()).toEqual(marked.toJSON());
+        expect((await elementPixels(button))(...sample)).toEqual(markedFill);
+      } finally {
+        await emulateForcedColours(null);
+        await commands.emulateColorScheme(null);
+      }
+    },
+  );
+
   it("draws a filled forgotten tab's icon in the filled tab's text colour", async () => {
     const { el, host } = await mount([
       seated("t1", "z1"),
@@ -593,6 +620,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
         expect(edge.querySelector(".pulse")).toBeNull();
         // As its tab is: a forgotten zone fills red when nothing may move.
         expect(getComputedStyle(edge).backgroundColor).toBe("rgb(4, 5, 6)");
+        await emulateForcedColours("active")
+          .then(() => expect(getComputedStyle(edge, "::after").borderTopStyle).toBe("dotted"))
+          .finally(() => emulateForcedColours(null));
       },
       true,
     );

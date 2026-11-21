@@ -657,7 +657,11 @@ describe("the whole table shows its state", () => {
     el.reducedMotion = true;
     await el.updateComplete;
     expect(shapes()).toHaveLength(2);
-    expect(button(el, "a").querySelector("[data-pulse]")).toBeNull();
+    for (const shape of shapes()) {
+      const pulse = shape.querySelector<HTMLElement>('[data-pulse="forgotten"]')!;
+      expect(getComputedStyle(pulse).display).toBe("none");
+      expect(pulse.getAnimations()).toHaveLength(0);
+    }
   });
 
   it("draws the cue under the name on a table big enough for two lines", async () => {

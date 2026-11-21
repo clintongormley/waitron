@@ -61,6 +61,45 @@ export const floorRingStyles = css`
       0 0 0 calc(var(--wt-space-1) * 1.5) currentColor;
   }
 
+  .pulse.steady {
+    display: none;
+  }
+
+  @media (forced-colors: active) {
+    .ring {
+      border: var(--wt-space-1) solid CanvasText;
+    }
+
+    .ring-waiting {
+      border-width: calc(var(--wt-space-1) / 2);
+    }
+
+    .ring.ring-forgotten {
+      border-style: dotted;
+    }
+
+    .ring.ring-fire {
+      border-style: dashed;
+    }
+
+    .pulse {
+      outline: calc(var(--wt-space-1) / 2) solid CanvasText;
+      outline-offset: calc(var(--wt-space-1) / 2);
+    }
+
+    .pulse.ring-forgotten {
+      outline-style: dotted;
+    }
+
+    .pulse.ring-fire {
+      outline-style: dashed;
+    }
+
+    .pulse.steady {
+      display: block;
+    }
+  }
+
   /* --ring-dim is set per ring above, not a token: the colour its pulse dims to half-way. */
   @keyframes wt-pulse {
     50% {
@@ -102,14 +141,16 @@ export function renderFloorRing(
   ></span>`;
 }
 
-/** A ring outside its box, pulsing at its speed; nothing for no pulse, or while not `moving`. */
+/** A ring outside its box. A still forgotten ring can be shown in forced colours. */
 export function renderFloorPulse(
   pulse: FloorPulse | null,
   moving: boolean,
+  { steadyForgotten = false }: { steadyForgotten?: boolean } = {},
 ): TemplateResult | typeof nothing {
-  if (pulse === null || !moving) return nothing;
+  if (pulse === null || (!moving && !(steadyForgotten && pulse === "forgotten"))) return nothing;
+  const motion = moving ? `wt-pulse-${PULSE[pulse]}` : "steady";
   return html`<span
-    class="pulse ring-${pulse} wt-pulse-${PULSE[pulse]}"
+    class="pulse ring-${pulse} ${motion}"
     data-pulse=${pulse}
     aria-hidden="true"
   ></span>`;

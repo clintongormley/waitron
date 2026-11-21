@@ -18,6 +18,7 @@ type ColorScheme = "light" | "dark" | null;
 interface PlaywrightPage {
   emulateMedia(options: {
     colorScheme?: ColorScheme;
+    forcedColors?: "active" | "none" | null;
     reducedMotion?: "reduce" | "no-preference";
   }): Promise<void>;
 }
@@ -85,6 +86,10 @@ export default defineConfig({
         probeTillReload,
         holdDraftLine,
         emulateColorScheme,
+        emulateForcedColors: async (context, forcedColors: "active" | "none" | null) => {
+          const { page } = context as unknown as { page: PlaywrightPage };
+          await page.emulateMedia({ forcedColors });
+        },
         emulateReducedMotion: async (context, reduced: boolean) => {
           const { page } = context as unknown as { page: PlaywrightPage };
           await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
