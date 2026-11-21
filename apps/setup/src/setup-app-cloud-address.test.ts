@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import type { WtAddressLookup } from "@waitron/ui";
 import { userEvent } from "vitest/browser";
-import { wizardApi } from "../test/first-setup-browser.js";
+import { venue, wizardApi } from "../test/first-setup-browser.js";
+import { es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { dispatchProvisionRequested, dispatchSetupGoto, dispatchSetupPatch } from "./events.js";
 import { SetupApp } from "./setup-app.js";
@@ -9,6 +10,12 @@ import { SetupApp } from "./setup-app.js";
 const route = "/setup-api/cloud/sign-in/address-lookup";
 const tab = "bd185bdc-b7dd-4abb-991a-a9c3d613d38e";
 const suggestion = "Calle Mayor 1, Madrid";
+const adminDisplay = {
+  firstNames: venue.admin.firstNames,
+  lastNames: venue.admin.lastNames,
+  displayName: venue.admin.displayName,
+  email: venue.admin.email,
+};
 let app: SetupApp | undefined;
 const locale = currentLocale();
 afterEach(() => {
@@ -24,7 +31,7 @@ it.each(["missing", "partial"])(
     sessionStorage.setItem("waitron-setup-cloud-tab", tab);
     sessionStorage.setItem(
       "waitron-setup-cloud-return",
-      JSON.stringify({ mode: "prepare", locale: "en" }),
+      JSON.stringify({ mode: "prepare", locale: "en", admin: adminDisplay }),
     );
     sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
     const { api, requests } = wizardApi({
@@ -75,14 +82,6 @@ it.each(["missing", "partial"])(
     app.api = api;
     document.body.append(app);
     const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
-    await expect.poll(() => screen("admin")).not.toBeNull();
-    app.shadowRoot!.querySelector("main")!.dispatchEvent(
-      new CustomEvent("setup-goto", {
-        detail: { screen: "venue" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
     await expect.poll(() => screen("venue")).not.toBeNull();
     const form = screen("venue")!.shadowRoot!;
     const widget = form.querySelector<WtAddressLookup>("[data-test=address-lookup]")!;
@@ -145,7 +144,7 @@ it.each(["missing", "partial"])(
 async function openCloudEmailStep() {
   sessionStorage.setItem(
     "waitron-setup-cloud-return",
-    JSON.stringify({ mode: "prepare", locale: "en" }),
+    JSON.stringify({ mode: "prepare", locale: "en", admin: adminDisplay }),
   );
   sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
   sessionStorage.setItem("waitron-setup-cloud-tab", tab);
@@ -171,8 +170,8 @@ async function openCloudEmailStep() {
   app.api = api;
   document.body.append(app);
   const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
-  await expect.poll(() => screen("admin")).not.toBeNull();
-  dispatchSetupGoto(screen("admin")!, "email");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  dispatchSetupGoto(screen("venue")!, "email");
   await expect
     .poll(() => screen("email")?.shadowRoot?.querySelector('input[name="cloud-staff-email"]'))
     .toBeInstanceOf(HTMLInputElement);
@@ -220,4 +219,107 @@ it("points to System → Email when Cloud staff email could not be confirmed", a
   expect(requests.find(({ path }) => path === "/setup-api/provision")?.body).toMatchObject({
     cloudStaffEmail: true,
   });
+});
+
+it("opens Admin before Cloud sign-in in Prepare and keeps the administrator after a cancelled trip", async () => {
+  const { api, requests } = wizardApi({
+    intercept: (path) => {
+      if (path === "/setup-api/status")
+        return Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          needs: ["venue"],
+          cloudSignInAvailable: true,
+        });
+      if (path === "/setup-api/cloud/sign-in/start") return Response.json({});
+      if (path === "/setup-api/provision")
+        return Response.json(
+          { error: { code: "cloud.request_unavailable", params: {} } },
+          { status: 409 },
+        );
+      if (path === route) return Response.json({ available: false });
+    },
+  });
+  const mount = () => {
+    app = new SetupApp();
+    app.api = api;
+    document.body.append(app);
+  };
+  mount();
+  const screen = (name: string) => app!.shadowRoot?.querySelector(`[data-test=screen-${name}]`);
+  const click = async (step: string, name: string) => {
+    await expect.poll(() => screen(step)).not.toBeNull();
+    const control = screen(step)!.shadowRoot!.querySelector(`[data-test=${name}]`)!;
+    await userEvent.click(control.shadowRoot!.querySelector("button")!);
+  };
+  await click("mode", "choose-prepare");
+  await expect.poll(() => screen("admin")).not.toBeNull();
+  for (const [field, value] of Object.entries(venue.admin)) {
+    screen("admin")!
+      .shadowRoot!.querySelector(`[data-test=${field}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+  }
+  await click("admin", "next");
+  expect(requests.some(({ path }) => path.endsWith("/sign-in/start"))).toBe(false);
+  await click("cloud-sign-in", "sign-in");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  const start = requests.find(({ path }) => path.endsWith("/sign-in/start"))?.body;
+  expect(start).toMatchObject({ prepare: true, admin: venue.admin });
+
+  sessionStorage.setItem(
+    "waitron-setup-cloud-return",
+    JSON.stringify({
+      mode: "prepare",
+      locale: "es-ES",
+      admin: adminDisplay,
+    }),
+  );
+  sessionStorage.setItem("waitron-setup-cloud-result", "cancelled");
+  app!.remove();
+  mount();
+  await click("cloud-sign-in", "skip");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  expect(currentLocale()).toBe("es-ES");
+  await click("venue", "back");
+  await expect.poll(() => screen("admin")).not.toBeNull();
+  const field = (name: string) =>
+    screen("admin")!.shadowRoot!.querySelector(`[data-test=${name}]`) as HTMLElement & {
+      value: string;
+      required: boolean;
+      hint: string;
+    };
+  expect(field("email").value).toBe(venue.admin.email);
+  expect(field("password").value).toBe("");
+  expect(field("password").required).toBe(false);
+  expect(field("pin").value).toBe("");
+  expect(field("pin").required).toBe(false);
+  expect(field("password").hint).toBe(es["admin.password.held_hint"]);
+  expect(field("pin").hint).toBe(es["admin.pin.held_hint"]);
+
+  await click("admin", "next");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  dispatchSetupPatch(screen("venue")!, { venue: { name: "El Olivo" } });
+  dispatchSetupGoto(screen("venue")!, "review");
+  await expect.poll(() => screen("review")).not.toBeNull();
+  dispatchProvisionRequested(screen("review")!);
+  await expect.poll(() => screen("admin")).not.toBeNull();
+  expect(field("password").required).toBe(true);
+  expect(field("pin").required).toBe(true);
+  expect(screen("admin")!.shadowRoot!.querySelector("wt-form-actions")?.error).toContain(
+    es["admin.cloud_expired"],
+  );
+  for (const name of ["password", "pin"] as const)
+    field(name).dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: venue.admin[name] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  await click("admin", "next");
+  await expect.poll(() => screen("venue")).not.toBeNull();
+  const venueName = screen("venue")!.shadowRoot!.querySelector("[data-test=name]");
+  expect(venueName).toHaveProperty("value", "El Olivo");
 });

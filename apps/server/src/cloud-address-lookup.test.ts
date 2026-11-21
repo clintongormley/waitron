@@ -177,6 +177,10 @@ async function addressFixture() {
     app,
     { origin, connection },
     async () => {},
+    () => {
+      throw new Error("no administrator preparation on an address read");
+    },
+    true,
     () => {},
   );
   return {

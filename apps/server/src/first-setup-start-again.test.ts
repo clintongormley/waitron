@@ -286,6 +286,26 @@ it("Start again writes no start-again note", async () => {
   expect(await exists(join(f.stateDir, "first-setup-start-again.json"))).toBe(false);
 });
 
+it("Start again discards the held Cloud administrator and keeps the configured key", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  const folder = join(f.stateDir, "cloud");
+  const path = join(folder, "connection.json");
+  const key = {
+    version: 4,
+    origin: "https://cloud.example",
+    publicKey: "public",
+    privateKey: "private",
+  };
+  await mkdir(folder, { mode: 0o700 });
+  await writeFile(
+    path,
+    JSON.stringify({ ...key, setupAdmin: { expiresAt: Date.now() + 600_000 } }),
+    { mode: 0o600 },
+  );
+  await actions.startAgainFirstSetup(startRequest);
+  expect(JSON.parse(await readFile(path, "utf8"))).toEqual(key);
+});
+
 it("Start again leaves a leftover note file byte for byte", async () => {
   const { f, name, actions, startRequest } = await abandonedAttempt();
   const path = join(f.stateDir, "first-setup-start-again.json");

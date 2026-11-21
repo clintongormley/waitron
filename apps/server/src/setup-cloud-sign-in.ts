@@ -7,7 +7,7 @@ import { AppError } from "@waitron/shared";
 import { readSetupAddressLookup } from "./cloud-address-lookup.js";
 import type { CloudConnection } from "./cloud-client.js";
 import { mountCloudSignInCallback } from "./cloud-sign-in-callback.js";
-import { cloudSignInId, readCloudSignInReturn } from "./cloud-sign-in.js";
+import { cloudSignInId, readCloudSignInReturn, type PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { isSecure } from "./encrypted-connection.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { isRemoteStaffRequest } from "./request-from-box.js";
@@ -25,6 +25,8 @@ export interface SetupCloudSignIn {
     | "setupSignInAvailable"
     | "startSignIn"
     | "returnSignIn"
+    | "readSetupAdmin"
+    | "clearSetupAdmin"
     | "publishSetupSignIn"
     | "setupAddressLookup"
   >;
@@ -53,11 +55,15 @@ export function mountSetupCloudSignIn(
   app: Hono,
   deps: SetupCloudSignIn,
   authorize: () => Promise<void>,
+  prepareAdmin: (input: unknown, saved?: PreparedSetupAdmin) => PreparedSetupAdmin,
+  developmentLive: boolean,
   log: Logger,
 ): void {
   const run = createErrorBoundary(
     {
       "setup.owner_required": 403,
+      "setup.request_invalid": 400,
+      "person.email_invalid": 400,
       "cloud.request_invalid": 400,
       "cloud.not_configured": 409,
       "cloud.binding_conflict": 409,
@@ -74,7 +80,7 @@ export function mountSetupCloudSignIn(
   app.use(
     `${ROOT}/*`,
     bodyLimit({
-      maxSize: 4096,
+      maxSize: 16_384,
       onError: (c) => c.json({ error: { code: "cloud.request_invalid", params: {} } }, 400),
     }),
   );
@@ -123,7 +129,13 @@ export function mountSetupCloudSignIn(
           );
           return c.body(null, 204);
         }
-        if (Object.keys(input).length !== 1) throw new AppError("cloud.request_invalid", {});
+        const prepare = input.prepare === true;
+        if (
+          prepare
+            ? Object.keys(input).some((key) => !["tab", "prepare", "admin"].includes(key))
+            : !developmentLive || Object.keys(input).length !== 1
+        )
+          throw new AppError("cloud.request_invalid", {});
         const token = session ?? randomBytes(32).toString("base64url");
         setCookie(c, COOKIE, token, {
           path: "/",
@@ -136,11 +148,33 @@ export function mountSetupCloudSignIn(
           await deps.connection.startSignIn(
             { kind: "setup", tab: input.tab, session: token },
             authorize,
+            ...(prepare
+              ? ([
+                  (saved: PreparedSetupAdmin | undefined) => {
+                    if (input.admin !== undefined) return prepareAdmin(input.admin, saved);
+                    if (!saved) throw new AppError("cloud.request_unavailable", {});
+                    return saved;
+                  },
+                ] as const)
+              : []),
           ),
         );
       }),
     );
   }
+}
+
+export function setupCloudBinding(c: Context, deps: SetupCloudSignIn | undefined) {
+  if (
+    !deps ||
+    !onSetupOrigin(c, deps) ||
+    c.req.header("Origin") !== deps.origin ||
+    !sentFromThisOrigin(c)
+  )
+    return;
+  const tab = c.req.header("X-Waitron-Setup-Cloud-Tab");
+  const session = sessionFrom(c);
+  if (session && cloudSignInId(tab)) return { kind: "setup" as const, tab, session };
 }
 
 export async function recordSetupCloudPublication(
@@ -150,21 +184,12 @@ export async function recordSetupCloudPublication(
   log: Logger,
   staffEmail?: true,
 ): Promise<boolean | undefined> {
-  if (
-    !deps ||
-    cfg.environment !== "preproduction" ||
-    cfg.onboardingIntent === "demo" ||
-    !onSetupOrigin(c, deps) ||
-    c.req.header("Origin") !== deps.origin ||
-    !sentFromThisOrigin(c)
-  )
-    return;
-  const tab = c.req.header("X-Waitron-Setup-Cloud-Tab");
-  const session = sessionFrom(c);
-  if (!session || !cloudSignInId(tab)) return;
+  if (!deps || cfg.environment !== "preproduction" || cfg.onboardingIntent === "demo") return;
+  const binding = setupCloudBinding(c, deps);
+  if (!binding) return;
   try {
     return await deps.connection.publishSetupSignIn(
-      { kind: "setup", tab, session },
+      binding,
       cfg.nodeId,
       ...(staffEmail ? ([staffEmail] as const) : []),
     );

@@ -283,10 +283,11 @@ After a box becomes the main box, open **Backups** and check that each backup fo
 
 ## Connect a test box during setup {#setup-cloud-sign-in}
 
-On a test box prepared for Cloud sign-in, choose **Sign in to Waitron Cloud** before entering the
-administrator's details in Prepare or a development Live rehearsal. Sign in or create an account,
-then return to setup in the original tab. Waitron files the venue after you save it and the box
-restarts. Check **System → Cloud services** for the connection.
+On a test box prepared for Cloud sign-in, enter the administrator’s details first in **Prepare**.
+Then choose **Sign in to Waitron Cloud** and sign in or create an account. Setup resumes at the
+venue form in the same tab. In a development Live rehearsal, Cloud sign-in still comes before
+the administrator form. Waitron files the venue after you save it and the box restarts. Check
+**System → Cloud services** for the connection.
 
 If your test Cloud account has one Spanish business with no tax number or venues, choose a
 suggestion in **Find the registered address** or **Find the address**. Check the filled fields

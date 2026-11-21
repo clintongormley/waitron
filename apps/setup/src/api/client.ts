@@ -531,8 +531,14 @@ export class SetupApi {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }
 
-  startCloudSignIn(tab: string): Promise<{ authorizationUrl?: string }> {
-    return this.#request("/setup-api/cloud/sign-in/start", "POST", { tab });
+  startCloudSignIn(
+    tab: string,
+    prepareAdmin?: Partial<AdminDraft>,
+  ): Promise<{ authorizationUrl?: string }> {
+    return this.#request("/setup-api/cloud/sign-in/start", "POST", {
+      tab,
+      ...(prepareAdmin && { prepare: true, admin: prepareAdmin }),
+    });
   }
 
   cloudAddressLookup(

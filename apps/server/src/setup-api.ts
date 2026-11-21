@@ -2,8 +2,10 @@ import {
   mountSetupCloudSignIn,
   recordSetupCloudPublication,
   setupCloudSignInAvailable,
+  setupCloudBinding,
   type SetupCloudSignIn,
 } from "./setup-cloud-sign-in.js";
+import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { saveSmtpSettings } from "./mail-settings.js";
 import {
   mountRecoveryPreparationApi,
@@ -50,7 +52,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -302,6 +304,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.fiscal_test_required": 409,
   // A present-but-malformed `admin.email` (see `parseVenue`).
   "person.email_invalid": 400,
+  "cloud.request_unavailable": 409,
   "setup.already_provisioned": 409,
   "provisioning.foreign_taxpayer": 409,
   "provisioning.second_venue": 409,
@@ -496,15 +499,37 @@ function asStringArray(value: unknown, field: string): string[] {
   return value as string[];
 }
 
+function parseSetupAdmin(input: unknown, held?: PreparedSetupAdmin): PreparedSetupAdmin {
+  const admin = asObject(input, "admin");
+  const displayName = asString(admin.displayName, "admin.displayName");
+  const firstNames = asOptionalName(admin.firstNames, "admin.firstNames");
+  const lastNames = asOptionalName(admin.lastNames, "admin.lastNames");
+  const email = normalizeAndValidateEmail(asString(admin.email, "admin.email"));
+  return {
+    displayName,
+    firstNames,
+    lastNames,
+    email,
+    pinHash: held && admin.pin === "" ? held.pinHash : hashPin(asString(admin.pin, "admin.pin")),
+    passwordHash:
+      held && admin.password === ""
+        ? held.passwordHash
+        : hashPassword(asString(admin.password, "admin.password")),
+  };
+}
+
 /**
  * Validate the request's venue fields and HASH the admin PIN + password at this
  * boundary into a `VenueRequest` — the plaintext secrets are read, hashed and discarded here, so they
  * never enter the plan or any action. The country pack repeats the browser's tax-id, postcode,
  * province and jurisdiction checks here and derives the persisted fiscal territory and time zone.
  */
-function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): VenueRequest {
+function parseVenue(
+  venueRaw: unknown,
+  acceptLanguage: string | undefined,
+  heldAdmin?: PreparedSetupAdmin,
+): VenueRequest {
   const v = asObject(venueRaw, "venue");
-  const admin = asObject(v.admin, "admin");
   const countryInput = asString(v.country, "country");
   const taxIdInput = asString(v.taxId, "taxId");
   const fiscalTerritoryInput = asString(v.fiscalTerritory, "fiscalTerritory");
@@ -584,9 +609,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     fullSeriesCode: asString(v.fullSeriesCode, "fullSeriesCode"),
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
     admin: {
-      displayName: asString(admin.displayName, "admin.displayName"),
-      firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
-      lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
+      ...parseSetupAdmin(v.admin, heldAdmin),
       // The DISPLAY language, not the fiscal `invoiceLocales`. Never null: the till after a
       // PIN sign-in and account emails have no browser header to fall back to.
       locale: resolveLoginLocale(
@@ -597,10 +620,6 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
           fallback: FALLBACK_LOCALE,
         }),
       ),
-      pinHash: hashPin(asString(admin.pin, "admin.pin")),
-      passwordHash: hashPassword(asString(admin.password, "admin.password")),
-      // NOT hashed: the email is not a secret, and the dashboard login resolves it.
-      email: normalizeAndValidateEmail(asString(admin.email, "admin.email")),
     },
   };
 }
@@ -610,6 +629,7 @@ async function parseProvisionPayload(
   hostEnvironment: DeploymentEnvironment,
   devMode: boolean,
   acceptLanguage: string | undefined,
+  heldAdmin?: PreparedSetupAdmin,
 ): Promise<{
   mode: "demo" | "prepare" | "live";
   request: ProvisionRequest;
@@ -645,7 +665,7 @@ async function parseProvisionPayload(
   ) {
     invalidRequest("demoVenueNameSource");
   }
-  const parsedVenue = parseVenue(body.venue, acceptLanguage);
+  const parsedVenue = parseVenue(body.venue, acceptLanguage, heldAdmin);
   const pack = getVenueSetupCountryPack(parsedVenue.country)!;
   const identity =
     nameSource === "automatic" ? resolveCountryDemoIdentity(pack, parsedVenue.province) : undefined;
@@ -754,6 +774,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           throw new AppError("setup.already_provisioning", {});
         await deps.firstSetup?.assertOtherAllowed();
       },
+      parseSetupAdmin,
+      deps.devMode === true,
       log,
     );
   }
@@ -1099,7 +1121,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
-      setTimeout(() => requestRestart(), 0);
       if (key === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
       return c.json({
@@ -1112,15 +1133,54 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runProvision(c, log, async () => {
       let succeeded = false;
       try {
-        const requestHash = createHash("sha256")
-          .update(await c.req.raw.clone().text())
-          .digest("hex");
+        const requestHash = createHash("sha256").update(await c.req.raw.clone().text());
         const parsed = await readRawJsonBody<unknown>(c);
+        const raw = parsed as {
+          mode?: unknown;
+          venue?: { admin?: { password?: unknown; pin?: unknown } };
+        };
+        const admin = raw?.venue?.admin;
+        const usesHeldAdmin =
+          raw?.mode === "prepare" && (admin?.password === "" || admin?.pin === "");
+        const prepareBinding =
+          raw?.mode === "prepare" && deps.environment === "preproduction"
+            ? setupCloudBinding(c, cloudSignIn)
+            : undefined;
+        const binding = usesHeldAdmin ? prepareBinding : undefined;
+        if (
+          usesHeldAdmin &&
+          !binding &&
+          cloudSignIn &&
+          deps.environment === "preproduction" &&
+          c.req.header("X-Waitron-Setup-Cloud-Tab") !== undefined
+        )
+          throw new AppError("cloud.request_unavailable", {});
+        if (binding) requestHash.update(binding.tab).update(binding.session);
+        const hash = requestHash.digest("hex");
+        const clearHeldAdmin = async () => {
+          if (deps.environment === "preproduction")
+            await cloudSignIn?.connection.clearSetupAdmin().catch((error: unknown) => {
+              log("warn", "setup.cloud_admin_clear_failed", { errorCode: codeOf(error) });
+            });
+        };
+        const existing = binding ? await deps.operations?.read() : undefined;
+        if (
+          existing?.kind === "provision" &&
+          existing.requestHash === hash &&
+          existing.phase === "complete"
+        ) {
+          await clearHeldAdmin();
+          return c.json(existing.data as { provisioned: true; restarting: true });
+        }
+        const heldAdmin = binding
+          ? await cloudSignIn!.connection.readSetupAdmin(binding, existing?.requestHash === hash)
+          : undefined;
         const payload = await parseProvisionPayload(
           parsed,
           deps.environment,
           deps.devMode === true,
           c.req.header("Accept-Language"),
+          heldAdmin,
         );
         const { email: rawEmail, cloudStaffEmail } = parsed as Record<string, unknown>;
         const recoveryModule =
@@ -1136,15 +1196,18 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           if (node === undefined) throw new AppError("setup.not_ready", {});
           keyOutput = { node, module: recoveryModule, format: formatServerKey };
         }
+        const run = async (operation?: ActiveSetupOperation) => {
+          if (operation?.phase === "complete")
+            return c.json(operation.data as { provisioned: true; restarting: true });
+          const result = await execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
+          await clearHeldAdmin();
+          setTimeout(() => requestRestart(), 0);
+          return result;
+        };
         const response =
           deps.operations === undefined
-            ? await execute(payload, rawEmail, cloudStaffEmail, keyOutput)
-            : await runOperation(c.req.raw, "provision", requestHash, async (operation) => {
-                if (operation.phase === "complete") {
-                  return c.json(operation.data as { provisioned: true; restarting: true });
-                }
-                return execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
-              });
+            ? await run()
+            : await runOperation(c.req.raw, "provision", hash, run);
         succeeded = response.ok;
         return response;
       } finally {

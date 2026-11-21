@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isPairingV4Profile, type PairingV4Operation } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
+import type { VenueRequest } from "@waitron/provisioning";
 import type { CloudRegistration } from "./cloud-client.js";
 import "./errors.js";
 
@@ -27,12 +28,16 @@ type Attempt = CloudSignInBinding & {
   emailRelayEnabled?: true;
   provisionalRegistration?: CloudRegistration;
 };
+export type PreparedSetupAdmin = Omit<VenueRequest["admin"], "locale">;
+type HeldSetupAdmin = CloudSignInBinding & { expiresAt: number; admin: PreparedSetupAdmin };
+
 export interface CloudSignInState {
   version: 4;
   origin: string;
   privateKey: string;
   publicKey: string;
   attempt?: Attempt;
+  setupAdmin?: HeldSetupAdmin;
 }
 
 export const cloudSignInId = (value: unknown): value is string =>
@@ -43,6 +48,29 @@ const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const instant = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
+
+export function readHeldSetupAdmin(value: unknown): HeldSetupAdmin | undefined {
+  if (value === undefined) return;
+  const hash = (input: unknown) =>
+    typeof input === "string" && /^scrypt\$[0-9a-f]{32}\$[0-9a-f]{64}$/.test(input);
+  if (
+    !record(value) ||
+    value.kind !== "setup" ||
+    !cloudSignInId(value.tab) ||
+    typeof value.session !== "string" ||
+    !/^[0-9a-f]{64}$/.test(value.session) ||
+    !Number.isSafeInteger(value.expiresAt) ||
+    !record(value.admin) ||
+    typeof value.admin.displayName !== "string" ||
+    typeof value.admin.email !== "string" ||
+    (value.admin.firstNames !== null && typeof value.admin.firstNames !== "string") ||
+    (value.admin.lastNames !== null && typeof value.admin.lastNames !== "string") ||
+    !hash(value.admin.passwordHash) ||
+    !hash(value.admin.pinHash)
+  )
+    throw new AppError("cloud.state_invalid", {});
+  return value as unknown as HeldSetupAdmin;
+}
 
 export function readCloudSignInReturn(value: Record<string, unknown>): CloudSignInReturn {
   const { requestId, state, code, error } = value;

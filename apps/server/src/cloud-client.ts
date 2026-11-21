@@ -5,10 +5,12 @@ import {
   readCloudSignInReply,
   newCloudSignInAttempt,
   readCloudSignInAttempt,
+  readHeldSetupAdmin,
   type CloudSignInBinding,
   type CloudSignInProfile,
   type CloudSignInReturn,
   type CloudSignInState,
+  type PreparedSetupAdmin,
 } from "./cloud-sign-in.js";
 import { fetchSetupAddress } from "./cloud-address-lookup.js";
 import { fetchOwnerRecovery, ownerRecoveryBinding } from "./cloud-owner-recovery.js";
@@ -272,6 +274,23 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
     throw new AppError("cloud.unavailable", {});
   return view;
 }
+async function readPrivateCloudState(path: string): Promise<unknown> {
+  const info = await lstat(path);
+  if (!info.isFile() || info.size > 65536 || (info.mode & 0o077) !== 0)
+    throw new AppError("cloud.state_invalid", {});
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
+// Start again already owns the venue folder. Keep the configured key and remove the setup draft
+// before deleting the abandoned attempt.
+export async function discardHeldSetupAdmin(stateDir: string): Promise<void> {
+  const path = join(stateDir, CLOUD_CONNECTION_FILE);
+  const state = await readPrivateCloudState(path).catch(() => undefined);
+  if (!record(state) || state.version !== 4 || !Object.hasOwn(state, "setupAdmin")) return;
+  delete state.setupAdmin;
+  await writeFileDurable(path, JSON.stringify(state), 0o600);
+}
+
 const connectionTurns = new Map<string | symbol, Promise<void>>();
 /** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
@@ -310,9 +329,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
   }
   async function readState(): Promise<SavedCloudState | CloudSignInState | undefined> {
     try {
-      const info = await lstat(path);
-      if (!info.isFile() || info.size > 65536 || (info.mode & 0o077) !== 0) throw new Error();
-      const value: unknown = JSON.parse(await readFile(path, "utf8"));
+      const value = await readPrivateCloudState(path);
       if (record(value) && value.version === 1) {
         heldEmergencyHints = undefined;
         return undefined;
@@ -339,12 +356,14 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         if (options.environment !== "test") throw new Error();
         heldEmergencyHints = undefined;
         const attempt = readCloudSignInAttempt(value.attempt);
+        const setupAdmin = readHeldSetupAdmin(value.setupAdmin);
         return {
           version: 4,
           origin: options.origin,
           privateKey: value.privateKey,
           publicKey: value.publicKey,
           ...(attempt ? { attempt } : {}),
+          ...(setupAdmin ? { setupAdmin } : {}),
         };
       }
       const venueId = await options.readVenueId();
@@ -579,6 +598,15 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       attempt.tab === binding.tab &&
       attempt.session === hashSessionToken(binding.session)
     );
+  }
+  async function liveSetupAdmin(state: CloudSignInState, saveInProgress = false) {
+    const held = state.setupAdmin;
+    if (held && held.expiresAt <= Date.now() && !saveInProgress) {
+      delete state.setupAdmin;
+      await writeState(state);
+      return;
+    }
+    return held;
   }
   async function setupAddressAttempt(binding: CloudSignInBinding) {
     if (options.signIn?.setup !== true) return;
@@ -851,7 +879,28 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         return staffEmail ? attempt.emailRelayEnabled === true : undefined;
       });
     },
-    async startSignIn(binding: CloudSignInBinding, authorize: () => Promise<void>) {
+    async readSetupAdmin(binding: CloudSignInBinding, saveInProgress: boolean) {
+      return run(async () => {
+        const state = await signInState();
+        const held = await liveSetupAdmin(state, saveInProgress);
+        if (!held || !sameBinding(held, binding))
+          throw new AppError("cloud.request_unavailable", {});
+        return held.admin;
+      });
+    },
+    async clearSetupAdmin() {
+      return run(async () => {
+        const state = await readState();
+        if (state?.version !== 4 || !state.setupAdmin) return;
+        delete state.setupAdmin;
+        await writeState(state);
+      });
+    },
+    async startSignIn(
+      binding: CloudSignInBinding,
+      authorize: () => Promise<void>,
+      prepareAdmin?: (saved: PreparedSetupAdmin | undefined) => PreparedSetupAdmin,
+    ) {
       return run(async () => {
         const state = await signInState();
         let attempt = state.attempt;
@@ -859,6 +908,25 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         const setup = binding.kind === "setup";
         if (setup !== (options.signIn!.setup === true))
           throw new AppError("cloud.binding_conflict", {});
+        if (setup && prepareAdmin) {
+          const held = await liveSetupAdmin(state);
+          if (
+            attempt &&
+            Date.parse(attempt.expiresAt) > Date.now() &&
+            !sameBinding(attempt, binding)
+          )
+            throw new AppError("cloud.binding_conflict", {});
+          const previous = held && sameBinding(held, binding) ? held.admin : undefined;
+          state.setupAdmin = {
+            kind: "setup",
+            tab: binding.tab,
+            session: hashSessionToken(binding.session),
+            expiresAt: Date.now() + 43_800_000,
+            admin: prepareAdmin(previous),
+          };
+          await authorize();
+          await writeState(state);
+        }
         const resumeSetup =
           !setup &&
           (attempt?.resumeSetup ||
