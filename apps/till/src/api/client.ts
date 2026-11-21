@@ -1057,14 +1057,20 @@ export type TenderBlock =
       externalMachine?: string;
     };
 
-/** The recorded ticket carried by payment answers and receipt reads. */
+/** The table's ticket that took a part payment off. */
+export interface TakenOffBy {
+  saleId: string;
+  invoiceNumber: string;
+}
+
 /** A ticket as the ticket view reads it. */
 export interface TransactionReceipt extends TillSaleResult {
   /** On a part payment's ticket, the table's ticket that took it off; absent on any other ticket
    * and on a corrective. Shown on screen only. */
-  takenOffBy?: { saleId: string; invoiceNumber: string };
+  takenOffBy?: TakenOffBy;
 }
 
+/** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
   slipPaymentId?: string;
   slipPrintFailed?: true;
@@ -1214,7 +1220,7 @@ export interface BillPaymentView extends OutsideCardDetails {
   issuedOn?: string;
   vatBreakdown?: { rate: string; base: string; tax: string }[];
   /** The bill's invoice that took the advance off, once issued; never a corrective of it. */
-  takenOffBy?: { saleId: string; invoiceNumber: string };
+  takenOffBy?: TakenOffBy;
   left?: string;
   tipLeft?: string;
   id: string;

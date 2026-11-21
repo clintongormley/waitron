@@ -19,6 +19,7 @@ import {
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordCorrection } from "@waitron/core";
+import type { TrustedClock } from "@waitron/fiscal";
 import {
   computeCategorySales,
   computeTopSellers,
@@ -1039,7 +1040,7 @@ describe("a settled bill's received, once Correct invoice gave money back", () =
 describe("a whole credit of the rest's invoice (ruling L9)", () => {
   /** Credits the settled rest's invoice whole: its lines reversed as cancelling an order reverses
    * them, and its split the invoice's own negated. The credit's id. */
-  async function creditWhole(saleId: string): Promise<string> {
+  async function creditWhole(saleId: string, clock?: TrustedClock): Promise<string> {
     const { saleId: credit } = await inTx(venue(), async (tx) => {
       const [sale] = await tx
         .select({ total: sales.total })
@@ -1047,6 +1048,7 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
         .where(eq(sales.id, saleId));
       return recordCorrection(tx, venue().backend, {
         ...(await correctionOf(tx, saleId)),
+        ...(clock === undefined ? {} : { clock }),
         total: centsToDecimal(-sale!.total),
         lines: reversedLines(await linesIn(tx, saleId)),
         wholeInvoice: true,
@@ -1112,9 +1114,30 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     });
   });
 
-  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment and on the advance's ticket", async () => {
+  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment, the advance's ticket and its refusal, though the credit is dated before it", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
-    const credit = await creditWhole(rest.saleId);
+    const issuedAt = async (saleId: string) =>
+      (
+        await inTx(venue(), (tx) =>
+          tx.select({ at: sales.issuedAt }).from(sales).where(eq(sales.id, saleId)),
+        )
+      )[0]!.at;
+    const original = new Date(await issuedAt(rest.saleId));
+    const anHourEarlier: TrustedClock = {
+      now: () => ({
+        instant: new Date(original.getTime() - 3_600_000),
+        offsetMinutes: 60,
+        confident: true,
+        confidence: "anchored",
+        anchorAgeSeconds: 0,
+      }),
+      anchor: () => {
+        throw new Error("anchor() is not used here");
+      },
+      currentAnchor: () => null,
+    };
+    const credit = await creditWhole(rest.saleId, anHourEarlier);
+    expect(new Date(await issuedAt(credit)).getTime()).toBeLessThan(original.getTime());
     const takenOffBy = {
       saleId: rest.saleId,
       invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
@@ -1123,6 +1146,15 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
     expect((await ticketOf(rest.advanceIds[0]!)).takenOffBy).toEqual(takenOffBy);
     expect(await ticketOf(credit)).not.toHaveProperty("takenOffBy");
+    const refused = await preview(rest.advanceIds[0]!, "30.00");
+    expect(refused.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: rest.advanceIds[0],
+        finalSaleId: rest.saleId,
+        invoiceNumber: takenOffBy.invoiceNumber,
+      },
+    });
   });
 
   it("example 8: files −3.92/−0.43, reversing the seven dishes and the deduction line", async () => {
