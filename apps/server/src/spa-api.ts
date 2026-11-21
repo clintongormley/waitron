@@ -17,6 +17,8 @@ export interface SpaDeps {
   /** URL prefix without a trailing slash; "" for the origin root. */
   basePath: string;
   navigationPath?: string | ((path: string) => boolean);
+  /** A page on a sibling name of the same site must not frame the app and steer a tap. */
+  frameSelfOnly?: boolean;
 }
 
 /** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
@@ -73,7 +75,7 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
       !firstSegment.includes(".") &&
       (c.req.header("Accept") ?? "").includes("text/html");
     if (relPath === "/" || isNavigation) {
-      return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
+      return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log, deps.frameSelfOnly);
     }
     const abs = safeResolve(root, relPath);
     // The adapter collapses dot segments on the way in, so what reaches this in practice is a path
@@ -84,7 +86,7 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
     const cache = relPath.startsWith("/assets/")
       ? IMMUTABLE_CACHE_CONTROL
       : REVALIDATE_CACHE_CONTROL;
-    return sendFile(c, abs, cache, log);
+    return sendFile(c, abs, cache, log, deps.frameSelfOnly);
   };
 
   if (deps.basePath === "" || deps.basePath === "/") {
@@ -107,7 +109,12 @@ export function mountBuiltApps(
   if (apps.dashboardAppDir !== undefined)
     mountSpa(
       app,
-      { root: apps.dashboardAppDir, basePath: "", navigationPath: isDashboardPath },
+      {
+        root: apps.dashboardAppDir,
+        basePath: "",
+        navigationPath: isDashboardPath,
+        frameSelfOnly: true,
+      },
       log,
     );
 }
@@ -121,6 +128,7 @@ async function sendFile(
   absolutePath: string,
   cacheControl: string,
   log: Logger,
+  frameSelfOnly = false,
 ): Promise<Response> {
   try {
     // `c.body` wants `Uint8Array<ArrayBuffer>`, narrower than the `Buffer` `readFile` returns.
@@ -128,6 +136,7 @@ async function sendFile(
     return c.body(bytes, 200, {
       "Content-Type": getMimeType(absolutePath) ?? "application/octet-stream",
       "Cache-Control": cacheControl,
+      ...(frameSelfOnly ? { "Content-Security-Policy": "frame-ancestors 'self'" } : {}),
     });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
