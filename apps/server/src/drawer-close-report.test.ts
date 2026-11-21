@@ -7,6 +7,9 @@ import {
   CORE_MIGRATIONS,
   CORE_CHANGE_SOURCES,
   installChangeFeed,
+  saveDrawerCount,
+  recountDrawer,
+  finishDrawerClose,
   subscribeToChanges,
   devices,
   handoverActivations,
@@ -21,7 +24,7 @@ import { startManagementSession } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createPrinter } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { stringToCents } from "@waitron/shared";
+import { decimal, stringToCents } from "@waitron/shared";
 import { mountReportApi } from "./report-api.js";
 import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 
@@ -146,8 +149,8 @@ it("lists pending and finished drawer counts in the selected Sales dates, includ
   const done = await finish(first.id);
   const pending = await saveCount(nodeId, drawer, "2026-11-20T19:00:00.000Z");
   await saveCount(otherNode, drawer, "2026-11-20T20:00:00.000Z");
-  await saveCount(nodeId, drawer, "2026-11-19T22:00:00.000Z");
-  const response = await get(`${onDay}&drawerId=${drawer}`);
+  const overnight = await saveCount(nodeId, sparePrinter, "2026-11-19T22:00:00.000Z");
+  const response = await get();
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
     timeZone: "Europe/Madrid",
@@ -166,16 +169,51 @@ it("lists pending and finished drawer counts in the selected Sales dates, includ
         recount: { person: "Robin", counted: "9.00", difference: "-1.00", cashMoved: false },
         finished: { id: done.id, person: "Robin", bankWithdrawal: "6.00", amountLeft: "3.00" },
       },
+      { id: overnight.id, finished: null },
     ],
-  });
-  expect(await (await get(`${onDay}&drawerId=${sparePrinter}`)).json()).toMatchObject({
-    closes: [],
   });
 });
 
 it("queues only a document on the selected active receipt printer for a deleted drawer", async () => {
-  const first = await saveCount(nodeId, drawer, "2026-11-20T18:00:00.000Z");
-  const done = await finish(first.id);
+  const done = await withTransaction(store.db, async (tx) => {
+    const actor = (minute: string) => ({
+      nodeId,
+      printerId: drawer,
+      personId: alex,
+      deviceId: null,
+      recordedAt: `2026-11-20T18:${minute}:00.000Z`,
+    });
+    const cashIn = (minute: string, amount: number) =>
+      appendDrawerEntry(tx, { ...actor(minute), kind: "cash_in", amount });
+    const firstDeposit = await cashIn("00", 700);
+    const firstClose = await saveDrawerCount(tx, actor("01"), {
+      counted: decimal("7.00"),
+      startSequence: firstDeposit.sequence,
+    });
+    await finishDrawerClose(tx, actor("02"), {
+      firstCountId: firstClose.first.id,
+      confirmSequence: firstClose.confirmSequence,
+      amountLeft: decimal("3.00"),
+    });
+    const nextDeposit = await cashIn("03", 1000);
+    const counted = await saveDrawerCount(tx, actor("04"), {
+      counted: decimal("12.00"),
+      startSequence: nextDeposit.sequence - 1,
+    });
+    await recountDrawer(tx, actor("05"), {
+      firstCountId: counted.first.id,
+      counted: decimal("13.00"),
+      startSequence: counted.confirmSequence,
+    });
+    const afterCount = await cashIn("06", 200);
+    const close = await finishDrawerClose(tx, actor("07"), {
+      firstCountId: counted.first.id,
+      confirmSequence: afterCount.sequence,
+      amountLeft: decimal("4.00"),
+    });
+    await cashIn("08", 2500);
+    return close;
+  });
   await store.db
     .update(printers)
     .set({ active: false, deletedAt: done.recordedAt })
@@ -191,10 +229,25 @@ it("queues only a document on the selected active receipt printer for a deleted 
   const [job] = await store.db.select().from(printJobs).where(eq(printJobs.id, jobId));
   expect(job).toMatchObject({ printerId: sparePrinter, kind: "document" });
   expect(opensDrawer(job!.payload!)).toBe(false);
-  expect(printedLines(job!.payload!).join("\n")).toContain("Bar drawer");
+  const lines = printedLines(job!.payload!).map((line) => line.trim().replace(/ +/g, " "));
+  expect(lines).toEqual(
+    expect.arrayContaining([
+      "Bar drawer",
+      "From 20/11/2026, 19:02",
+      "Cash in €12.00",
+      "Counted €13.00",
+      "Cash moved after the count +€2.00",
+      "For the bank €11.00",
+      "Cash left €4.00",
+    ]),
+  );
+  expect(lines).not.toContain("Cash moved while counting.");
   expect((await print(done.id, drawer)).status).toBe(404);
   expect(await (await get()).json()).toMatchObject({
-    closes: [{ assigned: false, deleted: true }],
+    closes: [
+      { assigned: false, deleted: true, finished: { cashAfterCount: "2.00" } },
+      { assigned: false, deleted: true, finished: { cashAfterCount: "0.00" } },
+    ],
   });
 });
 

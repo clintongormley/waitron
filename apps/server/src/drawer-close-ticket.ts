@@ -28,9 +28,10 @@ export function formatDrawerCloseTicket(
   text(`${words.from} ${date.format(new Date(close.from))}`);
   text(`${words.to} ${date.format(new Date(close.finished.at))}`);
   text(`${words.closedBy} ${close.finished.person}`);
-  if (close.cashMoved) text(words.moved);
+  if (close.count.cashMoved) text(words.moved);
   builder.line();
-  for (const [label, amount] of [
+  const afterCount = close.finished.cashAfterCount;
+  for (const [label, amount, signed] of [
     [words.cashSales, close.cashSales],
     [words.cashRefunds, close.cashRefunds],
     [words.cashIn, close.cashIn],
@@ -38,13 +39,14 @@ export function formatDrawerCloseTicket(
     [words.expected, close.count.expected],
     [words.counted, close.count.counted],
     [words.difference, close.finished.difference],
+    ...(afterCount === "0.00" ? [] : ([[words.afterCount, afterCount, true]] as const)),
     [words.bank, close.finished.bankWithdrawal],
     [words.left, close.finished.amountLeft],
     [words.cards, close.cardPayments],
   ] as const) {
     for (const line of labelAmountLines(
       prepareText(label),
-      prepareText(formatMoney(amount, locale)),
+      prepareText((signed && !amount.startsWith("-") ? "+" : "") + formatMoney(amount, locale)),
       columns,
     ))
       builder.line(line);

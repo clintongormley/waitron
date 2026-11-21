@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import type { DrawerCloseForPrint } from "./drawer-close-report.js";
 import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
+import { DRAWER_CLOSE_TICKET_WORDS } from "./i18n/drawer-close-ticket.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 
 const close: DrawerCloseForPrint = {
@@ -14,6 +15,7 @@ const close: DrawerCloseForPrint = {
     bankWithdrawal: decimal("500.50"),
     amountLeft: decimal("150.00"),
     difference: decimal("-0.50"),
+    cashAfterCount: decimal("0.00"),
   },
   count: {
     person: "Alex",
@@ -23,7 +25,6 @@ const close: DrawerCloseForPrint = {
     expected: decimal("651.00"),
     difference: decimal("-0.50"),
   },
-  cashMoved: true,
   cashSales: decimal("532.50"),
   cashRefunds: decimal("-12.00"),
   cashIn: decimal("50.00"),
@@ -65,7 +66,7 @@ it("prints the stored amounts and identifies that card payments are before refun
 
 it("wraps the Spanish labels to the selected 58 mm print area", () => {
   const ticket = formatDrawerCloseTicket(
-    { ...close, cashMoved: false },
+    { ...close, count: { ...close.count, cashMoved: false } },
     { paperWidth: "58mm", resolution: "180dpi" },
     "es-ES",
     "Europe/Madrid",
@@ -74,6 +75,6 @@ it("wraps the Spanish labels to the selected 58 mm print area", () => {
   expect([...commands.find(({ name }) => name === "GS W")!.bytes]).toEqual([29, 87, 104, 1]);
   expect([...new Set(commands.flatMap(({ widthDots }) => widthDots ?? []))]).toEqual([360]);
   const text = printedLines(ticket).join(" ").replace(/ +/g, " ");
-  expect(text).toContain("Cobros con tarjeta, antes de devoluciones 1310,00 €");
+  expect(text).toContain(`${DRAWER_CLOSE_TICKET_WORDS["es-ES"].cards} 1310,00 €`);
   expect(text).not.toContain("Hubo movimientos");
 });

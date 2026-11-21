@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   devices,
@@ -8,7 +8,13 @@ import {
   printers,
   type Transaction,
 } from "@waitron/db";
-import { centsToDecimal, rawCentsToDecimal, subtractDecimal, type Decimal } from "@waitron/shared";
+import {
+  addDecimal,
+  centsToDecimal,
+  rawCentsToDecimal,
+  subtractDecimal,
+  type Decimal,
+} from "@waitron/shared";
 
 const recount = alias(drawerEntries, "recount");
 const finish = alias(drawerEntries, "finish");
@@ -18,7 +24,7 @@ const finishPerson = alias(persons, "finish_person");
 const reportDate = sql<string>`coalesce(${finish.recordedAt}, ${drawerEntries.recordedAt})`;
 
 type Entry = typeof drawerEntries.$inferSelect;
-type Filter = { startAt: string; endAt: string; drawerId?: string } | { finishId: string };
+type Filter = { startAt: string; endAt: string } | { finishId: string };
 
 function count(row: Entry, person: string) {
   const counted = centsToDecimal(row.amount);
@@ -44,10 +50,9 @@ async function readRows(tx: Transaction, nodeIds: readonly string[], filter: Fil
   const selection =
     "finishId" in filter
       ? eq(finish.id, filter.finishId)
-      : and(
-          sql`${reportDate} >= ${filter.startAt}`,
-          sql`${reportDate} < ${filter.endAt}`,
-          filter.drawerId === undefined ? undefined : eq(drawerEntries.printerId, filter.drawerId),
+      : or(
+          isNull(finish.id),
+          and(gte(finish.recordedAt, filter.startAt), lt(finish.recordedAt, filter.endAt)),
         );
   return tx
     .select({
@@ -76,24 +81,33 @@ async function readRows(tx: Transaction, nodeIds: readonly string[], filter: Fil
 }
 
 function history(row: Awaited<ReturnType<typeof readRows>>[number]) {
+  const first = count(row.first, row.firstName);
+  const recounted = row.recount === null ? null : count(row.recount, row.recountName!);
+  const finished = row.finish;
+  const bankWithdrawal = finished === null ? null : centsToDecimal(finished.amount);
+  const amountLeft = finished?.facts?.amountLeft as Decimal | undefined;
   return {
     id: row.first.id,
     drawerId: row.first.printerId,
     drawerName: row.drawerName,
     assigned: row.assigned,
     deleted: row.deleted,
-    first: count(row.first, row.firstName),
-    recount: row.recount === null ? null : count(row.recount, row.recountName!),
+    first,
+    recount: recounted,
     finished:
-      row.finish === null
+      finished === null
         ? null
         : {
-            id: row.finish.id,
+            id: finished.id,
             person: row.finishName!,
-            at: row.finish.recordedAt,
-            bankWithdrawal: centsToDecimal(row.finish.amount),
-            amountLeft: row.finish.facts!.amountLeft as Decimal,
-            difference: row.finish.facts!.difference as Decimal,
+            at: finished.recordedAt,
+            bankWithdrawal: bankWithdrawal!,
+            amountLeft: amountLeft!,
+            difference: finished.facts!.difference as Decimal,
+            cashAfterCount: subtractDecimal(
+              addDecimal(bankWithdrawal!, amountLeft!),
+              (recounted ?? first).counted,
+            ),
           },
   };
 }
@@ -163,7 +177,6 @@ export async function readDrawerCloseForPrint(
       [row.first.recordedAt, ...amounts.map((movement) => movement.firstAt)].sort()[0]!,
     finished: close.finished!,
     count: close.recount ?? close.first,
-    cashMoved: close.first.cashMoved || (close.recount?.cashMoved ?? false),
     cashSales: total("cash_payment"),
     cashRefunds: total("cash_refund"),
     cashIn: total("cash_in"),

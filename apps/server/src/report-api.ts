@@ -524,15 +524,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
-      const rawDrawerId = c.req.query("drawerId");
-      const drawerId =
-        rawDrawerId === undefined ? undefined : requireBodyUuid(rawDrawerId, "drawerId");
       const result = await gated(session, REPORT_VIEW_PERMISSION, async (tx) => {
         const { nodeIds, clock } = await buildReportContext(tx);
         const closes = await listDrawerCloses(tx, nodeIds, {
           startAt: businessDayBounds(clock, from).startAt,
           endAt: businessDayBounds(clock, to).endAt,
-          ...(drawerId === undefined ? {} : { drawerId }),
         });
         return { timeZone: clock.timeZone, closes };
       });

@@ -1732,6 +1732,7 @@ export interface DrawerCloseHistoryDto {
       bankWithdrawal: string;
       amountLeft: string;
       difference: string;
+      cashAfterCount: string;
     } | null;
   }[];
 }

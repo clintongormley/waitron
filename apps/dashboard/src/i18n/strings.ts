@@ -3117,6 +3117,8 @@ export const en = {
   "sales.drawer_all": "All drawers",
   "sales.drawer_empty": "No drawer counts for these dates.",
   "sales.drawer_pending": "Count pending",
+  "sales.drawer_pending_dates": "Pending counts show for any date.",
+  "sales.drawer_after_count": "Cash moved after the count {amount}",
   "sales.drawer_finished": "Closed",
   "sales.drawer_deleted": "Drawer deleted",
   "sales.drawer_unassigned": "Assign a till to this drawer to close it.",
@@ -3128,7 +3130,6 @@ export const en = {
   "sales.drawer_moved": "Cash moved while counting.",
   "sales.drawer_print": "Reprint close",
   "sales.drawer_print_sent": "Drawer close sent to {printer}.",
-  "sales.drawer_no_printers": "Turn on or add a receipt printer to reprint a close.",
   "sales.drawer_help": "Guide to drawer close history",
   "sales.print_sent": "Category sales sent to {printer}.",
   "sales.no_printers_manage":
@@ -7835,6 +7836,8 @@ export const es: Record<StringKey, string> = {
   "sales.drawer_all": "Todos los cajones",
   "sales.drawer_empty": "No hay recuentos de caja en estas fechas.",
   "sales.drawer_pending": "Recuento pendiente",
+  "sales.drawer_pending_dates": "Los recuentos pendientes se muestran en cualquier fecha.",
+  "sales.drawer_after_count": "Efectivo movido tras el recuento {amount}",
   "sales.drawer_finished": "Cerrado",
   "sales.drawer_deleted": "Cajón eliminado",
   "sales.drawer_unassigned": "Asigna un terminal a este cajón para cerrarlo.",
@@ -7846,8 +7849,6 @@ export const es: Record<StringKey, string> = {
   "sales.drawer_moved": "Hubo movimientos de efectivo durante el recuento.",
   "sales.drawer_print": "Reimprimir cierre",
   "sales.drawer_print_sent": "Cierre de caja enviado a {printer}.",
-  "sales.drawer_no_printers":
-    "Enciende o añade una impresora de recibos para reimprimir un cierre.",
   "sales.drawer_help": "Guía del historial de cierres de caja",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
   "sales.no_printers_manage":

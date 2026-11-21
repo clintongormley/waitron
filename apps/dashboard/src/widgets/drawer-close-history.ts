@@ -24,15 +24,6 @@ export class DrawerCloseHistory extends LitElement {
       h2 {
         font-size: var(--wt-font-size-md);
       }
-      .filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
-      }
-      wt-combobox {
-        flex: 0 1 calc(var(--wt-space-6) * 7);
-        min-width: 0;
-      }
       details {
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
@@ -66,11 +57,9 @@ export class DrawerCloseHistory extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property() from = "";
   @property() to = "";
-  @property({ attribute: false }) printers: ReportPrinter[] | null = null;
-  @property({ attribute: false }) printersError: string | null = null;
+  @property({ attribute: false }) printer?: ReportPrinter;
   @state() private report: DrawerCloseHistoryDto | null = null;
   @state() private drawerId = "";
-  @state() private printerId = "";
   @state() private readingError = "";
   @state() private printing = "";
   @state() private printError = "";
@@ -88,15 +77,23 @@ export class DrawerCloseHistory extends LitElement {
     new ContentLanguageController(this);
   }
 
-  override updated(changed: PropertyValues): void {
+  override willUpdate(changed: PropertyValues): void {
     if (!changed.has("from") && !changed.has("to") && !changed.has("api")) return;
     this.report = null;
     this.readingError = "";
+    this.sentTo = "";
+    this.printError = "";
     void this.#queries
       .watch(
         "getDrawerCloses",
         [this.from, this.to],
         (report) => {
+          if (
+            this.report === null &&
+            !report.closes.some(({ drawerId }) => drawerId === this.drawerId)
+          ) {
+            this.drawerId = "";
+          }
           this.report = report;
           this.readingError = "";
         },
@@ -107,12 +104,8 @@ export class DrawerCloseHistory extends LitElement {
       });
   }
 
-  #printer() {
-    return this.printers?.find(({ id }) => id === this.printerId) ?? this.printers?.[0];
-  }
-
   async #print(closeId: string) {
-    const printer = this.#printer();
+    const printer = this.printer;
     if (printer === undefined || this.printing !== "") return;
     this.printing = closeId;
     this.sentTo = "";
@@ -132,57 +125,44 @@ export class DrawerCloseHistory extends LitElement {
     const drawers = [...new Map(closes.map(({ drawerId, drawerName }) => [drawerId, drawerName]))];
     const visible =
       this.drawerId === "" ? closes : closes.filter((row) => row.drawerId === this.drawerId);
-    const printer = this.#printer();
-    const hasFinished = closes.some((row) => row.finished !== null);
+    const pending = visible.filter((row) => row.finished === null);
+    const completed = visible.filter((row) => row.finished !== null);
+    const renderRows = (rows: Close[]) =>
+      repeat(
+        rows,
+        (row) => row.id,
+        (row) => this.#renderClose(row, this.report!.timeZone),
+      );
 
     return html`
       <section aria-labelledby="drawer-history">
         <h2 id="drawer-history">${t("sales.drawer_history")}</h2>
-        <div class="filters">
-          ${
-            drawers.length === 0
-              ? nothing
-              : html` <wt-combobox
-                  label=${t("sales.drawer_filter")}
-                  name="drawerId"
-                  show-empty-option
-                  search="auto"
-                  .options=${[{ value: "", label: t("sales.drawer_all") }, ...drawers.map(([value, label]) => ({ value, label }))]}
-                  .value=${this.drawerId}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.drawerId = event.detail.value;
-                  }}
-                ></wt-combobox>`
-          }
-          ${
-            !hasFinished || printer === undefined
-              ? nothing
-              : html` <wt-combobox
-                  label=${t("sales.printer")}
-                  name="printerId"
-                  search="auto"
-                  .options=${this.printers!.map(({ id, name }) => ({ value: id, label: name }))}
-                  .value=${printer.id}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    this.printerId = event.detail.value;
-                  }}
-                ></wt-combobox>`
-          }
-        </div>
+        ${
+          drawers.length === 0
+            ? nothing
+            : html` <wt-combobox
+                label=${t("sales.drawer_filter")}
+                name="drawerId"
+                show-empty-option
+                search="auto"
+                .options=${[{ value: "", label: t("sales.drawer_all") }, ...drawers.map(([value, label]) => ({ value, label }))]}
+                .value=${this.drawerId}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  this.drawerId = event.detail.value;
+                }}
+              ></wt-combobox>`
+        }
         ${this.readingError ? html`<p class="error" role="alert">${codeMessage(this.readingError)}</p>` : nothing}
         ${
-          this.report === null
+          pending.length === 0
             ? nothing
-            : visible.length === 0
-              ? html`<p>${t("sales.drawer_empty")}</p>`
-              : repeat(
-                  visible,
-                  (row) => row.id,
-                  (row) => this.#renderClose(row, this.report!.timeZone),
-                )
+            : html`
+                <p class="muted">${t("sales.drawer_pending_dates")}</p>
+                ${renderRows(pending)}
+              `
         }
-        ${hasFinished && this.printers?.length === 0 ? html`<p>${t("sales.drawer_no_printers")}</p>` : nothing}
-        ${hasFinished && this.printersError ? html`<p class="error" role="alert">${codeMessage(this.printersError)}</p>` : nothing}
+        ${renderRows(completed)}
+        ${this.report !== null && visible.length === 0 ? html`<p>${t("sales.drawer_empty")}</p>` : nothing}
         <div class="error" role="alert">
           ${this.printError ? codeMessage(this.printError) : nothing}
         </div>
@@ -241,9 +221,20 @@ export class DrawerCloseHistory extends LitElement {
                   </dd>`
           }
         </dl>
+        ${
+          finished !== null && finished.cashAfterCount !== "0.00"
+            ? html`<p>
+                ${fill("sales.drawer_after_count", {
+                  amount:
+                    (finished.cashAfterCount.startsWith("-") ? "" : "+") +
+                    money(finished.cashAfterCount),
+                })}
+              </p>`
+            : nothing
+        }
         ${first.cashMoved || recount?.cashMoved ? html`<p>${t("sales.drawer_moved")}</p>` : nothing}
         ${
-          assigned && !deleted
+          !deleted && (assigned || finished !== null)
             ? nothing
             : html` <p class="muted">
                 ${t(deleted ? "sales.drawer_deleted" : "sales.drawer_unassigned")}
@@ -254,7 +245,7 @@ export class DrawerCloseHistory extends LitElement {
             ? nothing
             : html` <wt-button
                 variant="secondary"
-                ?disabled=${this.#printer() === undefined || this.printing !== ""}
+                ?disabled=${this.printer === undefined || this.printing !== ""}
                 ?loading=${this.printing === finished.id}
                 @click=${() => void this.#print(finished.id)}
                 >${t("sales.drawer_print")}</wt-button

@@ -35,7 +35,7 @@ const history: DrawerCloseHistoryDto = {
       id: "count",
       drawerId: "kitchen",
       drawerName: "Kitchen drawer",
-      assigned: true,
+      assigned: false,
       deleted: false,
       first,
       recount: {
@@ -52,6 +52,7 @@ const history: DrawerCloseHistoryDto = {
         bankWithdrawal: "6.00",
         amountLeft: "3.00",
         difference: "-1.00",
+        cashAfterCount: "2.00",
       },
     },
   ],
@@ -101,6 +102,25 @@ it("uses the Sales dates and preserves the drawer filter on a passive refresh", 
   expect(getDrawerCloses).toHaveBeenLastCalledWith("2026-11-20", "2026-11-20");
 });
 
+it("shows the new date range when it has no counts for the previously selected drawer", async () => {
+  const { api, getDrawerCloses } = fixture();
+  const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+  await vi.waitFor(() => expect(text(el)).toContain("Kitchen drawer"));
+  await chooseOption(body(el)!.querySelector('wt-combobox[name="drawerId"]')!, "kitchen");
+  getDrawerCloses.mockResolvedValue({ ...history, closes: [history.closes[0]!] });
+  el.shadowRoot!.querySelector('[data-test="to-picker"]')!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "2026-11-21" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(body(el)!.querySelector("summary")?.textContent ?? "").toContain("Bar drawer"),
+  );
+  expect(getDrawerCloses).toHaveBeenLastCalledWith("2026-11-20", "2026-11-21");
+});
+
 it.each(["light", "dark"] as const)(
   "shows pending counts and reprint feedback in %s theme",
   async (theme) => {
@@ -111,11 +131,15 @@ it.each(["light", "dark"] as const)(
     pending!.open = true;
     finished!.open = true;
     expect(pending!.textContent).toContain("Count pending");
+    expect(body(el)!.querySelector('wt-combobox[name="printerId"]')).toBeNull();
     expect(pending!.textContent).toContain("Alex");
     expect(pending!.textContent).toContain("Assign a till");
     expect(pending!.querySelector("wt-button")).toBeNull();
     expect(finished!.textContent).toContain("Robin");
-    await chooseOption(body(el)!.querySelector('wt-combobox[name="printerId"]')!, "p2");
+    expect(finished!.textContent).not.toContain("Assign a till");
+    expect(finished!.textContent).toContain("Cash moved after the count");
+    expect(text(el)).toContain("Pending counts show for any date.");
+    await chooseOption(el.shadowRoot!.querySelector('[data-test="print-printer"]')!, "p2");
 
     printDrawerClose.mockRejectedValueOnce({ code: "printer.not_found" });
     finished!.querySelector<HTMLElement>("wt-button")!.click();
