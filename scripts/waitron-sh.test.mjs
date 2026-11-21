@@ -4004,8 +4004,16 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
     expect(calls.filter((line) => line === "flock -n 9")).toHaveLength(2);
   });
 
-  it("refuses while another process holds the lock", async () => {
+  const lockCases = [args, ["check-upgrade-window"]];
+  it.each(lockCases)("refuses %j while the lock is held", async (...command) => {
     const sb = managedBox();
+    const checkingWindow = command[0] === "check-upgrade-window";
+    if (checkingWindow) {
+      const runtime = join(sb.root, "host/node-v26.7.0/bin");
+      mkdirSync(runtime, { recursive: true });
+      copyFileSync(HOST_NODE_STUB, join(runtime, "node"));
+      expect(run(sb, command, { WT_REAL_FLOCK: "1" }).status).toBe(0);
+    }
     const holder = spawn(
       "perl",
       [
@@ -4028,10 +4036,12 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
         holder.once("error", reject);
         exited.then(() => reject(new Error("the lock holder exited before holding the lock")));
       });
-      const result = run(sb, args, { WT_REAL_FLOCK: "1" });
+      const result = run(sb, command, { WT_REAL_FLOCK: "1" });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("another host operation is running");
       expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+      if (checkingWindow)
+        expect(loggedCalls(sb).filter((line) => line.startsWith("host:"))).toHaveLength(1);
     } finally {
       clearTimeout(timer);
       holder.kill("SIGKILL");

@@ -943,6 +943,13 @@ upgrade_cli() {
   "$HOST_NODE" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
 }
 
+cmd_check_upgrade_window() (
+  # Even a read-only WAL connection can create side files while copying or restoring the venue.
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die 'another host operation is running'
+  upgrade_cli check-upgrade-window
+)
+
 defer_upgrade_offer() {
   printf '{"status":"deferred","reason":"%s"}\n' "$1"
   exit 1
@@ -1374,7 +1381,7 @@ main() {
     __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
     check-upgrade-offer) cmd_check_upgrade_offer ;;
-    check-upgrade-window) upgrade_cli "$verb" ;;
+    check-upgrade-window) cmd_check_upgrade_window ;;
     restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;
