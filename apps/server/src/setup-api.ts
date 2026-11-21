@@ -1147,6 +1147,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             ? setupCloudBinding(c, cloudSignIn)
             : undefined;
         const binding = usesHeldAdmin ? prepareBinding : undefined;
+        if (
+          usesHeldAdmin &&
+          !binding &&
+          cloudSignIn &&
+          deps.environment === "preproduction" &&
+          c.req.header("X-Waitron-Setup-Cloud-Tab") !== undefined
+        )
+          throw new AppError("cloud.request_unavailable", {});
         if (binding) requestHash.update(binding.tab).update(binding.session);
         const hash = requestHash.digest("hex");
         const clearHeldAdmin = async () => {

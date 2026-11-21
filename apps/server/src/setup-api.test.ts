@@ -573,6 +573,11 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         venue: { ...venue, admin: { ...admin, password: "", pin: "" } },
       };
       const provisionHeaders = { ...headers, "x-waitron-setup-cloud-tab": tab };
+      const noCookie = await postProvision(app, body, {
+        ...origin,
+        "x-waitron-setup-cloud-tab": tab,
+      });
+      expect(await noCookie.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
       const wrongTabHeaders = { ...headers, "x-waitron-setup-cloud-tab": otherTab };
       const otherSave = await postProvision(app, body, wrongTabHeaders);
       expect(await otherSave.json()).toMatchObject({
