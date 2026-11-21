@@ -3,7 +3,7 @@
 > **For agentic workers:** use superpowers:subagent-driven-development, one `implementer` per task.
 > Steps are checkboxes (`- [ ]`).
 
-**Status: for the watcher's clearance, then the owner's (a fiscal change).** Nothing is built. Branch
+**Status: cleared by the watcher 2026-11-21 04:35 with O1–O4 at the recommended defaults (O1 yes, O2 (ii), O3 drop the filter, O4 a named row); the owner lands it (a fiscal change), and an owner answer that differs is built before landing.** Branch
 `feat/advance-refund-after-final`, worktree
 `~/workspace/worktrees/waitron-feat-advance-refund-after-final`, from `main` at `3e6eaf02b4`.
 Revised after fresh reads 1 and 2 (`~/waitron-campaign-l/receipts/advance-refund-plan-read-1.md`,
@@ -310,6 +310,13 @@ chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run
   correction is still open). Add A1 and A2 to the adviser sheet's question 12, EN and ES. Add dated
   pointers to this plan beside the 14:26 answer in `docs/superpowers/plans/2026-11-19-adviser-advances.md:239-241`
   and `:411-418`, rewriting neither.
+
+- [ ] **Task 5: a settled bill's `received` (watcher W2, 2026-11-21 04:35).** The payments route
+  answers `received` 120.00 on a €120 bill after €90 came back by Correct invoice (control RUN above),
+  which a person would notice. Size it first: if what the route reports can count Correct-invoice
+  refunds in a few lines without changing any refusal, balance check or invoice, fix it test-first
+  (that control as the failing case, and an advance case); otherwise stop and report, and it becomes
+  its own lane L item.
 
 ## Guards to run
 
