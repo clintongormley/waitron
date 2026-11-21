@@ -16,6 +16,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 const now = new Date("2026-10-13T06:00:00Z");
+// The synthetic invoice is issued on this business day.
 const businessDay = "2026-10-12";
 
 it("queues a report once per day and recipient and rechecks each recipient at send time", async () => {
@@ -23,6 +24,7 @@ it("queues a report once per day and recipient and rechecks each recipient at se
   await recordSyntheticInvoice(suite.db, venue.cfg.nodeId, {
     full: false,
     operationDescription: "Coffee sale",
+    quantity: "1.5",
   });
   const [retained, revoked] = await withTransaction(suite.db, async (tx) => {
     const people = await seedPersons(tx, [
@@ -74,7 +76,7 @@ it("queues a report once per day and recipient and rechecks each recipient at se
       text: expect.stringContaining("0,00"),
     },
   ]);
-  expect(sent[0]?.text).toContain("Coffee  1  ");
+  expect(sent[0]?.text).toContain("Coffee  1,5  ");
   expect(sent[0]?.text).toContain("\n0%  ");
   expect(await queued()).toEqual(
     expect.arrayContaining([

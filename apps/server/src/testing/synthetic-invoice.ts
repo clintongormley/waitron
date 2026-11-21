@@ -3,7 +3,7 @@ import { invoiceSeries, withTransaction, type Database } from "@waitron/db";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
-import { jobOrigin, seriesId } from "@waitron/shared";
+import { decimal, jobOrigin, seriesId, toScale } from "@waitron/shared";
 import { ALL_MODULES } from "../modules.js";
 import { venueModuleConfig } from "../provision.js";
 
@@ -36,9 +36,11 @@ const clock: TrustedClock = {
 export async function recordSyntheticInvoice(
   db: Database,
   nodeId: string,
-  options: { full?: boolean; seriesCode?: string; operationDescription: string },
+  options: { full?: boolean; seriesCode?: string; operationDescription: string; quantity?: string },
 ): Promise<{ saleId: string; number: string }> {
   const full = options.full ?? true;
+  const quantity = options.quantity ?? "1";
+  const total = toScale(decimal(quantity), 2);
   const [series] = await db
     .insert(invoiceSeries)
     .values({
@@ -59,16 +61,16 @@ export async function recordSyntheticInvoice(
       seriesId: seriesId(series!.id),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
-      total: "1.00",
+      total,
       lines: [
         {
           lineNo: 1,
           name: "Coffee",
           descriptions: { "es-ES": "Café" },
-          quantity: "1",
+          quantity,
           unitPrice: "1.00",
           vatRate: "0",
-          lineTotal: "1.00",
+          lineTotal: total,
         },
       ],
       clock,
