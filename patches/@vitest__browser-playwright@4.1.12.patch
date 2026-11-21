@@ -1,14 +1,48 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 01da2c3bd3d0c5d356c421737afbd5f08a1bc05b..9e8f17846587d3b23d09b6e687f20cc98a9cf781 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,6 +1,6 @@
+ import { CustomComparatorsRegistry } from '@vitest/browser';
+ export { defineBrowserCommand } from '@vitest/browser';
+-import { Page, Frame, FrameLocator, BrowserContext, CDPSession, Browser, LaunchOptions, ConnectOptions, BrowserContextOptions } from 'playwright';
++import { Page, Frame, BrowserContext, CDPSession, Browser, LaunchOptions, ConnectOptions, BrowserContextOptions } from 'playwright';
+ import { ScreenshotMatcherOptions, ScreenshotComparatorRegistry, Locator } from 'vitest/browser';
+ import { BrowserProvider, BrowserModuleMocker, TestProject, CDPSession as CDPSession$1, BrowserProviderOption } from 'vitest/node';
+ 
+@@ -72,7 +72,7 @@ declare class PlaywrightBrowserProvider implements BrowserProvider {
+ 		page: Page;
+ 		context: BrowserContext;
+ 		frame: () => Promise<Frame>;
+-		readonly iframe: FrameLocator;
++		readonly iframe: Frame;
+ 	};
+ 	private openBrowserPage;
+ 	openPage(sessionId: string, url: string, options: {
+@@ -86,7 +86,7 @@ declare module "vitest/node" {
+ 	interface BrowserCommandContext {
+ 		page: Page;
+ 		frame(): Promise<Frame>;
+-		iframe: FrameLocator;
++		iframe: Frame;
+ 		context: BrowserContext;
+ 	}
+ 	interface _BrowserNames {
 diff --git a/dist/index.js b/dist/index.js
-index f690b4d092a93d8a5fc5da4450eb24135a73c929..7ab23ecae2e56d865fcd1efa42f5f63aea68e64e 100644
+index f690b4d092a93d8a5fc5da4450eb24135a73c929..b1b0ef6c709878f7f88c27ee612c1e6217890571 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -1132,7 +1132,8 @@ class PlaywrightBrowserProvider {
+@@ -1132,7 +1132,12 @@ class PlaywrightBrowserProvider {
  				});
  			},
  			get iframe() {
 -				return page.frameLocator("[data-vitest=\"true\"]");
-+				// Bound to the test frame present when the command starts, so a command left by a cancelled run (a Stryker bail) fails on its removed frame instead of acting in the next run's; 5.1.1 still uses the frame locator, so re-check on a move to Vitest 5.
-+				return page.frame("vitest-iframe") ?? page.frameLocator("[data-vitest=\"true\"]");
++				// Bound to the frame present when the command starts, so a command left by a stopped run fails instead of acting in the next run's frame. @vitest/browser-playwright 5.1.1 still uses the frame locator: re-check on a move to Vitest 5.
++				const frame = page.frame("vitest-iframe");
++				if (!frame) {
++					throw new Error(`Cannot find "vitest-iframe" on the page, so this command has no test frame to act in.`);
++				}
++				return frame;
  			}
  		};
  	}

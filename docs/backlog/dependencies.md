@@ -27,7 +27,11 @@ and nothing here was run under Vitest 5, so the question is untouched rather tha
 retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
 PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
 `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
-(`docs/developers/workflow-guide.md` → Dependabot pull requests).
+(`docs/developers/workflow-guide.md` → Dependabot pull requests). It must also redo or drop every
+patch in the root `package.json`'s `pnpm.patchedDependencies` (today the `@vitest/browser`
+screenshot-name patch (guard `scripts/browser-screenshot-path.test.mjs`) and the
+`@vitest/browser-playwright` frame patch,
+[ci-and-gates.md](../developers/ci-and-gates.md#a-browser-command-left-by-a-run-stryker-stopped-fails-instead-of-acting-in-the-next-run)).
 Stryker 10.1.0's [release notes](https://github.com/stryker-mutator/stryker-js/releases/tag/v10.1.0)
 list “support vitest v5”; 10.1.1 republishes that release. A1302's qualification uses the installed
 Vitest 4.1.12. It does not test Vitest 5, so this entry remains open.
