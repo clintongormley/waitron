@@ -46,6 +46,16 @@ async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
   return parts.join("");
 }
 
+/** A workbook's per-request response headers: downloaded as `filename`, never cached or sniffed. */
+export function workbookDownloadHeaders(filename: string): Record<string, string> {
+  return {
+    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  };
+}
+
 export async function renderWorkbook(
   sheets: readonly WorkbookSheet[],
 ): Promise<Uint8Array<ArrayBuffer>> {

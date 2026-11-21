@@ -55,6 +55,7 @@ import {
 } from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { renderCorrectionsWorkbook } from "./corrections-report.js";
+import { workbookDownloadHeaders } from "./xlsx-workbook.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
@@ -339,12 +340,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return c.body(
         await renderCorrectionsWorkbook(corrections, toLanguage(deps.venueLocale)),
         200,
-        {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="corrections-${corrections.madeIn}.xlsx"`,
-          "Cache-Control": "no-store",
-          "X-Content-Type-Options": "nosniff",
-        },
+        workbookDownloadHeaders(`corrections-${corrections.madeIn}.xlsx`),
       );
     }),
   );
@@ -496,12 +492,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         });
         return data;
       });
-      return c.body(await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)), 200, {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="accountant-${from}-${to}.xlsx"`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      });
+      return c.body(
+        await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)),
+        200,
+        workbookDownloadHeaders(`accountant-${from}-${to}.xlsx`),
+      );
     }),
   );
 
