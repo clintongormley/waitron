@@ -27,6 +27,11 @@ export interface PayRefusal {
   /** An `advance.taken_off_final_invoice`'s: what Correct invoice on the table's receipt can still
    * give back. */
   finalMoneyLeft?: string;
+  /** An `advance.taken_off_final_invoice`'s: the table's receipt is still being paid, so
+   * `finalMoneyLeft` is what was paid on it so far. */
+  finalNotFullyPaid?: true;
+  /** An `invoice_correction.money_short`'s: what the receipt's payments can still give back. */
+  moneyLeft?: string;
   /** An `invoice_correction.money_short`'s: the payments on account the receipt took off. */
   advanceInvoiceNumbers?: string[];
   /** The payment refused was a card already charged on a terminal the box does not talk to. */

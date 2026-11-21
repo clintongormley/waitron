@@ -1084,6 +1084,57 @@ it.each([
   },
 );
 
+it.each([
+  [
+    "en",
+    "This payment on account was already taken off the table's receipt A/45, which is not fully paid yet, so this ticket cannot be corrected. Once A/45 is fully paid, use Correct invoice on A/45 first to give money back: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, then choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+    "This payment on account was already taken off the table's receipt, which is not fully paid yet, so this ticket cannot be corrected. Once that receipt is fully paid, use Correct invoice on it first to give money back: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on it. For anything more, then choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+  ],
+  [
+    "es",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, que aún no está pagado del todo, así que este ticket no se puede rectificar. Cuando A/45 esté pagado del todo, usa primero Rectificar factura en A/45 para devolver dinero: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en A/45. Para lo que falte, elige después Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa, que aún no está pagado del todo, así que este ticket no se puede rectificar. Cuando ese ticket esté pagado del todo, usa primero Rectificar factura en él para devolver dinero: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en él. Para lo que falte, elige después Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  ],
+])(
+  "sends staff to Correct invoice on the table's receipt only once it is fully paid, while it is still being paid, in %s",
+  (locale, named, unnamed) => {
+    const unpaid = { finalMoneyLeft: "50.00", finalNotFullyPaid: true };
+    expect(
+      codeMessage("advance.taken_off_final_invoice", locale, { ...unpaid, invoiceNumber: "A/45" }),
+    ).toBe(named);
+    expect(codeMessage("advance.taken_off_final_invoice", locale, unpaid)).toBe(unnamed);
+  },
+);
+
+it.each([
+  [
+    "en",
+    "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the ticket of the payment on account A/12: it gives money back from that payment and files no corrective invoice; the accountant's export lists it.",
+    "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the tickets of the payments on account A/12 and A/13: it gives money back from those payments and files no corrective invoice; the accountant's export lists it.",
+  ],
+  [
+    "es",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en el ticket del pago a cuenta A/12: devuelve dinero de ese pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  ],
+])(
+  "points a correction with nothing left to give back straight to Refund a payment on the payments on account, without a correction first, in %s",
+  (locale, one, two) => {
+    expect(
+      codeMessage("invoice_correction.money_short", locale, {
+        moneyLeft: "0.00",
+        advanceInvoiceNumbers: ["A/12"],
+      }),
+    ).toBe(one);
+    expect(
+      codeMessage("invoice_correction.money_short", locale, {
+        moneyLeft: "0.00",
+        advanceInvoiceNumbers: ["A/12", "A/13"],
+      }),
+    ).toBe(two);
+  },
+);
+
 it("points a correction short of money to Refund a payment on the payments on account the receipt took off", () => {
   const one = { advanceInvoiceNumbers: ["A/12"] };
   const two = { advanceInvoiceNumbers: ["A/12", "A/13"] };

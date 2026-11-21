@@ -1,6 +1,14 @@
 import "./errors.js";
 import { and, eq, inArray, isNotNull, isNull, notExists } from "drizzle-orm";
-import { invoiceSeries, saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  saleLines,
+  sales,
+  saleSettlements,
+  saleSubstitutions,
+  saleVoids,
+  type Transaction,
+} from "@waitron/db";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
@@ -9,9 +17,9 @@ import {
   decimal,
   saleId as brandSaleId,
   sumDecimals,
-  type Decimal,
   type ErrorParams,
 } from "@waitron/shared";
+import { paidOnIssuedBill } from "./bill-payments.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { readInvoiceNumber, readInvoiceNumbers } from "./working-order.js";
 
@@ -88,11 +96,36 @@ export async function advanceNumbersTakenOffBy(
   return ownIds.map((id) => numbers.get(id)!);
 }
 
-/** What Correct invoice on the invoice `finalSaleId` can still give back, as
- * `invoice_correction.money_short` reads it: the money its payments still hold, tips aside. */
-async function moneyLeftOn(tx: Transaction, finalSaleId: string): Promise<Decimal> {
+/**
+ * What Correct invoice on the invoice `finalSaleId` can give back, tips aside: once it is paid, the
+ * money its payments still hold, as `invoice_correction.money_short` reads it; while its bill is
+ * still being paid, the money paid on it so far, which Correct invoice can give back only once the
+ * bill is fully paid (`finalNotFullyPaid`).
+ */
+async function moneyLeftOn(
+  tx: Transaction,
+  finalSaleId: string,
+): Promise<Pick<TakenOffParams, "finalMoneyLeft" | "finalNotFullyPaid">> {
+  const [sale] = await tx
+    .select({
+      workingOrderId: sales.workingOrderId,
+      settled: saleSettlements.id,
+      voided: saleVoids.id,
+    })
+    .from(sales)
+    .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
+    .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
+    .where(eq(sales.id, finalSaleId));
+  if (sale?.settled === null && sale.voided === null && sale.workingOrderId !== null) {
+    const paid = await paidOnIssuedBill(tx, sale.workingOrderId);
+    return compareDecimal(paid, ZERO) > 0
+      ? { finalMoneyLeft: paid, finalNotFullyPaid: true }
+      : { finalMoneyLeft: ZERO };
+  }
   const refundable = await readRefundableTenders(tx, finalSaleId);
-  return sumDecimals([ZERO, ...refundable.map((row) => decimal(row.appliedRemaining))]);
+  return {
+    finalMoneyLeft: sumDecimals([ZERO, ...refundable.map((row) => decimal(row.appliedRemaining))]),
+  };
 }
 
 type TakenOffParams = ErrorParams["advance.taken_off_final_invoice"];
@@ -108,7 +141,7 @@ async function takenOffParams(
     saleId,
     finalSaleId: final.saleId,
     invoiceNumber: final.invoiceNumber,
-    finalMoneyLeft: await moneyLeftOn(tx, final.saleId),
+    ...(await moneyLeftOn(tx, final.saleId)),
   };
 }
 
@@ -134,7 +167,7 @@ export async function refusePlainRefundOfAdvance(
 ): Promise<void> {
   const takenOff = await takenOffParams(tx, saleId);
   if (takenOff === undefined)
-    await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", params);
+    await refuseNamingAdvance(tx, saleId, "tender.refund_of_advance", params);
   else if (compareDecimal(decimal(takenOff.finalMoneyLeft), ZERO) > 0)
     throw new AppError("advance.taken_off_final_invoice", takenOff);
 }
@@ -152,6 +185,16 @@ export async function refuseAdvanceRefund<C extends AdvanceRefundCode>(
   params: Omit<ErrorParams[C], "saleId" | "invoiceNumber">,
 ): Promise<never> {
   await refuseTakenOffAdvance(tx, saleId);
+  return refuseNamingAdvance(tx, saleId, code, params);
+}
+
+/** Refuses `code`, naming the advance `saleId` and its invoice number. */
+async function refuseNamingAdvance<C extends AdvanceRefundCode>(
+  tx: Transaction,
+  saleId: string,
+  code: C,
+  params: Omit<ErrorParams[C], "saleId" | "invoiceNumber">,
+): Promise<never> {
   const invoiceNumber = await readInvoiceNumber(tx, brandSaleId(saleId));
   throw new AppError<AdvanceRefundCode>(code, {
     ...params,

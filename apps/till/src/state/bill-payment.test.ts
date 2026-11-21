@@ -535,6 +535,28 @@ describe("refusalOf", () => {
     ).toEqual({ code: "invoice_correction.money_short", advanceInvoiceNumbers: ["A/12"] });
     expect(
       refusalOf({
+        code: "advance.taken_off_final_invoice",
+        finalMoneyLeft: "50.00",
+        finalNotFullyPaid: true,
+      }),
+    ).toEqual({
+      code: "advance.taken_off_final_invoice",
+      finalMoneyLeft: "50.00",
+      finalNotFullyPaid: true,
+    });
+    expect(refusalOf({ code: "invoice_correction.money_short", moneyLeft: "0.00" })).toEqual({
+      code: "invoice_correction.money_short",
+      moneyLeft: "0.00",
+    });
+    expect(
+      refusalOf({
+        code: "advance.taken_off_final_invoice",
+        finalNotFullyPaid: "yes",
+        moneyLeft: 0,
+      }),
+    ).toEqual({ code: "advance.taken_off_final_invoice" });
+    expect(
+      refusalOf({
         code: "invoice_correction.money_short",
         finalMoneyLeft: 0,
         advanceInvoiceNumbers: "A/12",

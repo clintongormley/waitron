@@ -871,12 +871,15 @@ declare module "@waitron/shared" {
     "advance.full_invoice_unsupported": { workingOrderId: string };
     /** A refund or correction of the advance `saleId` after the invoice `finalSaleId`, numbered
      * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice, which
-     * can still give back `finalMoneyLeft`, and past that by Refund a payment on the advance. */
+     * can still give back `finalMoneyLeft`, and past that by Refund a payment on the advance.
+     * `finalNotFullyPaid` marks an invoice whose bill is still being paid: `finalMoneyLeft` is what
+     * has been paid on it so far, and Correct invoice can give it back only once it is fully paid. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
       invoiceNumber: string;
       finalMoneyLeft: string;
+      finalNotFullyPaid?: true;
     };
     /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
      * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */

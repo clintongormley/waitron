@@ -1088,6 +1088,25 @@ const TAKEN_OFF_NOTHING_LEFT = {
   es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber} y no queda nada pagado en {it} por devolver. Elige Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
 };
 
+/** `advance.taken_off_final_invoice` while the table's receipt is still being paid. */
+const TAKEN_OFF_NOT_FULLY_PAID = {
+  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, which is not fully paid yet, so this ticket cannot be corrected. Once {receipt} is fully paid, use Correct invoice on {it} first to give money back: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on {it}. For anything more, then choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, que aún no está pagado del todo, así que este ticket no se puede rectificar. Cuando {receipt} esté pagado del todo, usa primero Rectificar factura en {it} para devolver dinero: descuenta el importe de los platos, cada uno con su tipo de IVA, emite una factura rectificativa y devuelve dinero pagado en {it}. Para lo que falte, elige después Devolver un pago en este ticket: devuelve dinero de este pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+};
+
+/** `invoice_correction.money_short` when nothing paid on the receipt is left and it took payments
+ * on account off. */
+const MONEY_SHORT_NOTHING_LEFT = {
+  one: {
+    en: "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the ticket of the payment on account {numbers}: it gives money back from that payment and files no corrective invoice; the accountant's export lists it.",
+    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  },
+  many: {
+    en: "Nothing paid on this bill is left to give back. To give money back, choose Refund a payment on the tickets of the payments on account {numbers}: it gives money back from those payments and files no corrective invoice; the accountant's export lists it.",
+    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver un pago en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos sin emitir factura rectificativa, y figura en la descarga para tu gestor.",
+  },
+};
+
 /** What `invoice_correction.money_short` adds when the receipt took payments on account off. */
 const MONEY_SHORT_ADVANCES = {
   one: {
@@ -1124,13 +1143,15 @@ export function codeMessage(
     dishNames?: unknown;
     invoiceNumber?: unknown;
     finalMoneyLeft?: unknown;
+    finalNotFullyPaid?: unknown;
+    moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
   },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (code === "advance.taken_off_final_invoice") return takenOffMessage(locale, params);
   if (code === "invoice_correction.money_short")
-    return moneyShortMessage(locale, params?.advanceInvoiceNumbers);
+    return moneyShortMessage(locale, params?.moneyLeft, params?.advanceInvoiceNumbers);
   if (
     code === "order.dining_fixed" &&
     typeof params?.dining === "string" &&
@@ -1186,13 +1207,16 @@ export function codeMessage(
 
 function takenOffMessage(
   locale: string,
-  params: { invoiceNumber?: unknown; finalMoneyLeft?: unknown } | undefined,
+  params:
+    { invoiceNumber?: unknown; finalMoneyLeft?: unknown; finalNotFullyPaid?: unknown } | undefined,
 ): string {
-  const nothingLeft =
-    typeof params?.finalMoneyLeft === "string" && /^0+(\.0+)?$/.test(params.finalMoneyLeft);
   const number = typeof params?.invoiceNumber === "string" ? params.invoiceNumber : undefined;
   const message = pickLocale(
-    nothingLeft ? TAKEN_OFF_NOTHING_LEFT : CODE_MESSAGES["advance.taken_off_final_invoice"]!,
+    isZeroMoney(params?.finalMoneyLeft)
+      ? TAKEN_OFF_NOTHING_LEFT
+      : params?.finalNotFullyPaid === true
+        ? TAKEN_OFF_NOT_FULLY_PAID
+        : CODE_MESSAGES["advance.taken_off_final_invoice"]!,
     locale,
   );
   return message.replace(/\{(invoiceNumber|receipt|it)\}/g, (_, field: string) => {
@@ -1204,7 +1228,16 @@ function takenOffMessage(
   });
 }
 
-function moneyShortMessage(locale: string, advanceInvoiceNumbers: unknown): string {
+/** Whether `value` is a money amount of nothing, as the server writes one ("0.00"). */
+function isZeroMoney(value: unknown): boolean {
+  return typeof value === "string" && /^0+(\.0+)?$/.test(value);
+}
+
+function moneyShortMessage(
+  locale: string,
+  moneyLeft: unknown,
+  advanceInvoiceNumbers: unknown,
+): string {
   const message = pickLocale(CODE_MESSAGES["invoice_correction.money_short"]!, locale);
   const numbers = Array.isArray(advanceInvoiceNumbers)
     ? advanceInvoiceNumbers.filter((number): number is string => typeof number === "string")
@@ -1213,7 +1246,10 @@ function moneyShortMessage(locale: string, advanceInvoiceNumbers: unknown): stri
   const listed = new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(
     numbers,
   );
-  const more = pickLocale(MONEY_SHORT_ADVANCES[numbers.length === 1 ? "one" : "many"], locale);
+  const count = numbers.length === 1 ? "one" : "many";
+  if (isZeroMoney(moneyLeft))
+    return pickLocale(MONEY_SHORT_NOTHING_LEFT[count], locale).replace("{numbers}", () => listed);
+  const more = pickLocale(MONEY_SHORT_ADVANCES[count], locale);
   return `${message} ${more.replace("{numbers}", () => listed)}`;
 }
 
