@@ -940,6 +940,15 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       firstRowIn(dirsM.venue, "select node_id from print_agents where id = ?", agentM.agentId)
         ?.node_id,
     ).toBe(nodeIdS);
+    const pulled = await fetch(`${urlM}/print-api/agent/jobs`, {
+      ...viaM,
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({}),
+    });
+    const pullBody = (await pulled.json()) as { nodeId?: unknown; jobs?: unknown };
+    expect(pulled.status, JSON.stringify(pullBody)).toBe(200);
+    expect(pullBody).toMatchObject({ nodeId: m.nodeId, jobs: [] });
     clock.end("ok");
   } catch (error) {
     clock.end("failed");
