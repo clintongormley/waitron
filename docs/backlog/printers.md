@@ -165,21 +165,22 @@ so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How
 pictures takes to print on the box is not measured"). Anything the timings or photographs show
 wrong becomes a new item.
 
-## Repeat the 58mm physical receipt after the print-area fix
+## Repeat the 58mm receipt in the wider Epson after the print-area fix
 
 The owner's wider printer clipped
 the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
-printer's own width setting also contributed was not tested. The corrected paper output has not
-yet been printed. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
+printer's own width setting also contributed was not tested. The corrected output on a 58 mm roll
+in that printer has not yet been printed; the 58 mm Bluetooth printer's test page printed whole on
+2026-11-20. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
 512 or 576 on 80 mm.
 
-## Nobody has yet typed a real printer's address into Check a known address
+## The HP has not been added by typing its address
 
 The owner's home is
 the case that motivated it: the box sits on 192.168.10.x and the HP LaserJet on 192.168.20.x,
-which the port-9100 sweep cannot reach. The first things to try on the box: add the Epson at
-`192.168.10.81:9100` (the sweep should also list it) and print to it; then type the HP's
-`192.168.20.56:9100`, which should come back as an office printer.
+which the port-9100 sweep cannot reach. On 2026-11-20 the Epson at `192.168.10.81` was added this
+way and printed. Still to try: type the HP's `192.168.20.56:9100`, which should come back as an
+office printer.
 
 ## The setup-page link is unproven on the box
 
@@ -190,9 +191,10 @@ the real box.
 
 ## Bluetooth at the box
 
-Repeat pairing through the dashboard and check that **Delete** clears the real printer's
-pairing under the shipped AppArmor profile with bluetoothd's `autopair` plugin off. The owner
-paired a real printer through the dashboard on 20 November. `waitron.sh install` switches
+Check that **Delete**, which unpairs since #3913, clears the real printer's pairing under the
+shipped AppArmor profile with bluetoothd's `autopair` plugin off. The owner paired a real printer
+through the dashboard on 20 November; the first attempt was refused by the printer
+(`AuthenticationFailed`) and the second worked. `waitron.sh install` switches
 `autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
 Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
 tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
@@ -337,12 +339,23 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 Hardware and inbox checks to complete in the owner session.
 
+- **What the 20 November session raised, by lane** (session notes:
+  `~/waitron-campaign-shared/real-box-session-20261120.md`, on the owner's Mac):
+  - C: drawer button only with a drawer (#3899), invoice email offered only when the bill can be emailed (#3905), Full invoice keeps its details on reopen (#3914, #3921), return to Card readers and no email in search boxes (#3927).
+  - D: profile printer switches (#3903), Email in System on every box (#3909), City on address forms (#3923).
+  - F: profile default reader at Pay (#3901), receipt card details, slip venue time and receipt copy (#3904), slip button after payment (#3920), default invoice printer (#3911); open: CARD-FIELDS-MISSING, CANCEL-WAITING-CARD-PAYMENT.
+  - H: A4 paper-out wording, Print Queue rows and the retired agent's alert (#3908), Delete unpairs a Bluetooth printer (#3913).
+  - L: open: FULL-INVOICE-ISSUER-ADDRESS (the issuer's postcode and town on a full invoice; fiscal, owner lands).
+  - B: open: PRINTER-TEST-PAGE-REAL-RECEIPT.
+
 - **A739 physical payment and delivery qualification.** On the real till, printer and reader,
-  check the post-payment slip button for each method, including a part payment. Check receipt
-  email delivery, the slip's local time and the marked receipt copy from Print Queue. The owner's
-  20 November session confirmed thermal original output from the till, a copy from Orders, a Solo
-  slip and its reprint from Print Queue.
-  One Solo payment recorded no printable card details, so its receipt and slip could not show them.
+  check the post-payment slip button for each method, including a part payment, the slip's venue
+  time and the marked receipt copy from Print Queue: all three changed after the 20 November
+  session (lane F's #3920 and #3904) and have not been seen on paper. An emailed full
+  invoice was handed to the box's mail server and appears in the sender's Sent folder; arrival in a
+  separate recipient's inbox has not been seen. The session confirmed the receipt from the till,
+  a marked copy from Orders, and a Solo receipt and slip carrying the card and authorisation
+  details. One Solo payment recorded no card details (lane F's CARD-FIELDS-MISSING).
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
   Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
@@ -362,34 +375,39 @@ Hardware and inbox checks to complete in the owner session.
   MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
   network. It has not run from the box's container, and no receipt printer that answers IPP has
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
-- **A552. Invoices on the owner's office printer are unchecked with the committed code.** Check
-  the HP Color LaserJet MFP M181fw with a long PDF invoice, measuring and scanning its QR, and
-  check what Waitron reports when power is lost mid-job. Verify the new paper-out wording and Print
-  Queue on the HP when the build with those changes reaches the box.
-  [Detail](printers.md#a552-invoices-on-the-owners-office-printer-are-unchecked-with-the-committed-code)
+- **A552. Invoices on the owner's office printer: a multi-page invoice and power loss.** On
+  20 November a one-page full invoice printed on the HP with its QR at 35 mm, and after paper ran
+  out it printed by itself once paper was back. Still owed: a multi-page invoice (A553), what
+  Waitron reports when the printer loses power mid-job, and the paper-out wording and Print Queue
+  rows lane H's #3908 changed, once that build reaches the box.
+  [Detail](printers.md#a552-invoices-on-the-owners-office-printer-a-multi-page-invoice-and-power-loss)
 - **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
   `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
   the box's container, where the lookup may fail outright; either way the printer stays addable.
 - **Photographs and timings of pictures on paper.**
   [Detail](printers.md#photographs-and-timings-of-pictures-on-paper)
-- **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
-  reaches the box while the Add agent dialog is open, the five-line feed before the cut, Bluetooth
-  discovery, and the receipt preview against printed paper. #324's slips, duplicates and drawer pulse
-  have never produced paper either.
-- **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
-  whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
-  QR size is meant to count the code's blank border or only its dark squares.
-- **Repeat the 58mm physical receipt after the print-area fix.** The corrected paper output has not
-  yet been printed.
-  [Detail](printers.md#repeat-the-58mm-physical-receipt-after-the-print-area-fix)
-- **Nobody has yet typed a real printer's address into Check a known address.** The first things to
-  try on the box: add the Epson at `192.168.10.81:9100` (the sweep should also list it) and print to
-  it; then type the HP's `192.168.20.56:9100`, which should come back as an office printer.
-  [Detail](printers.md#nobody-has-yet-typed-a-real-printers-address-into-check-a-known-address)
+- **Left unchecked since #327:** whether a device knock reaches the box while the Add agent dialog
+  is open, the five-line feed before the cut, and the receipt preview against printed paper. On
+  20 November discovery (the HP, and the Bluetooth printer seen on the spare box), receipts, slips,
+  a marked copy and the drawer pulse were all seen at the box.
+- **The TM-T88III's built-in QR command is untried** (spec "Verification on paper"): whether it
+  prints anything at all. On 20 November the drawn QR's dark squares measured 40 mm on the Epson's
+  80 mm paper, the top of the 30–40 mm band, and it scanned to AEAT's pre-production check page;
+  whether that band is meant to count the code's blank border is still undecided.
+- **Repeat the 58mm receipt in the wider Epson after the print-area fix.** The 58 mm Bluetooth
+  printer's test page printed whole on 20 November; a 58 mm roll in the wider printer, the case that
+  clipped, has not been printed since the fix.
+  [Detail](printers.md#repeat-the-58mm-receipt-in-the-wider-epson-after-the-print-area-fix)
+- **The HP has not been added by typing its address.** On 20 November the Epson was re-added
+  through Check a known address at `192.168.10.81` and came back with its saved calibration; the
+  HP's `192.168.20.56:9100`, on the network the sweep cannot reach, should come back as an office
+  printer.
+  [Detail](printers.md#the-hp-has-not-been-added-by-typing-its-address)
 - **The setup-page link is unproven on the box.**
   [Detail](printers.md#the-setup-page-link-is-unproven-on-the-box)
-- **Bluetooth at the box.** Repeat pairing through the dashboard and check that **Delete**
-  clears the real printer's pairing under the shipped AppArmor profile.
+- **Bluetooth at the box.** On 20 November the owner unpaired, paired again (the first try was
+  refused by the printer, the second worked) and printed a test page. Delete now unpairs too (lane
+  H's #3913); that is not yet tried at the box.
   [Detail](printers.md#bluetooth-at-the-box)
 - **Printing over RFCOMM from INSIDE the print-agent container (A140).**
   [Detail](printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
@@ -679,15 +697,15 @@ construct a friendly computer name from a printer label. See the
   the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every printer.
   Left open by C107 (#974).
 
-## A552. Invoices on the owner's office printer are unchecked with the committed code
+## A552. Invoices on the owner's office printer: a multi-page invoice and power loss
 
 Owed on
-the HP Color LaserJet MFP M181fw: a long full invoice sent as PDF through the product, its QR measured
-with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 dpi; a test page
-from the Printers tab; and what Waitron reports when the printer is switched off mid-job. On
-2026-11-20 the Lenovo saved a paper-out hold, then recorded one successful attempt after paper
-returned. The till wording and the A4 rows in Print Queue still need checking on that printer with
-the updated build.
+the HP Color LaserJet MFP M181fw: a multi-page full invoice through the product; the same invoice
+as Apple Raster at 600 dpi; a test page from the Printers tab; and what Waitron reports when the
+printer is switched off mid-job. On 2026-11-20 a one-page full invoice printed with its QR at
+35 mm; the Lenovo saved a paper-out hold, then recorded one successful attempt after paper
+returned. The till wording and the A4 rows in Print Queue, which lane H's #3908 changed, still
+need checking on that printer with the updated build.
 
 How long the box takes to draw a page (A553, measured 2026-11-20 on the Lenovo M710q, i7-7700T):
 the server's `renderInvoicePage` from main `58508d7fe8`, bundled as the server is and run on the
