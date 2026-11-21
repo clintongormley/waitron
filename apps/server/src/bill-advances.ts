@@ -243,7 +243,7 @@ export interface AdvancePaymentMoney {
   /** The tips, in cents, of the completed `refunds` against its tender on the advance. */
   tipGivenBack: number;
   /** The applied amounts, in cents, of those refunds that are no leg of a Correct invoice: what
-   * Refund a payment gave back, which `left` does not count. */
+   * Refund a payment gave back; `left` still counts it. */
   givenBack: number;
 }
 

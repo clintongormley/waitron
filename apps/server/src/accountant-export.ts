@@ -477,9 +477,9 @@ export async function listAccountantExport(
 }
 
 /**
- * The refunds `listRefundsWithoutCorrective` reads, found by `refunds_completed_at_idx`: without
- * planner statistics the box would take `refunds_recovery_idx` on state, reading every completed
- * refund. Drizzle refuses a selected column of a table named only in `sql`, hence `mapWith`.
+ * The refunds `listRefundsWithoutCorrective` reads, found by `refunds_completed_at_idx`. Unnamed, the
+ * planner took `refunds_recovery_idx` on state (node:26-slim, SQLite 3.54.1), reading every
+ * completed refund. Drizzle refuses a selected column of a table named only in `sql`, hence `mapWith`.
  */
 export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: SQL) => SQL) {
   const requester = alias(persons, "requester");

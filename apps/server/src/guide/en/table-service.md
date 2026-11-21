@@ -329,7 +329,8 @@ waits under **Waiting orders** on the **Counter** screen, marked **Paid, not han
 On a past receipt, choose **Refund a payment**. Pick the **Original payment**, check the **Payment
 amount to return** and the **Tip to return**, and choose a **Reason**. A reason that needs a note,
 such as **Other**, asks you to type one. Choose **Refund**. For cash, hand the money to the guest
-once the refund is done. **Download for accountant (XLSX)** lists these refunds on a sheet of their
+once the refund is done. **Download for accountant (XLSX)**, in the dashboard's **Sales &
+takings**, lists these refunds on a sheet of their
 own, with the VAT that stays declared because no corrective invoice is filed.
 
 To give back a part payment that the table's receipt already took off, first use **Correct

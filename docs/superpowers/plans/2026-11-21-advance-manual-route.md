@@ -240,6 +240,8 @@ PRs, costed before the ticket-view link and the VAT columns were added, which it
 
 ## Size (recommended path)
 
+(2026-11-22: PR 2 adds `refunds_completed_at_idx` and rebuilds core's starting migration, so it
+resets venues; watcher, "WATCHER 2026-11-22 00:24".)
 About 430 lines of production code, no table, no migration, no venue reset, 2 PRs; about 650 lines
 of tests and about 40 lines of guide in each of English and Spanish besides. The first estimate,
 260, left out the ticket-view link, the VAT columns, the refusal's new parameter and the separate

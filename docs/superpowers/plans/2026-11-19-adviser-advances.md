@@ -416,6 +416,9 @@ stops and reports to you rather than editing the test.
    by Correct invoice on the advance's ticket and by a plain or bill refund of its money, and still
    refused after a whole credit of the table's invoice. The €10 beyond what the table's invoice
    carries therefore has no way back through the till.
+   **Changed 2026-11-22 (owner, 2026-11-21 16:36):** once nothing paid on the table's invoice is
+   left to give back, Refund a payment on the advance's own ticket gives back the rest, filing
+   nothing ([advance-manual-route](2026-11-21-advance-manual-route.md)).
    A correction of an advance still open holds the table's invoice back
    (`advance.correction_open`, `refuseWhileAdvanceCorrectionOpen` in `bill-advances.ts`), so it
    cannot file a credit note after that invoice took the advance off. A reader payment started
