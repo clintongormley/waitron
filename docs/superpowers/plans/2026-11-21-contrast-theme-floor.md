@@ -1,41 +1,39 @@
 # Floor map in Windows contrast themes
 
-**Goal.** Staff can see each table, the held table or drop target, and overdue and forgotten waits on
- the floor plan with a Windows contrast theme active. The Lane D queue item `CONTRAST-THEME-FLOOR`
- sets the scope. Follow [the design-system rule](../../developers/design-system.md#forced-colours-windows-contrast-themes).
+**Goal.** Staff can see the table edge, held table or drop target, keyboard focus, and overdue and
+forgotten waits on the floor map with a Windows contrast theme active. Scope comes from the Lane D
+queue item `CONTRAST-THEME-FLOOR` and [the design-system rule](../../developers/design-system.md#forced-colours-windows-contrast-themes).
 
-## Test the painted map in Chromium
-
-- [ ] Add `packages/ui/src/components/wt-floor-map.forced-colors.test.ts`. Mount a flat, spaced fixture
-  with an ordinary table, an overdue table and a forgotten one. Use `emulateForcedColours` and
-  `elementPixels` from `packages/ui/src/test-helpers.ts`. Compare marks with nearby surface pixels,
-  checking the overdue band inside the shape and the forgotten band outside it. Check a held single
-  table and a keyboard-focused held merge for separate, visible selection and focus marks. Include
-  a forgotten table too small for a caption with reduced motion enabled. Run this file with
-  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.forced-colors.test.ts` and
-  observe the missing marks before making the change.
-
-## Repaint the marks with the contrast theme's own colours
-
-- [ ] In `packages/ui/src/components/wt-floor-map.ts`, use system colours for the table edge and
-  existing selection and focus outlines under `@media (forced-colors: active)`. Use a different line
-  style for selection and focus. Preserve the held, drop-target and merge geometry, and their
-  offset from the shape. Keep the clearing dashes and existing cue text.
-- [ ] In `packages/ui/src/floor-ring.ts`, give the existing `.ring` a border inside its box and
-  the existing `.pulse` a line outside it in forced colours. Make the forgotten line dashed and
-  keep the overdue band solid. In the map, mark the shape only when its forgotten pulse is
-  suppressed by reduced motion, and draw the same dashed line on its pseudo-element in forced
-  colours. Keep the outside mark clear of selection and focus; check the case where the two wait
-  states appear on the same shape. Keep system colours inside the media rule and keep browser
-  colour adjustment enabled. The floor's urgency, motion preferences and gestures use their
-  existing rules. [CSS Color Adjustment](https://www.w3.org/TR/css-color-adjust-1/#forced-colors-properties)
-- [ ] Rerun the new file and the existing `wt-floor-map.test.ts`, `wt-floor-map.a11y.test.ts`,
-  `wt-floor-map.keys.test.ts`, and `floor-ring.test.ts` files. Inspect the map and the till's list or
-  tab ring with forced colours active in light and dark themes, at phone and desktop widths in
-  English and Spanish. Keep captures in campaign receipts and run `git diff --check`.
+- [ ] Write the failing Chromium tests. In `packages/ui/src/floor-ring.test.ts`, add forced-colour
+  screenshot assertions to the existing `FloorRingProbe` for the inner and outer marks. In
+  `packages/ui/src/components/wt-floor-map.forced-colors.test.ts`, test the existing plain edge as
+  a control, selection on a held forgotten table, focus and selection on a held merge, and
+  forgotten with overdue or clearing on the same shape. A small forgotten table without a caption
+  must still have its mark with reduced motion. Use `emulateForcedColours`, `elementPixels` and
+  `emulateColorScheme` to sample the lines and the gaps in both schemes. Check the new assertions
+  fail for the missing marks or gaps before changing the component styles.
+- [ ] In `packages/ui/src/floor-ring.ts`, use an inset system-colour border for `.ring`, keeping
+  waiting at half the overdue width. Use a narrow system-colour outline for `.pulse` outside its
+  box. Use a dotted forgotten line, a solid overdue line and a dashed fire line. Use `CanvasText`
+  for the inner bands and the outer signals. Keep the clearing border's dashes on the shape.
+  Add an opt-in to `renderFloorPulse` for the map's forgotten pulse when still. Reuse its span,
+  without the animation class and hidden outside forced colours. Keep the normal pulse and its
+  timing. Use system colours only inside the media rule and keep browser colour adjustment on.
+  [CSS Color Adjustment](https://www.w3.org/TR/css-color-adjust-1/#forced-colors-properties)
+- [ ] In `packages/ui/src/components/wt-floor-map.ts`, opt in for that steady forgotten pulse on
+  real table shapes. Keep the existing table border. Under forced colours, place the pulse next
+  to the shape, then the held or drop-target `Highlight` selection, then keyboard focus, with a
+  gap between each band. Adjust the offsets in this mode only. Keep solid focus and make selection
+  dashed so the marks differ even if the palette gives them the same colour. Verify alongside
+  close neighbours and at the edge of the map. Table positions and gesture handling stay as they are.
+- [ ] Run `pnpm --filter @waitron/ui exec vitest run src/floor-ring.test.ts src/components/wt-floor-map`.
+  Keep the existing reduced-motion assertion about whether the ordinary pulse is painted. Inspect
+  English and Spanish at phone and desktop widths in both themes, with forced colours active.
+  Look at the shared ring on till cards, zone tabs and `wt-table-token` as well. This slice gives
+  the map a steady forgotten mark. The separate reduced-motion tab fill is outside this scope.
 - [ ] Replace the open-work note in `docs/developers/design-system.md` with the implemented rule.
-  Remove the item from `docs/backlog.md` and `docs/backlog/dashboard.md`. The change covers paint
-  and keeps the same staff steps and words. Commit with sign-off and follow Lane D's branch workflow.
+  Remove the map and shared ring entry from `docs/backlog.md` and `docs/backlog/dashboard.md`.
+  Save captures to campaign receipts, run `git diff --check` and commit with sign-off.
 
-Expected size is about 55 product lines, 95 test lines and a short design-system update. The files
-above reuse the shared ring styles and browser helpers. There are no new settings, cues or interactions.
+Estimate about 65 product lines, 110 test lines and a short design-system update. Reuse the current
+ring renderer and Chromium helpers. The same states, words and staff steps apply in both modes.
