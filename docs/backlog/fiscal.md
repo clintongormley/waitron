@@ -312,9 +312,8 @@ with no backward-compatibility implementation.
 
 The till offers **Full invoice**. A saved recipient can be invoiced through table bill
 payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
-window. Direct integrated-card payment
-(`POST /api/pay`), unissued counter
-collection and closing a counter bill by transfer still refuse F1 with `sale.full_invoice_unavailable`.
+window. Direct integrated-card payment (`POST /api/pay`) and closing a counter bill by
+transfer still refuse F1 with `sale.full_invoice_unavailable`.
 The shared Full invoice control and automatic recipient prompt are visible at the counter; the
 till saves that choice on the order before the Pay window opens. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
@@ -1127,6 +1126,10 @@ closing that window also prints the receipt unless an original was emailed or se
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
 `apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's
 `questions.md` (2026-11-12 11:31) and the watcher handoff (2026-11-12 11:58).
+
+21 November 2026. [#3917](https://github.com/clintongormley/waitron/pull/3917) retired the
+separate counter Collect payment route. See [Full invoices at the till](#a231-full-invoices-at-the-till)
+for the current limits.
 
 ### A802: a correction runs like a bill in reverse (owner, 2026-11-12)
 
