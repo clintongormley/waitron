@@ -33,13 +33,11 @@ import {
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { registeredAddressRefusal } from "./registered-address-check.js";
 import {
-  foldedLoginEmail,
   hashPassword,
   hashPin,
   MIN_PASSWORD_LENGTH,
   MIN_PIN_LENGTH,
   normalizeAndValidateEmail,
-  verifySecretAsync,
 } from "@waitron/identity";
 import {
   AppError,
@@ -52,15 +50,13 @@ import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
-import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
+import type { AdoptHooks } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
-import { createPasswordThrottle } from "./password-throttle.js";
-import { fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
-import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
+import { isLoopbackHost } from "./primary-url.js";
 import type { BoxJoinAttempt, JoinedBox } from "./box-join-attempt.js";
 import { JOIN_STATUS } from "./box-join-api.js";
 import { requestAddress } from "./request-from-box.js";
@@ -161,21 +157,13 @@ export interface SetupDeps {
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. */
   seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
-  /** Fetches the primary's bundle SERVER-SIDE, so the admin credential never touches a
-   * browser→primary hop. The returned `breakGlassSecret` is surfaced ONCE in the connect response
-   * and never logged. */
-  adopt?: (
-    req: AdoptRequest,
-    hooks: AdoptHooks,
-  ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
-  /** Adopts the main box's bundle that the join attempt holds once approved. */
+  /** Adopts the main box's bundle that the join attempt holds once approved. The returned
+   * `breakGlassSecret` is surfaced ONCE in the Finish joining response and never logged. */
   adoptJoined?: (
     joined: JoinedBox,
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
   joinAttempt?: BoxJoinAttempt;
-  /** Reads the main box's authority certificate; `fetchPrimaryCertificate` when absent. */
-  readPrimaryCertificate?: (primaryUrl: string) => ReturnType<typeof fetchPrimaryCertificate>;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
@@ -346,13 +334,9 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
 const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_failed");
 
 /**
- * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
- * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `password.invalid` is the primary's refusal of the login, `totp.required` its request for the
- * account's authenticator code, and `password.throttled` its refusal of too many attempts at it.
- * `mirror.vault_not_empty`, `mirror.vault_key_differs` and `mirror.primary_unconfirmed` are this
- * box's own refusals; `JOIN_REFUSAL_STATUS` holds the main box's refusals of the join, each relayed
- * by `fetchMirrorBundle`.
+ * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the main box
+ * the join was pointed at failed. `mirror.vault_not_empty` and `mirror.vault_key_differs` are this
+ * box's own refusals.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */
@@ -362,7 +346,6 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.bundle_fetch_failed": 502,
   "mirror.vault_not_empty": 409,
   "mirror.vault_key_differs": 409,
-  "mirror.primary_unconfirmed": 409,
   "mirror.environment_mismatch": 409,
   // What this box's own start after joining would refuse.
   "server.config_missing": 409,
@@ -371,9 +354,6 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "provisioning.second_venue": 409,
   "provisioning.foreign_taxpayer": 409,
   ...JOIN_REFUSAL_STATUS,
-  "password.invalid": 401,
-  "totp.required": 401,
-  "password.throttled": 429,
   "setup.connection_insecure": 403,
   "setup.owner_required": 403,
   "setup.not_ready": 503,
@@ -387,12 +367,6 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
 const JOIN_ADOPT_REQUEST = "adopt-joined";
-
-const PRIMARY_CERTIFICATE_STATUS: Record<string, ContentfulStatusCode> = {
-  "setup.request_invalid": 400,
-  "mirror.primary_url_invalid": 400,
-  "mirror.bundle_fetch_failed": 502,
-};
 
 const runJoin = createErrorBoundary(
   {
@@ -414,45 +388,14 @@ const runJoin = createErrorBoundary(
 /** How long after its last state read the page holding a join's handle still counts as open. */
 const JOIN_TAB_LIVE_MS = 15_000;
 
-const runPrimaryCertificate = createErrorBoundary(
-  PRIMARY_CERTIFICATE_STATUS,
-  "setup.primary_certificate_failed",
-);
-
 const RESET_STATUS: Record<string, ContentfulStatusCode> = {
-  "setup.request_invalid": 400,
   "setup.connection_insecure": 403,
   "setup.owner_required": 403,
-  "password.invalid": 401,
   "setup.reset_unavailable": 409,
   "setup.operation_conflict": 409,
-  "password.throttled": 429,
 };
 
 const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
-
-/**
- * Whether `email` and `password` are the admin login the primary accepted for the adopt that
- * stopped partway, the email compared as sign-in folds it. It does NOT establish that the admin is
- * still active on the primary, and the one-time code is not checked again.
- */
-async function matchesResetProof(
-  proof: unknown,
-  email: string,
-  password: string,
-): Promise<boolean> {
-  const saved =
-    typeof proof === "object" && proof !== null ? (proof as Record<string, unknown>) : {};
-  const passwordMatches = await verifySecretAsync(
-    password,
-    typeof saved.passwordHash === "string" ? saved.passwordHash : "",
-  );
-  return (
-    passwordMatches &&
-    typeof saved.email === "string" &&
-    foldedLoginEmail(saved.email) === foldedLoginEmail(email)
-  );
-}
 
 const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...PROVISION_STATUS,
@@ -852,7 +795,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         return directError(c, log, "setup.already_provisioning", 409);
       // These write nothing, so a main box that never answers them holds no other setup request
       // back.
-      if (["/setup-api/primary-certificate", "/setup-api/join/start"].includes(c.req.path))
+      if (c.req.path === "/setup-api/join/start")
         return boundary(c, log, async () => {
           await firstSetup.assertOtherAllowed();
           await next();
@@ -1266,18 +1209,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     });
   });
 
-  // Sends nothing secret: the person compares the answer's fingerprint with the main box's before
-  // the adopt request carries a password.
-  app.post("/setup-api/primary-certificate", async (c) =>
-    runPrimaryCertificate(c, log, async () => {
-      const body = await readJsonBody<{ primaryUrl?: unknown }>(c);
-      const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-      // The same SSRF guard as the adopt route: this route is unauthenticated too.
-      assertSafePrimaryUrl(primaryUrl);
-      return c.json(await (deps.readPrimaryCertificate ?? fetchPrimaryCertificate)(primaryUrl));
-    }),
-  );
-
   // The handle keeps the code on the page that started the join. Only its hash is kept.
   let joinHolder: { handleHash: Buffer; readAt: number } | null = null;
   const handleHash = (handle: string) => createHash("sha256").update(handle).digest();
@@ -1359,9 +1290,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   });
 
   app.post("/setup-api/adopt", async (c) => {
-    const adopt = deps.adopt;
+    const adoptJoined = deps.adoptJoined;
+    const joinAttempt = deps.joinAttempt;
     const requestRestart = deps.requestRestart;
-    if ((adopt === undefined && deps.adoptJoined === undefined) || requestRestart === undefined) {
+    if (adoptJoined === undefined || joinAttempt === undefined || requestRestart === undefined) {
       return directError(c, log, "setup.not_ready", 503);
     }
 
@@ -1371,103 +1303,38 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    type AdoptBody = { primaryUrl?: unknown; credential?: unknown; confirmedCaPem?: unknown };
-    const restartWith = (secret: { breakGlassSecret: string; breakGlassKeyName?: string }) => {
+    const run = async (joined: JoinedBox, operation?: ActiveSetupOperation) => {
+      const secret = await adoptJoined(joined, {
+        // Past "started", the store keeps the record, so a different request cannot run over a
+        // half-adopted node.
+        beforeFirstWrite: async (environment) => {
+          // What the next start takes as this box's environment if the join stops after its stamp
+          // and WAITRON_ENV is unset (`withUnfinishedJoinEnvironment`).
+          await operation?.advance("venue_committed", { environment });
+        },
+      });
       // The operator's only chance to record the offline promote fallback. It is NEVER logged.
       const response = c.json({ adopted: true, ...secret, restarting: true }, 200);
       setTimeout(() => requestRestart(), 0);
       return response;
     };
-    const executeJoined = async (
-      joined: JoinedBox,
-      operation?: ActiveSetupOperation,
-    ): Promise<Response> =>
-      restartWith(
-        await deps.adoptJoined!(joined, {
-          beforeFirstWrite: async (environment) => {
-            await operation?.advance("venue_committed", { environment });
-          },
-        }),
-      );
-    const execute = async (
-      body: AdoptBody,
-      operation?: ActiveSetupOperation,
-    ): Promise<Response> => {
-      if (adopt === undefined) throw new AppError("setup.not_ready", {});
-      // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
-      // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
-      // TOTP are never logged: `asString` names the field, never its value.
-      const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-      // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
-      // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
-      // box POST its admin credential there. Refused before `adopt` fetches anything.
-      assertSafePrimaryUrl(primaryUrl);
-      const cred = asObject(body.credential, "credential");
-      const credential: AdoptCredential = {
-        email: asString(cred.email, "credential.email"),
-        password: asString(cred.password, "credential.password"),
-        totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
-      };
-
-      const confirmedCaPem =
-        body.confirmedCaPem === undefined
-          ? undefined
-          : asString(body.confirmedCaPem, "confirmedCaPem");
-
-      const { breakGlassSecret, breakGlassKeyName } = await adopt(
-        { primaryUrl, credential, ...(confirmedCaPem === undefined ? {} : { confirmedCaPem }) },
-        {
-          // For adopt this phase means "adopt is past its own checks and may have written to this
-          // node": the store keeps a record past "started", so a different request cannot run over
-          // a half-adopted node. Adopt reaches this only after the primary accepted the login, which
-          // is what makes it the proof the reset route asks for.
-          beforeFirstWrite: async (environment) => {
-            await operation?.advance("venue_committed", {
-              resetProof: {
-                email: credential.email,
-                passwordHash: hashPassword(credential.password),
-              },
-              // What the next start takes as this box's environment if the join stops after its
-              // stamp and WAITRON_ENV is unset (`withUnfinishedJoinEnvironment`).
-              environment,
-            });
-          },
-        },
-      );
-
-      return restartWith({ breakGlassSecret, breakGlassKeyName });
-    };
     return runAdopt(c, log, async () => {
       let succeeded = false;
       try {
-        const bodyText = await c.req.raw.clone().text();
-        const body = await readJsonBody<AdoptBody>(c);
-        let run: (operation?: ActiveSetupOperation) => Promise<Response>;
+        refuseJoinElsewhere(c);
+        if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
+        const joined = joinAttempt.joined();
+        if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
         // Finish joining reads nothing from its body, so every resend counts as the same request.
-        let requestHash = createHash("sha256").update(JOIN_ADOPT_REQUEST).digest("hex");
-        if (body.primaryUrl === undefined && body.credential === undefined) {
-          refuseJoinElsewhere(c);
-          if (deps.adoptJoined === undefined || deps.joinAttempt === undefined)
-            throw new AppError("setup.not_ready", {});
-          if (holderOf(c) === null) throw new AppError("mirror.join_handle_invalid", {});
-          const joined = deps.joinAttempt.joined();
-          if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
-          run = (operation) => executeJoined(joined, operation);
-        } else {
-          requestHash = createHash("sha256").update(bodyText).digest("hex");
-          run = (operation) => execute(body, operation);
-        }
+        const requestHash = createHash("sha256").update(JOIN_ADOPT_REQUEST).digest("hex");
         const response =
           deps.operations === undefined
-            ? await run()
+            ? await run(joined)
             : await runOperation(c.req.raw, "adopt", requestHash, async (operation) => {
-                if (operation.phase === "complete") {
-                  return c.json(operation.data as { adopted: true; restarting: true });
-                }
                 if (operation.phase !== "started") {
                   throw new AppError("setup.adopt_incomplete", {});
                 }
-                const response = await run(operation);
+                const response = await run(joined, operation);
                 if (response.ok) {
                   await operation.complete({ adopted: true, restarting: true });
                 }
@@ -1483,7 +1350,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   // The wipe happens at the next start, under the venue lock, which refuses a box holding trading
   // settings, a taxpayer or an operational venue (`runStagedReset`).
-  const resetThrottle = createPasswordThrottle();
   app.post("/setup-api/reset-incomplete-adopt", async (c) => {
     const stageReset = deps.stageReset;
     const requestRestart = deps.requestRestart;
@@ -1499,36 +1365,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runReset(c, log, async () => {
       let succeeded = false;
       try {
-        const body = await readJsonBody<{ email?: unknown; password?: unknown }>(c);
-        const proof =
-          body.email === undefined && body.password === undefined
-            ? null
-            : {
-                email: asString(body.email, "email"),
-                password: asString(body.password, "password"),
-              };
-        if (proof === null) refuseJoinElsewhere(c);
+        refuseJoinElsewhere(c);
         const record = await operations.read();
         if (!isUnfinishedAdopt(record)) {
           throw new AppError("setup.reset_unavailable", {});
         }
-        if (proof !== null) {
-          // Keyed by the saved operation, not the submitted email: only its one saved login can
-          // authorise this, and a key per submitted email lets invented ones crowd the real one
-          // out.
-          const finish = resetThrottle.begin(record.id);
-          let outcome: "success" | "invalid" | "error" = "error";
-          try {
-            outcome = (await matchesResetProof(record.data.resetProof, proof.email, proof.password))
-              ? "success"
-              : "invalid";
-          } finally {
-            finish(outcome);
-          }
-          if (outcome === "invalid")
-            throw new AppError("password.invalid", {}, { reason: "reset_proof_mismatch" });
-        }
-
         await stageReset(record.id);
         const response = c.json({ resetStaged: true, restarting: true }, 202);
         setTimeout(() => requestRestart(), 0);

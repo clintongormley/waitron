@@ -1473,12 +1473,8 @@ declare module "@waitron/shared" {
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
     /**
-     * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
-     * UUID, `standbyPublicKey` absent or empty, `standbyContactUrl` absent, not a string, or a
-     * non-empty value that is not a bare http(s) origin, `standbyStoreUrl` not an `https` bare
-     * origin at the contact URL's host (so an empty contact URL is refused), or `standbyAt` not a
-     * number or not a time a `Date` can hold. Not
-     * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
+     * A join's hello carried a malformed new-box identity (`parseHello` in `box-join-api.ts`). The
+     * new box's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
     /**
@@ -1500,14 +1496,8 @@ declare module "@waitron/shared" {
      */
     "mirror.vault_key_differs": Record<string, never>;
     /**
-     * A spare was asked to join a main box over https before the person confirmed that box's
-     * authority certificate, or with something other than one authority certificate as the
-     * confirmed one; nothing was sent.
-     */
-    "mirror.primary_unconfirmed": Record<string, never>;
-    /**
      * The membership document could not be written because every read-mint-write round lost its
-     * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
+     * term race. Issuing a join's bundle refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
      * bound, a constant of this process. A machine's removal (`removeStandby`) and
      * clearance (`clearRemovedMachine`) raise it the same way.
@@ -1547,12 +1537,12 @@ declare module "@waitron/shared" {
      */
     "membership.node_not_removed": Record<string, never>;
     /**
-     * A mirror-bundle request named a standby node id this node's held chart lists as `evicted` or
+     * A join named a standby node id this node's held chart lists as `evicted` or
      * has cleared. A fresh join mints a fresh id.
      */
     "mirror.standby_removed": Record<string, never>;
     /**
-     * A mirror-bundle request named a standby node id this node's held chart does not list, and
+     * A join named a standby node id this node's held chart does not list, and
      * the chart already lists `limit` (MAX_NODES) machines, the most a chart may hold. Clearing a
      * removed machine frees a place.
      */
@@ -1624,8 +1614,7 @@ declare module "@waitron/shared" {
      * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket or
      * archives page is drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
      * or a spare asks this box to join while its `backup.env` holds no usable key
-     * (`mirror-bundle-api.ts`), refused before anything is reserved and passed on by the spare's
-     * adopt route. */
+     * (`mirror-bundle-api.ts`), refused on this box before anything is reserved. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };

@@ -384,7 +384,6 @@ import { mountManagementAttendanceApi } from "./management-attendance-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
@@ -408,13 +407,8 @@ import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
-import { adoptFromPrimary, adoptWithPassword, type PasswordAdoptDeps } from "./adopt.js";
-import {
-  fetchMirrorBundle,
-  fetchPrimaryCertificate,
-  rememberCheckedAddressesIn,
-  type BoxLookup,
-} from "./mirror-bundle-fetch.js";
+import { adoptFromPrimary, type AdoptDeps } from "./adopt.js";
+import { rememberCheckedAddressesIn, type BoxLookup } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
@@ -1645,19 +1639,13 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
-    const adoptDeps: PasswordAdoptDeps = {
+    const adoptDeps: AdoptDeps = {
       ownerDb: db,
       ownerNode: store.node,
       ring,
       environmentKeys: keyRingVariables(base),
       persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
       persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
-      fetchBundle: (primaryUrl, credential, standby, confirmedCaPem) =>
-        fetchMirrorBundle(primaryUrl, credential, standby, confirmedCaPem, {
-          lookup: seams.boxLookup,
-        }),
-      advertisedOrigin: config.managementOrigin,
-      spareStorePort: config.spareStorePort,
       environment: config.configuredEnvironment,
       persistTrading,
       assertStartsWith: (trading) => {
@@ -1704,8 +1692,6 @@ async function bootServer(
         cloudSignIn,
         requestFromBox: seams.requestFromBox,
         joinAttempt,
-        readPrimaryCertificate: (primaryUrl) =>
-          fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
         prepareRecovery: recoveryPreparation,
         recoveryOperationPath: base.WAITRON_RECOVERY_OPERATION_FILE,
         receiveArchive: (request, options) =>
@@ -1925,7 +1911,6 @@ async function bootServer(
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
         recoveryPackEvidence: documentEvidence,
-        adopt: (req, hooks) => adoptWithPassword(adoptDeps, req, hooks),
         adoptJoined: (joined, hooks) => adoptFromPrimary(adoptDeps, joined, hooks),
         establishIdentity: (nodeId) =>
           establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
@@ -4359,7 +4344,6 @@ async function bootServer(
       designated: config.node,
       wakeSpareJoin: () => spareJoin?.wake(),
     };
-    mountMirrorBundleApi(app, { ...bundleDeps, credentialKeyRing: ring }, log);
     mountBoxJoinApi(
       app,
       { appDb: db, node: store.node, ring, designated: config.node, requests: boxJoinRequests },

@@ -152,7 +152,7 @@ export function createStaffApp(
     if (/%2f|%5c|%00/i.test(path)) return c.notFound();
     // Joining and machine operations stay off remote access.
     if (
-      ["membership", "mirror-bundle", "promote", "box-joins"].some(
+      ["membership", "promote", "box-joins"].some(
         (name) => path === `/management-api/${name}` || path.startsWith(`/management-api/${name}/`),
       )
     )

@@ -40,11 +40,9 @@ import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { JoinedBox } from "./box-join-attempt.js";
-import type { MirrorBundle } from "./mirror-bundle.js";
-import { generateStandbyIdentity } from "./reserved-identity.js";
 import { writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
-import { leafHostnamesFor, ownContactUrl } from "./box-name.js";
+import { leafHostnamesFor } from "./box-name.js";
 import "./errors.js";
 
 /**
@@ -74,22 +72,6 @@ export function nodeTablesAdoptLeaves(tables: readonly string[]): string[] {
 }
 
 export type PersistTradingArgs = TradingConfig;
-
-/** The admin's sign-in for the PRIMARY: it authorises the bundle mint there and never touches this
- * mirror's own database. `totp` is present only when the admin has TOTP enrolled. */
-export interface AdoptCredential {
-  email: string;
-  password: string;
-  totp?: string;
-}
-
-export interface AdoptRequest {
-  primaryUrl: string;
-  credential: AdoptCredential;
-  /** The main box's authority as the person confirmed it; absent only for a plain-http loopback
-   * main box. */
-  confirmedCaPem?: string;
-}
 
 export interface AdoptHooks {
   /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step,
@@ -130,54 +112,6 @@ export interface AdoptDeps {
   /** The addresses this box's leaf names beyond 127.0.0.1, as at a setup start. */
   listIpv4: () => string[];
   now: () => Date;
-}
-
-export interface PasswordAdoptDeps extends AdoptDeps {
-  /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
-   * can route here after a failover. */
-  advertisedOrigin: string;
-  /** This box's store port; its name and this port are sent as the spare's store address (D15). */
-  spareStorePort: number;
-  /** Sends the standby identity so the primary can reserve and endorse it. */
-  fetchBundle: (
-    primaryUrl: string,
-    credential: AdoptCredential,
-    standby: {
-      nodeId: string;
-      publicKey: string;
-      contactUrl: string;
-      storeUrl: string;
-      at: number;
-    },
-    confirmedCaPem?: string,
-  ) => Promise<MirrorBundle>;
-}
-
-/** Joins with the main box's sign-in: makes this box's identity and fetches the bundle with it. */
-export async function adoptWithPassword(
-  deps: PasswordAdoptDeps,
-  req: AdoptRequest,
-  hooks: AdoptHooks,
-): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
-  const standby = generateStandbyIdentity();
-  const contactUrl = ownContactUrl(deps.advertisedOrigin, standby.nodeId);
-  const store = new URL(contactUrl);
-  store.protocol = "https:";
-  store.port = String(deps.spareStorePort);
-  const storeUrl = store.origin;
-  const bundle = await deps.fetchBundle(
-    req.primaryUrl,
-    req.credential,
-    {
-      nodeId: standby.nodeId,
-      publicKey: standby.publicKey,
-      contactUrl,
-      storeUrl,
-      at: deps.now().getTime(),
-    },
-    req.confirmedCaPem,
-  );
-  return adoptFromPrimary(deps, { identity: standby, bundle, storeUrl }, hooks);
 }
 
 /**
