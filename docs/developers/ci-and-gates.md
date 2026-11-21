@@ -1447,19 +1447,30 @@ These older range reports omit boundary-spanning mutants; their sum is a model i
 measurement of a whole-file run. At that point, every other cost-table entry remained unchanged.
 
 **15 November refresh.** Scheduled run `43679554218` cancelled db shard 9 at its
-25-minute job limit, after 839 of 848 mutants. The current weights use the medians
-from its twelve completed reports and all thirteen reports of successful run
+25-minute job limit, after 839 of 848 mutants. That refresh's weights used the medians
+from run `43679554218`'s twelve completed reports and all thirteen reports of successful run
 `43559793352`; both runs follow the whole-file change. The failed shard supplied
-no cost samples, so its files use the preceding run's samples only;
-`src/schema/menu/index.ts` has no sample under its current name and now uses the
+no cost samples, so its files used the preceding run's samples only;
+`src/schema/menu/index.ts` had no sample under its current name and used the
 byte fallback. The failed shard's phase had already run 1,350.217 seconds against
-816.708 newly estimated seconds (at least 1.653 times). Repacking spreads those
-files over ten shards but does not explain that slowdown; roughly 716 estimated
-seconds per shard is not a measured finishing time. Verify the mitigation with a
-manual `mutation.yml` run on main using `packages=db`, retaining the slowest
-shard's job and mutation-phase times.
+816.708 newly estimated seconds (at least 1.653 times). That repacking spread those
+files over ten shards but did not explain that slowdown; roughly 716 estimated
+seconds per shard is not a measured finishing time.
 
-**Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
+**21 November refresh.** Scheduled run `44869195665` cancelled db shard 11 at its 25-minute
+job limit, after 1,044 of 1,053 mutants; its shards 3 and 10 took 23 min 56 s and 24 min 34 s
+of job time and shard 2 took 7 min 38 s. Thirteen selected files had no entry in the table and
+were weighed by bytes. The table now takes each file's median over the twelve completed reports
+of that run and all thirteen reports of each of scheduled runs `44678716690` and
+`44462750256`, and names every selected file. Replaying run `44869195665`'s own modelled file
+seconds over the new packing gives about 828 seconds for its slowest shard (new shard 2),
+against 1,210 for the old packing's shard 10, the slowest with a report in that run (cancelled
+shard 11 left none); the replay counts only files with a report in that run. 828 modelled
+seconds is not a measured finishing time: the old shard 10's 1,210 took 24 min 34 s.
+Dispatched run `44875671062`, on this table over main at `3682c7536b`, finished all 13 db
+shards; the slowest, shard 6, took 21 min 03 s of job time, and the fastest, shard 1, 9 min 33 s.
+
+**Refreshing the table.** Use reports only from runs after the 13 November whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
 would take the median of partial costs and understate the file's cost. The builder refuses a
 line-range report for a currently selected whole file, naming it and directing you to post-change
@@ -3187,7 +3198,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
-| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
+| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066); 24.6 (run 44869195665, slowest of 12 completed); that run's shard 11 hit the limit | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
 | mutation.yml       | mutation-handover                 | 3.4 (run 42075592113)          | 10    |
