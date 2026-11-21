@@ -167,8 +167,11 @@ Three parts:
 release from the first group that matches. The default applies only if no group matches. The
 selector can refuse a replay after a later offer or pause. The
 [release workflow](../operations/release.md#offer-a-release-to-a-group) publishes the signed file
-and checks the exact bytes on GitHub. The first real publication and the box's scheduled check
-remain open in the [staged-offer plan](../superpowers/plans/2026-11-19-a950-staged-offers.md).
+and checks the exact bytes on GitHub. You can [check a numbered box's signed offer](../../deploy/README.md#checking-the-signed-upgrade-offer)
+from its retained installer. It keeps the most recent verified offer, including a pause, on the
+host outside the rollback copy. Losing that file loses its replay history. The first real
+publication, the scheduled check and automatic installation remain open in the
+[staged-offer plan](../superpowers/plans/2026-11-19-a950-staged-offers.md).
 
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the

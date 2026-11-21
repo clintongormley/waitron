@@ -38,6 +38,7 @@ waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
+  waitron.sh check-upgrade-offer  check which signed release is offered to this box
   waitron.sh restore           restore the intact copy from a held manual upgrade
   waitron.sh keep              start the candidate despite its failed checks
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
@@ -942,6 +943,34 @@ upgrade_cli() {
   "$HOST_NODE" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
 }
 
+defer_upgrade_offer() {
+  printf '{"status":"deferred","reason":"%s"}\n' "$1"
+  return 1
+}
+
+cmd_check_upgrade_offer() (
+  local current result status=0
+  exec 9>"${WAITRON_DIR}.upgrade.lock" && flock -n 9 || {
+    defer_upgrade_offer upgrade-busy
+    return 1
+  }
+  if upgrade_pending; then
+    defer_upgrade_offer upgrade-pending
+    return 1
+  fi
+  current="$(installed_app_ref)" && is_release_tag "$current" || {
+    defer_upgrade_offer installed-version-unavailable
+    return 1
+  }
+  result="$(upgrade_cli check-upgrade-offer "${current#v}" "$RELEASE_TRUST")" || status=$?
+  if [ -z "$result" ]; then
+    defer_upgrade_offer offer-check-unavailable
+    return 1
+  fi
+  printf '%s\n' "$result"
+  return "$status"
+)
+
 cmd_upgrade_choice() (
   exec 9>"${WAITRON_DIR}.upgrade.lock"
   flock -n 9 || die "another host operation is running"
@@ -1336,7 +1365,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | restore | keep | reset | __candidate | "" | -h | --help) ;;
+    install | update | status | check-upgrade-offer | restore | keep | reset | __candidate | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -1348,6 +1377,7 @@ main() {
     install | update) shift; cmd_install "$@" ;;
     __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
+    check-upgrade-offer) cmd_check_upgrade_offer ;;
     restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;

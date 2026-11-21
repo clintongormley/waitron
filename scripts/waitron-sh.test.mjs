@@ -4165,3 +4165,57 @@ it.each([
   const saved = readFileSync(join(sb.boxDir, ".env"), "utf8");
   expect(saved).toBe(expected ? `COMPOSE_PROFILES=${expected}\n` : "");
 });
+
+describe("waitron.sh check-upgrade-offer", () => {
+  const cmd = ["check-upgrade-offer"];
+
+  it.each([
+    [
+      "numbered prerelease",
+      "v1.2.3-rc.1",
+      "1.2.3-rc.1",
+      '{"status":"offered","version":"1.2.3"}',
+      0,
+    ],
+    ["retained deferral", "v1.2.2", "1.2.2", '{"status":"deferred","reason":"fixture"}', 1],
+    ["missing CLI output", "v1.2.2", "1.2.2", "", 1],
+  ])(
+    "passes the installed version to the retained CLI for %s",
+    (_name, ref, version, output, status) => {
+      const sb = sandbox();
+      const host = join(sb.root, "host");
+      mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+      writeFileSync(
+        join(host, "node-v26.7.0/bin/node"),
+        `#!/bin/bash\nprintf 'host:%s\\n' "$*" >> "$WT_LOG"\n${output ? `echo '${output}'\n` : ""}exit ${status}\n`,
+        { mode: 0o700 },
+      );
+      const result = run(sb, cmd, { WT_INSTALLED_RELEASE_REF: ref });
+      expect(result.status).toBe(status);
+      expect(result.stdout).toBe(
+        (output || '{"status":"deferred","reason":"offer-check-unavailable"}') + "\n",
+      );
+      expect(loggedCalls(sb)).toContain(
+        `host:${host}/box/upgrades/cli.mjs check-upgrade-offer ${sb.boxDir} ${version} ${host}/release-trust`,
+      );
+    },
+  );
+
+  it.each([
+    ["upgrade-busy", true, false, "v1.2.3"],
+    ["upgrade-pending", false, true, "v1.2.3"],
+    ["installed-version-unavailable", false, false, "main"],
+  ])("defers for %s", (reason, busy, pending, ref) => {
+    const sb = sandbox();
+    if (pending) mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    const result = run(sb, cmd, {
+      WT_INSTALLED_RELEASE_REF: ref,
+      WT_UPGRADE_BUSY: busy ? "1" : "",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe(JSON.stringify({ status: "deferred", reason }) + "\n");
+    expect(loggedCalls(sb)).toContain("flock -n 9");
+    if (busy || pending)
+      expect(loggedCalls(sb).some((call) => call.startsWith("docker "))).toBe(false);
+  });
+});

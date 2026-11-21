@@ -530,6 +530,28 @@ If verification fails, check that the release includes `waitron-release.json` an
 box has both public keys. A release may carry a database migration. Keep the installation on
 numbered releases when the box holds production data.
 
+### Checking the signed upgrade offer
+
+Once you install a numbered release that includes the offer check, you can see which upgrade the
+publisher is offering to this box.
+
+```bash
+sudo bash /opt/waitron-host/waitron.sh check-upgrade-offer
+```
+
+```json
+{ "status": "offered", "version": "1.3.0" }
+```
+
+The check leaves the app running and installs nothing. It prints one JSON line and exits zero for
+an offer or for `{"status":"none"}`. A deferred check includes a reason and exits nonzero.
+If a manual upgrade is held, resolve it before checking again.
+
+The box remembers the newest verified offer, including a pause, in
+`/opt/waitron.upgrade-offer.json`. Keep this file on the host so the box can reject older offers.
+If you lose it, the box starts with the first verified offer it reads. A fresh-identity restore or a
+full reset can change which rollout group matches this box.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and

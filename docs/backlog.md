@@ -1239,9 +1239,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   signs and reads back the staged offer. A prerelease such as `1.3.0-rc.1` has its own declaration
   and can be published for checked manual installation. Older lines have
   [release tooling for maintenance branches](operations/release.md#cut-a-release-on-an-older-line).
-  Automatic offers take stable releases.
-  Still open are the first signed publication, the first live offer,
-  the test-box upgrade, the scheduled offer check and window, status/email and pairs. After the
+  Automatic offers take stable releases. You can
+  [check the signed offer](../deploy/README.md#checking-the-signed-upgrade-offer) on a numbered box.
+  Still open are the first signed publication, the first live offer, the test-box upgrade,
+  the scheduled check and window, automatic installation, status/email and pairs. After the
   first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry
