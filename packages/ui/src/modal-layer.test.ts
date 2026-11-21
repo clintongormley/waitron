@@ -1,5 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { modalClosed, modalOpened, onModalChange, underModal } from "./modal-layer.js";
+import {
+  inInertTree,
+  modalClosed,
+  modalOpen,
+  modalOpened,
+  onModalChange,
+  surfaceOutside,
+  underModal,
+} from "./modal-layer.js";
 
 const opened: Element[] = [];
 const stops: (() => void)[] = [];
@@ -162,4 +170,87 @@ test("an element inside a component's own drawing, inside the open window, is no
   const modal = open(box(), 1);
   const root = box(modal).attachShadow({ mode: "open" });
   expect(underModal(box(root))).toBe(false);
+});
+
+test("a window is open only between its opening and its closing", () => {
+  expect(modalOpen()).toBe(false);
+  const modal = open(box(), 1);
+  expect(modalOpen()).toBe(true);
+  modalClosed(modal);
+  expect(modalOpen()).toBe(false);
+});
+
+test("an element inside an inert container is in an inert tree", () => {
+  const container = box();
+  container.inert = true;
+  expect(inInertTree(box(box(container)))).toBe(true);
+  expect(inInertTree(container)).toBe(true);
+});
+
+test("an element inside a component whose host sits in an inert container is in an inert tree", () => {
+  const container = box();
+  container.inert = true;
+  const root = box(container).attachShadow({ mode: "open" });
+  expect(inInertTree(box(root))).toBe(true);
+});
+
+test("an element slotted into an inert part of a component's drawing is in an inert tree", () => {
+  const host = box();
+  const root = host.attachShadow({ mode: "open" });
+  const inertPart = box(root);
+  inertPart.inert = true;
+  inertPart.appendChild(document.createElement("slot"));
+  const slotted = box(host);
+  expect(slotted.assignedSlot).not.toBeNull();
+  expect(inInertTree(slotted)).toBe(true);
+});
+
+test("an element with no inert ancestor is not in an inert tree", () => {
+  const sibling = box();
+  sibling.inert = true;
+  const root = box().attachShadow({ mode: "open" });
+  expect(inInertTree(box(root))).toBe(false);
+});
+
+function openPopover(parent: Node = document.body): HTMLElement {
+  const popover = box(parent);
+  popover.popover = "manual";
+  popover.showPopover();
+  return popover;
+}
+
+test("nothing is in front while no popup or window is open", () => {
+  box().popover = "manual";
+  document.body.appendChild(document.createElement("dialog"));
+  expect(surfaceOutside(box())).toBe(false);
+});
+
+test("an open popup elsewhere is in front", () => {
+  openPopover();
+  expect(surfaceOutside(box())).toBe(true);
+});
+
+test("an open popup holding the element is not in front of it", () => {
+  const popover = openPopover();
+  const root = box(popover).attachShadow({ mode: "open" });
+  expect(surfaceOutside(box(root))).toBe(false);
+});
+
+test("an open modal dialog inside a component's drawing, not holding the element, is in front", () => {
+  const root = box().attachShadow({ mode: "open" });
+  const dialog = document.createElement("dialog");
+  root.appendChild(dialog);
+  dialog.showModal();
+  try {
+    expect(surfaceOutside(box())).toBe(true);
+  } finally {
+    dialog.close();
+  }
+});
+
+test("a dialog shown without being modal is not in front", () => {
+  const dialog = document.createElement("dialog");
+  document.body.appendChild(dialog);
+  dialog.show();
+  expect(surfaceOutside(box())).toBe(false);
 });

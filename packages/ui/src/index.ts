@@ -119,6 +119,7 @@ export type {
   FloorMapPulse,
 } from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
+export { inInertTree, modalOpen, surfaceOutside, underModal } from "./modal-layer.js";
 export { belongsToComposition, submitOnEnter } from "./submit-on-enter.js";
 export { FormFeedback, bottomMessage } from "./form-feedback.js";
 export { breakAfterColons } from "./fingerprint.js";

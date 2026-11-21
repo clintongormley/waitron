@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
-import { modalClosed, modalOpened } from "../modal-layer.js";
+import { composedContains, modalClosed, modalOpened, openSurfaces } from "../modal-layer.js";
 import { composedParent, isTabbable, tabbables } from "../tabbable.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
@@ -18,19 +18,6 @@ function deepActiveElement(): Element | null {
   let focused = document.activeElement;
   while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
   return focused;
-}
-
-/** Whether `node` is `ancestor` or sits inside it, across shadow-root boundaries. */
-function composedContains(ancestor: Node, node: Node | null): boolean {
-  for (let at = node; at; at = composedParent(at)) if (at === ancestor) return true;
-  return false;
-}
-
-/** Open popovers and modal dialogs in `root` and in every open shadow root inside it. */
-function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElement> {
-  yield* root.querySelectorAll<HTMLElement>(":popover-open, dialog:modal");
-  for (const each of root.querySelectorAll("*"))
-    if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
 }
 
 @customElement("wt-dialog")
