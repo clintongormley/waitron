@@ -94,6 +94,7 @@ it("validates a partial pair and a short window, then saves an explicitly cleare
   await edit(dialog, "end", "");
   await edit(dialog, "start", "");
   await expect.poll(() => save(dialog).disabled).toBe(false);
+  expect(dialog.textContent).toContain("Leaving both times empty stops automatic installation.");
   const closed = dialogClosed(dialog);
   await userEvent.click(save(dialog));
   await closed;
@@ -116,9 +117,13 @@ it.each([
   [
     "upgrade.settings_unavailable",
     503,
-    "The box could not save upgrade settings. Try again in a moment.",
+    "The box could not save upgrade settings. Try again in a moment. If the problem continues, see the console recovery steps in the deployment guide.",
   ],
-  ["node.read_only", 403, "Open Box status on the main box to change upgrade settings."],
+  [
+    "node.read_only",
+    403,
+    "Upgrade settings are read-only on this box. To change the main box’s settings, open its Box status page.",
+  ],
 ] as const)("shows the %s refusal below the draft", async (code, status, sentence) => {
   const { dialog } = await open(
     vi
@@ -150,7 +155,7 @@ it("explains a failed open without showing default hours from a different box", 
       ),
   );
   expect(await dialogMessageOf(dialog)).toBe(
-    "The box could not read upgrade settings. Close and reopen this dialog to try again.",
+    "The box could not read upgrade settings. Close and reopen this dialog. If the problem continues, see the console recovery steps in the deployment guide.",
   );
   expect(field(dialog, "start")).toBeNull();
   expect(save(dialog).disabled).toBe(true);

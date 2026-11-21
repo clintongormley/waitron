@@ -89,10 +89,11 @@ problem.
 ## Set the overnight upgrade hours {#automatic-upgrades}
 
 In **System → Box status**, choose **Automatic upgrades**. Enter the start and end in the venue’s
-local time, leaving at least 60 minutes. You can end after midnight.
+local time, with at least 60 minutes between them. You can end after midnight. For now, the
+overnight timer only checks for offers.
 
 To pause installation and keep your hours, turn off **Allow automatic installation** and choose
-**Save**. To remove the window, clear both times and save. Choose **Cancel** to leave your saved
+**Save**. To stop automatic installation and remove the window, clear both times and save. Choose **Cancel** to leave your saved
 settings as they were.
 
 ## Check the network {#network}

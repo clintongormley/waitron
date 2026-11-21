@@ -99,11 +99,13 @@ página avisa de que puede no mostrar todos los problemas.
 ## Configura el horario nocturno de actualización {#automatic-upgrades}
 
 En **Sistema → Estado del servidor**, elige **Actualizaciones automáticas**. Introduce las horas
-de inicio y fin en la hora local del establecimiento, con al menos 60 minutos de margen. La hora
-de fin puede ser después de medianoche.
+de inicio y fin en la hora local del establecimiento, con al menos 60 minutos entre ambas. La
+hora de fin puede ser después de medianoche. Por ahora, el temporizador nocturno solo busca
+actualizaciones disponibles.
 
 Para pausar la instalación y conservar el horario, desactiva **Permitir la instalación automática**
-y elige **Guardar**. Para quitar el horario, borra ambas horas y guarda. Elige **Cancelar** para
+y elige **Guardar**. Para detener la instalación automática y quitar el horario, borra ambas
+horas y guarda. Elige **Cancelar** para
 conservar los ajustes guardados.
 
 ## Consultar la red {#network}

@@ -576,14 +576,16 @@ sudo systemctl enable --now waitron-upgrade.timer
 sudo journalctl -u waitron-upgrade.service
 ```
 
-The timer checks every half hour while Waitron is running. In **System → Box status → Automatic
-upgrades**, set the hours in the venue’s local time. The default is 03:00–05:00. Pausing installation
-keeps the saved hours and offer checks. Clearing both hours stops offered installs and returns
-offer checks to 03:00–05:00.
+The timer wakes every half hour. While Waitron is running, it checks for offers within the saved
+hours. In **System → Box status → Automatic upgrades**, set the hours in the venue’s local time.
+The default is 03:00–05:00. Pausing installation keeps the saved hours and offer checks. Clearing
+both hours stops offered installs and returns offer checks to 03:00–05:00.
+
+#### Recover the overnight upgrade settings
 
 If the saved settings are unreadable, stop the timer with `sudo systemctl stop waitron-upgrade.timer`.
-On a default installation, restore the latest intact settings file to
-`/opt/waitron.upgrade-settings.json`. If you have no intact copy, move the unreadable file aside.
+The file is `/opt/waitron.upgrade-settings.json` on a default installation. If you kept an intact
+copy, restore it there. Otherwise move the unreadable file aside.
 The box uses the defaults in the absence of that file. Reopen **Automatic upgrades**, set your
 intended hours or pause, and save before restarting the timer with
 `sudo systemctl start waitron-upgrade.timer`.
