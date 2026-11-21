@@ -534,9 +534,9 @@ is removed. You can stop sharing in the Cloud portal while the box is offline; e
 resume delivery. If Cloud refuses a publication, check the menu and its content languages; the box
 retries. After disconnecting the box, remove any delivered copy in the Cloud portal.
 
-If the preview says you need a Cloud plan, choose **Open Cloud Billing**. After signing in,
-choose **Billing** if you land on the account page, then select your venue if asked.
-Start a free trial if offered.
+If the preview says you need a Cloud plan, choose **Open Cloud Billing**. If you land on
+the account page after signing in, choose **Billing** if it appears. Select your venue if asked
+and start a free trial if offered.
 
 A guest link over mobile data is still being prepared.
 

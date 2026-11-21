@@ -24,7 +24,11 @@ async function fixture(
         ...(typeof sent.body === "string" ? { text: sent.body } : {}),
       });
       await wait(req, res);
-      if (!res.writableEnded) res.end(JSON.stringify(reply));
+      if (!res.writableEnded) {
+        const answer = { ...reply };
+        if (values[2] !== "guest-menu-status") delete answer.planRequired;
+        res.end(JSON.stringify(answer));
+      }
     },
   });
   onTestFinished(() => f.close());

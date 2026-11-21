@@ -565,8 +565,8 @@ revisa la carta y sus idiomas de contenido; el servidor vuelve a intentarlo. Tra
 retira cualquier copia enviada desde el portal de Cloud.
 
 Si la vista previa indica que necesitas un plan de Cloud, elige **Abrir Facturación de Cloud**.
-Tras iniciar sesión, elige **Facturación** si llegas a la página de la cuenta y selecciona tu local
-si se te pide. Inicia una prueba gratuita si está disponible.
+Si llegas a la página de la cuenta tras iniciar sesión, elige **Facturación** si aparece. Selecciona
+tu local si se te pide e inicia una prueba gratuita si está disponible.
 
 El enlace para clientes con datos móviles aún se está preparando.
 
