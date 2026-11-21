@@ -3,6 +3,12 @@ import { generateNodeKeyPair, verifyBytes } from "@waitron/membership";
 import { describe, expect, it } from "vitest";
 import {
   JOIN_APPROVED_LABEL,
+  JOIN_BUNDLE_LABEL,
+  JOIN_CANCEL_LABEL,
+  JOIN_CODE_LABEL,
+  JOIN_COMMITMENT_LABEL,
+  JOIN_HELLO_LABEL,
+  JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
   codeTaken,
   commitmentFor,
@@ -37,6 +43,30 @@ function baseInputs(): JoinCodeInputs {
     requestId: "c1d2e3f4-0000-4000-8000-000000000001",
   };
 }
+
+describe("labels", () => {
+  it("keeps the exact text of every join label", () => {
+    expect({
+      JOIN_COMMITMENT_LABEL,
+      JOIN_CODE_LABEL,
+      JOIN_HELLO_LABEL,
+      JOIN_REVEAL_LABEL,
+      JOIN_POLL_LABEL,
+      JOIN_CANCEL_LABEL,
+      JOIN_APPROVED_LABEL,
+      JOIN_BUNDLE_LABEL,
+    }).toEqual({
+      JOIN_COMMITMENT_LABEL: "waitron box join commitment v1",
+      JOIN_CODE_LABEL: "waitron box join code v1",
+      JOIN_HELLO_LABEL: "waitron box join hello v1",
+      JOIN_REVEAL_LABEL: "waitron box join reveal v1",
+      JOIN_POLL_LABEL: "waitron box join poll v1",
+      JOIN_CANCEL_LABEL: "waitron box join cancel v1",
+      JOIN_APPROVED_LABEL: "waitron box join approved v1",
+      JOIN_BUNDLE_LABEL: "waitron box join bundle v1",
+    });
+  });
+});
 
 describe("encodeFields", () => {
   it("puts each field's length before it as four big-endian bytes", () => {
