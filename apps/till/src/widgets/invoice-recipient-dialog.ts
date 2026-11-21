@@ -17,12 +17,9 @@ import type {
   LeaveCoordinator,
   LeaveReason,
 } from "@waitron/ui";
+import type { AdministrativeArea } from "@waitron/country";
 import {
-  findAdministrativeArea,
-  findAdministrativeAreaByPostalCode,
-  type AdministrativeArea,
-} from "@waitron/country";
-import {
+  areaOfChosenAddress,
   countryNameFor,
   getCountryPack,
   RECIPIENT_COUNTRY_CODES,
@@ -500,16 +497,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     }
     this.foreignAddressCountry = undefined;
     const pack = getCountryPack(this.countryCode);
-    const postal = pack?.postalCode?.validate(address.postalCode);
-    const area =
-      pack === undefined
-        ? undefined
-        : ((address.administrativeAreaCode === undefined
-            ? undefined
-            : findAdministrativeArea(pack, address.administrativeAreaCode)) ??
-          (postal?.valid === true
-            ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
-            : undefined));
+    const area = pack === undefined ? undefined : areaOfChosenAddress(pack, address);
     this.streetAddress = address.lines.join(", ");
     this.postalCode = address.postalCode;
     this.locality = address.locality;

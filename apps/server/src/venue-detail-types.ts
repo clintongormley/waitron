@@ -25,6 +25,8 @@ export interface VenueDetailsModel {
   businessDayClock: BusinessDayClockModel;
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
+  /** The registered address full invoices print; null when setup stored none. */
+  taxpayerDomicile: string | null;
   hasSales: boolean;
   hasOrderHistory: boolean;
   hasDailyClose: boolean;

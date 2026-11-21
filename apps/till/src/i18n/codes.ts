@@ -422,8 +422,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo o imprime la copia desde otro dispositivo.",
   },
   "fiscal.taxpayer_domicile_missing": {
-    en: "The venue's legal address is missing. Ask a manager before issuing a full invoice",
-    es: "Falta el domicilio fiscal del local. Avisa a un responsable antes de emitir una factura completa",
+    en: "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing a full invoice",
+    es: "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir una factura completa",
   },
   "invoice.recipient_invalid": {
     en: "Check the customer's invoice details and try again",

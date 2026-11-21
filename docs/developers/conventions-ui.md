@@ -2507,7 +2507,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: it reads text
   under `apps/*/src` only, finds forms by the literals `"addressLine1"`/`"streetAddress"`, and checks
   that the tag is present, not where or with a provider. Limits:
-  [design-system.md](design-system.md).
+  [design-system.md](design-system.md). Since 2026-11-20 the guard also finds
+  `"taxpayerDomicile"`; its current limits are in [design-system.md](design-system.md#addresses).
 
 ## Root receipts moved on 2026-11-02
 

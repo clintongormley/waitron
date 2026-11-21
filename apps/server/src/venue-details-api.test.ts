@@ -143,7 +143,7 @@ describe("venue details HTTP boundary", () => {
     });
     expect((await initial()).details).toEqual(model.details);
   });
-  it.each(["country", "taxId", "legalName", "fiscalTerritory"])(
+  it.each(["country", "taxId", "legalName", "fiscalTerritory", "taxpayerDomicile"])(
     "refuses a crafted %s identity edit",
     async (field) => {
       const model = await initial();

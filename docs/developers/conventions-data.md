@@ -1120,9 +1120,11 @@ switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_f
 `box`'s role group; first setup and replacing the recovery key reach its recovery-key group; first setup
 and `waitron-credentials rotate` reach its signing-key group; `mode.ts`, `recovery-key.ts` and
 credentials' `node-signing-key.ts` append role-change, replacement and rotation events through
-`appendHandoverEventTx`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
-(`PUT /management-api/venue-details/legal-name`, owner A494) reaches `taxpayer` through
-`packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
+`appendHandoverEventTx`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; the dashboard's legal-name change
+(`PUT /management-api/venue-details/legal-name`, owner A494) and its registered-address change
+(`PUT /management-api/venue-details/registered-address`) reach `taxpayer` through
+`packages/provisioning/src/taxpayer-name.ts`, each updating its own column (`legal_name` or
+`taxpayer_domicile`) alone; and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`) and configuration imports use
 `packages/provisioning/src/privacy-contact.ts` to save the two privacy fields in `settings.venue`.
 Only `taxpayer-name.ts` and `venue-apply.ts` write `taxpayer`, as

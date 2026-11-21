@@ -370,7 +370,11 @@ const UNLISTED_SCREENS: ScreenRule[] = [
 type CoreSettingsPanel = AccessRule & {
   key: string;
   tab: VenueSettingsTab;
-  render(api: DashboardApi, canConfigure: boolean, reportLateRefusal: () => void): TemplateResult;
+  render(
+    api: DashboardApi,
+    canConfigure: boolean,
+    lateRefusalFor: (key: StringKey) => () => void,
+  ): TemplateResult;
 };
 
 const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
@@ -378,10 +382,10 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     key: "venue-details",
     tab: "venue-details",
     requiresPermission: "venue.view",
-    render: (api, canConfigure, reportLateRefusal) =>
+    render: (api, canConfigure, lateRefusalFor) =>
       html`<dashboard-venue-details-panel
         .api=${api}
-        .reportLateRefusal=${reportLateRefusal}
+        .lateRefusalFor=${lateRefusalFor}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
   },
@@ -2328,6 +2332,8 @@ export class DashboardApp extends LitElement {
 
   #saveReporters = new Map<StringKey, { generation: number; report: (name?: string) => void }>();
 
+  readonly #lateRefusalFor = (key: StringKey): (() => void) => this.#lateSaveReporter(key);
+
   #lateSaveReporter(key: StringKey): (name?: string) => void {
     const generation = this.sessionGeneration;
     const existing = this.#saveReporters.get(key);
@@ -2721,7 +2727,7 @@ export class DashboardApp extends LitElement {
         panel.render(
           this.api,
           this.#sessionPermissions.includes("venue.configure"),
-          this.#lateSaveReporter("venue_details.legal_name_not_saved"),
+          this.#lateRefusalFor,
         ),
     }));
     const modules = this.#activePanels
@@ -3560,6 +3566,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-venue-settings-screen
           .panels=${this.#settingsPanels()}
           @venue-identity-changed=${() => void this.#rereadVenueName()}
+          @venue-identity-stale=${() => void this.#rereadVenueName()}
         ></dashboard-venue-settings-screen>`;
       case "approvals":
         return html`<dashboard-approvals-screen .api=${this.api}></dashboard-approvals-screen>`;

@@ -653,6 +653,33 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   expect(location.pathname).toBe("/venue-settings/view/venue-details");
 });
 
+it("a legal-name change refused because the name changed elsewhere re-reads the banner's name", async () => {
+  let venueName = "Issuer SL";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    roleIds: ["manager"],
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: ["venue-service", "kitchen-test"],
+  }));
+  const { app } = await mount("/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+    renameTaxpayer: async () => {
+      venueName = "Elsewhere SL";
+      throw Object.assign(new Error("changed"), { code: "venue.detail_changed" });
+    },
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Issuer SL");
+  const { dialog } = await openLegalName(app, "New SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(banner).toBe("Elsewhere SL");
+});
+
 async function openLegalName(app: DashboardApp, typed?: string) {
   await select(app, "venue-details");
   await expect.poll(() => selected(app)).toBe("venue-details");
@@ -1189,3 +1216,46 @@ for (const locale of ["en-GB", "es-ES"]) {
     }
   }
 }
+
+it("a registered-address change refused after Back and Discard closed its dialog says so in its own words", async () => {
+  let refuse!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    changeTaxpayerDomicile: () =>
+      new Promise((_, reject) => {
+        refuse = () =>
+          reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
+      }),
+  } as Partial<DashboardApi>);
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect
+    .poll(() => panel.shadowRoot?.querySelector("[data-test=change-taxpayer-domicile]"))
+    .toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=change-taxpayer-domicile]")!.click();
+  const host = panel.shadowRoot!.querySelector("dashboard-registered-address-dialog")!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+  await input.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(input.shadowRoot!.querySelector("input")!),
+    "Carrer de Mallorca 1, 08010 Barcelona",
+  );
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-taxpayer-domicile]")!.click();
+  await expect.poll(() => refuse).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  refuse();
+  await expect
+    .poll(() =>
+      app
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-banner"]>('[data-test="save-refusal"]')
+        ?.shadowRoot?.querySelector("p")
+        ?.textContent?.trim(),
+    )
+    .toBe(
+      "The registered-address change was not confirmed. Check the registered address in Venue settings before trying again.",
+    );
+});

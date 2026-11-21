@@ -40,7 +40,18 @@ import {
   venueDetailProblems,
 } from "./venue-details-form.js";
 import "./legal-name-dialog.js";
-import type { VenueIdentityChanged } from "./legal-name-dialog.js";
+import "./registered-address-dialog.js";
+import type { TaxpayerField, VenueIdentityChanged } from "./taxpayer-field-dialog.js";
+
+function withTaxpayerField(
+  target: VenueDetailsModel,
+  source: VenueDetailsModel,
+  field: TaxpayerField,
+): VenueDetailsModel {
+  return field === "legalName"
+    ? { ...target, issuer: { ...target.issuer, legalName: source.issuer.legalName } }
+    : { ...target, taxpayerDomicile: source.taxpayerDomicile };
+}
 
 const LABELS: Record<VenueDetailField, StringKey> = {
   name: "venue_details.name",
@@ -94,9 +105,15 @@ export class VenueDetailsPanel extends LitElement {
         min-width: 0;
       }
       /* Its dialog opens in the top layer; out of the grid's flow it adds no second gap between cards. */
-      dashboard-legal-name-dialog {
+      dashboard-legal-name-dialog,
+      dashboard-registered-address-dialog {
         display: block;
         position: absolute;
+      }
+      .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
       form {
         display: grid;
@@ -159,7 +176,7 @@ export class VenueDetailsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) reportLateRefusal?: () => void;
+  @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
   @property({ attribute: false }) readOnly = false;
   /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
@@ -181,9 +198,14 @@ export class VenueDetailsPanel extends LitElement {
   #generation = 0;
   #retries = new AbortController();
   /** Each read and each save takes the next place when it is sent, a dialog's answer when it
-   * arrives; the card shows a value only if its place is later than the one it shows. */
+   * arrives; the card shows a value only if its place is later than the one it shows. A dialog's
+   * answer is shown for its own field only, and a read or save sent before that answer arrived
+   * leaves that field as the answer set it. A business-day answer takes its place when it arrives,
+   * since the panel does not see when it was sent, so it leaves every answered field as shown and
+   * the read after it brings any later change. */
   #places = 0;
   #shownPlace = 0;
+  #answeredPlaces: Partial<Record<TaxpayerField, number>> = {};
   #scope?: DraftScope<VenueDetailValues>;
   #leave?: LeaveCoordinator;
   readonly #queries = new DashboardQueries(
@@ -201,6 +223,7 @@ export class VenueDetailsPanel extends LitElement {
     super();
     this.addEventListener("venue-settings-hidden", () => {
       this.renderRoot.querySelector("dashboard-legal-name-dialog")?.dismiss();
+      this.renderRoot.querySelector("dashboard-registered-address-dialog")?.dismiss();
       if (this.#scope && saveActionState(this.#scope).unchanged) this.#cancel();
     });
   }
@@ -261,7 +284,24 @@ export class VenueDetailsPanel extends LitElement {
   #show(place: number, model: VenueDetailsModel): void {
     if (place <= this.#shownPlace) return;
     this.#shownPlace = place;
-    this.model = model;
+    const before = this.model;
+    let shown = model;
+    for (const [field, answered] of Object.entries(this.#answeredPlaces))
+      if (before && answered > place)
+        shown = withTaxpayerField(shown, before, field as TaxpayerField);
+    this.model = shown;
+  }
+  #showBusinessDayAnswer(model: VenueDetailsModel): void {
+    let shown = model;
+    if (this.model)
+      for (const field of Object.keys(this.#answeredPlaces))
+        shown = withTaxpayerField(shown, this.model, field as TaxpayerField);
+    this.#show(++this.#places, shown);
+  }
+  #showAnswer(field: TaxpayerField, model: VenueDetailsModel): void {
+    if (!this.model) return;
+    this.#answeredPlaces[field] = ++this.#places;
+    this.model = withTaxpayerField(this.model, model, field);
   }
   #begin(): void {
     if (!this.model || this.readOnly) return;
@@ -711,6 +751,22 @@ export class VenueDetailsPanel extends LitElement {
       ${this.#field("province")} ${this.#field("timeZone")}
     </div>`;
   }
+  #changeButton(
+    dataTest: string,
+    label: StringKey,
+    dialog: "dashboard-legal-name-dialog" | "dashboard-registered-address-dialog",
+    stored: (model: VenueDetailsModel) => string,
+    current: () => boolean,
+  ): TemplateResult {
+    return html`<wt-button
+      data-test=${dataTest}
+      @click=${() => {
+        if (current() && this.model)
+          this.renderRoot.querySelector(dialog)?.show(stored(this.model));
+      }}
+      >${t(label)}</wt-button
+    >`;
+  }
   override render(): TemplateResult {
     const model = this.model;
     const expected = this.#expected;
@@ -718,6 +774,16 @@ export class VenueDetailsPanel extends LitElement {
     const current = () =>
       this.isConnected && expected === this.#expected && generation === this.#generation;
     const saveAction = saveActionState(this.#scope);
+    const identityChanged =
+      (field: TaxpayerField) => (event: CustomEvent<VenueIdentityChanged>) => {
+        if (generation === this.#generation) {
+          this.#showAnswer(field, event.detail.model);
+          this.#readAfterAnswer();
+        }
+      };
+    const identityStale = () => {
+      if (generation === this.#generation) this.#readAfterAnswer();
+    };
     const formError = this.#feedback.message(
       { request: this.actionError, ...this.errors },
       new Set(Object.keys(this.errors)),
@@ -748,15 +814,20 @@ export class VenueDetailsPanel extends LitElement {
               editing: false,
               action: this.readOnly
                 ? nothing
-                : html`<wt-button
-                    data-test="change-legal-name"
-                    @click=${() => {
-                      if (current() && this.model)
-                        this.renderRoot
-                          .querySelector("dashboard-legal-name-dialog")
-                          ?.show(this.model.issuer.legalName);
-                    }}
-                    >${t("venue_details.change_legal_name")}</wt-button
+                : html`<span class="card-actions"
+                    >${this.#changeButton(
+                      "change-legal-name",
+                      "venue_details.change_legal_name",
+                      "dashboard-legal-name-dialog",
+                      (shown) => shown.issuer.legalName,
+                      current,
+                    )}${this.#changeButton(
+                      "change-taxpayer-domicile",
+                      "venue_details.change_taxpayer_domicile",
+                      "dashboard-registered-address-dialog",
+                      (shown) => shown.taxpayerDomicile ?? "",
+                      current,
+                    )}</span
                   >`,
               body: settingsRows([
                 {
@@ -770,6 +841,11 @@ export class VenueDetailsPanel extends LitElement {
                   dataTest: "saved-taxId",
                 },
                 {
+                  label: t("venue_details.taxpayer_domicile"),
+                  value: model.taxpayerDomicile ?? t("venue_details.unset"),
+                  dataTest: "saved-taxpayerDomicile",
+                },
+                {
                   label: t("venue_details.country"),
                   value: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
                     model.issuer.country,
@@ -780,14 +856,18 @@ export class VenueDetailsPanel extends LitElement {
             })}
             <dashboard-legal-name-dialog
               .api=${this.api}
-              .reportLateRefusal=${this.reportLateRefusal}
-              @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
-                if (generation === this.#generation) {
-                  this.#show(++this.#places, event.detail.model);
-                  this.#readAfterAnswer();
-                }
-              }}
+              .lateRefusalFor=${this.lateRefusalFor}
+              @venue-identity-changed=${identityChanged("legalName")}
+              @venue-identity-stale=${identityStale}
             ></dashboard-legal-name-dialog>
+            <dashboard-registered-address-dialog
+              .api=${this.api}
+              .addressProvider=${this.addressProvider}
+              .countryCode=${model.issuer.country}
+              .lateRefusalFor=${this.lateRefusalFor}
+              @venue-identity-changed=${identityChanged("taxpayerDomicile")}
+              @venue-identity-stale=${identityStale}
+            ></dashboard-registered-address-dialog>
             ${settingsCard({
               id: "venue-card",
               heading: t("venue_settings.card.venue"),
@@ -884,7 +964,7 @@ export class VenueDetailsPanel extends LitElement {
               .readOnly=${this.readOnly}
               @saved=${(event: CustomEvent<VenueDetailsModel>) => {
                 event.stopPropagation();
-                this.#show(++this.#places, event.detail);
+                this.#showBusinessDayAnswer(event.detail);
                 this.#readAfterAnswer();
               }}
             ></dashboard-business-day-start-editor>

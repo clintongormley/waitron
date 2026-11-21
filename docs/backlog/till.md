@@ -1174,7 +1174,7 @@ Left open by A1382 (`device.forbidden_action`), #3605 (eight `codes.ts` refusals
 till's own sentences and notice hints). What is left is fiscal and invoice wording. By code:
 
 - `apps/till/src/i18n/codes.ts`: `fiscal.fingerprint_mismatch`, `series.no_rectificative_for_node`,
-  `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
+  `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
   `sale.correction_unsupported`, `department.operation_description_required`,
   `sale.charged_not_recorded`.

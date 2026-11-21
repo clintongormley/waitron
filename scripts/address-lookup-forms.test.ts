@@ -3,10 +3,11 @@
  * (docs/developers/design-system.md → Forms → Addresses).
  *
  * Weaker than its name: it reads TEXT. It takes a non-test `.ts` file under `apps/*\/src` for an
- * address form when the file holds the string literal "addressLine1" or "streetAddress" and draws a
- * `<wt-input` or `<wt-textarea`, so a form naming its address fields otherwise — the setup screen's
- * one-line registered business address, `taxpayerDomicile`, is one — is not seen; and it checks
- * that the file holds `<wt-address-lookup` somewhere, not where, nor that it is handed a provider.
+ * address form when the file holds the string literal "addressLine1", "streetAddress" or
+ * "taxpayerDomicile" and draws a `<wt-input` or `<wt-textarea`, so a form naming its address fields
+ * otherwise, or naming them in one file and drawing them in another, is not seen; and it checks
+ * that the file holds `<wt-address-lookup` somewhere, not where, nor that it is drawn for the
+ * address field, nor that it is handed a provider.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -21,7 +22,10 @@ const WAITING: Readonly<Record<string, string>> = {};
 const NOT_ADDRESS_FORMS: Readonly<Record<string, string>> = {};
 
 export function looksLikeAddressForm(source: string): boolean {
-  return /"(?:addressLine1|streetAddress)"/.test(source) && /<wt-(?:input|textarea)\b/.test(source);
+  return (
+    /"(?:addressLine1|streetAddress|taxpayerDomicile)"/.test(source) &&
+    /<wt-(?:input|textarea)\b/.test(source)
+  );
 }
 
 export function offersAddressSearch(source: string): boolean {
@@ -63,6 +67,7 @@ describe("address forms offer the shared address search", () => {
       expect.arrayContaining([
         "apps/setup/src/screens/venue-screen.ts",
         "apps/dashboard/src/screens/venue-details-panel.ts",
+        "apps/dashboard/src/screens/taxpayer-field-dialog.ts",
         "apps/till/src/widgets/invoice-recipient-dialog.ts",
         ...Object.keys(WAITING),
       ]),
@@ -91,6 +96,7 @@ describe("address forms offer the shared address search", () => {
   test("the matcher needs both an address field name and a drawn field", () => {
     expect(looksLikeAddressForm('const f = "addressLine1"; html`<wt-input>`')).toBe(true);
     expect(looksLikeAddressForm('const f = "streetAddress"; html`<wt-textarea>`')).toBe(true);
+    expect(looksLikeAddressForm('const f = "taxpayerDomicile"; html`<wt-input>`')).toBe(true);
     expect(looksLikeAddressForm('const f = "addressLine1";')).toBe(false);
     expect(looksLikeAddressForm('const f = "addressLine2"; html`<wt-input>`')).toBe(false);
     expect(offersAddressSearch("html`<wt-address-lookup .provider=${p}>`")).toBe(true);

@@ -418,7 +418,7 @@ describe("venue detail edits", () => {
     ).toEqual([{ name: "  Main room  " }]);
     expect((await read()).details.name).toBe("Main room");
   });
-  it.each(["country", "legalName", "taxId", "fiscalTerritory"])(
+  it.each(["country", "legalName", "taxId", "fiscalTerritory", "taxpayerDomicile"])(
     "refuses read-only %s even with a matching value",
     async (field) => {
       const initial = await read();

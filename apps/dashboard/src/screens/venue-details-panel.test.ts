@@ -103,6 +103,7 @@ it("shows the saved issuer and venue values as text without a second page h1", a
   expect(rows(q(el, "[data-test=issuer]"))).toEqual([
     "Legal name: Issuer SL",
     "Tax ID: B12345678",
+    "Registered business address: Calle Fiscal 8, 28013 Madrid",
     "Country: Spain",
   ]);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Venue");
@@ -651,7 +652,12 @@ function rows(card: Element | null | undefined): string[] {
 it("shows the legal name, tax ID and country name as labelled rows outside the form, in view and edit mode", async () => {
   setLocale("en-GB");
   const el = await mount(rig().api);
-  const expected = ["Legal name: Issuer SL", "Tax ID: B12345678", "Country: Spain"];
+  const expected = [
+    "Legal name: Issuer SL",
+    "Tax ID: B12345678",
+    "Registered business address: Calle Fiscal 8, 28013 Madrid",
+    "Country: Spain",
+  ];
   expect(rows(q(el, "[data-test=issuer]"))).toEqual(expected);
   await click(el, "[data-test=edit]");
   expect(rows(q(el, "[data-test=issuer]"))).toEqual(expected);
@@ -665,6 +671,7 @@ it("names the country in the screen's language", async () => {
   expect(rows(q(el, "[data-test=issuer]"))).toEqual([
     "Razón social: Issuer SL",
     "NIF: B12345678",
+    "Domicilio fiscal del negocio: Calle Fiscal 8, 28013 Madrid",
     "País: España",
   ]);
 });

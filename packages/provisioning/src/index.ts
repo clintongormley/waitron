@@ -12,7 +12,7 @@ export { throwawayApplyInput } from "./throwaway-allocation.js";
 export type { ThrowawayApplyInput } from "./throwaway-allocation.js";
 export { parseInitialVenueInput, initialVenueApplyInput } from "./initial-venue-input.js";
 export type { InitialVenueInput } from "./initial-venue-input.js";
-export { renameTaxpayer } from "./taxpayer-name.js";
+export { changeTaxpayerDomicile, renameTaxpayer } from "./taxpayer-name.js";
 export {
   privacyContactChecked,
   readPrivacyContact,

@@ -1743,6 +1743,22 @@ it("renames the taxpayer with the new legal name and the one the page showed", a
   ]);
 });
 
+it("changes the registered address with the new address and the one the page showed", async () => {
+  const answer = { model: venueDetailsFixture() };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+  const api = new DashboardApi("", fetchImpl);
+  await expect(
+    api.changeTaxpayerDomicile({ taxpayerDomicile: "Calle Mayor 1", expected: "2º 1ª" }),
+  ).resolves.toEqual(answer);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-details/registered-address",
+      "PUT",
+      { taxpayerDomicile: "Calle Mayor 1", expected: "2º 1ª" },
+    ],
+  ]);
+});
+
 it("previews a dated business-day start passively and writes with the loaded revision", async () => {
   const input = {
     effectiveBusinessDay: "2026-11-05",

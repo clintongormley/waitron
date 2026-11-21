@@ -1,0 +1,553 @@
+import { LiveData } from "@waitron/dashboard-kit";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import type {
+  AddressLookupProvider,
+  AddressLookupResult,
+  WtAddressLookup,
+  WtButton,
+  WtDialog,
+  WtFormActions,
+  WtInput,
+} from "@waitron/ui";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
+import { setLocale, t } from "../i18n/t.js";
+import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
+import "./venue-details-panel.js";
+
+type Panel = HTMLElementTagNameMap["dashboard-venue-details-panel"];
+
+const OLD = "Calle Fiscal 8, 28013 Madrid";
+const NEW = "Carrer de Mallorca 1, 08010 Barcelona";
+
+const moved = (taxpayerDomicile: string | null): VenueDetailsModel => ({
+  ...venueDetailsFixture(),
+  taxpayerDomicile,
+});
+
+function stubApi(stored: string | null = OLD) {
+  let current = moved(stored);
+  return {
+    liveData: new LiveData(),
+    getVenueDetails: vi.fn(async () => structuredClone(current)),
+    getVenueClockPreview: vi.fn(),
+    patchVenueDetails: vi.fn(),
+    renameTaxpayer: vi.fn(),
+    changeTaxpayerDomicile: vi.fn(
+      async ({ taxpayerDomicile }: { taxpayerDomicile: string; expected: string }) => {
+        current = moved(taxpayerDomicile);
+        return { model: moved(taxpayerDomicile) };
+      },
+    ),
+  };
+}
+type Api = ReturnType<typeof stubApi>;
+
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
+
+async function mount(api: Api, readOnly = false): Promise<Panel> {
+  const { el } = await mountWidget<Panel>("dashboard-venue-details-panel", {
+    api: api as unknown as DashboardApi,
+    readOnly,
+  });
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=issuer]")).toBeTruthy();
+  return el;
+}
+
+const button = (panel: Panel) =>
+  panel.shadowRoot!.querySelector<WtButton>("[data-test=change-taxpayer-domicile]");
+const dialogHost = (panel: Panel) =>
+  panel.shadowRoot!.querySelector("dashboard-registered-address-dialog")!;
+const dialog = (panel: Panel) =>
+  dialogHost(panel).shadowRoot!.querySelector<WtDialog>(
+    "wt-dialog[data-test=taxpayer-domicile-dialog]",
+  )!;
+const input = (panel: Panel) =>
+  dialog(panel).querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+const save = (panel: Panel) =>
+  dialog(panel).querySelector<WtButton>("wt-button[data-test=save-taxpayer-domicile]")!;
+const actions = (panel: Panel) => dialog(panel).querySelector<WtFormActions>("wt-form-actions")!;
+
+async function open(panel: Panel): Promise<void> {
+  button(panel)!.click();
+  await dialogHost(panel).updateComplete;
+  await expect.poll(() => dialog(panel)?.open).toBe(true);
+}
+
+async function type(panel: Panel, value: string): Promise<void> {
+  input(panel).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await dialogHost(panel).updateComplete;
+}
+
+async function press(panel: Panel): Promise<void> {
+  save(panel).click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await dialogHost(panel).updateComplete;
+}
+
+it("shows the saved registered address in the Business card, or Not set when none was saved", async () => {
+  setLocale("en-GB");
+  const saved = await mount(stubApi());
+  expect(
+    saved.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
+  ).toBe(OLD);
+  const none = await mount(stubApi(null));
+  expect(
+    none.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
+  ).toBe(t("venue_details.unset"));
+});
+
+it("offers Change registered address in the Business card's header only when the panel can be edited", async () => {
+  setLocale("en-GB");
+  const editable = await mount(stubApi());
+  const shown = button(editable)!;
+  expect(shown.textContent!.trim()).toBe("Change registered address");
+  expect(shown.closest("header")?.parentElement?.matches("[data-test=issuer]")).toBe(true);
+  expect(shown.variant).toBe(
+    editable.shadowRoot!.querySelector<WtButton>("[data-test=change-legal-name]")!.variant,
+  );
+  const readOnly = await mount(stubApi(), true);
+  expect(button(readOnly)).toBeNull();
+});
+
+it("opens prefilled, with the hint and the note, and keeps Save quiet until the address changes and again when changed back", async () => {
+  const panel = await mount(stubApi());
+  await open(panel);
+  const field = input(panel);
+  expect(field.value).toBe(OLD);
+  expect(field.required).toBe(true);
+  expect(field.hint).toBe(t("venue_details.taxpayer_domicile_hint"));
+  expect(dialog(panel).textContent).toContain(t("venue_details.taxpayer_domicile_note"));
+  expect(save(panel).variant).toBe("secondary");
+  expect(save(panel).disabled).toBe(true);
+  await type(panel, NEW);
+  expect(save(panel).variant).toBe("primary");
+  expect(save(panel).disabled).toBe(false);
+  await type(panel, OLD);
+  expect(save(panel).variant).toBe("secondary");
+  expect(save(panel).disabled).toBe(true);
+});
+
+it("opens empty when no address was saved, and sends an empty expected address", async () => {
+  const api = stubApi(null);
+  const panel = await mount(api);
+  await open(panel);
+  expect(input(panel).value).toBe("");
+  await type(panel, NEW);
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+    taxpayerDomicile: NEW,
+    expected: "",
+  });
+});
+
+it("does not send an unchanged address even when Save is clicked", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  await open(panel);
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
+  expect(dialog(panel).open).toBe(true);
+});
+
+it("an emptied address is marked under the field and at the bottom, and blocks Save until filled", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  await open(panel);
+  await type(panel, "  ");
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
+  expect(input(panel).error).toBe(t("venue_details.required"));
+  expect(actions(panel).error).toBe(t("form.fix_fields"));
+  expect(save(panel).disabled).toBe(true);
+  await type(panel, NEW);
+  expect(input(panel).error).toBe("");
+  expect(actions(panel).error).toBe("");
+  expect(save(panel).disabled).toBe(false);
+});
+
+for (const [reason, key] of [
+  ["required", "venue_details.required"],
+  ["unchanged", "venue_details.taxpayer_domicile_unchanged"],
+  ["shape", "venue_details.invalid"],
+] as const) {
+  it(`a ${reason} refusal shows under the field with the bottom message, and leaves Save enabled`, async () => {
+    for (const locale of ["en-GB", "es-ES"]) {
+      setLocale(locale);
+      const api = stubApi();
+      api.changeTaxpayerDomicile.mockRejectedValue({
+        code: "venue.detail_invalid",
+        params: { field: "taxpayerDomicile", reason },
+      });
+      const panel = await mount(api);
+      await open(panel);
+      await type(panel, NEW);
+      await press(panel);
+      expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+        taxpayerDomicile: NEW,
+        expected: OLD,
+      });
+      expect(input(panel).error).toBe(t(key));
+      expect(actions(panel).error).toBe(t("form.fix_fields"));
+      expect(save(panel).disabled).toBe(false);
+      expect(dialog(panel).open).toBe(true);
+      await type(panel, `${NEW} 2`);
+      expect(input(panel).error).toBe("");
+      expect(actions(panel).error).toBe("");
+      cleanupWidgets();
+    }
+  });
+}
+
+it("an address changed in another session is the bottom message, and Save stays enabled", async () => {
+  const api = stubApi();
+  api.changeTaxpayerDomicile.mockRejectedValue({
+    code: "venue.detail_changed",
+    params: { field: "taxpayerDomicile" },
+  });
+  const panel = await mount(api);
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  expect(actions(panel).error).toBe(t("venue_details.taxpayer_domicile_changed"));
+  expect(input(panel).error).toBe("");
+  expect(save(panel).disabled).toBe(false);
+  expect(dialog(panel).open).toBe(true);
+});
+
+it("a successful change closes the dialog, shows the new address and tells the page the identity changed", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  const told: Event[] = [];
+  const listen = (event: Event) => told.push(event);
+  document.body.addEventListener("venue-identity-changed", listen);
+  onTestFinished(() => document.body.removeEventListener("venue-identity-changed", listen));
+  await open(panel);
+  await type(panel, NEW);
+  const closed = dialogClosed(dialog(panel));
+  await press(panel);
+  await closed;
+  expect(dialog(panel).open).toBe(false);
+  expect(api.renameTaxpayer).not.toHaveBeenCalled();
+  await panel.updateComplete;
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
+  ).toBe(NEW);
+  expect(told).toHaveLength(1);
+  expect(told[0]!.bubbles && told[0]!.composed).toBe(true);
+});
+
+it("a refusal that arrives after the dialog was dismissed is reported through the panel's own reporter", async () => {
+  const api = stubApi();
+  let refuse!: (error: unknown) => void;
+  api.changeTaxpayerDomicile.mockImplementation(
+    () => new Promise((_resolve, reject) => (refuse = reject)),
+  );
+  const panel = await mount(api);
+  const legal = vi.fn();
+  const address = vi.fn();
+  panel.lateRefusalFor = (key) =>
+    key === "venue_details.taxpayer_domicile_not_saved" ? address : legal;
+  await panel.updateComplete;
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  dialogHost(panel).dismiss();
+  refuse({ code: "venue.detail_changed", params: { field: "taxpayerDomicile" } });
+  await expect.poll(() => address.mock.calls.length).toBe(1);
+  expect(legal).not.toHaveBeenCalled();
+});
+
+it("a saved address with surrounding spaces or another Unicode spelling keeps Save quiet, and a change still names the stored spelling", async () => {
+  const stored = "  Pla\u00e7a Major 1, 08002 Barcelona  ";
+  const api = stubApi(stored);
+  const panel = await mount(api);
+  await open(panel);
+  expect(input(panel).value).toBe(stored);
+  expect(save(panel).variant).toBe("secondary");
+  expect(save(panel).disabled).toBe(true);
+  await type(panel, "Plac\u0327a Major 1, 08002 Barcelona");
+  expect(save(panel).variant).toBe("secondary");
+  expect(save(panel).disabled).toBe(true);
+  await type(panel, NEW);
+  expect(save(panel).variant).toBe("primary");
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+    taxpayerDomicile: NEW,
+    expected: stored,
+  });
+});
+
+function held<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((yes) => (resolve = yes));
+  return { promise, resolve };
+}
+
+it("an address answer that arrives after a later legal-name answer keeps the new legal name, even when the follow-up reads fail", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  const addressAnswer = held<{ model: VenueDetailsModel }>();
+  const nameAnswer = held<{ model: VenueDetailsModel }>();
+  api.changeTaxpayerDomicile.mockImplementationOnce(() => addressAnswer.promise);
+  api.renameTaxpayer.mockImplementationOnce(() => nameAnswer.promise);
+  api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
+
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  dialogHost(panel).dismiss();
+
+  const legalHost = panel.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  panel.shadowRoot!.querySelector<WtButton>("[data-test=change-legal-name]")!.click();
+  await legalHost.updateComplete;
+  const legalDialog = legalHost.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+  await expect.poll(() => legalDialog.open).toBe(true);
+  legalDialog
+    .querySelector<WtInput>("wt-input[name=legalName]")!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "New SL" }, bubbles: true, composed: true }),
+    );
+  await legalHost.updateComplete;
+  legalDialog.querySelector<WtButton>("wt-button[data-test=save-legal-name]")!.click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const base = venueDetailsFixture();
+  nameAnswer.resolve({ model: { ...moved(OLD), issuer: { ...base.issuer, legalName: "New SL" } } });
+  const shown = (name: string) =>
+    panel.shadowRoot!.querySelector(`[data-test=saved-${name}]`)!.textContent!.trim();
+  await expect.poll(() => shown("legalName")).toBe("New SL");
+  addressAnswer.resolve({ model: moved(NEW) });
+  await expect.poll(() => shown("taxpayerDomicile")).toBe(NEW);
+  await panel.updateComplete;
+  expect(shown("legalName")).toBe("New SL");
+
+  panel.shadowRoot!.querySelector<WtButton>("[data-test=change-legal-name]")!.click();
+  await legalHost.updateComplete;
+  await expect.poll(() => legalDialog.open).toBe(true);
+  expect(legalDialog.querySelector<WtInput>("wt-input[name=legalName]")!.value).toBe("New SL");
+});
+
+it("after an address changed in another session, the typed address stays, and reopening shows the stored one", async () => {
+  const STORED = "Calle del Sol 2, 28013 Madrid";
+  const api = stubApi();
+  api.changeTaxpayerDomicile.mockRejectedValue({
+    code: "venue.detail_changed",
+    params: { field: "taxpayerDomicile" },
+  });
+  const panel = await mount(api);
+  api.getVenueDetails.mockResolvedValue(moved(STORED));
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  expect(actions(panel).error).toBe(t("venue_details.taxpayer_domicile_changed"));
+  expect(input(panel).value).toBe(NEW);
+  await expect
+    .poll(() =>
+      panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
+    )
+    .toBe(STORED);
+  await dialogHost(panel).updateComplete;
+  expect(input(panel).value).toBe(NEW);
+  dialogHost(panel).dismiss();
+  await dialogHost(panel).updateComplete;
+  await open(panel);
+  expect(input(panel).value).toBe(STORED);
+});
+
+it("a venue-details save sent before an address answer arrived, answering the old address later, keeps the new address", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  const formAnswer = held<{ changed: boolean; model: VenueDetailsModel }>();
+  api.patchVenueDetails.mockImplementationOnce(() => formAnswer.promise);
+  api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
+  panel.shadowRoot!.querySelector<WtButton>("[data-test=edit]")!.click();
+  await panel.updateComplete;
+  panel.shadowRoot!.querySelector<WtInput>('[name="addressLine2"]')!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Floor 2" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await panel.updateComplete;
+  panel.shadowRoot!.querySelector<WtButton>("[data-test=save]")!.click();
+  await expect.poll(() => api.patchVenueDetails.mock.calls.length).toBe(1);
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  const shown = (name: string) =>
+    panel.shadowRoot!.querySelector(`[data-test=saved-${name}]`)!.textContent!.trim();
+  await expect.poll(() => shown("taxpayerDomicile")).toBe(NEW);
+  const before = moved(OLD);
+  formAnswer.resolve({
+    changed: true,
+    model: { ...before, details: { ...before.details, addressLine2: "Floor 2" } },
+  });
+  await expect
+    .poll(() => panel.shadowRoot!.querySelector("[data-test=address]")?.textContent)
+    .toContain("Floor 2");
+  expect(shown("taxpayerDomicile")).toBe(NEW);
+});
+
+it("a business-day answer that arrives after an address answer, carrying the old address, keeps the new address", async () => {
+  const api = stubApi();
+  const panel = await mount(api);
+  api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  const shown = () =>
+    panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim();
+  await expect.poll(shown).toBe(NEW);
+
+  const before = moved(OLD);
+  const editor = panel.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
+  editor.dispatchEvent(
+    new CustomEvent("saved", {
+      detail: { ...before, businessDayClock: { ...before.businessDayClock, revision: 1 } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => editor.model.revision).toBe(1);
+  await panel.updateComplete;
+  expect(shown()).toBe(NEW);
+});
+
+it("an address changed in another session, refused after the dialog was dismissed, still reads the stored address", async () => {
+  const STORED = "Calle del Sol 2, 28013 Madrid";
+  const api = stubApi();
+  let refuse!: (error: unknown) => void;
+  api.changeTaxpayerDomicile.mockImplementationOnce(
+    () => new Promise<never>((_resolve, reject) => (refuse = reject)),
+  );
+  const panel = await mount(api);
+  api.getVenueDetails.mockResolvedValue(moved(STORED));
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  dialogHost(panel).dismiss();
+  refuse({ code: "venue.detail_changed", params: { field: "taxpayerDomicile" } });
+  await expect
+    .poll(() =>
+      panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
+    )
+    .toBe(STORED);
+});
+
+const MADRID: AddressLookupResult = {
+  lines: ["Calle Mayor 1", "3º B"],
+  locality: "Madrid",
+  administrativeAreaCode: "28",
+  postalCode: "28013",
+  countryCode: "ES",
+};
+
+const provider: AddressLookupProvider = {
+  suggest: async () => [{ id: "s1", label: "Calle Mayor 1" }],
+  resolve: async () => MADRID,
+};
+
+async function mountSearching(
+  api: Api,
+  addressProvider: AddressLookupProvider | null = provider,
+): Promise<Panel> {
+  const { el } = await mountWidget<Panel>("dashboard-venue-details-panel", {
+    api: api as unknown as DashboardApi,
+    addressProvider: addressProvider ?? undefined,
+  });
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=issuer]")).toBeTruthy();
+  return el;
+}
+
+const search = (panel: Panel) => dialog(panel).querySelector<WtAddressLookup>("wt-address-lookup");
+
+async function choose(panel: Panel, address: AddressLookupResult): Promise<void> {
+  search(panel)!.dispatchEvent(
+    new CustomEvent("wt-address-chosen", { detail: { address }, bubbles: true, composed: true }),
+  );
+  await dialogHost(panel).updateComplete;
+}
+
+it("puts the address search above the registered address, in the business's country", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  const lookup = search(panel)!;
+  await lookup.updateComplete;
+  expect(lookup.hidden).toBe(false);
+  expect(lookup.countryCode).toBe("ES");
+  expect(lookup.label).toBe("Find the address");
+  const order = [...dialog(panel).querySelectorAll("wt-address-lookup, wt-input")].map(
+    (node) => node.localName,
+  );
+  expect(order).toEqual(["wt-address-lookup", "wt-input"]);
+});
+
+it("fills the registered address from a chosen address as one line, and Save sends it", async () => {
+  const api = stubApi();
+  const panel = await mountSearching(api);
+  await open(panel);
+  expect(save(panel).disabled).toBe(true);
+  await choose(panel, MADRID);
+  expect(input(panel).value).toBe("Calle Mayor 1, 3º B, 28013 Madrid, Madrid");
+  expect(save(panel).disabled).toBe(false);
+  expect(save(panel).variant).toBe("primary");
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+    taxpayerDomicile: "Calle Mayor 1, 3º B, 28013 Madrid, Madrid",
+    expected: OLD,
+  });
+});
+
+it("fills nothing from an address in another country, and says why on the search's line", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  await choose(panel, { ...MADRID, countryCode: "PT", postalCode: "1100-148" });
+  expect(input(panel).value).toBe(OLD);
+  expect(search(panel)!.message).toBe(
+    "That address is not in Spain. Choose another or type it below.",
+  );
+  await choose(panel, MADRID);
+  expect(search(panel)!.message).toBe("");
+});
+
+it("stops a search still on its way when the person types the address", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  const cancel = vi.spyOn(search(panel)!, "cancelSearch");
+  await type(panel, NEW);
+  expect(cancel).toHaveBeenCalled();
+});
+
+it("shows no address search without a provider, and none in the legal-name dialog", async () => {
+  const panel = await mountSearching(stubApi(), null);
+  await open(panel);
+  const lookup = search(panel)!;
+  await lookup.updateComplete;
+  expect(lookup.hidden).toBe(true);
+  expect(lookup.getBoundingClientRect().height).toBe(0);
+  const withProvider = await mountSearching(stubApi());
+  withProvider.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const legal = withProvider.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await legal.updateComplete;
+  expect(legal.shadowRoot!.querySelector("wt-input[name=legalName]")).not.toBeNull();
+  expect(legal.shadowRoot!.querySelector("wt-address-lookup")).toBeNull();
+});
+
+it("an address chosen while a save is on its way does not replace the address being saved", async () => {
+  const api = stubApi();
+  api.changeTaxpayerDomicile.mockImplementationOnce(() => new Promise<never>(() => {}));
+  const panel = await mountSearching(api);
+  await open(panel);
+  await type(panel, NEW);
+  await press(panel);
+  expect(search(panel)!.disabled).toBe(true);
+  await choose(panel, MADRID);
+  expect(input(panel).value).toBe(NEW);
+});

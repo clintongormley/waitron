@@ -44,8 +44,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
   "fiscal.taxpayer_domicile_missing": {
-    en: "A full invoice could not be issued because the venue's legal address is missing. Add it before retrying the sale.",
-    es: "No se ha podido emitir una factura completa porque falta el domicilio fiscal del local. Añádelo antes de reintentar la venta.",
+    en: "A full invoice could not be issued because the business's registered address is missing. Add it in Venue settings → Venue details, then retry the sale.",
+    es: "No se ha podido emitir una factura completa porque falta el domicilio fiscal del negocio. Añádelo en Ajustes del local → Datos del local y reintenta la venta.",
   },
   "station.printer_down": {
     en: "{station}'s printer {printer} has printed nothing since something sent to it got stuck, so {station}'s tickets may not be reaching it. Fix the printer; while {station} is open, closing it on the Prep stations page sends its new work elsewhere (the page shows where).",

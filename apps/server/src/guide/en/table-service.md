@@ -136,6 +136,11 @@ the bill**; otherwise it prints when you close the window after payment.
 If the form says **Email** isn't offered, add a contact email on the department's **Receipts** tab
 in **Departments and zones**, in the dashboard.
 
+Every full invoice prints your business's registered address. If it is wrong or incomplete,
+correct it in **Venue settings → Venue details**: choose **Change registered address** on the
+**Business** card. Invoices issued afterwards print the new address; invoices
+already issued keep the one they were issued with.
+
 ## Choose a document and printer {#invoice-printer}
 
 Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. The receipt uses

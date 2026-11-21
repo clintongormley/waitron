@@ -3396,6 +3396,8 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
+- Venue details' Change registered address dialog. Its leave cases are in
+  `apps/dashboard/src/screens/registered-address-dialog.unsaved.test.ts`;
 - A755: Venue settings' Venue card and Defaults card, each editing in place. Their leave cases are
   in `apps/dashboard/src/screens/venue-details-panel.unsaved.test.ts` and
   `apps/dashboard/src/screens/venue-defaults-panel.unsaved.test.ts`;
@@ -3923,16 +3925,18 @@ setup venue screen takes the province from the address's area code, else its pos
 dashboard's Venue card never fills the province, which the server keeps, refuses an address whose
 area names another province (other mismatches are refused by the server's postcode check at Save),
 and offers the search only while the street, line 2, postcode and city can all
-change. A one-line address (the setup screen's registered business address) is filled as
-"lines, postcode city, province". The till's invoice recipient dialog asks in the country chosen
+change. A one-line address (the registered business address, on the setup screen and in Venue
+details' Change registered address dialog) is filled as "lines, postcode city, province", by
+`oneLineAddress` in `@waitron/country-packs`. The till's invoice recipient dialog asks in the country chosen
 below its fields, which its label names, and fills its one street line with every line of the
 address, joined by commas, so a typed floor or unit is replaced; the province is the comma-free
 name of the area Waitron knows for the address's area code, else its postcode, and is emptied when
 Waitron knows no area for the address. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its
 name: it reads text under `apps/*/src` only, so a module's screen under `packages/` is not seen; it
-finds forms by the literals `"addressLine1"` and `"streetAddress"` in a file that also draws a
-`wt-input` or `wt-textarea`; and it checks that the file holds `<wt-address-lookup`, not where,
-nor that it is handed a provider.
+finds forms by the literals `"addressLine1"`, `"streetAddress"` and `"taxpayerDomicile"` in a file
+that also draws a `wt-input` or `wt-textarea`, so a form that names its field in one file and draws
+it in another is not seen; and it checks that the file holds `<wt-address-lookup`, not where, nor
+that it is drawn for the address field, nor that it is handed a provider.
 
 #### A field that falls back to another value
 
@@ -4665,7 +4669,7 @@ the AEAT certificate card, comes after them from
 `packages/fiscal-verifactu/src/dashboard/certificate-card.ts`. Each card's heading is inside the card and its
 action sits in the card's header. The Venue, Defaults and Privacy cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
-and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
+and Change registered address and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
 card's one action is Change start, even while a change waits, and it shows one New start row per
 waiting change ("offers only Change start while a change waits, and opens the dialog from it" and
 "shows one New start row per waiting change after a Save while one already waits" in
