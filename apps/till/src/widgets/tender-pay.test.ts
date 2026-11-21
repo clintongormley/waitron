@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { blurAll, cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { blurAll, cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
 import { TillTenderPay, type CardOutcome } from "./tender-pay.js";
 import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
 import { userEvent } from "vitest/browser";
@@ -2925,9 +2925,9 @@ describe("typing cash and weights with a keyboard", () => {
   it("draws no text field while the cash or weight pad shows", async () => {
     const cash = await paying();
     expect(query(cash.el, "till-numeric-pad")).not.toBeNull();
-    expect(cash.el.shadowRoot!.querySelectorAll("input, textarea, select")).toHaveLength(0);
+    expect(textFieldsIn(cash.el.shadowRoot!)).toEqual([]);
     const weight = await weighing();
     expect(query(weight.el, "till-numeric-pad")).not.toBeNull();
-    expect(weight.el.shadowRoot!.querySelectorAll("input, textarea, select")).toHaveLength(0);
+    expect(textFieldsIn(weight.el.shadowRoot!)).toEqual([]);
   });
 });

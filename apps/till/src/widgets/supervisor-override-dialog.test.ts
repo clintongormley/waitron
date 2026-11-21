@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -305,6 +305,6 @@ describe("typing the supervisor's PIN with a keyboard", () => {
   it("draws no text field while the PIN pad shows", async () => {
     const { el } = await pinFor();
     expect(pad(el)).not.toBeNull();
-    expect(root(el).querySelectorAll("input, textarea, select")).toHaveLength(0);
+    expect(textFieldsIn(root(el))).toEqual([]);
   });
 });

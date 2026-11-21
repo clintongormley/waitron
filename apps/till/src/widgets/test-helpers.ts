@@ -206,6 +206,15 @@ export function textRects(node: Node): DOMRect[] {
   return [...range.getClientRects()].filter((rect) => rect.width > 0);
 }
 
+/** The native text fields under `root` and inside every open shadow root below it, so a field drawn
+ * by a primitive such as `wt-input` counts. */
+export function textFieldsIn(root: ParentNode): Element[] {
+  const found = [...root.querySelectorAll("input, textarea, select, [contenteditable]")];
+  for (const each of root.querySelectorAll("*"))
+    if (each.shadowRoot) found.push(...textFieldsIn(each.shadowRoot));
+  return found;
+}
+
 /** Each `wt-icon` under `root` as `[name, role, aria-label]`, after checking that it draws a glyph:
  * path data in its shadow root and an SVG with a nonzero box. */
 export async function namedIcons(root: ParentNode): Promise<(string | null)[][]> {

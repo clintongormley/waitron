@@ -21,6 +21,7 @@ import {
   expectChooserFaces,
   cleanupWidgets,
   mountWidget,
+  textFieldsIn,
   tokenColour,
 } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
@@ -1364,6 +1365,6 @@ describe("typing on the sign-in PIN pad with a keyboard", () => {
   it("draws no text field while the PIN pad shows", async () => {
     const el = await pinFor(stubApi());
     expect(query(el, "till-numeric-pad")).not.toBeNull();
-    expect(el.shadowRoot!.querySelectorAll("input, textarea, select")).toHaveLength(0);
+    expect(textFieldsIn(el.shadowRoot!)).toEqual([]);
   });
 });
