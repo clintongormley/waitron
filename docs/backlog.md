@@ -650,6 +650,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A1563. Typing on the till with a keyboard (owner, 2026-11-21; queued for building).** A
+  laptop or USB keyboard types into the PIN, supervisor PIN, cash and weight pads; the PIN pad gets
+  a Clear key; the till fits above an Android device's own keyboard. Design
+  `docs/superpowers/specs/2026-11-21-till-keyboard-input-design.md`, plan
+  `docs/superpowers/plans/2026-11-21-till-keyboard-input.md`. Task 1 (Clear key) is on branch
+  `till-keyboard-input`; Tasks 2–5 remain. Task 5's check needs the owner's Android phone and
+  tablet; Safari is untested (no Apple device). Comes before the Counter's custom item and
+  scale-label barcodes, which reuse its single key listener.
+
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
 - **Small till and floor wording fixes** (bundle of 5, size M, 4 wait for the owner's table-screen redesign). Holds A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
