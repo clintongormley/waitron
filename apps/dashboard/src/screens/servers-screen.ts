@@ -253,11 +253,18 @@ export class ServersScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-danger);
       }
+      .join-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+      .join-body .target {
+        margin: 0;
+      }
       .choices {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-3);
-        margin-top: var(--wt-space-3);
       }
       .declarations {
         display: flex;
@@ -509,12 +516,13 @@ export class ServersScreen extends LitElement {
       ${
         join === null
           ? nothing
-          : html`<p class="target" data-test="join-dialog-address">
+          : html`<div class="join-body">
+              <p class="target" data-test="join-dialog-address">
                 ${fill("servers.join_asking", { address: join.request.address })}
               </p>
               ${
                 join.request.startedAgain
-                  ? html`<p class="explanation">${t("servers.join_started_again")}</p>`
+                  ? html`<p class="explanation join-again">${t("servers.join_started_again")}</p>`
                   : nothing
               }
               ${checking ? html`<p class="explanation">${t("servers.join_checking")}</p>` : nothing}
@@ -545,7 +553,8 @@ export class ServersScreen extends LitElement {
                             >`,
                         )}
                       </div>`
-              }`
+              }
+            </div>`
       }
       <wt-form-actions slot="footer" .error=${join?.error ?? ""}>
         <wt-button
