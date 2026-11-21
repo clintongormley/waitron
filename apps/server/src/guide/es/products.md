@@ -566,7 +566,8 @@ retira cualquier copia enviada desde el portal de Cloud.
 
 Si la vista previa indica que necesitas un plan de Cloud, elige **Abrir Facturación de Cloud**.
 Si llegas a la página de la cuenta tras iniciar sesión, elige **Facturación** si aparece. Selecciona
-tu local si se te pide e inicia una prueba gratuita si está disponible.
+tu local si se te pide e inicia una prueba gratuita si está disponible. Si no aparece Facturación,
+elige **Abrir la carta compartida en este servidor** en la vista previa para usar el enlace local.
 
 El enlace para clientes con datos móviles aún se está preparando.
 

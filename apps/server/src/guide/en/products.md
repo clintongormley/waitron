@@ -536,7 +536,8 @@ retries. After disconnecting the box, remove any delivered copy in the Cloud por
 
 If the preview says you need a Cloud plan, choose **Open Cloud Billing**. If you land on
 the account page after signing in, choose **Billing** if it appears. Select your venue if asked
-and start a free trial if offered.
+and start a free trial if offered. If Billing is unavailable, choose **Open the shared menu on this box**
+in the preview to use the local link.
 
 A guest link over mobile data is still being prepared.
 
