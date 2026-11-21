@@ -27,6 +27,9 @@ export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] 
   ["POST", "/management-api/handover", 1048576],
   ["POST", "/management-api/promote/preparation", 1048576],
   ["POST", "/management-api/promote", 1048576],
+  ["POST", "/management-api/box-joins/:id/check", null],
+  ["POST", "/management-api/box-joins/:id/approve", 1048576],
+  ["POST", "/management-api/box-joins/:id/dismiss", null],
   ["GET", "/management-api/return-clashes", null],
   ["POST", "/management-api/return-clashes/:clashId/accept", null],
 ];

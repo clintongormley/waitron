@@ -399,6 +399,11 @@ export function mountBoxJoinPersonApi(
     }),
   );
 
+  // The same budget as the password join's route, which carried the same module operation.
+  app.use(
+    "/management-api/box-joins/:id/approve",
+    peerBodyLimit(1048576, "management.request_invalid"),
+  );
   app.post("/management-api/box-joins/:id/approve", (c) =>
     run(c, log, async () => {
       const approverId = await guard(c, true);

@@ -20,7 +20,7 @@ import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { mountPromoteApi } from "./promote-api.js";
-import { mountBoxJoinApi } from "./box-join-api.js";
+import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
 import type { Logger } from "./logger.js";
 
 function mounted() {
@@ -60,6 +60,7 @@ function mounted() {
   mount(mountReturnRecordsApi);
   mount(mountPromoteApi);
   mount(mountBoxJoinApi);
+  mount(mountBoxJoinPersonApi);
   armed = true;
   return { app, reads: () => reads };
 }
@@ -172,7 +173,7 @@ describe("peer route request limits", () => {
           ? { error: { code: "spare.settings_invalid", params: { reason: "size" } } }
           : {
               error: {
-                code: path.startsWith("/management-api/promote")
+                code: /^\/management-api\/(promote|box-joins)/.test(path)
                   ? "management.request_invalid"
                   : "handover.request_invalid",
                 params: { field: "body" },
