@@ -15,6 +15,7 @@ import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty } from "./bill-actions.js";
 import { enqueueMovedSlips, firedQuantity, readSentWork, type SentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
+import { seatMergeMembers } from "./floor-today-merges.js";
 import { storedOrderDining } from "./order-dining.js";
 import { hasBillSetMenuLines, hasDraftSetMenuLines } from "./set-menu-bill.js";
 import {
@@ -270,6 +271,7 @@ async function moveBillOnce(
       operatorId: options.operatorId,
       tableId: destination.tableId,
     });
+    await seatMergeMembers(tx, partyId, destination.tableId);
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "copy");
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
