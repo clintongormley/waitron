@@ -224,6 +224,30 @@ it("opens with Same as the venue's address on, and the parts hidden, when the sa
   }
 });
 
+it("with the switch on, a venue address that changes while the window is open makes Save send the new one", async () => {
+  const api = stubApi(VENUE);
+  const panel = await mount(api);
+  await open(panel);
+  expect(same(panel).checked).toBe(true);
+  expect(save(panel).disabled).toBe(true);
+  const host = dialogHost(panel);
+  const opened = host.venueAddress!;
+  host.venueAddress = { ...opened, addressLine1: "Calle Mayor 2" };
+  await host.updateComplete;
+  expect(save(panel).disabled).toBe(false);
+  expect(save(panel).variant).toBe("primary");
+  host.venueAddress = { ...opened };
+  await host.updateComplete;
+  expect(save(panel).disabled).toBe(true);
+  host.venueAddress = { ...opened, addressLine1: "Calle Mayor 2" };
+  await host.updateComplete;
+  await press(panel);
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+    taxpayerDomicile: "Calle Mayor 2, 28001 Madrid, Madrid",
+    expected: VENUE,
+  });
+});
+
 it("opens with the switch off when the saved line is another address, or none", async () => {
   for (const stored of [OLD, null, "Calle Mayor 1, 28002 Madrid, Madrid"]) {
     const panel = await mount(stubApi(stored));

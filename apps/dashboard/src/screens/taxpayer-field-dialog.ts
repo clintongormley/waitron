@@ -40,6 +40,12 @@ export interface TaxpayerFieldSettings {
   send(api: DashboardApi, value: string, expected: string): Promise<{ model: VenueDetailsModel }>;
 }
 
+/** A draft and the value it made then, which the draft scope compares. */
+interface Snapshot<Draft> {
+  draft: Draft;
+  value: string;
+}
+
 /** What a subclass's fields are drawn from. */
 export interface TaxpayerFieldsView<Draft> {
   draft: Draft;
@@ -125,7 +131,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   @state() private bottom = "";
 
   readonly #feedback = new FormFeedback(this);
-  #scope?: DraftScope<Draft>;
+  #scope?: DraftScope<Snapshot<Draft>>;
   #leave?: LeaveCoordinator;
   #opening = 0;
 
@@ -140,13 +146,13 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     this.refusal = {};
     this.bottom = "";
     this.reset();
-    const { coordinator, scope } = draftScopeFor<Draft>(this, {
+    const { coordinator, scope } = draftScopeFor<Snapshot<Draft>>(this, {
       id: {},
-      current: () => this.draft,
+      current: () => this.#snapshot(this.draft),
       snapshot: (value) => value,
-      equal: (a, b) => normalized(this.valueFor(a)) === normalized(this.valueFor(b)),
+      equal: (a, b) => a.value === b.value,
       restore: (value) => {
-        this.draft = value;
+        this.draft = value.draft;
         this.refusal = {};
         this.bottom = "";
         this.#feedback.reset();
@@ -155,7 +161,12 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    scope.commit(draft);
+    scope.commit(this.#snapshot(draft));
+  }
+
+  /** The value is taken when the snapshot is, as `valueFor` can read more than the draft. */
+  #snapshot(draft: Draft): Snapshot<Draft> {
+    return { draft, value: normalized(this.valueFor(draft)) };
   }
 
   /** Closes without asking. For a page that hides this dialog's host: a native modal left open
@@ -231,7 +242,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     try {
       const { model } = await this.settings.send(this.api, value, expected);
       const current = opening === this.#opening;
-      if (current) this.#scope?.commit(draft);
+      if (current) this.#scope?.commit({ draft, value });
       // Announced even after a dismiss: the server has the new value either way.
       this.dispatchEvent(
         new CustomEvent<VenueIdentityChanged>("venue-identity-changed", {
