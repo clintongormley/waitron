@@ -229,6 +229,18 @@ describe("the venue screen's address search", () => {
     expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
   });
 
+  it("shows no refusal of the venue's address on the parts a chosen registered address fills", async () => {
+    const el = await mount({
+      addressProvider: providerFor(MADRID),
+      invalidField: "taxpayerDomicile",
+    });
+    expect(sameAsVenue(el)).toBe(true);
+    await choose(el, BARCELONA, "domicile-lookup");
+    expect(sameAsVenue(el)).toBe(false);
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
+    expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
+  });
+
   it("refuses an address in another country, filling nothing and saying why", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     await type(el, "addressLine1", "Mine");

@@ -758,6 +758,21 @@ describe("setup-venue-screen", () => {
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
+  it("shows a refusal of the typed parts only while the form would send that line again", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: EXPECTED_VENUE },
+      invalidField: "taxpayerDomicile",
+    });
+    // The switch on sends the venue's address, which the server never refused.
+    await type(el, "registeredSameAsVenue", "on");
+    expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
+    expect(await bottomOf(el)).toBe("");
+    // Off again, the parts make the refused line once more.
+    await type(el, "registeredSameAsVenue", "off");
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(true);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  });
+
   it("says in the bottom message why the registered address was refused while it is the venue's", async () => {
     for (const [locale, said] of [
       [
