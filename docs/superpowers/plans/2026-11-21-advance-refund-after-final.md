@@ -188,6 +188,9 @@ here is **not settled**: adviser questions A1 and A2.
      account off. Choose Discard, then open Correct invoice on this ticket again." / "Esta
      rectificación se abrió antes de que el ticket de la mesa{invoiceNumber} descontara este pago a
      cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket."
+     As built, after review, it claims no order of times, sends staff to the table's receipt first
+     (the correction stays open and carries on afterwards), and names Discard only for when nothing
+     has been given back, otherwise Finish now: the words are in `apps/till/src/i18n/codes.ts`.
    - The two refund-of-advance messages (`apps/till/src/i18n/codes.ts:656-663`) lose "While the
      table's bill is still open" and say "that gives the money back, and while the bill is open
      takes it off the bill" instead of "that gives the money back and takes it off the bill".

@@ -663,8 +663,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   },
   "advance.taken_off_final_invoice": {
-    en: "The table's receipt{invoiceNumber} has taken this payment on account off, so this correction cannot carry on. Choose Discard, then open Correct invoice on this ticket again.",
-    es: "El ticket de la mesa{invoiceNumber} ya ha descontado este pago a cuenta, así que esta rectificación no puede continuar. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
+    en: "The table's receipt{invoiceNumber} has taken this payment on account off and can still give back money at this payment on account's rate, so this correction cannot give money back for now. Use Correct invoice on that receipt first: this correction stays open, and can carry on once that receipt has given back all it can at that rate. To stop here instead, choose Discard if nothing has been given back, or otherwise Finish now, which files a corrective invoice for what was given back.",
+    es: "El ticket de la mesa{invoiceNumber} ya ha descontado este pago a cuenta y todavía puede devolver dinero al tipo de este pago a cuenta, así que esta rectificación no puede devolver dinero por ahora. Usa primero Rectificar factura en ese ticket: esta rectificación sigue abierta y podrá continuar cuando ese ticket haya devuelto todo lo que puede a ese tipo. Para parar aquí, elige Descartar si no se ha devuelto nada o, si no, Terminar ahora, que presenta una factura rectificativa por lo devuelto.",
   },
   "advance.final_invoice_first": {
     en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",

@@ -1052,13 +1052,13 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
   );
 });
 
-it("sends staff back to Correct invoice on the advance after the table's receipt took it off, naming that receipt", () => {
+it("sends staff to Correct invoice on the table's receipt that took the advance off, naming it, and says how to stop this correction instead", () => {
   const final = { invoiceNumber: "A/45" };
   expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
-    "The table's receipt A/45 has taken this payment on account off, so this correction cannot carry on. Choose Discard, then open Correct invoice on this ticket again.",
+    "The table's receipt A/45 has taken this payment on account off and can still give back money at this payment on account's rate, so this correction cannot give money back for now. Use Correct invoice on that receipt first: this correction stays open, and can carry on once that receipt has given back all it can at that rate. To stop here instead, choose Discard if nothing has been given back, or otherwise Finish now, which files a corrective invoice for what was given back.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
-    "El ticket de la mesa A/45 ya ha descontado este pago a cuenta, así que esta rectificación no puede continuar. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
+    "El ticket de la mesa A/45 ya ha descontado este pago a cuenta y todavía puede devolver dinero al tipo de este pago a cuenta, así que esta rectificación no puede devolver dinero por ahora. Usa primero Rectificar factura en ese ticket: esta rectificación sigue abierta y podrá continuar cuando ese ticket haya devuelto todo lo que puede a ese tipo. Para parar aquí, elige Descartar si no se ha devuelto nada o, si no, Terminar ahora, que presenta una factura rectificativa por lo devuelto.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
     /^The table's receipt has taken /,
