@@ -321,9 +321,9 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       // `payments_card_last4_ck` CHECK) plus a `type`. A malformed value drops the whole block so a
       // real capture still records; the DB CHECK stays the backstop (CLAUDE.md §5).
       const card =
-        t.card?.last_4_digits !== undefined &&
+        typeof t.card?.last_4_digits === "string" &&
         /^\d{4}$/.test(t.card.last_4_digits) &&
-        t.card.type !== undefined
+        typeof t.card.type === "string"
           ? { last4: t.card.last_4_digits, type: t.card.type }
           : undefined;
       return {

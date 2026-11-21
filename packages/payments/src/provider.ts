@@ -103,7 +103,14 @@ export interface ForwardResult {
   incidentsRaised: number;
 }
 
-/** Which `attempting` payments a box's card sweep may resolve. */
+export interface CardDetailFollowUp {
+  outcome: "filled" | "exhausted";
+  paymentRef: string;
+  attempts: number;
+  ageSeconds: number;
+}
+
+/** Which payments a box may handle in its provider sweep. */
 export interface CollectionOwners {
   /** This box. */
   readonly nodeId: NodeId;
@@ -254,6 +261,13 @@ export interface PaymentProvider {
   /** Resolve uncertain rows owned by this box. Unresolved rows set `nextDueAt`; `forwarded` counts
    * captures and `declined` failures. An aborted pass leaves unasked rows for a later pass. */
   resolvePending(now: Date, owners: CollectionOwners, signal?: AbortSignal): Promise<ForwardResult>;
+
+  /** Fill missing receipt details for recent captures, returning the next retry time, if any. */
+  fillMissingCardDetails?(
+    owners: CollectionOwners,
+    onOutcome: (result: CardDetailFollowUp) => void,
+    signal?: AbortSignal,
+  ): Promise<Date | null>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
    * guarantees that. A `captured` or `failed` outcome

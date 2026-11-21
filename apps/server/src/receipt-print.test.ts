@@ -1,4 +1,5 @@
-import { SimulatorPaymentProvider } from "@waitron/payments";
+import { fillCapturedCard, payments, SimulatorPaymentProvider } from "@waitron/payments";
+import { seedHeldReader } from "@waitron/payments/test/seed.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { holdPrinterForTest } from "@waitron/db/testing/seed.js";
@@ -837,6 +838,59 @@ describe("receipt grouping after table changes", () => {
 });
 
 describe("receipt original and copy tracking", () => {
+  it("prints card details filled after a reader capture on a later receipt copy", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter();
+    await configureReceipt(cfg, { printerId });
+    const operator = await counterOperator(cfg);
+    const readerId = await seedHeldReader(suite.db, cfg.origin.deviceId);
+    const orderId = randomUUID();
+    const result = await takeReaderPaymentWithRecovery(
+      {
+        ...deps(),
+        admission: testTradingAdmission(),
+        provider: new FakePaymentProvider(suite.db),
+        readerId,
+      },
+      cfg,
+      orderId,
+      {
+        submissionId: orderId,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        applied: "0.00",
+        tip: "0.00",
+      },
+      operator,
+      { zoneId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] },
+    );
+    expect(result.outcome).toBe("received");
+    await printSaleReceipt(deps(), cfg, orderId, "original");
+    const [payment] = await suite.db
+      .update(payments)
+      .set({ externalRef: "txn-receipt" })
+      .where(eq(payments.workingOrderId, orderId))
+      .returning({ paymentRef: payments.paymentRef });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        fillCapturedCard(
+          tx,
+          { provider: "fake", paymentRef: payment!.paymentRef, externalRef: "txn-receipt" },
+          { scheme: "VISA", last4: "0421", entryMode: "chip", authCode: "A123" },
+        ),
+      ),
+    ).toBe(true);
+
+    await reprintSale(deps(), cfg, orderId);
+    const [copy] = await suite.db.select().from(printJobs).where(eq(printJobs.receiptCopy, true));
+    const ticket = decodeTicket(new Uint8Array(copy!.payload!));
+    expect(ticket).toContain("DUPLICADO");
+    expect(ticket).toContain("Visa ****0421 (Chip)");
+    expect(ticket).toContain("Autorización A123");
+  });
+
   it("distinguishes the F2 original, manual copy and drawer job without changing the sale", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();

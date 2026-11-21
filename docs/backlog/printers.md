@@ -340,7 +340,7 @@ Hardware and inbox checks to complete in the owner session.
   `~/waitron-campaign-shared/real-box-session-20261120.md`, on the owner's Mac):
   - C: drawer button only with a drawer (#3899), invoice email offered only when the bill can be emailed (#3905), Full invoice keeps its details on reopen (#3914, #3921), return to Card readers and no email in search boxes (#3927).
   - D: profile printer switches (#3903), Email in System on every box (#3909), City on address forms (#3923).
-  - F: profile default reader at Pay (#3901), receipt card details, slip venue time and receipt copy (#3904), slip button after payment (#3920), default invoice printer (#3911); open: CARD-FIELDS-MISSING and cancellation from direct Counter and table Pay (Lane F's second cancellation slice).
+  - F: profile default reader at Pay (#3901), receipt card details, slip venue time and receipt copy (#3904), slip button after payment (#3920), default invoice printer (#3911).
   - H: A4 paper-out wording, Print Queue rows and the retired agent's alert (#3908), Delete unpairs a Bluetooth printer (#3913).
   - L: open: FULL-INVOICE-ISSUER-ADDRESS (the issuer's postcode and town on a full invoice; fiscal, owner lands).
   - B: open: PRINTER-TEST-PAGE-REAL-RECEIPT.
@@ -352,7 +352,8 @@ Hardware and inbox checks to complete in the owner session.
   invoice was handed to the box's mail server and appears in the sender's Sent folder; arrival in a
   separate recipient's inbox has not been seen. The session confirmed the receipt from the till,
   a marked copy from Orders, and a Solo receipt and slip carrying the card and authorisation
-  details. One Solo payment recorded no card details (lane F's CARD-FIELDS-MISSING).
+  details. For a new reader payment whose first receipt has no card details, check a receipt copy
+  after the background lookup fills them in.
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
   Move earlier/later actions remain available. Browser gesture checks do not settle this choice.

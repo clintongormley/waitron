@@ -69,7 +69,7 @@ export const payments = table(
     externalRef: label("external_ref"),
     externalProvider: externalProviderType("external_provider"),
     externalMachine: label("external_machine"),
-    /** Card-present facts, written at capture by a provider that supplies them; null otherwise. */
+    /** Card-present facts from the provider, which can arrive after capture. */
     cardScheme: label("card_scheme"),
     cardLast4: label("card_last4"),
     // A plain text column beside its own check constraint below, NOT the enumText/enumCheck pair:

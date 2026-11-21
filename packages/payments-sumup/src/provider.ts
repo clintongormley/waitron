@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type {
   CompletedRefunds,
   CardDetails,
+  CardDetailFollowUp,
   CollectParams,
   CollectionOwners,
   ForwardResult,
@@ -23,12 +24,14 @@ import type {
 } from "@waitron/payments";
 import {
   captureAttempting,
+  fillCapturedCard,
   getPaymentByRef,
   recordCaptureMismatch,
   recordRefund,
   failAttempting,
   insertAttempting,
   listAttempting,
+  listCapturesMissingCard,
   refundLookupOf,
   saveCharge,
   stampAttemptingRef,
@@ -49,6 +52,11 @@ const DEFAULT_POLL = {
 
 export const RESOLVE_RETRY_MS = 60_000;
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
+
+const CARD_DETAILS_MAX_AGE_MS = 120_000;
+const CARD_DETAILS_WINDOW_MS = 60_000;
+const CARD_DETAILS_RETRY_MS = 20_000;
+const CARD_DETAILS_MAX_ATTEMPTS = 3;
 
 /**
  * How far before `sentAt` SumUp may stamp a REFUND event that is still the refund sent then: the
@@ -114,6 +122,13 @@ type PollOutcome =
   | { kind: "pending"; refundUncertain?: boolean }
   | { kind: "deferred" };
 
+interface CardDetailRetry {
+  attempts: number;
+  settledAt: number;
+  expiresAt: number;
+  dueAt: number | null;
+}
+
 /** The attempt is committed before the checkout begins. While attempting, `externalRef` is the
  * poll key; capture replaces it with the refundable transaction id. */
 export class SumUpCloudProvider implements PaymentProvider {
@@ -123,6 +138,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   readonly refundResendWindowMs = null;
   private readonly poll: Required<NonNullable<SumUpCloudProviderOptions["poll"]>>;
   private readonly now: () => Date;
+  private readonly cardDetailRetries = new Map<string, CardDetailRetry>();
 
   constructor(private readonly opts: SumUpCloudProviderOptions) {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
@@ -409,6 +425,111 @@ export class SumUpCloudProvider implements PaymentProvider {
       row.state === "refunded" ? "refund_completed" : "partial_refund",
       outcome.settledAt,
     );
+  }
+
+  async fillMissingCardDetails(
+    owners: CollectionOwners,
+    onOutcome: (result: CardDetailFollowUp) => void,
+    signal?: AbortSignal,
+  ): Promise<Date | null> {
+    if (signal?.aborted) return null;
+    const discoveredAt = this.now().getTime();
+    const rows = await listCapturesMissingCard(
+      this.opts.db,
+      SUMUP_PROVIDER,
+      owners,
+      new Date(discoveredAt - CARD_DETAILS_MAX_AGE_MS),
+    );
+    const report = (
+      outcome: CardDetailFollowUp["outcome"],
+      paymentRef: string,
+      retry: CardDetailRetry,
+    ) =>
+      onOutcome({
+        outcome,
+        paymentRef,
+        attempts: retry.attempts,
+        ageSeconds: Math.max(0, Math.floor((this.now().getTime() - retry.settledAt) / 1_000)),
+      });
+    const refs = new Set(rows.map((row) => row.paymentRef));
+    for (const [ref, retry] of this.cardDetailRetries) {
+      if (refs.has(ref)) continue;
+      this.cardDetailRetries.delete(ref);
+      if (retry.dueAt !== null && discoveredAt > retry.expiresAt) report("exhausted", ref, retry);
+    }
+
+    let nextDueAt = Infinity;
+    for (const row of rows) {
+      if (signal?.aborted) return null;
+      const at = this.now().getTime();
+      const settledAt = Date.parse(row.settledAt);
+      if (settledAt > at) continue;
+      const ref = row.paymentRef;
+      const retry = this.cardDetailRetries.get(ref) ?? {
+        attempts: 0,
+        settledAt,
+        expiresAt: Math.min(
+          settledAt + CARD_DETAILS_MAX_AGE_MS,
+          discoveredAt + CARD_DETAILS_WINDOW_MS,
+        ),
+        dueAt: at,
+      };
+      this.cardDetailRetries.set(ref, retry);
+      if (retry.dueAt === null) continue;
+      if (at > retry.expiresAt) {
+        retry.dueAt = null;
+        report("exhausted", ref, retry);
+        continue;
+      }
+      if (retry.dueAt <= at) {
+        const card = await this.lookupCapturedCard(row.externalRef, row.amount);
+        if (signal?.aborted) return null;
+        retry.attempts += 1;
+        if (card !== undefined) {
+          try {
+            // Recheck the stop inside the write turn in case shutdown began while we queued for it.
+            const filled = await this.inTransaction(
+              async (tx) =>
+                !signal?.aborted &&
+                fillCapturedCard(
+                  tx,
+                  { provider: SUMUP_PROVIDER, paymentRef: ref, externalRef: row.externalRef },
+                  card,
+                ),
+            );
+            retry.dueAt = null;
+            if (filled) report("filled", ref, retry);
+            continue;
+          } catch {
+            // A write refusal uses the same retry budget and leaves the next capture eligible.
+          }
+        }
+        retry.dueAt = at + CARD_DETAILS_RETRY_MS;
+        if (retry.attempts >= CARD_DETAILS_MAX_ATTEMPTS || retry.dueAt > retry.expiresAt) {
+          retry.dueAt = null;
+          report("exhausted", ref, retry);
+          continue;
+        }
+      }
+      nextDueAt = Math.min(nextDueAt, retry.dueAt);
+    }
+    return Number.isFinite(nextDueAt) ? new Date(nextDueAt) : null;
+  }
+
+  private async lookupCapturedCard(externalRef: string, amount: Decimal) {
+    try {
+      const t = await this.opts.client.findTransaction({ id: externalRef });
+      if (
+        t?.id === externalRef &&
+        t.status === "SUCCESSFUL" &&
+        compareDecimal(t.amount, amount) === 0 &&
+        (t.currency === undefined || t.currency === CURRENCY)
+      )
+        return cardFromTransaction(t);
+    } catch {
+      // The settled payment remains printable even when SumUp cannot supply card details.
+    }
+    return undefined;
   }
 
   async resolvePending(

@@ -12,8 +12,11 @@ import {
   findCapturedPaymentForWorkingOrderAnyProvider,
   insertAttempting,
   insertCapturedPayment,
+  insertFailedPayment,
+  listCapturesMissingCard,
+  fillCapturedCard,
 } from "./store.js";
-import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
+import { freshNif, seedHeldReader, seedSale, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -219,5 +222,95 @@ describe("the provider's start of the checkout", () => {
 
   it("leaves it empty when the capture names none", async () => {
     expect((await captured("started-2")).checkoutStartedAt).toBeNull();
+  });
+});
+
+describe("late card details", () => {
+  it("finds only recent captured reader payments with an empty block that this box owns", async () => {
+    const own = await seedWorkingOrder(suite.db);
+    const previous = await seedWorkingOrder(suite.db);
+    const other = await seedWorkingOrder(suite.db);
+    const readerId = await seedHeldReader(suite.db, own.deviceId);
+    const base = {
+      origin: deviceOrigin(own.deviceId),
+      workingOrderId: own.workingOrderId,
+      provider: "sumup",
+      readerId,
+      amount: decimal("10.00"),
+      settledAt: SETTLED,
+    };
+    await withTransaction(suite.db, async (tx) => {
+      for (const [paymentRef, change] of [
+        ["own", {}],
+        ["taken-over", { nodeId: previous.nodeId }],
+        ["other-box", { nodeId: other.nodeId }],
+        ["other-provider", { provider: "stripe" }],
+        ["old", { settledAt: new Date("2026-07-22T09:57:59Z") }],
+        ["without-reader", { readerId: undefined }],
+        ["without-ref", { externalRef: undefined }],
+        ["with-card", {}],
+      ] as const) {
+        await insertCapturedPayment(tx, {
+          ...base,
+          nodeId: own.nodeId,
+          paymentRef,
+          externalRef: `txn-${paymentRef}`,
+          ...change,
+        });
+      }
+      await tx
+        .update(payments)
+        .set({ cardLast4: "1234" })
+        .where(eq(payments.paymentRef, "with-card"));
+      await insertFailedPayment(tx, { ...base, nodeId: own.nodeId, paymentRef: "failed" });
+    });
+
+    const candidates = await listCapturesMissingCard(
+      suite.db,
+      "sumup",
+      {
+        nodeId: own.nodeId,
+        takenOverFrom: [previous.nodeId],
+        unowned: false,
+      },
+      new Date("2026-07-22T09:58:00Z"),
+    );
+    expect(candidates.map((p) => p.paymentRef).sort()).toEqual(["own", "taken-over"]);
+  });
+
+  it("fills a captured payment once without changing its financial facts or links", async () => {
+    const own = await seedWorkingOrder(suite.db);
+    const readerId = await seedHeldReader(suite.db, own.deviceId);
+    const saleId = await seedSale(suite.db, own);
+    const key = { provider: "sumup", paymentRef: "captured", externalRef: "txn-captured" };
+    await withTransaction(suite.db, async (tx) => {
+      await insertCapturedPayment(tx, {
+        ...key,
+        origin: deviceOrigin(own.deviceId),
+        workingOrderId: own.workingOrderId,
+        nodeId: own.nodeId,
+        amount: decimal("10.00"),
+        readerId,
+        settledAt: SETTLED,
+      });
+      await associatePaymentWithSale(tx, { ...key, saleId });
+    });
+    const [before] = await suite.db.select().from(payments);
+    const card = { scheme: "VISA", last4: "1234", entryMode: "chip", authCode: "A123" } as const;
+    const fill = (externalRef: string, last4: string) =>
+      withTransaction(suite.db, (tx) =>
+        fillCapturedCard(tx, { ...key, externalRef }, { ...card, last4 }),
+      );
+    expect(await fill("other-txn", "9999")).toBe(false);
+    expect(await fill(key.externalRef, "1234")).toBe(true);
+    expect(await fill(key.externalRef, "9999")).toBe(false);
+    const [after] = await suite.db.select().from(payments);
+    expect(after).toEqual({
+      ...before,
+      cardScheme: "VISA",
+      cardLast4: "1234",
+      cardEntryMode: "chip",
+      cardAuthCode: "A123",
+    });
   });
 });

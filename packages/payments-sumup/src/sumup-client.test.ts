@@ -169,6 +169,18 @@ describe("sumupClient findTransaction card mapping", () => {
     });
   });
 
+  it.each([
+    { last_4_digits: 1234, type: "VISA" },
+    { last_4_digits: "1234", type: null },
+  ])("drops a card block with malformed field types: %j", async (card) => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: respondingWith({ id: "txn_1", status: "SUCCESSFUL", amount: 12.5, card }),
+    });
+    expect((await client.findTransaction({ id: "txn_1" }))?.card).toBeUndefined();
+  });
+
   it("omits the card block when a card sub-field is missing", async () => {
     const client = sumupClient({
       apiKey: "k",
