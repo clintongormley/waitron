@@ -312,8 +312,7 @@ with no backward-compatibility implementation.
 
 The till offers **Full invoice**. A saved recipient can be invoiced through table bill
 payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
-window. Direct integrated-card payment (`POST /api/pay`) and closing a counter bill by
-transfer still refuse F1 with `sale.full_invoice_unavailable`.
+window. Closing a counter bill by transfer still refuses F1 with `sale.full_invoice_unavailable`.
 The shared Full invoice control and automatic recipient prompt are visible at the counter; the
 till saves that choice on the order before the Pay window opens. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain

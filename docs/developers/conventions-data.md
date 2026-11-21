@@ -3051,26 +3051,24 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   open route still fails by itself, `storage.disk_full`, if its own save does not fit. Opening or
   closing a kitchen station for the day (`station-today-api.ts`, mounted inside `mountTillApi`) is
   refused.
-- `POST /api/pay` and `POST /api/working-orders/:id/payments` check for a replay before refusing new money inside
-  their first transaction. A replay can still return the recorded result. On `POST /api/pay`, Pay again on a card already charged
-  files the sale without asking the reader.
+- `POST /api/working-orders/:id/payments` checks for a replay before refusing new money inside
+  its first transaction. A replay can still return the recorded result. Pay again can finish a whole-bill
+  card payment that the reader already charged, without asking the reader again.
 - A card-reader payment checks the stop three times: the free-space read before its first
   transaction; inside it, refused when that read said full or a refusal has been noted since; and
   after it commits, just before the reader is asked, refused when a refusal has been noted, undoing
-  the first transaction's marks (`payIntegrated` in `till-sale.ts`; `takeReaderBillPayment` in
-  `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
+  the bill payment's reservation (`takeReaderBillPayment` in `bill-payments.ts`). Writes take turns in the write queue, so a payment that read "not full" can
   wait behind another till's write that then fails.
 - A card charged on a connected reader whose sale then fails for a full disk answers
   `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not
-  to charge again (`afterCardCharged`, `bill-payments.ts`). Only the till's two card routes ask for
-  it (`sayCardChargedNotRecorded`, set in `till-api.ts`'s `POST /api/pay` and
-  `bill-payments-api.ts`); every other caller, the dashboard's stuck-payment resolve route among
-  them, still answers `storage.disk_full`. On those two routes the same 507 answers a card charged
+  to charge again (`afterCardCharged`, `bill-payments.ts`). The till's bill payment route asks for
+  it (`sayCardChargedNotRecorded` in `bill-payments-api.ts`). Other callers, including the dashboard's
+  bill-payment resolve route, answer `storage.disk_full`. The same 507 answers a card charged
   while the box's clock comes to read before 28 October 2024, with `reason: "clock_unusable"`
   (`apps/server/src/clock-behind-stop.charged.test.ts`). The same answer covers a charge whose capture the
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
-  that save failed for a full disk, and the two routes translate only that error
+  that save failed for a full disk, and the till route translates only that error
   (`collectFailure`, `bill-payments.ts`). Its cause is the full disk, so every other caller still
   answers `storage.disk_full`. The provider's row stays `attempting` for a later pass to record the
   confirmed amount once space is available. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
@@ -5412,9 +5410,8 @@ absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`)
 `apps/server/src/till-api.parties.test.ts`, `clears the count with null` and `refuses the guest count
 %j as a bad field, changing nothing` pin the two halves, and in
 `apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
-null` and `refuses guests %j as a bad %s, changing nothing` do. The payment routes' `guestCount`
-(`POST /api/pay` and
-`/api/working-orders/:id/payments` for the payment that completes the bill) keeps an explicit null
+null` and `refuses guests %j as a bad %s, changing nothing` do. `POST /api/working-orders/:id/payments` keeps an explicit null `guestCount`
+on the payment that completes the bill
 as no guests line, while an absent key takes the party's default (`saleReceiptFacts`,
 `apps/server/src/receipt-guests.ts`). In `apps/server/src/receipt-guests.routes.test.ts` a pair of
 cases on a party's bill pins both inputs.
