@@ -332,9 +332,9 @@ export class WtFloorMap extends LitElement {
       @media (forced-colors: active) {
         :host {
           /* Leave space between the pulse, selection and focus, even when they share a colour. */
-          --map-selection: 2px dashed Highlight;
+          --map-selection: calc(var(--wt-space-1) / 2) dashed Highlight;
           --map-selection-offset: calc(var(--wt-space-1) * 1.5);
-          --map-focus: 2px solid Highlight;
+          --map-focus: calc(var(--wt-space-1) / 2) solid Highlight;
           --map-focus-offset: calc(var(--wt-space-1) * 2.5);
         }
 
