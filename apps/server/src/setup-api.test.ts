@@ -2082,6 +2082,14 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     expect(await res.text()).toContain("setup-wizard-spa");
   });
 
+  it("lets only the setup page's own origin frame it", async () => {
+    const app = new Hono();
+    mountSetupSpa(app, wizardDir!, noopLog);
+    const res = await app.request("/", { headers: { Accept: "text/html" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+  });
+
   // mountSetup answers /api/* before the SPA's middleware runs; the first-setup resolution app does not.
   it("keeps a missing /api path as 404 where nothing answers /api/* before the setup app", async () => {
     const app = new Hono();

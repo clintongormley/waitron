@@ -23,5 +23,6 @@ export function mountSetupSpa(app: Hono, root: string, log: Logger): void {
     await next();
     if (c.res.status === 200) c.header("Content-Disposition", "attachment");
   });
-  mountSpa(app, { root: root, basePath: "" }, log);
+  // Its Join, Start again and Finish joining add this box to a venue, so no other site may frame it.
+  mountSpa(app, { root: root, basePath: "", frameSelfOnly: true }, log);
 }
