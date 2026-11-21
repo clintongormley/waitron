@@ -4,10 +4,10 @@ An administrator can see when the last offered upgrade finished, which two versi
 and whether the box upgraded or reopened its previous release. The operator running the supervised
 command already sees its result at the console. This slice makes it visible later in Box status
 and puts the reader in the baseline release before the timer can install. On rollback, that
-baseline app must be able to read the result. The later email slice can use the same result and
-attempt id to identify the rollback. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
+baseline app must be able to read the result, so later hosts keep answering `upgrade.status`.
+The later email slice can use the same result and attempt id to identify the rollback. [Parent plan](2026-11-09-a950-shorter-upgrades.md) ·
 [Supervised install](2026-11-21-a950-quiet-upgrade-stop.md). Codex wrote this plan for Lane F.
-Claude reviewed its first draft and the driver revised it. Watcher clearance is pending.
+Claude reviewed it and reread the revisions. Watcher clearance is pending.
 
 The timer keeps checking offers. Manual Restore/Keep, editable hours, pause, rollback email, and
 activation are outside this slice's changes. Physical rehearsal and timing precede activation.
@@ -20,9 +20,12 @@ settings and install requests, which the parent plan grouped together.
    durable writer to save `attemptId`, `finishedAt` (box time), `fromVersion`, `toVersion` and
    `status: "upgraded" | "rolled-back"` to `<box directory>.upgrade-result.json`
    (by default `/opt/waitron.upgrade-result.json`). Use the same path during recovery
-   (`host.mjs`). Save only an offered attempt with versions that selected the candidate or had a
-   stopped copy. Keep the same result when cleanup retries. Manual attempts, late busy starts with
-   no copy, a failed reopen, and markers without versions leave the previous result as it stands.
+   (`host.mjs`). Take the attempt id from the existing attempt directory name. For an offered
+   attempt with versions, report a healthy candidate as upgraded or a healthy reopening through
+   `restore()` as rolled back, including after a partial copy. Carry that restore decision through
+   the committed marker. Keep the same result when cleanup retries. Manual attempts, late busy
+   stops, failed reopens and markers without versions leave the prior result. The existing command
+   output stays as defined in step 5c.
    If writing fails, report it in host logs and let cleanup finish. Like the installed version,
    this is box history that survives venue reset. Keep only the latest result.
 2. **Use the existing Box status read.** In `deploy/box/waitron-box{.sh,@.service}`, add one fixed
@@ -37,8 +40,8 @@ settings and install requests, which the parent plan grouped together.
    Box status guides and both A950 backlog entries.
 
 **Tests first.** `transaction.test.mjs` and `cli.test.mjs` should first fail because no result survives
-cleanup. Test success, rollback, recovery of an interrupted attempt, and a busy or old marker
-leaving the prior result. `scripts/waitron-box-sh.test.mjs` owns fixed reads, including missing files.
+cleanup. Test success, rollback, partial copy failure, recovery of an interrupted attempt and
+a busy or old marker leaving the prior result. `scripts/waitron-box-sh.test.mjs` owns fixed reads, including missing files.
 `scripts/box/host-protocol.test.mjs` grows the pinned shell verb list for `upgrade.status`.
 `box-host-client.test.ts` owns malformed and absent replies, `box-health-api.test.ts` the protected
 answer, and the dashboard status tests the two visible outcomes and absent result. Exercise success
