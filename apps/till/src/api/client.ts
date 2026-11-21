@@ -998,7 +998,6 @@ export interface CardTender extends OutsideCardDetails {
 /** A cash or hand-keyed card tender. */
 export type Tender = CashTender | CardTender;
 
-/** A tender with the payer's payment slip choice, which the client sends beside the tender. */
 /**
  * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e): `descriptions`
  * in the invoice locale, the display `quantity`, and the GROSS line total. The receipt renders THESE,
