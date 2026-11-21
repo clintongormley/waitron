@@ -45,6 +45,7 @@ import { useTestProducer } from "./testing/test-producer.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { boxHostClient, type LastOfferedUpgrade } from "./box-host-client.js";
+import { UPGRADE_ROLLBACK_EMAIL_WORDS } from "./i18n/box-emails.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 useTestProducer();
@@ -825,11 +826,12 @@ describe("the running server's notice and email checks", () => {
           smtp: { url: "smtp://127.0.0.1:1", from: "box@example.test" },
         }),
       });
+      const words = UPGRADE_ROLLBACK_EMAIL_WORDS.es;
       expect(holder.sent).toEqual([
         expect.objectContaining({
           recipient: "owner@example.test",
-          subject: expect.stringContaining("ha revertido una actualización"),
-          text: expect.stringMatching(/1\.3\.0.*1\.2\.0.*Estado del servidor/s),
+          subject: words.subject.replace("{venue}", await venueName()),
+          text: words.text.replace("{toVersion}", "1.3.0").replace("{fromVersion}", "1.2.0"),
         }),
       ]);
       expect(lastOfferedUpgrade).toHaveBeenCalledTimes(2);
@@ -859,15 +861,16 @@ describe("the running server's notice and email checks", () => {
         notAfter: new Date(Date.now() + 86_400_000),
       }),
     );
+    const lastOfferedUpgrade = vi.fn(() =>
+      boxHostClient({ socketPath: join(booted.scratch!, "box.sock") }).lastOfferedUpgrade(),
+    );
     try {
       await bootServer(booted, venue, undefined, undefined, {
-        boxHost: {
-          ...synchronisedBoxHost(),
-          lastOfferedUpgrade: () =>
-            boxHostClient({ socketPath: join(booted.scratch!, "box.sock") }).lastOfferedUpgrade(),
-        },
+        boxHost: { ...synchronisedBoxHost(), lastOfferedUpgrade },
       });
       await tick();
+      expect(lastOfferedUpgrade).toHaveBeenCalledTimes(1);
+      await expect(lastOfferedUpgrade.mock.results[0]!.value).resolves.toBeNull();
       const pass = () =>
         runMailPass({
           ...holder.mail!,
