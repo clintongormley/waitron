@@ -445,6 +445,12 @@ it.each([
   const { box } = await fixture();
   const file = `${box}.upgrade-settings.json`;
   await fs.writeFile(file, bytes);
+  const window = runUpgradeCli(["check-upgrade-window", box], {
+    run: async () => {
+      throw new Error("unexpected venue lookup");
+    },
+  });
+  await expect(window).rejects.toThrow("the saved upgrade settings are unreadable");
   expect(await runUpgradeCli(["read-upgrade-settings", box])).toEqual({
     ok: false,
     reason: "host_failed",
