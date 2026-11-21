@@ -5,6 +5,7 @@ import {
   type CountryPack,
   type ResolvedAddress,
 } from "@waitron/country";
+import { joinRegisteredAddress } from "./registered-address.js";
 
 /** The area an address chosen from the search lies in: the one its area code names, else the one
  *  its postcode names. */
@@ -25,8 +26,12 @@ export function areaOfChosenAddress(
 
 /** A chosen address as a registered business address is written: "lines, postcode city, province". */
 export function oneLineAddress(pack: CountryPack, address: ResolvedAddress): string {
-  const place = `${address.postalCode} ${address.locality}`.trim();
-  return [...address.lines, place, areaOfChosenAddress(pack, address)?.name ?? ""]
-    .filter((part) => part.trim() !== "")
-    .join(", ");
+  const [street = "", ...more] = address.lines;
+  return joinRegisteredAddress({
+    street,
+    line2: more.filter((line) => line.trim() !== "").join(", "),
+    postalCode: address.postalCode,
+    city: address.locality,
+    province: areaOfChosenAddress(pack, address)?.name ?? "",
+  });
 }

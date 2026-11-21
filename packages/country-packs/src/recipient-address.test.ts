@@ -311,3 +311,43 @@ describe("recipientAddressFields", () => {
     });
   });
 });
+
+describe("recipientAddressFields with a Spanish province holding a comma", () => {
+  it.each([
+    [
+      "Carrer Major 1, 07001 Palma, Balears, Illes",
+      "Carrer Major 1",
+      "07001",
+      "Palma",
+      "Balears, Illes",
+    ],
+    ["Rúa Real 1, 15001 A Coruña, Coruña, A", "Rúa Real 1", "15001", "A Coruña", "Coruña, A"],
+    [
+      "Calle Portales 1, 26001 Logroño, Rioja, La",
+      "Calle Portales 1",
+      "26001",
+      "Logroño",
+      "Rioja, La",
+    ],
+    [
+      "Calle Triana 1, 35002 Las Palmas de Gran Canaria, Palmas, Las",
+      "Calle Triana 1",
+      "35002",
+      "Las Palmas de Gran Canaria",
+      "Palmas, Las",
+    ],
+  ])("reads %j as its province", (address, streetAddress, postalCode, locality, province) => {
+    const split = addresses.recipientAddressFields(address, "ES");
+    expect(split).toEqual({ streetAddress, postalCode, locality, province });
+    expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
+  });
+});
+
+it("splits an address of a country it does not know as before", () => {
+  expect(addresses.recipientAddressFields("1 Broadway, New York, NY", "XX")).toEqual({
+    streetAddress: "1 Broadway",
+    postalCode: "",
+    locality: "New York",
+    province: "NY",
+  });
+});

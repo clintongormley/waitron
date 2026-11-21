@@ -1,5 +1,6 @@
 import { getCountryPack } from "./registry.js";
 import { normalizeRecipientCountryCode } from "./recipient-countries.js";
+import { trailingProvince } from "./registered-address.js";
 
 export interface RecipientAddressDraft {
   countryCode: string;
@@ -43,9 +44,11 @@ export function recipientAddressFields(
   countryCode: string,
 ): Omit<RecipientAddressDraft, "countryCode"> {
   const whole = { streetAddress: address, postalCode: "", locality: "", province: "" };
-  const parts = address.split(", ");
+  const pack = getCountryPack(normalizeRecipientCountryCode(countryCode) ?? "");
+  const named = pack === undefined ? undefined : trailingProvince(address.trim(), pack);
+  const parts = (named?.rest ?? address).split(", ");
   if (parts.length < 2) return whole;
-  const province = parts.length >= 3 ? parts.pop()! : "";
+  const province = named?.province ?? (parts.length >= 3 ? parts.pop()! : "");
   const place = parts.pop()!;
   const words = /^(\S+) (\S.*)$/su.exec(place);
   const split =

@@ -3,4 +3,5 @@ export * from "./starter-languages.js";
 export * from "./recipient-countries.js";
 export * from "./recipient-address.js";
 export * from "./chosen-address.js";
+export * from "./registered-address.js";
 export * from "./recipient-identifier.js";
