@@ -15,9 +15,9 @@ export const printAgents = table(
     host: label("host"),
     setupUrl: label("setup_url"),
     setupPort: smallCount("setup_port"),
-    // The node that enrolled this agent over loopback, or NULL when a person enrolled it or it came
-    // in through a configuration import. NO FK to `nodes`: the primary holds no `nodes` row for a
-    // mirror (mirror-bundle.ts), so a FK would reject a mirror's self-enrolment.
+    // The box this agent runs on, which asked for its token itself, or NULL when a person enrolled it
+    // or it came in through a configuration import. NO FK to `nodes`: the primary holds no `nodes`
+    // row for a mirror (mirror-bundle.ts), so a FK would reject a mirror's self-enrolment.
     nodeId: id("node_id"),
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),

@@ -313,6 +313,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
   "/api/node/handover/emergency/declare": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/preview": { status: 403, code: "node.operation_page_required" },
   "/api/node/backup-settings": { status: 400, code: "spare.settings_invalid" },
+  "/api/node/enrol-self": { status: 403, code: "node.enrol_not_local" },
   "/api/node/handover/emergency/backup": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/followed": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/passkey-challenge": {

@@ -425,7 +425,7 @@ declare module "@waitron/shared" {
     "node.enrol_not_local": Record<string, never>;
     /** This node cannot give a print agent a token: it is not the serving main box, or, on a spare,
      * the main box its chart names could not be reached or did not give one (`node-enrol-api.ts`,
-     * `print-agent-enrol-api.ts`). A fenced node's POST is refused earlier with `node.read_only`. */
+     * `print-agent-enrol-api.ts`). */
     "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error code (`EADDRINUSE`,

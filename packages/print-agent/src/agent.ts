@@ -621,9 +621,9 @@ export function createAgent(opts: AgentOptions): Agent {
       return false;
     }
 
-    // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on the primary box must
-    // enrol even when its configured server is momentarily not an accepting primary. A LITERAL
-    // loopback origin, not config.serverUrl; anywhere but the primary box it falls through below.
+    // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on a box must enrol even
+    // when its configured server is momentarily not an accepting primary. A LITERAL loopback
+    // origin, not config.serverUrl.
     if ((await host.token()) === null) {
       const loopback = new URL(config.serverUrl);
       loopback.hostname = "127.0.0.1";

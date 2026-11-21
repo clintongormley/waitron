@@ -360,6 +360,11 @@ class PeerSilenceUnestablished extends Error {}
 
 class PeerCertificateRefused extends Error {}
 
+/** Whether `postToBox` refused the box's certificate, or had no authority to check it under. */
+export function isCertificateRefusal(error: unknown): boolean {
+  return error instanceof PeerCertificateRefused;
+}
+
 const CERTIFICATE_REFUSALS = new Set([
   "CERT_HAS_EXPIRED",
   "CERT_NOT_YET_VALID",

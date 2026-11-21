@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { taxpayer, writeNodeMembership } from "@waitron/db";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { verifyEnvelope } from "@waitron/handover";
@@ -16,6 +16,12 @@ import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { PRINT_AGENT_ENROL_PATH } from "./print-agent-enrol-api.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  type BoxAuthority,
+  type BoxServer,
+} from "./testing/box-authority.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -200,6 +206,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
       mainUrl?: string;
       chart?: boolean;
       withFetch?: boolean;
+      authority?: string;
       log?: Logger;
     } = {},
   ) {
@@ -251,6 +258,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
           exchange: {
             timeoutMs: 100,
             lookup,
+            ...(opts.authority === undefined ? {} : { authorityOf: () => opts.authority }),
             ...(opts.withFetch === false ? {} : { fetch: fetchSeam as typeof fetch }),
           },
         },
@@ -352,6 +360,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
       { spareStanding: "evicted" as const },
       { mainStanding: "serving-secondary" as const },
       { mainUrl: "" },
+      { mainStanding: "serving-secondary" as const, spareStanding: "serving-primary" as const },
     ]) {
       const { app, fetchSeam } = await spareApp(opts);
       expect([opts, await outcome(await post(app, { name: "a" }, "127.0.0.1"))]).toEqual([
@@ -369,6 +378,60 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
     });
     expect(await outcome(await post(app, { name: "a" }, "127.0.0.1"))).toEqual(REFUSED);
     expect(lookup).not.toHaveBeenCalled();
+  });
+
+  describe("over HTTPS to the main box", () => {
+    let authorityX: BoxAuthority;
+    let authorityY: BoxAuthority;
+    const servers: BoxServer[] = [];
+    beforeAll(async () => {
+      [authorityX, authorityY] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+    });
+    afterEach(async () => {
+      while (servers.length > 0) await servers.pop()!.close();
+    });
+
+    async function forwardFailures(opts: { authority?: string; server: BoxAuthority }) {
+      const server = await startBoxServer(opts.server, () => ({
+        status: 201,
+        body: JSON.stringify({ token: "agent-1.secret" }),
+      }));
+      servers.push(server);
+      const reasons: unknown[] = [];
+      const { app } = await spareApp({
+        withFetch: false,
+        mainUrl: server.url,
+        ...(opts.authority === undefined ? {} : { authority: opts.authority }),
+        log: (_level, event, fields) => {
+          if (event === "node.enrol_forward_failed") reasons.push(fields);
+        },
+      });
+      const res = await post(app, { name: "a" }, "127.0.0.1");
+      return { res, reasons, server };
+    }
+
+    it("passes on the token from a main box serving a certificate from this box's authority", async () => {
+      const { res } = await forwardFailures({ authority: authorityX.caPem, server: authorityX });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ token: "agent-1.secret" });
+    });
+
+    it("logs no_authority, and sends nothing, when this box holds no venue authority", async () => {
+      const { res, reasons, server } = await forwardFailures({ server: authorityX });
+      expect(await outcome(res)).toEqual(REFUSED);
+      expect(reasons).toEqual([{ reason: "no_authority" }]);
+      expect(server.requests).toHaveLength(0);
+    });
+
+    it("logs certificate, and sends nothing, when the main box's certificate is from another authority", async () => {
+      const { res, reasons, server } = await forwardFailures({
+        authority: authorityX.caPem,
+        server: authorityY,
+      });
+      expect(await outcome(res)).toEqual(REFUSED);
+      expect(reasons).toEqual([{ reason: "certificate" }]);
+      expect(server.requests).toHaveLength(0);
+    });
   });
 
   it("logs a failure once until the reason changes or a request gets through", async () => {

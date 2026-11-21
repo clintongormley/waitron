@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, printAgents, writeNodeMembership, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  printAgents,
+  withTransaction,
+  writeNodeMembership,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
@@ -16,9 +22,12 @@ import {
 } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { authenticateAgent } from "@waitron/printing";
+import { hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
+import { ENROL_RATE_MAX, type EnrolRateLimiter } from "./enrol-rate-limit.js";
+import { selfEnrolNodeAgent } from "./join-requests.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { requireAgent } from "./print-agent-session.js";
 import {
   PRINT_AGENT_ENROL_PATH,
   mountPrintAgentEnrolApi,
@@ -39,8 +48,10 @@ describe("POST /api/node/print-agent", () => {
   interface Boxes {
     db: Database;
     self: string;
+    selfKey: string;
     spare: { nodeId: string; privateKey: string };
     app: Hono;
+    chart: (term: number, spareStanding: NodeStanding | "revoked") => Promise<void>;
   }
 
   async function boxes(
@@ -59,27 +70,29 @@ describe("POST /api/node/print-agent", () => {
       await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     const selfKey = await readNodeIdentityKey(suite.node, RING, self);
     const spareKey = await readNodeIdentityKey(suite.node, RING, spareId);
-    const body: MembershipDocumentBody = {
-      term: 3,
-      nodes: [
-        {
-          nodeId: self,
-          contactUrl: "https://box-0",
-          standing: opts.selfStanding ?? "serving-primary",
-        },
-        {
-          nodeId: spareId,
-          contactUrl: "https://box-1",
-          standing: opts.spareStanding ?? "serving-secondary",
-        },
-      ],
+    const chart = async (term: number, spareStanding: NodeStanding | "revoked") => {
+      const body: MembershipDocumentBody = {
+        term,
+        nodes: [
+          {
+            nodeId: self,
+            contactUrl: "https://box-0",
+            standing: opts.selfStanding ?? "serving-primary",
+          },
+          ...(spareStanding === "revoked"
+            ? []
+            : [{ nodeId: spareId, contactUrl: "https://box-1", standing: spareStanding }]),
+        ],
+        ...(spareStanding === "revoked" ? { revoked: [spareId] } : {}),
+      };
+      await writeNodeMembership(db, {
+        body,
+        signerNodeId: self,
+        signature: signDocumentBody(body, selfKey),
+        endorsements: [endorseKey(spareId, nodeSigningPublicKey(spareKey), self, selfKey)],
+      });
     };
-    await writeNodeMembership(db, {
-      body,
-      signerNodeId: self,
-      signature: signDocumentBody(body, selfKey),
-      endorsements: [endorseKey(spareId, nodeSigningPublicKey(spareKey), self, selfKey)],
-    });
+    await chart(3, opts.spareStanding ?? "serving-secondary");
     const app = new Hono();
     mountPrintAgentEnrolApi(
       app,
@@ -93,7 +106,7 @@ describe("POST /api/node/print-agent", () => {
       },
       () => {},
     );
-    return { db, self, spare: { nodeId: spareId, privateKey: spareKey }, app };
+    return { db, self, selfKey, spare: { nodeId: spareId, privateKey: spareKey }, app, chart };
   }
 
   function envelope(
@@ -233,15 +246,128 @@ describe("POST /api/node/print-agent", () => {
     expect(await agentRows(db)).toEqual([]);
   });
 
-  it("checks the enrol rate limit before reading the request", async () => {
-    const { app, db } = await boxes({
+  it("refuses a request signed by this box itself", async () => {
+    const { app, self, selfKey, db } = await boxes();
+    expect(
+      await send(
+        app,
+        envelope({ nodeId: self, privateKey: selfKey }, { name: "Main agent", toNodeId: self }),
+      ),
+    ).toEqual(refusal(401, "handover.peer_unknown"));
+    expect(await agentRows(db)).toEqual([]);
+  });
+
+  it("refuses a listed box's envelope whose body was changed after signing", async () => {
+    const { app, self, spare, db } = await boxes();
+    const signed = envelope(spare, { name: "Spare agent", toNodeId: self });
+    expect(await send(app, { ...signed, body: { name: "Other agent", toNodeId: self } })).toEqual(
+      refusal(401, "handover.peer_unknown"),
+    );
+    expect(await agentRows(db)).toEqual([]);
+  });
+
+  it("counts only signed requests against the enrol rate limit", async () => {
+    const { app, self, spare, db } = await boxes();
+    for (let i = 0; i < ENROL_RATE_MAX + 1; i += 1) {
+      expect((await send(app, envelope(STRANGER, { name: "x", toNodeId: self }))).status).toBe(401);
+      expect((await send(app, "not json")).status).toBe(400);
+    }
+    expect((await send(app, envelope(spare, { name: "Spare agent", toNodeId: self }))).status).toBe(
+      201,
+    );
+    expect(await agentRows(db)).toHaveLength(1);
+  });
+
+  it("checks the enrol rate limit once the signature is verified, before the body", async () => {
+    const { app, self, spare, db } = await boxes({
       limiter: {
         check: () => {
           throw new AppError("device.join_rate_limited", {});
         },
       },
     });
-    expect(await send(app, "not json")).toEqual(refusal(429, "device.join_rate_limited"));
+    expect(await send(app, "not json")).toEqual(
+      refusal(400, "handover.request_invalid", { field: "envelope" }),
+    );
+    expect(await send(app, envelope(spare, { toNodeId: self }))).toEqual(
+      refusal(429, "device.join_rate_limited"),
+    );
     expect(await agentRows(db)).toEqual([]);
+  });
+
+  describe("a print agent's token once its box is removed", () => {
+    /** One route behind the print-agent API's bearer guard. */
+    function agentApp(db: Database): Hono {
+      const app = new Hono();
+      app.get("/agent", async (c) => {
+        try {
+          return c.json(await requireAgent({ db }, c));
+        } catch (error) {
+          return c.json({ code: (error as AppError).code }, 401);
+        }
+      });
+      return app;
+    }
+
+    async function asAgent(db: Database, token: string) {
+      const response = await agentApp(db).request("/agent", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      return { status: response.status, body: await response.json() };
+    }
+
+    async function spareToken(app: Hono, self: string, spare: Boxes["spare"]): Promise<string> {
+      const { status, body } = await send(
+        app,
+        envelope(spare, { name: "Spare agent", toNodeId: self }),
+      );
+      expect(status).toBe(201);
+      return (body as AgentEnrolAnswer).token;
+    }
+
+    it.each(["evicted", "revoked"] as const)(
+      "is refused once a newer chart marks the box %s",
+      async (removal) => {
+        const { app, self, spare, db, chart } = await boxes();
+        const token = await spareToken(app, self, spare);
+        expect((await asAgent(db, token)).status).toBe(200);
+        await chart(4, removal);
+        expect(await asAgent(db, token)).toEqual({
+          status: 401,
+          body: { code: "agent.unauthorized" },
+        });
+      },
+    );
+
+    it("leaves the main box's own agent and an agent tied to no box working", async () => {
+      const { self, db, chart } = await boxes();
+      const own = await withTransaction(db, (tx) =>
+        selfEnrolNodeAgent(tx, { nodeId: self, name: "Main agent" }),
+      );
+      const secret = "unboxed-secret";
+      const [unboxed] = await db
+        .insert(printAgents)
+        .values({ name: "Office agent", tokenHash: hashDeviceToken(secret) })
+        .returning({ id: printAgents.id });
+      await chart(4, "evicted");
+      expect(await asAgent(db, own.token)).toEqual({
+        status: 200,
+        body: { agentId: own.agentId },
+      });
+      expect(await asAgent(db, `${unboxed!.id}.${secret}`)).toEqual({
+        status: 200,
+        body: { agentId: unboxed!.id },
+      });
+    });
+
+    it("lets the box's agent enrol again once a newer chart lists the box again", async () => {
+      const { app, self, spare, db, chart } = await boxes();
+      const old = await spareToken(app, self, spare);
+      await chart(4, "evicted");
+      await chart(5, "serving-secondary");
+      const fresh = await spareToken(app, self, spare);
+      expect((await asAgent(db, fresh)).status).toBe(200);
+      expect((await asAgent(db, old)).status).toBe(401);
+    });
   });
 });

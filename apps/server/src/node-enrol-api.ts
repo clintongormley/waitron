@@ -1,12 +1,11 @@
 import "./errors.js";
 import type { Hono } from "hono";
-import { getConnInfo } from "@hono/node-server/conninfo";
 import { createErrorBoundary, readJsonBody, requireString } from "@waitron/server-kit";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { fencedOutNodeIds, servingPrimaryNodeId } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
-import { boxRefusal, isRecord, postToBox } from "./boot-peer-check.js";
+import { boxRefusal, isCertificateRefusal, isRecord, postToBox } from "./boot-peer-check.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { signAsThisBox } from "./handover-signing.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
@@ -17,17 +16,13 @@ import {
   type AgentEnrolAnswer,
   type AgentEnrolBody,
 } from "./print-agent-enrol-api.js";
+import { requestProvenFromBox } from "./request-from-box.js";
 import type { SpareSettingsExchange } from "./spare-settings.js";
-
-/** `::ffff:127.0.0.1` is IPv4 mapped into IPv6, which a dual-stack listener reports for a v4
- * loopback client. */
-const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 export interface NodeEnrolApiDeps {
   db: Database;
   nodeId: string;
-  /** Boot-captured. A fenced node's read-only gate refuses the POST with `node.read_only` before
-   * this is read; this is the refusal for any other node that is not primary and not a spare. */
+  /** Boot-captured: false on a mirror or a fenced node. */
   isPrimary: boolean;
   /**
    * Set on a mirror that is not fenced: a request is signed by this box and sent to the main box
@@ -64,7 +59,8 @@ const MAIN_REFUSALS: ReadonlySet<string> = new Set([
 export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "node.failed");
   const limiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
-  // The agent asks again every round while refused, so a lasting failure is logged once.
+  // The agent asks again every round while refused, so the forwarding warning is written only when
+  // its reason changes; the error boundary still logs each refusal it answers.
   let lastFailure: string | undefined;
 
   async function askMainBox(spare: NonNullable<NodeEnrolApiDeps["spare"]>, name: string) {
@@ -87,6 +83,8 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
     const base = contactUrl.replace(/\/+$/, "");
     if (spare.exchange.fetch === undefined && URL.parse(base)?.protocol !== "https:")
       return failed("not_https");
+    if (spare.exchange.fetch === undefined && spare.exchange.authorityOf?.(mainId) === undefined)
+      return failed("no_authority");
     const body: AgentEnrolBody = { name, toNodeId: mainId };
     const envelope = await signAsThisBox(
       { node: spare.node, ring: spare.ring, nodeId: deps.nodeId },
@@ -101,8 +99,8 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
         `${base}${PRINT_AGENT_ENROL_PATH}`,
         JSON.stringify(envelope),
       );
-    } catch {
-      return failed("unreachable");
+    } catch (error) {
+      return failed(isCertificateRefusal(error) ? "certificate" : "unreachable");
     }
     if (answer.status !== 201) {
       const code = boxRefusal(answer.text)?.code;
@@ -124,16 +122,12 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
   app.post("/api/node/enrol-self", (c) =>
     run(c, log, async () => {
       limiter.check(); // throws device.join_rate_limited (429)
-      const address = getConnInfo(c).remote.address;
-      if (address === undefined || !LOOPBACK.has(address)) {
-        throw new AppError("node.enrol_not_local", {});
-      }
+      if (!requestProvenFromBox(c)) throw new AppError("node.enrol_not_local", {});
       if (!deps.isPrimary && deps.spare === undefined)
         throw new AppError("node.enrol_unavailable", {});
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      if (deps.spare !== undefined && !deps.isPrimary)
-        return c.json(await askMainBox(deps.spare, name), 201);
+      if (deps.spare !== undefined) return c.json(await askMainBox(deps.spare, name), 201);
       const { token } = await withTransaction(deps.db, async (tx) => {
         return selfEnrolNodeAgent(tx, { nodeId: deps.nodeId, name });
       });

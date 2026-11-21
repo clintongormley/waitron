@@ -46,9 +46,10 @@ const STATUS = {
 const BODY_KEYS = ["name", "toNodeId"];
 
 /**
- * `POST /api/node/print-agent` — a box the held chart lists, and has not removed, asks the serving
- * main box for a token for the print agent running on it. The agent's row is the signer's, so each
- * box keeps at most one; a repeat gives that row a new token.
+ * `POST /api/node/print-agent` — another box asks the serving main box for a token for the print
+ * agent running on it, in an envelope signed under a key `peerKeyOf` trusts for it. The agent's row
+ * is the signer's, so each box keeps at most one; a repeat gives that row a new token. Only signed
+ * requests count against the rate limit, so unsigned traffic cannot hold a box's agent off.
  */
 export function mountPrintAgentEnrolApi(
   app: Hono,
@@ -61,16 +62,20 @@ export function mountPrintAgentEnrolApi(
   app.use(PRINT_AGENT_ENROL_PATH, peerBodyLimit(65536));
   app.post(PRINT_AGENT_ENROL_PATH, (c) =>
     run(c, log, async () => {
-      limiter.check();
       if (!deps.isPrimary) throw new AppError("node.enrol_unavailable", {});
       const raw = await readRawJsonBody<unknown>(c);
       const held = await readNodeMembership(deps.db);
-      const verdict = verifyEnvelope<unknown>(raw, "agent-enrol", await peerKeyOf(deps, held));
+      const keyOf = await peerKeyOf(deps, held);
+      // This box's own agent enrols over loopback (`node-enrol-api.ts`), never here.
+      const verdict = verifyEnvelope<unknown>(raw, "agent-enrol", (id) =>
+        id === deps.nodeId ? undefined : keyOf(id),
+      );
       if (!verdict.valid) {
         if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose")
           refuseRequest("envelope");
         throw new AppError("handover.peer_unknown", {});
       }
+      limiter.check();
       const body = verdict.body;
       if (
         body === null ||
