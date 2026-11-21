@@ -660,6 +660,7 @@ it("confirms an empty top-level folder preview and keeps unrelated ticks", async
   expect(count(el)).toBe("1 selected");
   expect((await nameCell(el, "bread")).closest("tr")!.querySelector("input")!.checked).toBe(true);
 });
+
 it("a toolbar move uses its own selection after a folder drop was cancelled", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
@@ -672,7 +673,11 @@ it("a toolbar move uses its own selection after a folder drop was cancelled", as
   expect(el.api.moveProductItems).not.toHaveBeenCalled();
   await press(el, "move");
   await destination(el, "f");
-  await press(el, "confirm");
+  const confirm =
+    dialog(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm]")!;
+  await vi.waitFor(() => expect(confirm.disabled).toBe(false));
+  await confirm.updateComplete;
+  await userEvent.click(confirm);
   expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: ["bread"], categoryIds: [] },
     "f",

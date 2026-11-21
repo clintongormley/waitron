@@ -147,19 +147,22 @@ async function cancel(f: Fixture, route: "cancel" | "escape") {
   await f.browser.updateComplete;
 }
 
-it("Escape closes an untouched folder drop directly and leaves its selection", async () => {
-  const f = await fixture("move", {}, "f");
-  expect(value(f)).toBe("f");
-  expect.soft(protectedUnload()).toBe(false);
-  const closed = dialogClosed(f.modal);
-  await cancel(f, "escape");
-  expect((await question(f)).open).toBe(false);
-  await closed;
-  expect(f.api.moveProductItems).not.toHaveBeenCalled();
-  expect(
-    f.browser.shadowRoot!.querySelector("[data-test=selected-count]")!.textContent!.trim(),
-  ).toBe("1 selected");
-});
+it.each(["cancel", "escape"] as const)(
+  "%s closes an untouched folder drop directly and leaves its selection",
+  async (route) => {
+    const f = await fixture("move", {}, "f");
+    expect(value(f)).toBe("f");
+    expect.soft(protectedUnload()).toBe(false);
+    const closed = dialogClosed(f.modal);
+    await cancel(f, route);
+    expect((await question(f)).open).toBe(false);
+    await closed;
+    expect(f.api.moveProductItems).not.toHaveBeenCalled();
+    expect(
+      f.browser.shadowRoot!.querySelector("[data-test=selected-count]")!.textContent!.trim(),
+    ).toBe("1 selected");
+  },
+);
 
 for (const operation of ["move", "delete"] as const) {
   for (const route of ["escape"] as const) {
