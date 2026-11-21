@@ -14,6 +14,7 @@ import type {
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
+  ReaderStopResult,
   RefundAnswer,
   RefundLookup,
   RefundLookupQuery,
@@ -205,10 +206,23 @@ export class SumUpCloudProvider implements PaymentProvider {
     // T1.5
     await this.inTransaction((tx) => stampAttemptingRef(tx, key, created.clientTransactionId));
 
+    let collecting = true;
+    let stopInFlight: Promise<ReaderStopResult> | undefined;
+    params.onReaderCheckout?.(() => {
+      if (!collecting) return Promise.resolve("unavailable");
+      stopInFlight ??= this.stopReader(readerId, () => collecting).finally(() => {
+        stopInFlight = undefined;
+      });
+      return stopInFlight;
+    });
+
     // Poll — outside any transaction.
     const outcome = await this.pollUntilResolved({
       clientTransactionId: created.clientTransactionId,
     });
+    collecting = false;
+    // SumUp stops the reader's current checkout. Keep this attempt live until dispatch ends.
+    await stopInFlight;
 
     // T2 — only a captured or failed outcome is a basis for it.
     if (outcome.kind === "pending" || outcome.kind === "deferred") {
@@ -260,6 +274,18 @@ export class SumUpCloudProvider implements PaymentProvider {
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       card,
     };
+  }
+
+  private async stopReader(readerId: string, collecting: () => boolean): Promise<ReaderStopResult> {
+    try {
+      const status = await this.opts.client.readerStatus(readerId);
+      if (!collecting() || !status.online || status.activity !== "WAITING_FOR_CARD") {
+        return "unavailable";
+      }
+      return (await this.opts.client.terminateCheckout(readerId)) ? "requested" : "refused";
+    } catch {
+      return "unknown";
+    }
   }
 
   private async pendingResult(paymentRef: string): Promise<PaymentResult> {

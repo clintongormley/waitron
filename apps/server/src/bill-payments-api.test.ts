@@ -5238,16 +5238,17 @@ describe("a reader payment on a device that changes profile while it is starting
       log,
     );
     const billId = await bill120();
-    const pay = async (amount: string) =>
+    const cookie = `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    const pay = async (amount: string, submissionId = randomUUID()) =>
       app.request(`/api/working-orders/${billId}/payments`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           "x-request-id": "reader-payment",
-          cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+          cookie,
         },
         body: JSON.stringify({
-          submissionId: randomUUID(),
+          submissionId,
           expectedEdit: await inTx((tx) => readBillEditState(tx, billId)),
           kind: "contribution",
           amount,
@@ -5262,6 +5263,21 @@ describe("a reader payment on a device that changes profile while it is starting
       billId,
       client,
       pay,
+      provider,
+      anotherSession: async () => {
+        const other = await inTx((tx) =>
+          loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+        );
+        return `${SESSION_COOKIE}=${other.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+      },
+      cancel: (submissionId: string, as = cookie) =>
+        app.request(
+          `/api/working-orders/${billId}/payments/${encodeURIComponent(submissionId)}/cancel`,
+          {
+            method: "POST",
+            headers: { cookie: as },
+          },
+        ),
       moveOnNextCollect: () => {
         moveOnNextCollect = true;
       },
@@ -5307,6 +5323,64 @@ describe("a reader payment on a device that changes profile while it is starting
     expect(retry.status).toBe(200);
     expect(await retry.json()).toMatchObject({ outcome: "received" });
   });
+
+  it.each(["failed", "captured"] as const)(
+    "binds reader stop to the original payment and keeps the final %s outcome",
+    async (final) => {
+      const { billId, client, provider, pay, cancel, anotherSession } = await readerOnStripe();
+      if (final === "failed") {
+        vi.spyOn(client, "readerOutcome").mockResolvedValueOnce({ status: "failed" });
+      }
+      const stop = vi.fn(() => Promise.resolve("requested" as const));
+      let offered!: () => void;
+      let settle!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        offered = resolve;
+      });
+      const settled = new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      const collect = provider.collect.bind(provider);
+      vi.spyOn(provider, "collect").mockImplementationOnce(async (params) => {
+        params.onReaderCheckout?.(stop);
+        offered();
+        await settled;
+        return collect(params);
+      });
+      const submissionId = randomUUID();
+      const original = pay("30.00", submissionId);
+      try {
+        await ready;
+        for (const cookie of [venue.cookie, await anotherSession()]) {
+          const wrongSession = await cancel(submissionId, cookie);
+          expect(wrongSession.status).toBe(200);
+          expect(await wrongSession.json()).toEqual({ outcome: "unavailable" });
+        }
+        const wrongSubmission = await cancel(randomUUID());
+        expect(await wrongSubmission.json()).toEqual({ outcome: "unavailable" });
+        expect(stop).not.toHaveBeenCalled();
+
+        const response = await cancel(submissionId);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ outcome: "requested" });
+        expect(stop).toHaveBeenCalledTimes(1);
+      } finally {
+        settle();
+        await original;
+      }
+
+      const answer = await (await original).json();
+      if (final === "failed") {
+        expect(answer).toMatchObject({ outcome: "declined", balance: { reserved: "0.00" } });
+        expect(await (await pay("30.00")).json()).toMatchObject({ outcome: "received" });
+      } else {
+        expect(answer).toMatchObject({ outcome: "received", balance: { received: "30.00" } });
+        expect(await (await pay("30.00", submissionId)).json()).toMatchObject(answer);
+        expect(await billPaymentStates(billId)).toEqual([{ state: "received" }]);
+      }
+      expect(await (await cancel(submissionId)).json()).toEqual({ outcome: "unavailable" });
+    },
+  );
 
   it("returns the reader's reason when a card is declined", async () => {
     const log = vi.fn<Logger>();

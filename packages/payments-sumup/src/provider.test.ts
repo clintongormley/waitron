@@ -11,7 +11,12 @@ import { CORE_MIGRATIONS, devices } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, diskFullIn } from "@waitron/shared";
-import { ChargeNotSavedError, PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
+import {
+  ChargeNotSavedError,
+  PAYMENTS_MIGRATIONS,
+  payments,
+  type RequestReaderStop,
+} from "@waitron/payments";
 import {
   billPaymentOfRow,
   ownsEveryPayment,
@@ -288,6 +293,99 @@ describe("SumUpCloudProvider.collect", () => {
     expect(result).toMatchObject({ state: "failed", settledAt: null });
     expect((await row(result.paymentRef)).state).toBe("failed");
   });
+
+  it("keeps the attempt pending until a requested reader stop ends", async () => {
+    const { fake, provider, params, row } = await setup(suite, (f) => f.declineNext());
+    const readerStatus = vi.spyOn(fake, "readerStatus").mockResolvedValue({
+      online: true,
+      activity: "WAITING_FOR_CARD",
+    });
+    let finishStop!: () => void;
+    const terminate = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishStop = () => resolve(true);
+        }),
+    );
+    vi.spyOn(fake, "terminateCheckout").mockImplementation(terminate);
+    let requestStop: RequestReaderStop | undefined;
+    let stopped: Promise<unknown> | undefined;
+
+    const collected = provider.collect({
+      ...params,
+      onReaderCheckout: (stop) => {
+        requestStop = stop;
+        stopped = stop();
+      },
+    });
+    try {
+      await vi.waitFor(() => expect(terminate).toHaveBeenCalledExactlyOnceWith("rdr_1"));
+      expect((await row(fake.lastCreate!.foreignTransactionId)).state).toBe("attempting");
+    } finally {
+      finishStop?.();
+      await collected;
+    }
+    await expect(stopped).resolves.toBe("requested");
+    await expect(collected).resolves.toMatchObject({ state: "failed" });
+    await expect(requestStop?.()).resolves.toBe("unavailable");
+    expect(terminate).toHaveBeenCalledTimes(1);
+    expect(readerStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends no stop when the payment finishes during the reader status read", async () => {
+    const { fake, provider, params } = await setup(suite);
+    let answerStatus!: () => void;
+    vi.spyOn(fake, "readerStatus").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerStatus = () => resolve({ online: true, activity: "WAITING_FOR_CARD" });
+        }),
+    );
+    const terminate = vi.spyOn(fake, "terminateCheckout");
+    const find = fake.findTransaction.bind(fake);
+    vi.spyOn(fake, "findTransaction").mockImplementationOnce(async (query) => {
+      const result = await find(query);
+      setTimeout(answerStatus, 0);
+      return result;
+    });
+    let stopped: Promise<unknown> | undefined;
+
+    const result = await provider.collect({
+      ...params,
+      onReaderCheckout: (stop) => {
+        stopped = stop();
+      },
+    });
+
+    expect(result.state).toBe("captured");
+    await expect(stopped).resolves.toBe("unavailable");
+    expect(terminate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["WAITING_FOR_PIN", false, "unavailable", 0],
+    ["WAITING_FOR_CARD", false, "refused", 1],
+    ["WAITING_FOR_CARD", null, "unknown", 1],
+  ] as const)(
+    "answers %s with %s acknowledgement as %s",
+    async (activity, reply, outcome, calls) => {
+      const { fake, provider, params } = await setup(suite, (f) => f.declineNext());
+      vi.spyOn(fake, "readerStatus").mockResolvedValue({ online: true, activity });
+      const terminate = vi.spyOn(fake, "terminateCheckout");
+      if (reply === null) terminate.mockRejectedValueOnce(new Error("timeout"));
+      let stopped: Promise<unknown> | undefined;
+      const result = await provider.collect({
+        ...params,
+        onReaderCheckout: (stop) => {
+          stopped = stop();
+        },
+      });
+
+      await expect(stopped).resolves.toBe(outcome);
+      expect(terminate).toHaveBeenCalledTimes(calls);
+      expect(result.state).toBe("failed");
+    },
+  );
 
   it("a cancelled checkout resolves failed", async () => {
     const { provider, params } = await setup(suite, (f) => f.cancelNext());

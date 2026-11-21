@@ -27,7 +27,12 @@ export interface ProviderCapabilities {
   partialRefund: boolean;
 }
 
+export type ReaderStopResult = "requested" | "unavailable" | "refused" | "unknown";
+export type RequestReaderStop = () => Promise<ReaderStopResult>;
+
 export interface CollectParams {
+  /** Offered only while this collection has a reader checkout that can be stopped. */
+  onReaderCheckout?: (requestStop: RequestReaderStop) => void;
   requestedBy?: string;
   /** The device the payment is started on, written on the provider's `payments` row. */
   origin: DeviceOrigin;

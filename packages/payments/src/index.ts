@@ -15,6 +15,8 @@ export type {
   PaymentResultState,
   PaymentState,
   ProviderCapabilities,
+  ReaderStopResult,
+  RequestReaderStop,
   RefundAnswer,
   RefundLookup,
   RefundLookupQuery,

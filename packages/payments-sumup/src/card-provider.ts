@@ -31,6 +31,7 @@ const UNKNOWN_MERCHANT = "";
 const CLIENT_METHODS = [
   "historyPage",
   "createCheckout",
+  "terminateCheckout",
   "findTransaction",
   "refund",
   "sendRefund",

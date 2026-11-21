@@ -93,6 +93,7 @@ export interface SumUpClient {
     foreignTransactionId: string;
     omitAffiliate?: boolean;
   }): Promise<CreateCheckoutOutcome>;
+  terminateCheckout(readerId: string): Promise<boolean>;
   findTransaction(query: TransactionQuery): Promise<SumUpTransaction | null>;
   refund(params: {
     transactionId: string;

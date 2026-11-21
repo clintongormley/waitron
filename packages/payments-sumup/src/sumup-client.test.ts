@@ -381,6 +381,26 @@ describe("sumupClient reader management", () => {
     await expect(client.listReaders()).rejects.toThrow("sumup GET readers: HTTP 401");
   });
 
+  it.each([
+    [202, true],
+    [422, false],
+  ])("maps terminate HTTP %i to acknowledgement %s", async (status, acknowledged) => {
+    const s = stub(() => ({ status }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    await expect(Promise.resolve().then(() => client.terminateCheckout("rdr_1"))).resolves.toBe(
+      acknowledged,
+    );
+    expect(s.calls).toEqual([["POST", "/v0.1/merchants/MC/readers/rdr_1/terminate"]]);
+  });
+
+  it("keeps a server error on terminate uncertain", async () => {
+    const s = stub(() => ({ status: 503 }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+
+    await expect(client.terminateCheckout("rdr_1")).rejects.toThrow("HTTP 503");
+  });
+
   it("rejects a reader status SumUp refuses", async () => {
     const s = stub(() => ({ status: 404, body: { title: "Reader not found" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });

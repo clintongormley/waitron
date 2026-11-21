@@ -58,6 +58,7 @@ import {
   recordManualCardPayment,
 } from "@waitron/payments";
 import type {
+  CollectParams,
   PaymentProvider,
   PaymentResult,
   PaymentResultState,
@@ -2119,6 +2120,7 @@ function chargedNotRecorded(
 /** {@link takeReaderBillPayment}'s deps: the fiscal ones, and the reader's provider. */
 export type ReaderBillPaymentDeps = BillPaymentDeps & {
   provider: PaymentProvider;
+  onReaderCheckout?: CollectParams["onReaderCheckout"];
   settleCapturedReplay?: (
     tx: Transaction,
     paymentId: string,
@@ -2419,6 +2421,7 @@ export async function takeReaderBillPayment(
         simulationOutcome: req.simulationOutcome,
         billPaymentId: payment.id,
         requestedBy: operator.personId,
+        onReaderCheckout: deps.onReaderCheckout,
       });
     } catch (error) {
       if (isAppError(error) && REFUSED_START.has(error.code)) {

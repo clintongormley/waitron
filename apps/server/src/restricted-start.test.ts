@@ -41,6 +41,7 @@ describe("startRestricted", () => {
 
   it.each([
     "/api/working-orders/wo-1/payments",
+    "/api/working-orders/wo-1/payments/sub-1/cancel",
     "/api/working-orders/wo-1/payments/pay-1/refunds",
     "/api/transactions/s-1/refunds",
     "/api/tender-refunds/r-1/retry",

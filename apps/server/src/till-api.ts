@@ -1308,6 +1308,7 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "POST /api/dead-ends/draft",
   "POST /api/dead-ends/order",
   "POST /api/working-orders/:id/payments/preview",
+  "POST /api/working-orders/:id/payments/:submissionId/cancel",
   "POST /api/working-orders/:id/adjustments/preview",
   "POST /api/parties/:id/allergy/send-preview",
   "POST /api/bills/:id/move/allergy-preview",

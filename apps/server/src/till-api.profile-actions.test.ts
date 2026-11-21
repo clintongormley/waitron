@@ -265,6 +265,13 @@ const ROUTES: readonly Row[] = [
     forbidden("pay"),
     billPayment("card", "reader"),
   ],
+  [
+    "POST",
+    `/api/working-orders/${id}/payments/${id}/cancel`,
+    "integrated-card-payment",
+    forbidden("pay"),
+    {},
+  ],
   preparing("POST", `/api/orders/${id}/ready`),
   handingOver("POST", `/api/orders/${id}/collect`),
   ordering("POST", `/api/orders/${id}/reprint`),

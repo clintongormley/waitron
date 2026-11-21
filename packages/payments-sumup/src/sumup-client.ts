@@ -284,6 +284,15 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         clientTransactionId: data.client_transaction_id,
       };
     },
+    async terminateCheckout(readerId: string): Promise<boolean> {
+      const status = await callForStatus(
+        "POST",
+        `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}/terminate`,
+      );
+      if (status === 202) return true;
+      if (status >= 400 && status < 500) return false;
+      throw new Error(`sumup POST terminate: HTTP ${status}`);
+    },
     async findTransaction(q: TransactionQuery): Promise<SumUpTransaction | null> {
       const param =
         "clientTransactionId" in q

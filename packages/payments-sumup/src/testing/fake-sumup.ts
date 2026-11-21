@@ -291,6 +291,10 @@ export class FakeSumUp implements SumUpClient {
     );
   }
 
+  terminateCheckout(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
   deleteReader(readerId: string): Promise<void> {
     const i = this.readers.findIndex((x) => x.id === readerId);
     if (i !== -1) this.readers.splice(i, 1);
