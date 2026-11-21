@@ -64,6 +64,8 @@ The owner wants an escape hatch for that **rare one-off**, not a routine way to 
   reuses the same window.
 - A price limit per person, as discounts have. The permission is the control.
 - Allergens or diets on a custom item.
+- A description line under the name (owner, 2026-11-21: "probably ok for now"); a kitchen note
+  works as on any dish.
 - Saving a custom item as a real menu product for next time.
 
 ## Constraints
