@@ -3,10 +3,13 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  kitchenCourses,
   menus,
   menuItems,
   menuItemVariantOverrides,
   sections,
+  setMenuDishCourses,
+  setMenuVariantExclusions,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -693,15 +696,38 @@ describe("a set menu's revision after a sync with no earlier graph", () => {
     expect(await revision(set)).toEqual(saved);
   });
 
-  it("moves the revision of a set menu whose stale row it reset", async () => {
-    const f = await fixture();
-    const set = await cleanSetMenu(f);
-    await app((tx) =>
-      tx.insert(menuItems).values({ menuId: set, productId: f.burger, grossPrice: 300 }),
-    );
-    await app((tx) => syncMenuOffers(tx, [set]));
-    expect(await revision(set)).not.toEqual(saved);
-  });
+  it.each(["a price", "a variant price", "a variant exclusion", "a dish course"])(
+    "moves the revision of a set menu whose leftover row held only %s",
+    async (held) => {
+      const f = await fixture();
+      const set = await cleanSetMenu(f);
+      await app(async (tx) => {
+        const [row] = await tx
+          .insert(menuItems)
+          .values({
+            menuId: set,
+            productId: f.lemonade,
+            grossPrice: held === "a price" ? 300 : null,
+          })
+          .returning({ id: menuItems.id });
+        const menuItemId = row!.id;
+        const variant = { menuItemId, productId: f.lemonade, variantId: f.large };
+        if (held === "a variant price")
+          await tx.insert(menuItemVariantOverrides).values({ ...variant, price: 300 });
+        if (held === "a variant exclusion")
+          await tx.insert(setMenuVariantExclusions).values(variant);
+        if (held === "a dish course") {
+          const [course] = await tx
+            .insert(kitchenCourses)
+            .values({ name: "Starters" })
+            .returning({ id: kitchenCourses.id });
+          await tx.insert(setMenuDishCourses).values({ menuItemId, courseId: course!.id });
+        }
+      });
+      await app((tx) => syncMenuOffers(tx, [set]));
+      expect(await revision(set)).not.toEqual(saved);
+    },
+  );
 
   it("moves the revision of a set menu missing a row for a dish it offers", async () => {
     const f = await fixture();
