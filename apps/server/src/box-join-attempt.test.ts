@@ -100,6 +100,20 @@ describe("the new box's join attempt", () => {
     vi.useRealTimers();
   });
 
+  /** The main box restarts, so its store no longer knows any request. */
+  function restartMainBox() {
+    requests = createBoxJoinRequests();
+    app = new Hono();
+    mountBoxJoinApi(app, {
+      appDb: suite.db,
+      node: suite.node,
+      ring: RING,
+      designated: { nodeId: mainNodeId },
+      requests,
+      now: () => new Date(NOW),
+    });
+  }
+
   const mainKey = () => readNodeIdentityKey(suite.node, RING, mainNodeId);
 
   async function bundleFor(over: Partial<MirrorBundle> = {}): Promise<MirrorBundle> {
@@ -207,10 +221,13 @@ describe("the new box's join attempt", () => {
         privateKey: expect.any(String),
       },
       bundle,
+      storeUrl: sent[0]!.body.storeUrl,
     });
     expect(publicHalf(joined!.identity.privateKey)).toBe(joined!.identity.publicKey);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    await expect(attempt.start(MAIN_URL)).rejects.toMatchObject({ code: "mirror.join_waiting" });
+    expect(attempt.joined()).toEqual(joined);
   });
 
   it("collects a lost approved answer at the next poll", async () => {
@@ -276,17 +293,7 @@ describe("the new box's join attempt", () => {
     ],
     [
       "a main box that no longer knows the request",
-      () => {
-        app = new Hono();
-        mountBoxJoinApi(app, {
-          appDb: suite.db,
-          node: suite.node,
-          ring: RING,
-          designated: { nodeId: mainNodeId },
-          requests: createBoxJoinRequests(),
-          now: () => new Date(NOW),
-        });
-      },
+      () => restartMainBox(),
       { state: "failed", error: "mirror.join_not_found" },
     ],
   ])("keeps %s as the attempt's state and stops polling", async (_name, end, state) => {
@@ -301,7 +308,7 @@ describe("the new box's join attempt", () => {
     expect(paths()).toEqual(["hello", "reveal", "poll"]);
   });
 
-  it("keeps polling past an ended answer whose reason it does not know", async () => {
+  it("ends the attempt on an ended answer whose reason it does not know", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const ending: typeof boxExchange = async (url, options) => {
       const answer = await exchange(url, options);
@@ -311,9 +318,26 @@ describe("the new box's join attempt", () => {
     const attempt = createBoxJoinAttempt(deps({ exchange: ending }));
     await attempt.start(MAIN_URL);
 
-    await vi.advanceTimersByTimeAsync(4_000);
-    expect(attempt.current()).toMatchObject({ state: "waiting" });
-    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual({ state: "ended", reason: "unknown" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+  });
+
+  it.each<[string, (requestId: string) => void]>([
+    ["ended", (requestId) => void requests.dismiss(requestId)],
+    ["failed", () => restartMainBox()],
+  ])("starts again over an attempt that has %s", async (state, end) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+    end(requests.listed()[0]!.id);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toMatchObject({ state });
+
+    const shown = await settled(attempt.start(MAIN_URL));
+    expect(attempt.current()).toMatchObject({ state: "waiting", code: shown.code });
+    expect(paths()).toEqual(["hello", "reveal", "poll", "hello", "reveal"]);
   });
 
   it.each([

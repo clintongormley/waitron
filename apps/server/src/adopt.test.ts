@@ -130,9 +130,12 @@ const CREDENTIAL: AdoptCredential = {
   password: "dashPass123",
 };
 const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;
+/** Not the address `deps()` would give, so a pair link holding it was taken from the attempt. */
+const HELLO_STORE_URL = "https://box-aaaa.waitron.local:7600";
 const joined = (bundle = makeBundle(), identity = STANDBY): JoinedBox => ({
   identity,
   bundle,
+  storeUrl: HELLO_STORE_URL,
 });
 const ADVERTISED_ORIGIN = "https://standby.deli.test";
 const NO_HOOKS: AdoptHooks = { beforeFirstWrite: async () => {} };
@@ -411,7 +414,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       state: "awaiting_copy",
       peerNodeId: DESIGNATED.nodeId,
       peerPublicKey: PRIMARY_KEYS.publicKey,
-      storeUrl: "https://standby.deli.test:7443",
+      storeUrl: HELLO_STORE_URL,
       venueId: PAIR_STORE.venueId,
       accessKeyId: PAIR_STORE.accessKeyId,
       ringVersion: BUNDLE_RING.version,

@@ -62,13 +62,18 @@ export interface BoxJoinAttemptDeps {
 export type JoinAttemptState =
   | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; expiresAt: string }
   | { state: "approved"; code: string }
-  | { state: "ended"; reason: JoinEndReason }
+  /** `unknown`: the main box ended the request for a reason this box does not know. */
+  | { state: "ended"; reason: JoinEndReason | "unknown" }
   | { state: "failed"; error: ErrorCode };
 
-/** What an approved attempt hands adopt: the identity it joined under and the main box's bundle. */
+/**
+ * What an approved attempt hands adopt: the identity it joined under, the main box's bundle and the
+ * store address its hello sent, which the main box recorded.
+ */
 export interface JoinedBox {
   identity: StandbyIdentity;
   bundle: MirrorBundle;
+  storeUrl: string;
 }
 
 interface Attempt {
@@ -227,8 +232,8 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       attempt.state = { state: "approved", code: attempt.code };
       return;
     }
-    const reason = isRecord(answer) ? JOIN_END_REASONS.find((r) => r === answer.reason) : undefined;
-    if (isRecord(answer) && answer.state === "ended" && reason !== undefined) {
+    if (isRecord(answer) && answer.state === "ended") {
+      const reason = JOIN_END_REASONS.find((r) => r === answer.reason) ?? "unknown";
       attempt.state = { state: "ended", reason };
       return;
     }
@@ -254,9 +259,11 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     await sendCancel(attempt);
   }
 
-  /** Hello and reveal; answers the code to show, or throws the refusal. */
+  /** Hello and reveal; answers the code to show, or throws the refusal. Replaces an attempt that
+   * has ended or failed. */
   async function start(primaryUrl: string) {
-    if (current !== null || starting !== null) throw new AppError("mirror.join_waiting", {});
+    const live = current?.state.state === "waiting" || current?.state.state === "approved";
+    if (live || starting !== null) throw new AppError("mirror.join_waiting", {});
     const opening = open(primaryUrl);
     starting = opening;
     try {
@@ -397,6 +404,8 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     cancel,
     current: (): JoinAttemptState | null => current?.state ?? null,
     joined: (): JoinedBox | null =>
-      current?.bundle === undefined ? null : { identity: current.identity, bundle: current.bundle },
+      current?.bundle === undefined
+        ? null
+        : { identity: current.identity, bundle: current.bundle, storeUrl: current.hello.storeUrl },
   };
 }

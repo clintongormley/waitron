@@ -111,11 +111,6 @@ export interface AdoptDeps {
   environmentKeys: Readonly<Record<string, string>>;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
-  /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
-   * can route here after a failover. */
-  advertisedOrigin: string;
-  /** This box's store port; its name and this port are sent as the spare's store address (D15). */
-  spareStorePort: number;
   /** The environment this box's `WAITRON_ENV` names, or `null` when it is unset or empty: the box
    * then takes the main box's. */
   environment: DeploymentEnvironment | null;
@@ -138,6 +133,11 @@ export interface AdoptDeps {
 }
 
 export interface PasswordAdoptDeps extends AdoptDeps {
+  /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
+   * can route here after a failover. */
+  advertisedOrigin: string;
+  /** This box's store port; its name and this port are sent as the spare's store address (D15). */
+  spareStorePort: number;
   /** Sends the standby identity so the primary can reserve and endorse it. */
   fetchBundle: (
     primaryUrl: string,
@@ -153,13 +153,6 @@ export interface PasswordAdoptDeps extends AdoptDeps {
   ) => Promise<MirrorBundle>;
 }
 
-function spareStoreUrl(deps: AdoptDeps, nodeId: string): URL {
-  const storeUrl = new URL(ownContactUrl(deps.advertisedOrigin, nodeId));
-  storeUrl.protocol = "https:";
-  storeUrl.port = String(deps.spareStorePort);
-  return storeUrl;
-}
-
 /** Joins with the main box's sign-in: makes this box's identity and fetches the bundle with it. */
 export async function adoptWithPassword(
   deps: PasswordAdoptDeps,
@@ -167,19 +160,24 @@ export async function adoptWithPassword(
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
   const standby = generateStandbyIdentity();
+  const contactUrl = ownContactUrl(deps.advertisedOrigin, standby.nodeId);
+  const store = new URL(contactUrl);
+  store.protocol = "https:";
+  store.port = String(deps.spareStorePort);
+  const storeUrl = store.origin;
   const bundle = await deps.fetchBundle(
     req.primaryUrl,
     req.credential,
     {
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,
-      contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
-      storeUrl: spareStoreUrl(deps, standby.nodeId).origin,
+      contactUrl,
+      storeUrl,
       at: deps.now().getTime(),
     },
     req.confirmedCaPem,
   );
-  return adoptFromPrimary(deps, { identity: standby, bundle }, hooks);
+  return adoptFromPrimary(deps, { identity: standby, bundle, storeUrl }, hooks);
 }
 
 /**
@@ -195,8 +193,7 @@ export async function adoptFromPrimary(
   joined: JoinedBox,
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
-  const { identity: standby, bundle } = joined;
-  const storeUrl = spareStoreUrl(deps, standby.nodeId);
+  const { identity: standby, bundle, storeUrl } = joined;
   const { designated } = bundle;
 
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
@@ -290,7 +287,7 @@ export async function adoptFromPrimary(
       state: "awaiting_copy",
       peerNodeId: designated.nodeId,
       peerPublicKey: bundle.primaryPublicKey,
-      storeUrl: storeUrl.origin,
+      storeUrl,
       ...bundle.store,
     });
     const { name } = await mintBreakGlassKeyTx(deps.ownerDb, tx, standby.nodeId, recovery);
