@@ -6,23 +6,17 @@ import {
   FormFeedback,
   saveActionState,
   submitOnEnter,
-  type AddressChosenDetail,
-  type AddressLookupProvider,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
-  type WtAddressLookup,
   type WtDialog,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-address-lookup.js";
-import { getCountryPack, oneLineAddress } from "@waitron/country-packs";
 import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 export interface VenueIdentityChanged {
@@ -37,9 +31,6 @@ export interface TaxpayerFieldSettings {
   dataTest: string;
   heading: StringKey;
   label: StringKey;
-  hint?: StringKey;
-  /** Offers the address search above the field, which a chosen address fills as one line. */
-  addressSearch?: true;
   note: StringKey;
   changedElsewhere: StringKey;
   /** Reported when a save is refused after its dialog has closed. */
@@ -74,7 +65,7 @@ function normalized(value: string): string {
 export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   protected abstract readonly settings: TaxpayerFieldSettings;
 
-  /** What the stored value, or an address chosen in the search, opens as. */
+  /** What the stored value opens as. */
   protected draftFor(stored: string): Draft {
     return stored as Draft;
   }
@@ -92,39 +83,28 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
       : {};
   }
 
-  /** The fields a `venue.detail_invalid` refusal for this field is shown under. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- named for the subclasses that read them
-  protected refusedFields(_reason: string, _draft: Draft): string[] {
-    return [this.settings.field];
+  /** A `venue.detail_invalid` refusal for this field, `message`, by the field it is shown under;
+   *  focus goes to the first. */
+  protected refusalFor(_reason: string, _draft: Draft, message: string): Record<string, string> {
+    return { [this.settings.field]: message };
   }
 
-  /** Draws the fields. */
-  protected renderFields(view: TaxpayerFieldsView<Draft>): TemplateResult {
-    const settings = this.settings;
-    return html`<wt-input
-      name=${settings.field}
-      required
-      label=${t(settings.label)}
-      hint=${settings.hint === undefined ? "" : t(settings.hint)}
-      .value=${view.draft as string}
-      .error=${view.errors[settings.field] ?? ""}
-      ?disabled=${view.busy}
-      @keydown=${view.submitOnEnter}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        view.change(event.detail.value as Draft);
-      }}
-    ></wt-input>`;
-  }
+  /** Errors kept by these names belong to no field: they are the bottom message. */
+  protected readonly unplacedErrors: ReadonlySet<string> = new Set();
+
+  /** When the dialog opens and when its draft is restored. */
+  protected reset(): void {}
+
+  /** After the person changes a field. */
+  protected typed(): void {}
+
+  protected abstract renderFields(view: TaxpayerFieldsView<Draft>): TemplateResult;
 
   static override styles = [
     baseStyles,
     css`
       :host {
         display: contents;
-      }
-      wt-address-lookup {
-        margin-block-end: var(--wt-space-3);
       }
       .note {
         margin: var(--wt-space-3) 0 0;
@@ -135,9 +115,6 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) lateRefusalFor?: (key: StringKey) => () => void;
-  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
-  /** The business's country: the search looks there, and an address elsewhere fills nothing. */
-  @property({ attribute: false }) countryCode = "";
 
   /** The stored spelling the dialog opened with, sent as `expected`; null while it is shut. */
   @state() private opened: string | null = null;
@@ -146,7 +123,6 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
   /** A refusal's sentence by field name, kept until a field changes or Save is pressed again. */
   @state() private refusal: Record<string, string> = {};
   @state() private bottom = "";
-  @state() private foreignAddress = false;
 
   readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
@@ -163,7 +139,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     this.#feedback.reset();
     this.refusal = {};
     this.bottom = "";
-    this.foreignAddress = false;
+    this.reset();
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
       id: {},
       current: () => this.draft,
@@ -173,9 +149,8 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
         this.draft = value;
         this.refusal = {};
         this.bottom = "";
-        this.foreignAddress = false;
         this.#feedback.reset();
-        this.#cancelAddressSearch();
+        this.reset();
       },
     });
     this.#leave = coordinator;
@@ -216,55 +191,24 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     return this.#feedback.attempted ? this.fieldErrors(this.draft) : {};
   }
 
-  #change(draft: Draft): void {
-    if (this.#replace(draft)) this.#cancelAddressSearch();
+  /** Whether the draft can change now: the dialog is open and no save is on its way. */
+  protected get editable(): boolean {
+    return this.opened !== null && !this.busy;
   }
 
-  #replace(draft: Draft): boolean {
-    if (this.opened === null || this.busy) return false;
-    this.draft = draft;
+  #change(draft: Draft): void {
+    if (this.replaceDraft(() => draft)) this.typed();
+  }
+
+  /** Replaces the draft, as a person's change does, unless it cannot change now. Any refusal
+   *  shown goes, as it was for the line the draft made. */
+  protected replaceDraft(update: (draft: Draft) => Draft): boolean {
+    if (!this.editable) return false;
+    this.draft = update(this.draft);
     this.refusal = {};
     this.bottom = "";
     this.#scope?.changed();
     return true;
-  }
-
-  /** So an address still on its way cannot overwrite what the person typed or restored. */
-  #cancelAddressSearch(): void {
-    this.renderRoot.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
-  }
-
-  #addressChosen(event: CustomEvent<AddressChosenDetail>): void {
-    event.stopPropagation();
-    if (this.opened === null || this.busy) return;
-    const address = event.detail.address;
-    const pack = getCountryPack(this.countryCode);
-    this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
-    if (pack !== undefined && !this.foreignAddress)
-      this.#replace(this.draftFor(oneLineAddress(pack, address)));
-  }
-
-  #addressSearch(): TemplateResult {
-    return html`<wt-address-lookup
-      name="domicile-search"
-      .provider=${this.addressProvider}
-      country-code=${this.countryCode}
-      label=${t("venue_details.address_lookup.label")}
-      placeholder=${t("venue_details.address_lookup.placeholder")}
-      no-results-label=${t("venue_details.address_lookup.no_results")}
-      unavailable-label=${t("venue_details.address_lookup.unavailable")}
-      .message=${
-        this.foreignAddress
-          ? fill("venue_details.address_lookup.other_country", {
-              country: new Intl.DisplayNames([currentLocale()], { type: "region" }).of(
-                this.countryCode,
-              )!,
-            })
-          : ""
-      }
-      ?disabled=${this.busy}
-      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#addressChosen(event)}
-    ></wt-address-lookup>`;
   }
 
   async #save(): Promise<void> {
@@ -320,10 +264,12 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
           ...this.settings.refusals,
         };
         const reason = String(params.reason);
-        const message = t(refusals[reason] ?? "venue_details.invalid");
-        const fields = this.refusedFields(reason, draft);
-        this.refusal = Object.fromEntries(fields.map((name) => [name, message]));
-        await this.#focusField(fields[0]!);
+        this.refusal = this.refusalFor(
+          reason,
+          draft,
+          t(refusals[reason] ?? "venue_details.invalid"),
+        );
+        await this.#focusField(Object.keys(this.refusal)[0]!);
       } else {
         this.bottom =
           code === "venue.detail_changed" ? t(this.settings.changedElsewhere) : codeMessage(code);
@@ -333,7 +279,9 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
 
   async #focusField(name: string): Promise<void> {
     await this.updateComplete;
-    this.#dialog()?.querySelector<HTMLElement>(`:is(wt-input,wt-combobox)[name=${name}]`)?.focus();
+    this.#dialog()
+      ?.querySelector<HTMLElement>(`:is(wt-input,wt-combobox,wt-switch)[name=${name}]`)
+      ?.focus();
   }
 
   override render(): TemplateResult {
@@ -342,7 +290,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     const errors = { ...own, ...this.refusal };
     const bottom = this.#feedback.message(
       { request: this.bottom, ...errors },
-      new Set(Object.keys(errors)),
+      new Set(Object.keys(errors).filter((name) => !this.unplacedErrors.has(name))),
       t("form.fix_fields"),
     );
     const action = saveActionState(this.#scope);
@@ -360,7 +308,7 @@ export abstract class TaxpayerFieldDialog<Draft = string> extends LitElement {
     >
       ${
         open
-          ? html`${settings.addressSearch ? this.#addressSearch() : nothing}${this.renderFields({
+          ? html`${this.renderFields({
                 draft: this.draft,
                 errors,
                 busy: this.busy,

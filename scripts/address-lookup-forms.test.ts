@@ -67,7 +67,7 @@ describe("address forms offer the shared address search", () => {
       expect.arrayContaining([
         "apps/setup/src/screens/venue-screen.ts",
         "apps/dashboard/src/screens/venue-details-panel.ts",
-        "apps/dashboard/src/screens/taxpayer-field-dialog.ts",
+        "apps/dashboard/src/screens/registered-address-dialog.ts",
         "apps/till/src/widgets/invoice-recipient-dialog.ts",
         ...Object.keys(WAITING),
       ]),

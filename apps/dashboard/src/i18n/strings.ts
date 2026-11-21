@@ -1337,6 +1337,11 @@ export const en = {
   "venue_details.taxpayer_domicile": "Registered business address",
   "venue_details.change_taxpayer_domicile": "Change registered address",
   "venue_details.registered_province": "Province (optional)",
+  "venue_details.registered_same": "Same as the venue's address",
+  "venue_details.registered_same_hint":
+    "Copies the venue's address when you save. Later changes to the venue's address do not change it.",
+  "venue_details.registered_same_unusable":
+    "The venue's address could not be used as the registered business address. Check the venue's address, or turn off “Same as the venue's address” and enter the registered address.",
   "venue_details.registered_postal_code": "Enter a valid postcode.",
   "venue_details.registered_province_mismatch": "Choose the province the postcode is in.",
   "venue_details.registered_city_comma": "Write the city without a comma.",
@@ -5914,6 +5919,11 @@ export const es: Record<StringKey, string> = {
   "venue_details.taxpayer_domicile": "Domicilio fiscal del negocio",
   "venue_details.change_taxpayer_domicile": "Cambiar domicilio fiscal",
   "venue_details.registered_province": "Provincia (opcional)",
+  "venue_details.registered_same": "Igual que la dirección del local",
+  "venue_details.registered_same_hint":
+    "Copia la dirección del local al guardar. Si después cambia la dirección del local, esta no cambia.",
+  "venue_details.registered_same_unusable":
+    "La dirección del local no se pudo usar como domicilio fiscal del negocio. Revisa la dirección del local o desactiva «Igual que la dirección del local» e introduce el domicilio fiscal.",
   "venue_details.registered_postal_code": "Introduce un código postal válido.",
   "venue_details.registered_province_mismatch": "Elige la provincia del código postal.",
   "venue_details.registered_city_comma": "Escribe la ciudad sin comas.",

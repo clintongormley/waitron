@@ -864,6 +864,7 @@ export class VenueDetailsPanel extends LitElement {
               .api=${this.api}
               .addressProvider=${this.addressProvider}
               .countryCode=${model.issuer.country}
+              .venueAddress=${model.details}
               .lateRefusalFor=${this.lateRefusalFor}
               @venue-identity-changed=${identityChanged("taxpayerDomicile")}
               @venue-identity-stale=${identityStale}
