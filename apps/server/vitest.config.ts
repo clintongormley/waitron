@@ -16,7 +16,7 @@ export default defineConfig({
     ],
     // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s unless a
     // suite passes `timeoutMs`), so `hookTimeout` bounds the hooks left untimed: that helper's
-    // per-test reset and close, and any hook a test file writes for itself.
+    // close, and any hook a test file writes for itself.
     testTimeout: 120_000,
     hookTimeout: 180_000,
     exclude: [

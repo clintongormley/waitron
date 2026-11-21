@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // `useVenueDb` times its own beforeAll, so `hookTimeout` bounds its untimed afterEach/afterAll
+    // `useVenueDb` times its own beforeAll, so `hookTimeout` bounds its untimed afterAll
     // and a suite's own hooks; `testTimeout` covers a database opened inside an `it` body.
     testTimeout: 120_000,
     hookTimeout: 180_000,

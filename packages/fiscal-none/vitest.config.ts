@@ -6,7 +6,7 @@ export default defineConfig({
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     // `useVenueDb` passes its own budget to the `beforeAll` that migrates the database, and a hook's
-    // own timeout overrides `hookTimeout`, so this one reaches only the helper's per-test reset and
+    // own timeout overrides `hookTimeout`, so this one reaches only the helper's
     // close (`packages/db/src/testing/venue-db.ts`) and any untimed hook a test writes. Neither value
     // is sized to a need: both are margin for a loaded CI runner.
     testTimeout: 30_000,
