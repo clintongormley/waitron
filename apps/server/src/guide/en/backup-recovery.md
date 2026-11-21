@@ -190,13 +190,11 @@ fetch observations from other devices.
 Restoring replaces the database already on this server.
 
 Enter the server key, tick both statements and "These details are correct.", then choose
-**Proceed**. The invoice series is
-the code at the start of every invoice number; recovery creates new ones so the box never repeats
-the old box's numbers. After **Proceed** the page compares the clocks and creates the invoice series
+**Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
 check that both are right, then choose **Confirm the time**. It then shows
-**We've created these invoice series:** with the new invoice series. If you change the key or untick a box,
+**We've created these invoice series:** with each new series and what it is for. If you change the key or untick a box,
 the page stops until you choose **Proceed** again. Before **Proceed**, **Edit these details** goes
 back to choosing the backup.
 

@@ -207,13 +207,12 @@ observaciones en otros dispositivos.
 La restauración sustituye la base de datos que ya está en este servidor.
 
 Escribe la clave del servidor, marca las dos declaraciones y «Estos datos son
-correctos.», y elige **Continuar**. La serie de facturas es el código al principio de cada número de factura; la recuperación crea series
-nuevas para que el servidor nunca repita los números del servidor anterior. Después de **Continuar**, la
+correctos.», y elige **Continuar**. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Si el servidor no puede comprobar su hora
 por internet, la página muestra antes la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**. Después muestra **Hemos creado estas
-series de facturas:** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
+series de facturas:** con cada serie nueva y para qué sirve. Si cambias la clave o desmarcas una casilla, la página se
 detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Editar estos datos**
 vuelve a la elección de la copia.
 

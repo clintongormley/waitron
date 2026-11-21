@@ -25,7 +25,7 @@
   - Show each series with its label, for example "A-0CSQW — Standard".
   - Add a **Continue** button; the page moves on only when it is pressed.
   - Cut `seriesLine` (`recovery-hour.ts:96,126`) to one sentence: "Waitron will start new invoice series for this box."
-- **Restore too.** The restore flow uses the same element, so the Continue button applies there as well, and the restore screens' tests run.
+- **Restore too.** The restore flow uses the same element. It already waits for its own Restore button, so it gains the labels and the shorter sentence but no second button; the restore screens' tests run (as built, 21 November).
 
 ## PR 3: the emergency switch page shows the steps, not the paperwork
 

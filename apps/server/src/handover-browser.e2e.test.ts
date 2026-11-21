@@ -526,6 +526,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     });
     await page.locator('input[name="recovery-details-confirmed"]').check();
     await page.getByRole("button", { name: "Proceed", exact: true }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
     await page.getByText("This box has taken over the venue.", { exact: true }).waitFor();
     expect((await readNodeMode(placed.node, standby.nodeId)).mode).toBe("primary");
     expect(

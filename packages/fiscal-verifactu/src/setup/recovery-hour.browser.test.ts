@@ -8,8 +8,6 @@ import type {
   ModulePromotionEntry,
 } from "@waitron/module/src/setup-contract.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
-import { isMinuteIdentity } from "../hour-identity.js";
-import { seriesMatchBases } from "../allocation-identity.js";
 
 const binding = {
   module: "fiscal-verifactu",
@@ -296,11 +294,10 @@ it.each([
     expect(prepare).not.toHaveBeenCalled();
   },
 );
-const RESTORE_SERIES_LINE =
-  "When you press Proceed, Waitron creates new invoice series for this box, so its invoice numbers never repeat the old box's. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.";
+const RESTORE_SERIES_LINE = "Waitron will start new invoice series for this box.";
 const seriesLine = (el: Entry) =>
   el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.replace(/\s+/g, " ").trim();
-it("the key, both statements and the details tick send nothing until Proceed, and the page says what Proceed does", async () => {
+it("the key, both statements and the details tick send nothing until Proceed, and the page says new series will be made", async () => {
   const { prepare } = scripted();
   const { el } = await mount(prepare);
   fakeClock();
@@ -319,7 +316,7 @@ it("the key, both statements and the details tick send nothing until Proceed, an
     vi.useRealTimers();
   }
 });
-it("the page says what Proceed does only while the button reads Proceed, not during the wait after it", async () => {
+it("the page says new series will be made only while the button reads Proceed, not during the wait after it", async () => {
   const { prepare } = scripted([
     { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
     selected,
@@ -537,24 +534,28 @@ it("does not accept selected material for a different operation", async () => {
   );
   expect(el.readCredentials()).toBeNull();
 });
-it.each([[null], [{ code: "", purpose: "full" }], [{ purpose: "full" }]])(
-  "does not accept selected material whose series entries are not usable: %j",
-  async (entry) => {
-    const { prepare } = scripted([
-      { ...selected, input: { allocation: { ...selected.input.allocation, series: [entry] } } },
-    ]);
-    const { el } = await mount(prepare);
-    await ready(el);
-    await vi.waitFor(() =>
-      expect(
-        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
-      ).toBe("Could not complete this step."),
-    );
-    expect(action(el)).toBe("Try again");
-    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
-    expect(el.readCredentials()).toBeNull();
-  },
-);
+it.each([
+  [null],
+  [{ code: "", purpose: "full" }],
+  [{ purpose: "full" }],
+  [{ code: "A-0CSQW" }],
+  [{ code: "A-0CSQW", purpose: "" }],
+  [{ code: "A-0CSQW", purpose: "simplified" }],
+])("does not accept selected material whose series entries are not usable: %j", async (entry) => {
+  const { prepare } = scripted([
+    { ...selected, input: { allocation: { ...selected.input.allocation, series: [entry] } } },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("Could not complete this step."),
+  );
+  expect(action(el)).toBe("Try again");
+  expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).toBeNull();
+  expect(el.readCredentials()).toBeNull();
+});
 it("ignores a selected response after the sole-recovery declaration changes", async () => {
   let release!: (value: unknown) => void;
   const held = new Promise<unknown>((resolve) => {
@@ -1346,9 +1347,7 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   state.decision = noSecondClock;
   el.locale = "es";
   await el.updateComplete;
-  expect(seriesLine(el)).toBe(
-    "Cuando pulses Continuar, Waitron creará series de facturas nuevas para este servidor, para que sus números de factura nunca repitan los del servidor anterior. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
-  );
+  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
   fakeClock();
   try {
     await ready(el);
@@ -1752,6 +1751,7 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
     expect(action(el)).toBeUndefined();
     decision = clock;
     vi.advanceTimersByTime(15_000);
+    await continueOn(el);
     await vi.waitFor(() =>
       expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
     );
@@ -1775,6 +1775,157 @@ it("a handover start shows the details tick and Proceed, sends nothing before Pr
   }
 });
 
+const seriesRows = (el: LitElement) =>
+  [...el.shadowRoot!.querySelectorAll("[data-test=selected-hour] li")].map((li) =>
+    li.textContent!.replace(/\s+/g, " ").trim(),
+  );
+/** Presses Continue under a handover's new series, which hands the operation to the page. */
+async function continueOn(el: LitElement) {
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull(),
+  );
+  await userEvent.click(button(el, "continue"));
+  await el.updateComplete;
+}
+it("a handover start lists each new series with what it is for, and hands over nothing until Continue", async () => {
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return promotionSelected;
+  });
+  const el = await mountPromotion(prepare);
+  const ready: boolean[] = [];
+  el.addEventListener("promotion-change", (event) =>
+    ready.push((event as CustomEvent<{ ready: boolean }>).detail.ready),
+  );
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(seriesRows(el)).toEqual([
+      "A-0CSQW — Standard",
+      "FF-0CSQW — Full invoice",
+      "R-0CSQW — Correction",
+    ]),
+  );
+  const next = button(el, "continue") as HTMLElement & { variant: string; disabled: boolean };
+  expect(next.textContent!.trim()).toBe("Continue");
+  expect(next.variant).toBe("primary");
+  expect(next.disabled).toBe(false);
+  expect(el.readOperation()).toBeNull();
+  expect(ready).not.toContain(true);
+  expect(el.shadowRoot!.activeElement).toBe(
+    el.shadowRoot!.querySelector("[data-test=selected-hour] h4"),
+  );
+  await continueOn(el);
+  expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input });
+  expect(ready.at(-1)).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  expect(el.readOperation()).not.toBeNull();
+  el.clear();
+  await el.updateComplete;
+  expect(el.readOperation()).toBeNull();
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull(),
+  );
+  expect(el.readOperation()).toBeNull();
+  await continueOn(el);
+  expect(el.readOperation()).not.toBeNull();
+});
+it("a handover's Continue stays on screen, busy and focused, while the page starts the venue, and is not pressed twice", async () => {
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return promotionSelected;
+  });
+  const el = await mountPromotion(prepare);
+  let starts = 0;
+  let changes = 0;
+  el.addEventListener("promotion-change", () => {
+    changes++;
+    if (el.readOperation() && !el.starting) {
+      starts++;
+      el.starting = true;
+    }
+  });
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  const next = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<LitElement & { loading: boolean }>(
+      "[data-test=continue]",
+    );
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  await next.updateComplete;
+  next.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(starts).toBe(1);
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBe(next);
+  expect(next.loading).toBe(true);
+  expect(el.shadowRoot!.activeElement).toBe(next);
+  const pressed = changes;
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(changes).toBe(pressed);
+  expect(starts).toBe(1);
+  el.starting = false;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  expect(el.readOperation()).not.toBeNull();
+});
+it("a Spanish handover start names each new series' use and offers Continuar", async () => {
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return promotionSelected;
+  });
+  const el = await mountPromotion(prepare);
+  el.locale = "es";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.trim()).toBe(
+    "Waitron creará series de facturas nuevas para este servidor.",
+  );
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(seriesRows(el)).toEqual([
+      "A-0CSQW — Simplificada",
+      "FF-0CSQW — Factura completa",
+      "R-0CSQW — Rectificativa",
+    ]),
+  );
+  expect(button(el, "continue").textContent!.trim()).toBe("Continuar");
+});
+it("a restore lists each new series with what it is for, in English and Spanish, and draws no Continue", async () => {
+  const { el } = await pressed();
+  await vi.waitFor(() =>
+    expect(seriesRows(el)).toEqual([
+      "A-0CSQW — Standard",
+      "FF-0CSQW — Full invoice",
+      "R-0CSQW — Correction",
+    ]),
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+  expect(el.readCredentials()).not.toBeNull();
+  el.locale = "es";
+  await el.updateComplete;
+  expect(seriesRows(el)).toEqual([
+    "A-0CSQW — Simplificada",
+    "FF-0CSQW — Factura completa",
+    "R-0CSQW — Rectificativa",
+  ]);
+  expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+});
 it("compares and selects a promotion without a recovery key or recovery declarations, after the details tick and Proceed", async () => {
   let decision = clock;
   const prepare = vi.fn(async (proposal: unknown) => {
@@ -1824,6 +1975,7 @@ it("compares and selects a promotion without a recovery key or recovery declarat
   await el.updateComplete;
   expect(button(el, "compare").disabled).toBe(false);
   await proceed(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
   );
@@ -2246,7 +2398,7 @@ it.each([
   ["en", "We've created these invoice series:"],
   ["es", "Hemos creado estas series de facturas:"],
 ] as const)(
-  "%s: the made series are listed by code under the invoice series heading, with no bare name",
+  "%s: the made series are listed by code and use under the invoice series heading, with no bare name",
   async (locale, heading) => {
     const { el } = await mount();
     el.locale = locale;
@@ -2255,11 +2407,11 @@ it.each([
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
     const section = el.shadowRoot!.querySelector("[data-test=selected-hour]")!;
     expect(section.querySelector("h4")!.textContent!.trim()).toBe(heading);
-    expect([...section.querySelectorAll("li")].map((li) => li.textContent!.trim())).toEqual([
-      "A-0CSQW",
-      "FF-0CSQW",
-      "R-0CSQW",
-    ]);
+    expect([...section.querySelectorAll("li")].map((li) => li.textContent!.trim())).toEqual(
+      locale === "en"
+        ? ["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]
+        : ["A-0CSQW — Simplificada", "FF-0CSQW — Factura completa", "R-0CSQW — Rectificativa"],
+    );
     expect(section.textContent!.replace(/[A-Z]+-0CSQW/g, "")).not.toContain("0CSQW");
   },
 );
@@ -2284,40 +2436,12 @@ it.each([
     await vi.waitFor(() => expect(text(el)).toContain(words));
   },
 );
-it("the Spanish series line says what Continuar does", async () => {
+it("the Spanish series line says new series will be made", async () => {
   const { el } = await mount();
   el.locale = "es";
   await el.updateComplete;
-  expect(seriesLine(el)).toBe(
-    "Cuando pulses Continuar, Waitron creará series de facturas nuevas para este servidor, para que sus números de factura nunca repitan los del servidor anterior. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
-  );
+  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
 });
-it.each([
-  ["en", /in (\S+)\/(\d+) the series is (\S+)\.$/],
-  ["es", /en (\S+)\/(\d+) la serie es (\S+)\.$/],
-] as const)(
-  "the %s restore series line's example is an invoice number in the traced format",
-  async (locale, example) => {
-    const { el } = await mount();
-    el.locale = locale;
-    await el.updateComplete;
-    const [, series, number, named] = seriesLine(el)!.match(example)!;
-    // An invoice number is the series code, "/", then the number (`formatInvoiceNumber`,
-    // packages/core/src/record-sale.ts), and a series code is the base code, "-", then the name.
-    expect(series).toBe(named);
-    expect(Number(number)).toBeGreaterThan(0);
-    const dash = series!.lastIndexOf("-");
-    const base = series!.slice(0, dash),
-      name = series!.slice(dash + 1);
-    expect(isMinuteIdentity(name)).toBe(true);
-    expect(
-      seriesMatchBases([{ code: series!, purpose: "standard" }], name, [
-        { code: base, purpose: "standard" },
-      ]),
-    ).toBe(true);
-  },
-);
-
 const detailRows = (el: LitElement, list: string) =>
   [...el.shadowRoot!.querySelectorAll(`[data-test=${list}] > div`)].map((row) => [
     row.querySelector("dt")?.textContent?.trim(),
@@ -2411,7 +2535,7 @@ it("after Proceed the second screen says which series were created, and the rest
     [...el.shadowRoot!.querySelectorAll("[data-test=selected-hour] li")].map((li) =>
       li.textContent?.trim(),
     ),
-  ).toEqual(["A-0CSQW", "FF-0CSQW", "R-0CSQW"]);
+  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]);
   expect(el.shadowRoot!.querySelector<HTMLElement>("[data-test=check-venue]")?.hidden).toBe(true);
   expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();
   expect(el.readCredentials()).not.toBeNull();
@@ -2594,6 +2718,7 @@ it("a handover start sets the spare's clock from This device and carries on to t
   await proceed(el);
   await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
   await userEvent.click(button(el, "device-correct"));
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
   );

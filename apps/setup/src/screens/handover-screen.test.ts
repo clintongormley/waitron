@@ -336,8 +336,12 @@ describe("This device on the handover's clock step", () => {
     );
   });
 
-  it("sends the set under the administrator's sign-in, then starts the venue with nobody pressing", async () => {
-    const { el, posts } = await mount({ status: "set" });
+  it("sends the set under the administrator's sign-in, then makes the series with nobody pressing and starts the venue on Continue", async () => {
+    const { el, entry, posts } = await mount({ status: "set" });
+    const next = () => entry.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]");
+    await vi.waitFor(() => expect(next()).not.toBeNull());
+    expect(actions(posts)).not.toContain("activate");
+    next()!.click();
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
     );

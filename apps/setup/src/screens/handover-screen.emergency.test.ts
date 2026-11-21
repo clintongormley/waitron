@@ -539,6 +539,13 @@ async function startVenue(el: SetupHandoverScreen) {
   );
   q(entry, "[data-test=compare]").click();
 }
+/** Presses Continue under the new series, the step that lets the venue start. */
+async function continueOn(el: SetupHandoverScreen) {
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
+  q(entry, "[data-test=continue]").click();
+  await el.updateComplete;
+}
 afterEach(() => {
   vi.useRealTimers();
   cleanupWidgets();
@@ -763,6 +770,7 @@ it("resumes a saved declaration on another page, prepares and starts without rep
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
   expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   const preparation = posts.filter(({ path }) => path.endsWith("/preparation"));
@@ -879,6 +887,7 @@ it("stops activation when the post-restart comparison finds a changed copy", asy
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
       t("handover.emergency.copy_failed"),
@@ -890,6 +899,27 @@ it("stops activation when the post-restart comparison finds a changed copy", asy
   );
   expect(posts.filter(({ path }) => path.endsWith("/preview"))).toHaveLength(2);
   expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(0);
+});
+
+it("moves keyboard focus to the page heading when a changed copy leaves no action to offer", async () => {
+  const { el } = await mount({ saved: true, activationMismatch: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
+  const button = q<LitElement>(entry, "[data-test=continue]");
+  await button.updateComplete;
+  button.focus();
+  expect(button.shadowRoot!.activeElement).toBe(button.shadowRoot!.querySelector("button"));
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.copy_failed"),
+    ),
+  );
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
 });
 
 it("checks an uncertain declaration before retrying the same frozen request", async () => {
@@ -988,6 +1018,7 @@ it("explains a second code expiry after replacing only the code and pressing Try
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
       t("handover.emergency.code_expired"),
@@ -1655,6 +1686,7 @@ async function stopAndContinueLinks(pageUrl: string) {
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
   const proceed = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
     (link) => link.textContent === t("handover.continue"),
@@ -1876,6 +1908,7 @@ it("a passkey switch unlocks once and the later steps lean on the proof, through
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
   expect(get).toHaveBeenCalledTimes(1);
   const steps = posts.map(({ path, body }) => [
@@ -1989,6 +2022,7 @@ it("with no internet time, a passkey switch confirms the time, and a proof lapse
   expect(selects()).toEqual([]);
   expect(get).toHaveBeenCalledTimes(1);
   q(entry, "[data-test=confirm-time]").click();
+  await continueOn(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.done")));
   const confirmed = { action: "select", comparisonId: "comparison", confirmed: true };
   expect(selects()).toEqual([
@@ -2213,6 +2247,7 @@ it("a successful start whose progress cannot be read asks for nothing until the 
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
   expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
   await startVenue(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.read_failed")));
   expect(actions(el)).not.toContain(t("handover.fix"));
   expect(signInDrawn(el)).toEqual([false, false, false, false, false]);

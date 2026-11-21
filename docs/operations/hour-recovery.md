@@ -117,10 +117,8 @@ There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last
 offers no clock confirmation while the internet time service vouches for the clock"). Enter the server key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
-to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so
-its invoice numbers never repeat the old box's." with an example of an invoice series (the same
-file's "the key, both statements and the details tick send nothing until Proceed, and the page says what Proceed
-does"). After **Proceed** the box asks its internet time service whether it is synchronised and
+to the box; while the button reads **Proceed** it says "Waitron will start new invoice series for this box." (the same
+file's "the key, both statements and the details tick send nothing until Proceed, and the page says new series will be made"). After **Proceed** the box asks its internet time service whether it is synchronised and
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
 it), and when the time service is synchronised the page asks the box for the invoice series, all by
 itself (`recovery-hour.browser.test.ts`, "decodes the printed key and sends independent recovery
