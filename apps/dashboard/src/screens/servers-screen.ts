@@ -474,7 +474,13 @@ export class ServersScreen extends LitElement {
   }
 
   #closeJoin(): void {
+    if (this.#sendingTap()) return;
     this.join = null;
+  }
+
+  /** A tap's answer is shown in the codes dialog, so it stays open until the answer arrives. */
+  #sendingTap(): boolean {
+    return this.joinBusy !== null && this.joinBusy !== "check" && this.joinBusy !== "dismiss";
   }
 
   #renderJoinRequests(): TemplateResult | typeof nothing {
@@ -535,12 +541,14 @@ export class ServersScreen extends LitElement {
   #renderJoinDialog(): TemplateResult {
     const join = this.join;
     const checking = this.joinBusy === "check";
+    const sending = this.#sendingTap();
     const canCheckAgain =
       join !== null && !checking && join.choices === null && !join.approved && !join.ended;
     return html`<wt-dialog
       data-test="join-dialog"
       heading=${t("servers.join_dialog_title")}
       .open=${join !== null}
+      .dismissible=${!sending}
       @wt-close=${() => this.#closeJoin()}
     >
       ${
@@ -591,6 +599,7 @@ export class ServersScreen extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test="join-close"
+          ?disabled=${sending}
           @click=${() => this.#closeJoin()}
           >${t("action.close")}</wt-button
         >

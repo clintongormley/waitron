@@ -147,6 +147,31 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(api.listServers).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the codes dialog open while a tap is being sent, so its answer is shown", async () => {
+    let answer!: () => void;
+    const api = stubApi({
+      approveBoxJoin: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+    });
+    const el = await mount(api);
+    await check(el);
+    choiceButtons(el)[0]!.click();
+    await flush(el);
+    const close =
+      joinDialog(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=join-close]")!;
+    expect(close.disabled, "close while sending").toBe(true);
+    expect(joinDialog(el).dismissible, "dismissible while sending").toBe(false);
+    close.click();
+    expect(await joinDialog(el).requestClose("cancel")).toBe(false);
+    await flush(el);
+    expect(joinDialog(el).open, "open after close attempts").toBe(true);
+    answer();
+    await flush(el);
+    await flush(el);
+    expect(find(el, "join-approved")).not.toBeNull();
+    expect(close.disabled).toBe(false);
+    expect(joinDialog(el).dismissible).toBe(true);
+  });
+
   it("a wrong tap shows the refusal and offers no more codes", async () => {
     const api = stubApi({
       approveBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_wrong_code", status: 409 }),
