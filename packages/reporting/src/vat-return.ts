@@ -1,26 +1,10 @@
-import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { isZeroDecimal, subtractDecimal } from "@waitron/shared";
 import { sumByRate } from "./vat-summary.js";
 import { computeInputVat } from "./input-vat.js";
-import { periodDays, stampDate, validatePeriod } from "./period.js";
+import { periodDays, validatePeriod } from "./period.js";
 import type { VatReturn, VatReturnInput } from "./types.js";
 import { vatMovements } from "./vat-movements.js";
-
-/**
- * The civil date `"YYYY-MM-DD"` the accountant workbook lists a sale under: the `supply_day` of the
- * replacement that repeats it, else its own `supply_day`, else its filed issue date. Where a sale's
- * VAT counts in a return is `vatMovements`'s rule, not this.
- */
-export function saleVatDay(sale: {
-  replacementSupplyDay: SQLWrapper;
-  supplyDay: SQLWrapper;
-  issuedAt: SQLWrapper;
-  issuedOffsetMinutes: SQLWrapper;
-}): SQL<string> {
-  const filedDate = stampDate(sale.issuedAt, sale.issuedOffsetMinutes);
-  return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
-}
 
 /**
  * The modelo 303 aggregate over one liquidation period (month/quarter/year), across ALL nodes of the

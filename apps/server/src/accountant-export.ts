@@ -1,7 +1,7 @@
 import { listOutsidePayments, type OutsidePayment } from "./outside-payments-report.js";
-import { saleVatDay, stampDate, validatedRangeWindow } from "@waitron/reporting";
+import { stampDate, validatedRangeWindow } from "@waitron/reporting";
 import { readVenueClock } from "@waitron/db";
-import { and, asc, between, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, between, eq, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -136,6 +136,21 @@ export async function renderAccountantWorkbook(
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
   ]);
+}
+
+/**
+ * The civil date `"YYYY-MM-DD"` the accountant workbook lists a sale under: the `supply_day` of the
+ * replacement that repeats it, else its own `supply_day`, else its filed issue date. Where a sale's
+ * VAT counts in a return is `vatMovements`'s rule, not this.
+ */
+function saleVatDay(sale: {
+  replacementSupplyDay: SQLWrapper;
+  supplyDay: SQLWrapper;
+  issuedAt: SQLWrapper;
+  issuedOffsetMinutes: SQLWrapper;
+}): SQL<string> {
+  const filedDate = stampDate(sale.issuedAt, sale.issuedOffsetMinutes);
+  return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 
 export async function listAccountantExport(
