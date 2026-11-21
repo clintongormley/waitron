@@ -75,7 +75,19 @@ CREATE TABLE `declaraciones_responsables` (
 	`version` text PRIMARY KEY NOT NULL,
 	`text` text NOT NULL,
 	`first_started_at` text NOT NULL,
-	CONSTRAINT "declaraciones_responsables_version_ck" CHECK("declaraciones_responsables"."version" glob '[0-9]*.[0-9]*.[0-9]*' and "declaraciones_responsables"."version" not glob '*[^0-9.]*' and length("declaraciones_responsables"."version") - length(replace("declaraciones_responsables"."version", '.', '')) = 2 and "declaraciones_responsables"."version" not glob '0[0-9]*' and "declaraciones_responsables"."version" not glob '*.0[0-9]*')
+	CONSTRAINT "declaraciones_responsables_version_ck" CHECK(instr("declaraciones_responsables"."version", char(0)) = 0
+          and length("declaraciones_responsables"."version") <= 50
+          and substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1) glob '[0-9]*.[0-9]*.[0-9]*'
+          and substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1) not glob '*[^0-9.]*'
+          and length(substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1)) - length(replace(substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1), '.', '')) = 2
+          and substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1) not glob '0[0-9]*'
+          and substr("declaraciones_responsables"."version", 1, instr("declaraciones_responsables"."version" || '-', '-') - 1) not glob '*.0[0-9]*'
+          and (instr("declaraciones_responsables"."version", '-') = 0 or (
+            substr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), 1, instr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), '.') - 1) in ('alpha', 'beta', 'rc')
+            and substr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), instr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), '.') + 1) glob '[0-9]*'
+            and substr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), instr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), '.') + 1) not glob '*[^0-9]*'
+            and substr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), instr(substr("declaraciones_responsables"."version", instr("declaraciones_responsables"."version", '-') + 1), '.') + 1) not glob '0[0-9]*'
+          )))
 );
 --> statement-breakpoint
 CREATE TABLE `envio_flujo` (

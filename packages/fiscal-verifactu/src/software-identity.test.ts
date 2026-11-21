@@ -150,6 +150,8 @@ describe("softwareVersion", () => {
         (issue) => issue.field === "SistemaInformatico.Version",
       );
     expect(versionIssues(softwareVersion(COMMIT))).toEqual([]);
+    const candidate = { bundled: true, version: "1.3.0-rc.1" } as const;
+    expect(versionIssues(softwareVersion(COMMIT, candidate))).toEqual([]);
     // Control: one character past the field's limit is reported, so the check above can fail.
     expect(versionIssues(`${softwareVersion(COMMIT)}x`)).not.toEqual([]);
   });

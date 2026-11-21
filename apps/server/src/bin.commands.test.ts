@@ -132,6 +132,24 @@ describe("check-release on the test bundle", { timeout: CHILD_LIMIT_MS + 10_000 
   });
 });
 
+describe("check-release on a release candidate", { timeout: CHILD_LIMIT_MS + 10_000 }, () => {
+  const declaration = { ...TEST_RELEASE, version: "1.2.3-rc.1" };
+  const releaseServer = useBuiltServer(undefined, {
+    releaseVersion: declaration.version,
+    declaration,
+  });
+
+  it("checks that the full stamp and declaration version agree", async () => {
+    const result = await runBin(["check-release", "1.2.3-rc.1"], {}, releaseServer());
+    expect(result, result.stdout + result.stderr).toMatchObject({
+      code: 0,
+      signal: null,
+      stderr: "",
+    });
+    expect(result.stdout).toContain("release: the bundle and the declaration folder match");
+  });
+});
+
 describe("check-release on a release bundle", { timeout: CHILD_LIMIT_MS + 10_000 }, () => {
   const releaseServer = useBuiltServer(undefined, {
     releaseVersion: TEST_RELEASE.version,

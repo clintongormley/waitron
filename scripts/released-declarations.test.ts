@@ -135,6 +135,25 @@ describe("releasedDeclarationProblems", () => {
     expect(releasedDeclarationProblems(repo)).toEqual([]);
   });
 
+  it("keeps a tagged release candidate when preparing its stable release", () => {
+    const repo = repository({ "v1.3.0-rc.1.md": "candidate\n" });
+    tag(repo, "v1.3.0-rc.1");
+    commit(repo, { "v1.3.0.md": "stable\n" }, "prepare stable");
+    expect(releasedDeclarationProblems(repo)).toEqual([]);
+    commit(repo, { "v1.3.0-rc.1.md": "edited\n" }, "edit");
+    expect(releasedDeclarationProblems(repo)).toEqual([
+      `${FOLDER}/v1.3.0-rc.1.md differs from its release v1.3.0-rc.1`,
+    ]);
+  });
+
+  it("refuses a prepared release candidate left behind by a newer declaration", () => {
+    const repo = repository({ "v1.3.0-rc.1.md": "candidate\n", "v1.3.0.md": "stable\n" });
+    tag(repo, "pre-sqlite-migration");
+    expect(releasedDeclarationProblems(repo)).toEqual([
+      `${FOLDER}/v1.3.0-rc.1.md is below the highest version v1.3.0 but has no tag v1.3.0-rc.1`,
+    ]);
+  });
+
   it("finds nothing wrong in this repository", () => {
     expect(releasedDeclarationProblems(ROOT)).toEqual([]);
   });

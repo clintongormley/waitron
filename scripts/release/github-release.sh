@@ -28,6 +28,15 @@ fi
 version=$1
 image=$2
 tag="v$version"
+release_flags=(--verify-tag)
+case "${RELEASE_PRERELEASE-}" in
+  true) release_flags+=(--prerelease --latest=false) ;;
+  false) ;;
+  *)
+    echo "RELEASE_PRERELEASE must be true or false" >&2
+    exit 2
+    ;;
+esac
 
 work=$(mktemp -d)
 container=""
@@ -43,13 +52,16 @@ txt="$work/waitron-$version-declaration.txt"
 docker cp "$container:/app/declaration/declaration.pdf" "$pdf"
 docker cp "$container:/app/declaration/declaration.txt" "$txt"
 
-# gh exits 1 for every failure; only these words mean the Release is missing (measured with gh
-# 2.103.3, 2026-11-12: a bad token prints "HTTP 401: Bad credentials", no network a dial error).
+# Only the missing-Release response permits creation. The exit status also covers read failures.
 errors="$work/view-errors"
-if gh release view "$tag" >/dev/null 2>"$errors"; then
+if existing=$(gh release view "$tag" --json isPrerelease --jq .isPrerelease 2>"$errors"); then
+  if [ "$existing" != "$RELEASE_PRERELEASE" ]; then
+    echo "The GitHub Release $tag has a different prerelease flag. Check its tag annotation and signed file before correcting it." >&2
+    exit 1
+  fi
   gh release upload "$tag" --clobber "$pdf" "$txt"
 elif [ "$(cat "$errors")" = "release not found" ]; then
-  gh release create "$tag" --title "$version" --verify-tag "$pdf" "$txt"
+  gh release create "$tag" --title "$version" "${release_flags[@]}" "$pdf" "$txt"
 else
   cat "$errors" >&2
   echo "cannot ask GitHub whether the Release $tag exists" >&2

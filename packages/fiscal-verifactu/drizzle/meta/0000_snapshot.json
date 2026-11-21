@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "46404aa5-b766-48af-9e1a-5ba7833628d5",
+  "id": "ba710300-0f3a-4371-9021-e77e22be590c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -538,7 +538,7 @@
       "checkConstraints": {
         "declaraciones_responsables_version_ck": {
           "name": "declaraciones_responsables_version_ck",
-          "value": "\"declaraciones_responsables\".\"version\" glob '[0-9]*.[0-9]*.[0-9]*' and \"declaraciones_responsables\".\"version\" not glob '*[^0-9.]*' and length(\"declaraciones_responsables\".\"version\") - length(replace(\"declaraciones_responsables\".\"version\", '.', '')) = 2 and \"declaraciones_responsables\".\"version\" not glob '0[0-9]*' and \"declaraciones_responsables\".\"version\" not glob '*.0[0-9]*'"
+          "value": "instr(\"declaraciones_responsables\".\"version\", char(0)) = 0\n          and length(\"declaraciones_responsables\".\"version\") <= 50\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) glob '[0-9]*.[0-9]*.[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*[^0-9.]*'\n          and length(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1)) - length(replace(substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1), '.', '')) = 2\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '0[0-9]*'\n          and substr(\"declaraciones_responsables\".\"version\", 1, instr(\"declaraciones_responsables\".\"version\" || '-', '-') - 1) not glob '*.0[0-9]*'\n          and (instr(\"declaraciones_responsables\".\"version\", '-') = 0 or (\n            substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), 1, instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') - 1) in ('alpha', 'beta', 'rc')\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) glob '[0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '*[^0-9]*'\n            and substr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), instr(substr(\"declaraciones_responsables\".\"version\", instr(\"declaraciones_responsables\".\"version\", '-') + 1), '.') + 1) not glob '0[0-9]*'\n          ))"
         }
       }
     },

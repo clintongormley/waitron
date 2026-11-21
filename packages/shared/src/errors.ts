@@ -91,6 +91,7 @@ export interface ErrorParams {
   "shared.invalid_cents": { value: string };
   "shared.invalid_thousandths": { value: string };
   "shared.invalid_basis_points": { value: string };
+  "release.version_invalid": Record<string, never>;
   "locale.unsupported": { locale: string };
   /**
    * Names the FIELD, never its value: a PIN or password is exactly the kind of secret a caller can

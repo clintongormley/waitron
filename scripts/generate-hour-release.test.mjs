@@ -415,13 +415,15 @@ child.stdout.on('data', bytes => {
   // The bound clears every wait at its limit: two 90 s bundles plus a 10 s load per entry per bundle.
   it("the actual bundle command replaces a stale stamp for every declared Node entry", () => {
     const { cwd, hashes } = fixture();
-    mkdirSync(join(cwd, "scripts"));
+    mkdirSync(join(cwd, "scripts/box/upgrades"), { recursive: true });
     for (const file of [
       "bundle-node.mjs",
       "generate-hour-release.mjs",
       "npm-bundle-notices.mjs",
       "backup-verification-runtime.mjs",
       "is-main-script.mjs",
+      "box/release-list.mjs",
+      "box/upgrades/contracts.mjs",
     ])
       copyFileSync(join(ROOT, "scripts", file), join(cwd, "scripts", file));
     const manifests = ["apps/server/package.json", "packages/provisioning/package.json"];

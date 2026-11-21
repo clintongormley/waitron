@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -30,22 +30,28 @@ const offer = { format: 1, entries: groups, default: "1.3.0" };
 const pause = { format: 1, entries: [], default: "none" };
 
 function signedRelease(tag, metadata = {}) {
-  const signed = signReleaseList(
-    {
-      format: 1,
-      kind: "release",
-      version: metadata.signedVersion ?? tag.slice(1),
-      prerelease: metadata.signedPrerelease ?? false,
-      sourceSha: metadata.signedSha ?? sourceSha,
-      platform: "linux/amd64",
-      images: {
-        app: `sha256:${"a".repeat(64)}`,
-        printAgent: `sha256:${"b".repeat(64)}`,
-        tunnel: `sha256:${"c".repeat(64)}`,
-      },
+  const payload = {
+    format: 1,
+    kind: "release",
+    version: metadata.signedVersion ?? tag.slice(1),
+    prerelease: metadata.signedPrerelease ?? false,
+    sourceSha: metadata.signedSha ?? sourceSha,
+    platform: "linux/amd64",
+    images: {
+      app: `sha256:${"a".repeat(64)}`,
+      printAgent: `sha256:${"b".repeat(64)}`,
+      tunnel: `sha256:${"c".repeat(64)}`,
     },
-    privateKey,
-  );
+  };
+  const bytes = Buffer.from(JSON.stringify(payload));
+  const signed = metadata.signedPrerelease
+    ? Buffer.from(
+        JSON.stringify({
+          payload: bytes.toString("base64url"),
+          signature: sign(null, bytes, privateKey).toString("base64url"),
+        }),
+      )
+    : signReleaseList(payload, privateKey);
   return metadata.signedPadding
     ? Buffer.concat([signed, Buffer.alloc(metadata.signedPadding, " ")])
     : signed;
@@ -204,11 +210,18 @@ else process.exit(4);
 
   it.each([
     ["refs/heads/v1.4.0", /numbered release tag/],
+    ["refs/tags/v1.4.0-rc.1", /release tag/],
     ["refs/tags/v1.4.x", /numbered release tag/],
   ])("refuses dispatch from %s", (ref, error) => {
     const repository = github();
     expect(() => dispatch(repository, pause, { ref })).toThrow(error);
     expect(repository.uploads).toHaveLength(0);
+  });
+
+  it("refuses a release candidate as an automatic offer target before contacting GitHub", () => {
+    const repository = { run: vi.fn() };
+    expect(() => dispatch(repository, { ...offer, default: "1.4.0-rc.1" })).toThrow(/payload/i);
+    expect(repository.run).not.toHaveBeenCalled();
   });
 
   it("checks that even a pause is dispatched from the commit named in the signed release", () => {

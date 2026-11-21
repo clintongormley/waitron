@@ -2,9 +2,13 @@ import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
+import {
+  compareReleaseVersions,
+  isNumberedVersion,
+  isStableVersion,
+} from "../box/release-list.mjs";
 import { isMainScript } from "../is-main-script.mjs";
 
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const TAG = /^refs\/tags\/v(.+)$/;
 const USAGE =
   "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version>\n";
@@ -12,34 +16,17 @@ const USAGE =
 const COMMAND_TIMEOUT_MS = 20 * 60_000;
 const SHOWN = { show: true };
 
-export function parseVersion(text) {
-  // 50: the most a record's `SistemaInformatico.Version` holds (`isReleaseVersion` in @waitron/shared).
-  const match = text.length <= 50 ? VERSION.exec(text) : null;
-  if (!match) throw new Error(`${JSON.stringify(text)} is not a version like 1.2.3`);
-  return match.slice(1).map(BigInt);
-}
-
-export function isVersion(text) {
-  try {
-    parseVersion(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function compareVersions(a, b) {
-  const [left, right] = [parseVersion(a), parseVersion(b)];
-  for (let at = 0; at < 3; at++) if (left[at] !== right[at]) return left[at] < right[at] ? -1 : 1;
-  return 0;
+function requireVersion(version) {
+  if (!isNumberedVersion(version))
+    throw new Error(`${JSON.stringify(version)} is not a version like 1.2.3 or 1.2.3-rc.1`);
 }
 
 export function releasedVersions(lsRemoteOutput) {
   return lsRemoteOutput
     .split("\n")
     .map((line) => TAG.exec(line.split("\t")[1] ?? "")?.[1])
-    .filter((version) => version !== undefined && isVersion(version))
-    .sort(compareVersions);
+    .filter((version) => isNumberedVersion(version))
+    .sort(compareReleaseVersions);
 }
 
 export function madridDate(now) {
@@ -81,7 +68,7 @@ function refuseUnlessNextVersion(run, version) {
   const released = releasedVersions(run("git", ["ls-remote", "--tags", "origin", "refs/tags/v*"]));
   if (released.includes(version)) throw new Error(`${version} is already released`);
   const highest = released.at(-1);
-  if (highest !== undefined && compareVersions(version, highest) <= 0) {
+  if (highest !== undefined && compareReleaseVersions(version, highest) <= 0) {
     throw new Error(`${version} is not above ${highest}, the highest released version`);
   }
 }
@@ -89,7 +76,7 @@ function refuseUnlessNextVersion(run, version) {
 const declarationFile = (version) => `packages/fiscal-verifactu/declarations/v${version}.md`;
 
 export async function prepareRelease({ version, place, run, ask, now, print }) {
-  parseVersion(version);
+  requireVersion(version);
   const branch = `release/${version}`;
   onCleanBranchAtOriginMain(run, branch);
   refuseUnlessNextVersion(run, version);
@@ -123,7 +110,7 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
 }
 
 export async function tagRelease({ version, run }) {
-  parseVersion(version);
+  requireVersion(version);
   const head = onCleanBranchAtOriginMain(run, "main");
   const file = declarationFile(version);
   try {
@@ -159,7 +146,8 @@ export async function tagRelease({ version, run }) {
   }
 
   const tag = `v${version}`;
-  run("git", ["tag", "-a", tag, "-m", `Waitron ${version}`]);
+  const subject = isStableVersion(version) ? `Waitron ${version}` : `Waitron prerelease ${version}`;
+  run("git", ["tag", "-a", tag, "-m", subject]);
   try {
     run("git", ["push", "origin", tag], SHOWN);
   } catch (error) {

@@ -155,6 +155,8 @@ const IMAGE_SMOKE_FILES = [
   "scripts/npm-bundle-notices.mjs",
   "scripts/is-main-script.mjs",
   "scripts/backup-verification-runtime.mjs",
+  "scripts/box/release-list.mjs",
+  "scripts/box/upgrades/contracts.mjs",
   "apps/till/vite.config.ts",
   "apps/dashboard/vite.config.ts",
   "apps/setup/vite.config.ts",

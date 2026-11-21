@@ -2,7 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applicationVersion } from "@waitron/db";
-import { isReleaseVersion, type LegalAbout } from "@waitron/shared";
+import { compareReleaseVersions, isReleaseVersion, type LegalAbout } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import type { Context, Hono } from "hono";
 import { boxPageAnswer, renderBoxPage } from "./guide-pages.js";
@@ -64,7 +64,7 @@ function releaseFrom(json: string): { version: string; releasedOn: string } | un
   }
   if (typeof value !== "object" || value === null) return undefined;
   const { version, releasedOn } = value as Record<string, unknown>;
-  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) return undefined;
+  if (typeof version !== "string" || !isReleaseVersion(version)) return undefined;
   if (typeof releasedOn !== "string" || !realDate(releasedOn)) return undefined;
   return { version, releasedOn };
 }
@@ -135,15 +135,10 @@ function wordsPage(c: Context, title: string, text: string | undefined, status: 
   return boxPageAnswer(c, renderBoxPage(languageOf(c), title, body), status);
 }
 
-/** The kept versions below `running`, lowest first, compared part by part as whole numbers of any
- * size: a release version may run to 50 characters. */
 function earlierVersions(kept: readonly string[], running: string): string[] {
-  const order = (a: string, b: string) => {
-    const [x, y] = [a.split(".").map(BigInt), b.split(".").map(BigInt)];
-    const at = x.findIndex((part, i) => part !== y[i]);
-    return at < 0 ? 0 : x[at]! < y[at]! ? -1 : 1;
-  };
-  return kept.filter((version) => order(version, running) < 0).sort(order);
+  return kept
+    .filter((version) => isReleaseVersion(version) && compareReleaseVersions(version, running) < 0)
+    .sort(compareReleaseVersions);
 }
 
 function fileName(version: string, ext: "pdf" | "txt"): string {

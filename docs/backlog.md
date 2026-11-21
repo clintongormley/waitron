@@ -1240,7 +1240,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   The release job signs and attaches the release file. The retained
   installer checks it before downloading a numbered release. A checked numbered upgrade
   refreshes the keys and verifier. The [offer publisher](operations/release.md#offer-a-release-to-a-group)
-  signs and reads back the staged offer. Still open are prerelease publishing, the first live offer,
+  signs and reads back the staged offer. A prerelease such as `1.3.0-rc.1` has its own declaration
+  and can be published for checked manual installation. Automatic offers take stable releases.
+  Still open are the first signed publication, the first live offer,
   the test-box upgrade, the scheduled offer check and window, status/email and pairs. After the
   first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux

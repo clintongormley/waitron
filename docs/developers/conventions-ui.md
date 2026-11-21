@@ -430,14 +430,15 @@ The box serves the software's declaración responsable (A940) from `mountDeclara
 - `/legal/declaration`: the declaration as a page, in Spanish whatever the reader's language, with
   «Descargar PDF» and «Descargar texto» links under it that download the two files below as
   `waitron-<version>-declaration.pdf` and `.txt`. Under the links, «Versiones anteriores» links to
-  each earlier version the venue has kept, lowest first by number; the running version and later ones are
-  left out, and with none kept the heading is not shown. A failed read of the kept versions logs
+  each earlier version the venue has kept, in release order. A release candidate comes before its
+  stable release. The running version and later ones are left out, and with none kept the
+  heading is not shown. A failed read of the kept versions logs
   `declaration.kept_read_failed` and shows the page without them.
 - `/legal/declaration.pdf` and `/legal/declaration.txt`: the two files as written.
 - `/legal/declaration/<version>.txt`: an earlier version's kept text, as plain text named
   `waitron-<version>-declaration.txt`, served even when the running release's folder is missing or
-  damaged. Only a release version (`isReleaseVersion`: three whole numbers without leading zeros,
-  at most 50 characters) that the venue kept is served; anything else answers "Page not found". A
+  damaged. The route serves a kept version that passes `isReleaseVersion`, including a full
+  prerelease version. Anything else answers "Page not found". A
   failed read logs `declaration.kept_read_failed` and answers "cannot be shown", 500.
 - `/legal/about`: JSON `{ release: { version, releasedOn } | null, build }` (`LegalAbout`,
   `packages/shared/src/legal-about.ts`), where `build` is `applicationVersion(process.env)`, the
@@ -462,7 +463,7 @@ tests: the mount-site cases expect the "this build has none" page from that fold
 - **No folder** (`stat` answers `ENOENT`): "this build has no declaración responsable", 404, and
   `/legal/about` answers `release: null`.
 - **Damaged**: the folder is not a readable directory, a file is missing or unreadable,
-  `release.json` does not hold a `x.y.z` version and a real `YYYY-MM-DD` date, `declaration.html`
+  `release.json` does not hold a valid release version and a real `YYYY-MM-DD` date, `declaration.html`
   does not have exactly one `<body>` line and one `</body>` line, or `declaration.txt` does not
   have exactly one line starting `1.c) ` (the renderer's version item) or that line does not end
   with `: ` and `release.json`'s version. Answers "cannot be shown", 500, and logs

@@ -13,8 +13,11 @@ function readKey(path) {
 }
 
 export function main([keysDir, output], env, logger = console) {
-  let next = "check that both public key files can be read";
+  let next = "set RELEASE_PRERELEASE to true or false";
   try {
+    const prerelease = env.RELEASE_PRERELEASE;
+    if (prerelease !== "true" && prerelease !== "false") throw new Error("Invalid prerelease flag");
+    next = "check that both public key files can be read";
     const privateKey = env.WAITRON_RELEASE_SIGNING_KEY;
     const current = readKey(join(keysDir, "current.pem"));
     const spare = readKey(join(keysDir, "spare.pem"));
@@ -31,7 +34,7 @@ export function main([keysDir, output], env, logger = console) {
         format: 1,
         kind: "release",
         version: env.RELEASE_VERSION,
-        prerelease: false,
+        prerelease: prerelease === "true",
         sourceSha: env.RELEASE_SOURCE_SHA,
         platform: "linux/amd64",
         images: {

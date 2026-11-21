@@ -396,6 +396,18 @@ describe("earlier declarations kept by the venue", () => {
     expect(listed).toStrictEqual(["9007199254740992.0.0"]);
   });
 
+  it("lists and serves the release candidate declaration from its stable release", async () => {
+    const root = await runningFolder("1.3.0");
+    const text = "Declaration 1.3.0-rc.1\n";
+    const { kept } = keptHolding({ "1.3.0-rc.1": text });
+    const app = appFor(root, vi.fn(), kept);
+    const html = await (await app.request("/legal/declaration")).text();
+    expect(html).toContain('href="/legal/declaration/1.3.0-rc.1.txt"');
+    const download = await app.request("/legal/declaration/1.3.0-rc.1.txt");
+    expect(download.status).toBe(200);
+    expect(await download.text()).toBe(text);
+  });
+
   it("shows no list when no earlier version is kept", async () => {
     const root = await runningFolder("1.2.0");
     const plain = await (await appFor(root).request("/legal/declaration")).text();

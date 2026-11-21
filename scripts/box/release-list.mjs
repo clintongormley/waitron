@@ -3,22 +3,41 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify } from "nod
 import { TextDecoder } from "node:util";
 import { exactRecord } from "./upgrades/contracts.mjs";
 
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+// Keep the version grammar and order in step with packages/shared/src/built-release.ts.
+const VERSION =
+  /^((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(?:-(alpha|beta|rc)\.(0|[1-9]\d*))?$/;
+const CHANNELS = ["alpha", "beta", "rc", undefined];
 const SHA = /^[a-f0-9]{40}$/;
 const IMAGE_DIGEST = /^sha256:[a-f0-9]{64}$/;
 export const MAX_SIGNED_RELEASE_BYTES = 16 * 1024;
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
+function versionMatch(version) {
+  return typeof version === "string" && version.length <= 50 ? VERSION.exec(version) : null;
+}
+
 export function isNumberedVersion(version) {
-  return typeof version === "string" && version.length <= 50 && VERSION.test(version);
+  return versionMatch(version) !== null;
+}
+
+export function isStableVersion(version) {
+  const match = versionMatch(version);
+  return match !== null && match[2] === undefined;
+}
+
+function versionParts(version) {
+  const match = versionMatch(version);
+  if (match === null) throw new Error("Expected a numbered release version");
+  return [
+    ...match[1].split(".").map(BigInt),
+    BigInt(CHANNELS.indexOf(match[2])),
+    BigInt(match[3] ?? "0"),
+  ];
 }
 
 export function compareReleaseVersions(candidate, installed) {
-  if (!isNumberedVersion(candidate) || !isNumberedVersion(installed))
-    throw new Error("Expected a numbered release version");
-
-  const requested = candidate.split(".").map(BigInt);
-  const current = installed.split(".").map(BigInt);
+  const requested = versionParts(candidate);
+  const current = versionParts(installed);
   for (const [index, part] of requested.entries()) {
     if (part < current[index]) return -1;
     if (part > current[index]) return 1;
@@ -55,6 +74,8 @@ function releasePayload(value) {
     new Set(Object.values(images)).size !== 3
   )
     throw new Error("Invalid release payload");
+  if (prerelease !== !isStableVersion(version))
+    throw new Error("Invalid release payload: prerelease flag does not match the version");
   return {
     format,
     kind,
@@ -122,7 +143,7 @@ export function verifyReleaseList(bytes, trustedPublicKeys) {
 }
 
 function isOfferTarget(target) {
-  return target === "none" || isNumberedVersion(target);
+  return target === "none" || isStableVersion(target);
 }
 
 function isOfferCondition(condition, target) {
@@ -132,7 +153,7 @@ function isOfferCondition(condition, target) {
       condition.installations.every((id) => typeof id === "string" && id.length > 0)
     );
   }
-  if (exactRecord(condition, ["atLeast"])) return isNumberedVersion(condition.atLeast);
+  if (exactRecord(condition, ["atLeast"])) return isStableVersion(condition.atLeast);
 
   const paused = target === "none";
   return (
@@ -140,7 +161,7 @@ function isOfferCondition(condition, target) {
     Number.isInteger(condition.bucketBelow) &&
     condition.bucketBelow >= 1 &&
     condition.bucketBelow <= 99 &&
-    (!paused || isNumberedVersion(condition.bucketVersion))
+    (!paused || isStableVersion(condition.bucketVersion))
   );
 }
 

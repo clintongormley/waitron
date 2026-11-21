@@ -14,7 +14,6 @@ import {
   madridDate,
   nodeAsk,
   nodeRun,
-  parseVersion,
   prepareRelease,
   releasedVersions,
   tagRelease,
@@ -172,25 +171,8 @@ const forbidden = (calls) =>
       file === "gh",
   );
 
-describe("parseVersion", () => {
-  it("answers the three numbers", () => {
-    expect(parseVersion("1.10.0")).toEqual([1n, 10n, 0n]);
-  });
-
-  it("answers a version of 50 characters", () => {
-    expect(parseVersion(`1.0.${"9".repeat(46)}`)).toHaveLength(3);
-  });
-
-  it.each(["1.0", "v1.0.0", "01.0.0", "1.0.0-rc.1", "", "1.0.0 ", `1.0.${"9".repeat(47)}`])(
-    "refuses %j",
-    (text) => {
-      expect(() => parseVersion(text)).toThrow(/is not a version/);
-    },
-  );
-});
-
 describe("releasedVersions", () => {
-  it("keeps v<major>.<minor>.<patch> tags only, sorted numerically", () => {
+  it("keeps release tags and skips peeled copies, sorted numerically", () => {
     const output = [
       `${OTHER_SHA}\trefs/tags/v1.10.0`,
       `${OTHER_SHA}\trefs/tags/vfoo`,
@@ -200,6 +182,22 @@ describe("releasedVersions", () => {
       "",
     ].join("\n");
     expect(releasedVersions(output)).toEqual(["1.9.0", "1.10.0"]);
+  });
+
+  it("orders the alpha, beta, release candidate and stable tags", () => {
+    const expected = [
+      "1.2.0",
+      "1.3.0-alpha.1",
+      "1.3.0-beta.1",
+      "1.3.0-rc.2",
+      "1.3.0-rc.10",
+      "1.3.0",
+    ];
+    const output = [...expected]
+      .reverse()
+      .map((version) => `${OTHER_SHA}\trefs/tags/v${version}`)
+      .join("\n");
+    expect(releasedVersions(output)).toEqual(expected);
   });
 
   it("sorts versions past JavaScript's exact whole numbers", () => {
@@ -377,6 +375,12 @@ describe("tagRelease", () => {
       "a tag that already exists",
       { "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.0.0\n` },
       /already released/,
+      8,
+    ],
+    [
+      "an unused version below a published prerelease",
+      { "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.1.0-rc.1\n` },
+      /not above 1\.1\.0-rc\.1/,
       8,
     ],
     [
@@ -667,6 +671,28 @@ describe("the entry point", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("the hook's own words\n");
     expect(recorded).toEqual(argvOnly(tagPath()));
+  });
+
+  it("tags a prerelease after the same declaration and CI checks", () => {
+    const version = "1.0.0-rc.1";
+    const { result, recorded } = runEntryPoint(["tag", version], { WT_BRANCH: "main" }, "");
+    expect(result.status, result.stderr).toBe(0);
+    expect(recorded).toEqual([
+      ...argvOnly(tagPath(version).slice(0, -2)),
+      ["git", "tag", "-a", "v1.0.0-rc.1", "-m", "Waitron prerelease 1.0.0-rc.1"],
+      ["git", "push", "origin", "v1.0.0-rc.1"],
+    ]);
+  });
+
+  it("refuses the old flag before running release commands", () => {
+    const { result, recorded } = runEntryPoint(
+      ["tag", "1.0.0", "--prerelease"],
+      { WT_BRANCH: "main" },
+      "",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("usage:");
+    expect(recorded).toEqual([]);
   });
 
   it("names the step that stopped prepare, and prints none of its output", () => {

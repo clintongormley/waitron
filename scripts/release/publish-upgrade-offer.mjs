@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  isNumberedVersion,
+  isStableVersion,
   signUpgradeOffer,
   verifyReleaseList,
   verifyUpgradeOffer,
@@ -27,7 +27,8 @@ function download(gh, tag, name) {
 
 export function publishUpgradeOffer({ ref, sha, serial, attempt, input, privateKey, keys }, gh) {
   const dispatchVersion = ref?.startsWith("refs/tags/v") ? ref.slice("refs/tags/v".length) : null;
-  if (!isNumberedVersion(dispatchVersion)) throw new Error("Dispatch from a numbered release tag");
+  if (!isStableVersion(dispatchVersion))
+    throw new Error("Dispatch from a stable numbered release tag");
   if (!exactRecord(input, ["format", "entries", "default"]))
     throw new Error("Expected upgrade offer input with format, entries and default");
 

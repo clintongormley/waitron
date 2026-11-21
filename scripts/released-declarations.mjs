@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { compareVersions, isVersion } from "./release/waitron-release.mjs";
+import { compareReleaseVersions, isNumberedVersion } from "./box/release-list.mjs";
 
 const FOLDER = "packages/fiscal-verifactu/declarations";
-const isVersionTag = (name) => name.startsWith("v") && isVersion(name.slice(1));
+const isVersionTag = (name) => name.startsWith("v") && isNumberedVersion(name.slice(1));
 
 /**
  * What breaks "a released declaration never changes" in `repo` at `HEAD`, one line per problem:
- * a `vX.Y.Z` tag whose `v<X.Y.Z>.md` is missing at `HEAD` or differs from the tag's copy; a
+ * a release tag whose declaration is missing at `HEAD` or differs from the tag's copy; a
  * declaration below the highest version with no tag of its own; any declaration in a checkout with
  * no tags at all, which cannot tell a released version from a prepared one.
  *
@@ -52,7 +52,7 @@ function blobs(repo, ref) {
   return entries;
 }
 
-const compare = (a, b) => compareVersions(a.slice(1), b.slice(1));
+const compare = (a, b) => compareReleaseVersions(a.slice(1), b.slice(1));
 
 // The caller's GIT_DIR and its family would point git at another repository than `repo`.
 function git(repo, ...args) {

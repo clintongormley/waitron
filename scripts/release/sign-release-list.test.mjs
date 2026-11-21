@@ -29,17 +29,19 @@ function run({
   viaCli = false,
   existingOutput,
   unreadableKey,
+  prerelease = "false",
+  version = "1.2.3",
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "sign-release-list-"));
   const output = join(dir, "waitron-release.json");
   const env = {
     WAITRON_RELEASE_SIGNING_KEY: secret ?? "",
-    RELEASE_VERSION: "1.2.3",
+    RELEASE_VERSION: version,
     RELEASE_SOURCE_SHA: source,
     RELEASE_APP_DIGEST: appDigest,
     RELEASE_PRINT_AGENT_DIGEST: agent,
     RELEASE_TUNNEL_DIGEST: tunnel,
-    RELEASE_PRERELEASE: "true",
+    ...(prerelease === null ? {} : { RELEASE_PRERELEASE: prerelease }),
   };
   try {
     if (currentPem) writeFileSync(join(dir, "current.pem"), currentPem);
@@ -73,17 +75,27 @@ const publicKeys = { currentPem: current.publicKey, sparePem: spare.publicKey };
 
 describe("sign-release-list.mjs", () => {
   it("publishes a file when run as the release job's script", () => {
-    const result = run({ ...publicKeys, secret: spare.privateKey, viaCli: true });
+    const result = run({
+      ...publicKeys,
+      secret: spare.privateKey,
+      viaCli: true,
+      prerelease: "true",
+      version: "1.2.3-rc.1",
+    });
     expect(result.status, result.stderr).toBe(0);
     const signed = JSON.parse(result.bytes);
-    expect(
-      verify(
-        null,
-        Buffer.from(signed.payload, "base64url"),
-        spare.publicKey,
-        Buffer.from(signed.signature, "base64url"),
-      ),
-    ).toBe(true);
+    const payload = Buffer.from(signed.payload, "base64url");
+    expect(verify(null, payload, spare.publicKey, Buffer.from(signed.signature, "base64url"))).toBe(
+      true,
+    );
+    expect(JSON.parse(payload)).toMatchObject({ version: "1.2.3-rc.1", prerelease: true });
+  });
+
+  it.each([null, "yes"])("refuses to sign with prerelease input %j", (prerelease) => {
+    const result = run({ ...publicKeys, secret: current.privateKey, prerelease });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("RELEASE_PRERELEASE");
+    expect(result.bytes).toBeUndefined();
   });
 
   it("reports a bad key using a nonzero exit without printing its value", () => {
