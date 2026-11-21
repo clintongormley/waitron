@@ -657,7 +657,6 @@ export class RecoveryHourEntry extends LitElement {
                 variant="primary"
                 ?loading=${this.continued}
                 @click=${() => {
-                  if (this.continued) return;
                   this.continued = true;
                   this.#notify();
                 }}

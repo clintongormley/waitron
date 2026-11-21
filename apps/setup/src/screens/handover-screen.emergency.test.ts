@@ -901,6 +901,27 @@ it("stops activation when the post-restart comparison finds a changed copy", asy
   expect(posts.filter(({ path }) => path.endsWith("/declare"))).toHaveLength(0);
 });
 
+it("moves keyboard focus to the page heading when a changed copy leaves no action to offer", async () => {
+  const { el } = await mount({ saved: true, activationMismatch: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  const entry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(entry, "[data-test=continue]")).not.toBeNull());
+  const button = q<LitElement>(entry, "[data-test=continue]");
+  await button.updateComplete;
+  button.focus();
+  expect(button.shadowRoot!.activeElement).toBe(button.shadowRoot!.querySelector("button"));
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.copy_failed"),
+    ),
+  );
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
+});
+
 it("checks an uncertain declaration before retrying the same frozen request", async () => {
   const { el, posts } = await mount({ lostBeforeWrite: true });
   await authenticate(el);

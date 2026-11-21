@@ -508,13 +508,16 @@ export class SetupHandoverScreen extends LitElement {
       if (refused) void this.#focusNextAction();
     }
   }
-  /** The refused start's button is gone or idle again, so focus moves to the action now offered. */
+  /**
+   * The refused start's button is gone or idle again, so focus moves to the action now offered,
+   * else the first field to fix, else the page heading, as when a copy has failed its check.
+   */
   async #focusNextAction(): Promise<void> {
     await this.updateComplete;
     const root = this.shadowRoot!;
     const action = root.querySelector<HTMLElement>("wt-form-actions wt-button:not([disabled])");
     if (action) action.focus();
-    else await focusFirstInvalid(root);
+    else if (!(await focusFirstInvalid(root))) root.querySelector<HTMLElement>("h1")?.focus();
   }
   #emergencyError(cause: unknown): string {
     const error = cause as {
@@ -1210,7 +1213,7 @@ export class SetupHandoverScreen extends LitElement {
         if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
-      <h1>${t("handover.heading")}</h1>
+      <h1 tabindex="-1">${t("handover.heading")}</h1>
       ${this.#content()}
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : status.waitingReason === "handover.copy_check_failed" ? "handover.check_failed" : "handover.wait")}</p>` : nothing}
       ${status?.waitingReason === "handover.copy_check_failed" ? html`<p><a href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/servers#emergency`}>${t("handover.check_help")}</a></p>` : nothing}
