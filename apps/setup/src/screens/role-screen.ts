@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import { actionsStyles } from "../form-styles.js";
@@ -12,6 +12,7 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 export class SetupRoleScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     actionsStyles,
     css`
       :host {

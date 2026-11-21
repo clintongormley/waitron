@@ -4,6 +4,7 @@ import {
   FormFeedback,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   type DraftScope,
 } from "@waitron/ui";
@@ -75,6 +76,7 @@ function readFileAsBase64(file: Blob): Promise<string> {
 export class SetupCertScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     actionsStyles,
     css`
@@ -95,6 +97,9 @@ export class SetupCertScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
       }
     `,
   ];

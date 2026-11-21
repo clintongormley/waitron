@@ -63,6 +63,9 @@ export class SetupRecoveryCopy extends LitElement {
       p {
         overflow-wrap: anywhere;
       }
+      h2 {
+        font-size: var(--wt-font-size-lg);
+      }
     `,
   ];
   @property() errorMessage?: string;

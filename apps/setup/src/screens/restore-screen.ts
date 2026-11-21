@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   FormFeedback,
   baseStyles,
+  pageTitleStyles,
   bottomMessage,
   focusFirstInvalid,
   leaveCoordinatorFor,
@@ -37,6 +38,7 @@ export type RestoreField = "artifact" | "recoveryKey" | "environment" | Recovery
 export class SetupRestoreScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,

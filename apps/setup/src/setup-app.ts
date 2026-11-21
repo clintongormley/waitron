@@ -19,7 +19,7 @@ import {
 } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
+import { DROPDOWN_ICONS, baseStyles, pageTitleStyles, registerIcons } from "@waitron/ui";
 import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
@@ -733,6 +733,7 @@ registerIcons(DROPDOWN_ICONS);
 export class SetupApp extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       /* Keeps the card's margins inside the wizard rather than collapsing into the page's. */
       :host {

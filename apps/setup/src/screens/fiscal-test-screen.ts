@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { actionsStyles, errorStyles } from "../form-styles.js";
 import { dispatchFiscalTestRequested, dispatchSetupGoto } from "../events.js";
@@ -11,6 +11,7 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 export class SetupFiscalTestScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     actionsStyles,
     errorStyles,
     css`

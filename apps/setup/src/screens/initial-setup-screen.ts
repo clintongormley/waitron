@@ -1,7 +1,7 @@
 import { passwordVisibility } from "../i18n/t.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
 import type { InitialSetupActions, SetupContribution } from "@waitron/module/src/setup-contract.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -13,6 +13,7 @@ import { initialSetupStrings } from "./initial-setup-strings.js";
 export class InitialSetupScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -28,6 +29,9 @@ export class InitialSetupScreen extends LitElement {
         display: inline-flex;
         align-items: center;
         min-height: var(--wt-tap-min);
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
       }
     `,
   ];

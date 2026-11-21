@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   focusFirstInvalid,
   submitOnEnter,
@@ -31,6 +32,7 @@ type Values = Record<Field, string>;
 export class SetupEmailScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     introStyles,
     pairStyles,

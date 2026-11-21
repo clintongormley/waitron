@@ -1,6 +1,6 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import type { ConfigurationPreview } from "../api/client.js";
@@ -19,6 +19,7 @@ function label<Labels extends Record<string, StringKey>>(labels: Labels, module:
 export class SetupConfigurationPreviewScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     actionsStyles,
     css`
       :host {
@@ -26,6 +27,9 @@ export class SetupConfigurationPreviewScreen extends LitElement {
       }
       .choices {
         margin-top: var(--wt-space-3);
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
       }
     `,
   ];

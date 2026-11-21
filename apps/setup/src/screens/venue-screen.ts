@@ -4,6 +4,7 @@ import {
   FormFeedback,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   type AddressChosenDetail,
   type AddressLookupProvider,
@@ -214,6 +215,7 @@ function defaultInvoiceLocales(
 export class SetupVenueScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,
