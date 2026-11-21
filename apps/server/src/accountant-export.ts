@@ -475,23 +475,21 @@ export async function listAccountantExport(
 }
 
 /**
- * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
- * a Correct invoice. A bill refund is never listed: it is taken before the bill's invoice exists.
+ * The refunds `listRefundsWithoutCorrective` reads, found by `refunds_completed_at_idx`: without
+ * planner statistics the box would take `refunds_recovery_idx` on state, reading every completed
+ * refund. Drizzle refuses a selected column of a table named only in `sql`, hence `mapWith`.
  */
-async function listRefundsWithoutCorrective(
-  tx: Transaction,
-  window: (column: SQL) => SQL,
-): Promise<RefundWithoutCorrective[]> {
+export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: SQL) => SQL) {
   const requester = alias(persons, "requester");
   const authorizer = alias(persons, "authorizer");
-  const rows = await tx
+  return tx
     .select({
-      id: refunds.id,
+      id: sql`${refunds.id}`.mapWith(refunds.id),
       refundedAt: sql<string>`${refunds.completedAt}`,
-      applied: refunds.appliedAmount,
-      tip: refunds.tipAmount,
-      method: refunds.method,
-      reason: refunds.reason,
+      applied: sql`${refunds.appliedAmount}`.mapWith(refunds.appliedAmount),
+      tip: sql`${refunds.tipAmount}`.mapWith(refunds.tipAmount),
+      method: sql`${refunds.method}`.mapWith(refunds.method),
+      reason: sql`${refunds.reason}`.mapWith(refunds.reason),
       requestedBy: requester.displayName,
       authorizedBy: authorizer.displayName,
       saleId: sql<string>`${refunds.saleId}`,
@@ -499,7 +497,7 @@ async function listRefundsWithoutCorrective(
       number: sales.invoiceNumber,
       vatBreakdown: sales.vatBreakdown,
     })
-    .from(refunds)
+    .from(sql`${refunds} indexed by refunds_completed_at_idx`)
     .innerJoin(sales, eq(sales.id, refunds.saleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .innerJoin(requester, eq(requester.id, refunds.requestedBy))
@@ -517,6 +515,17 @@ async function listRefundsWithoutCorrective(
       ),
     )
     .orderBy(asc(refunds.completedAt), asc(refunds.id));
+}
+
+/**
+ * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
+ * a Correct invoice. A bill refund is never listed: it is taken before the bill's invoice exists.
+ */
+async function listRefundsWithoutCorrective(
+  tx: Transaction,
+  window: (column: SQL) => SQL,
+): Promise<RefundWithoutCorrective[]> {
+  const rows = await refundsWithoutCorrectiveQuery(tx, window);
   const takenOff = await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]);
   return rows.map(({ applied, tip, code, number, vatBreakdown, ...row }) => {
     const amount = centsToDecimal(applied);

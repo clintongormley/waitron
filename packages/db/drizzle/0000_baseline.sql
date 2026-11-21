@@ -1754,6 +1754,7 @@ CREATE UNIQUE INDEX `refunds_pending_capture_key` ON `refunds` (`provider`,`prov
 CREATE UNIQUE INDEX `refunds_provider_event_key` ON `refunds` (`provider`,`provider_payment_ref`,`provider_refund_ref`) WHERE "refunds"."provider_refund_ref" is not null;--> statement-breakpoint
 CREATE INDEX `refunds_recovery_idx` ON `refunds` (`state`,`next_retry_at`,`created_at`,`id`);--> statement-breakpoint
 CREATE INDEX `refunds_created_at_idx` ON `refunds` (`created_at`);--> statement-breakpoint
+CREATE INDEX `refunds_completed_at_idx` ON `refunds` (`completed_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `refunds_bill_submission_key` ON `refunds` (`bill_payment_id`,`submission_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `refunds_sale_submission_key` ON `refunds` (`sale_id`,`submission_id`);--> statement-breakpoint
 CREATE TABLE `venue_credentials` (

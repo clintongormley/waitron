@@ -32,7 +32,7 @@ import {
   seedRefundableSale,
   seedTenderRefund,
 } from "@waitron/reporting/test/tender-refund-fixtures.js";
-import { computeVatCorrections, computeVatReturn } from "@waitron/reporting";
+import { computeVatCorrections, computeVatReturn, validatedRangeWindow } from "@waitron/reporting";
 import {
   decimal,
   deviceOrigin,
@@ -44,6 +44,7 @@ import {
   linkPaymentsOnAccount,
   listAccountantExport,
   partPaymentsAmong,
+  refundsWithoutCorrectiveQuery,
   renderAccountantWorkbook,
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
@@ -536,6 +537,27 @@ describe("accountant period selection", () => {
     );
     expect(plan).toContain(
       "SEARCH bill_advances USING INDEX bill_advances_advance_sale_key (advance_sale_id=?)",
+    );
+    expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  });
+
+  it("finds the period's refunds through their completion index rather than every refund", async () => {
+    const window = validatedRangeWindow({
+      fromBusinessDay: "2026-11-01",
+      toBusinessDay: "2026-11-30",
+      timeZone: "Europe/Madrid",
+      dayCutover: "00:00",
+      cutoverChanges: [],
+    });
+    const plan = await withTransaction(suite.db, async (tx) =>
+      (
+        await tx.execute<{ detail: string }>(
+          sql`explain query plan ${refundsWithoutCorrectiveQuery(tx, window).getSQL()}`,
+        )
+      ).rows.map((step) => step.detail),
+    );
+    expect(plan.find((step) => step.includes(" refunds "))).toMatch(
+      /^SEARCH refunds USING INDEX refunds_completed_at_idx \(completed_at>\? AND completed_at<\?\)$/,
     );
     expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
   });
