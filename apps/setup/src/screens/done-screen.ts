@@ -47,7 +47,10 @@ function isRecoveryAnswer(answer: unknown): boolean {
   return typeof failures === "number" && typeof level === "string";
 }
 
-/** A rejection that carries an HTTP status, or a body that would not parse, came from the box. */
+/**
+ * A rejection that carries an HTTP status, or a body that would not parse, means something answered
+ * at this address.
+ */
 function boxAnswered(error: unknown): boolean {
   if (error instanceof SyntaxError) return true;
   return typeof error === "object" && error !== null && "status" in error;
@@ -327,7 +330,8 @@ export class SetupDoneScreen extends LitElement {
       this.#lastAnswerMs = Date.now();
       this.lost = false;
       this.joined = answer === "joined";
-      this.copyStage = answer === "joined" || answer === "answered" ? undefined : answer;
+      if (answer !== "stage_unread")
+        this.copyStage = answer === "joined" || answer === "answered" ? undefined : answer;
       if (this.joined) return;
     }
     this.#timer = setTimeout(
@@ -337,11 +341,12 @@ export class SetupDoneScreen extends LitElement {
   }
 
   /**
-   * Asks the role probe, then, when the box answers without one, the status a box still joining
-   * answers. Each request is abandoned after `requestTimeoutMs`, so one that never settles cannot
-   * stop the polling.
+   * Asks the role probe, then, when the box refuses it (a box still joining has none:
+   * boot.mirror-surface.test.ts:545), the status a box still joining answers. Each request is
+   * abandoned after `requestTimeoutMs`, so one that never settles cannot stop the polling. The
+   * refusal is itself an answer, so a status read that fails is `stage_unread`, not `none`.
    */
-  async #askJoin(): Promise<"joined" | "answered" | "none" | JoinCopyStage> {
+  async #askJoin(): Promise<"joined" | "answered" | "stage_unread" | "none" | JoinCopyStage> {
     const controller = new AbortController();
     this.#joinRequest = controller;
     let limit: ReturnType<typeof setTimeout> | undefined;
@@ -361,7 +366,7 @@ export class SetupDoneScreen extends LitElement {
           (await Promise.race([this.api.joinCopyStage(controller.signal), deadline])) ?? "answered"
         );
       } catch {
-        return "answered";
+        return "stage_unread";
       }
     } finally {
       clearTimeout(limit);

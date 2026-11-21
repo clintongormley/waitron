@@ -404,7 +404,7 @@ export class SetupApi {
 
   /**
    * Where the first copy has got to, from the status a box still joining answers
-   * (`mountLatchBoxStatus`); `null` for any other answer.
+   * (`mountLatchBoxStatus`); `null` for any other successful answer; rejects on a refusal.
    */
   async joinCopyStage(signal: AbortSignal): Promise<JoinCopyStage | null> {
     const fetchImpl = this.#fetchImpl;

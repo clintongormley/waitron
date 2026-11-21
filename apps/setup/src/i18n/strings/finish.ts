@@ -114,7 +114,7 @@ export const finishEn = {
   "done.joining.copy_restoring": "Joining. Copying the restaurant's data from the primary.",
   "done.joining.copy_ready": "Joining. The copy is complete and this server is restarting.",
   "done.joining.lost_before":
-    "This page can no longer reach this server. That is expected after it restarts to join, because it then uses the restaurant's own security certificate. To check, open the primary's",
+    "This page can no longer reach this server. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
   "done.joining.lost_link": "Servers page",
   "done.joining.lost_after": "and look at this server's row.",
   "done.joined.status": "Joined. This server is now the standby.",
@@ -253,7 +253,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.joining.copy_ready":
     "Uniéndose. La copia está completa y este servidor se está reiniciando.",
   "done.joining.lost_before":
-    "Esta página ya no puede comunicarse con este servidor. Es lo esperado después de que se reinicie para unirse, porque entonces usa el certificado de seguridad propio del restaurante. Para comprobarlo, abre la",
+    "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la",
   "done.joining.lost_link": "página Servidores",
   "done.joining.lost_after": "del principal y mira la fila de este servidor.",
   "done.joined.status": "Unido. Este servidor es ahora el servidor en espera.",

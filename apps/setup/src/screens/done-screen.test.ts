@@ -2003,7 +2003,7 @@ describe("the joining page", () => {
   };
   const SERVERS = "https://waitron.local/servers";
   const LOST_EN =
-    "This page can no longer reach this server. That is expected after it restarts to join, because it then uses the restaurant's own security certificate. To check, open the primary's Servers page and look at this server's row.";
+    "This page can no longer reach this server. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's Servers page and look at this server's row.";
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
       status,
@@ -2193,6 +2193,55 @@ describe("the joining page", () => {
     await vi.waitFor(() => expect(statusText(el)).toMatch(/^This page can no longer reach/));
   });
 
+  it.each([
+    ["gets no answer in time", () => new Promise<Response>(() => {})],
+    ["cannot reach the box", unreachable],
+    [
+      "is refused",
+      () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 500)),
+    ],
+  ])(
+    "keeps the copy's stage, and counts the refused role probe as an answer, when the status read %s",
+    async (_, later) => {
+      let boxCalls = 0;
+      const { el } = await mountJoining(
+        [notFound],
+        { requestTimeoutMs: 10, lostAfterMs: 0, lostPollIntervalMs: 3 },
+        () => {
+          boxCalls += 1;
+          return boxCalls === 1
+            ? Promise.resolve(json({ adoption: "pending", copy: "restoring" }))
+            : later();
+        },
+      );
+      const copying = "Joining. Copying the restaurant's data from the primary.";
+      await vi.waitFor(() => expect(statusText(el)).toBe(copying));
+      await vi.waitFor(() => expect(boxCalls).toBeGreaterThan(4));
+      expect(statusText(el)).toBe(copying);
+    },
+  );
+
+  it("counts a role-probe answer that is not JSON as the box answering", async () => {
+    const htmlPage = () =>
+      Promise.resolve(
+        new Response("<!doctype html>", { status: 200, headers: { "content-type": "text/html" } }),
+      );
+    const { el, nodeCalls } = await mountJoining([htmlPage], {
+      lostAfterMs: 0,
+      lostPollIntervalMs: 3,
+    });
+    await vi.waitFor(() => expect(nodeCalls()).toBeGreaterThan(3));
+    expect(statusText(el)).toBe(JOINING_STATUS_EN);
+  });
+
+  it("cancels the request in flight when the screen leaves the page", async () => {
+    const { el, signals } = await mountJoining([() => new Promise(() => {})]);
+    await vi.waitFor(() => expect(signals).toHaveLength(1));
+    expect(signals[0]?.aborted).toBe(false);
+    el.remove();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
   it("shows the Servers page words without a link when the primary's address is not known", async () => {
     const { el } = await mountJoining([unreachable], { lostAfterMs: 0 });
     await vi.waitFor(() => expect(statusText(el)).toBe(LOST_EN));
@@ -2299,7 +2348,7 @@ describe("the joining page", () => {
     const { el } = await mountJoining([unreachable], { serversUrl: SERVERS, lostAfterMs: 0 });
     await vi.waitFor(() =>
       expect(statusText(el)).toBe(
-        "Esta página ya no puede comunicarse con este servidor. Es lo esperado después de que se reinicie para unirse, porque entonces usa el certificado de seguridad propio del restaurante. Para comprobarlo, abre la página Servidores del principal y mira la fila de este servidor.",
+        "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la página Servidores del principal y mira la fila de este servidor.",
       ),
     );
   });
