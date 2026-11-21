@@ -932,7 +932,9 @@ A802 slice 5b (#3108):
   paid €62 ticket needs a corrective, the owner answered "yes" (owner, 2026-11-18, question 6 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details); the sheet
   records as open that the "yes" does not say which of the two choices it answers, and reads it as
-  the corrective being required. Today a refund files a corrective only when it is a leg of an
+  the corrective being required. On 21 November the owner answered "yes and yes" to whether a goodwill amount
+  on a bill with two VAT rates is split by menu price and whether a corrective is needed, which
+  settles that reading; the adviser is still to confirm. The work stays parked (owner, 19 November). Today a refund files a corrective only when it is a leg of an
   invoice correction (`refundSettledTender`, `apps/server/src/tender-refunds.ts:144-146`), and the
   A802 design leaves a served dish's goodwill return to the ordinary **Refund a payment** on purpose
   (`docs/superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md:301-302`).

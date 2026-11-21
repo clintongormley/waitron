@@ -171,6 +171,8 @@ Open: whether covered dishes may also be left off a full invoice; drinks served 
 
 Open: the goodwill "yes" does not say which of the two choices it answers; read as: the corrective is required.
 
+**The owner's answer, 21 November 2026**, to the summary "whether that split is right, and whether a correction is needed at all" (the point on goodwill money back on a bill with two VAT rates): "yes and yes". Read as: splitting by menu price is right, and a corrective is required, which settles the reading of 18 November above. The adviser is still to confirm.
+
 **7. Tips**
 
 Waitron can offer a tip when a guest pays, and keeps tips off the invoice. The card provider pays the tip to the restaurant with the rest of the bill, and the restaurant passes it to staff.
