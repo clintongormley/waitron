@@ -295,6 +295,26 @@ describe("POST /api/node/print-agent", () => {
     expect(await agentRows(db)).toEqual([]);
   });
 
+  it("logs an unexpected failure under this route's own name", async () => {
+    const lines: [string, string][] = [];
+    const failing = new Proxy({} as Database, {
+      get() {
+        throw new Error("boom");
+      },
+    });
+    const app = new Hono();
+    mountPrintAgentEnrolApi(
+      app,
+      { db: failing, node: suite.node, ring: RING, nodeId: STRANGER.nodeId, isPrimary: true },
+      (level, event) => lines.push([level, event]),
+    );
+    expect(await send(app, envelope(STRANGER, { name: "x", toNodeId: STRANGER.nodeId }))).toEqual({
+      status: 500,
+      body: { error: { code: "server.internal" } },
+    });
+    expect(lines).toEqual([["error", "print-agent-enrol.failed"]]);
+  });
+
   describe("a print agent's token once its box is removed", () => {
     /** One route behind the print-agent API's bearer guard. */
     function agentApp(db: Database): Hono {

@@ -56,7 +56,7 @@ export function mountPrintAgentEnrolApi(
   deps: PrintAgentEnrolApiDeps,
   log: Logger,
 ): void {
-  const run = createErrorBoundary(STATUS, "node.failed");
+  const run = createErrorBoundary(STATUS, "print-agent-enrol.failed");
   const limiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
   app.use(PRINT_AGENT_ENROL_PATH, peerBodyLimit(65536));
