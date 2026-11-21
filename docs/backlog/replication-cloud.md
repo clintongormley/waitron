@@ -848,8 +848,8 @@ Remote dashboard access, Settings on/off and retirement of the old TCP relay are
 [PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
 thread.
 
-Translate all returned one editable menu suggestion on the test box. Address completion still
-needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
+Translate all returned one editable menu suggestion on the test box. The live Google address
+trial still needs its Cloud provider. Provider keys stay on the gateway host and come from the owner.
 
 The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
 that the sign-in page and a bug in the remote entrance face the internet, and that this version

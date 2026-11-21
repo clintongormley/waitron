@@ -525,6 +525,27 @@ export class SetupApi {
     return this.#request("/setup-api/cloud/sign-in/start", "POST", { tab });
   }
 
+  cloudAddressLookup(
+    tab: string,
+    operation:
+      | { kind: "available" }
+      | { kind: "suggest"; workflowId: string; query: string; language: "en" | "es" }
+      | { kind: "validate"; workflowId: string; selectedText: string },
+  ): Promise<{
+    available?: boolean;
+    candidates?: { text: string }[];
+    fields?: {
+      addressLine1: string;
+      addressLine2: string | null;
+      postalCode: string;
+      city: string;
+      province: string;
+      countryCode: "ES";
+    };
+  }> {
+    return this.#request("/setup-api/cloud/sign-in/address-lookup", "POST", { tab, ...operation });
+  }
+
   /** Answered only by the page a box shows when its start failed (`recovery-surface.ts`). */
   getRecoveryStatus(): Promise<unknown> {
     return this.#request<unknown>("/recovery-api/status", "GET");

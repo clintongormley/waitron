@@ -15,6 +15,7 @@ import {
   applyThemePick,
   THEME_SELECTED_EVENT,
   themeLabelsPerLocale,
+  type AddressLookupProvider,
   type DraftScope,
 } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -58,6 +59,7 @@ import type {
   CloudRecoveryView,
 } from "./api/client.js";
 import { PREVIEW_NULLABLE_VENUE_FIELDS } from "./api/client.js";
+import { setupCloudAddressProvider } from "./api/cloud-address-provider.js";
 import { dispatchSetupGoto } from "./events.js";
 import { serversPageOf } from "./servers-page.js";
 import type {
@@ -833,6 +835,23 @@ export class SetupApp extends LitElement {
   #localeChosen = false;
 
   #cloudSignInAvailable = false;
+  @state() private cloudAddressProvider?: AddressLookupProvider;
+  #addressLoad?: Promise<AddressLookupProvider | undefined>;
+
+  #loadCloudAddressProvider(): void {
+    this.cloudAddressProvider = undefined;
+    const tab =
+      this.screen === "venue" && !this.draft.configurationImport ? this.#cloudSignInTab : undefined;
+    const pending =
+      tab && this.draft.mode !== "demo"
+        ? setupCloudAddressProvider(this.api, tab, setupLocale).catch(() => undefined)
+        : undefined;
+    this.#addressLoad = pending;
+    void pending?.then((provider) => {
+      if (this.isConnected && this.#addressLoad === pending) this.cloudAddressProvider = provider;
+    });
+  }
+
   get #cloudSignInTab(): string | undefined {
     if (this.#cloudSignInAvailable)
       return sessionStorage.getItem("waitron-setup-cloud-signed-in") ?? undefined;
@@ -1214,7 +1233,9 @@ export class SetupApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     // The connection screen's Join question must not outlive the screen that asked it.
-    if (changed.has("screen") && this.screen !== "connection") this.#joinAbort.abort();
+    if (!changed.has("screen")) return;
+    if (this.screen !== "connection") this.#joinAbort.abort();
+    this.#loadCloudAddressProvider();
   }
 
   #requestModeChoice(
@@ -2969,6 +2990,7 @@ export class SetupApp extends LitElement {
       case "venue":
         return html`<setup-venue-screen
           data-test="screen-venue"
+          .addressProvider=${this.cloudAddressProvider}
           .draft=${this.draft}
           .errorMessage=${this.venueError?.()}
           .refusal=${this.venueError}
