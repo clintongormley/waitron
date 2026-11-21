@@ -490,6 +490,10 @@ async function declarationFields(el: SetupHandoverScreen) {
   }
   await el.updateComplete;
 }
+async function useDifferentCopy(el: SetupHandoverScreen) {
+  q(el, "[data-test=different-copy]").click();
+  await el.updateComplete;
+}
 async function startVenue(el: SetupHandoverScreen) {
   const entry = q<LitElement>(el, "vf-recovery-hour");
   await entry.updateComplete;
@@ -515,6 +519,7 @@ afterEach(() => {
 it("draws the backup picker's words in the chooser's language, not the browser's", async () => {
   const { el } = await mount({ backup: true });
   await authenticate(el);
+  await useDifferentCopy(el);
   setLocale("es-ES");
   await el.updateComplete;
   const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
@@ -530,6 +535,7 @@ it("writes the chosen backup's size in the chooser's language", async () => {
   setLocale("es-ES");
   const { el } = await mount({ backup: true });
   await authenticate(el);
+  await useDifferentCopy(el);
   const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
   chooseFiles(picker, new File([new Uint8Array(48_200)], "venue.enc"));
   await el.updateComplete;
@@ -552,6 +558,7 @@ it.each(
         theme === "dark" ? "recovery.passphrase_invalid" : "handover.backup_key_missing",
     });
     await authenticate(el);
+    await useDifferentCopy(el);
     const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
     chooseFiles(input, new File(["archive"], "venue.enc"));
@@ -607,6 +614,7 @@ it.each(["en-GB", "es-ES"])(
     setLocale(locale);
     const { el, posts } = await mount({ backup: true });
     await authenticate(el);
+    await useDifferentCopy(el);
     chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
     await el.updateComplete;
     q(el, "[data-test=emergency-backup]").click();
@@ -644,6 +652,7 @@ it.each([
       backupRefusalReason: reason,
     });
     await authenticate(el);
+    await useDifferentCopy(el);
     const input = q(el, 'wt-file-input[name="handover-backup"]');
     expect(input).not.toBeNull();
     chooseFiles(input, new File(["archive"], "venue.enc"));
@@ -666,8 +675,7 @@ it.each(["en-GB", "es-ES"])(
     setLocale(locale);
     const { el, posts } = await mount();
     await authenticate(el);
-    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.one_way"));
-    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.split"));
+    expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.warning"));
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.no_date"));
     const action = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-declare]");
     expect(action.disabled).toBe(true);
@@ -796,7 +804,7 @@ it.each([
   if (link)
     expect(el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${link}"]`)).not.toBeNull();
   expect(el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/"]')!.textContent).toBe(
-    t("handover.emergency.stop"),
+    t("handover.emergency.leave"),
   );
   expect(q(el, "[data-test=emergency-preview]").shadowRoot!.querySelector("button")!.disabled).toBe(
     false,
@@ -804,8 +812,13 @@ it.each([
 });
 
 it("clears saved reason and secret inputs on an account change, and clears secrets when the page closes", async () => {
-  const { el } = await mount({ saved: true });
+  const { el } = await mount({ saved: true, preparationRefusal: "password.invalid" });
   await authenticate(el);
+  // After Declare only a refusal that needs the sign-in opens the fields again.
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() => expect(q(el, '[name="handover-email"]')).not.toBeNull());
   expect(el.shadowRoot!.textContent).toContain(saved.reason);
   await edit(el, "handover-email", "another@example.com");
   expect(el.shadowRoot!.textContent).not.toContain(saved.reason);
@@ -1472,6 +1485,7 @@ it("choosing a backup while the spare catches up stops the catching up", async (
 
 async function chooseBackup(el: SetupHandoverScreen) {
   await authenticate(el);
+  await useDifferentCopy(el);
   chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
   await el.updateComplete;
   q(el, "[data-test=emergency-backup]").click();
@@ -1562,7 +1576,7 @@ const spareSwitchPage = (back: string) =>
 async function stopAndContinueLinks(pageUrl: string) {
   const { el } = await mount({ saved: true, pageUrl });
   const stop = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-    (link) => link.textContent === t("handover.emergency.stop"),
+    (link) => link.textContent === t("handover.emergency.leave"),
   )!;
   const stopHref = stop.getAttribute("href");
   await authenticate(el);
@@ -1628,7 +1642,7 @@ async function declareAndReload(pageUrl: string) {
   });
   const stop = await vi.waitFor(() => {
     const link = [...reloaded.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-      (candidate) => candidate.textContent === t("handover.emergency.stop"),
+      (candidate) => candidate.textContent === t("handover.emergency.leave_saved"),
     );
     expect(link).toBeDefined();
     return link!;
@@ -2040,3 +2054,154 @@ it.each([
   await vi.waitFor(() => expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(words));
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(["preview"]);
 });
+
+const signInDrawn = (el: SetupHandoverScreen) =>
+  [
+    '[name="handover-sign-in-method"]',
+    '[name="handover-email"]',
+    '[name="handover-password"]',
+    '[name="handover-code"]',
+    'wt-file-input[name="handover-backup"]',
+  ].map((selector) => el.shadowRoot!.querySelector(selector) !== null);
+const leaveLink = (el: SetupHandoverScreen) =>
+  el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="/"]`)!;
+
+it.each(["en-GB", "es-ES"])(
+  "a checked copy folds the sign-in away, and Use a different copy brings it back with its values (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount();
+    expect(signInDrawn(el)).toEqual([true, true, true, true, true]);
+    await authenticate(el);
+    expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.sign_in"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.backup_intro"));
+    const different = q(el, "[data-test=different-copy]");
+    expect(different.textContent!.trim()).toBe(t("handover.emergency.different_copy"));
+    expect(different.getAttribute("variant")).toBe("ghost");
+    different.click();
+    await el.updateComplete;
+    expect(signInDrawn(el)).toEqual([true, true, true, true, true]);
+    expect(q(el, "[data-test=different-copy]")).toBeNull();
+    const email = q<LitElement>(el, '[name="handover-email"]');
+    await email.updateComplete;
+    expect(email.shadowRoot!.querySelector("input")!.value).toBe(signIn.email);
+  },
+);
+
+it("a folded sign-in is still sent with the declaration", async () => {
+  const { el, posts } = await mount();
+  await authenticate(el);
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(posts.find(({ path }) => path.endsWith("/declare"))!.body.signIn).toEqual(signIn);
+  expect(q(el, "[data-test=different-copy]")).toBeNull();
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+});
+
+it("a refusal that needs the sign-in opens it again, before Declare", async () => {
+  const { el } = await mount({ expired: true });
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.code_expired"),
+    ),
+  );
+  expect(signInDrawn(el)).toEqual([true, true, true, true, true]);
+  const code = q<LitElement>(el, '[name="handover-code"]');
+  await code.updateComplete;
+  expect(code.shadowRoot!.querySelector("input")!.value).toBe(signIn.totp);
+});
+
+it("an expired code at the clock check opens the sign-in again, without Use a different copy", async () => {
+  const { el } = await mount({ saved: true, preparationRefusal: "password.invalid" });
+  await authenticate(el);
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.code_expired"),
+    ),
+  );
+  // After Declare the copy cannot change, so the backup choice stays away.
+  expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
+  expect(q(el, "[data-test=different-copy]")).toBeNull();
+});
+
+it("fields the page marks invalid are drawn, even while folded", async () => {
+  const { el } = await mount();
+  await authenticate(el);
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+  Reflect.set(el, "password", "");
+  Reflect.set(el, "attempted", true);
+  await el.updateComplete;
+  expect(signInDrawn(el)).toEqual([true, true, true, true, true]);
+});
+
+it.each(["en-GB", "es-ES"])(
+  "names the copy by its times, not its fingerprint, with one warning line above the statements (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount();
+    await authenticate(el);
+    const copy = q(el, "[data-test=emergency-copy]");
+    expect(copy.textContent).not.toContain(preview.copy.identifier);
+    expect(copy.textContent).toContain(t("handover.emergency.no_date"));
+    const statements = q(el, ".statements");
+    expect(statements.previousElementSibling!.textContent!.trim()).toBe(
+      t("handover.emergency.warning"),
+    );
+    expect([...statements.querySelectorAll("label")].map((label) => label.textContent)).toEqual(
+      (["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
+        (key) => `${t(`handover.emergency.${key}`)} *`,
+      ),
+    );
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "the leave link says it goes back before Declare and that the switch is saved after (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount();
+    expect(leaveLink(el).textContent).toBe(t("handover.emergency.leave"));
+    await authenticate(el);
+    expect(leaveLink(el).textContent).toBe(t("handover.emergency.leave"));
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+    expect(leaveLink(el).textContent).toBe(t("handover.emergency.leave_saved"));
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "after Declare, says the switch is saved and folds the copy's details, the reason and the time (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount({ saved: true });
+    await authenticate(el);
+    const copy = q(el, "[data-test=emergency-copy]");
+    const saved_ = [...copy.querySelectorAll(":scope > p")].map((p) => p.textContent!.trim());
+    expect(saved_).toEqual([t("handover.emergency.saved")]);
+    const details = copy.querySelector<HTMLDetailsElement>(":scope > details")!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector("summary")!.textContent!.trim()).toBe(
+      t("handover.emergency.details"),
+    );
+    expect(details.textContent).toContain(saved.reason);
+    expect(details.textContent).toContain(t("handover.emergency.declared_at"));
+    expect(details.textContent).toContain(t("handover.emergency.no_date"));
+    expect(details.querySelector<HTMLAnchorElement>("a")!.getAttribute("href")).toBe(
+      preview.sourceServersUrl,
+    );
+    q(el, "[data-test=authenticate]").click();
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+    expect(details.contains(q(el, "vf-recovery-hour"))).toBe(false);
+  },
+);

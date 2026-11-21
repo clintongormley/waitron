@@ -43,8 +43,8 @@ export const handoverEn = {
     "The spare took a while to catch up and your passkey sign-in expired. Choose Check this copy and use your passkey again.",
   "handover.emergency.held_passkey_refused":
     "This spare's own copy did not accept your passkey. To use it, choose Use your password and sign in.",
-  "handover.emergency.saved":
-    "This declaration is saved and cannot be undone. Stop leaves this page; it does not cancel the declaration.",
+  "handover.emergency.saved": "The switch is saved and cannot be undone.",
+  "handover.emergency.details": "Details",
   "handover.emergency.copy": "Copy held on this spare",
   "handover.emergency.selected_backup": "Selected backup",
   "handover.emergency.followed": "Latest copy from the main box",
@@ -86,12 +86,8 @@ export const handoverEn = {
   "handover.emergency.declared_at": "Declared:",
   "handover.emergency.no_date": "No dated activity was found in this copy.",
   "handover.emergency.servers": "Open Servers on the old main box",
-  "handover.emergency.one_way":
-    "This declaration cannot be undone. Switch off the old main box before continuing, and keep it switched off.",
-  "handover.emergency.split":
-    "If the old main box is still running, both boxes could take payments and file records separately. Do not continue while it is running.",
-  "handover.emergency.returned":
-    "Keep the old box and its data. Its invoice records and recorded payment facts can return later; orders, stock changes and drawer openings are not replayed.",
+  "handover.emergency.warning":
+    "Switch off the old main box and keep it, with its data. This cannot be undone.",
   "handover.emergency.sourceSwitchedOff": "I have switched off the old main box.",
   "handover.emergency.noParallelRecovery":
     "No other box or cloud recovery is being started for this venue.",
@@ -101,7 +97,9 @@ export const handoverEn = {
   "handover.emergency.reason_long": "Use no more than 500 characters.",
   "handover.emergency.check": "Check this copy",
   "handover.emergency.declare": "Declare the old main box switched off",
-  "handover.emergency.stop": "Stop",
+  "handover.emergency.leave": "Don't switch, go back",
+  "handover.emergency.leave_saved": "Leave this page (the switch is saved)",
+  "handover.emergency.different_copy": "Use a different copy",
   "handover.emergency.progress": "Open handover progress",
   "handover.emergency.controlled_link": "Open the unfinished handover",
   "handover.emergency.code_expired":
@@ -210,8 +208,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "El servidor de reserva ha tardado en ponerse al día y la solicitud de passkey ha caducado. Elige Comprobar esta copia y vuelve a usar tu passkey.",
   "handover.emergency.held_passkey_refused":
     "La copia de este servidor de reserva no ha aceptado tu passkey. Para usarla, elige Usar tu contraseña e identifícate.",
-  "handover.emergency.saved":
-    "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
+  "handover.emergency.saved": "El cambio está guardado y no se puede deshacer.",
+  "handover.emergency.details": "Detalles",
   "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
     "La copia cambió mientras la leías. Revisa su última actividad y vuelve a confirmar las tres declaraciones.",
@@ -219,12 +217,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
   "handover.emergency.servers": "Abrir Servidores en el servidor principal anterior",
-  "handover.emergency.one_way":
-    "Esta declaración no se puede deshacer. Apaga el servidor principal anterior antes de continuar y mantenlo apagado.",
-  "handover.emergency.split":
-    "Si el servidor principal anterior sigue encendido, ambos servidores podrían cobrar y enviar registros por separado. No continúes mientras siga encendido.",
-  "handover.emergency.returned":
-    "Conserva el servidor anterior y sus datos. Sus registros de facturación y hechos de pago registrados podrán volver más adelante; no se repiten pedidos, cambios de existencias ni aperturas de cajón.",
+  "handover.emergency.warning":
+    "Apaga el servidor principal anterior y guárdalo con sus datos. Esto no se puede deshacer.",
   "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
   "handover.emergency.noParallelRecovery":
     "No se está iniciando otro servidor ni una recuperación en la nube para este local.",
@@ -234,7 +228,9 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
   "handover.emergency.check": "Comprobar esta copia",
   "handover.emergency.declare": "Declarar apagado el servidor principal anterior",
-  "handover.emergency.stop": "Parar",
+  "handover.emergency.leave": "No cambiar, volver",
+  "handover.emergency.leave_saved": "Salir de esta página (el cambio está guardado)",
+  "handover.emergency.different_copy": "Usar otra copia",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
   "handover.emergency.controlled_link": "Abrir el traspaso pendiente",
   "handover.emergency.code_expired":
