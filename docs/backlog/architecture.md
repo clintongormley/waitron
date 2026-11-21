@@ -153,11 +153,6 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
   The regional cuts' local launches refused at Mailpit's absent Docker socket; their native setup
   component views and database/media checks do not qualify those live screens.
-- **Demo media regeneration changes the committed Negroni picture.** The moved
-  generator produces different pixels for Negroni; a decoded-pixel comparison
-  preserves this finding across tested Node compression versions. Preserve the
-  committed picture when qualifying a future regeneration policy;
-  A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   The server split suites' comments and shared helper consumers remain.
