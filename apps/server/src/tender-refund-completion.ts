@@ -3,7 +3,7 @@ import { appendDrawerEntry, refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { centsToDecimal, deviceOrigin, type NodeId } from "@waitron/shared";
 import { recordManualRefund } from "@waitron/payments";
-import { resolveDrawerAssignment } from "./receipt-print.js";
+import { printerLookup, resolveDrawerAssignment } from "./receipt-print.js";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
 type RefundRow = typeof refunds.$inferSelect;
@@ -85,7 +85,7 @@ export async function completeRefundReservation(
 
 async function recordCashDrawerRefund(tx: Transaction, refund: RefundRow): Promise<void> {
   if (refund.deviceId === null) return;
-  const drawer = await resolveDrawerAssignment(tx, deviceOrigin(refund.deviceId));
+  const drawer = await resolveDrawerAssignment(printerLookup(tx, deviceOrigin(refund.deviceId)));
   if (drawer === undefined) return;
   await appendDrawerEntry(tx, {
     nodeId: refund.nodeId,

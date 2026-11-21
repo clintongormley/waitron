@@ -2050,7 +2050,7 @@ export async function takeBillPayment(
       } else {
         await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
       }
-      await recordBillDrawerPayment(tx, cfg, payment);
+      await recordBillDrawerPayment(tx, cfg, payment, printers);
       const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const { invoice, figures } = await issueWhenFullyPaid(
         tx,
@@ -2204,8 +2204,9 @@ async function recordBillDrawerPayment(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   payment: PaymentRow,
+  printers: PrinterLookup,
 ): Promise<void> {
-  const drawer = await resolveDrawerAssignment(tx, cfg.origin);
+  const drawer = await resolveDrawerAssignment(printers);
   if (drawer === undefined) return;
   await appendDrawerEntry(tx, {
     nodeId: cfg.nodeId,
@@ -2308,25 +2309,19 @@ export async function completeBillPayment(
     .returning();
   // The invoices are filed under the device that took the payment, whoever completes it.
   const takenAt = { ...cfg, origin: storedDeviceOrigin(payment!) };
-  await recordBillDrawerPayment(tx, takenAt, payment!);
+  const printers = printerLookup(tx, takenAt.origin);
+  await recordBillDrawerPayment(tx, takenAt, payment!, printers);
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
     takenAt,
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true, guestCount, datedByLatestAcceptance },
+    { moneyMoved: true, guestCount, datedByLatestAcceptance, printers },
   );
   // An invoice issued or settled is answered, so with none `figures` still stand.
   if (issued.invoice === null)
-    await issueAdvanceIfOwed(
-      tx,
-      deps,
-      takenAt,
-      payment!,
-      printerLookup(tx, takenAt.origin),
-      issued.figures,
-    );
+    await issueAdvanceIfOwed(tx, deps, takenAt, payment!, printers, issued.figures);
   return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
 }
 
