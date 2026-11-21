@@ -227,16 +227,17 @@ it("close aborts the closed signal", () => {
 
 describe("a closed gate's refusal across origins", () => {
   const ADMITTED = "https://other-box.example";
+  const paymentPath = "/api/working-orders/bill-1/payments";
   function crossOriginRig(allow: (origin: string) => Promise<boolean>) {
     const gate = createHandoverGate({ cors: corsForVenue(allow) });
     let handled = 0;
     const app = new Hono();
     app.use("*", gate.middleware);
-    app.post("/api/pay", (c) => {
+    app.post(paymentPath, (c) => {
       handled += 1;
       return c.json({ paid: true });
     });
-    app.on("OPTIONS", "/api/pay", (c) => {
+    app.on("OPTIONS", paymentPath, (c) => {
       handled += 1;
       return c.body(null, 204);
     });
@@ -260,8 +261,8 @@ describe("a closed gate's refusal across origins", () => {
 
   it("answers an admitted origin's API preflight and gives its refusal the venue's CORS headers, running no route", async () => {
     const r = crossOriginRig((o) => Promise.resolve(o === ADMITTED));
-    const asked = await r.app.request("/api/pay", preflight(ADMITTED));
-    const refused = await r.app.request("/api/pay", post(ADMITTED));
+    const asked = await r.app.request(paymentPath, preflight(ADMITTED));
+    const refused = await r.app.request(paymentPath, post(ADMITTED));
     expect({
       preflight: {
         status: asked.status,
@@ -297,8 +298,8 @@ describe("a closed gate's refusal across origins", () => {
 
   it("names no allowed origin to a stranger, on its preflight or its refusal", async () => {
     const r = crossOriginRig((o) => Promise.resolve(o === ADMITTED));
-    const asked = await r.app.request("/api/pay", preflight("https://stranger.example"));
-    const refused = await r.app.request("/api/pay", post("https://stranger.example"));
+    const asked = await r.app.request(paymentPath, preflight("https://stranger.example"));
+    const refused = await r.app.request(paymentPath, post("https://stranger.example"));
     expect(asked.headers.get("access-control-allow-origin")).toBeNull();
     expect(refused.status).toBe(503);
     expect(refused.headers.get("access-control-allow-origin")).toBeNull();
@@ -314,7 +315,7 @@ describe("a closed gate's refusal across origins", () => {
 
   it("still refuses when the origin list cannot be read", async () => {
     const r = crossOriginRig(() => Promise.reject(new Error("store closed")));
-    const refused = await r.app.request("/api/pay", post(ADMITTED));
+    const refused = await r.app.request(paymentPath, post(ADMITTED));
     expect(refused.status).toBe(503);
     expect(await refused.json()).toEqual({
       error: { code: "handover.stepping_down", params: {} },

@@ -11,8 +11,8 @@ import { setProfileServiceScope, replaceZoneClosedWeek } from "@waitron/venue-se
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
+import { takeReaderBillPayment } from "./bill-payments.js";
 import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
-import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -44,7 +44,7 @@ it.each(["cash", "integrated"] as const)(
   "a walk-up %s sale with no zone records the counter zone and files its authored description",
   async (method) => {
     const id = randomUUID();
-    const request = { id, lines: [{ menuItemId: venue.counterItem("Water"), quantity: "1" }] };
+    const lines = [{ menuItemId: venue.counterItem("Water"), quantity: "1" }];
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
     if (method === "cash") {
       expect(
@@ -54,7 +54,7 @@ it.each(["cash", "integrated"] as const)(
             venue.cfg,
             venue.operator,
             id,
-            { lines: request.lines },
+            { lines },
             "2.00",
           )
         ).total,
@@ -62,17 +62,30 @@ it.each(["cash", "integrated"] as const)(
     } else {
       expect(
         (
-          await payWorkingOrderIntegratedOrchestration(
+          await takeReaderBillPayment(
             {
               admission: testTradingAdmission(),
               ...deps,
               provider: new SimulatorPaymentProvider(suite.db),
             },
             venue.cfg,
-            { ...request, simulationOutcome: "captured" },
+            id,
+            {
+              submissionId: id,
+              expectedEdit: null,
+              kind: "share",
+              shareOf: 1,
+              method: "card",
+              entry: "reader",
+              applied: "0.00",
+              tip: "0.00",
+              simulationOutcome: "captured",
+            },
+            venue.operator,
+            { lines },
           )
         ).outcome,
-      ).toBe("captured");
+      ).toBe("received");
     }
     expect(await context(id)).toEqual([
       { zoneId: venue.counter.zoneId, departmentId: counterDepartmentId },

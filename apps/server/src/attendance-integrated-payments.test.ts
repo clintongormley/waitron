@@ -10,10 +10,7 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
-import {
-  payWorkingOrderIntegrated,
-  type IntegratedPayRequest,
-} from "./testing/whole-payment-fixture.js";
+import { takeReaderBillPayment } from "./bill-payments.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 
 import { openTillSession } from "./testing/session-device.js";
@@ -64,21 +61,30 @@ function at(instant = "2026-01-05T11:00:00.987Z") {
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
 
-const request = (): IntegratedPayRequest => ({
-  id: newId(),
-  zoneId: v.counter.zoneId,
-  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-});
-
 it("a card initiation records its collector without keeping per-attempt discovery state", async () => {
   at("2026-01-05T11:00:00Z");
-  const result = await payWorkingOrderIntegrated(
+  const id = newId();
+  const result = await takeReaderBillPayment(
     { ...deps(), admission: testTradingAdmission() },
     v.cfg,
-    request(),
+    id,
+    {
+      submissionId: id,
+      expectedEdit: null,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "0.00",
+      tip: "0.00",
+    },
     collector,
+    {
+      zoneId: v.counter.zoneId,
+      lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+    },
   );
-  expect(result.outcome).toBe("captured");
+  expect(result.outcome).toBe("received");
   expect(await suite.db.select().from(staffActivity)).toMatchObject([
     { personId: collector.personId, firstAt: "2026-01-05T11:00:00.000Z" },
   ]);

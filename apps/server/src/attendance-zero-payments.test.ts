@@ -3,7 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { closeZeroBill } from "./bill-payments.js";
+import { closeZeroBill, takeReaderBillPayment } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { newId, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,7 +15,6 @@ import { payments } from "@waitron/payments";
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { republishMenus } from "./testing/publish-menu.js";
-import { payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import {
   setupPartyVenue,
   seat,
@@ -69,17 +68,6 @@ function at(instant = "2026-01-05T11:00:00.987Z") {
   vi.spyOn(v.clock, "now").mockReturnValue({ ...reading, instant: new Date(instant) });
 }
 const operations = () => suite.db.select().from(staffActivity);
-const tender = (method: "cash" | "card") => ({
-  method,
-  amount: "20.00",
-  ...(method === "card" ? { externalRef: "hand keyed" } : {}),
-});
-const request = (id: string = newId()) => ({
-  workingOrderId: id,
-  zoneId: v.counter.zoneId,
-  lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
-  tender: tender("cash"),
-});
 function evidence() {
   return { personId: collector.personId, lastAt: "2026-01-05T11:00:00.000Z" };
 }
@@ -156,35 +144,50 @@ describe("a human zero-owing command remains attendance evidence", () => {
       } else id = await zeroBill(path === "issued");
       const provider = new FakePaymentProvider(suite.db);
       const integrated = { ...deps(), provider };
-      const req =
+      const basket =
         path === "counter"
-          ? { id, lines: request(id).lines, zoneId: v.counter.zoneId }
-          : { id, lines: [] };
+          ? {
+              zoneId: v.counter.zoneId,
+              lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+            }
+          : undefined;
+      const req = {
+        submissionId: id,
+        expectedEdit: basket === undefined ? await readBillEditState(suite.db, id) : null,
+        method: "card" as const,
+        entry: "reader" as const,
+        applied: "0.00",
+        tip: "0.00",
+      };
       at();
-      const result = await payWorkingOrderIntegrated(
-        { ...integrated, admission: testTradingAdmission() },
-        v.cfg,
-        req,
-        collector,
-      );
-      expect(result.outcome).toBe("captured");
-      if (result.outcome !== "captured") throw new Error("Expected local settlement");
-      expect(result.ticket.total).toBe("0.00");
-      expect(result.ticket.tender).toEqual({ method: "unpaid" });
+      const fiscal = { ...integrated, admission: testTradingAdmission() };
+      const pay = (operator: typeof collector) =>
+        basket === undefined
+          ? closeZeroBill(
+              fiscal,
+              v.cfg,
+              id,
+              { ...req, kind: "contribution", amount: "0.00" },
+              operator,
+            )
+          : takeReaderBillPayment(
+              fiscal,
+              v.cfg,
+              id,
+              { ...req, kind: "share", shareOf: 1 },
+              operator,
+              basket,
+            );
+      const result = await pay(collector);
+      expect(result.outcome).toBe("settled");
+      expect(result.invoice).toMatchObject({ total: "0.00", tender: { method: "unpaid" } });
       expect(provider.collectCalls).toEqual([]);
       expect(await operations()).toMatchObject([evidence()]);
       await noMoney();
       vi.spyOn(v.clock, "now").mockImplementation(() => {
         throw new Error("New clock unavailable");
       });
-      expect(
-        await payWorkingOrderIntegrated(
-          { ...integrated, admission: testTradingAdmission() },
-          v.cfg,
-          req,
-          v.operator,
-        ),
-      ).toEqual(result);
+      expect(await pay(v.operator)).toEqual(result);
       expect(await operations()).toMatchObject([evidence()]);
     },
   );

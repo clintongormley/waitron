@@ -1,5 +1,10 @@
-import { takeBillPayment } from "./bill-payments.js";
-import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import {
+  billShare,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+  takeReaderBillPayment as paySavedOnReader,
+} from "./testing/bill-payment-fixture.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
@@ -40,21 +45,18 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 
 import { insertCapturedPayment } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { SaleLineClassification } from "@waitron/shared";
-import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { issuancePass } from "./issuance-pass.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  printSaleReceipt,
-  reprintSale,
-} from "./testing/whole-payment-fixture.js";
-import type { IntegratedPayDeps } from "./till-sale.js";
+import { printSaleReceipt, reprintSale } from "./till-sale.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   createOpenOrder,
   parkOrder,
@@ -327,6 +329,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
           origin: params.origin,
           nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
+          billPaymentId: params.billPaymentId,
           provider: "stripe",
           paymentRef,
           amount: params.amount,
@@ -348,10 +351,6 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
     refund: () => Promise.reject(new Error("stubProvider: refund unused")),
     partialRefund: () => Promise.reject(new Error("stubProvider: partialRefund unused")),
   };
-}
-
-function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
-  return { admission: testTradingAdmission(), ...deps(), provider, readerRef: "reader_1" };
 }
 
 describe("what a filed sale line records about its product", () => {
@@ -651,17 +650,25 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     const pricedAfterMove = randomUUID();
     const line = [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }];
 
-    const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => moveCocktailsToSpirits(v))),
-      v.cfg,
-      { id: movedDuringCharge, zoneId: v.counter.zoneId, lines: line },
+    const pay = (id: string, provider: PaymentProvider) =>
+      takeReaderBillPayment(
+        { ...deps(), admission: testTradingAdmission(), provider },
+        v.cfg,
+        id,
+        { ...billShare("card", "0.00"), expectedEdit: null, entry: "reader" },
+        v.operator,
+        { zoneId: v.counter.zoneId, lines: line },
+      );
+
+    const out = await pay(
+      movedDuringCharge,
+      stubProvider(() => moveCocktailsToSpirits(v)),
     );
-    expect(out.outcome).toBe("captured");
-    await payWorkingOrderIntegrated(cardDeps(stubProvider(() => Promise.resolve())), v.cfg, {
-      id: pricedAfterMove,
-      zoneId: v.counter.zoneId,
-      lines: line,
-    });
+    expect(out.outcome).toBe("received");
+    await pay(
+      pricedAfterMove,
+      stubProvider(() => Promise.resolve()),
+    );
 
     expect(await reportingOf(movedDuringCharge)).toEqual([underAlcoholic(v)]);
     expect(await reportingOf(pricedAfterMove)).toEqual([underSpirits(v)]);
@@ -679,26 +686,24 @@ describe("the snapshot is taken when the line is added, on every till filing pat
         null,
         { zoneId: v.counter.zoneId },
       );
-      await insertCapturedPayment(tx, {
-        origin: v.cfg.origin,
-        nodeId: v.cfg.nodeId,
-        workingOrderId: id,
-        provider: "stripe",
-        paymentRef: `pi-${randomUUID()}`,
-        amount: decimal("9.00"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      });
     });
+    const provider = new FakePaymentProvider(suite.db);
+    const filing = { ...deps(), admission: testTradingAdmission() };
+    provider.crashNextCollect("captured");
+    await expect(
+      paySavedOnReader(
+        { ...filing, provider },
+        v.cfg,
+        id,
+        billShare("card", "9.00", { entry: "reader" }),
+        v.operator,
+      ),
+    ).rejects.toThrow("fake provider: the process stopped after writing a captured row");
     await moveCocktailsToSpirits(v);
 
-    const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => Promise.reject(new Error("recovery must not charge")))),
-      v.cfg,
-      { id, lines: [] },
-    );
-
-    expect(out.outcome).toBe("captured");
+    expect(await settlePendingBillPayments({ ...filing, cfg: v.cfg })).toMatchObject({
+      received: 1,
+    });
     expect(await reportingOf(id)).toEqual([underAlcoholic(v)]);
   });
 

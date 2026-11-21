@@ -64,20 +64,14 @@ function clockAt(ms: number): TrustedClock {
 const dish = () => [{ menuItemId: counter.offerFor(dishId), quantity: "1" }];
 
 function cardSale(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    id,
-    lines: dish(),
-    zoneId: counter.zoneId,
-  });
-}
-
-function payStored(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: [],
-    zoneId: counter.zoneId,
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    basket: { zoneId: counter.zoneId, lines: dish() },
   });
 }
 
@@ -102,11 +96,11 @@ it("answers a replay of a settled order", async () => {
   const behind = nowMs() - 10 * MINUTE;
   const before = collects();
 
-  const replay = await payStored(venue.appAt(clockAt(behind)), id);
+  const replay = await cardSale(venue.appAt(clockAt(behind)), id);
 
   expect(replay.status).toBe(200);
-  expect(replay.json.outcome).toBe("captured");
-  expect(replay.json.ticket).toEqual(first.json.ticket);
+  expect(replay.json.outcome).toBe("received");
+  expect(replay.json.invoice).toEqual(first.json.invoice);
   expect(collects()).toBe(before);
 });
 
@@ -117,7 +111,7 @@ it("sells again once the clock passes the record", async () => {
   const sold = await cardSale(venue.appAt(clockAt(later)), randomUUID());
 
   expect(sold.status).toBe(200);
-  expect(sold.json.outcome).toBe("captured");
+  expect(sold.json.outcome).toBe("received");
   expect(collects()).toBe(before + 1);
   expect(latest().at.getTime()).toBe(later);
 });

@@ -25,7 +25,6 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { payWorkingOrderIntegratedOrchestration as reader } from "./testing/whole-payment-fixture.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -124,19 +123,24 @@ describe("a table bill issued after the business day it was opened in ended", ()
     const venue = await provisionBillVenue(suite.db);
     const party = await mondayBill(venue);
 
-    const paid = await reader(
+    const paid = await send(
+      venue.appAt(clockAt(THU_1200)),
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
       {
-        ...venue,
-        provider: venue.card,
-        clock: clockAt(THU_1200),
-        admission: testTradingAdmission(),
+        submissionId: party.tabId,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        applied: "10.00",
+        tip: "0.00",
       },
-      venue.cfg,
-      { id: party.tabId, lines: [] },
-      venue.operatorId,
     );
 
-    expect(paid.outcome).toBe("captured");
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json.outcome).toBe("received");
     await expectCloseOfDay(venue, party.tabId, "2026-03-19");
   });
 

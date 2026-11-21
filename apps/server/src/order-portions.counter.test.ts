@@ -12,16 +12,19 @@ import {
   sales,
   workingOrders,
 } from "@waitron/db";
-import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { decimal } from "@waitron/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { takeBillPayment } from "./bill-payments.js";
-import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import {
+  billShare,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+} from "./testing/bill-payment-fixture.js";
 import { carryLineReductions } from "./order-portions.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
@@ -29,7 +32,6 @@ import { openTillSession } from "./testing/session-device.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { payWorkingOrderIntegratedOrchestration, type IntegratedPayDeps } from "./till-sale.js";
 import {
   createOpenOrder,
   parkOrder,
@@ -202,49 +204,15 @@ async function payParked(id: string, amount: string): Promise<void> {
   );
 }
 
-/** A card reader that captures what it is asked for; `charge: false` refuses to charge at all. */
-function cardDeps(charge: boolean): IntegratedPayDeps {
-  const fail = () => Promise.reject(new Error("cardDeps: not used"));
-  const provider: PaymentProvider = {
-    provider: "stripe",
-    capabilities: { partialRefund: true },
-    async collect(params) {
-      if (!charge) throw new Error("cardDeps: this payment must not charge");
-      const paymentRef = `pi-${randomUUID()}`;
-      const settledAt = new Date();
-      await withTransaction(venue.db, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: params.origin,
-          nodeId: params.nodeId,
-          workingOrderId: params.workingOrderId,
-          provider: "stripe",
-          paymentRef,
-          amount: params.amount,
-          settledAt,
-          externalRef: paymentRef,
-        }),
-      );
-      return {
-        provider: "stripe",
-        paymentRef,
-        state: "captured",
-        amount: params.amount,
-        settledAt,
-      };
-    },
-    resolvePending: fail,
-    void: fail,
-    refund: fail,
-    partialRefund: fail,
-  };
-  return {
-    admission: testTradingAdmission(),
-    db: venue.db,
-    backend: venue.backend,
-    clock: venue.clock,
-    provider,
-    readerRef: "r1",
-  };
+async function payOnReader(id: string, lines: TabRoundLine[], provider: FakePaymentProvider) {
+  return takeReaderBillPayment(
+    { ...venue, admission: testTradingAdmission(), provider },
+    venue.cfg,
+    id,
+    { ...billShare("card", "0.00"), expectedEdit: null, entry: "reader" },
+    await operator(),
+    { lines, zoneId: counter.zoneId },
+  );
 }
 
 const sorted = (values: (string | null)[]) => [...values].sort();
@@ -309,14 +277,9 @@ describe("A1208 counter orders are written as portions", () => {
 
   it("A1208 a walk-up paid by integrated card links its filed row to both portions", async () => {
     const id = randomUUID();
-    const out = await payWorkingOrderIntegratedOrchestration(
-      cardDeps(true),
-      venue.cfg,
-      { id, expectedEdit: null, lines: croquettes("2"), zoneId: counter.zoneId },
-      venue.operatorId,
-    );
+    const out = await payOnReader(id, croquettes("2"), new FakePaymentProvider(venue.db));
 
-    expect(out.outcome).toBe("captured");
+    expect(out.outcome).toBe("received");
     const lines = linesOf(id);
     expect(lines.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
       [1000, 1],
@@ -335,14 +298,12 @@ describe("A1208 counter orders are written as portions", () => {
 
   it("A1208 100 of one dish on an integrated-card walk-up is refused before the reader is asked", async () => {
     const id = randomUUID();
-    await expect(
-      payWorkingOrderIntegratedOrchestration(
-        cardDeps(false),
-        venue.cfg,
-        { id, expectedEdit: null, lines: croquettes("100"), zoneId: counter.zoneId },
-        venue.operatorId,
-      ),
-    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+    const provider = new FakePaymentProvider(venue.db);
+    await expect(payOnReader(id, croquettes("100"), provider)).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    expect(provider.collectCalls).toHaveLength(0);
     expect(await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
   });
 

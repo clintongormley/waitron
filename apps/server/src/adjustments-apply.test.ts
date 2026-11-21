@@ -1,9 +1,14 @@
-import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { observedPaymentSender, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import {
+  billShare,
+  observedPaymentSender,
+  paySavedBillInCash,
+  seedPendingCardPayment,
+  takeReaderBillPayment,
+} from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder, updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
@@ -35,7 +40,7 @@ import {
   type AdjustmentAction,
 } from "@waitron/adjustments";
 import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/menu";
-import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
@@ -46,11 +51,8 @@ import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  readSettledTicket,
-  type TillSaleResult,
-} from "./testing/whole-payment-fixture.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { readSettledTicket, type TillSaleResult } from "./till-sale.js";
 import {
   advanceTicketItem,
   parkOrder,
@@ -559,54 +561,44 @@ describe("the receipt (ruling R13)", () => {
     expect(printed[burger + 1]).toMatch(/^ {2}Descuento 100% +-12,00 A$/u);
   });
 
+  async function payOnReader(billId: string, provider: FakePaymentProvider) {
+    const personId = venue.staffId;
+    const sessionId = await openTillSession(venue.db, {
+      deviceId: venue.cfg.origin.deviceId,
+      personId,
+    });
+    return takeReaderBillPayment(
+      { ...venue, admission: testTradingAdmission(), provider },
+      venue.cfg,
+      billId,
+      billShare("card", "29.50", { entry: "reader" }),
+      { personId, sessionId },
+    );
+  }
+
   it("shows the change on a card reader's receipt too", async () => {
     const billId = await compBurgerAndDiscountBottle();
 
-    const paid = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        provider: new SimulatorPaymentProvider(venue.db),
-      },
-      venue.cfg,
-      { id: billId, lines: [], simulationOutcome: "captured" },
-    );
+    const paid = await payOnReader(billId, new FakePaymentProvider(venue.db));
 
-    expect(paid.outcome).toBe("captured");
-    expect(shown((paid as { ticket: TillSaleResult }).ticket)).toEqual(ADJUSTED_LINES);
+    expect(paid.outcome).toBe("received");
+    expect(shown(paid.invoice!)).toEqual(ADJUSTED_LINES);
   });
 
   it("shows the change when a card payment whose reply was lost is filed later", async () => {
     const billId = await compBurgerAndDiscountBottle();
-    await inTx(venue, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: billId,
-        provider: "simulator",
-        paymentRef: `sim-${randomUUID()}`,
-        amount: decimal("29.50"),
-        settledAt: new Date(),
-        externalRef: `sim_lost_${randomUUID()}`,
-      }),
+    const provider = new FakePaymentProvider(venue.db);
+    provider.crashNextCollect("captured");
+    await expect(payOnReader(billId, provider)).rejects.toThrow(
+      "fake provider: the process stopped after writing a captured row",
     );
 
-    const paid = await payWorkingOrderIntegrated(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-        provider: new SimulatorPaymentProvider(venue.db),
-      },
-      venue.cfg,
-      { id: billId, lines: [] },
+    const pass = await settlePendingBillPayments({ ...venue, admission: testTradingAdmission() });
+    expect(pass).toMatchObject({ received: 1 });
+    const ticket = await inTx(venue, (tx) =>
+      readSettledTicket(venue.backend, tx, venue.cfg, billId),
     );
-
-    expect(paid.outcome).toBe("captured");
-    expect(shown((paid as { ticket: TillSaleResult }).ticket)).toEqual(ADJUSTED_LINES);
+    expect(shown(ticket)).toEqual(ADJUSTED_LINES);
   });
 });
 

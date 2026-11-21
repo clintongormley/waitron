@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -3384,15 +3385,6 @@ describe("every write to an open order's lines counts on its revision, a served 
 });
 
 describe("a line write on an order whose card payment is in flight is refused, a served mark aside (plan D22)", () => {
-  const MARK = "2026-09-26T10:00:00.000Z";
-
-  async function markPaying(orderId: string, at: string | null = MARK): Promise<void> {
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: at })
-      .where(eq(workingOrders.id, orderId));
-  }
-
   /** The line and order fields these cases compare, on either tab — not every column. */
   async function snapshot(t: Pick<Tabs, "tabId" | "otherId">) {
     const lines = await db
@@ -3426,7 +3418,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
   it("takes a served mark, changing none of the compared fields but the line's served ones", async () => {
     const tab = await partyTab(addGroupedTabRound);
     const tabs = { tabId: tab.tabId, otherId: tab.tabId };
-    await markPaying(tab.tabId, MARK);
+    await seedPendingCardPayment(db, tab.tabId);
     const before = await snapshot(tabs);
 
     await asApp(tab.cfg, (tx) => serveLine(tx, tab.cfg, tab.tabId, 1));
@@ -3450,7 +3442,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabs.tabId))
       .orderBy(workingOrderLines.lineNo);
-    await markPaying(tabs.tabId);
+    await seedPendingCardPayment(db, tabs.tabId);
     const revision = await revisionOf(tabs.tabId);
 
     await expect(
@@ -3471,7 +3463,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
 
   it("never blocks a different order", async () => {
     const tabs = await twoTabs();
-    await markPaying(tabs.otherId);
+    await seedPendingCardPayment(db, tabs.otherId);
     const before = await revisionOf(tabs.tabId);
 
     await asApp(tabs.cfg, (tx) =>
