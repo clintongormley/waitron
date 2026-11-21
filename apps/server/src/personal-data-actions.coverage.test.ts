@@ -46,6 +46,7 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "device_invoice_save_operations.person_id",
     "document_delivery_requests.person_id",
     "document_page_reprints.person_id",
+    "drawer_entries.person_id",
     "incidents.acknowledged_by",
     "invoice_corrections.authorized_by",
     "invoice_corrections.ended_by",

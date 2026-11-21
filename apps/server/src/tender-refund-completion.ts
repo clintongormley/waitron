@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
-import { refunds, type Transaction } from "@waitron/db";
+import { appendDrawerEntry, refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
-import { centsToDecimal, type NodeId } from "@waitron/shared";
+import { centsToDecimal, deviceOrigin, type NodeId } from "@waitron/shared";
 import { recordManualRefund } from "@waitron/payments";
+import { resolveDrawerAssignment } from "./receipt-print.js";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
 type RefundRow = typeof refunds.$inferSelect;
@@ -65,7 +66,10 @@ export async function completeRefundReservation(
       .where(eq(refunds.id, refund.id))
       .returning();
     refund = completed!;
-    if (refund.method === "cash") await steps.openDrawer?.(refund);
+    if (refund.method === "cash") {
+      await recordCashDrawerRefund(tx, refund);
+      await steps.openDrawer?.(refund);
+    }
   }
   await deps.attendance?.(tx, {
     source: "refund",
@@ -77,4 +81,20 @@ export async function completeRefundReservation(
     outcome: refund.state === "completed" ? "qualified" : "pending",
   });
   return refund;
+}
+
+async function recordCashDrawerRefund(tx: Transaction, refund: RefundRow): Promise<void> {
+  if (refund.deviceId === null) return;
+  const drawer = await resolveDrawerAssignment(tx, deviceOrigin(refund.deviceId));
+  if (drawer === undefined) return;
+  await appendDrawerEntry(tx, {
+    nodeId: refund.nodeId,
+    printerId: drawer.id,
+    deviceId: refund.deviceId,
+    personId: refund.requestedBy,
+    recordedAt: refund.completedAt!,
+    kind: "cash_refund",
+    amount: -(refund.appliedAmount + refund.tipAmount),
+    refundId: refund.id,
+  });
 }

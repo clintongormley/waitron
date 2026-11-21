@@ -14,6 +14,7 @@ import {
   billAdvances,
   billPaymentLines,
   refunds as refundRows,
+  appendDrawerEntry,
   billPayments,
   insertInChunks,
   invoiceCorrectionRefunds,
@@ -96,6 +97,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
   refreshWaitingOriginals,
+  resolveDrawerAssignment,
 } from "./receipt-print.js";
 import type { PrinterLookup } from "./receipt-print.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
@@ -2048,6 +2050,7 @@ export async function takeBillPayment(
       } else {
         await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
       }
+      await recordBillDrawerPayment(tx, cfg, payment);
       const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const { invoice, figures } = await issueWhenFullyPaid(
         tx,
@@ -2197,6 +2200,25 @@ export function attestationColumns(attestation: Attestation | undefined) {
     : { attestedBy: attestation.attestedBy, attestationNote: attestation.note };
 }
 
+async function recordBillDrawerPayment(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  payment: PaymentRow,
+): Promise<void> {
+  const drawer = await resolveDrawerAssignment(tx, cfg.origin);
+  if (drawer === undefined) return;
+  await appendDrawerEntry(tx, {
+    nodeId: cfg.nodeId,
+    printerId: drawer.id,
+    deviceId: cfg.origin.deviceId,
+    personId: payment.requestedBy,
+    recordedAt: payment.receivedAt!,
+    kind: payment.method === "cash" ? "cash_payment" : "card_payment",
+    amount: payment.applied + payment.tip,
+    billPaymentId: payment.id,
+  });
+}
+
 /** Receive a pending card payment at its settlement time, then issue when fully paid.
  * A partial refund requires explicit net amounts: the gross provider charge includes returned money. */
 export async function completeBillPayment(
@@ -2286,6 +2308,7 @@ export async function completeBillPayment(
     .returning();
   // The invoices are filed under the device that took the payment, whoever completes it.
   const takenAt = { ...cfg, origin: storedDeviceOrigin(payment!) };
+  await recordBillDrawerPayment(tx, takenAt, payment!);
   const issued = await issueWhenFullyPaid(
     tx,
     deps,

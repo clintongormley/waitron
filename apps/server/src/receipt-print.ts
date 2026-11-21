@@ -106,6 +106,14 @@ async function drawerPrinter(printers: PrinterLookup): Promise<DevicePrinter | u
   return printer;
 }
 
+/** Cash can be put in or taken out by hand while the assigned printer is switched off. */
+export function resolveDrawerAssignment(
+  tx: Transaction,
+  origin: Origin,
+): Promise<DevicePrinter | undefined> {
+  return drawerPrinter(printerLookup(tx, origin, { whileSwitchedOff: true }));
+}
+
 /** The device has a drawer it may open, by the same resolution the drawer paths use. */
 export async function deviceOpensDrawer(tx: Transaction, deviceId: string): Promise<boolean> {
   return (await drawerPrinter(printerLookup(tx, deviceOrigin(deviceId)))) !== undefined;
