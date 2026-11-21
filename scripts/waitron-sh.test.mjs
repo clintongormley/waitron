@@ -959,6 +959,24 @@ describe("waitron.sh manual upgrade invocation", () => {
     },
   );
 
+  it("fetches and installs the upgrade units without switching the timer on", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], { WAITRON_SH_REFRESHED: "1" });
+    expect(result.status, result.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    for (const unit of ["waitron-upgrade.service", "waitron-upgrade.timer"]) {
+      expect(
+        calls.some((line) => line.includes(`/deploy/box/${unit}`)),
+        unit,
+      ).toBe(true);
+      expect(existsSync(join(sb.root, "etc/systemd/system", unit))).toBe(true);
+      expect(calls.filter((line) => line.startsWith("systemctl ") && line.includes(unit))).toEqual(
+        [],
+      );
+    }
+  });
+
   it("installs libatomic1 before the host's Node is fetched when the box has none", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);

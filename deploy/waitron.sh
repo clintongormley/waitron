@@ -986,7 +986,7 @@ fetch_upgrade_driver() {
   for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs; do
     fetch "$RAW_BASE/$sha/scripts/box/upgrades/$file" "$stage/$file" || return 1
   done
-  for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
+  for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service waitron-upgrade.service waitron-upgrade.timer; do
     fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
   done
 }
@@ -1029,7 +1029,7 @@ install_upgrade_driver() {
   install -m 0755 "$stage/waitron.sh" "$WAITRON_HOST_DIR/waitron.sh"
   as_root install -d -m 0755 "$BOX_LIB_DIR" "$BOX_UNIT_DIR"
   as_root install -m 0755 "$stage/upgrade-restart.sh" "$BOX_LIB_DIR/upgrade-restart.sh"
-  for file in waitron-app.service waitron-upgrade-recovery.service; do
+  for file in waitron-app.service waitron-upgrade-recovery.service waitron-upgrade.service waitron-upgrade.timer; do
     as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
   done
   printf 'WAITRON_DIR="%s"\nWAITRON_HOST_DIR="%s"\n' "$WAITRON_DIR" "$WAITRON_HOST_DIR" > "$WAITRON_HOST_DIR/service.env"
@@ -1361,7 +1361,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | check-upgrade-offer | restore | keep | reset | __candidate | "" | -h | --help) ;;
+    install | update | status | check-upgrade-offer | check-upgrade-window | restore | keep | reset | __candidate | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -1374,6 +1374,7 @@ main() {
     __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
     check-upgrade-offer) cmd_check_upgrade_offer ;;
+    check-upgrade-window) upgrade_cli "$verb" ;;
     restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;

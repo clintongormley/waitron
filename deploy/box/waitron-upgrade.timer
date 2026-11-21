@@ -1,0 +1,9 @@
+[Unit]
+Description=Check Waitron upgrade offers during the venue's overnight window
+
+[Timer]
+OnCalendar=*-*-* *:00,30:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target

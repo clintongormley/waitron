@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the signed Waitron upgrade offer
+Requisite=waitron-app.service
+After=waitron-app.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=90s
+EnvironmentFile=-/opt/waitron-host/service.env
+ExecCondition=/opt/waitron-host/waitron.sh check-upgrade-window
+ExecStart=/opt/waitron-host/waitron.sh check-upgrade-offer

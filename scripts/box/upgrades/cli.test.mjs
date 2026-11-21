@@ -4,6 +4,7 @@ import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, URL } from "node:url";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { signUpgradeOffer } from "../release-list.mjs";
@@ -305,4 +306,58 @@ it("writes one JSON line or an error and returns the command's exit code", async
   expect(await runUpgradeCliMain(["discard", box], output)).toBe(1);
   expect(stdout.write).not.toHaveBeenCalled();
   expect(stderr.write).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Expected apply"));
+});
+
+it("admits only the venue-local window and skips a missing, invalid or unreadable zone", async () => {
+  const { root, box } = await fixture();
+  const state = join(root, "state");
+  await fs.mkdir(join(state, "venue"), { recursive: true });
+  const database = new DatabaseSync(join(state, "venue/venue.db"));
+  onTestFinished(() => database.close());
+  database.exec("create table settings (module text, version integer, doc text)");
+  const insert = database.prepare("insert into settings values ('business_day', 1, ?)");
+  insert.run(JSON.stringify({ timeZone: "Europe/Madrid" }));
+
+  const run = async (file, args) => {
+    if (file === "docker" && args.includes("config"))
+      return { stdout: '{"volumes":{"state":{"name":"test_state"}}}' };
+    if (file === "docker" && args.join(" ") === "volume inspect test_state")
+      return { stdout: JSON.stringify([{ Mountpoint: state }]) };
+    throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
+  };
+  const stdout = { write: vi.fn() };
+  const stderr = { write: vi.fn() };
+  const check = () => runUpgradeCliMain(["check-upgrade-window", box], { run, stdout, stderr });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.stubEnv("TZ", "UTC");
+  onTestFinished(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+  for (const [hour, status] of [
+    ["01:59:59", 1],
+    ["02:00:00", 0],
+    ["03:59:59", 0],
+    ["04:00:00", 1],
+  ]) {
+    vi.setSystemTime(new Date(`2026-11-21T${hour}Z`));
+    stderr.write.mockClear();
+    expect(await check()).toBe(status);
+    if (status === 0) expect(stderr.write).not.toHaveBeenCalled();
+    else expect(stderr.write).toHaveBeenCalledWith(expect.stringContaining("outside"));
+  }
+  vi.setSystemTime(new Date("2026-11-21T02:30:00Z"));
+  for (const timeZone of [" Europe/Madrid ", "+01:00", "\u221201:00", 3]) {
+    database.exec("delete from settings");
+    insert.run(JSON.stringify({ timeZone }));
+    expect(await check()).toBe(1);
+    expect(stderr.write).toHaveBeenLastCalledWith(expect.stringContaining("invalid"));
+  }
+  database.exec("delete from settings");
+  expect(await check()).toBe(1);
+  expect(stderr.write).toHaveBeenLastCalledWith(expect.stringContaining("missing"));
+  database.exec("drop table settings");
+  expect(await check()).toBe(1);
+  expect(stderr.write).toHaveBeenLastCalledWith(expect.stringContaining("could not read"));
+  expect(stdout.write).not.toHaveBeenCalled();
 });
