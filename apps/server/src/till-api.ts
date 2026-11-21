@@ -2445,7 +2445,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Counter handover records delivery to the customer after payment.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "hand-over-orders" });
