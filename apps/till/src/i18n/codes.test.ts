@@ -1068,10 +1068,10 @@ it("sends staff back to Correct invoice on the advance after the table's receipt
 it("sends staff to Correct invoice on the table's receipt first, naming it, the money it can still give back and the advance's rate", () => {
   const final = { invoiceNumber: "A/45", rate: "10.00", moneyLeft: "90.00" };
   expect(codeMessage("advance.final_invoice_first", "en", final)).toBe(
-    "The table's receipt A/45 can still give back €90.00 for dishes at 10% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
+    "The table's receipt A/45 can still give back €90.00 for dishes at 10% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",
   );
   expect(codeMessage("advance.final_invoice_first", "es", final)).toBe(
-    "El ticket de la mesa A/45 todavía puede devolver 90,00\u00a0€ de platos al 10 % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
+    "El ticket de la mesa A/45 todavía puede devolver 90,00\u00a0€ de platos al 10 % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya haya devuelto todo lo que puede a ese tipo, rectifica este pago a cuenta.",
   );
   expect(codeMessage("advance.final_invoice_first", "es", { ...final, rate: "5.50" })).toContain(
     " al 5,5 % de IVA,",

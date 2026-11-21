@@ -1,4 +1,5 @@
 import { PORTIONS_AT_ONCE, formatMoney } from "@waitron/shared";
+import { formatDecimalInput } from "@waitron/ui";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -666,8 +667,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta rectificación se abrió antes de que el ticket de la mesa{invoiceNumber} descontara este pago a cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
   },
   "advance.final_invoice_first": {
-    en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
-    es: "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft} de platos al {rate} % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
+    en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",
+    es: "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft} de platos al {rate} % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya haya devuelto todo lo que puede a ese tipo, rectifica este pago a cuenta.",
   },
   "advance.correction_open": {
     en: "The table's receipt cannot be issued while a correction of the payment on account{invoiceNumber} is open. In Correct invoice, use Finish now or Discard, then try again.",
@@ -1052,8 +1053,8 @@ const FIGURES_UNCHECKED = {
 };
 
 const FINAL_INVOICE_FIRST_UNNAMED = {
-  en: "The table's receipt{invoiceNumber} can still give back money for dishes at this payment on account's VAT rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
-  es: "El ticket de la mesa{invoiceNumber} todavía puede devolver dinero de platos al tipo de IVA de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
+  en: "The table's receipt{invoiceNumber} can still give back money for dishes at this payment on account's VAT rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",
+  es: "El ticket de la mesa{invoiceNumber} todavía puede devolver dinero de platos al tipo de IVA de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya haya devuelto todo lo que puede a ese tipo, rectifica este pago a cuenta.",
 };
 
 const TABLE_RECEIPT_REFUSED = {
@@ -1164,9 +1165,7 @@ export function codeMessage(
     return (named ? message : pickLocale(FINAL_INVOICE_FIRST_UNNAMED, locale))
       .replace("{invoiceNumber}", () => invoiceNumberOf(params))
       .replace("{moneyLeft}", () => formatMoney(moneyLeft as string, locale))
-      .replace("{rate}", () =>
-        new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(rate)),
-      );
+      .replace("{rate}", () => formatDecimalInput(String(Number(rate)), locale));
   }
   if (typeof code !== "string" || !code.startsWith("set_menu.")) return message;
   const setMenuName =
