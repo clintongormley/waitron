@@ -313,7 +313,7 @@ chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run
   pointers to this plan beside the 14:26 answer in `docs/superpowers/plans/2026-11-19-adviser-advances.md:239-241`
   and `:411-418`, rewriting neither.
 
-- [ ] **Task 5: a settled bill's `received` (watcher W2, 2026-11-21 04:35).** The payments route
+- [x] **Task 5: a settled bill's `received` (watcher W2, 2026-11-21 04:35).** The payments route
   answers `received` 120.00 on a €120 bill after €90 came back by Correct invoice (control RUN above),
   which a person would notice. Size it first: if what the route reports can count Correct-invoice
   refunds in a few lines without changing any refusal, balance check or invoice, fix it test-first
