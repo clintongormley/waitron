@@ -252,6 +252,8 @@ export interface BillPaymentView extends OutsideCardDetails {
   takenOffBy?: TakenOffBy;
   left?: Decimal;
   tipLeft?: Decimal;
+  /** What Refund a payment gave back from the advance's ticket; `left` still counts it. */
+  givenBack?: Decimal;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -704,7 +706,7 @@ function toView(
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
   advance:
     | (PaymentMoney &
-        Pick<AdvancePaymentMoney, "saleId" | "ticket"> & {
+        Pick<AdvancePaymentMoney, "saleId" | "ticket" | "givenBack"> & {
           takenOffBy: TakenOffBy | undefined;
         })
     | undefined,
@@ -722,6 +724,7 @@ function toView(
           ...(advance.takenOffBy === undefined ? {} : { takenOffBy: advance.takenOffBy }),
           left: money(advance.netApplied),
           tipLeft: money(advance.netTip),
+          givenBack: centsToDecimal(advance.givenBack),
         }),
     id: payment.id,
     submissionId: payment.submissionId,
@@ -925,6 +928,7 @@ export async function readBillBalance(
           ...payment,
           saleId: advance.saleId,
           ticket: advance.ticket,
+          givenBack: advance.givenBack,
           takenOffBy: takenOff.get(advance.saleId),
         };
   };

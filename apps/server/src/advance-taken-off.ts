@@ -1,10 +1,21 @@
 import "./errors.js";
-import { and, eq, inArray, isNull, notExists } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, notExists } from "drizzle-orm";
 import { invoiceSeries, saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { formatInvoiceNumber } from "@waitron/core";
-import { AppError, saleId as brandSaleId, type ErrorParams } from "@waitron/shared";
-import { readInvoiceNumber } from "./working-order.js";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  saleId as brandSaleId,
+  sumDecimals,
+  type Decimal,
+  type ErrorParams,
+} from "@waitron/shared";
+import { readRefundableTenders } from "./tender-refund-balance.js";
+import { readInvoiceNumber, readInvoiceNumbers } from "./working-order.js";
+
+const ZERO = decimal("0.00");
 
 /** The invoice that took an advance off. */
 export interface TakenOffBy {
@@ -58,17 +69,74 @@ export async function advancesTakenOff(
 }
 
 /**
+ * The invoice numbers of the advances the invoice `finalSaleId` took off ({@link advancesTakenOff}),
+ * in its lines' order; none for a corrective or substitution, which only copy the deduction lines.
+ */
+export async function advanceNumbersTakenOffBy(
+  tx: Transaction,
+  finalSaleId: string,
+): Promise<string[]> {
+  const lines = await tx
+    .select({ advanceId: saleLines.deductsSaleId })
+    .from(saleLines)
+    .where(and(eq(saleLines.saleId, finalSaleId), isNotNull(saleLines.deductsSaleId)))
+    .orderBy(saleLines.lineNo);
+  const advanceIds = [...new Set(lines.map((line) => line.advanceId!))];
+  const takenOff = await advancesTakenOff(tx, advanceIds);
+  const ownIds = advanceIds.filter((id) => takenOff.get(id)?.saleId === finalSaleId);
+  const numbers = await readInvoiceNumbers(tx, ownIds);
+  return ownIds.map((id) => numbers.get(id)!);
+}
+
+/** What Correct invoice on the invoice `finalSaleId` can still give back, as
+ * `invoice_correction.money_short` reads it: the money its payments still hold, tips aside. */
+async function moneyLeftOn(tx: Transaction, finalSaleId: string): Promise<Decimal> {
+  const refundable = await readRefundableTenders(tx, finalSaleId);
+  return sumDecimals([ZERO, ...refundable.map((row) => decimal(row.appliedRemaining))]);
+}
+
+type TakenOffParams = ErrorParams["advance.taken_off_final_invoice"];
+
+/** {@link refuseTakenOffAdvance}'s refusal's params, once an invoice took the advance off. */
+async function takenOffParams(
+  tx: Transaction,
+  saleId: string,
+): Promise<TakenOffParams | undefined> {
+  const final = (await advancesTakenOff(tx, [saleId])).get(saleId);
+  if (final === undefined) return undefined;
+  return {
+    saleId,
+    finalSaleId: final.saleId,
+    invoiceNumber: final.invoiceNumber,
+    finalMoneyLeft: await moneyLeftOn(tx, final.saleId),
+  };
+}
+
+/**
  * Refuses `advance.taken_off_final_invoice` once an invoice has taken the advance `saleId` off
  * ({@link advancesTakenOff}). A whole credit of that invoice leaves the refusal in place.
  */
 export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Promise<void> {
-  const final = (await advancesTakenOff(tx, [saleId])).get(saleId);
-  if (final === undefined) return;
-  throw new AppError("advance.taken_off_final_invoice", {
-    saleId,
-    finalSaleId: final.saleId,
-    invoiceNumber: final.invoiceNumber,
-  });
+  const params = await takenOffParams(tx, saleId);
+  if (params !== undefined) throw new AppError("advance.taken_off_final_invoice", params);
+}
+
+/**
+ * Refuses a plain refund (Refund a payment) of the advance `saleId`'s money with
+ * `tender.refund_of_advance` until an invoice took the advance off; then with
+ * {@link refuseTakenOffAdvance}'s refusal while Correct invoice on that invoice can still give
+ * money back, and not once it cannot.
+ */
+export async function refusePlainRefundOfAdvance(
+  tx: Transaction,
+  saleId: string,
+  params: Omit<ErrorParams["tender.refund_of_advance"], "saleId" | "invoiceNumber">,
+): Promise<void> {
+  const takenOff = await takenOffParams(tx, saleId);
+  if (takenOff === undefined)
+    await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", params);
+  else if (compareDecimal(decimal(takenOff.finalMoneyLeft), ZERO) > 0)
+    throw new AppError("advance.taken_off_final_invoice", takenOff);
 }
 
 type AdvanceRefundCode = "tender.refund_of_advance" | "bill.refund_of_advance";

@@ -358,6 +358,46 @@ describe("the rest's invoice takes the advances off", () => {
     expect(ticket).not.toHaveProperty("payments");
   });
 
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: the bill still owes €90, the advance still counts €30 and shows €20 given back", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    await printTheBill(bill);
+    const payments = async () => {
+      const read = await send(
+        venue.app,
+        venue.cookie,
+        "GET",
+        `/api/working-orders/${bill.billId}/payments`,
+      );
+      expect(read.status, JSON.stringify(read.json)).toBe(200);
+      return read.json as { payments: Record<string, unknown>[] };
+    };
+    expect(await payments()).toMatchObject({ received: "30.00", outstanding: "90.00" });
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, advanceId)),
+    );
+
+    const given = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advanceId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: tender!.id,
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    const after = await payments();
+    expect(after).toMatchObject({ received: "30.00", outstanding: "90.00" });
+    expect(after.payments[0]).toMatchObject({ left: "30.00", givenBack: "20.00" });
+  });
+
   it("a €10 advance and a plain €5, then Print the bill: the ticket takes the advance off, lists the €5 and owes €105", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "10.00");

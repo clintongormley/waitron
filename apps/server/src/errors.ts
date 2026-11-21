@@ -744,8 +744,15 @@ declare module "@waitron/shared" {
     "invoice_correction.cash_short": { correctionId: string; cashLeft: string; amount: string };
     /** The invoice already has a correction that is still open. */
     "invoice_correction.already_open": { saleId: string; correctionId: string };
-    /** The invoice's payments hold less money still refundable than the correction would give back. */
-    "invoice_correction.money_short": { saleId: string; moneyLeft: string; gross: string };
+    /** The invoice's payments hold less money still refundable than the correction would give back.
+     * `advanceInvoiceNumbers` are the advances the invoice took off, whose own tickets Refund a
+     * payment can give the rest back from. */
+    "invoice_correction.money_short": {
+      saleId: string;
+      moneyLeft: string;
+      gross: string;
+      advanceInvoiceNumbers: string[];
+    };
     "invoice_correction.not_found": { correctionId: string };
     /** The correction belongs to another invoice, or has ended. */
     "invoice_correction.not_open": {
@@ -863,11 +870,13 @@ declare module "@waitron/shared" {
      * till cannot issue as an advance yet. */
     "advance.full_invoice_unsupported": { workingOrderId: string };
     /** A refund or correction of the advance `saleId` after the invoice `finalSaleId`, numbered
-     * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice. */
+     * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice, which
+     * can still give back `finalMoneyLeft`, and past that by Refund a payment on the advance. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
       invoiceNumber: string;
+      finalMoneyLeft: string;
     };
     /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
      * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */
@@ -956,8 +965,8 @@ declare module "@waitron/shared" {
     "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
     "tender.refund_exceeds_cancelled": { tenderId: string; cancelled: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
-     * `invoiceNumber`) took: a payment on account is not refunded this way. Once an invoice took
-     * it off, `advance.taken_off_final_invoice` instead. */
+     * `invoiceNumber`) took, before an invoice took it off. After, it is refused
+     * `advance.taken_off_final_invoice` while that invoice's payments still hold money. */
     "tender.refund_of_advance": { tenderId: string; saleId: string; invoiceNumber: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
