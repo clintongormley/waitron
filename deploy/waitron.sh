@@ -993,9 +993,15 @@ fetch_upgrade_driver() {
   for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs; do
     fetch "$RAW_BASE/$sha/scripts/box/upgrades/$file" "$stage/$file" || return 1
   done
-  for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service waitron-upgrade.service waitron-upgrade.timer; do
+  for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
     fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
   done
+  # A checked install can target a release whose driver cannot run the timer.
+  if grep -qF 'check-upgrade-window)' "$stage/waitron.sh"; then
+    for file in waitron-upgrade.service waitron-upgrade.timer; do
+      fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
+    done
+  fi
 }
 
 fetch_release_trust() {
@@ -1036,9 +1042,14 @@ install_upgrade_driver() {
   install -m 0755 "$stage/waitron.sh" "$WAITRON_HOST_DIR/waitron.sh"
   as_root install -d -m 0755 "$BOX_LIB_DIR" "$BOX_UNIT_DIR"
   as_root install -m 0755 "$stage/upgrade-restart.sh" "$BOX_LIB_DIR/upgrade-restart.sh"
-  for file in waitron-app.service waitron-upgrade-recovery.service waitron-upgrade.service waitron-upgrade.timer; do
+  for file in waitron-app.service waitron-upgrade-recovery.service; do
     as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
   done
+  if [ -f "$stage/waitron-upgrade.timer" ]; then
+    for file in waitron-upgrade.service waitron-upgrade.timer; do
+      as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
+    done
+  fi
   printf 'WAITRON_DIR="%s"\nWAITRON_HOST_DIR="%s"\n' "$WAITRON_DIR" "$WAITRON_HOST_DIR" > "$WAITRON_HOST_DIR/service.env"
   chmod 600 "$WAITRON_HOST_DIR/service.env"
   as_root install -d -m 0755 "$BOX_UNIT_DIR/docker.service.d" "$BOX_UNIT_DIR/docker.socket.d"

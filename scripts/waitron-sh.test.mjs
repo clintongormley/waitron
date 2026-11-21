@@ -302,6 +302,7 @@ stub(
   "curl",
   `
 out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in *"\${WT_DRIVER_MISSING:-__never__}"*) exit 22 ;; esac
 case "$url" in
   */releases/download/*/waitron-release.json)
     [ -n "\${WT_RELEASE_ASSET:-}" ] || exit 22
@@ -316,7 +317,6 @@ case "$url" in
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
   */scripts/box/upgrades/*)
-    case "$url" in *"\${WT_DRIVER_MISSING:-__never__}"*) exit 22 ;; esac
     if [[ "$url" == */bootstrap.sh ]]; then cp "$WT_BOOTSTRAP" "$out"; else printf 'source:%s\\n' "$url" > "$out"; fi
     exit 0 ;;
   */deploy/compose.yml)
@@ -1581,6 +1581,22 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
+  it("installs a signed release whose driver predates the upgrade timer", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    const olderDriver = join(sb.root, "older-driver.sh");
+    writeFileSync(olderDriver, "#!/usr/bin/env bash\n");
+    const result = run(sb, ["install", "v1.2.3"], {
+      ...release,
+      WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      WT_SELF_SCRIPT: olderDriver,
+      WT_DRIVER_MISSING: "/deploy/box/waitron-upgrade.",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(loggedCalls(sb).some((line) => /cli\.mjs apply /.test(line))).toBe(true);
+  });
+
   it.each(["committed", "restored"])(
     "accepts the rotated key and uses the refreshed verifier after a %s upgrade",
     (outcome) => {

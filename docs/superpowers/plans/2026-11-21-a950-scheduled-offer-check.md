@@ -32,14 +32,16 @@ checks when the service starts installing. See the [upgrade plan](2026-11-09-a95
    disabled. Document `systemctl enable --now waitron-upgrade.timer` for test-box rehearsal and
    `journalctl -u waitron-upgrade.service` in `deploy/README.md`. A recipe carrying the units
    has them immediately. An existing box’s first checked refresh installs the new driver;
-   that driver fetches the units on its next checked refresh. Update `docs/backlog.md` and
-   `docs/backlog/box.md`.
+   that driver fetches both units together on a checked refresh to a source whose installer
+   contains the window check. A pre-timer source can still be installed. Update
+   `docs/backlog.md` and `docs/backlog/box.md`.
 
 Run the failing cases first. `host.test.mjs` checks the real SQLite zone read and missing row.
 `cli.test.mjs` pins both boundaries with a different host zone, invalid-zone refusal and
 the condition exit status. Step 5a keeps the offer and deferral tests.
 `scripts/waitron-sh.test.mjs` checks the new driver’s file lists and that it installs both units
-without enabling them, and that another process holding the upgrade lock makes the read skip.
+without enabling them. It also covers an older signed source and a window read while the lock is
+held.
 In a disposable smoke run, pair the driver from #3935 with the new files and check Apply can
 load before the new units arrive. In a throwaway container booted with
 systemd, use a test trust key, a stubbed download and a fake installed release tag. Verify the
