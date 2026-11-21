@@ -24,7 +24,8 @@ import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import type { CounterPaymentBasket } from "./bill-payments.js";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
-import { billRefundFields,
+import {
+  billRefundFields,
   billShare,
   seedPendingCardPayment,
   takeBillPayment,

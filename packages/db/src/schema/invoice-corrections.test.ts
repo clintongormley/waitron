@@ -6,9 +6,10 @@ import { refusalOn, triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { CHECK_VIOLATION, FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
+import { billPayments } from "./bill-payments.js";
 import { invoiceCorrectionRefunds } from "./invoice-correction-refunds.js";
 import { invoiceCorrections } from "./invoice-corrections.js";
 import { sales, tenders } from "./sales.js";
@@ -27,11 +28,12 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
   let originalSaleId: string;
   let correctiveSaleId: string;
   let tenderRefundId: string;
+  let refunder: string;
 
   beforeEach(async () => {
     db = suite.db;
     await seedVenue(db, { name: "Fix", invoiceLocales: ["en"] });
-    const refunder = await seedPerson(db, { displayName: "Refund operator" });
+    refunder = await seedPerson(db, { displayName: "Refund operator" });
     nodeId = await seedNode(db);
     ({ deviceId } = await seedDevice(db));
     const [series] = await db
@@ -151,6 +153,52 @@ describe("invoice_corrections and invoice_correction_refunds", () => {
     const [written] = await open();
     const refund = await captureError(() => link(written!.id, { tenderRefundId: GHOST }));
     expect(isRefusal(refund, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("links a sale refund to a correction and refuses a bill refund", async () => {
+    const order = await seedWorkingOrder(db);
+    const [payment] = await db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order.id,
+        submissionId: randomUUID(),
+        fingerprint: "bill cash",
+        kind: "contribution",
+        method: "cash",
+        applied: 500,
+        tendered: 500,
+        state: "received",
+        source: "device",
+        deviceId,
+        requestedBy: refunder,
+        receivedAt: AT,
+      })
+      .returning();
+    const [billRefund] = await db
+      .insert(refunds)
+      .values({
+        billPaymentId: payment!.id,
+        submissionId: randomUUID(),
+        fingerprint: "bill refund",
+        method: "cash",
+        appliedAmount: 400,
+        reason: "Wrong dish",
+        requestedBy: refunder,
+        authorizedBy: refunder,
+        source: "device",
+        deviceId,
+        nodeId,
+        state: "completed",
+        completedAt: AT,
+      })
+      .returning();
+    const [correction] = await open();
+    const error = await captureError(() =>
+      link(correction!.id, { tenderRefundId: billRefund!.id }),
+    );
+    expect(triggerRaised(error, "an invoice correction refund must name a sale refund")).toBe(true);
+    const [saleLink] = await link(correction!.id);
+    expect(saleLink).toMatchObject({ tenderRefundId });
   });
 
   it("refuses a second open correction for one sale, and allows one once the first is filed", async () => {

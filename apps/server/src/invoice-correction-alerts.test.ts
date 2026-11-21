@@ -405,10 +405,7 @@ describe("automatic filing of a correction whose money is all back", () => {
     expect(await alertsFor(t.saleId, FILING_REFUSED)).toEqual(raised);
     expect(salesCount()).toBe(before);
     expect(
-      await v.db
-        .select({ state: refunds.state })
-        .from(refunds)
-        .where(eq(refunds.id, leg.id)),
+      await v.db.select({ state: refunds.state }).from(refunds).where(eq(refunds.id, leg.id)),
     ).toEqual([{ state: "completed" }]);
 
     at(2);

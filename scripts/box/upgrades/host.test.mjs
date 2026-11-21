@@ -8,9 +8,12 @@ import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters 
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
 import { useVenueDb } from "../../../packages/db/src/testing/venue-db.js";
+import { seedNode, seedPerson } from "../../../packages/db/src/testing/seed.js";
 import {
   BUSINESS_DAY_SETTINGS,
   CORE_MIGRATIONS,
+  billPayments,
+  refunds,
   saveSettings,
   settings,
   workingOrders,
@@ -192,6 +195,65 @@ describe("quiet before an offered upgrade", () => {
     await expect(checkInstalledUpgradeQuiet(box.root, box.run, now)).rejects.toThrow(
       "venue has recent or unresolved trading activity",
     );
+  });
+
+  it.each([
+    ["pending", null, false],
+    ["completed", "2026-11-21T03:40:00.000Z", false],
+    ["completed", "2026-11-20T19:05:00.000Z", true],
+  ])("checks a %s refund with completion time %s", async (state, completedAt, quiet) => {
+    const box = await imageFixture({ onlineTrial: "pass", prepare: false });
+    const db = suite.db;
+    const old = "2026-11-20T19:00:00.000Z";
+    const person = await seedPerson(db);
+    const nodeId = await seedNode(db);
+    const [order] = await db
+      .insert(workingOrders)
+      .values({
+        source: "dashboard",
+        orderNumber: 1,
+        status: "settled",
+        dining: "eat_in",
+        openedAt: old,
+        settledAt: old,
+      })
+      .returning({ id: workingOrders.id });
+    const [payment] = await db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order.id,
+        submissionId: "payment",
+        fingerprint: "payment",
+        kind: "contribution",
+        method: "cash",
+        applied: 500,
+        tendered: 500,
+        state: "received",
+        source: "operator_script",
+        requestedBy: person,
+        createdAt: old,
+        receivedAt: old,
+      })
+      .returning({ id: billPayments.id });
+    await db.insert(refunds).values({
+      billPaymentId: payment.id,
+      submissionId: "refund",
+      fingerprint: "refund",
+      nodeId,
+      method: "cash",
+      appliedAmount: 500,
+      reason: "Returned",
+      source: "operator_script",
+      requestedBy: person,
+      authorizedBy: person,
+      state,
+      createdAt: old,
+      completedAt,
+    });
+    await mountVenue(suite, box.root);
+    const check = checkInstalledUpgradeQuiet(box.root, box.run, now);
+    if (quiet) await expect(check).resolves.toBeUndefined();
+    else await expect(check).rejects.toThrow("venue has recent or unresolved trading activity");
   });
 
   it("allows a rollback stop even if trading changed after the first stop", async () => {

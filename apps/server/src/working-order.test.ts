@@ -5443,8 +5443,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual(before.lines.map((row) => ({ ...(row as object), ...change })));
-    for (const refund of await db.select().from(refunds))
-      expect(refund.state).toBe("pending");
+    for (const refund of await db.select().from(refunds)) expect(refund.state).toBe("pending");
   }
 
   // A sale line files its own options answer, and a whole-order card files the answers it priced.

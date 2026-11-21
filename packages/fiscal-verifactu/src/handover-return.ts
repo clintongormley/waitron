@@ -193,9 +193,7 @@ export async function inspectReturnedPayments(
       settlements: tx.all<ReturnRow>(
         sql`select * from sale_settlements where sale_id = ${sale.id} order by id`,
       ),
-      refunds: tx.all<ReturnRow>(
-        sql`select * from refunds where sale_id = ${sale.id} order by id`,
-      ),
+      refunds: tx.all<ReturnRow>(sql`select * from refunds where sale_id = ${sale.id} order by id`),
     };
     const records = forSale(returned.records);
     const originalsMatch =

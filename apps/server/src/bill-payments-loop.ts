@@ -289,10 +289,7 @@ async function settlePendingBillRefunds(
     try {
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
-        const [refund] = await tx
-          .select()
-          .from(refunds)
-          .where(eq(refunds.id, id));
+        const [refund] = await tx.select().from(refunds).where(eq(refunds.id, id));
         if (refund?.state !== "pending") return;
         pass.refundsUnresolved += 1;
         await raiseRefundUnresolved(tx, refund, workingOrderId, now);

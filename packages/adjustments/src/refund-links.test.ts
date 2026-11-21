@@ -17,7 +17,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
-import { seedVenueWithSeries, type SeededVenue } from "@waitron/reporting/test/fixtures.js";
+import {
+  seedBillPayment,
+  seedBillRefund,
+  seedVenueWithSeries,
+  type SeededVenue,
+} from "@waitron/reporting/test/fixtures.js";
 import {
   seedRefundableSale,
   seedTenderRefund,
@@ -147,6 +152,37 @@ describe("the link from a refund to its cancels", () => {
     const another = await refund("pending", 3);
     await link(another, [{ adjustmentId: first, amount: "0.50" }]);
     expect(linkedOf(await read([first, second]))).toEqual({ [first]: "1.50", [second]: "0.00" });
+  });
+
+  it("links a sale refund to a cancel and refuses a bill refund", async () => {
+    const order = await seedWorkingOrder(db);
+    const cancelId = await cancel(order, await seedVoidReason(db), "3.00");
+    const saleRefund = await refund("completed", 1);
+    const { deviceId, nodeId } = venue!;
+    const billPaymentId = await seedBillPayment(
+      db,
+      { workingOrderId: order, deviceId },
+      {
+        method: "cash",
+        applied: "5.00",
+        state: "received",
+        at: AT,
+      },
+    );
+    const billRefund = await seedBillRefund(
+      db,
+      { billPaymentId, deviceId, nodeId },
+      {
+        applied: "3.00",
+        state: "completed",
+        at: AT,
+      },
+    );
+    const links = [{ adjustmentId: cancelId, amount: "3.00" }];
+    const error = await captureError(() => link(billRefund, links));
+    expect(triggerRaised(error, "an adjustment refund must name a sale refund")).toBe(true);
+    await link(saleRefund, links);
+    expect(linkedOf(await read([cancelId]))).toEqual({ [cancelId]: "3.00" });
   });
 
   it("linking no cancels writes nothing", async () => {

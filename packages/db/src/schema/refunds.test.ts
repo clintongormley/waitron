@@ -183,9 +183,9 @@ describe("settled-tender refund ledger", () => {
     const cash = { method: "cash", provider: null, provider_payment_ref: null };
     const first = await insert(cash);
     const error = await captureError(() => insert(cash));
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, { table: "refunds", columns: ["tender_id"] }),
-    ).toBe(true);
+    expect(refusalOn(error, UNIQUE_VIOLATION, { table: "refunds", columns: ["tender_id"] })).toBe(
+      true,
+    );
     await update(first, sql`state = 'failed', failed_at = ${AT}`);
     const second = await insert(cash);
     expect(second).not.toBe(first);
@@ -373,6 +373,24 @@ describe("settled-tender refund ledger", () => {
       expect(suite.db.all(sql`select state from refunds`)).toEqual([{ state }]);
     },
   );
+
+  it("stamps a completed cash refund once", async () => {
+    const refundId = await insert({
+      method: "cash",
+      provider: null,
+      provider_payment_ref: null,
+      state: "completed",
+      completed_at: AT,
+    });
+    await update(refundId, sql`drawer_opened_at = ${AT}`);
+    for (const value of [null, "2026-10-17T00:00:00.000Z"]) {
+      const error = await captureError(() => update(refundId, sql`drawer_opened_at = ${value}`));
+      expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
+    }
+    expect(suite.db.all(sql`select drawer_opened_at from refunds`)).toEqual([
+      { drawer_opened_at: AT },
+    ]);
+  });
 
   it("does not delete an unresolved request", async () => {
     const refundId = await insert();

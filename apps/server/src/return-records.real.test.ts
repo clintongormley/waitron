@@ -32,7 +32,7 @@ import {
   readHandoverOperation,
   readOpenHandoverOperation,
 } from "@waitron/node-db";
-import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode as bareNode, seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments, recordRefund } from "@waitron/payments";
 import { getHeldOrder, listHeldOrders } from "./working-order.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -660,6 +660,8 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
+  await seedPerson(old.db, { id: "operator", displayName: "Refund operator" });
+  await seedPerson(old.db, { id: "manager", displayName: "Refund manager" });
   await old.db.insert(refunds).values({
     id: "returned-refund",
     saleId: sale!.id,
@@ -740,6 +742,8 @@ async function pendingCardOriginal() {
     state: "captured",
     settledAt: "2026-07-20T17:21:00.000Z",
   });
+  await seedPerson(old.db, { id: "operator", displayName: "Refund operator" });
+  await seedPerson(old.db, { id: "manager", displayName: "Refund manager" });
   await old.db.insert(refunds).values({
     id: "pending-card-refund",
     saleId,

@@ -759,9 +759,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     it("writes and reads back a pending card refund", async () => {
       const paymentId = await receivedPayment();
       const id = await insertRefund(paymentId);
-      const [row] = await inTx((tx) =>
-        tx.select().from(refunds).where(eq(refunds.id, id)),
-      );
+      const [row] = await inTx((tx) => tx.select().from(refunds).where(eq(refunds.id, id)));
       expect(row).toMatchObject({
         billPaymentId: paymentId,
         appliedAmount: 500,
@@ -798,42 +796,18 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     it.each([
       ["nothing given back", { appliedAmount: 0, tipAmount: 0 }, "refunds_amounts_ck"],
       ["a negative tip", { appliedAmount: 500, tipAmount: -1 }, "refunds_amounts_ck"],
-      [
-        "a negative applied amount",
-        { appliedAmount: -1, tipAmount: 500 },
-        "refunds_amounts_ck",
-      ],
+      ["a negative applied amount", { appliedAmount: -1, tipAmount: 500 }, "refunds_amounts_ck"],
       ["an unknown state", { state: "lost" }, "refunds_state_ck"],
-      [
-        "a send counted with no send time",
-        { sendCount: 1, sentAt: null },
-        "refunds_sent_ck",
-      ],
-      [
-        "a send time with no send counted",
-        { sendCount: 0, sentAt: AT },
-        "refunds_sent_ck",
-      ],
+      ["a send counted with no send time", { sendCount: 1, sentAt: null }, "refunds_sent_ck"],
+      ["a send time with no send counted", { sendCount: 0, sentAt: AT }, "refunds_sent_ck"],
       [
         "a completed refund with no time",
         { state: "completed", completedAt: null },
         "refunds_completed_at_ck",
       ],
-      [
-        "a pending refund with a completed time",
-        { completedAt: AT },
-        "refunds_completed_at_ck",
-      ],
-      [
-        "a failed refund with no time",
-        { state: "failed", failedAt: null },
-        "refunds_failed_at_ck",
-      ],
-      [
-        "a pending refund with a failed time",
-        { failedAt: AT },
-        "refunds_failed_at_ck",
-      ],
+      ["a pending refund with a completed time", { completedAt: AT }, "refunds_completed_at_ck"],
+      ["a failed refund with no time", { state: "failed", failedAt: null }, "refunds_failed_at_ck"],
+      ["a pending refund with a failed time", { failedAt: AT }, "refunds_failed_at_ck"],
       [
         "an attestation with no note",
         { state: "failed", failedAt: AT, attestedBy: MANAGER },
@@ -877,9 +851,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
   describe("refunds_guard_update: outcome once, sent once, counted up by one", () => {
     async function refundState(id: string) {
-      const [row] = await inTx((tx) =>
-        tx.select().from(refunds).where(eq(refunds.id, id)),
-      );
+      const [row] = await inTx((tx) => tx.select().from(refunds).where(eq(refunds.id, id)));
       return row!;
     }
 
@@ -1028,9 +1000,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
     it("refuses a delete", async () => {
       const id = await insertRefund(await receivedPayment());
-      const error = await captureError(() =>
-        run(sql`delete from refunds where id = ${id}`),
-      );
+      const error = await captureError(() => run(sql`delete from refunds where id = ${id}`));
       expect(triggerRaised(error, REFUND_DELETE_REFUSAL)).toBe(true);
     });
   });

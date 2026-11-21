@@ -1103,9 +1103,7 @@ describe("a pass while the start's time is unconfirmed", () => {
     );
     expect(asked.json).toMatchObject({ refund: { state: "pending" } });
     const rows = () =>
-      inTx(venue, (tx) =>
-        tx.select().from(refunds).where(eq(refunds.billPaymentId, paymentId)),
-      );
+      inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.billPaymentId, paymentId)));
     const [row] = await rows();
     const lookups = venue.card.lookupCalls.length;
     const state = startClockState();

@@ -41,7 +41,11 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { billRefundFields, paySavedBillInCash, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
+import {
+  billRefundFields,
+  paySavedBillInCash,
+  seedPendingCardPayment,
+} from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,

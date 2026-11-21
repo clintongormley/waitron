@@ -323,29 +323,33 @@ export async function seedBillRefund(
     state: "pending" | "completed" | "failed";
     at?: string;
   },
-): Promise<void> {
+): Promise<string> {
   const [payment] = await db
     .select({ method: billPayments.method })
     .from(billPayments)
     .where(eq(billPayments.id, ref.billPaymentId));
-  await db.insert(refunds).values({
-    billPaymentId: ref.billPaymentId,
-    nodeId: ref.nodeId,
-    method: payment!.method,
-    manual: payment!.method === "card",
-    submissionId: randomUUID(),
-    fingerprint: "fixture",
-    appliedAmount: stringToCents(opts.applied),
-    tipAmount: stringToCents(opts.tip ?? "0.00"),
-    reason: "fixture",
-    authorizedBy: PERSON,
-    requestedBy: PERSON,
-    source: "device",
-    deviceId: ref.deviceId,
-    state: opts.state,
-    completedAt: opts.state === "completed" ? opts.at! : null,
-    failedAt: opts.state === "failed" ? opts.at! : null,
-  });
+  const [refund] = await db
+    .insert(refunds)
+    .values({
+      billPaymentId: ref.billPaymentId,
+      nodeId: ref.nodeId,
+      method: payment!.method,
+      manual: payment!.method === "card",
+      submissionId: randomUUID(),
+      fingerprint: "fixture",
+      appliedAmount: stringToCents(opts.applied),
+      tipAmount: stringToCents(opts.tip ?? "0.00"),
+      reason: "fixture",
+      authorizedBy: PERSON,
+      requestedBy: PERSON,
+      source: "device",
+      deviceId: ref.deviceId,
+      state: opts.state,
+      completedAt: opts.state === "completed" ? opts.at! : null,
+      failedAt: opts.state === "failed" ? opts.at! : null,
+    })
+    .returning({ id: refunds.id });
+  return refund!.id;
 }
 
 export async function seedVoid(

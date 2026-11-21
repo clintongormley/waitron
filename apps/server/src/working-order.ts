@@ -5895,12 +5895,7 @@ export async function refuseRefundInProgress(
     .select({ workingOrderId: billPayments.workingOrderId })
     .from(refunds)
     .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
-    .where(
-      and(
-        inArray(billPayments.workingOrderId, [...orderIds]),
-        eq(refunds.state, "pending"),
-      ),
-    )
+    .where(and(inArray(billPayments.workingOrderId, [...orderIds]), eq(refunds.state, "pending")))
     .orderBy(billPayments.workingOrderId)
     .limit(1);
   if (pending !== undefined) {

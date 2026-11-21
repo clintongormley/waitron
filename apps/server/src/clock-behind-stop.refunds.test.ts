@@ -110,9 +110,7 @@ function retry(app: Hono, refundId: string) {
 }
 
 function tenderRefundRows(saleId: string) {
-  return inTx(venue, (tx) =>
-    tx.select().from(refunds).where(eq(refunds.saleId, saleId)),
-  );
+  return inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, saleId)));
 }
 
 const refundSends = () => venue.card.refundCalls.length;

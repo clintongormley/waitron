@@ -1104,6 +1104,18 @@ describe("a correction's cash", () => {
       { tenderRefundId: given.refunds[0]!.id },
     ]);
     expect(counts().drawers).toBe(was.drawers + 1);
+    const stamps = await venue.db
+      .select({
+        id: refundRows.id,
+        openedAt: refundRows.drawerOpenedAt,
+        doneAt: refundRows.completedAt,
+      })
+      .from(refundRows)
+      .where(eq(refundRows.saleId, saleId));
+    const first = stamps.find((row) => row.id === given.refunds[0]!.id)!;
+    expect(first.openedAt).not.toBeNull();
+    expect(first.openedAt).toBe(first.doneAt);
+    expect(stamps.find((row) => row.id === given.refunds[1]!.id)!.openedAt).toBeNull();
     expect(given.correction).toMatchObject({ state: "filed", moneyBack: "25.00" });
     expect(await original(saleId)).toEqual(before);
   });

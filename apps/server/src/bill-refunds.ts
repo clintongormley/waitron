@@ -858,10 +858,7 @@ export async function refundBillPayment(
     }
     const refundId = begun.refundId;
     return await withTransaction(deps.db, async (tx) => {
-      const [refund] = await tx
-        .select()
-        .from(refunds)
-        .where(eq(refunds.id, refundId));
+      const [refund] = await tx.select().from(refunds).where(eq(refunds.id, refundId));
       const result = await resultOf(tx, refund!, workingOrderId);
       if (result.refund.state === "failed" && refusalReason !== undefined) {
         result.refund.refusalReason = refusalReason;

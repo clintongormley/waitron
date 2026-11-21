@@ -262,12 +262,7 @@ export async function reserveTenderRefund(
       const [pending] = await tx
         .select({ id: refunds.id })
         .from(refunds)
-        .where(
-          and(
-            eq(refunds.billPaymentId, capture.billPaymentId),
-            eq(refunds.state, "pending"),
-          ),
-        );
+        .where(and(eq(refunds.billPaymentId, capture.billPaymentId), eq(refunds.state, "pending")));
       if (pending !== undefined) throw new AppError("tender.refund_in_progress", { tenderId });
     }
     if (!refundable.manual) {

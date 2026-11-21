@@ -2047,10 +2047,7 @@ describe("refunds_guard_update", () => {
 
   it("refuses a change to the device a refund was asked for on", () => {
     expect(
-      refusalFor(
-        connection,
-        `update refunds set device_id = 'dev-off' where id = 'bpr-pending'`,
-      ),
+      refusalFor(connection, `update refunds set device_id = 'dev-off' where id = 'bpr-pending'`),
     ).toBe(REFUND_CHANGE_REFUSAL);
   });
 
@@ -2075,9 +2072,9 @@ describe("refunds_guard_update", () => {
 
 describe("refunds_no_delete", () => {
   it("refuses deleting a bill payment refund", () => {
-    expect(
-      refusalFor(connection, `delete from refunds where id = 'bpr-pending'`),
-    ).toBe(REFUND_DELETE_REFUSAL);
+    expect(refusalFor(connection, `delete from refunds where id = 'bpr-pending'`)).toBe(
+      REFUND_DELETE_REFUSAL,
+    );
   });
 });
 

@@ -5,12 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  refunds,
-  refundState,
-  CORE_MIGRATIONS,
-  tenders,
-} from "@waitron/db";
+import { refunds, refundState, CORE_MIGRATIONS, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
@@ -27,7 +22,10 @@ let saleId: string;
 beforeEach(async () => {
   seeded = await seedWorkingOrder(suite.db);
   saleId = await seedSale(suite.db, seeded);
-  await seedPerson(suite.db, { id: "11111111-1111-1111-1111-111111111111", displayName: "Cashier" });
+  await seedPerson(suite.db, {
+    id: "11111111-1111-1111-1111-111111111111",
+    displayName: "Cashier",
+  });
 });
 
 afterEach(async () => {
@@ -227,7 +225,8 @@ describe("summariseOpenPayments", () => {
     const sumup = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
     const simulator = await chargedBillPayment("simulator", "sim-ref", null);
     const sent = await billRefund(sumup, "pending", STAMPED);
-    const unsent = await billRefund(sumup, "pending", null);
+    const unsentPayment = await chargedBillPayment("sumup", "unsent-ref", "txn-2");
+    const unsent = await billRefund(unsentPayment, "pending", null);
     const own = await billRefund(simulator, "pending", STAMPED);
 
     const summary = await summarise();
@@ -244,10 +243,10 @@ describe("summariseOpenPayments", () => {
         },
         {
           refundId: unsent,
-          billPaymentId: sumup,
+          billPaymentId: unsentPayment,
           provider: "sumup",
-          paymentRef: "sumup-ref",
-          processorRef: "txn-1",
+          paymentRef: "unsent-ref",
+          processorRef: "txn-2",
           sentAt: null,
         },
         {

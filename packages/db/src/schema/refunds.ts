@@ -131,10 +131,7 @@ export const refunds = table(
       "refunds_completed_at_ck",
       sql`(${t.state} = 'completed') = (${t.completedAt} is not null)`,
     ),
-    check(
-      "refunds_failed_at_ck",
-      sql`(${t.state} = 'failed') = (${t.failedAt} is not null)`,
-    ),
+    check("refunds_failed_at_ck", sql`(${t.state} = 'failed') = (${t.failedAt} is not null)`),
     check(
       "refunds_sent_ck",
       sql`typeof(${t.sendCount}) = 'integer' and ${t.sendCount} >= 0 and (${t.sendCount} = 0) = (${t.sentAt} is null)`,

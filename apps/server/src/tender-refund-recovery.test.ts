@@ -107,9 +107,7 @@ describe("settled tender recovery admission", () => {
       ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
       expect(v.snapshot()).toEqual(before);
       await recoverTenderRefunds(v.deps);
-      expect(
-        (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
-      ).toEqual({
+      expect((await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0]).toEqual({
         ...t.refund,
         state: "failed",
         failedAt: "2026-10-14T23:30:00.000Z",
@@ -155,9 +153,9 @@ describe("settled tender recovery admission", () => {
       boundary.mockRestore();
     }
     expect(v.snapshot()).toEqual(before);
-    expect(
-      (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
-    ).toEqual(t.refund);
+    expect((await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0]).toEqual(
+      t.refund,
+    );
   });
   it("preserves pending evidence when admission closes during a provider lookup", async () => {
     const t = await retained(true),
@@ -180,10 +178,7 @@ describe("settled tender recovery admission", () => {
     } finally {
       lookup.mockRestore();
     }
-    const current = await v.db
-      .select()
-      .from(refunds)
-      .where(eq(refunds.id, t.refund.id));
+    const current = await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id));
     expect(current[0]).toEqual({ ...t.refund, lastLookupAt: "2026-10-14T23:30:00.000Z" });
     const after = v.snapshot();
     expect(after.payment_refunds).toEqual(before.payment_refunds);
@@ -232,9 +227,9 @@ describe("settled tender recovery admission", () => {
     });
     expect(errors).toEqual([]);
     expect(v.snapshot()).toEqual(before);
-    expect(
-      (await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0],
-    ).toEqual(t.refund);
+    expect((await v.db.select().from(refunds).where(eq(refunds.id, t.refund.id)))[0]).toEqual(
+      t.refund,
+    );
   });
 });
 
@@ -435,18 +430,20 @@ describe("bill refund recovery stopping", () => {
         );
       }
       const stateOf = async (id: string) =>
-        (
-          await v.db
-            .select({ state: refunds.state })
-            .from(refunds)
-            .where(eq(refunds.id, id))
-        )[0]!.state;
+        (await v.db.select({ state: refunds.state }).from(refunds).where(eq(refunds.id, id)))[0]!
+          .state;
       // Sent and pending: each one this pass would ask its provider about.
       const waiting = (
         await v.db
           .select({ id: refunds.id })
           .from(refunds)
-          .where(and(eq(refunds.state, "pending"), isNotNull(refunds.sentAt)))
+          .where(
+            and(
+              isNotNull(refunds.billPaymentId),
+              eq(refunds.state, "pending"),
+              isNotNull(refunds.sentAt),
+            ),
+          )
       ).map(({ id }) => id);
       expect(waiting.length).toBeGreaterThanOrEqual(2);
       const controller = new AbortController();
@@ -490,7 +487,13 @@ describe("bill refund recovery stopping", () => {
         await v.db
           .select({ id: refunds.id })
           .from(refunds)
-          .where(and(eq(refunds.state, "pending"), isNotNull(refunds.sentAt)))
+          .where(
+            and(
+              isNotNull(refunds.billPaymentId),
+              eq(refunds.state, "pending"),
+              isNotNull(refunds.sentAt),
+            ),
+          )
       ).map(({ id }) => id);
       const controller = new AbortController();
       const asked: string[] = [];
@@ -519,7 +522,7 @@ describe("bill refund recovery stopping", () => {
       const rows = await v.db
         .select()
         .from(refunds)
-        .where(eq(refunds.state, "pending"));
+        .where(and(isNotNull(refunds.billPaymentId), eq(refunds.state, "pending")));
       expect(rows.map((row) => row.id)).toEqual(signalled ? expect.arrayContaining(waiting) : []);
       // Nothing of the stopped pass holds the refund: the next pass without a signal settles it.
       if (signalled) {
@@ -554,10 +557,7 @@ describe("bill refund recovery stopping", () => {
       v.operator,
       "reader-card",
     );
-    const [saved] = await v.db
-      .select()
-      .from(refunds)
-      .where(eq(refunds.billPaymentId, t.paymentId));
+    const [saved] = await v.db.select().from(refunds).where(eq(refunds.billPaymentId, t.paymentId));
     expect(asked).toEqual([]);
     expect(saved).toMatchObject({ state: "pending", sendCount: 1 });
     expect(saved!.sentAt).not.toBeNull();

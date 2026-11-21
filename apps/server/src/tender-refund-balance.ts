@@ -88,12 +88,7 @@ export async function readRefundableTenders(
           await tx
             .select()
             .from(refunds)
-            .where(
-              and(
-                inArray(refunds.billPaymentId, billIds),
-                eq(refunds.state, "completed"),
-              ),
-            )
+            .where(and(inArray(refunds.billPaymentId, billIds), eq(refunds.state, "completed")))
         ).map((row) => ({
           ...row,
           appliedAmount: centsToDecimal(row.appliedAmount),

@@ -1493,9 +1493,9 @@ it.each([
           receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
         ),
       ).toEqual({ complete: true });
-      expect(
-        receiver.db.all<{ id: string }>(sql`select id from refunds order by id`),
-      ).toEqual([{ id: "receiver-refund" }]);
+      expect(receiver.db.all<{ id: string }>(sql`select id from refunds order by id`)).toEqual([
+        { id: "receiver-refund" },
+      ]);
     }
   },
 );

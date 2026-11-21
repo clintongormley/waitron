@@ -979,9 +979,7 @@ describe("the provider refunds another refund of the payment already accounts fo
     await refund(billId, card.id, { applied: "1.00" });
     const [completed, failed, pending] = await refundRowsOf(card.id);
     // The provider's id may arrive on a refund still pending; it is this refund's own.
-    venue.db.run(
-      sql`update refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`,
-    );
+    venue.db.run(sql`update refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`);
 
     await withProvider({ lookups: { kind: "none" } }, () =>
       resumeCardRefund(
@@ -1697,8 +1695,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           where state = 'pending' and id <> ${refundId}`,
     );
     const pass = async (ms: number) => {
-      venue.db
-        .run(sql`create trigger fail_recovered_bill_refund before update of state on refunds
+      venue.db.run(sql`create trigger fail_recovered_bill_refund before update of state on refunds
         when new.state = 'completed' begin select raise(abort, 'refund storage unavailable'); end`);
       try {
         return await withProvider(

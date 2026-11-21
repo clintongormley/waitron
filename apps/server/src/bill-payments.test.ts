@@ -74,7 +74,8 @@ import {
   readBillBalance,
   readPaymentsByBill,
 } from "./bill-payments.js";
-import { billRefundFields,
+import {
+  billRefundFields,
   takeBillPayment,
   takeReaderBillPayment,
   type BillPaymentRequest,

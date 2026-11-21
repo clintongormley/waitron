@@ -1097,10 +1097,7 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     });
     // Start separately to exercise the lookup path, which must union all ledgers' references.
     const next = await run(t);
-    await store.db
-      .update(refunds)
-      .set({ sentAt: AT, sendCount: 1 })
-      .where(eq(refunds.id, next.id));
+    await store.db.update(refunds).set({ sentAt: AT, sendCount: 1 }).where(eq(refunds.id, next.id));
     expect((await resumeTenderRefund(deps, next.id, "loop")).state).toBe("pending");
     expect(provider.lookupCalls.at(-1)!.excludeRefs).toEqual(["attributed-failure"]);
     expect(await store.db.select().from(paymentRefunds)).toEqual([]);
@@ -1320,10 +1317,7 @@ describe("settled-tender send deadline and terminal controls", () => {
     const work = refundSettledTender(deps, cfg, t.saleId, request(t), operator());
     await vi.waitFor(() => expect(provider.refundCalls).toHaveLength(1));
     const id = provider.refundCalls[0]!.refundId;
-    await store.db
-      .update(refunds)
-      .set({ state: "failed", failedAt: AT })
-      .where(eq(refunds.id, id));
+    await store.db.update(refunds).set({ state: "failed", failedAt: AT }).where(eq(refunds.id, id));
     release();
     expect((await work).state).toBe("failed");
     expect(await row(id)).toMatchObject({

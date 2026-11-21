@@ -62,10 +62,7 @@ function dueCorrections(db: Transaction, cutoff: string) {
     )
     .innerJoin(
       refunds,
-      and(
-        eq(refunds.id, invoiceCorrectionRefunds.tenderRefundId),
-        eq(refunds.state, "completed"),
-      ),
+      and(eq(refunds.id, invoiceCorrectionRefunds.tenderRefundId), eq(refunds.state, "completed")),
     )
     .where(
       and(

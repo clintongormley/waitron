@@ -30,9 +30,6 @@ const READ = [
   "refunds.requested_by",
   "refunds.authorized_by",
   "refunds.attested_by",
-  "refunds.requested_by",
-  "refunds.authorized_by",
-  "refunds.attested_by",
   "drawer_opens.person_id",
   "drawer_opens.authorized_by",
 ];

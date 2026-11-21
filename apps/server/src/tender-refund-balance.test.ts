@@ -608,10 +608,7 @@ describe("settled-tender refundable balances", () => {
       },
     ]);
     expect(
-      await store.db
-        .select()
-        .from(refunds)
-        .where(eq(refunds.billPaymentId, bill!.id)),
+      await store.db.select().from(refunds).where(eq(refunds.billPaymentId, bill!.id)),
     ).toHaveLength(1);
   });
 });

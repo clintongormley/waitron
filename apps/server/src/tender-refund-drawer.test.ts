@@ -15,7 +15,7 @@ import {
   tenders,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin } from "@waitron/shared";
 import { enqueueRefundDrawer } from "./receipt-print.js";
@@ -34,6 +34,8 @@ let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
   await seedVenue(db, { name: "Returns", invoiceLocales: ["en"] });
+  await seedPerson(db, { id: PERSON, displayName: "Refund operator" });
+  await seedPerson(db, { id: AUTH.authorizedBy, displayName: "Refund authorizer" });
   const nodeId = await seedNode(db);
   const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;
@@ -201,6 +203,8 @@ describe("settled-tender refund audited drawer", () => {
           .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.cash_drawer')` });
       await enqueue(row.id);
       await empty();
+      const [stored] = await store.db.select().from(refunds).where(eq(refunds.id, row.id));
+      expect(stored!.drawerOpenedAt).toBeNull();
     },
   );
   it.each(["pending", "failed"] as const)("does not open for a %s refund", async (state) => {

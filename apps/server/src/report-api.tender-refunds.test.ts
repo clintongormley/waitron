@@ -35,6 +35,7 @@ let saleId: string;
 let tenderId: string;
 let paymentId: string;
 let cookie: string;
+let managerId: string;
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -113,7 +114,8 @@ beforeEach(async () => {
       role: "manager",
       pinHash: PIN_HASH,
     });
-    return startManagementSession(tx, { method: "password", personId: person!.id });
+    managerId = person!.id;
+    return startManagementSession(tx, { method: "password", personId: managerId });
   });
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
 });
@@ -146,8 +148,8 @@ async function refund(state: "completed" | "pending" | "failed", refundNode = no
     appliedAmount: 10000,
     tipAmount: 725,
     reason: "Returning the correct charge",
-    requestedBy: randomUUID(),
-    authorizedBy: randomUUID(),
+    requestedBy: managerId,
+    authorizedBy: managerId,
     source: "device",
     deviceId: returnedOn,
     nodeId: refundNode,

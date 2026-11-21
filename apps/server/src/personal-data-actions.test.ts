@@ -1,4 +1,4 @@
-import { billRefundFields } from "./testing/bill-payment-fixture.js";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -201,10 +201,13 @@ async function seedBillRefund(
     createdAt: string;
   },
 ): Promise<void> {
+  const [payment] = await db.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
   await db.insert(refunds).values({
     ...row,
     billPaymentId,
-    ...billRefundFields(db, at.nodeId, billPaymentId),
+    nodeId: at.nodeId,
+    method: payment!.method,
+    manual: payment!.method === "card",
     submissionId: randomUUID(),
     fingerprint: `bill refund ${row.id}`,
     reason: `bill refund reason ${row.id}`,
@@ -726,10 +729,6 @@ describe("actionsPersonalData", () => {
       ...(await suite.db.select({ text: saleVoids.reason }).from(saleVoids)),
       ...(await suite.db.select({ text: refunds.reason }).from(refunds)),
       ...(await suite.db.select({ text: refunds.attestationNote }).from(refunds)),
-      ...(await suite.db.select({ text: refunds.reason }).from(refunds)),
-      ...(await suite.db
-        .select({ text: refunds.attestationNote })
-        .from(refunds)),
     ]
       .map((row) => row.text)
       .filter((value): value is string => value !== null);

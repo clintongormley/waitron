@@ -3988,8 +3988,8 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
         fingerprint: "f",
         appliedAmount: 500,
         reason: "error",
-        authorizedBy: randomUUID(),
-        requestedBy: randomUUID(),
+        authorizedBy: venue.adminId,
+        requestedBy: venue.staffId,
         source: "device",
         deviceId: venue.deviceId,
         state: "completed",
@@ -4144,9 +4144,7 @@ describe("the device a bill payment and its refund name", () => {
       suite.db.all(sql`select source, device_id from bill_payments where id = ${paymentId}`),
     ).toEqual([{ source: "device", device_id: venue.deviceId }]);
     expect(
-      suite.db.all(
-        sql`select source, device_id from refunds where bill_payment_id = ${paymentId}`,
-      ),
+      suite.db.all(sql`select source, device_id from refunds where bill_payment_id = ${paymentId}`),
     ).toEqual([{ source: "device", device_id: venue.handheldDeviceId }]);
   });
 });

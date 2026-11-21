@@ -132,13 +132,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   listAbandonedRefunds: ["payments", "payment_refunds", "working_orders"],
   listHeldPayments: ["payments", "working_orders"],
-  listStuckBillRefunds: [
-    "refunds",
-    "bill_payments",
-    "payments",
-    "working_orders",
-    "devices",
-  ],
+  listStuckBillRefunds: ["refunds", "bill_payments", "payments", "working_orders", "devices"],
   pairingMode: ["pairing"],
   // A device's ask; `dependenciesOf` narrows a print agent's.
   joinRequests: ["join_requests", "devices", "device_profiles", "pairing"],
