@@ -8,6 +8,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { formatRecentMinute } from "../date-utils.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
+import { LiveData } from "@waitron/dashboard-kit";
 
 const REQUEST = "66666666-6666-4666-8666-666666666666";
 
@@ -250,6 +251,17 @@ describe("a box asking to join, on the Servers screen", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("shows a request a new box makes while the page is open, without a reload", async () => {
+    const liveData = new LiveData();
+    const background = { listServers: vi.fn().mockResolvedValue(listing()) };
+    const el = await mount(
+      stubApi({ liveData, background, listServers: vi.fn().mockResolvedValue(listing([])) }),
+    );
+    expect(find(el, `join-row-${REQUEST}`)).toBeNull();
+    liveData.invalidate([{ type: "box_joins" }]);
+    await vi.waitFor(() => expect(find(el, `join-row-${REQUEST}`)).not.toBeNull());
   });
 
   it("starts no timer while nothing is listed, and stops when the screen is removed", async () => {

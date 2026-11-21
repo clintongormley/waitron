@@ -16,6 +16,7 @@ export function liveResourceTypes(
       ]),
       ...settingsModules.map(settingsChangeType),
       "pairing",
+      "box_joins",
       "printer_discovery",
       "email_inbox",
       "backup_status",

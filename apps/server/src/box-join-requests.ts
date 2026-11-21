@@ -115,6 +115,11 @@ export interface BoxJoinRequestsOptions {
   newId?: () => string;
   newMainNonce?: (requestId: string) => Buffer;
   drawCode?: () => string;
+  /**
+   * Called when a request joins or leaves the list. A request that runs out of time leaves it
+   * unannounced, when the store next reads its requests.
+   */
+  changed?: () => void;
 }
 
 function shuffled(codes: string[]): string[] {
@@ -133,6 +138,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
   const wallNow = options.wallNow ?? (() => Date.now());
   const newId = options.newId ?? (() => randomUUID());
   const newMainNonce = options.newMainNonce ?? (() => randomBytes(32));
+  const changed = options.changed ?? (() => {});
 
   const requests = new Map<string, JoinRequest>();
   const helloWindows = new Map<string, Window>();
@@ -169,11 +175,13 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
   }
 
   function end(r: JoinRequest, reason: JoinEndReason, now: number) {
+    const wasListed = isListed(r);
     r.phase = "ended";
     r.reason = reason;
     r.keptUntil = now + ENDED_KEPT_MS;
     delete r.locked;
     if (reason === "cancelled" || reason === "replaced") startedAgainAt.set(r.address, now);
+    if (wasListed) changed();
   }
 
   /** A person looked at the request, so its reveal stops counting. */
@@ -330,6 +338,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         startedAgain: startedAgainAt.has(r.address),
       };
       r.phase = "waiting";
+      changed();
       return answer;
     },
 
@@ -446,6 +455,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         r.phase = "approved";
         r.locked = locked;
         r.keptUntil = steadyNow() + ENDED_KEPT_MS;
+        changed();
         return true;
       },
 

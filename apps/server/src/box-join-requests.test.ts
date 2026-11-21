@@ -39,7 +39,9 @@ function setup() {
   const decoys: string[] = [];
   let ids = 0;
   let decoyFill = 0;
+  const changed = vi.fn();
   const store = createBoxJoinRequests({
+    changed,
     steadyNow: () => clock.steady,
     wallNow: () => clock.wall,
     newId: () => `req-${++ids}`,
@@ -63,7 +65,7 @@ function setup() {
     const revealed = reveal(answer.requestId, address);
     return { id: answer.requestId, revealed };
   };
-  return { store, clock, decoys, advance, hello, reveal, revealFrom, signAnswer };
+  return { store, clock, decoys, advance, hello, reveal, revealFrom, signAnswer, changed };
 }
 
 const locked = (tag: string): LockedJoinBundle => ({
@@ -408,5 +410,33 @@ describe("approve", () => {
       locked: locked("a"),
     });
     expect(store.listed().map((r) => r.id)).toEqual([b]);
+  });
+});
+
+describe("changes to the list", () => {
+  it("tells its listener when a request is listed, approved or ends, and not for a hello or a poll", () => {
+    const { store, hello, reveal, revealFrom, changed } = setup();
+    const opened = hello("10.0.0.1");
+    if ("refused" in opened) throw new Error("hello refused");
+    expect(changed).not.toHaveBeenCalled();
+    reveal(opened.requestId, "10.0.0.1");
+    expect(changed).toHaveBeenCalledTimes(1);
+    store.poll({ requestId: opened.requestId, seq: 2, at: iso(0) });
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    const approved = revealFrom("10.0.0.2").id;
+    expect(changed).toHaveBeenCalledTimes(2);
+    store.approve.begin(approved, codeOf(approved, "10.0.0.2"));
+    store.approve.finish(approved, locked("a"));
+    expect(changed).toHaveBeenCalledTimes(3);
+
+    store.dismiss(opened.requestId);
+    expect(changed).toHaveBeenCalledTimes(4);
+    const cancelled = revealFrom("10.0.0.3").id;
+    store.cancel({ requestId: cancelled, seq: 2 });
+    expect(changed).toHaveBeenCalledTimes(6);
+    const wrong = revealFrom("10.0.0.4").id;
+    store.approve.begin(wrong, "000000");
+    expect(changed).toHaveBeenCalledTimes(8);
   });
 });
