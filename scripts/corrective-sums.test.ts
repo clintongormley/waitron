@@ -73,6 +73,31 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
       "looks up a replaced sale's supply day to choose its VAT period; it totals nothing a sale owes",
   },
   {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join d t on t.id = d.corrects_sale_id",
+    lines: 1,
+    reason: "finds the one invoice a corrective corrects, to read the day its VAT belongs to",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join d o on o.id = t.corrects_sale_id",
+    lines: 1,
+    reason: "finds the original of a corrected replacement, to read its own day",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "left join sales r on r.corrects_sale_id = d.id and r.replaces_original = 1",
+    lines: 1,
+    reason: "looks up a replaced sale's supply day, where a void of it takes its VAT off",
+  },
+  {
+    file: "packages/reporting/src/vat-movements.ts",
+    fragment: "from d join d o on o.id = d.corrects_sale_id",
+    lines: 1,
+    reason:
+      "finds a replacement's original, to take the replacement's split off the original's own day",
+  },
+  {
     file: "apps/server/src/accountant-export.ts",
     fragment: "eq(replacement.correctsSaleId, sales.id), eq(replacement.replacesOriginal, true)",
     lines: 1,

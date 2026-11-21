@@ -24,6 +24,8 @@ export type {
 } from "./category-sales.js";
 export { computeOverdueOrders } from "./overdue-orders.js";
 export { computeVatReturn, vatReturnDay } from "./vat-return.js";
+export { vatMovements } from "./vat-movements.js";
+export type { VatMovement, VatMovementKind } from "./vat-movements.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
 export { parsePeriodToken } from "./period.js";
