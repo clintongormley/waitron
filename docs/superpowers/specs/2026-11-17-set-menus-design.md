@@ -1,5 +1,7 @@
 # Set menus (A1515): design
 
+_2026-11-21: Replaced for VAT by the [VAT rates design](2026-11-21-vat-rates-design.md): set menus have no VAT rates of their own. Eaten in, they are at the one dine-in rate; taken away, only when all their products share one takeaway rate (owner, 21 November)._
+
 _2026-11-18: The owner decided that set menus carry their own eat-in and takeaway VAT rates, may include dishes at any rate, and can be sold for takeaway. Supplements take the applicable set-menu rate. See the [19 November sheet](../../compliance/2026-11-19-adviser-meeting.md)._
 
 Status: approved by the owner in conversation, 17 November 2026 ("yes"), after reading the list

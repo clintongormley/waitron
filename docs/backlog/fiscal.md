@@ -882,6 +882,8 @@ job count as a physical exactly-once printing guarantee.
 
 ## VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68)
 
+**Design written 2026-11-21, for the owner to approve:** [2026-11-21-vat-rates-design.md](../superpowers/specs/2026-11-21-vat-rates-design.md). The owner changed the model that day: one dine-in rate for everything eaten or drunk on the premises, supplied by Waitron with dates; a dated takeaway rate per product; no labels; set menus with no VAT of their own, and none taken away when its products' takeaway rates differ. The history below is kept for the earlier decisions it records.
+
 The owner's brainstorm of 16 November 2026, paused for the adviser: VAT classes go; each product
 keeps a dated history of two rates, one for eating in and one for taking away, chosen from the
 rates AEAT accepts (0, 2, 4, 5, 7.5, 10 and 21), and a change can be scheduled ahead; an invoice
@@ -899,8 +901,8 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
-A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals). Next: write
-the design and get the owner's approval. From M7v, owner rulings
+A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-corrections-to-filed-quarters-wrong-vat-rates-and-free-meals). Next: the owner's approval of
+the design above, then plans for its pieces A, B and C. From M7v, owner rulings
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
