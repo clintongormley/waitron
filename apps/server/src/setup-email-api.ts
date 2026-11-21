@@ -8,6 +8,12 @@ import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
+export function assertSetupMailLogin(settings: { url: string }): void {
+  if (new URL(settings.url).username === "") {
+    throw new AppError("email.settings_invalid", { field: "user" });
+  }
+}
+
 function object(value: unknown, field: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new AppError("setup.request_invalid", { field });
@@ -38,6 +44,7 @@ export function mountSetupEmailTest(
           throw new AppError("setup.request_invalid", { field: "admin.email" });
         }
         const recipient = normalizeAndValidateEmail(admin.email);
+        assertSetupMailLogin(settings);
         return c.json(await send(settings, recipient));
       } finally {
         testing = false;

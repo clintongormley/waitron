@@ -823,6 +823,8 @@ it("keeps email testing inside the claimed owner and uses its frozen administrat
     port: 465,
     encryption: "tls",
     from: "owner@example.test",
+    user: "owner",
+    password: "mail-password",
   };
   const response = await f.post("/setup-api/email-test", { email }, f.headers());
   expect({ status: response.status, body: await response.json() }).toEqual({
@@ -961,6 +963,33 @@ it("refuses a claimed-owner sender that named delivery cannot use before SMTP co
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
     error: { code: "email.settings_invalid", params: { field: "from" } },
+  });
+  expect(contacted).toBe(false);
+});
+
+it("refuses a claimed-owner mail server with no login before SMTP contact", async () => {
+  let contacted = false;
+  const f = await fixture(async () => {
+    contacted = true;
+    return { accepted: true };
+  });
+  const response = await f.post(
+    "/setup-api/email-test",
+    {
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        from: "owner@example.test",
+        user: "",
+        password: "",
+      },
+    },
+    f.headers(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "email.settings_invalid", params: { field: "user" } },
   });
   expect(contacted).toBe(false);
 });
