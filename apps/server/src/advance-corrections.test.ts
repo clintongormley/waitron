@@ -925,6 +925,53 @@ describe("an advance once the rest's invoice has taken it off", () => {
 
       expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
     });
+
+    it("a pending refund of the rest's tip alone, once its €90 came back, holds nothing back: the advance's preview goes ahead", async () => {
+      const billId = await seated("Tasting menu");
+      const advanceId = await advance(billId, "30.00");
+      const paid = await send(
+        venue().app,
+        venue().cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "95.00",
+          method: "card",
+          entry: "reader",
+          applied: "90.00",
+          tip: "5.00",
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const finalSaleId = await restId(billId);
+      const [tender] = await inTx(venue(), (tx) =>
+        tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, finalSaleId)),
+      );
+      const refund = (appliedAmount: string, tipAmount: string) =>
+        send(venue().app, venue().cookie, "POST", `/api/transactions/${finalSaleId}/refunds`, {
+          submissionId: randomUUID(),
+          tenderId: tender!.id,
+          appliedAmount,
+          tipAmount,
+          reason: "Sent back",
+          override: supervisor(),
+        });
+      expect((await refund("90.00", "0.00")).json).toMatchObject({ state: "completed" });
+      venue().card.scriptNextRefund({
+        made: false,
+        answer: { kind: "uncertain", reason: "network" },
+      });
+      expect((await refund("0.00", "5.00")).json).toMatchObject({ state: "pending" });
+
+      const previewed = await preview(advanceId, "30.00");
+
+      expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+      expect(previewed.json).toMatchObject({
+        vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+      });
+    });
   });
 
   it("a rest's invoice AEAT refused: Correct invoice on the advance answers that invoice's refusal, naming it", async () => {

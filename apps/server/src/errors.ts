@@ -895,9 +895,9 @@ declare module "@waitron/shared" {
       rate: string;
       moneyLeft: string;
     };
-    /** Correct invoice on the advance `saleId` while the refund `refundId` of the invoice
-     * `finalSaleId`, numbered `invoiceNumber`, that took it off waits for its result: whether that
-     * invoice can still give back money at the advance's rate depends on it. */
+    /** Correct invoice on the advance `saleId` while the refund `refundId` of money for dishes on
+     * the invoice `finalSaleId`, numbered `invoiceNumber`, that took it off waits for its result:
+     * whether that invoice can still give back money at the advance's rate depends on it. */
     "advance.final_invoice_refund_pending": {
       saleId: string;
       finalSaleId: string;

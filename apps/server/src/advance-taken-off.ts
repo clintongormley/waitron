@@ -1,6 +1,13 @@
 import "./errors.js";
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { invoiceCorrections, invoiceSeries, saleLines, sales, type Transaction } from "@waitron/db";
+import { and, eq, gt, inArray, isNull } from "drizzle-orm";
+import {
+  invoiceCorrections,
+  invoiceSeries,
+  saleLines,
+  sales,
+  tenderRefunds,
+  type Transaction,
+} from "@waitron/db";
 import { correctionTargetFor, formatInvoiceNumber, readCorrectableLines } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
@@ -80,9 +87,9 @@ type NamesTableInvoice = "sale.correction_not_admitted" | "sale.correction_histo
  * that invoice can still give back money for a dish at the advance's rate: `moneyLeft` is the
  * smaller of what is left of its dishes at that rate and the money still refundable on it. A whole
  * credit of that invoice leaves it nothing, and its correctable lines are then unreadable.
- * Otherwise refuses `advance.final_invoice_refund_pending` while a refund of that invoice waits
- * for its result and it has a dish left at that rate, or its lines cannot be read: a failed refund
- * would give it money to give back.
+ * Otherwise refuses `advance.final_invoice_refund_pending` while a refund of that invoice carrying
+ * money for its dishes, not a tip alone, waits for its result and the invoice has a dish left at
+ * that rate, or its lines cannot be read: that refund failing would give it money to give back.
  */
 export async function refuseFinalInvoiceFirst(
   tx: Transaction,
@@ -112,14 +119,24 @@ export async function refuseFinalInvoiceFirst(
     decimal("0.00"),
     ...refundable.map((row) => decimal(row.appliedRemaining)),
   ]);
-  const pending = refundable.find((row) => row.pendingRefundId !== null);
+  const pendingIds = refundable.flatMap((row) =>
+    row.pendingRefundId === null ? [] : [row.pendingRefundId],
+  );
+  const [pending] =
+    pendingIds.length === 0
+      ? []
+      : await tx
+          .select({ id: tenderRefunds.id })
+          .from(tenderRefunds)
+          .where(and(inArray(tenderRefunds.id, pendingIds), gt(tenderRefunds.appliedAmount, 0)))
+          .limit(1);
   const noMoney = compareDecimal(money, decimal("0.00")) <= 0;
   // Nothing to send staff to, so a refusal of reading the table's invoice must not block this one.
   if (noMoney && pending === undefined) return;
   const refundPending = () =>
     new AppError("advance.final_invoice_refund_pending", {
       ...takenOffParams(saleId, final),
-      refundId: pending!.pendingRefundId!,
+      refundId: pending!.id,
     });
   const [own] = await tx
     .select({ rate: saleLines.vatRate })
