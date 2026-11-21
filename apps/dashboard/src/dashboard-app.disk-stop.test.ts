@@ -626,18 +626,6 @@ describe("the full-disk bar's button", () => {
     expect(login(el)).toBeNull();
   });
 
-  it("passes the signed-in venue country to both staff editors", async () => {
-    history.replaceState(null, "", "/staff");
-    const permissions = ["person.view", "person.manage", "venue.view"];
-    const { el } = await mountAs("manager", permissions, {
-      getMe: vi.fn().mockResolvedValue({ ...me("manager", permissions), venueCountry: "ES" }),
-    });
-    const staff = el.shadowRoot!.querySelector("dashboard-staff-screen")!;
-    await staff.updateComplete;
-    expect(staff.shadowRoot!.querySelector("dashboard-person-form")!.venueCountry).toBe("ES");
-    expect(staff.shadowRoot!.querySelector("dashboard-person-edit")!.venueCountry).toBe("ES");
-  });
-
   it("leaves the staff screen's administrator sign-in clearing the address as before", async () => {
     history.replaceState(null, "", "/staff");
     const logout = vi.fn().mockResolvedValue(undefined);
@@ -655,4 +643,20 @@ describe("the full-disk bar's button", () => {
     expect(location.pathname).not.toContain("staff");
     expect(location.pathname).not.toContain("box-status");
   });
+});
+
+it("passes the signed-in venue country to both staff editors", async () => {
+  history.replaceState(null, "", "/staff");
+  const api = stubApi({
+    getMe: vi.fn().mockResolvedValue({
+      ...me("manager", ["person.view", "venue.view"]),
+      venueCountry: "ES",
+    }),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+  const staff = el.shadowRoot!.querySelector("dashboard-staff-screen")!;
+  await staff.updateComplete;
+  expect(staff.shadowRoot!.querySelector("dashboard-person-form")!.venueCountry).toBe("ES");
+  expect(staff.shadowRoot!.querySelector("dashboard-person-edit")!.venueCountry).toBe("ES");
 });

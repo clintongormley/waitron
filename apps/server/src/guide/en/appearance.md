@@ -200,8 +200,8 @@ rather than one that may be the wrong one.
 
 In a department’s **Receipts** preview, fixed receipt words follow the selected receipt language. The language of your dashboard controls does not change those words.
 
-If you add a foreign phone number on **Receipts**, include its country code, for example
-`+44 7700 900123`.
+If you add a foreign phone number on **Receipts**, start with `+` and its country code,
+for example `+44 7700 900123`.
 
 ## Set colours and text by hand {#advanced}
 
