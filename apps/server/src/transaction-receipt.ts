@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   billAdvances,
   invoiceSeries,
@@ -124,12 +124,18 @@ export async function readTransactionReceipt(
   const groupId =
     sale.workingOrderId ??
     (scope.workingOrderIds.length === 1 ? scope.workingOrderIds[0] : undefined);
-  // An advance keeps the heading its line was worded under; its bill's may move until the bill's
-  // own invoice.
+  // An advance, and a correction of one, keep the heading the advance's line was worded under;
+  // its bill's may move until the bill's own invoice. A correction is never settled, so it is
+  // never corrected itself.
   const [advance] = await tx
     .select({ orderLabel: billAdvances.orderLabel })
     .from(billAdvances)
-    .where(eq(billAdvances.advanceSaleId, saleId));
+    .where(
+      inArray(
+        billAdvances.advanceSaleId,
+        sale.correctsSaleId === null ? [saleId] : [saleId, sale.correctsSaleId],
+      ),
+    );
   return {
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }

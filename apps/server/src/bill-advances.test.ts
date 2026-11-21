@@ -746,6 +746,98 @@ describe("an advance in Find a bill (ruling L2)", () => {
     );
   });
 
+  /** Files a €10.00 cash correction of the advance `saleId`; answers the corrective sale's id. */
+  async function fileCorrection(saleId: string): Promise<string> {
+    const correctionId = await openCorrection(saleId);
+    const filed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "10.00", override: supervisor() },
+    );
+    expect(filed.status, JSON.stringify(filed.json)).toBe(200);
+    const [corrective] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, saleId)),
+    );
+    return corrective!.id;
+  }
+
+  const renameTable = (tableLabel: string) => {
+    const renamed = `Renamed ${randomUUID().slice(0, 8)}`;
+    return inTx(venue, async (tx) => {
+      await tx
+        .update(diningTables)
+        .set({ label: renamed })
+        .where(eq(diningTables.label, tableLabel));
+      return renamed;
+    });
+  };
+
+  it("a correction of the advance printed after table 7 is renamed is headed with table 7, as its line is", async () => {
+    const { tableLabel, saleId } = await advanceAt();
+    const correction = await fileCorrection(saleId);
+    const renamed = await renameTable(tableLabel);
+    await allowPrintReceipt();
+    const before = await jobCount();
+
+    const printed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${correction}/reprint`,
+      {},
+    );
+
+    expect(printed.status, JSON.stringify(printed.json)).toBe(200);
+    const [job] = (await jobsSince(before)).filter((row) => row.saleId === correction);
+    const lines = printedLines(job!.payload);
+    expect(lines.join("\n")).not.toContain(renamed);
+    expect(lines.find((line) => line.includes("Pedido"))).toContain(tableLabel);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const again = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${correction}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "1.00",
+        reasonId: reason!.id,
+        note: "Correct the correction",
+        expectedSplit: [{ rate: "10.00", base: "0.91", tax: "0.09" }],
+        override: supervisor(),
+      },
+    );
+    expect(again.json).toMatchObject({ code: "invoice_correction.not_settled" });
+  });
+
+  it("a copy of the advance's correction printed after table 7 is renamed is the original plus the copy mark", async () => {
+    const { tableLabel, saleId } = await advanceAt();
+    await allowPrintReceipt();
+    const before = await jobCount();
+    const correction = await fileCorrection(saleId);
+    await renameTable(tableLabel);
+
+    const reprinted = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${correction}/reprint`,
+      {},
+    );
+
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    const [original, copy] = (await jobsSince(before)).filter((job) => job.saleId === correction);
+    expect(copy).toMatchObject({ receiptCopy: true });
+    const originalLines = printedLines(original!.payload);
+    const copyLines = printedLines(copy!.payload);
+    expect(copyLines.filter((line) => !originalLines.includes(line))).toEqual([
+      expect.stringContaining("DUPLICADO"),
+    ]);
+    expect(originalLines.filter((line) => !copyLines.includes(line))).toEqual([]);
+  });
+
   it("an advance's open correction is listed to a device limited to table 7's zone, and not to one limited to another", async () => {
     const { saleId } = await advanceAt();
     const elsewhere = await otherZone();
