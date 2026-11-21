@@ -35,7 +35,8 @@ function directionOf(base: Decimal, tax: Decimal): VatCorrectionDirection {
 
 /**
  * The VAT movements (`vatMovements`) made in the period that belong before its first day, one row
- * per rate line, and their sums by (belongs-to period, rate, direction).
+ * per rate line, and their sums by (belongs-to period, rate, direction), with the period named as
+ * the rows name theirs.
  */
 export async function computeVatCorrections(
   tx: Transaction,
@@ -89,5 +90,5 @@ export async function computeVatCorrections(
       (a.direction === "reduction" ? -1 : 1),
   );
 
-  return { summary, rows };
+  return { madeIn: periodLabel(first, input.period.kind), summary, rows };
 }

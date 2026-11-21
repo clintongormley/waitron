@@ -332,17 +332,16 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const year = requireYear(c.req.query("year"));
-      const { period, token } = requireLiquidationPeriod(c.req.query("period"));
+      const { period } = requireLiquidationPeriod(c.req.query("period"));
       const corrections = await gated(sessionId, REPORT_EXPORT_PERMISSION, (tx) =>
         computeVatCorrections(tx, { year, period }),
       );
-      const madeIn = `${year}-${token}`;
       return c.body(
-        await renderCorrectionsWorkbook(corrections, madeIn, toLanguage(deps.venueLocale)),
+        await renderCorrectionsWorkbook(corrections, toLanguage(deps.venueLocale)),
         200,
         {
           "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="corrections-${madeIn}.xlsx"`,
+          "Content-Disposition": `attachment; filename="corrections-${corrections.madeIn}.xlsx"`,
           "Cache-Control": "no-store",
           "X-Content-Type-Options": "nosniff",
         },

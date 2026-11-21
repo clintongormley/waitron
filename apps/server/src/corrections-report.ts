@@ -3,10 +3,8 @@ import type { VatCorrections } from "@waitron/reporting";
 import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
 import { numeric, renderWorkbook, type Cell } from "./xlsx-workbook.js";
 
-/** `madeIn` names the asked period as the rows' `belongsTo` names theirs: `"2026-3T"`, `"2026-08"`. */
 export function renderCorrectionsWorkbook(
   corrections: VatCorrections,
-  madeIn: string,
   language: "en" | "es",
 ): Promise<Uint8Array<ArrayBuffer>> {
   const words = CORRECTIONS_REPORT_WORDS[language];
@@ -14,7 +12,7 @@ export function renderCorrectionsWorkbook(
     corrections.summary.length === 0
       ? [[words.nothing]]
       : corrections.summary.map((line) => [
-          madeIn,
+          corrections.madeIn,
           line.belongsTo,
           numeric(line.rate),
           words.directions[line.direction],

@@ -63,6 +63,7 @@ describe("computeVatCorrections", () => {
       rate: "10.00",
     };
     expect(await corrections(Q3)).toEqual({
+      madeIn: "2026-3T",
       rows: [
         {
           ...made,
@@ -97,6 +98,7 @@ describe("computeVatCorrections", () => {
   it("lists a ticket issued in April for a March sale as an addition for the first quarter (#3398)", async () => {
     await sale("2026-04-01", { supplyDay: "2026-03-31" });
     expect(await corrections(Q2)).toEqual({
+      madeIn: "2026-2T",
       rows: [
         {
           madeDay: "2026-04-01",
@@ -226,6 +228,7 @@ describe("computeVatCorrections", () => {
       lines: [{ vatRate: "10.00", lineTotal: "-11.00", quantity: "-1.000" }],
     });
     expect(await corrections({ kind: "month", month: 5 })).toEqual({
+      madeIn: "2026-05",
       rows: [
         {
           madeDay: "2026-05-05",
@@ -249,13 +252,14 @@ describe("computeVatCorrections", () => {
         },
       ],
     });
-    expect(await corrections(Q2)).toEqual({ rows: [], summary: [] });
+    expect(await corrections(Q2)).toEqual({ madeIn: "2026-2T", rows: [], summary: [] });
   });
 
   it("lists, for a year, a void of the previous year's invoice", async () => {
     const december = await sale("2025-12-20");
     await seedVoid(suite.db, { saleId: december }, at("2026-01-15"));
     expect(await corrections({ kind: "year" })).toEqual({
+      madeIn: "2026",
       rows: [
         {
           madeDay: "2026-01-15",
@@ -333,11 +337,11 @@ describe("computeVatCorrections", () => {
     });
     const april = await sale("2026-04-10");
     await seedVoid(suite.db, { saleId: april }, at("2026-05-01"));
-    expect(await corrections(Q2)).toEqual({ rows: [], summary: [] });
+    expect(await corrections(Q2)).toEqual({ madeIn: "2026-2T", rows: [], summary: [] });
   });
 
   it("is empty for a period with nothing in it", async () => {
-    expect(await corrections(Q2)).toEqual({ rows: [], summary: [] });
+    expect(await corrections(Q2)).toEqual({ madeIn: "2026-2T", rows: [], summary: [] });
   });
 
   it("refuses a bad period", async () => {

@@ -25,7 +25,7 @@ async function sheets(
   corrections: VatCorrections,
   language: "en" | "es",
 ): Promise<{ workbook: string; summary: string; rows: string }> {
-  const files = unzipSync(await renderCorrectionsWorkbook(corrections, "2026-2T", language));
+  const files = unzipSync(await renderCorrectionsWorkbook(corrections, language));
   return {
     workbook: strFromU8(files["xl/workbook.xml"]!),
     summary: strFromU8(files["xl/worksheets/sheet1.xml"]!),
@@ -34,6 +34,7 @@ async function sheets(
 }
 
 const LATE: VatCorrections = {
+  madeIn: "2026-2T",
   rows: [
     {
       madeDay: "2026-04-01",
@@ -161,7 +162,7 @@ describe("corrections workbook", () => {
   ] as const)(
     "writes one line saying so when the period corrected nothing (%s)",
     async (language, nothing) => {
-      const { summary, rows } = await sheets({ summary: [], rows: [] }, language);
+      const { summary, rows } = await sheets({ madeIn: "2026-2T", summary: [], rows: [] }, language);
       expect(summary.match(/<row /g)).toHaveLength(2);
       expect(row(summary, 2)).toEqual([nothing]);
       expect(rows.match(/<row /g)).toHaveLength(1);

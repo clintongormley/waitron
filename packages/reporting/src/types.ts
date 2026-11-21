@@ -160,6 +160,8 @@ export interface VatCorrectionSummaryLine {
 
 /** The movements made in a period that belong before it: row by row, and summed. */
 export interface VatCorrections {
+  /** The asked period, named as `belongsTo` names a row's: `"2026-3T"`, `"2026-08"`. */
+  madeIn: string;
   /** By belongs-to, then rate, reductions before additions. */
   summary: VatCorrectionSummaryLine[];
   rows: VatCorrectionRow[];
