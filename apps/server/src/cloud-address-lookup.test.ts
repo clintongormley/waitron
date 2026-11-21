@@ -289,6 +289,7 @@ it("confirms checked staff email while an address search waits for its own lease
     held.release();
     expect((await lookup).status).toBe(409);
     expect(f.calls.map((call) => call[2])).toEqual(["renew", "renew", "configuration"]);
+    expect(f.calls[1]?.[4]).not.toBe(f.calls[0]?.[4]);
   } finally {
     held.release();
     await lookup;

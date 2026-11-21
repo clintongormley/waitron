@@ -840,11 +840,10 @@ export class SetupApp extends LitElement {
   #cloudSignInAvailable = false;
   @state() private cloudAddressProvider?: AddressLookupProvider;
   #addressLoad?: Promise<AddressLookupProvider | undefined>;
-  @state() private cloudStaffEmailAvailable = false;
+  @state() private cloudStaffEmailAvailable?: boolean;
   #staffEmailLoad?: Promise<boolean | undefined>;
 
   #loadCloudStaffEmail(): void {
-    this.cloudStaffEmailAvailable = false;
     const tab =
       this.screen === "email" &&
       this.draft.mode === "prepare" &&
@@ -852,6 +851,7 @@ export class SetupApp extends LitElement {
       !this.draft.configurationImport
         ? this.#cloudSignInTab
         : undefined;
+    this.cloudStaffEmailAvailable = tab ? undefined : false;
     const pending = tab
       ? this.api
           .cloudAddressLookup(tab, { kind: "available" })

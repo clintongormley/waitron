@@ -95,6 +95,10 @@ describe("wizard Email step", () => {
     await test(el);
     button(el, "next").click();
     expect(patch.mock.calls[0]![0].detail.patch).toEqual({ email, cloudStaffEmail: true });
+    el.cloudStaffEmailAvailable = false;
+    await el.updateComplete;
+    button(el, "next").click();
+    expect(patch.mock.calls[1]![0].detail.patch).toEqual({ email, cloudStaffEmail: false });
   });
 
   it("tests Prepare mode and invalidates acceptance if the mode changes", async () => {

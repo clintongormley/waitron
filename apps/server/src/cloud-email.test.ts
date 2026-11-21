@@ -3,8 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
-import * as cloudEmail from "./cloud-email.js";
-const { sendCloudEmail } = cloudEmail;
+import { requestSetupCloudEmailGrant, sendCloudEmail } from "./cloud-email.js";
 import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
 
 const grant = () => ({
@@ -468,8 +467,7 @@ it.each([
       await f.client.emailRelay();
       const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
       f.requests.length = 0;
-      expect(cloudEmail.requestSetupCloudEmailGrant).toBeTypeOf("function");
-      expect(await cloudEmail.requestSetupCloudEmailGrant(saved, requestId)).toBe(expected);
+      expect(await requestSetupCloudEmailGrant(saved, requestId)).toBe(expected);
       expect(
         f.requests.map((values) => (String(values[7]).includes("consent") ? "grant" : values[2])),
       ).toEqual(exchanges);

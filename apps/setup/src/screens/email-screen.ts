@@ -62,7 +62,7 @@ export class SetupEmailScreen extends LitElement {
   ];
   @property({ attribute: false }) email?: EmailSettingsDraft;
   @property() errorMessage?: string;
-  @property({ type: Boolean }) cloudStaffEmailAvailable = false;
+  @property({ attribute: false }) cloudStaffEmailAvailable?: boolean;
   @property({ type: Boolean }) cloudStaffEmail = false;
   @property() adminEmail = "";
   @property() mode: "live" | "prepare" = "live";
@@ -230,7 +230,7 @@ export class SetupEmailScreen extends LitElement {
     dispatchSetupPatch(this, {
       email: this.#settings(),
       ...((this.cloudStaffEmailAvailable || this.cloudStaffEmail) && {
-        cloudStaffEmail: this.staffEmail,
+        cloudStaffEmail: this.cloudStaffEmailAvailable !== false && this.staffEmail,
       }),
     });
     this.#baseline = { ...this.values, staffEmail: this.staffEmail };
