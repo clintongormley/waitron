@@ -5,7 +5,12 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import * as venueAddress from "./venue-address.js";
-import { addressLines, readReceiptAddress } from "./venue-address.js";
+import {
+  addressLines,
+  readReceiptAddress,
+  readReceiptVenueAddress,
+  venueAddressLine,
+} from "./venue-address.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 const none = {
@@ -66,6 +71,21 @@ describe("addressLines", () => {
   });
 });
 
+describe("venueAddressLine", () => {
+  it("joins the parts as a registered address is, keeping a province that names the city", () => {
+    expect(
+      venueAddressLine({
+        addressLine1: " Carrer de Mallorca 123 ",
+        addressLine2: "2º 1ª",
+        postalCode: "08010",
+        city: "Barcelona",
+        province: "Barcelona",
+      }),
+    ).toBe("Carrer de Mallorca 123, 2º 1ª, 08010 Barcelona, Barcelona");
+    expect(venueAddressLine(none)).toBe("");
+  });
+});
+
 describe("readReceiptAddress", () => {
   const suite = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
@@ -107,5 +127,25 @@ describe("readReceiptAddress", () => {
       province: null,
     });
     expect(await read({})).toEqual([]);
+  });
+
+  it("reads the receipt's address lines and the venue's whole line in one go", async () => {
+    await setupVenue(suite.db);
+    await seedVenueSettings(suite.db, {
+      addressLine1: "Carrer de Mallorca 123",
+      postalCode: "08010",
+      city: "Barcelona",
+      province: "Barcelona",
+    });
+    const read = (printAddress: boolean) =>
+      withTransaction(suite.db, (tx) => readReceiptVenueAddress(tx, { printAddress }));
+    expect(await read(true)).toEqual({
+      venueAddress: ["Carrer de Mallorca 123", "08010 Barcelona"],
+      venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
+    });
+    expect(await read(false)).toEqual({
+      venueAddress: [],
+      venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
+    });
   });
 });

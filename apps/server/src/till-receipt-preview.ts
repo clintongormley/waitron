@@ -1,7 +1,8 @@
-import { readTaxpayer, type Transaction } from "@waitron/db";
+import { readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
 import { readPrintedGuests } from "./receipt-guests.js";
 import type { TillSaleResult } from "./till-sale.js";
+import { venueAddressLine } from "./venue-address.js";
 
 export async function tillReceiptPreview(
   tx: Transaction,
@@ -16,13 +17,26 @@ export async function tillReceiptPreview(
     issuer = { venueName: taxpayer.legalName, nif: taxpayer.taxId };
   }
   const guests = await readPrintedGuests(tx, saleId);
+  const venueAddress = ticket.receiptSettings.printAddress ? ticket.venueAddress : [];
+  let line = "";
+  if (issuer.domicile && venueAddress.length > 0) {
+    try {
+      line = venueAddressLine(await readVenue(tx));
+    } catch {
+      console.warn("receipt.optional_read_failed", {
+        operation: "readVenueAddressLine",
+        code: "receipt.read_failed",
+      });
+    }
+  }
   const input: ReceiptDocumentInput = {
     result: ticket,
     issuer,
     paperWidth: "80mm",
     receiptHeader: ticket.receiptHeader,
     receipt: ticket.receiptTrim,
-    venueAddress: ticket.receiptSettings.printAddress ? ticket.venueAddress : [],
+    venueAddress,
+    venueAddressLine: line,
     invoiceLocale: ticket.locale,
     namesLocale: ticket.namesLocale,
     simulated: practiceMode,
