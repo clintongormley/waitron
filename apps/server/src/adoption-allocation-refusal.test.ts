@@ -16,7 +16,7 @@ import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { adoptFromPrimary } from "./adopt.js";
+import { adoptWithPassword } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { writeCredentialsRing } from "./box-secrets.js";
@@ -130,7 +130,7 @@ it("keeps the stamped-environment refusal before allocation-dependent adoption",
   const before = await state();
   let reachedFirstWrite = false;
   await expect(
-    adoptFromPrimary(deps(), request, {
+    adoptWithPassword(deps(), request, {
       beforeFirstWrite: async () => {
         reachedFirstWrite = true;
       },
@@ -169,7 +169,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
   const before = await fiscalState();
   expect(Object.values(before).every((rows) => Array.isArray(rows))).toBe(true);
   await expect(
-    adoptFromPrimary(deps(), request, { beforeFirstWrite: async () => {} }),
+    adoptWithPassword(deps(), request, { beforeFirstWrite: async () => {} }),
   ).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
   expect(await fiscalState()).toEqual(before);
   expect(await readPendingAdoption(stateDir)).toMatchObject({
@@ -180,7 +180,7 @@ it("adopts with the allocation-dependent module enabled, writing no fiscal row",
 it("adopts when the allocation-dependent module is disabled", async () => {
   const value = bundle();
   value.moduleOverrides = { "fiscal-verifactu": false };
-  const adopted = adoptFromPrimary(deps(value), request, { beforeFirstWrite: async () => {} });
+  const adopted = adoptWithPassword(deps(value), request, { beforeFirstWrite: async () => {} });
   await expect(adopted).resolves.toMatchObject({ breakGlassKeyName: expect.any(String) });
   const result = await adopted;
   expect(result.breakGlassKeyName).toMatch(/^\d{4}-\d{2}-\d{2} · /);
@@ -290,7 +290,7 @@ it.each(Object.entries(JOIN_REFUSAL_CASES))(
         {
           environment: "preproduction",
           adopt: (req, hooks) =>
-            adoptFromPrimary({ ...deps(), fetchBundle: fetchMirrorBundle }, req, hooks),
+            adoptWithPassword({ ...deps(), fetchBundle: fetchMirrorBundle }, req, hooks),
           requestRestart: () => {
             restarts += 1;
           },

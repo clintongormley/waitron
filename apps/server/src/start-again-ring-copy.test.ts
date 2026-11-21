@@ -24,7 +24,7 @@ import {
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
 import { isAppError } from "@waitron/shared";
-import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { adoptWithPassword, type AdoptHooks, type AdoptRequest } from "./adopt.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
@@ -92,7 +92,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
   const store = await openVenueDatabase(venueDir);
   try {
     const adopt: Adopt = async (req, hooks) =>
-      adoptFromPrimary(
+      adoptWithPassword(
         {
           ownerDb: store.venue,
           ownerNode: store.node,

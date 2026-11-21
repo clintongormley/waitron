@@ -407,7 +407,7 @@ import { fiscalReconciliationJob } from "./fiscal-reconciliation.js";
 import { runPendingCardLoop, settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
-import { adoptFromPrimary } from "./adopt.js";
+import { adoptWithPassword } from "./adopt.js";
 import {
   fetchMirrorBundle,
   fetchPrimaryCertificate,
@@ -1877,7 +1877,7 @@ async function bootServer(
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
         recoveryPackEvidence: documentEvidence,
         adopt: (req, hooks) =>
-          adoptFromPrimary(
+          adoptWithPassword(
             {
               ownerDb: db,
               ownerNode: store.node,

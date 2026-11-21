@@ -28,7 +28,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { adoptWithPassword, type AdoptHooks, type AdoptRequest } from "./adopt.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { markJoined } from "./box-tls-install.js";
@@ -434,7 +434,7 @@ describe("runStagedReset", () => {
     try {
       let standbyNodeId: string | undefined;
       const adopt = vi.fn<Adopt>((req, hooks) =>
-        adoptFromPrimary(
+        adoptWithPassword(
           {
             ownerDb: store.venue,
             ownerNode: store.node,

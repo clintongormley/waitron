@@ -25,7 +25,7 @@ import { enabledModules } from "@waitron/module";
 import { readNodeMode } from "@waitron/node-db";
 import { planVenue } from "@waitron/provisioning";
 import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { adoptFromPrimary, type AdoptCredential } from "./adopt.js";
+import { adoptWithPassword, type AdoptCredential } from "./adopt.js";
 import type { StartedServer } from "./boot.js";
 import { readPendingAdoption } from "./finish-adoption.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -219,7 +219,7 @@ async function joinedPair() {
   const loopbackPort = await freePort();
   let standby!: { nodeId: string; publicKey: string };
   let spareId!: string;
-  await adoptFromPrimary(
+  await adoptWithPassword(
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,

@@ -34,7 +34,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, nodeId } from "@waitron/shared";
 import { assembleMirrorBundle, type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { adoptFromPrimary } from "./adopt.js";
+import { adoptWithPassword } from "./adopt.js";
 import { readPendingAdoption } from "./finish-adoption.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { sealAdoptedStandbyKey } from "./testing/adopted-standby-key.js";
@@ -453,7 +453,7 @@ it("a refused public adoption retains its independently signed reservation witho
   let fetched: ReservedIdentity | undefined;
   const adoptionDir = join(stateDir!, "empty-adoption");
   await mkdir(adoptionDir);
-  const refusal = await adoptFromPrimary(
+  const refusal = await adoptWithPassword(
     {
       ownerDb: unadopted.db,
       ownerNode: unadopted.node,

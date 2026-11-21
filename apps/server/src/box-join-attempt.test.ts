@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
@@ -13,7 +13,9 @@ import { JOIN_REVEAL_LABEL, revealAnswerFields, signJoinMessage } from "./box-jo
 import { createBoxJoinRequests, type BoxJoinRequests } from "./box-join-requests.js";
 import { lockJoinBundle } from "./box-join-seal.js";
 import type { boxExchange } from "./mirror-bundle-fetch.js";
+import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -26,6 +28,14 @@ const MAIN_URL = "http://127.0.0.1:8443";
 interface RevealAnswer {
   mainNonce: string;
   signature: string;
+}
+
+function publicHalf(privateKey: string): string {
+  return createPublicKey(
+    createPrivateKey({ key: Buffer.from(privateKey, "base64"), format: "der", type: "pkcs8" }),
+  )
+    .export({ format: "der", type: "spki" })
+    .toString("base64");
 }
 
 interface Sent {
@@ -90,6 +100,46 @@ describe("the new box's join attempt", () => {
     vi.useRealTimers();
   });
 
+  const mainKey = () => readNodeIdentityKey(suite.node, RING, mainNodeId);
+
+  async function bundleFor(over: Partial<MirrorBundle> = {}): Promise<MirrorBundle> {
+    const mainPublicKey = publicHalf(await mainKey());
+    return {
+      designated: { nodeId: mainNodeId },
+      taxpayer: { country: "ES", taxId: "80000001K" },
+      primaryNode: { name: "Till 1", filingModule: null, taxModule: null },
+      environment: "preproduction",
+      boxHostname: "waitron.local",
+      boxCaPem: "authority",
+      ...PAIR_BUNDLE_FIELDS,
+      reservedIdentity: {
+        modules: {},
+        series: [],
+        endorsement: { nodeId: "n", publicKey: "p", endorsedBy: mainNodeId, signature: "s" },
+      },
+      moduleOverrides: {},
+      primaryPublicKey: mainPublicKey,
+      credentialsRing: { key: "k", version: 1 },
+      backupSettings: null,
+      boxCaKeyPem: "authority key",
+      ...over,
+    };
+  }
+
+  /** Approves the one listed request in the main box's store, its bundle locked under `signingKey`. */
+  async function approveWith(code: string, bundle: unknown, signingKey?: string) {
+    const requestId = requests.listed()[0]!.id;
+    const begun = requests.approve.begin(requestId, code);
+    if ("refused" in begun) throw new Error("approve refused");
+    const locked = lockJoinBundle({
+      requestId,
+      encryptionKey: begun.encryptionKey,
+      bundle: Buffer.from(JSON.stringify(bundle)),
+      mainPrivateKey: signingKey ?? (await mainKey()),
+    });
+    expect(requests.approve.finish(requestId, locked)).toBe(true);
+  }
+
   /** The code the main box lists for its one request is among the three it shows. */
   function listedChoices(): string[] {
     const [listed] = requests.listed();
@@ -144,20 +194,125 @@ describe("the new box's join attempt", () => {
     expect(paths()).toEqual(["hello", "reveal", "poll"]);
     expect(sent[2]!.status).toBe(200);
 
-    const requestId = requests.listed()[0]!.id;
-    const begun = requests.approve.begin(requestId, shown.code);
-    if ("refused" in begun) throw new Error("approve refused");
-    const locked = lockJoinBundle({
-      requestId,
-      encryptionKey: begun.encryptionKey,
-      bundle: Buffer.from("{}"),
-      mainPrivateKey: await readNodeIdentityKey(suite.node, RING, mainNodeId),
-    });
-    expect(requests.approve.finish(requestId, locked)).toBe(true);
+    const bundle = await bundleFor();
+    await approveWith(shown.code, bundle);
 
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(attempt.current()).toEqual({ state: "approved", code: shown.code, locked });
+    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    const joined = attempt.joined();
+    expect(joined).toEqual({
+      identity: {
+        nodeId: sent[0]!.body.newNodeId,
+        publicKey: sent[0]!.body.newPublicKey,
+        privateKey: expect.any(String),
+      },
+      bundle,
+    });
+    expect(publicHalf(joined!.identity.privateKey)).toBe(joined!.identity.publicKey);
     await vi.advanceTimersByTimeAsync(10_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+  });
+
+  it("collects a lost approved answer at the next poll", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let approvedPolls = 0;
+    lose = (path) =>
+      path.endsWith("/poll") && requests.listed().length === 0 && ++approvedPolls === 1;
+    const attempt = createBoxJoinAttempt(deps());
+    const shown = await attempt.start(MAIN_URL);
+    const bundle = await bundleFor();
+    await approveWith(shown.code, bundle);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toMatchObject({ state: "waiting" });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
+    expect(attempt.current()).toEqual({ state: "approved", code: shown.code });
+    expect(attempt.joined()?.bundle).toEqual(bundle);
+  });
+
+  const otherKey = () =>
+    generateKeyPairSync("ed25519")
+      .privateKey.export({ format: "der", type: "pkcs8" })
+      .toString("base64");
+
+  it.each<[string, () => Promise<{ bundle: unknown; signingKey?: string }>]>([
+    [
+      "is signed by another key",
+      async () => ({ bundle: await bundleFor(), signingKey: otherKey() }),
+    ],
+    [
+      "holds no taxpayer",
+      async () => ({ bundle: { ...(await bundleFor()), taxpayer: undefined } }),
+    ],
+    [
+      "names another main key",
+      async () => ({ bundle: await bundleFor({ primaryPublicKey: publicHalf(otherKey()) }) }),
+    ],
+    [
+      "names another main box",
+      async () => ({ bundle: await bundleFor({ designated: { nodeId: "other-main" } }) }),
+    ],
+  ])("ends and cancels the attempt when the approved answer %s", async (_name, make) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    const shown = await attempt.start(MAIN_URL);
+    const { bundle, signingKey } = await make();
+    await approveWith(shown.code, bundle, signingKey);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual({ state: "failed", error: "mirror.join_invalid" });
+    expect(attempt.joined()).toBeNull();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll", "cancel"]);
+    expect(sent[3]!.status).toBe(200);
+  });
+
+  it.each<[string, (requestId: string) => void, unknown]>([
+    [
+      "an ended request's reason",
+      (requestId) => void requests.dismiss(requestId),
+      { state: "ended", reason: "dismissed" },
+    ],
+    [
+      "a main box that no longer knows the request",
+      () => {
+        app = new Hono();
+        mountBoxJoinApi(app, {
+          appDb: suite.db,
+          node: suite.node,
+          ring: RING,
+          designated: { nodeId: mainNodeId },
+          requests: createBoxJoinRequests(),
+          now: () => new Date(NOW),
+        });
+      },
+      { state: "failed", error: "mirror.join_not_found" },
+    ],
+  ])("keeps %s as the attempt's state and stops polling", async (_name, end, state) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+    end(requests.listed()[0]!.id);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(attempt.current()).toEqual(state);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(paths()).toEqual(["hello", "reveal", "poll"]);
+  });
+
+  it("keeps polling past an ended answer whose reason it does not know", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const ending: typeof boxExchange = async (url, options) => {
+      const answer = await exchange(url, options);
+      if (!url.pathname.endsWith("/poll")) return answer;
+      return { status: 200, text: JSON.stringify({ state: "ended", reason: "elsewhere" }) };
+    };
+    const attempt = createBoxJoinAttempt(deps({ exchange: ending }));
+    await attempt.start(MAIN_URL);
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(attempt.current()).toMatchObject({ state: "waiting" });
     expect(paths()).toEqual(["hello", "reveal", "poll", "poll"]);
   });
 

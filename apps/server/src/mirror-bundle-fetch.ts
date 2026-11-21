@@ -40,7 +40,7 @@ function isEncodedKeyRing(value: unknown): boolean {
   return isKeyEntry(value) && (value.previous === undefined || isKeyEntry(value.previous));
 }
 
-function isMirrorBundle(value: unknown): value is MirrorBundle {
+export function isMirrorBundle(value: unknown): value is MirrorBundle {
   if (!isRecord(value)) return false;
   const {
     designated,

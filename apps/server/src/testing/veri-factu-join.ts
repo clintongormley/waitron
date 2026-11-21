@@ -17,7 +17,7 @@ import type { VenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { enabledModules } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
-import { adoptFromPrimary, type AdoptCredential } from "../adopt.js";
+import { adoptWithPassword, type AdoptCredential } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
 import { mountMirrorBundleApi } from "../mirror-bundle-api.js";
@@ -154,7 +154,7 @@ export async function joinSpare(
   let bundle!: MirrorBundle;
   let standby!: { nodeId: string; publicKey: string };
   let spareId!: string;
-  await adoptFromPrimary(
+  await adoptWithPassword(
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,

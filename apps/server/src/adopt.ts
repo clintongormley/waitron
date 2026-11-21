@@ -39,6 +39,7 @@ import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 
 import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
+import type { JoinedBox } from "./box-join-attempt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { writePendingAdoption } from "./finish-adoption.js";
@@ -110,19 +111,6 @@ export interface AdoptDeps {
   environmentKeys: Readonly<Record<string, string>>;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
-  /** Sends the standby identity so the primary can reserve and endorse it. */
-  fetchBundle: (
-    primaryUrl: string,
-    credential: AdoptCredential,
-    standby: {
-      nodeId: string;
-      publicKey: string;
-      contactUrl: string;
-      storeUrl: string;
-      at: number;
-    },
-    confirmedCaPem?: string,
-  ) => Promise<MirrorBundle>;
   /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
    * can route here after a failover. */
   advertisedOrigin: string;
@@ -149,6 +137,51 @@ export interface AdoptDeps {
   now: () => Date;
 }
 
+export interface PasswordAdoptDeps extends AdoptDeps {
+  /** Sends the standby identity so the primary can reserve and endorse it. */
+  fetchBundle: (
+    primaryUrl: string,
+    credential: AdoptCredential,
+    standby: {
+      nodeId: string;
+      publicKey: string;
+      contactUrl: string;
+      storeUrl: string;
+      at: number;
+    },
+    confirmedCaPem?: string,
+  ) => Promise<MirrorBundle>;
+}
+
+function spareStoreUrl(deps: AdoptDeps, nodeId: string): URL {
+  const storeUrl = new URL(ownContactUrl(deps.advertisedOrigin, nodeId));
+  storeUrl.protocol = "https:";
+  storeUrl.port = String(deps.spareStorePort);
+  return storeUrl;
+}
+
+/** Joins with the main box's sign-in: makes this box's identity and fetches the bundle with it. */
+export async function adoptWithPassword(
+  deps: PasswordAdoptDeps,
+  req: AdoptRequest,
+  hooks: AdoptHooks,
+): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
+  const standby = generateStandbyIdentity();
+  const bundle = await deps.fetchBundle(
+    req.primaryUrl,
+    req.credential,
+    {
+      nodeId: standby.nodeId,
+      publicKey: standby.publicKey,
+      contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
+      storeUrl: spareStoreUrl(deps, standby.nodeId).origin,
+      at: deps.now().getTime(),
+    },
+    req.confirmedCaPem,
+  );
+  return adoptFromPrimary(deps, { identity: standby, bundle }, hooks);
+}
+
 /**
  * Adopts an existing venue into this mirror's own database. It inserts no scaffold rows and registers
  * no SIF, so it forks no fiscal chain; the reserved standby identity stays dormant.
@@ -159,26 +192,11 @@ export interface AdoptDeps {
  */
 export async function adoptFromPrimary(
   deps: AdoptDeps,
-  req: AdoptRequest,
+  joined: JoinedBox,
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
-  const standby = generateStandbyIdentity();
-  const contactUrl = ownContactUrl(deps.advertisedOrigin, standby.nodeId);
-  const storeUrl = new URL(contactUrl);
-  storeUrl.protocol = "https:";
-  storeUrl.port = String(deps.spareStorePort);
-  const bundle = await deps.fetchBundle(
-    req.primaryUrl,
-    req.credential,
-    {
-      nodeId: standby.nodeId,
-      publicKey: standby.publicKey,
-      contactUrl,
-      storeUrl: storeUrl.origin,
-      at: deps.now().getTime(),
-    },
-    req.confirmedCaPem,
-  );
+  const { identity: standby, bundle } = joined;
+  const storeUrl = spareStoreUrl(deps, standby.nodeId);
   const { designated } = bundle;
 
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
@@ -216,10 +234,8 @@ export async function adoptFromPrimary(
   if ((await listCredentials(deps.ownerDb)).length > 0) {
     throw new AppError("mirror.vault_not_empty", {});
   }
-  // This proves only that the bundle agrees with itself and with the identity this box sent, not
-  // who sent it: that rests on the authority the person confirmed, which `fetchMirrorBundle` trusts
-  // before it sends the password (trust and fencing,
-  // docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md §6).
+  // This proves only that the bundle agrees with itself and with this box's identity, not who sent
+  // it: that rests on how the bundle was collected.
   const { endorsement } = bundle.reservedIdentity;
   if (
     endorsement.nodeId !== standby.nodeId ||

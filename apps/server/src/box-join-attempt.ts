@@ -19,10 +19,16 @@ import {
   type JoinField,
   type JoinHelloFields,
 } from "./box-join-code.js";
-import { JOIN_LIMITS } from "./box-join-requests.js";
-import type { LockedJoinBundle } from "./box-join-seal.js";
+import { JOIN_END_REASONS, JOIN_LIMITS, type JoinEndReason } from "./box-join-requests.js";
+import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
 import { ownContactUrl } from "./box-name.js";
-import { boxExchange, fetchPrimaryCertificate, isIsoTime } from "./mirror-bundle-fetch.js";
+import type { MirrorBundle } from "./mirror-bundle.js";
+import {
+  boxExchange,
+  fetchPrimaryCertificate,
+  isIsoTime,
+  isMirrorBundle,
+} from "./mirror-bundle-fetch.js";
 import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
 import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
@@ -55,7 +61,15 @@ export interface BoxJoinAttemptDeps {
 
 export type JoinAttemptState =
   | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; expiresAt: string }
-  | { state: "approved"; code: string; locked: LockedJoinBundle };
+  | { state: "approved"; code: string }
+  | { state: "ended"; reason: JoinEndReason }
+  | { state: "failed"; error: ErrorCode };
+
+/** What an approved attempt hands adopt: the identity it joined under and the main box's bundle. */
+export interface JoinedBox {
+  identity: StandbyIdentity;
+  bundle: MirrorBundle;
+}
 
 interface Attempt {
   base: URL;
@@ -68,7 +82,10 @@ interface Attempt {
   mainPublicKey: string;
   /** The last `seq` this attempt signed. */
   seq: number;
+  /** The code this attempt shows, once revealed. */
+  code: string;
   state: JoinAttemptState;
+  bundle?: MirrorBundle;
   timer?: ReturnType<typeof setTimeout>;
 }
 
@@ -167,21 +184,56 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     }
   }
 
+  /** The bundle an approved answer locked for this attempt, or null when any check fails. */
+  function collect(attempt: Attempt, locked: LockedJoinBundle): MirrorBundle | null {
+    const opened = unlockJoinBundle({
+      requestId: attempt.requestId,
+      locked,
+      encryptionKey: attempt.hello.encryptionKey,
+      encryptionPrivateKey: attempt.encryptionPrivateKey,
+      mainPublicKey: attempt.mainPublicKey,
+    });
+    const bundle = opened === null ? undefined : jsonOf(opened.toString("utf8"));
+    if (
+      !isMirrorBundle(bundle) ||
+      bundle.primaryPublicKey !== attempt.mainPublicKey ||
+      bundle.designated.nodeId !== attempt.mainNodeId
+    )
+      return null;
+    return bundle;
+  }
+
   async function poll(attempt: Attempt): Promise<void> {
     const at = deps.now().getTime();
-    let answer: unknown;
+    let sent: { status: number; text: string } | undefined;
     try {
-      const sent = await send(attempt, "poll", {
+      sent = await send(attempt, "poll", {
         ...signed(attempt, JOIN_POLL_LABEL, pollMessageFields(at)),
         at,
       });
-      answer = jsonOf(sent.text);
     } catch {
       // A lost poll is asked again at the next one.
     }
     if (current !== attempt) return;
+    const answer = sent === undefined ? undefined : jsonOf(sent.text);
     if (isRecord(answer) && answer.state === "approved" && isLocked(answer.locked)) {
-      attempt.state = { state: "approved", code: attempt.state.code, locked: answer.locked };
+      const bundle = collect(attempt, answer.locked);
+      if (bundle === null) {
+        attempt.state = { state: "failed", error: "mirror.join_invalid" };
+        await sendCancel(attempt);
+        return;
+      }
+      attempt.bundle = bundle;
+      attempt.state = { state: "approved", code: attempt.code };
+      return;
+    }
+    const reason = isRecord(answer) ? JOIN_END_REASONS.find((r) => r === answer.reason) : undefined;
+    if (isRecord(answer) && answer.state === "ended" && reason !== undefined) {
+      attempt.state = { state: "ended", reason };
+      return;
+    }
+    if (sent?.status === 404 && refusalOf(sent.text).code === "mirror.join_not_found") {
+      attempt.state = { state: "failed", error: "mirror.join_not_found" };
       return;
     }
     schedulePoll(attempt);
@@ -271,6 +323,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       mainNodeId: answered.mainNodeId,
       mainPublicKey: answered.mainPublicKey,
       seq: 0,
+      code: "",
       state: { state: "waiting", code: "", addresses, primaryUrl, expiresAt: answered.expiresAt },
     };
     const newNonce = randomBytes(32);
@@ -326,7 +379,14 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
       mainNonce,
       requestId: attempt.requestId,
     });
-    attempt.state = { ...attempt.state, code };
+    attempt.code = code;
+    attempt.state = {
+      state: "waiting",
+      code,
+      addresses,
+      primaryUrl,
+      expiresAt: answered.expiresAt,
+    };
     current = attempt;
     schedulePoll(attempt);
     return { code, addresses, expiresAt: answered.expiresAt };
@@ -336,5 +396,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
     start,
     cancel,
     current: (): JoinAttemptState | null => current?.state ?? null,
+    joined: (): JoinedBox | null =>
+      current?.bundle === undefined ? null : { identity: current.identity, bundle: current.bundle },
   };
 }

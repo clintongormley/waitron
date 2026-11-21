@@ -34,7 +34,7 @@ import {
   type NodeStanding,
 } from "@waitron/membership";
 import { verifySecretAsync } from "@waitron/identity";
-import { adoptFromPrimary } from "./adopt.js";
+import { adoptWithPassword } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
@@ -132,7 +132,7 @@ beforeAll(async () => {
   let persisted: EncodedKeyRing | undefined;
   let bId: string | undefined;
   let bJoinedPublicKey: string | undefined;
-  const joined = await adoptFromPrimary(
+  const joined = await adoptWithPassword(
     {
       ownerDb: bStore.venue,
       ownerNode: bStore.node,

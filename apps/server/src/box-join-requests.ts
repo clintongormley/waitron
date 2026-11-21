@@ -31,8 +31,15 @@ export interface MainIdentity {
 
 export const JOIN_LIMITS = ["address", "network", "listed", "recent"] as const;
 export type JoinLimit = (typeof JOIN_LIMITS)[number];
-export type JoinEndReason =
-  "wrong_code" | "dismissed" | "replaced" | "cancelled" | "code_taken" | "invalid";
+export const JOIN_END_REASONS = [
+  "wrong_code",
+  "dismissed",
+  "replaced",
+  "cancelled",
+  "code_taken",
+  "invalid",
+] as const;
+export type JoinEndReason = (typeof JOIN_END_REASONS)[number];
 
 export type JoinFull = { refused: "full"; limit: JoinLimit; retryAt: string };
 export type JoinNotFound = { refused: "not_found" };
