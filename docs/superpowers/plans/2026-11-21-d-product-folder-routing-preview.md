@@ -1,6 +1,6 @@
 # Preview prep-station changes when moving products and folders
 
-Staff can see where dishes will print before saving a move that includes a dragged folder or before confirming a product-only **Move to…**. The watcher queued this on 21 November at 15:39 under `PRODUCT-FOLDER-ROUTING-PREVIEW`, from the [30 September design](../specs/2026-09-30-catalogue-menus-routing-design.md#512-the-screen). A separate Sol-high Codex invocation drafted the plan. The Lane D driver checked it and applied Claude's review. Watcher clearance is pending.
+Staff can see where dishes will print before saving a move that includes a dragged folder or before confirming a product-only **Move to…**. The watcher queued this on 21 November at 15:39 under `PRODUCT-FOLDER-ROUTING-PREVIEW`, from the [30 September design](../specs/2026-09-30-catalogue-menus-routing-design.md#512-the-screen). A separate Sol-high Codex invocation drafted the plan. The Lane D driver checked it and applied Claude's review. The watcher cleared the plan at 16:43 on 21 November in Lane D's questions.md, including Move confirmation for every category drop.
 
 Three Products cases ran in Chromium on `5069c16f650`. A folder drop sent its move at once, product-only **Move to…** skipped the preview, and folder **Move to…** showed changed stations before confirmation. Lane D's queue and `receipts/product-folder-routing-preview/baseline.log` record the run.
 

@@ -1979,8 +1979,9 @@ across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
 Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, the Customise
 column list and the Home page tab's shortcut preview use this helper. Shared reorder tables keep
-the moves already made when the system cancels the pointer, and put the row back when Escape cancels a drag; Products, Menu Structure and the shortcut preview apply their move
-only on release.
+the moves already made when the system cancels the pointer, and put the row back when Escape
+cancels a drag. Menu Structure, the shortcut preview and product-only drops in Products apply
+their move on release. A Products drop that includes a category opens the Move dialog.
 
 ### Remembered, searchable, filterable tables
 
@@ -2493,9 +2494,8 @@ The All products row has a named chevron: closing it closes every category and p
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays
 closed on reload; an explicit category or product reveal opens only its ancestor path.
 
-Products leaves the mode by **Done** rather than Cancel, the one exception to the rule above. A drag
-made in the mode is saved as soon as it is dropped (`#drop`,
-`apps/dashboard/src/widgets/product-browser.ts`), so Cancel would promise an undo it cannot give.
+Products leaves this mode with **Done**. A product-only drag saves on drop. A drop that includes
+a category opens the Move dialog with its destination selected and saves when you confirm.
 Done clears the selection, leaves the mode and puts focus back on Select, since Done
 itself disappears.
 

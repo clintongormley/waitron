@@ -413,8 +413,9 @@ The selected count includes hidden ticks; Move includes them too. A drag carries
 and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
-toolbar and returns focus to **Select**, and so does pressing **Select** again. It reads Done rather than Cancel because a
-drag made in the mode is saved as soon as it is dropped. A Delete you already
+toolbar and returns focus to **Select**, and so does pressing **Select** again. A product-only
+drop saves on release. A drop that includes a category opens the Move dialog with its destination
+selected. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
 With only products selected, the toolbar's action reads **Archive**, and its dialog asks
@@ -501,10 +502,10 @@ products up.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
-cascades. The dialog counts the routing rules each answer removes. Before you confirm a folder
-move through **Move to…** or a deletion, its routing preview lists the surviving products whose
-station changes, with their old and new destinations, zones and periods. Change your choice to
-refresh it; a failed read offers Retry preview. Dragging still moves without that preview.
+cascades. The dialog counts the routing rules each answer removes. Before you confirm a move
+through **Move to…**, a drop that includes a category, or a category deletion, the routing preview
+lists the surviving products whose station changes, with their old and new destinations, zones and
+periods. Change your choice to refresh it. Choose **Retry preview** if it fails to load.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API

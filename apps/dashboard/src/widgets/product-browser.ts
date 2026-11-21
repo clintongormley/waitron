@@ -162,7 +162,13 @@ export class ProductBrowser extends LitElement {
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
   #operationLeave?: LeaveCoordinator;
-  readonly #operationBaseline: OperationDraft = { destination: "", contents: "move_up" };
+  #moveDrop?: { keys: string[]; destination: string };
+  get #operationBaseline(): OperationDraft {
+    return {
+      destination: this.operation === "move" ? (this.#moveDrop?.destination ?? "") : "",
+      contents: "move_up",
+    };
+  }
   readonly #beforeOperationClose = async (reason: LeaveReason): Promise<boolean> =>
     this.isConnected &&
     !this.operationBusy &&
@@ -210,10 +216,15 @@ export class ProductBrowser extends LitElement {
       !acceptsMenuDrop(keys, folderId, this.categories)
     )
       return;
-    this.operationBusy = true;
     this.dropError = "";
+    const selection = this.#selection(keys);
+    if (selection.categoryIds.length) {
+      this.#openMove(keys, folderId ?? "top");
+      return;
+    }
+    this.operationBusy = true;
     try {
-      await this.api.moveProductItems(this.#outermost(this.#selection(keys)), folderId);
+      await this.api.moveProductItems(this.#outermost(selection), folderId);
       this.selected = this.selected.filter((key) => !keys.includes(key));
     } catch (error) {
       this.dropError = codeMessage(codeOf(error));
@@ -362,13 +373,7 @@ export class ProductBrowser extends LitElement {
     };
   }
   #routingChange(): ProductItemsChange | null {
-    if (
-      !this.operation ||
-      !this.operationSelection.categoryIds.length ||
-      this.summaryLoading ||
-      this.summaryFailed
-    )
-      return null;
+    if (!this.operation || this.summaryLoading || this.summaryFailed) return null;
     if (this.operation === "move")
       return this.destination
         ? {
@@ -377,7 +382,9 @@ export class ProductBrowser extends LitElement {
             to: this.destination === "top" ? null : this.destination,
           }
         : null;
-    return { kind: "delete", selection: this.operationSelection, contents: this.#contentsChoice() };
+    return this.operationSelection.categoryIds.length
+      ? { kind: "delete", selection: this.operationSelection, contents: this.#contentsChoice() }
+      : null;
   }
   get #routingReady(): boolean {
     return (
@@ -415,12 +422,14 @@ export class ProductBrowser extends LitElement {
     }
   }
 
-  #openMove(keys = this.selected): void {
+  #openMove(keys = this.selected, droppedDestination?: string): void {
     if (this.operationBusy || this.summaryLoading) return;
     this.#operationFeedback.reset();
     this.summaryFailed = false;
     this.operationSelection = this.#outermost(this.#selection(keys));
-    this.destination = "";
+    this.#moveDrop =
+      droppedDestination === undefined ? undefined : { keys, destination: droppedDestination };
+    this.destination = droppedDestination ?? "";
     this.operationError = "";
     this.operation = "move";
   }
@@ -553,9 +562,10 @@ export class ProductBrowser extends LitElement {
           return;
         }
       }
+      const drop = operation === "move" ? this.#moveDrop : undefined;
       this.#releaseOperation();
       this.operation = null;
-      this.selected = [];
+      this.selected = drop ? this.selected.filter((key) => !drop.keys.includes(key)) : [];
     } catch (error) {
       this.operation = operation;
       this.operationError = refusalText(

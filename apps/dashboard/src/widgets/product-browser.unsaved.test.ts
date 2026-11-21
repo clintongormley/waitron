@@ -30,7 +30,11 @@ afterEach(() => {
   setLocale("en-GB");
 });
 const counts = { id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1, ownRoutes: 1 };
-async function fixture(operation: "move" | "delete", overrides: Partial<DashboardApi> = {}) {
+async function fixture(
+  operation: "move" | "delete",
+  overrides: Partial<DashboardApi> = {},
+  dropTo?: string,
+) {
   setLocale("en-GB");
   const api = {
     previewProductItemsRouting: vi.fn().mockResolvedValue({ moves: [], stations: [], periods: [] }),
@@ -57,7 +61,15 @@ async function fixture(operation: "move" | "delete", overrides: Partial<Dashboar
     )!
     .click();
   await browser.updateComplete;
-  browser.shadowRoot!.querySelector<HTMLElement>(`[data-test=${operation}]`)!.click();
+  if (dropTo)
+    list.dispatchEvent(
+      new CustomEvent("drop-items", {
+        detail: { keys: ["folder:d"], folderId: dropTo },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  else browser.shadowRoot!.querySelector<HTMLElement>(`[data-test=${operation}]`)!.click();
   await expect.poll(() => browser.shadowRoot!.querySelector("wt-modal")?.open).toBe(true);
   await browser.updateComplete;
   const modal = browser.shadowRoot!.querySelector("wt-modal")!;
@@ -129,6 +141,22 @@ async function cancel(f: Fixture, route: "cancel" | "escape") {
   else await userEvent.keyboard("{Escape}");
   await f.browser.updateComplete;
 }
+
+it("cancel closes an untouched folder drop directly and leaves its selection", async () => {
+  const f = await fixture("move", {}, "f");
+  expect(value(f)).toBe("f");
+  expect(protectedUnload()).toBe(false);
+  const closed = new Promise((resolve) =>
+    f.modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await cancel(f, "cancel");
+  await closed;
+  expect((await question(f)).open).toBe(false);
+  expect(f.api.moveProductItems).not.toHaveBeenCalled();
+  expect(
+    f.browser.shadowRoot!.querySelector("[data-test=selected-count]")!.textContent!.trim(),
+  ).toBe("1 selected");
+});
 
 for (const operation of ["move", "delete"] as const) {
   for (const route of ["escape"] as const) {
