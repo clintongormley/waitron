@@ -755,6 +755,51 @@ describe("setup-venue-screen", () => {
     const input = q(el, "[data-test=registeredStreet]")!;
     await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(input.hasAttribute("invalid")).toBe(true);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  });
+
+  it("says in the bottom message why the registered address was refused while it is the venue's", async () => {
+    for (const [locale, said] of [
+      [
+        "en-GB",
+        "The venue's address was not accepted as the registered business address. Check the venue's address below, or turn off “Same as the venue's address” and enter the registered address.",
+      ],
+      [
+        "es-ES",
+        "La dirección del local no se aceptó como domicilio fiscal del negocio. Revisa la dirección del local más abajo o desactiva «Igual que la dirección del local» e introduce el domicilio fiscal.",
+      ],
+    ] as const) {
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+          draft: { mode: "prepare" },
+          invalidField: "taxpayerDomicile",
+        });
+        expect(
+          (q(el, "[data-test=registeredSameAsVenue]") as HTMLElement & { checked: boolean })
+            .checked,
+        ).toBe(true);
+        expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
+        expect(await bottomOf(el)).toBe(said);
+        // Turning the switch off shows the parts, and the mark moves onto Street.
+        await type(el, "registeredSameAsVenue", "off");
+        expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(true);
+        expect(await bottomOf(el)).toBe(locale === "en-GB" ? FIX_FIELDS : t("venue.fix_fields"));
+        cleanupWidgets();
+      } finally {
+        setLocale("en-GB");
+      }
+    }
+  });
+
+  it("clears the refusal of the venue's address as the registered one once the venue's address is edited", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare" },
+      invalidField: "taxpayerDomicile",
+    });
+    expect(await bottomOf(el)).not.toBe("");
+    await type(el, "city", "Madrid");
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("marks nothing for a field path this form does not recognise", async () => {
@@ -1220,6 +1265,32 @@ describe("the registered business address in parts", () => {
     q(el, "[data-test=next]")!.click();
     expect(venueOf(events).taxpayerDomicile).toBe("Calle Mayor 1, 28013 Madrid, Madrid");
   });
+
+  it.each([
+    // A postal code with no province behind it marks the province too, as it does elsewhere.
+    ["a malformed venue postal code", { postalCode: "2801" }, ["postalCode", "province"]],
+    [
+      "a venue province that does not match its postal code",
+      { province: "Barcelona" },
+      ["postalCode", "province"],
+    ],
+  ])(
+    "marks only the venue's own fields for %s while the switch is on, not its City",
+    async (_case, venue, marked) => {
+      const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { mode: "prepare", venue: { ...EXPECTED_VENUE, ...venue, taxpayerDomicile: "" } },
+      });
+      const events = collect(host);
+      expect(sameSwitch(el).checked).toBe(true);
+      q(el, "[data-test=next]")!.click();
+      await el.updateComplete;
+      expect(events).toEqual([]);
+      const invalid = [...el.shadowRoot!.querySelectorAll("[invalid]")].map((node) =>
+        node.getAttribute("data-test"),
+      );
+      expect(invalid).toEqual(marked);
+    },
+  );
 
   it("clears the registered postal code and province when the country changes", async () => {
     const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
@@ -2129,16 +2200,22 @@ describe("owner's fixes of 2026-11-20", () => {
     expect(native.getAttribute("autocomplete")).toBe("off");
   });
 
-  it("lets the browser fill the venue's postal address and keeps the other text fields off", async () => {
+  it("lets the browser fill the venue's and the registered address, each in its own section, and keeps the other text fields off", async () => {
     const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
     packs.push(SPARSE_PACK);
     try {
       const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
       await type(el, "country", "ZZ");
+      await type(el, "registeredSameAsVenue", "off");
       const autocomplete: Record<string, string | null> = {};
       for (const key of [
         "taxId",
         "legalName",
+        "registeredStreet",
+        "registeredLine2",
+        "registeredPostalCode",
+        "registeredCity",
+        "registeredProvince",
         "name",
         "addressLine1",
         "addressLine2",
@@ -2159,6 +2236,11 @@ describe("owner's fixes of 2026-11-20", () => {
       expect(autocomplete).toEqual({
         taxId: "off",
         legalName: "off",
+        registeredStreet: "section-registered address-line1",
+        registeredLine2: "section-registered address-line2",
+        registeredPostalCode: "section-registered postal-code",
+        registeredCity: "section-registered address-level2",
+        registeredProvince: "section-registered address-level1",
         name: "off",
         addressLine1: "section-venue address-line1",
         addressLine2: "section-venue address-line2",

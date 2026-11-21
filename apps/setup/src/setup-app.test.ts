@@ -856,6 +856,32 @@ describe("setup-app", () => {
         )!.checked,
       ).toBe(true);
       expect(venue.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+      // Behind the switch, the parts hold nothing of the old taxpayer's registered address.
+      venue.shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { checked: false },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await (venue as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(
+        Object.fromEntries(
+          [
+            "registeredStreet",
+            "registeredLine2",
+            "registeredPostalCode",
+            "registeredCity",
+            "registeredProvince",
+          ].map((key) => [key, venueValue(venue, key)]),
+        ),
+      ).toEqual({
+        registeredStreet: "",
+        registeredLine2: "",
+        registeredPostalCode: "",
+        registeredCity: "",
+        registeredProvince: "",
+      });
       expect(Object.fromEntries(fiscal.map((key) => [key, venueValue(venue, key)]))).toEqual({
         taxId: "",
         legalName: "",

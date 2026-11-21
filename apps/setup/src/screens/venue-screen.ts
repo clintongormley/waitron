@@ -25,7 +25,6 @@ import {
 import {
   areaOfChosenAddress,
   joinRegisteredAddress,
-  oneLineAddress,
   registeredAddressErrors,
   registeredAddressParts,
   type RegisteredAddressError,
@@ -69,7 +68,6 @@ const REGISTERED_PART = {
 } as const satisfies Record<string, keyof RegisteredAddressParts>;
 type RegisteredField = keyof typeof REGISTERED_PART;
 const REGISTERED_FIELDS = Object.keys(REGISTERED_PART) as RegisteredField[];
-const isRegisteredField = (key: string): key is RegisteredField => key in REGISTERED_PART;
 
 type TextField =
   | "country"
@@ -96,11 +94,11 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   country: "off",
   taxId: "off",
   legalName: "off",
-  registeredStreet: "off",
-  registeredLine2: "off",
-  registeredPostalCode: "off",
-  registeredCity: "off",
-  registeredProvince: "off",
+  registeredStreet: "section-registered address-line1",
+  registeredLine2: "section-registered address-line2",
+  registeredPostalCode: "section-registered postal-code",
+  registeredCity: "section-registered address-level2",
+  registeredProvince: "section-registered address-level1",
   name: "off",
   addressLine1: "section-venue address-line1",
   addressLine2: "section-venue address-line2",
@@ -658,11 +656,8 @@ export class SetupVenueScreen extends LitElement {
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     // Editing the field the server refused retires that mark: the new value has not been refused.
-    if (
-      this.serverInvalid?.key === key ||
-      (this.serverInvalid?.key === "taxpayerDomicile" && isRegisteredField(key))
-    )
-      this.serverInvalid = undefined;
+    if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
+    this.#clearDomicileRefusal(SEARCH_FILLS[key]);
     const value = event.detail.value;
     this.#cancelAddressSearch(SEARCH_FILLS[key]);
     if (key === "name") this.#demoVenueNameSource = "custom";
@@ -719,12 +714,20 @@ export class SetupVenueScreen extends LitElement {
       return;
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
-    if (which === "domicile") {
-      this.#fill(registeredValues(registeredAddressParts(oneLineAddress(pack, address), pack)));
-      return;
-    }
     const area = areaOfChosenAddress(pack, address);
     const [addressLine1 = "", ...rest] = address.lines;
+    this.#clearDomicileRefusal(which);
+    if (which === "domicile") {
+      this.sameAsVenue = false;
+      this.#fill({
+        registeredStreet: addressLine1,
+        ...(rest.length > 0 ? { registeredLine2: rest.join(", ") } : {}),
+        registeredPostalCode: address.postalCode,
+        registeredCity: address.locality,
+        ...(area === undefined ? {} : { registeredProvince: area.name }),
+      });
+      return;
+    }
     this.#fill({
       addressLine1,
       // The person's own line 2 (a floor, a unit) stays unless the address brings one.
@@ -737,6 +740,13 @@ export class SetupVenueScreen extends LitElement {
     this.#followDemoName(pack, area);
     if (this.#invoiceLocalesFollowAreaDefault)
       this.invoiceLocales = defaultInvoiceLocales(pack, area);
+  }
+
+  /** The refused line is joined from the parts, or from the venue's address while the switch is on,
+   * so an edit to whichever it was joined from retires the refusal. */
+  #clearDomicileRefusal(which: AddressSearch | undefined): void {
+    if (this.serverInvalid?.key !== "taxpayerDomicile" || which === undefined) return;
+    if (which === (this.sameAsVenue ? "address" : "domicile")) this.serverInvalid = undefined;
   }
 
   #fill(filled: Partial<Record<TextField, string>>): void {
@@ -756,7 +766,7 @@ export class SetupVenueScreen extends LitElement {
     event.stopPropagation();
     const pack = this.#pack();
     if (pack === undefined) return;
-    if (this.serverInvalid?.key === "taxpayerDomicile") this.serverInvalid = undefined;
+    this.#clearDomicileRefusal("domicile");
     this.#cancelAddressSearch("domicile");
     this.values = {
       ...this.values,
@@ -790,6 +800,7 @@ export class SetupVenueScreen extends LitElement {
     event.stopPropagation();
     const pack = this.#pack();
     if (pack === undefined) return;
+    this.#clearDomicileRefusal("address");
     this.#cancelAddressSearch("address");
     const area = findAdministrativeArea(pack, event.detail.value);
     this.values = { ...this.values, province: area?.name ?? "" };
@@ -831,6 +842,11 @@ export class SetupVenueScreen extends LitElement {
     this.#scope?.changed();
   }
 
+  /** Whether a field on screen carries the key's message; the rest go in the bottom message. */
+  #showsAsField(key: FieldKey): boolean {
+    return this.#shows(key) && !(key === "taxpayerDomicile" && this.sameAsVenue);
+  }
+
   #shows(key: FieldKey): boolean {
     return key === "staffLanguage" || !(this.#demo && DEMO_HIDDEN.has(key));
   }
@@ -842,8 +858,6 @@ export class SetupVenueScreen extends LitElement {
     }
     for (const key of this.#registeredErrors().keys()) invalid.add(key);
     const pack = this.#pack();
-    const unreadable = this.#unreadableCity(invalid);
-    if (unreadable !== undefined) invalid.add(unreadable);
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
     const postalArea =
@@ -887,6 +901,9 @@ export class SetupVenueScreen extends LitElement {
         invalid.add(second);
       }
     }
+    // Last, so it sees every mark on the fields the line is joined from.
+    const unreadable = this.#unreadableCity(invalid);
+    if (unreadable !== undefined) invalid.add(unreadable);
     return invalid;
   }
 
@@ -940,7 +957,12 @@ export class SetupVenueScreen extends LitElement {
       for (const key of this.#invalidFields()) errors.set(key, this.#fieldMessage(key));
     }
     if (this.serverInvalid !== undefined) {
-      errors.set(this.serverInvalid.key, this.serverInvalid.refusal.message);
+      errors.set(
+        this.serverInvalid.key,
+        this.serverInvalid.key === "taxpayerDomicile" && this.sameAsVenue
+          ? t("venue.error.registered_same_refused")
+          : this.serverInvalid.refusal.message,
+      );
     }
     return errors;
   }
@@ -1165,7 +1187,7 @@ export class SetupVenueScreen extends LitElement {
     const fixedReason =
       fixed === undefined ? "" : resolveContentText(fixed.reason, currentLocale(), "en");
     const errors = this.#errors;
-    const fieldErrors = new Set([...errors.keys()].filter((key) => this.#shows(key)));
+    const fieldErrors = new Set([...errors.keys()].filter((key) => this.#showsAsField(key)));
     const invalid =
       this.#feedback.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
     const bottom = this.#feedback.message(

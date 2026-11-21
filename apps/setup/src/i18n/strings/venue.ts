@@ -66,6 +66,8 @@ export const venueEn = {
   "venue.label.registered_province": "Province (optional)",
   "venue.hint.registered_province": "Province or region",
   "venue.error.registered_postal_code": "Enter a valid postal code.",
+  "venue.error.registered_same_refused":
+    "The venue's address was not accepted as the registered business address. Check the venue's address below, or turn off “Same as the venue's address” and enter the registered address.",
   "venue.error.city_comma": "Write the city without a comma.",
   "venue.label.venue_name": "Venue name",
   "venue.label.invoice_locales": "Receipt language",
@@ -331,6 +333,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.registered_province": "Provincia (opcional)",
   "venue.hint.registered_province": "Provincia o región",
   "venue.error.registered_postal_code": "Introduce un código postal válido.",
+  "venue.error.registered_same_refused":
+    "La dirección del local no se aceptó como domicilio fiscal del negocio. Revisa la dirección del local más abajo o desactiva «Igual que la dirección del local» e introduce el domicilio fiscal.",
   "venue.error.city_comma": "Escribe la ciudad sin comas.",
   "venue.label.venue_name": "Nombre del local",
   "venue.label.invoice_locales": "Idioma del recibo",
