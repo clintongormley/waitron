@@ -185,9 +185,10 @@ async function isDue(
  * The end of the business day `billId` was opened in, when that day has ended by `issuedAt` and the
  * close counts the bill as due ({@link readDueBill}): the latest moment its meal can have ended,
  * whichever path issues it. Undefined otherwise. A bill holding a dish the kitchen was never asked
- * for is left open by the close, so its meal has not ended; a payment still moving only makes the
- * close try again. A bill paid in full before that day ended, which the close leaves open, is dated
- * by this too rather than by its last payment.
+ * for is left open by the close, so its meal has not ended; a payment still moving, or an open
+ * correction of one of its advances, only makes the close try again. A bill paid in full before
+ * that day ended, which the close leaves open, is dated by this too rather than by its last
+ * payment.
  */
 export async function closeOfDayEnd(
   tx: Transaction,

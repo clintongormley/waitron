@@ -503,7 +503,8 @@ piece; Task 1.0 (Q2) holds up piece 1's landing.
   the second kind is chosen (Tasks 1.4b, 1b.1 and 4.1b), not a change to any record.
 - **Q2.** When an advance at 10% is larger than the meal's 10% part (example 2), may the rest's
   record carry a negative line at 10% beside a positive line at 21%? Waitron's copy of AEAT's
-  checks accepts it; Task 1.0 sends it to AEAT's test service.
+  checks accepts it; Task 1.0 sends it to AEAT's test service. AEAT's test service accepted it
+  (verifactu run 44707265624, `e5d065b40f`: every record `Correcto`).
 - **Q3.** The rest's record takes off the advance's own filed base and VAT (ruling L1), so across
   the two invoices the VAT declared is what one invoice for the meal would declare. Example 8:
   seven €1.05 dishes at 10% (base 6.65, VAT 0.70) and a €3.00 advance (2.73 + 0.27) leave 3.92 +

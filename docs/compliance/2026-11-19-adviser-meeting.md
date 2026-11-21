@@ -459,3 +459,9 @@ Q1, Q2, Q4, Q6–Q10 and Q12; revised after the owner's answers of 21:00 the sam
 after the plan's third fresh read the same evening: the table's ticket no longer prints the
 advance's base and VAT, and the plan's Q3, on rounding between the advance and the rest, was
 added as its own point). Copy it into the shared Google Doc before sending.
+
+AEAT's test service accepted the records question 12 describes (the advances plan's Task 1.0):
+verifactu live run [44707265624](https://github.com/waitron-io/verifactu/actions/runs/44707265624),
+mode `advance-rest`, verifactu `main` at `e5d065b40f`. All eight records, among them the negative
+10% line beside a positive 21% line (Q2) and the rest whose VAT is not its base times the rate
+(Q3), returned `EstadoEnvio` and `EstadoRegistro` `Correcto`.

@@ -260,9 +260,10 @@ async function canPrintReceipts(q: Transaction, deviceId: string): Promise<boole
 }
 
 /**
- * Queues, as the till's close request does, the original of each owed till sale issued at least
- * 10 minutes ago on its device's receipt printer, and says when the next sale will be due. A
- * device that may not print receipts, or has no receipt printer, is left until one changes.
+ * Queues the original of each owed till sale (a bill's invoice as the till's close request does, an
+ * advance's ticket as its payment does) issued at least 10 minutes ago on its device's receipt
+ * printer, and says when the next sale will be due. A device that may not print receipts, or has
+ * no receipt printer, is left until one changes.
  */
 export async function printOwedTickets(
   deps: { db: Database; backend: FiscalBackend; cfg: TradingContext; log: Logger },

@@ -110,7 +110,10 @@ function centToMove(base: Decimal, gross: Decimal, rate: Decimal): Decimal {
   return compareDecimal(gross, ZERO) < 0 ? negateDecimal(CENT) : CENT;
 }
 
-/** A gross amount's base and VAT at `rate`, by the difference method with D11's one-cent rule. */
+/**
+ * A gross amount's base and VAT at `rate`, by the difference method with the one-cent rule
+ * (advances plan, D11).
+ */
 export function splitGross(gross: Decimal, rate: Decimal): { base: Decimal; tax: Decimal } {
   const exact = baseFromGross(gross, rate);
   const base = subtractDecimal(exact, centToMove(exact, gross, rate));

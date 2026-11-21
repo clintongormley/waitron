@@ -78,9 +78,9 @@ the adviser is still to confirm the details:
 
 Built: on a part payment that leaves something owed on a bill with no invoice yet, set for a
 ticket, the till asks "Does this payer want their own receipt for this amount?"
-(`apps/till/src/widgets/bill-pay-dialog.ts:2108`). **Yes** issues the payer a ticket of one line,
+(`#ownReceiptAsked` in `apps/till/src/widgets/bill-pay-dialog.ts`). **Yes** issues the payer a ticket of one line,
 «Pago a cuenta — consumo en mesa 7», at Waitron's shipped reduced rate, 10% today
-(`apps/server/src/bill-advances.ts:59`, `ADVANCE_VAT_CLASS` in
+(`issueAdvance` in `apps/server/src/bill-advances.ts`, `ADVANCE_VAT_CLASS` in
 `packages/shared/src/menu-document/vat-rates.ts:9`). The bill's own invoice, however it is issued,
 takes each advance off (`apps/server/src/advance-deduction.ts`). Its printed ticket lists the
 dishes, then «Pago a cuenta n.º A/12, 19/11/2026 −30,00» for each advance, then the total less the
@@ -92,7 +92,7 @@ is negative"); whether that is enough is
 asked in question 12 of the 19 November sheet (the advances plan's Q4). Its record takes off the advance's own filed base and VAT
 (`apps/server/src/advance-deduction.test.ts`, "example 8 subtracts the advance's own base and
 VAT"). **No** keeps a plain part payment, which issues no invoice
-(`apps/server/src/bill-payments-api.test.ts:822`, "leaves €70.00 outstanding on a €120.00 bill,
+(`apps/server/src/bill-payments-api.test.ts`, "leaves €70.00 outstanding on a €120.00 bill,
 changes no line's price, and issues no invoice"). Printing the bill issues the ticket before
 payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
 advance off, the till refuses to give the advance back on its own and names Correct invoice on the

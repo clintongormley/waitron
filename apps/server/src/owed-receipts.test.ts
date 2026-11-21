@@ -1212,7 +1212,7 @@ describe("printOwedTickets", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("leaves a sale with no working order", async () => {
+  it("leaves a sale with no working order that is not an advance", async () => {
     const { cfg, ring } = await till();
     const sale = await ring();
     const loose = await copyOf(sale.sale, { workingOrderId: null });
