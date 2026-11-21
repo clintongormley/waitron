@@ -118,7 +118,7 @@ number as written. A passport is accepted with a Spanish address too; the issuin
 belongs to the document, independently of where the customer lives. A full invoice needs an
 identifier. **Cancel** returns without saving.
 
-Choose the address country and enter the street and number and locality. A Spanish address also
+Choose the address country and enter the street and number and city. A Spanish address also
 needs a valid five-digit postcode and province; those fields are optional for other countries.
 For example, a French address can be **2 Main Street**, **Paris**, **France**, without a postcode
 or province. Do not add the country name to the street. The printed invoice and till ticket name
