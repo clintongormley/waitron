@@ -18,7 +18,8 @@ import {
 } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import type { Logger } from "./logger.js";
+import { createLogger, type Logger } from "./logger.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { createLogReader, type LogEvent, type LogReader } from "./log-file.js";
 import { ALL_MODULES } from "./modules.js";
 import { createVerbosityController } from "./verbosity.js";
@@ -133,11 +134,13 @@ function stubReader(): { reader: LogReader; lastRecentOpts: () => { limit?: numb
 
 /** One Hono app for a venue, wiring the diagnostics routes with a real verbosity controller (default
  * `info`) and the given stub reader. `now` is fixed so `revertsAt` is deterministic. */
-function mountApp(reader: LogReader) {
+function mountApp(reader: LogReader, requestLog?: Logger) {
   const app = new Hono();
+  const now = () => new Date("2026-08-31T12:00:00.000Z");
+  if (requestLog) app.use("*", requestIdMiddleware(requestLog, now));
   const verbosity = createVerbosityController({
     defaultLevel: "info",
-    now: () => new Date("2026-08-31T12:00:00.000Z"),
+    now,
   });
   mountDiagnosticsApi(
     app,
@@ -145,7 +148,7 @@ function mountApp(reader: LogReader) {
       db: suite.db,
       reader,
       verbosity,
-      now: () => new Date("2026-08-31T12:00:00.000Z"),
+      now,
     },
     noopLog,
   );
@@ -349,6 +352,40 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("keeps successful Diagnostics polling out of the request log", async () => {
+    const { managerCookie } = await setupVenue();
+    const entries: LogEvent[] = [];
+    const log = createLogger(
+      (line) => entries.push(JSON.parse(line) as LogEvent),
+      () => new Date("2026-08-31T12:00:00.000Z"),
+      () => "debug",
+    );
+    const { app } = mountApp(stubReader().reader, log);
+    app.get("/other", (c) => c.json({}));
+    for (const [path, id, passive, cookie, status] of [
+      ["/management-api/diagnostics/recent?level=all", "poll-recent", true, managerCookie, 200],
+      ["/management-api/diagnostics/verbosity", "poll-verbosity", true, managerCookie, 200],
+      ["/management-api/diagnostics/recent", "failed-poll", true, "", 401],
+      ["/management-api/diagnostics/recent", "active-read", false, managerCookie, 200],
+      ["/other", "other-poll", true, managerCookie, 200],
+    ] as const) {
+      const response = await app.request(path, {
+        headers: {
+          "x-request-id": id,
+          "x-waitron-live": passive ? "1" : "0",
+          cookie,
+        },
+      });
+      expect(response.status).toBe(status);
+      expect(response.headers.get("x-request-id")).toBe(id);
+    }
+    expect(entries.map(({ event, requestId }) => [event, requestId])).toEqual([
+      ["http.request", "failed-poll"],
+      ["http.request", "active-read"],
+      ["http.request", "other-poll"],
+    ]);
   });
 
   it("reports the default verbosity (no active override) as info with a null revert time", async () => {
