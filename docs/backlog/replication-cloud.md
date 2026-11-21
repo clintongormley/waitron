@@ -598,6 +598,14 @@ Slice 3.
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
+- **What A1558 left open (21 November 2026).** Approving a joining box on the main box instead of
+  typing its password into the new box, and a one-button reset of a replaced box in the Servers row
+  menu, both wait for the owner's answer
+  ([plan](../superpowers/plans/2026-11-21-a1558-second-box-pages.md)). A spare's server key is
+  shown ungrouped, unlike fresh setup's, because the conflict switch and the promote route check
+  the key exactly as typed (`apps/server/src/operation-authentication.ts`); only restore reads
+  the grouped form. Chrome and Safari accepting the warning for a box's IP address during a join
+  is not yet tried on real boxes.
 
 ## Bundle: Everything needing a third box or a Cloud peer
 

@@ -102,6 +102,7 @@ The work is in `apps/dashboard/src/screens/servers-screen.ts`.
   - ✓ **Joined the venue.**
   - **Save the server key.** Show it the way fresh setup does, through the composition hook `formatServerKey` (`setup-api.ts:1074-1081`, `packages/composition/src/modules.ts:321`). That format re-encodes the key with check characters, so it is more than spacing. First confirm that every place the key is typed decodes that form (`serverKeyAsTyped`, `restore-request.ts:177`), including the emergency switch. Keep the `.txt` download. A PDF waits for lane D's A1556 slice for spares.
   - **Print the switch label.** Link to the main box's `/servers`, where the button is (`servers-screen.ts:541`).
+- **As built.** The key keeps its current form: the conflict switch and the promote route check it exactly as typed (`apps/server/src/operation-authentication.ts`), so the grouped form would be refused there. The page counts the box as joined when its own `/api/node` answers `standing: "serving-secondary"`, the standing the main box gives a joining box (`packages/membership/src/standings.ts`, `withMember`).
 - **Not alerts.** The owner allowed alerts here, but these steps are done once, on this page, by the person who is joining, so a task list is the simpler choice.
 
 ## For the owner first: approve a joining box on the main box instead of typing its password
