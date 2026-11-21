@@ -95,13 +95,28 @@ VAT"). **No** keeps a plain part payment, which issues no invoice
 (`apps/server/src/bill-payments-api.test.ts`, "leaves €70.00 outstanding on a €120.00 bill,
 changes no line's price, and issues no invoice"). Printing the bill issues the ticket before
 payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
-advance off, the till refuses to give the advance back on its own and names Correct invoice on the
-table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
-this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
-invoice can give back at most what it carries, so money beyond it, such as any of an advance that
-equals the meal, has no way back through the till. So that a correction opened before the table's
-invoice cannot file a credit note after it, the table's invoice is held back while a correction of
-one of its advances is open: the payment that pays the bill off (refused before any card reader is
+advance off, money comes back first through Correct invoice on the table's invoice, while that
+invoice still has money to give back and a dish at the advance's own rate left to correct: Correct
+invoice on the advance's ticket is refused with `advance.final_invoice_first`, naming the table's
+invoice, the rate and the smaller of the two amounts (`apps/server/src/advance-taken-off.ts`;
+`apps/server/src/advance-corrections.test.ts`, "refuses Correct invoice on the advance's ticket
+while the rest's invoice can give back €90 at 10%, naming it, and files nothing"). What the table's
+invoice cannot give back, such as any of an advance that equals the meal, comes back as an R5 of
+the advance's own ticket at its 10%, filed by `recordCorrection` unchanged, cash with its own drawer
+opening or card ("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10%
+−18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were");
+the table's invoice is never altered by it. The till's Refund beside such a payment opens Correct
+invoice on its ticket, printed bill or not, and a plain or bill refund of its money is refused with
+`tender.refund_of_advance` or `bill.refund_of_advance`, naming that ticket. This replaces the
+2026-11-20 14:26 rule that refused the advance's own correction once the table's invoice existed
+(owner, 2026-11-20 ~22:40: "I think we have to allow a refund"; watcher, 2026-11-21 04:35, O1;
+[plan](../superpowers/plans/2026-11-21-advance-refund-after-final.md)). On a bill holding a dish
+below 10%, the advance's 10% corrective can declare a few cents less VAT than the dishes it gives
+back (O2 (ii)); that, and whether one corrective should name both tickets, are A1 and A2 in
+question 12 of the 19 November sheet. `advance.taken_off_final_invoice` is left only for a leg of a
+correction opened before the table's invoice took the advance off. The table's invoice is held
+back while a correction of one of its advances is open, so that it never takes off an advance whose
+correction is still open: the payment that pays the bill off (refused before any card reader is
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
 it paid are refused with `advance.correction_open`; a reader payment started before the correction
 was opened keeps its money and issues no invoice; when the correction is closed or discarded, the

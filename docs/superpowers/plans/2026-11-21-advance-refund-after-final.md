@@ -275,7 +275,7 @@ chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run
 --filter @waitron/till exec vitest run <file>`, `pnpm --filter @waitron/reporting exec vitest run
 <file>`.
 
-- [ ] **Task 1a: the advance's corrective after the table's invoice (server).** Failing first, in
+- [x] **Task 1a: the advance's corrective after the table's invoice (server).** Failing first, in
   `apps/server/src/advance-corrections.test.ts`: (a) €0.00 table's invoice, €20 cash back on the
   advance files 10% −18.18 and −1.82 naming it, one `drawer_opens` row `tender_refund`, bill
   `settled` owing 0.00, table's record unchanged; (b) example 1 while the table's invoice holds €90:
@@ -288,20 +288,20 @@ chain or numbering. Focused runs: `pnpm --filter @waitron/server exec vitest run
   Design 1 and 3, and Design 2 under O2 (i), the codes in
   `apps/server/src/errors.ts` and `apps/server/src/till-api.ts` beside `:666` (409). Run `:564` and `:582`
   unchanged.
-- [ ] **Task 1b: category sales (reporting).** Failing first, in
+- [x] **Task 1b: category sales (reporting).** Failing first, in
   `apps/server/src/advance-corrections.test.ts` (the reports need the till's routes), each measured
   as the change over one bill: example 1 with €90 back on the table's invoice and €10 on the
   advance moves category sales by €20.00, as the VAT summary (fails today: €30.00); a whole credit
   of the table's invoice moves it by −€90.00 (fails today: −€120.00); top sellers unchanged. Then
   Design 5 under O3 and O4, row `category-sales.test.ts:765`, and a unit case for the new row in
   that file. Under O3's alternative, the cases pin its figures instead.
-- [ ] **Task 2: card legs and plain refunds (server).** Failing first: a hand-keyed card advance and
+- [x] **Task 2: card legs and plain refunds (server).** Failing first: a hand-keyed card advance and
   a reader card advance (fake provider, following `apps/server/src/invoice-correction-cards.test.ts`)
   given back after a €0.00 table's invoice, no drawer row; row `:461`. Then Design 4. Run
   `pnpm exec vitest run scripts/errors-reachable.test.ts` from the root.
-- [ ] **Task 3: the till.** Failing first: row `till-app-bill-payments.test.ts:8118`, the
+- [x] **Task 3: the till.** Failing first: row `till-app-bill-payments.test.ts:8118`, the
   `codes.test.ts` rows and cases for the two new codes' words. Then Design 6.
-- [ ] **Task 4: guides and docs.** The guide's "While the bill has no invoice, **Refund** …"
+- [x] **Task 4: guides and docs.** The guide's "While the bill has no invoice, **Refund** …"
   (`apps/server/src/guide/en/table-service.md:220-221`, `apps/server/src/guide/es/table-service.md:235-236`)
   becomes: Refund beside a payment that has its own ticket opens Correct invoice on that ticket; once
   the table's receipt has taken it off, money comes back first through Correct invoice on the table's

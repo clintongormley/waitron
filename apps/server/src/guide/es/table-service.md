@@ -232,8 +232,10 @@ pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **
 Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo. Un pago de artículos concretos se devuelve
 entero y después esos artículos pueden pagarse de nuevo.
 
-Mientras la cuenta no tenga factura, **Devolver** junto a un pago que tiene su propio ticket abre
-**Rectificar factura** en ese ticket.
+**Devolver** junto a un pago que tiene su propio ticket abre **Rectificar factura** en ese ticket.
+Cuando el ticket de la mesa ya ha descontado ese pago, devuelve el dinero primero con **Rectificar
+factura** en el ticket de la mesa, y rectifica el ticket propio del pago solo por lo que el ticket de
+la mesa no pueda devolver.
 
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
 encargado introduce su PIN. En una devolución en efectivo, entrega el dinero al cliente cuando el

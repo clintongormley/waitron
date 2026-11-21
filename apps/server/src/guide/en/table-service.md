@@ -217,8 +217,10 @@ the **Reason** from the list. A reason that needs a note, such as **Other**, ask
 and the note is recorded as the reason. A payment for particular items is refunded in full, and
 those items can then be paid for again.
 
-While the bill has no invoice, **Refund** beside a payment that has a ticket of its own opens
-**Correct invoice** on that ticket instead.
+**Refund** beside a payment that has a ticket of its own opens **Correct invoice** on that ticket
+instead. Once the table's receipt has taken that payment off, give money back first with **Correct
+invoice** on the table's receipt, and correct the payment's own ticket only for what the table's
+receipt cannot give back.
 
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you
