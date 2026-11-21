@@ -16,7 +16,7 @@ const passport: InvoiceRecipientDetail["recipient"] = {
   taxId: "X1234567",
   identifierType: "passport",
   identifierCountryCode: "FR",
-  legalName: "Ana García",
+  legalName: "Ana Garcia",
   address: "Calle Mayor 1, 2º B, 28013 Madrid, Madrid",
   countryCode: "ES",
 };
@@ -112,7 +112,7 @@ it("opens with every field of the saved recipient and its delivery filled in", a
     identifierType: "passport",
     identifierCountryCode: "FR",
     taxId: "X1234567",
-    legalName: "Ana García",
+    legalName: "Ana Garcia",
     address: "Calle Mayor 1, 2º B",
     postalCode: "28013",
     locality: "Madrid",
@@ -143,7 +143,7 @@ const savedFields = {
   identifierType: "passport",
   identifierCountryCode: "FR",
   taxId: "X1234567",
-  legalName: "Ana García",
+  legalName: "Ana Garcia",
   address: "Calle Mayor 1, 2º B",
   postalCode: "28013",
   locality: "Madrid",
@@ -166,19 +166,19 @@ it("opens an unstaged invoice with a saved recipient and no saved delivery on A4
 it("keeps Use full invoice quiet and disabled until a field changes", async () => {
   const { form } = await mount();
   expect(await saveState(form)).toEqual({ variant: "secondary", disabled: true });
-  await fill(form, "legalName", "Ana García López");
+  await fill(form, "legalName", "Ana Garcia Lopez");
   expect(await saveState(form)).toEqual({ variant: "primary", disabled: false });
 });
 
 it("sends the edited recipient, with the rest of the saved one unchanged, on Use full invoice", async () => {
   const { app, form } = await mount();
-  await fill(form, "legalName", "Ana García López");
+  await fill(form, "legalName", "Ana Garcia Lopez");
   saveButton(form).click();
   await form.updateComplete;
   expect(app.submitted).toEqual([
     {
       invoiceType: "F1",
-      recipient: { ...passport, legalName: "Ana García López" },
+      recipient: { ...passport, legalName: "Ana Garcia Lopez" },
       delivery: a4,
     },
   ]);
@@ -242,7 +242,7 @@ it("splits the saved address when the remembered fields composed a different one
 it("reports the address fields it confirmed with the address they sent", async () => {
   const { app, form } = await mount({ recipient: null, saved: undefined });
   await fill(form, "taxId", "12345678Z");
-  await fill(form, "legalName", "Ana García");
+  await fill(form, "legalName", "Ana Garcia");
   await fill(form, "address", "Calle Mayor 1, 2º B");
   await fill(form, "postalCode", "28013");
   await fill(form, "locality", "Madrid");
@@ -270,19 +270,19 @@ it("sends a saved address with a postcode of repeated spaces unchanged when only
     countryCode: "GB",
   };
   const { app, form } = await mount({ recipient });
-  await fill(form, "legalName", "Ana García López");
+  await fill(form, "legalName", "Ana Garcia Lopez");
   saveButton(form).click();
   await form.updateComplete;
-  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana García López" });
+  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana Garcia Lopez" });
 });
 
 it("sends a saved Spanish address with a space before a comma in its street unchanged when only the name changes", async () => {
   const recipient = { ...passport, address: "Calle Mayor 1 , 2º B, 28013 Madrid, Madrid" };
   const { app, form } = await mount({ recipient });
-  await fill(form, "legalName", "Ana García López");
+  await fill(form, "legalName", "Ana Garcia Lopez");
   saveButton(form).click();
   await form.updateComplete;
-  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana García López" });
+  expect(app.submitted[0]!.recipient).toEqual({ ...recipient, legalName: "Ana Garcia Lopez" });
 });
 
 it("composes the address again once an address field changes", async () => {

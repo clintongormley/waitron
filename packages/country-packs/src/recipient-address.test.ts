@@ -134,11 +134,11 @@ describe("recipientAddressFields", () => {
     ],
     [
       "ES",
-      "Calle Mayor 1, 08001 Sant Adrià de Besòs, Barcelona",
+      "Calle Mayor 1, 08001 Sant Adria de Besos, Barcelona",
       {
         streetAddress: "Calle Mayor 1",
         postalCode: "08001",
-        locality: "Sant Adrià de Besòs",
+        locality: "Sant Adria de Besos",
         province: "Barcelona",
       },
     ],
