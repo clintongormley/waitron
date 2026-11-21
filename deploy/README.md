@@ -1007,7 +1007,8 @@ replaced (`restore.membership_invalid`, described under
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing in the server: the SANs in the leaf certificate it presents, the reach URLs and QR the
-setup wizard shows, and the mDNS responder's answers. The setup start's check for another box
+setup wizard shows, the mDNS responder's answers, and the addresses a new box sends when it asks
+to join a main box (unset, that list is every interface address that is not loopback). The setup start's check for another box
 answering `waitron.local` counts both these and every interface address as this box's own. The
 addresses `waitron.sh` prints on the console do not use it. Leave it empty on a
 real box — unset, the box advertises only its **default-route interface** (its real uplink), so the

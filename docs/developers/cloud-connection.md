@@ -30,8 +30,8 @@ settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTR
 still selects the WireGuard container's control directory.
 
 The staff entrance carries dashboard requests and Cloud's `GET /public/availability` check
-only. Joining a spare box does not use it: the mirror-bundle route names the main box's own
-address. A staff connection does not enable the parked cloud-standby work.
+only. Joining a spare box does not use it: a new box asks to join at the main box's own
+address, which the person types on its setup page. A staff connection does not enable the parked cloud-standby work.
 
 Box Compose sets `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control directory.
 The container saves its private key before publishing `public-key`. The app reads that public file. On a connected test installation, the primary Cloud worker and **Refresh

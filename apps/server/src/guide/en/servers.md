@@ -27,20 +27,24 @@ Before you start, check two things on the main box:
   bucket then stops receiving the venue's changes, and in this version it cannot receive them again
   while the spare is there.
 
-You also need an account that can open **System → Servers** on the main box, with the email it
-signs in with, its password and its current authenticator code, if set up.
+You also need a device signed in to the main box with an account that can open **System →
+Servers**.
 
 Connect the new box to the venue's network and switch it on; it needs no internet connection.
 Because `waitron.local` reaches the main box, open the address that the new box's screen lists
 after **Use this box's own address**. You do not need to install the new box's certificate: accept
 your browser's warning once, choose **Join or recover** on the first screen, then **Add a mirror node**.
 
-Enter the main box's address by its name, `https://waitron.local`, and choose **Continue**; its IP address, such as `https://192.168.1.10`, is refused. On a device already signed in to the
-main box, open its Servers page from the link on the new box's page and compare **This server's
-public certificate fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
-Enter the account's email and password. You can use the eye button to check what you typed.
-Choose **Connect**. If the account uses an authenticator, the page asks for its current code.
-Enter it and choose **Connect** again. The
+Enter the main box's address by its name, `https://waitron.local`, and choose **Join**; its IP
+address, such as `https://192.168.1.10`, is refused. The new box shows a six-digit code and its own
+addresses.
+
+On the main box, open **System → Servers**, choose **Check** beside the box at one of those
+addresses, and tap the code the new box shows. Check that the address is the one the new box shows
+and the code is the one it shows now. A wrong tap ends the request; choose **Start again** on the
+new box.
+
+Back on the new box, choose **Finish joining**. The
 new box takes its first copy over the venue's network and restarts by itself as the spare. Its page
 lists what is left to do: save the server key, and, once the box has joined, print the
 [switch labels](servers.md#switch-label).

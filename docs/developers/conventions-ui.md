@@ -1032,22 +1032,21 @@ one, since the lookup never reads the user handle), the deletion cases in
 `apps/server/src/management-api-passkey.test.ts`.
 Identity's password and PIN refusals carry the real cause for the server log only:
 `new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`
-(`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. The server's own password/PIN refusals use fixed private reasons for malformed input,
-invalid credential-header JSON and a setup Reset proof mismatch; the standby's relayed
-`password.invalid` records `primary_refused` without accepting upstream details.
+(`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. The server's own password/PIN refusals use fixed private reasons for malformed input
+and invalid credential-header JSON.
 Passkey and Google refusals still carry no reason. Validation that does not depend
 on the account (an empty required field, a malformed code) may still sit under its field; a
 signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
 answers are reachable only after a credential was proved and stay: `totp.required` (asking
 for the authenticator code, after a right password), `google.second_factor_required` (after a valid
-Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote, the waiting
+Google sign-in) and `authorization.not_permitted` (403 from promote, the waiting
 box's carry-on (`apps/server/src/carry-on.ts`) and `GET /management-api/membership` when the password and code are right but the person lacks the
 permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
 right PIN that the approval does not admit (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
 `packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
-(the dashboard sign-in), `mirror-bundle-api.test.ts` (standby connect),
+(the dashboard sign-in),
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
 `till-api.receipt.test.ts` (a drawer override). The membership read
 (`management-api.membership.test.ts`), adjustment approver (`adjustments-api.test.ts`), refund

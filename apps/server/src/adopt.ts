@@ -165,8 +165,8 @@ export async function adoptFromPrimary(
   if ((await listCredentials(deps.ownerDb)).length > 0) {
     throw new AppError("mirror.vault_not_empty", {});
   }
-  // This proves only that the bundle agrees with itself and with this box's identity, not who sent
-  // it: that rests on how the bundle was collected.
+  // This proves only that the bundle agrees with itself and with this box's identity; who sent it
+  // rests on the code compared on both boxes and the main box's signature (`box-join-attempt.ts`).
   const { endorsement } = bundle.reservedIdentity;
   if (
     endorsement.nodeId !== standby.nodeId ||

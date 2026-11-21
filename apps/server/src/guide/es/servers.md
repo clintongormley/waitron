@@ -28,9 +28,8 @@ Antes de empezar, comprueba dos cosas en el servidor principal:
   **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local y, en
   esta versión, no puede volver a recibirlos mientras el servidor de reserva siga en el local.
 
-También necesitas una cuenta que pueda abrir **Sistema → Servidores** en el servidor principal, con
-el correo con el que inicia sesión, su contraseña y el código actual del autenticador, si está
-configurado.
+También necesitas un dispositivo con la sesión iniciada en el servidor principal con una cuenta que
+pueda abrir **Sistema → Servidores**.
 
 Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
 `waitron.local` lleva al servidor principal, abre la dirección que la pantalla del servidor nuevo
@@ -38,14 +37,16 @@ muestra después de **Use this box's own address**. No hace falta instalar el ce
 servidor nuevo: acepta una vez el aviso del navegador, elige **Unirse o recuperar** en la primera
 pantalla y después **Añadir un nodo réplica**.
 
-Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige **Continuar**; su dirección IP, como `https://192.168.1.10`, se rechaza. En un dispositivo que ya
-tenga la sesión iniciada en el servidor principal, abre su página Servidores desde el enlace de la
-página del servidor nuevo y compara **Huella del certificado público de este servidor** con la que
-muestra el servidor nuevo. Elige
-**Coincide** solo si son iguales. Introduce el correo y la contraseña de la cuenta. Puedes usar
-el botón con el icono de ojo para comprobar lo que has escrito. Elige **Conectar**. Si la cuenta
-usa un autenticador, la página te pide su código actual. Escríbelo y elige **Conectar** otra vez.
-El servidor nuevo recibe su primera copia por la red del
+Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige
+**Unirse**; su dirección IP, como `https://192.168.1.10`, se rechaza. El servidor nuevo muestra un
+código de seis cifras y sus propias direcciones.
+
+En el servidor principal, abre **Sistema → Servidores**, elige **Comprobar** junto al servidor en una
+de esas direcciones y toca el código que muestra el servidor nuevo. Comprueba que la dirección es la
+que muestra el servidor nuevo y que el código es el que muestra ahora. Un toque equivocado termina la
+solicitud; elige **Empezar de nuevo** en el servidor nuevo.
+
+De vuelta en el servidor nuevo, elige **Terminar la unión**. El servidor nuevo recibe su primera copia por la red del
 local y se reinicia solo como servidor de reserva. Su página muestra lo que queda por hacer:
 guardar la clave del servidor y, cuando se haya unido, imprimir las
 [etiquetas de cambio](servers.md#switch-label).

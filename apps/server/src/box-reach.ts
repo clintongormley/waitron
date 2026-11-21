@@ -117,7 +117,8 @@ const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 
 /**
  * The operator-supplied override for the addresses this box advertises — its certificate SANs, its
- * IP-QR and its mDNS answers. Unset, the interfaces are enumerated instead (`listBoxIpv4`).
+ * IP-QR, its mDNS answers and the addresses its join request lists. Unset, the interfaces are
+ * enumerated instead (`listBoxIpv4`; the join request lists every non-loopback interface address).
  *
  * It exists because a container does not necessarily sit on the venue's network: under bridge
  * networking `listBoxIpv4` returns the container's own address, which is non-internal and
