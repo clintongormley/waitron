@@ -1041,14 +1041,15 @@ answers are reachable only after a credential was proved and stay: `totp.require
 for the authenticator code, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from promote, the waiting
 box's carry-on (`apps/server/src/carry-on.ts`) and `GET /management-api/membership` when the password and code are right but the person lacks the
-permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,
+permission, from the box-join Check and approve routes
+(`apps/server/src/box-join-api.ts`) when a signed-in person lacks `node.manage`, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
 right PIN that the approval does not admit (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
 `packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
 (the dashboard sign-in),
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
-`till-api.receipt.test.ts` (a drawer override). The membership read
+`till-api.receipt.test.ts` (a drawer override) and `box-join-person-api.test.ts` (the Check route only). The membership read
 (`management-api.membership.test.ts`), adjustment approver (`adjustments-api.test.ts`), refund
 override and manual-refund confirmer (`bill-payments-api.test.ts`) also compare the 401
 status, full JSON body and asynchronous scrypt count for unknown, suspended and wrong-secret credentials.

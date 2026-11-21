@@ -110,7 +110,7 @@ export const shellEn = {
   "shell.adopt.generic":
     "This server could not finish joining just now. Check that it is switched on and connected, then try again.",
   "shell.adopt.incomplete":
-    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. Reset this server clears what the stopped join left on this server and restarts setup from the first page. If the main server's Servers page lists this server, remove it there.",
+    "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. Choosing Reset this server clears what the stopped join left on this server and restarts setup from the first page. If the main server's Servers page lists this server, remove it there.",
 
   "shell.reset.generic": "The server could not be reset. Check the connection and try again.",
   "shell.reset.resetting":

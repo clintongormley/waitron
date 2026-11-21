@@ -223,14 +223,15 @@ credential-free production path. (iii) A cleared machine is refused promotion by
 chart only once that chart contains the clearing. (iv) The primary's join and mint paths refuse
 removed ids and full charts; the credential-free fetch in (ii) does not deliver those changes.
 (v) A receiver with an older chart may accept a removed machine until it learns of the removal.
-(vi) Bundle fetch passes only login refusals and `JOIN_REFUSALS`; removal and full-chart refusals
-still become `mirror.bundle_fetch_failed`. (vii) Removing a live standby as though it never
+(vi) A removal or full-chart refusal of a join is shown to the manager who chooses Check or taps
+the code on the main box (`refuseJoinBeforeApproving`, `apps/server/src/mirror-bundle-api.ts`);
+the request stays waiting and the new box is not told why. (vii) Removing a live standby as though it never
 finished joining could leave its later charts refused as `signer_removed`, logged without an
 alert. That removal/promotion sequence on started boxes remains unmeasured.
 
-Incomplete-adoption reset still accepts the email/password proof recorded at join time without
-rechecking that account or requesting another one-time code. A record without that proof is
-refused. Whether a failure after `trading.env` was written leaves this reset reachable remains
+Incomplete-adoption reset takes no proof: it is refused only for a box that joined elsewhere or
+holds no unfinished join (`/setup-api/reset-incomplete-adopt`, `apps/server/src/setup-api.ts`).
+Whether a failure after `trading.env` was written leaves this reset reachable remains
 unmeasured. Also unmeasured: `operation.complete()` failing after the restart was scheduled can
 release the setup latch while that restart is pending.
 
@@ -875,7 +876,8 @@ The owner approved the second revision on 2026-10-22 at about 02:40; the amendme
 [#2371](https://github.com/clintongormley/waitron/pull/2371) on 2026-11-01: what a box remembers
 about itself is in its own `node.db`. The owner answered yes to both its questions on 2026-10-31:
 the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
-certificate fingerprint before it receives the venue's keys. Slice 3b's build
+certificate fingerprint before it receives the venue's keys (2026-11-22: the join by code, A1558
+PR 9, replaced the fingerprint check). Slice 3b's build
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
 eight pull requests, split on 2026-11-10 into eleven, two of them fiscal and landed by the owner (3b-G, the start steps that decide
 whether a box files; 3b-F, letting a Veri*Factu venue add a spare, under option (c) of question Q1, which the campaign

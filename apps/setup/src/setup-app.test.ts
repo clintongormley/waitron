@@ -348,7 +348,9 @@ async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
   const text = (await screenText(el, "provisioning", "[data-test=error]"))!.replace(/\s+/g, " ");
   expect(text).toContain("partly set up");
   expect(text).toContain("stopped partway");
-  expect(text).toContain("Reset this server clears what the stopped join left on this server");
+  expect(text).toContain(
+    "Choosing Reset this server clears what the stopped join left on this server",
+  );
   expect(text).not.toContain("Contact support");
   const host = await screenHost(el, "provisioning");
   expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();

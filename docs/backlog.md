@@ -982,8 +982,9 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
   Backups, recovery material, exports, people, your own sign-in, connections, handover and fiscal/box
   changes use the fifteen-minute session window. Handover requires a confirmation without a recovery
   code and an account with a password for the spare’s sign-in. The [ask-again plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md)
-  retains current authenticator codes for own-account changes; sessionless promotion and mirror
-  creation keep body credentials. A Google-only account needs a password from password reset
+  retains current authenticator codes for own-account changes; sessionless promotion keeps body
+  credentials, and approving a box join needs a signed-in session with `node.manage` and a fresh
+  sign-in. A Google-only account needs a password from password reset
   to open the window. Google proof and the later sign-in steps remain in the
   [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
 

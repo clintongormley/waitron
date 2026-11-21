@@ -131,7 +131,7 @@ describe("a box asking to join, on the Servers screen", () => {
     expect(find(el, "join-dialog-address")!.textContent).toContain("192.168.1.23");
   });
 
-  it("a right tap approves with that code and says the new box is fetching its copy", async () => {
+  it("a right tap approves with that code and says to finish joining on the new box", async () => {
     const api = stubApi();
     const el = await mount(api);
     await check(el);
@@ -140,7 +140,7 @@ describe("a box asking to join, on the Servers screen", () => {
     await flush(el);
     expect(api.approveBoxJoin).toHaveBeenCalledWith(REQUEST, "482913");
     expect(find(el, "join-approved")!.textContent!.trim()).toBe(
-      "Approved; the new box is fetching its copy",
+      "Approved. On the new box, choose Finish joining.",
     );
     expect(choiceButtons(el)).toEqual([]);
     expect(api.listServers).toHaveBeenCalledTimes(2);
