@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { businessDayBoundaryAt, businessDayBounds, cutoverForBusinessDay } from "@waitron/shared";
+import {
+  businessDayBoundaryAt,
+  businessDayBounds,
+  cutoverForBusinessDay,
+  splitBusinessDayChanges,
+} from "@waitron/shared";
 import {
   dateTimeFormat,
   formatBusinessDate,
@@ -149,13 +154,12 @@ export class BusinessDayStartEditor extends LitElement {
     const model = this.model;
     const today = model?.currentBusinessDay;
     if (!today) return [];
-    return model.clock.cutoverChanges
-      .filter((change) => change.effectiveBusinessDay > today)
-      .map((change) => ({
-        effectiveBusinessDay: change.effectiveBusinessDay,
-        dayCutover: change.dayCutover.slice(0, 5),
-        startsAt: businessDayBoundaryAt(model.clock, change.effectiveBusinessDay),
-      }));
+    const { waiting } = splitBusinessDayChanges(model.clock, today);
+    return waiting.map((change) => ({
+      effectiveBusinessDay: change.effectiveBusinessDay,
+      dayCutover: change.dayCutover.slice(0, 5),
+      startsAt: businessDayBoundaryAt(model.clock, change.effectiveBusinessDay),
+    }));
   }
   #clearReread(): void {
     clearTimeout(this.#changeoverTimer);

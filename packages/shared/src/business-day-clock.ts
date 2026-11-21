@@ -122,3 +122,16 @@ export function businessDayAt(clock: BusinessDayClock, at: Date): string {
   }
   return invalid("outside_boundaries");
 }
+
+/** Use the business day resolved from this clock's ordered changes. */
+export function splitBusinessDayChanges(
+  clock: BusinessDayClock,
+  currentBusinessDay: string,
+): { settled: CutoverChange[]; waiting: CutoverChange[] } {
+  const changes = clock.cutoverChanges;
+  const firstWaiting = changes.findIndex(
+    (change) => change.effectiveBusinessDay > currentBusinessDay,
+  );
+  const splitAt = firstWaiting === -1 ? changes.length : firstWaiting;
+  return { settled: changes.slice(0, splitAt), waiting: changes.slice(splitAt) };
+}

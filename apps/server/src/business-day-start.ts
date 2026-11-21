@@ -14,6 +14,7 @@ import {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockTransitionAt, planBusinessDayStart } from "./business-day-changeover.js";
@@ -86,9 +87,7 @@ export async function readBusinessDayClockModel(
   } catch {
     return { ...base, currentBusinessDay: null, pending: null };
   }
-  const pending = clock.cutoverChanges.find(
-    (change) => businessDayBoundaryAt(clock, change.effectiveBusinessDay) > at.toISOString(),
-  );
+  const [pending] = splitBusinessDayChanges(clock, currentBusinessDay).waiting;
   if (pending === undefined) return { ...base, currentBusinessDay, pending: null };
   const startsAt = businessDayBoundaryAt(clock, pending.effectiveBusinessDay);
   return { ...base, currentBusinessDay, pending: { ...pending, startsAt } };

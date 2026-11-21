@@ -39,15 +39,17 @@ A877-ONE-HELPER item and [the A877 backlog entry](../../backlog/service-periods.
   waiting-change refusal in `packages/provisioning/src/configuration-transfer.ts` as well.
 - Run the existing tests with `pnpm --filter @waitron/<package> exec vitest run <files>`.
   In server, use `src/business-day-{changeover,start}.test.ts` and `src/configuration-export-api.test.ts`.
-  In dashboard, use `src/screens/business-day-start-editor.test.ts`. In venue-service, use
+  In dashboard, use `src/screens/business-day-start-editor.test.ts`. In provisioning, use
+  `src/configuration-transfer.security.test.ts` for the waiting-start export refusal. In venue-service, use
   `src/{business-day-schedule,special-days,menu-timetable,period-delete,seasons,season-weeks,zone-closed-times}.test.ts`.
   Keep the existing checks for a conflict on the second waiting start, writes with an unreadable
   zone, the editor's re-read of a stale model, and export refusing a waiting change.
 
-## Scope for watcher clearance
+## Scope
 
-This slice proposes the shared rule named in the queue title. Update `docs/backlog/service-periods.md`
-and its `docs/backlog.md` index to reflect the completed helper. The write gate and repeated hours
-reads stay with the remaining bundle work until the watcher settles scope. There are no schema,
-display or response shape changes. Expect about +40/−40 production lines (roughly even) and
-+25–40 test lines. Work test-first and commit with sign-off.
+The watcher confirmed the shared rule and its callers as this slice at 15:54 and cleared it at 15:56
+on 21 November 2026 in Lane F's `questions.md`. Keep the write gate and the other bundle entries
+open in `docs/backlog/service-periods.md` and its index. The Save planner keeps at most two
+changes waiting, so the repeated hours reads are a deliberate limit. There are no schema, display
+or response shape changes. Expect about +40/−40 production lines and +25–40 test lines. Work
+test-first and commit with sign-off.

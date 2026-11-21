@@ -17,12 +17,13 @@ import {
   businessDayAt,
   businessDayBoundaryAt,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
 } from "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
 import { addDays } from "./hours-rules.js";
 import { minuteOfServiceDay, parseClosedRanges, rangeSpan } from "./service-day.js";
-import { serviceDayWallContext, settledClock } from "./service-day-context.js";
+import { serviceDayWallContext } from "./service-day-context.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "@waitron/module";
@@ -325,11 +326,12 @@ export async function assertWaitingChangeFits(
   acquiredClock?: BusinessDayClock,
 ): Promise<void> {
   const clock = acquiredClock ?? (await readVenueClock(tx));
-  let settled = settledClock(clock, at);
-  const waiting = clock.cutoverChanges.filter((change) => !settled.cutoverChanges.includes(change));
+  if (clock.cutoverChanges.length === 0) return;
+  const { settled, waiting } = splitBusinessDayChanges(clock, businessDayAt(clock, at));
+  let before = { ...clock, cutoverChanges: settled };
   for (const change of waiting) {
-    const next = { ...settled, cutoverChanges: [...settled.cutoverChanges, change] };
-    const result = await businessDayClockConflicts(tx, settled, next, change.effectiveBusinessDay);
+    const next = { ...before, cutoverChanges: [...before.cutoverChanges, change] };
+    const result = await businessDayClockConflicts(tx, before, next, change.effectiveBusinessDay);
     if (result.conflictCount > 0)
       throw new AppError("hours.clock_change_conflict", {
         dayCutover: change.dayCutover,
@@ -337,7 +339,7 @@ export async function assertWaitingChangeFits(
         timeZone: clock.timeZone,
         ...result,
       });
-    settled = next;
+    before = next;
   }
 }
 
@@ -373,9 +375,7 @@ export async function readBusinessDayScheduleStatus(
   } catch {
     return { businessDayClock: clock, clockRevision, currentBusinessDay: null, pending: null };
   }
-  const change = clock.cutoverChanges.find(
-    (row) => businessDayBoundaryAt(clock, row.effectiveBusinessDay) > at.toISOString(),
-  );
+  const [change] = splitBusinessDayChanges(clock, currentBusinessDay).waiting;
   let pending: BusinessDayScheduleStatus["pending"] = null;
   if (change !== undefined)
     pending = { ...change, startsAt: businessDayBoundaryAt(clock, change.effectiveBusinessDay) };

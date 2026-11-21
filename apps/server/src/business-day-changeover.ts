@@ -3,6 +3,7 @@ import {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
   type CutoverChange,
 } from "@waitron/shared";
@@ -33,11 +34,8 @@ export function planBusinessDayStart(
   at: Date,
 ): BusinessDayStartPlan {
   const today = businessDayAt(clock, at);
-  const future = clock.cutoverChanges.filter((change) => change.effectiveBusinessDay > today);
-  const base = {
-    ...clock,
-    cutoverChanges: clock.cutoverChanges.filter((change) => change.effectiveBusinessDay <= today),
-  };
+  const { settled, waiting } = splitBusinessDayChanges(clock, today);
+  const base = { ...clock, cutoverChanges: settled };
   const tomorrow = addDays(today, 1);
   const tonight = withStart(base, tomorrow, dayCutover);
   if (businessDayBoundaryAt(tonight, tomorrow) > at.toISOString())
@@ -45,19 +43,19 @@ export function planBusinessDayStart(
       today,
       effectiveBusinessDay: tomorrow,
       kept: [],
-      removed: future.map((change) => change.effectiveBusinessDay),
+      removed: waiting.map((change) => change.effectiveBusinessDay),
       before: base,
       candidate: tonight,
     };
   // Today's end is still ahead, so a row waiting for tomorrow already decides it and stays.
-  const kept = future.filter((change) => change.effectiveBusinessDay === tomorrow);
+  const kept = waiting.filter((change) => change.effectiveBusinessDay === tomorrow);
   const before = { ...base, cutoverChanges: [...base.cutoverChanges, ...kept] };
   const effectiveBusinessDay = addDays(today, 2);
   return {
     today,
     effectiveBusinessDay,
     kept,
-    removed: future
+    removed: waiting
       .filter((change) => change.effectiveBusinessDay !== tomorrow)
       .map((change) => change.effectiveBusinessDay),
     before,

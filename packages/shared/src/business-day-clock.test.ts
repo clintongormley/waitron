@@ -5,6 +5,7 @@ import {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
 } from "./business-day-clock.js";
 
@@ -97,6 +98,28 @@ describe("clock input refusal", () => {
 });
 
 describe("dated business-day boundaries", () => {
+  it("splits dated starts at their actual changeover", () => {
+    const first = { effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" };
+    const second = { effectiveBusinessDay: "2026-11-05", dayCutover: "07:00" };
+    const clock = { ...madrid(), cutoverChanges: [first, second] };
+
+    expect(businessDayBoundaryAt(clock, first.effectiveBusinessDay)).toBe(
+      "2026-11-04T02:00:00.000Z",
+    );
+    expect(businessDayBoundaryAt(clock, second.effectiveBusinessDay)).toBe(
+      "2026-11-05T06:00:00.000Z",
+    );
+    expect(
+      splitBusinessDayChanges(clock, businessDayAt(clock, new Date("2026-11-04T01:59:59.999Z"))),
+    ).toEqual({ settled: [], waiting: [first, second] });
+    expect(
+      splitBusinessDayChanges(clock, businessDayAt(clock, new Date("2026-11-04T02:00:00.000Z"))),
+    ).toEqual({ settled: [first], waiting: [second] });
+    expect(
+      splitBusinessDayChanges(clock, businessDayAt(clock, new Date("2026-11-05T06:00:00.000Z"))),
+    ).toEqual({ settled: [first, second], waiting: [] });
+  });
+
   it.each([
     ["03:00", "2026-11-04T02:00:00.000Z"],
     ["07:00", "2026-11-04T06:00:00.000Z"],
