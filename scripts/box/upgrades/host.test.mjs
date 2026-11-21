@@ -89,13 +89,19 @@ describe("quiet before an offered upgrade", () => {
     await writeFile(join(box.root, "state", "trading.env"), "WAITRON_NODE_ID=one\n");
 
     const { link, offer } = await offerTrustFixture(box.root, "one");
+    let offerRead = false;
     const run = async (file, args, ...rest) => {
       if (file === "prepare-fixture")
         return { stdout: JSON.stringify({ compose: JSON.stringify(box.candidate) }) };
-      if (file === "curl") return { stdout: offer(1, paused ? "none" : "1.2.3") };
+      if (file === "curl") {
+        expect(box.calls.some((call) => call.includes("trial"))).toBe(true);
+        offerRead = true;
+        return { stdout: offer(1, paused ? "none" : "1.2.3") };
+      }
       if (scenario === "stopped app" && args[0] === "inspect" && args.length === 2)
         return { stdout: '[{"State":{"Running":false}}]' };
       if (
+        offerRead &&
         scenario === "missing app" &&
         args.includes("ps") &&
         args.includes("-a") &&
