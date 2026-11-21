@@ -1178,19 +1178,104 @@ describe("createAgent — on-node self-enrol", () => {
     expect(c.join).not.toHaveBeenCalled();
   });
 
-  it("asks its own box at once again after new settings, even while a refusal's wait runs", async () => {
+  it("on the spare, asks its own box at once again after new settings, even while a refusal's wait runs", async () => {
+    const loopback = "https://127.0.0.1";
     let now = 0;
-    const host = fakeHost({ config: CONFIG, now: () => now });
-    const c = client({ join: vi.fn(async () => failR({ kind: "pairing_closed" })) });
+    const host = fakeHost({ config: { serverUrl: loopback, name: "kitchen-pi" }, now: () => now });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>({ ...primary, acceptingSales: false, standing: "serving-secondary" }),
+      ),
+    });
     const agent = createAgent({ host, client: c });
     await agent.runOnce();
     now += 2_000;
     await agent.runOnce();
     expect(c.enrolSelf).toHaveBeenCalledTimes(1);
-    expect(await agent.configure({ serverUrl: A, name: "kitchen-pi" })).toBe(true);
+    expect(await agent.configure({ serverUrl: loopback, name: "kitchen-pi" })).toBe(true);
     now += 2_000;
     await agent.runOnce();
     expect(c.enrolSelf).toHaveBeenCalledTimes(2);
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it("a spare promoted while a refusal's wait runs never knocks, and self-enrols when the wait ends", async () => {
+    const loopback = "https://127.0.0.1";
+    let now = 0;
+    let promoted = false;
+    const host = fakeHost({ config: { serverUrl: loopback, name: "kitchen-pi" }, now: () => now });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>(
+          promoted ? primary : { ...primary, acceptingSales: false, standing: "serving-secondary" },
+        ),
+      ),
+      join: vi.fn(async () => okR({ token: "a1.pending", verificationNumber: "07" })),
+      enrolSelf: vi.fn(async () =>
+        promoted ? okR({ token: "id.self" }) : failR({ kind: "refused" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    promoted = true;
+    for (let round = 0; round < 16; round += 1) {
+      now += 2_000;
+      await agent.runOnce();
+    }
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2);
+    expect(await host.token()).toBe("id.self");
+  });
+
+  it.each(["open", "closed"] as const)(
+    "on the main box, never knocks while a refusal's wait runs, and self-enrols when it ends (pairing %s)",
+    async (pairing) => {
+      let now = 0;
+      let up = false;
+      const host = fakeHost({ config: CONFIG, now: () => now });
+      const c = client({
+        probeNode: vi.fn(async () =>
+          okR<NodeProbe>(up ? primary : { ...primary, acceptingSales: false }),
+        ),
+        join: vi.fn(async () =>
+          pairing === "open"
+            ? okR({ token: "a1.pending", verificationNumber: "07" })
+            : failR({ kind: "pairing_closed" }),
+        ),
+        enrolSelf: vi.fn(async () => (up ? okR({ token: "id.self" }) : failR({ kind: "refused" }))),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      up = true;
+      for (let round = 0; round < 16; round += 1) {
+        now += 2_000;
+        await agent.runOnce();
+      }
+      expect({
+        token: await host.token(),
+        phase: agent.status.phase,
+        enrolSelfCalls: vi.mocked(c.enrolSelf).mock.calls.length,
+        joinCalls: vi.mocked(c.join).mock.calls.length,
+      }).toEqual({ token: "id.self", phase: "running", enrolSelfCalls: 2, joinCalls: 0 });
+    },
+  );
+
+  it("on the main box, self-enrols on the round its server first accepts after a waiting start", async () => {
+    // The waiting start mounts no enrol-self route; the client reports its 404 as a refusal.
+    let up = false;
+    const host = fakeHost({ config: CONFIG, now: () => 0 });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>(up ? primary : { ...primary, acceptingSales: false }),
+      ),
+      enrolSelf: vi.fn(async () => (up ? okR({ token: "id.self" }) : failR({ kind: "refused" }))),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    up = true;
+    await agent.runOnce();
+    expect(await host.token()).toBe("id.self");
+    expect(c.join).not.toHaveBeenCalled();
   });
 
   it("on the main box, asks again on the next round when its own server did not answer at all", async () => {

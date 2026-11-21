@@ -29,8 +29,8 @@ import { Router } from "./router.js";
 /** Failed pulls and active discovery passes use this interval. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
-/** After its own box refuses to enrol it (or after a halt, on any failure), an agent asks again at
- * most this often: two asks a minute against the enrol limit of 30 a minute (`ENROL_RATE_MAX`,
+/** After a failed ask of its own box, an agent on the spare, or a halted one, asks again at most
+ * this often: two asks a minute against the enrol limit of 30 a minute (`ENROL_RATE_MAX`,
  * `apps/server/src/enrol-rate-limit.ts`), which every spare's asks share on the main box. The
  * first ask after a start, new settings or a halt goes at once. */
 export const SELF_ENROL_RETRY_INTERVAL_MS = 30_000;
@@ -624,15 +624,17 @@ export function createAgent(opts: AgentOptions): Agent {
       });
       return false;
     }
-    if (halted && !passed(selfEnrolAt, SELF_ENROL_RETRY_INTERVAL_MS)) {
-      report({ phase: "unauthorized", serverUrl: config.serverUrl });
-      return false;
-    }
-
     // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on the main box must
     // enrol even while its server briefly does not accept, and a spare's own server never accepts.
     // A LITERAL loopback origin, not config.serverUrl.
-    if ((await host.token()) === null && passed(selfEnrolAt, SELF_ENROL_RETRY_INTERVAL_MS)) {
+    let askedSelf = false;
+    if ((await host.token()) === null) {
+      // While the wait runs, nothing below runs either, so a knock only ever follows a self-enrol
+      // ask made in the same round.
+      if (!passed(selfEnrolAt, SELF_ENROL_RETRY_INTERVAL_MS)) {
+        if (halted) report({ phase: "unauthorized", serverUrl: config.serverUrl });
+        return false;
+      }
       const loopback = new URL(config.serverUrl);
       loopback.hostname = "127.0.0.1";
       const self = await client.enrolSelf(loopback.origin, config.name);
@@ -645,10 +647,8 @@ export function createAgent(opts: AgentOptions): Agent {
         report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
         return false;
       }
-      // Only a refusal waits, or any ask while halted: the main box's agent can start before its
-      // server, and must self-enrol, not knock, once that server answers.
-      if (halted || self.failure.kind === "refused")
-        selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
+      if (halted) selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
+      else askedSelf = true;
     }
     if (halted) {
       report({ phase: "unauthorized", serverUrl: config.serverUrl });
@@ -657,6 +657,11 @@ export function createAgent(opts: AgentOptions): Agent {
 
     const r = routerFor(config);
     const round = await r.probe();
+    // Only on the spare does a failed ask wait: its server may ask the main box for us, against the
+    // main box's limit. Anywhere else the next round asks again, so a main box whose server is
+    // still starting self-enrols on the round it first accepts.
+    if (askedSelf && round.configuredIsSpare)
+      selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
     if (config.environment === undefined && r.environment !== undefined) {
       config = { ...config, environment: r.environment };
       await host.saveConfig(config);
