@@ -1672,6 +1672,8 @@ async function bootServer(
       now,
     };
     const joinAttempt = createBoxJoinAttempt({
+      lookup: seams.boxLookup,
+      ...(config.boxAddresses === undefined ? {} : { addresses: () => config.boxAddresses! }),
       advertisedOrigin: config.managementOrigin,
       spareStorePort: config.spareStorePort,
       now,

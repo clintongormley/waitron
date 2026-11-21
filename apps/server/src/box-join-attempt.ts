@@ -28,6 +28,7 @@ import {
   fetchPrimaryCertificate,
   isIsoTime,
   isMirrorBundle,
+  type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
@@ -57,6 +58,7 @@ export interface BoxJoinAttemptDeps {
   /** This box's own network addresses; by default every interface address that is not loopback. */
   addresses?: () => string[];
   exchange?: typeof boxExchange;
+  lookup?: BoxLookup;
 }
 
 export type JoinAttemptState =
@@ -140,7 +142,9 @@ function isLocked(value: unknown): value is LockedJoinBundle {
 }
 
 export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
-  const exchange = deps.exchange ?? boxExchange;
+  const exchange: typeof boxExchange =
+    deps.exchange ??
+    ((url, options, maxBytes) => boxExchange(url, { ...options, lookup: deps.lookup }, maxBytes));
   const ownAddresses =
     deps.addresses ?? (() => ownInterfaceAddresses().filter((a) => !isLoopbackHost(a)));
   let current: Attempt | null = null;
@@ -275,7 +279,7 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
 
   async function open(primaryUrl: string) {
     const base = assertSafePrimaryUrl(primaryUrl);
-    const certificate = await fetchPrimaryCertificate(primaryUrl);
+    const certificate = await fetchPrimaryCertificate(primaryUrl, { lookup: deps.lookup });
     const trust = certificate === null ? {} : { ca: certificate.pem, rejectUnauthorized: true };
 
     const identity = generateStandbyIdentity();

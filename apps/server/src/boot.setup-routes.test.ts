@@ -2091,6 +2091,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
+    const email = "owner@example.test";
     const operationId = "44444444-4444-4444-8444-444444444444";
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
@@ -2103,11 +2104,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             kind: "adopt",
             requestHash: "a-request",
             phase: "venue_committed",
-            data: {},
+            data: { resetProof: { email, passwordHash: hashPassword("the-password") } },
             updatedAt: "2026-09-26T00:00:00.000Z",
           }),
         );
-        const response = await post("/setup-api/reset-incomplete-adopt", {});
+        const response = await post("/setup-api/reset-incomplete-adopt", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, password: "the-password" }),
+        });
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
         expect(JSON.parse(await readFile(join(stateDir, "reset-request.json"), "utf8"))).toEqual({
@@ -2294,6 +2298,74 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             new X509Certificate(MAIN_AUTHORITY.caCertPem).fingerprint256,
           );
           expect(asked).toEqual([name]);
+        },
+        {
+          seams: {
+            boxLookup: async (hostname) => {
+              asked.push(hostname);
+              return { addresses: ["127.0.0.1"], remembered: false };
+            },
+          },
+        },
+      );
+    } finally {
+      await new Promise((resolve) => main.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a setup start's Join reaches the main box through the injected lookup and sends the box's configured addresses", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    // Inside the name space the box authority permits, so the hello's connection is checked.
+    const name = "nothing-else-resolves-this.waitron.local";
+    const served = mintSelfSignedServerCert({
+      hostnames: [name],
+      ipAddresses: [],
+      // Valid at the setup start's clock, which reads 16 October 2026.
+      now: new Date("2026-10-15T00:00:00Z"),
+    });
+    const hellos: { addresses?: unknown }[] = [];
+    const main = createHttpsServer(
+      { cert: served.serverCertPem, key: served.serverKeyPem },
+      (req, res) => {
+        if (req.url === "/ca.crt") {
+          res.writeHead(200, { "content-type": "application/x-pem-file" });
+          res.end(served.caCertPem);
+          return;
+        }
+        if (req.url !== "/api/node/join/hello") {
+          res.writeHead(404).end();
+          return;
+        }
+        let body = "";
+        req.on("data", (chunk: Buffer) => (body += chunk.toString("utf8")));
+        req.on("end", () => {
+          hellos.push(JSON.parse(body) as { addresses?: unknown });
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: { code: "mirror.join_address_mismatch", params: {} } }));
+        });
+      },
+    );
+    await new Promise<void>((resolve) => main.listen(0, "127.0.0.1", resolve));
+    const port = (main.address() as AddressInfo).port;
+    const asked: string[] = [];
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_BOX_ADDRESSES: "10.20.30.40,10.20.30.41" },
+        async ({ post }) => {
+          const response = await post("/setup-api/join/start", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ primaryUrl: `https://${name}:${port}` }),
+          });
+          expect(response.status, JSON.stringify({ asked, hellos })).toBe(409);
+          expect(await response.json()).toEqual({
+            error: { code: "mirror.join_address_mismatch", params: {} },
+          });
+          expect(hellos.map((hello) => hello.addresses)).toEqual([["10.20.30.40", "10.20.30.41"]]);
+          expect(new Set(asked)).toEqual(new Set([name]));
         },
         {
           seams: {
