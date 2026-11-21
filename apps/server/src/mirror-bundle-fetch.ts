@@ -103,7 +103,7 @@ function isRelayedBare(code: unknown): code is RelayedBare {
 }
 
 /** Text that is an ISO time exactly as `Date.prototype.toISOString` writes one. */
-function isIsoTime(value: unknown): value is string {
+export function isIsoTime(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const time = new Date(value);
   return !Number.isNaN(time.getTime()) && time.toISOString() === value;

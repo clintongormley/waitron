@@ -1,0 +1,320 @@
+// The new box's side of a join by code: it asks the main box, shows the code, and waits for a
+// person to tap it there. The attempt lives in memory only, so a restart forgets it.
+import "./errors.js";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { AppError, type ErrorCode } from "@waitron/shared";
+import {
+  JOIN_CANCEL_LABEL,
+  JOIN_HELLO_LABEL,
+  JOIN_POLL_LABEL,
+  JOIN_PROTOCOL,
+  JOIN_REVEAL_LABEL,
+  commitmentMatches,
+  helloMessageFields,
+  joinCode,
+  revealAnswerFields,
+  signJoinMessage,
+  verifyJoinMessage,
+  type JoinField,
+  type JoinHelloFields,
+} from "./box-join-code.js";
+import type { LockedJoinBundle } from "./box-join-seal.js";
+import { ownContactUrl } from "./box-name.js";
+import { boxExchange, fetchPrimaryCertificate, isIsoTime } from "./mirror-bundle-fetch.js";
+import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
+import { ownInterfaceAddresses } from "./request-from-box.js";
+import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
+
+const POLL_EVERY_MS = 2_000;
+const REVEAL_TRIES = 3;
+// Three tries fit in the ten seconds the person waits for a code.
+const TRY_LIMIT_MS = 3_000;
+
+const RELAYED_BARE = [
+  "mirror.join_address_mismatch",
+  "mirror.standby_name_taken",
+  "mirror.join_code_taken",
+  "mirror.join_not_found",
+  "mirror.join_invalid",
+] as const satisfies readonly ErrorCode[];
+const LIMITS = ["address", "network", "listed", "recent"] as const;
+
+export interface BoxJoinAttemptDeps {
+  /** Its `ownContactUrl` is sent as this box's contact address, as adopt does. */
+  advertisedOrigin: string;
+  /** This box's store port; the store address is its contact name on this port. */
+  spareStorePort: number;
+  now: () => Date;
+  /** This box's own network addresses; by default every interface address that is not loopback. */
+  addresses?: () => string[];
+  exchange?: typeof boxExchange;
+}
+
+export type JoinAttemptState =
+  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; expiresAt: string }
+  | { state: "approved"; code: string; locked: LockedJoinBundle };
+
+interface Attempt {
+  base: URL;
+  trust: Parameters<typeof boxExchange>[1]["trust"];
+  requestId: string;
+  identity: StandbyIdentity;
+  hello: JoinHelloFields;
+  encryptionPrivateKey: string;
+  mainNodeId: string;
+  mainPublicKey: string;
+  /** The last `seq` this attempt signed. */
+  seq: number;
+  state: JoinAttemptState;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
+const fetchFailed = () => new AppError("mirror.bundle_fetch_failed", {});
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function jsonOf(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The main box's refusal, rebuilt so nothing it wrote travels on beyond the checked parameters. */
+function refusalOf(text: string): AppError {
+  const body = jsonOf(text);
+  const error = isRecord(body) && isRecord(body.error) ? body.error : {};
+  const { code } = error;
+  const params = isRecord(error.params) ? error.params : {};
+  const bare = RELAYED_BARE.find((c) => c === code);
+  if (bare !== undefined) return new AppError(bare, {});
+  if (code === "mirror.clocks_apart" && isIsoTime(params.primaryAt) && isIsoTime(params.standbyAt))
+    return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
+  const limit = LIMITS.find((l) => l === params.limit);
+  if (code === "mirror.join_full" && limit !== undefined && isIsoTime(params.retryAt))
+    return new AppError(code, { limit, retryAt: params.retryAt });
+  return fetchFailed();
+}
+
+function strings<K extends string>(value: unknown, keys: readonly K[]): Record<K, string> | null {
+  if (!isRecord(value) || !keys.every((k) => typeof value[k] === "string")) return null;
+  return value as Record<K, string>;
+}
+
+function isLocked(value: unknown): value is LockedJoinBundle {
+  return strings(value, ["oneUsePublicKey", "ciphertext", "signature"]) !== null;
+}
+
+export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
+  const exchange = deps.exchange ?? boxExchange;
+  const ownAddresses =
+    deps.addresses ?? (() => ownInterfaceAddresses().filter((a) => !isLoopbackHost(a)));
+  let current: Attempt | null = null;
+
+  async function send(
+    to: Pick<Attempt, "base" | "trust">,
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<{ status: number; text: string }> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TRY_LIMIT_MS);
+    try {
+      return await exchange(new URL(`/api/node/join/${path}`, to.base.origin), {
+        method: "POST",
+        trust: to.trust,
+        signal: controller.signal,
+        body: JSON.stringify(body),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function signed(attempt: Attempt, label: string, fields: JoinField[]) {
+    attempt.seq += 1;
+    return {
+      requestId: attempt.requestId,
+      seq: attempt.seq,
+      signature: signJoinMessage(
+        label,
+        attempt.requestId,
+        attempt.seq,
+        fields,
+        attempt.identity.privateKey,
+      ),
+    };
+  }
+
+  /** Best effort: a main box that never hears it ends the request by itself. */
+  async function sendCancel(attempt: Attempt): Promise<void> {
+    try {
+      await send(attempt, "cancel", signed(attempt, JOIN_CANCEL_LABEL, []));
+    } catch {
+      // Unreachable or lost: nothing more to do.
+    }
+  }
+
+  async function poll(attempt: Attempt): Promise<void> {
+    const at = deps.now().getTime();
+    let answer: unknown;
+    try {
+      const sent = await send(attempt, "poll", {
+        ...signed(attempt, JOIN_POLL_LABEL, [Buffer.from(String(at))]),
+        at,
+      });
+      answer = jsonOf(sent.text);
+    } catch {
+      // A lost poll is asked again at the next one.
+    }
+    if (current !== attempt) return;
+    if (isRecord(answer) && answer.state === "approved" && isLocked(answer.locked)) {
+      attempt.state = { state: "approved", code: attempt.state.code, locked: answer.locked };
+      return;
+    }
+    schedulePoll(attempt);
+  }
+
+  function schedulePoll(attempt: Attempt): void {
+    attempt.timer = setTimeout(() => void poll(attempt), POLL_EVERY_MS);
+    attempt.timer.unref();
+  }
+
+  async function cancel(): Promise<void> {
+    const attempt = current;
+    if (attempt === null) return;
+    current = null;
+    clearTimeout(attempt.timer);
+    await sendCancel(attempt);
+  }
+
+  /** Hello and reveal; answers the code to show, or throws the refusal. */
+  async function start(primaryUrl: string) {
+    await cancel();
+    const base = assertSafePrimaryUrl(primaryUrl);
+    const certificate = await fetchPrimaryCertificate(primaryUrl);
+    const trust = certificate === null ? {} : { ca: certificate.pem, rejectUnauthorized: true };
+
+    const identity = generateStandbyIdentity();
+    const encryption = generateKeyPairSync("x25519");
+    const contactUrl = ownContactUrl(deps.advertisedOrigin, identity.nodeId);
+    const storeUrl = new URL(contactUrl);
+    storeUrl.protocol = "https:";
+    storeUrl.port = String(deps.spareStorePort);
+    const addresses = ownAddresses();
+    const hello: JoinHelloFields = {
+      newNodeId: identity.nodeId,
+      newPublicKey: identity.publicKey,
+      encryptionKey: encryption.publicKey
+        .export({ format: "der", type: "spki" })
+        .toString("base64"),
+      contactUrl,
+      storeUrl: storeUrl.origin,
+      addresses,
+    };
+    const at = deps.now().getTime();
+
+    let helloAnswer: { status: number; text: string };
+    try {
+      helloAnswer = await send({ base, trust }, "hello", {
+        protocol: JOIN_PROTOCOL,
+        ...hello,
+        at,
+        signature: signJoinMessage(
+          JOIN_HELLO_LABEL,
+          "",
+          0,
+          helloMessageFields(hello, at),
+          identity.privateKey,
+        ),
+      });
+    } catch {
+      throw fetchFailed();
+    }
+    if (helloAnswer.status !== 200) throw refusalOf(helloAnswer.text);
+    const answered = strings(jsonOf(helloAnswer.text), [
+      "requestId",
+      "mainNodeId",
+      "mainPublicKey",
+      "commitment",
+      "expiresAt",
+    ]);
+    if (answered === null) throw fetchFailed();
+
+    const attempt: Attempt = {
+      base,
+      trust,
+      requestId: answered.requestId,
+      identity,
+      hello,
+      encryptionPrivateKey: encryption.privateKey
+        .export({ format: "der", type: "pkcs8" })
+        .toString("base64"),
+      mainNodeId: answered.mainNodeId,
+      mainPublicKey: answered.mainPublicKey,
+      seq: 0,
+      state: { state: "waiting", code: "", addresses, primaryUrl, expiresAt: answered.expiresAt },
+    };
+    const newNonce = randomBytes(32);
+    // Every try is the same message, so the main box answers a repeat with its stored answer.
+    const reveal = {
+      ...signed(attempt, JOIN_REVEAL_LABEL, [newNonce]),
+      newNonce: newNonce.toString("base64"),
+    };
+    let revealAnswer: { status: number; text: string } | undefined;
+    for (let tries = 1; revealAnswer === undefined; tries++) {
+      try {
+        revealAnswer = await send(attempt, "reveal", reveal);
+      } catch {
+        if (tries === REVEAL_TRIES) {
+          await sendCancel(attempt);
+          throw fetchFailed();
+        }
+      }
+    }
+    if (revealAnswer.status !== 200) throw refusalOf(revealAnswer.text);
+
+    const revealed = strings(jsonOf(revealAnswer.text), ["mainNonce", "signature"]);
+    const mainNonce = Buffer.from(revealed?.mainNonce ?? "", "base64");
+    if (
+      revealed === null ||
+      !commitmentMatches(
+        Buffer.from(answered.commitment, "base64"),
+        attempt.requestId,
+        mainNonce,
+      ) ||
+      !verifyJoinMessage(
+        JOIN_REVEAL_LABEL,
+        attempt.requestId,
+        reveal.seq,
+        revealAnswerFields(hello, newNonce, mainNonce),
+        revealed.signature,
+        attempt.mainPublicKey,
+      )
+    ) {
+      await sendCancel(attempt);
+      throw new AppError("mirror.join_invalid", {});
+    }
+
+    const code = joinCode({
+      ...hello,
+      mainNodeId: attempt.mainNodeId,
+      mainPublicKey: attempt.mainPublicKey,
+      newNonce,
+      mainNonce,
+      requestId: attempt.requestId,
+    });
+    attempt.state = { ...attempt.state, code };
+    current = attempt;
+    schedulePoll(attempt);
+    return { code, addresses, expiresAt: answered.expiresAt };
+  }
+
+  return {
+    start,
+    cancel,
+    current: (): JoinAttemptState | null => current?.state ?? null,
+  };
+}
