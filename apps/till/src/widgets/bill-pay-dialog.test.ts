@@ -3546,48 +3546,48 @@ describe("till-bill-pay-dialog: the payer's own receipt", () => {
     expect(answers(el).map(({ checked }) => checked)).toEqual([false, false]);
   });
 
-  it("answering it changes no payment-slip choice", async () => {
-    const el = await mount({
-      way: "contribution",
-      ownReceiptOffered: true,
-      takesCash: false,
-      cardReader: "simulator",
-      slipPrinterAvailable: true,
-      asked: {
-        choice: { kind: "contribution", amount: "10.00" },
-        pay: { method: "card" },
-        card: { entry: "reader" },
-      },
-      preview: {
-        kind: "allocated",
-        choice: null,
-        applied: "10.00",
-        tip: "0.00",
-        change: null,
-        charged: "10.00",
-      },
-    });
-    const slip = () =>
-      root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]')!;
-    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+  it.each(["yes", "no"] as const)(
+    "own receipt %s leaves the slip for after payment",
+    async (answer) => {
+      const print = vi.fn();
+      const el = await mount({
+        way: "contribution",
+        ownReceiptOffered: true,
+        takesCash: false,
+        cardReader: "simulator",
+        paymentSlip: { print },
+        asked: {
+          choice: { kind: "contribution", amount: "10.00" },
+          pay: { method: "card" },
+          card: { entry: "reader" },
+        },
+        preview: {
+          kind: "allocated",
+          choice: null,
+          applied: "10.00",
+          tip: "0.00",
+          change: null,
+          charged: "10.00",
+        },
+      });
+      const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+      const slip = "[data-print-payment-slip]";
 
-    await pick(el, "ownReceipt", "yes");
-    expect(slip().checked).toBe(false);
-    await click(el, "[data-pay-confirm]");
-    await pick(el, "ownReceipt", "no");
-    slip().dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
-    );
-    await el.updateComplete;
-    await pick(el, "ownReceipt", "yes");
-    expect(slip().checked).toBe(true);
-    await click(el, "[data-pay-confirm]");
+      await pick(el, "ownReceipt", answer);
+      expect(root(el).querySelector(slip)).toBeNull();
+      await click(el, "[data-pay-confirm]");
+      expect(confirmed).toEqual([answer === "yes" ? { ownReceipt: true } : {}]);
+      expect(print).not.toHaveBeenCalled();
 
-    expect(confirmed).toEqual([
-      expect.objectContaining({ ownReceipt: true, printCardSlip: false }),
-      expect.objectContaining({ ownReceipt: true, printCardSlip: true }),
-    ]);
-  });
+      el.paymentAccepted();
+      el.asked = null;
+      el.preview = null;
+      el.taken = { change: null };
+      await el.updateComplete;
+      await click(el, slip);
+      expect(print).toHaveBeenCalledOnce();
+    },
+  );
 
   it("never asks on Whole bill", async () => {
     const el = await confirming({ kind: "whole" }, "120.00");
