@@ -409,8 +409,8 @@ const diagnostics = [
   ],
   [
     "email.test_login_required",
-    null,
-    "This mail server needs a user and password. Enter both, then send the test again.",
+    "port",
+    "This mail server does not offer a username-and-password login on this port. Check the port (usually 587 or 465). If it takes mail without a login, use another mail server for setup, then switch to this one later in System → Email on the dashboard.",
   ],
   [
     "email.test_timeout",

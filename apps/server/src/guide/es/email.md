@@ -20,7 +20,10 @@ local junto a la dirección del remitente. Si la página indica que la direcció
 elige **Cambiar servidor de correo** y corrige **Dirección del remitente** antes de repetir la prueba.
 
 Durante la configuración en Preparación o En vivo, introduce los ajustes del servidor de correo
-y envía una prueba a la dirección del administrador. Puedes omitir el servidor en desarrollo o si
+y envía una prueba a la dirección del administrador. La configuración solo prueba un servidor de
+correo que ofrezca inicio de sesión con nombre de usuario y contraseña. Si el tuyo acepta correo sin
+iniciar sesión, usa durante la configuración uno que lo ofrezca y cámbialo después por el tuyo en **Sistema → Correo**, donde **Usar
+autenticación** puede quedar desactivado. Puedes omitir el servidor en desarrollo o si
 [eliges Cloud para el correo del personal durante la configuración de prueba](email.md#cloud-staff-email).
 Si usas tu propio servidor, al guardarlo las invitaciones y los enlaces para restablecer
 contraseñas llegan a buzones reales. Esta página muestra el estado del correo de facturas:
@@ -84,10 +87,9 @@ Si Waitron marca **Puerto**, revisa el puerto en la configuración de tu proveed
 Si rechaza el cifrado, sigue la sugerencia de cifrado y puerto del resultado y envía otra prueba.
 Cambiar el cifrado conserva el puerto que has escrito, así que cámbialo también cuando haga falta.
 
-La configuración necesita el nombre de usuario y la contraseña del servidor de correo. En el
-panel, iniciar sesión es opcional: activa **Usar autenticación** para introducirlos. Si el servidor
-los rechaza, revisa ambos antes de repetir la prueba. Si no responde a tiempo o rechaza la prueba por otro motivo, revisa el puerto y el cifrado
-y vuelve a intentarlo.
+Si el servidor rechaza el usuario o la contraseña, revisa ambos antes de repetir la prueba. Si no
+responde a tiempo o rechaza la prueba por otro motivo, revisa el puerto y el cifrado y vuelve a
+intentarlo.
 
 Si la configuración te pide probar el correo, repite la prueba después de cambiar los ajustes o
 la dirección del administrador. Continuar se habilita cuando el servidor acepta una prueba con

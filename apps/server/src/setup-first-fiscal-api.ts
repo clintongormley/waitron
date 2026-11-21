@@ -255,7 +255,9 @@ export function mountSetupFirstFiscalApi(
             validateSmtpTestFrom(settings.from);
             assertSetupMailLogin(settings);
             const send = deps.sendEmailTest ?? sendSmtpTestMessage;
-            return c.json(await send(settings, state.frozen.request.admin.email));
+            return c.json(
+              await send(settings, state.frozen.request.admin.email, { requireLogin: true }),
+            );
           }
           if (path.endsWith("fiscal-test")) {
             const state = await host.owner.authorize(owner);

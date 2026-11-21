@@ -43,6 +43,7 @@ export async function smtpRig(
   const messages: string[] = [];
   let connections = 0;
   const authentications: string[] = [];
+  const commands: string[] = [];
   let received!: () => void;
   let closed!: () => void;
   const connectionClosed = new Promise<void>((resolve) => {
@@ -63,6 +64,7 @@ export async function smtpRig(
       while ((end = buffer.indexOf("\r\n")) !== -1) {
         const line = buffer.slice(0, end);
         buffer = buffer.slice(end + 2);
+        if (data === undefined) commands.push(line.split(" ")[0]!);
         if (data !== undefined) {
           if (line !== ".") {
             data.push(line);
@@ -152,6 +154,7 @@ export async function smtpRig(
     },
     messages,
     authentications,
+    commands,
     dataReceived,
     connectionClosed,
     sockets,

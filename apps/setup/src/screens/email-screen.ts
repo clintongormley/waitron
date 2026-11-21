@@ -208,7 +208,7 @@ export class SetupEmailScreen extends LitElement {
         this.refusedField =
           code === "email.test_host_not_found" || code === "email.test_certificate_untrusted"
             ? "server"
-            : code === "email.test_connection_refused"
+            : code === "email.test_connection_refused" || code === "email.test_login_required"
               ? "port"
               : undefined;
       }

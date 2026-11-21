@@ -42,7 +42,7 @@ export const venueEn = {
   "email.test_login_refused":
     "The mail server refused this user and password. Check both, then send the test again.",
   "email.test_login_required":
-    "This mail server needs a user and password. Enter both, then send the test again.",
+    "This mail server does not offer a username-and-password login on this port. Check the port (usually 587 or 465). If it takes mail without a login, use another mail server for setup, then switch to this one later in System → Email on the dashboard.",
   "email.test_timeout":
     "The mail server did not answer in time. Check the port and the encryption.",
   "email.test_refused":
@@ -290,7 +290,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.encryption.label": "Cifrado",
   "email.encryption.error": "Elige STARTTLS o TLS.",
   "email.user.label": "Nombre de usuario",
-  "email.user.hint": "El nombre de usuario de tu servidor de correo",
+  "email.user.hint": "El nombre de usuario del servidor de correo",
   "email.user.error": "Introduce el nombre de usuario de tu servidor de correo.",
   "email.password.label": "Contraseña",
   "email.password.hint": "La contraseña del servidor de correo",
@@ -313,7 +313,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.test_login_refused":
     "El servidor de correo ha rechazado este usuario y contraseña. Revisa ambos y vuelve a enviar la prueba.",
   "email.test_login_required":
-    "Este servidor de correo necesita un usuario y una contraseña. Introduce ambos y vuelve a enviar la prueba.",
+    "Este servidor de correo no ofrece inicio de sesión con usuario y contraseña en este puerto. Revisa el puerto (normalmente 587 o 465). Si acepta correo sin iniciar sesión, usa otro servidor de correo para la configuración y cambia a este más adelante en Sistema → Correo, en el panel.",
   "email.test_timeout":
     "El servidor de correo no ha respondido a tiempo. Revisa el puerto y el cifrado.",
   "email.test_refused":

@@ -20,8 +20,10 @@ the sender address. If the page says the saved sender address is not valid, choo
 **Change mail server** and correct **Sender address** before testing again.
 
 During Prepare or Live setup, enter your mail server settings and send a test to the administrator
-address. You can skip the mail server in development or when you [choose Cloud for staff email
-during test setup](email.md#cloud-staff-email). If you use your own mail server, saving it
+address. Setup tests only a mail server that offers a username-and-password login. If yours takes mail
+without a login, use one that has a login during setup, then switch to yours in **System → Email**,
+where **Use authentication** can stay off. You can skip the mail server in development or when you
+[choose Cloud for staff email during test setup](email.md#cloud-staff-email). If you use your own mail server, saving it
 sends invitations and password-reset links to real inboxes. This page shows invoice email status:
 development boxes keep invoice email locally even when account email uses a saved server or Cloud.
 
@@ -78,8 +80,7 @@ check the port in your provider's settings.
 For an encryption refusal, follow the result's suggested encryption and port, then send another
 test. Changing encryption leaves the port you entered in place, so change that too when needed.
 
-Setup needs the mail server's username and password. On the dashboard, a login is optional: turn
-on **Use authentication** to enter one. If the server refuses them, check both before testing again. For a timeout
+If the server refuses the username or password, check both before testing again. For a timeout
 or another refusal, check the port and encryption, then retry.
 
 If setup asks you to test email, test again after changing the settings or administrator address.

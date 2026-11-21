@@ -218,6 +218,26 @@ it("refuses a mail server with no login before any SMTP contact", async () => {
   expect(contacted).toBe(false);
 });
 
+it("refuses a mail server that offers no login despite a username, through the real sender", async () => {
+  const rig = await smtpRig("no-login", true);
+  try {
+    const { app } = mount((config, recipient, options) =>
+      sendSmtpTestMessage(config, recipient, { ...options, ca: smtpTestTls.caCertPem }),
+    );
+    const response = await request(
+      app,
+      body({ ...email, port: Number(new URL(rig.config.url).port) }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ accepted: false, code: "email.test_login_required" });
+    expect(rig.commands).toContain("EHLO");
+    expect(rig.commands).not.toContain("MAIL");
+    expect(rig.messages).toEqual([]);
+  } finally {
+    await rig.close();
+  }
+});
+
 it("refuses a setup sender that named delivery cannot use before SMTP contact", async () => {
   let contacted = false;
   const { app } = mount(async () => {

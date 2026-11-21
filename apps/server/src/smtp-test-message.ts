@@ -6,7 +6,7 @@ export type SmtpTestResult = { accepted: true } | { accepted: false; code: SmtpT
 export async function sendSmtpTestMessage(
   config: SmtpConnection,
   recipient: string,
-  options: { timeoutMs?: number; ca?: string } = {},
+  options: { timeoutMs?: number; ca?: string; requireLogin?: boolean } = {},
 ): Promise<SmtpTestResult> {
   const outcome = await sendSmtpMessage(
     config,

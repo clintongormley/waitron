@@ -45,7 +45,7 @@ export function mountSetupEmailTest(
         }
         const recipient = normalizeAndValidateEmail(admin.email);
         assertSetupMailLogin(settings);
-        return c.json(await send(settings, recipient));
+        return c.json(await send(settings, recipient, { requireLogin: true }));
       } finally {
         testing = false;
       }
