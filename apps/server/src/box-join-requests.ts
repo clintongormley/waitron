@@ -69,6 +69,8 @@ interface Revealed {
   answer: RevealAnswer;
   code: string;
   decoys: [string, string];
+  /** The three codes in the order Check shows them, drawn once. */
+  choices: string[];
   startedAgain: boolean;
 }
 
@@ -102,6 +104,15 @@ export interface BoxJoinRequestsOptions {
   drawCode?: () => string;
 }
 
+function shuffled(codes: string[]): string[] {
+  const out = [...codes];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randomInt(0, i + 1);
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+}
+
 export type BoxJoinRequests = ReturnType<typeof createBoxJoinRequests>;
 
 export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
@@ -109,7 +120,6 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
   const wallNow = options.wallNow ?? (() => Date.now());
   const newId = options.newId ?? (() => randomUUID());
   const newMainNonce = options.newMainNonce ?? (() => randomBytes(32));
-  const drawCode = options.drawCode ?? (() => String(randomInt(0, 1_000_000)).padStart(6, "0"));
 
   const requests = new Map<string, JoinRequest>();
   const helloWindows = new Map<string, Window>();
@@ -268,13 +278,15 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       for (const older of listedRequests()) {
         if (older.address === r.address) end(older, "replaced", now);
       }
+      const decoys = drawDecoys(code, shown(listedRequests()), options.drawCode);
       const answer = { mainNonce: r.mainNonce, signature: input.signAnswer(r.mainNonce) };
       r.revealed = {
         newNonce: input.newNonce,
         seq: input.seq,
         answer,
         code,
-        decoys: drawDecoys(code, shown(listedRequests()), drawCode),
+        decoys,
+        choices: shuffled([code, ...decoys]),
         startedAgain: startedAgainAt.has(r.address),
       };
       r.phase = "waiting";
@@ -288,7 +300,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       at: string;
     }): PollAnswer | JoinNotFound | JoinInvalid {
       const r = held(input.requestId);
-      if (!r) return { refused: "not_found" };
+      if (!r || r.phase === "unrevealed") return { refused: "not_found" };
       if (!acceptSeq(r, input.seq)) return { refused: "invalid" };
       r.latestAt = input.at;
       r.latestAtReceived = steadyNow();
@@ -339,16 +351,11 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       | JoinNotFound {
       const r = held(requestId);
       if (!r || !isListed(r)) return { refused: "not_found" };
-      const choices = [r.revealed!.code, ...r.revealed!.decoys];
-      for (let i = choices.length - 1; i > 0; i--) {
-        const j = randomInt(0, i + 1);
-        [choices[i], choices[j]] = [choices[j]!, choices[i]!];
-      }
       return {
         address: r.address,
         askedAt: wallAt(r.helloAt),
         startedAgain: r.revealed!.startedAgain,
-        choices,
+        choices: r.revealed!.choices,
         at: r.latestAt,
         atReceivedAt: wallAt(r.latestAtReceived),
       };

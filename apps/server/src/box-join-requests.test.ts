@@ -183,6 +183,34 @@ describe("reveal", () => {
     expect(store.listed()).toEqual([]);
   });
 
+  it("ends the request when a second reveal brings the same nonce with another seq", () => {
+    const { store, reveal, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    expect(reveal(id, "10.0.0.1", newNonceOf("10.0.0.1"), 2)).toEqual({ refused: "invalid" });
+    expect(store.listed()).toEqual([]);
+  });
+
+  it("does not answer a poll before the reveal, and the reveal still succeeds", () => {
+    const { store, hello, reveal } = setup();
+    hello("10.0.0.1");
+    expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0) })).toEqual({
+      refused: "not_found",
+    });
+    expect(reveal("req-1", "10.0.0.1")).toHaveProperty("mainNonce");
+  });
+
+  it("keeps the order of the three codes from one Check to the next", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    const order = () => {
+      const check = store.check(id);
+      return "refused" in check ? [] : check.choices;
+    };
+    const first = order();
+    expect(first).toHaveLength(3);
+    for (let n = 0; n < 20; n++) expect(order()).toEqual(first);
+  });
+
   it("refuses a code a listed request shows, real or decoy, without the main box's nonce", () => {
     const { store, decoys, revealFrom } = setup();
     decoys.push(codeOf("req-2", "10.0.0.2"), "222222");
