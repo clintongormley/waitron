@@ -1140,7 +1140,6 @@ describe("configuration transfer database path", () => {
       target_sales: number;
       agents: number;
       inactive_printers: number;
-      source_agent_secrets: number;
       employments: number;
       availability: number;
       shift_templates: number;
@@ -1159,8 +1158,6 @@ describe("configuration transfer database path", () => {
         (select count(*) from print_agents) as agents,
         (select count(*) from printers
           where not active and local_key = 'B120300001') as inactive_printers,
-        (select count(*) from print_agents
-          where token_hash = 'source-agent-token') as source_agent_secrets,
         (select count(*) from employments) as employments,
         (select count(*) from availability) as availability,
         (select count(*) from shift_templates) as shift_templates,
@@ -1178,7 +1175,6 @@ describe("configuration transfer database path", () => {
       target_sales: 0,
       agents: 0,
       inactive_printers: 1,
-      source_agent_secrets: 0,
       employments: 1,
       availability: 1,
       shift_templates: 1,
