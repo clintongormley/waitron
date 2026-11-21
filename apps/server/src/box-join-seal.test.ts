@@ -108,4 +108,10 @@ describe("lockJoinBundle and unlockJoinBundle", () => {
     );
     expect(unlock({ locked: { ...locked, signature } })).toBeNull();
   });
+
+  it("answers null, not an error, for a field of the wrong type off the wire", () => {
+    const { locked, unlock } = setup();
+    const malformed = { ...locked, oneUsePublicKey: 42 } as unknown as LockedJoinBundle;
+    expect(unlock({ locked: malformed })).toBeNull();
+  });
 });

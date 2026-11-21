@@ -126,19 +126,19 @@ export function unlockJoinBundle(input: {
   mainPublicKey: string;
 }): Buffer | null {
   const { locked } = input;
-  if (
-    !verifyJoinMessage(
-      JOIN_APPROVED_LABEL,
-      input.requestId,
-      APPROVED_SEQ,
-      approvedFields(locked.oneUsePublicKey, locked.ciphertext),
-      locked.signature,
-      input.mainPublicKey,
-    )
-  ) {
-    return null;
-  }
   try {
+    if (
+      !verifyJoinMessage(
+        JOIN_APPROVED_LABEL,
+        input.requestId,
+        APPROVED_SEQ,
+        approvedFields(locked.oneUsePublicKey, locked.ciphertext),
+        locked.signature,
+        input.mainPublicKey,
+      )
+    ) {
+      return null;
+    }
     const shared = diffieHellman({
       privateKey: createPrivateKey({
         key: Buffer.from(input.encryptionPrivateKey, "base64"),
@@ -152,7 +152,6 @@ export function unlockJoinBundle(input: {
       }),
     });
     const bytes = Buffer.from(locked.ciphertext, "base64");
-    if (bytes.length < IV_BYTES + TAG_BYTES) return null;
     const decipher = createDecipheriv(
       "aes-256-gcm",
       cipherKey(input.requestId, shared, locked.oneUsePublicKey, input.encryptionKey),
