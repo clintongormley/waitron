@@ -293,10 +293,11 @@ export class FirstSetupSession {
     current: () => void,
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+    cloudAdminTab?: string,
   ): Promise<void> {
     this.#saved!.claimPending = true;
     this.#save();
-    const result = await this.#api.claimFirstSetup(venue, locale, intent);
+    const result = await this.#api.claimFirstSetup(venue, locale, intent, cloudAdminTab);
     current();
     if (!publicState(result.state)) failure("setup.attempt_conflict");
     await this.#holdAttempt(result.state.attemptId);
@@ -307,16 +308,18 @@ export class FirstSetupSession {
     venue: ProvisionBody["venue"],
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+    cloudAdminTab?: string,
   ): Promise<void> {
     return this.#run(async (current) => {
       if (this.#saved!.owner || this.recoveryRequired) failure("setup.owner_required");
-      await this.#claim(venue, current, locale, intent);
+      await this.#claim(venue, current, locale, intent, cloudAdminTab);
     });
   }
   replaceAbandoned(
     venue: ProvisionBody["venue"],
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+    cloudAdminTab?: string,
   ): Promise<void> {
     return this.#run(async (current) => {
       if (this.#state?.consumptionIntent) failure("setup.attempt_uncertain");
@@ -330,7 +333,7 @@ export class FirstSetupSession {
       this.#needsRefresh = false;
       this.#save();
       this.#attemptLock = undefined;
-      await this.#claim(venue, current, locale, intent);
+      await this.#claim(venue, current, locale, intent, cloudAdminTab);
     });
   }
   #forgetOwner(): void {

@@ -6,7 +6,8 @@ import {
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
 import type { SetupDeps } from "./setup-api.js";
-import { recordSetupCloudPublication } from "./setup-cloud-sign-in.js";
+import { recordSetupCloudPublication, setupCloudBinding } from "./setup-cloud-sign-in.js";
+import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { assertSetupMailLogin } from "./setup-email-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
@@ -15,7 +16,7 @@ import { isSecure } from "./encrypted-connection.js";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import { VENUE_FIELDS, type StartAgainSummary, type VenueRequest } from "@waitron/provisioning";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { registeredAddressRefusal } from "./registered-address-check.js";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -41,6 +42,7 @@ const boundary = createErrorBoundary(
     "setup.connection_insecure": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
+    "cloud.request_unavailable": 409,
     "setup.attempt_invalid": 409,
     "setup.attempt_uncertain": 409,
     "setup.start_again_incomplete": 409,
@@ -226,7 +228,11 @@ export function mountSetupFirstFiscalApi(
   app: Hono,
   host: FirstFiscalHost,
   log: Logger,
-  parseVenue: (value: unknown, language: string | undefined) => VenueRequest,
+  parseVenue: (
+    value: unknown,
+    language: string | undefined,
+    heldAdmin?: PreparedSetupAdmin,
+  ) => VenueRequest,
   environment: "production" | "preproduction",
   deps: SetupDeps,
 ) {
@@ -433,10 +439,25 @@ export function mountSetupFirstFiscalApi(
         )
           invalid();
       }
-      const password = text(admin.password),
-        pin = text(admin.pin);
+      const cloudSignIn =
+        deps.devMode === true &&
+        deps.environment === "preproduction" &&
+        body.configurationImport !== true
+          ? deps.cloudSignIn
+          : undefined;
+      const usesHeldAdmin =
+        cloudSignIn !== undefined &&
+        c.req.header("X-Waitron-Setup-Cloud-Tab") !== undefined &&
+        (admin.password === "" || admin.pin === "");
+      const password = usesHeldAdmin && admin.password === "" ? "" : text(admin.password);
+      const pin = usesHeldAdmin && admin.pin === "" ? "" : text(admin.pin);
       if (Buffer.byteLength(password) > 1024 || Buffer.byteLength(pin) > 1024) invalid();
-      const venue = parseVenue(raw, c.req.header("Accept-Language"));
+      const binding = usesHeldAdmin ? setupCloudBinding(c, cloudSignIn) : undefined;
+      if (usesHeldAdmin && !binding) throw new AppError("cloud.request_unavailable", {});
+      const heldAdmin = binding
+        ? await cloudSignIn!.connection.readSetupAdmin(binding, false)
+        : undefined;
+      const venue = parseVenue(raw, c.req.header("Accept-Language"), heldAdmin);
       if (
         !venue.taxpayerDomicile?.trim() ||
         registeredAddressRefusal(
@@ -445,6 +466,13 @@ export function mountSetupFirstFiscalApi(
         ) !== undefined
       )
         throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
+      if (heldAdmin) {
+        const result = await host.owner.claimPreparedFirstSetup({ environment, request: venue });
+        await cloudSignIn!.connection.clearSetupAdmin().catch((error: unknown) => {
+          log("warn", "setup.cloud_admin_clear_failed", { errorCode: codeOf(error) });
+        });
+        return c.json(result);
+      }
       const { pinHash: _, passwordHash: __, ...normalized } = venue.admin;
       void _;
       void __;

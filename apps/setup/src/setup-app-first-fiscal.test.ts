@@ -963,7 +963,13 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
 it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
   const tab = crypto.randomUUID();
   sessionStorage.setItem("waitron-setup-cloud-tab", tab);
-  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live" }));
+  sessionStorage.setItem(
+    "waitron-setup-cloud-return",
+    JSON.stringify({
+      mode: "live",
+      admin: { ...venue.admin, password: undefined, pin: undefined },
+    }),
+  );
   sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
   const options = {
     developmentMode: true,
@@ -979,9 +985,14 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
         : undefined,
   };
   const first = await mount(options);
-  await screen(first.app, "admin");
-  await liveVenueAfterAdmin(first.app);
+  await screen(first.app, "venue");
+  const admin = { ...venue.admin, password: "", pin: "" };
+  emit(first.app, "setup-patch", { patch: { venue: { ...venue, admin } } });
+  emit(first.app, "setup-advance");
   await screen(first.app, "first-setup");
+  const claim = first.requests.find((r) => r.path.endsWith("/claim"))!;
+  expect(claim.headers.get("X-Waitron-Setup-Cloud-Tab")).toBe(tab);
+  expect(claim.body).toMatchObject({ venue: { admin } });
   first.app.remove();
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
   const { app, requests } = await mount({ ...options, claimed: true, resolution: false });
@@ -997,12 +1008,43 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
   ).toBe(tab);
 });
 
-async function liveVenueAfterAdmin(app: SetupApp) {
+it("returns a development Live claim with an expired Cloud draft to Admin", async () => {
+  const tab = crypto.randomUUID();
+  sessionStorage.setItem("waitron-setup-cloud-tab", tab);
+  sessionStorage.setItem("waitron-setup-cloud-result", "cancelled");
+  const admin = { ...venue.admin, password: "", pin: "" };
+  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live", admin }));
+  const { app, requests } = await mount({
+    developmentMode: true,
+    intercept: (path, _, headers) => {
+      if (path === "/setup-api/status")
+        return Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+          cloudSignInAvailable: true,
+        });
+      if (path.endsWith("/claim") && headers.has("X-Waitron-Setup-Cloud-Tab"))
+        return Response.json(
+          { error: { code: "cloud.request_unavailable", params: {} } },
+          { status: 409 },
+        );
+    },
+  });
+  const signIn = await screen(app, "cloud-sign-in");
+  await userEvent.click(signIn.shadowRoot!.querySelector<HTMLElement>("[data-test=skip]")!);
+  await screen(app, "venue");
+  emit(app, "setup-patch", { patch: { venue: { ...venue, admin } } });
+  emit(app, "setup-advance");
+  await screen(app, "admin");
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });
   await screen(app, "venue");
   emit(app, "setup-advance");
-}
+  await screen(app, "first-setup");
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(2);
+});
 
 it.each([
   ["prepare", false, true],
@@ -1035,8 +1077,14 @@ it.each([
       await click(choice, "[data-test=understand]");
       await click(choice, "[data-test=confirm-live]");
       await click(await screen(app, "live-source"), "[data-test=empty]");
-    } else {
+    }
+    const admin = await screen(app, "admin");
+    if (mode === "live" && developmentMode) {
+      await click(admin, "[data-test=back]");
+      await click(await screen(app, "live-source"), "[data-test=empty]");
       await screen(app, "admin");
+    }
+    if (mode === "prepare" || offered) {
       emit(app, "setup-patch", { patch: { venue } });
       emit(app, "setup-goto", { screen: "venue" });
     }
@@ -1044,7 +1092,7 @@ it.each([
       const signIn = await screen(app, "cloud-sign-in");
       await click(signIn, "[data-test=skip]");
     }
-    await screen(app, mode === "prepare" ? "venue" : "admin");
+    await screen(app, offered ? "venue" : "admin");
     expect(requests.some((request) => request.path.includes("/cloud/sign-in/"))).toBe(false);
     if (mode === "prepare") {
       emit(app, "setup-advance");

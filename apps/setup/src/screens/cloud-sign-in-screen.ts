@@ -13,7 +13,6 @@ export class SetupCloudSignInScreen extends LitElement {
 
   @property({ attribute: false }) start!: (isCurrent: () => boolean) => Promise<void>;
   @property({ type: Boolean }) returnFailed = false;
-  @property({ type: Boolean }) afterAdmin = false;
   @state() private busy = false;
 
   constructor() {
@@ -42,7 +41,7 @@ export class SetupCloudSignInScreen extends LitElement {
         <wt-button
           data-test="skip"
           variant="ghost"
-          @click=${() => dispatchSetupGoto(this, this.afterAdmin ? "venue" : "admin")}
+          @click=${() => dispatchSetupGoto(this, "venue")}
         >
           ${t("cloud_sign_in.skip")}
         </wt-button>

@@ -36,6 +36,8 @@ import {
   foldedLoginEmail,
   hashPassword,
   hashPin,
+  MIN_PASSWORD_LENGTH,
+  MIN_PIN_LENGTH,
   normalizeAndValidateEmail,
   verifySecretAsync,
 } from "@waitron/identity";
@@ -499,22 +501,35 @@ function asStringArray(value: unknown, field: string): string[] {
   return value as string[];
 }
 
-function parseSetupAdmin(input: unknown, held?: PreparedSetupAdmin): PreparedSetupAdmin {
+function parseSetupAdmin(
+  input: unknown,
+  held?: PreparedSetupAdmin,
+  checkCredentials = held !== undefined,
+): PreparedSetupAdmin {
   const admin = asObject(input, "admin");
   const displayName = asString(admin.displayName, "admin.displayName");
   const firstNames = asOptionalName(admin.firstNames, "admin.firstNames");
   const lastNames = asOptionalName(admin.lastNames, "admin.lastNames");
   const email = normalizeAndValidateEmail(asString(admin.email, "admin.email"));
+  const pin = held && admin.pin === "" ? undefined : asString(admin.pin, "admin.pin");
+  const password =
+    held && admin.password === "" ? undefined : asString(admin.password, "admin.password");
+  if (checkCredentials) {
+    if (pin !== undefined && (pin.length < MIN_PIN_LENGTH || Buffer.byteLength(pin) > 1024))
+      invalidRequest("admin.pin");
+    if (
+      password !== undefined &&
+      (password.length < MIN_PASSWORD_LENGTH || Buffer.byteLength(password) > 1024)
+    )
+      invalidRequest("admin.password");
+  }
   return {
     displayName,
     firstNames,
     lastNames,
     email,
-    pinHash: held && admin.pin === "" ? held.pinHash : hashPin(asString(admin.pin, "admin.pin")),
-    passwordHash:
-      held && admin.password === ""
-        ? held.passwordHash
-        : hashPassword(asString(admin.password, "admin.password")),
+    pinHash: pin === undefined ? held!.pinHash : hashPin(pin),
+    passwordHash: password === undefined ? held!.passwordHash : hashPassword(password),
   };
 }
 
@@ -774,8 +789,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           throw new AppError("setup.already_provisioning", {});
         await deps.firstSetup?.assertOtherAllowed();
       },
-      parseSetupAdmin,
-      deps.devMode === true,
+      (input, held) => parseSetupAdmin(input, held, true),
       log,
     );
   }

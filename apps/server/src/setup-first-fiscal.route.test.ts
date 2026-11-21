@@ -2,7 +2,11 @@ import * as filesystem from "node:fs/promises";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { verifyPin } from "@waitron/identity";
+import type { CloudSignInBinding, PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
@@ -68,6 +72,7 @@ async function fixture(
   grantClock?: () => number,
   staffLanguage?: unknown,
   setBoxClock?: Parameters<typeof createFirstSetupModuleHost>[0]["setBoxClock"],
+  claimOnMount = true,
 ) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
@@ -110,9 +115,11 @@ async function fixture(
       },
       env,
     );
-  const claimed = await post("/setup-api/first-setup/claim", {
-    venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
-  });
+  const claimed = claimOnMount
+    ? await post("/setup-api/first-setup/claim", {
+        venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
+      })
+    : new Response(null, { status: 204 });
   const claim = claimed.status === 200 ? await claimed.json() : {};
   const headers = (state = claim.state, capability = claim.capability) => ({
     "X-Waitron-Setup-Owner": capability,
@@ -252,6 +259,97 @@ it.each([null, "en-GB", "fr", ["en"]])(
     expect(await f.host.store.read()).toBeNull();
   },
 );
+
+it("claims a development Live setup with the administrator checked before Cloud sign-in", async () => {
+  let saved: PreparedSetupAdmin | undefined;
+  let setupBinding: CloudSignInBinding | undefined;
+  const origin = "https://box.test";
+  const f = await fixture(
+    undefined,
+    {
+      environment: "preproduction",
+      devMode: true,
+      cloudSignIn: {
+        origin,
+        connection: {
+          setupSignInAvailable: async () => true,
+          setupAddressLookup: async () => ({ available: false }),
+          startSignIn: async (binding, authorize, prepare) => {
+            await authorize();
+            saved = prepare?.(undefined);
+            setupBinding = binding;
+            return {};
+          },
+          returnSignIn: async () => {},
+          publishSetupSignIn: async () => {},
+          readSetupAdmin: async (binding) => {
+            expect(binding).toEqual(setupBinding);
+            if (!saved) throw new AppError("cloud.request_unavailable", {});
+            return saved;
+          },
+          clearSetupAdmin: async () => {
+            saved = undefined;
+          },
+        },
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    false,
+  );
+  const socket = new TLSSocket(new Socket());
+  try {
+    const env = { incoming: { socket } };
+    const tab = randomUUID();
+    const tooShort = await f.post(
+      origin + "/setup-api/cloud/sign-in/start",
+      { tab, prepare: true, admin: { ...request.admin, password: "short" } },
+      { origin },
+      env,
+    );
+    expect(await tooShort.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "admin.password" } },
+    });
+    const start = await f.post(
+      origin + "/setup-api/cloud/sign-in/start",
+      { tab, prepare: true, admin: request.admin },
+      { origin },
+      env,
+    );
+    expect(start.status).toBe(200);
+    const claim = await f.post(
+      origin + "/setup-api/first-setup/claim",
+      { venue: { ...request, admin: { ...request.admin, password: "", pin: "" } } },
+      {
+        origin,
+        cookie: start.headers.get("set-cookie")!.split(";")[0]!,
+        "X-Waitron-Setup-Cloud-Tab": tab,
+      },
+      env,
+    );
+    expect(claim.status).toBe(200);
+    const { state, capability } = await claim.json();
+    expect(state.environment).toBe("preproduction");
+    const frozen = (await f.host.store.read())!.frozen.request.admin;
+    expect(await verifyPin(request.admin.pin, frozen.pinHash)).toBe(true);
+    expect(
+      (
+        await f.post(
+          "/setup-api/first-setup/reconfirm",
+          {
+            password: PASSWORD,
+            purpose: "block-use",
+          },
+          f.headers(state, capability),
+        )
+      ).status,
+    ).toBe(200);
+    expect(saved).toBeUndefined();
+  } finally {
+    socket.destroy();
+  }
+});
 
 it("claims only the validated wizard identity and conceals all owner state from a stranger", async () => {
   const f = await fixture();

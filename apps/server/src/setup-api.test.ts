@@ -149,7 +149,13 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
       expect((await post("start", { tab }, { origin: "https://other.test" })).status).toBe(403);
       expect(startSignIn).not.toHaveBeenCalled();
       const origin = { origin: "https://box.test" };
-      const started = await post("start", { tab }, origin);
+      expect((await post("start", { tab }, origin)).status).toBe(400);
+      expect(startSignIn).not.toHaveBeenCalled();
+      const started = await post(
+        "start",
+        { tab, prepare: true, admin: asRec(prepareBody().venue).admin },
+        origin,
+      );
       expect(started.status).toBe(200);
       const setCookie = started.headers.get("set-cookie")!;
       expect(setCookie).toMatch(/^__Host-waitron-setup-cloud=[\w-]+;/);
