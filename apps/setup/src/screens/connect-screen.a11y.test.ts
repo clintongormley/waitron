@@ -57,4 +57,32 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     );
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with Start again beside Join after a refusal naming it", async () => {
+    const { el, host } = await mount({ state: "none" }, theme);
+    (el.api.startJoin as ReturnType<typeof vi.fn>).mockRejectedValue({
+      code: "mirror.join_in_use",
+    });
+    el.shadowRoot!.querySelector("wt-input")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "https://waitron.local" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=start-again]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while Finish joining is being sent", async () => {
+    const { el, host } = await mount({ state: "approved", code: "482913" }, theme);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=finish]")!.click();
+    await el.updateComplete;
+    expect(el.finishing).toBe(true);
+    await expectNoA11yViolations(host);
+  });
 });

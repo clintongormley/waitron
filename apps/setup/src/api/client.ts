@@ -308,13 +308,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const joinHeaders = (handle: string | undefined): Record<string, string> =>
+  handle === undefined ? {} : { "x-waitron-join-handle": handle };
+
 /**
  * The body is untrusted: a failed response need not carry our envelope, may not be JSON, or may be
  * a literal `null`, which parses. Nothing about it may throw here, or the `status` is lost.
  */
-const joinHeaders = (handle: string | undefined): Record<string, string> =>
-  handle === undefined ? {} : { "x-waitron-join-handle": handle };
-
 async function apiError(res: Response): Promise<ApiError> {
   const parsed: unknown = await res.json().catch(() => undefined);
   const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;

@@ -47,13 +47,19 @@ function originOf(typed: string): string {
 /** "482913" as "482 913", as the main box's Servers page shows it, never broken across lines. */
 const grouped = (code: string) => `${code.slice(0, 3)}\u00a0${code.slice(3)}`;
 
+// A state's words name Start again, the one way on that its view draws; a refusal of Join names Join.
 const ENDED_WORDS: Record<string, StringKey> = {
   wrong_code: "connect.ended.wrong_code",
   dismissed: "connect.ended.dismissed",
   replaced: "connect.replaced",
   cancelled: "connect.ended.cancelled",
-  code_taken: "connect.refusal.join_code_taken",
-  invalid: "connect.refusal.join_invalid",
+  code_taken: "connect.ended.code_taken",
+  invalid: "connect.ended.invalid",
+};
+
+const FAILED_WORDS: Record<string, StringKey> = {
+  "mirror.join_invalid": "connect.ended.invalid",
+  "mirror.join_not_found": "connect.failed.not_found",
 };
 
 const REFUSAL_WORDS: Record<string, StringKey> = {
@@ -101,6 +107,16 @@ function refusalWords({ code, params }: Refusal): string | undefined {
   return key === undefined ? undefined : t(key);
 }
 
+/** Refusals of Join whose way on is to end the join already held, which Start again does. */
+const HELD_JOIN_CODES: ReadonlySet<unknown> = new Set([
+  "mirror.join_waiting",
+  "mirror.join_in_use",
+]);
+
+/** Only a non-empty string is a handle: session storage answers `null` for none. */
+const handleOf = (value: unknown): string | undefined =>
+  typeof value === "string" && value !== "" ? value : undefined;
+
 const isAddressRefusal = ({ code, params }: Refusal) =>
   code === "mirror.primary_url_invalid" ||
   (code === "setup.request_invalid" && params?.field === "primaryUrl");
@@ -147,17 +163,26 @@ export class SetupConnectScreen extends LitElement {
   /** This tab's handle for the join, kept by the shell; without it no code is shown. */
   @property({ attribute: false }) handle?: string;
 
-  /** A refusal of Finish joining the shell routed back, with `errorMessage` as its words. */
+  /**
+   * A refusal of Finish joining the shell routed back, with `errorMessage` as its words. Each new
+   * refusal ends `finishing`.
+   */
   @property({ attribute: false }) refusal?: Refusal;
 
   @property() errorMessage?: string;
+
+  /**
+   * Set by the screen when Finish joining is chosen, so it is sent once; a routed-back `refusal`
+   * clears it, and so may the shell.
+   */
+  @property({ attribute: false }) finishing = false;
 
   @state() private view: View = { state: "reading" };
 
   @state() private primaryUrl = "";
 
-  /** Words for the last refusal of Join, Start again or Finish joining. */
-  @state() private message?: string;
+  /** The last refusal of Join, Start again or Finish joining; its words are chosen when drawn. */
+  @state() private shownRefusal?: { refusal: Refusal; routedBack: boolean };
 
   @state() private addressRefused = false;
 
@@ -208,11 +233,12 @@ export class SetupConnectScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     this.#baseline ??= { primaryUrl: this.primaryUrl };
     if (changed.has("refusal") && this.refusal !== undefined) {
+      this.finishing = false;
       if (isJoinNotApproved(this.refusal)) {
-        this.message = undefined;
+        this.shownRefusal = undefined;
         void this.#read();
       } else {
-        this.message = refusalWords(this.refusal) ?? this.errorMessage;
+        this.shownRefusal = { refusal: this.refusal, routedBack: true };
       }
     }
   }
@@ -229,7 +255,7 @@ export class SetupConnectScreen extends LitElement {
   async #read(): Promise<void> {
     this.#stopReading();
     const generation = this.#generation;
-    const handle = this.handle;
+    const handle = handleOf(this.handle);
     try {
       const answer = await this.api.joinState(handle);
       if (generation !== this.#generation || !this.isConnected) return;
@@ -238,6 +264,8 @@ export class SetupConnectScreen extends LitElement {
       if (generation !== this.#generation || !this.isConnected) return;
       // A lost read is asked again; without a join to follow, the address is the way on.
       if (this.view.state === "reading") this.view = { state: "address" };
+      // The time left is worked out when drawn, and a failed read changes nothing else.
+      this.requestUpdate();
       if (handle !== undefined) this.#readLater(generation);
     }
   }
@@ -248,13 +276,16 @@ export class SetupConnectScreen extends LitElement {
   }
 
   #show(answer: JoinState, handle: string | undefined): void {
-    const holds = handle !== undefined;
     // The code belongs to the tab that holds the handle, whatever an answer carries.
     const shown: JoinState =
-      !holds && (answer.state === "waiting" || answer.state === "approved")
+      handle === undefined && (answer.state === "waiting" || answer.state === "approved")
         ? { state: "elsewhere" }
         : answer;
-    if (shown.state === "waiting") this.primaryUrl = shown.primaryUrl;
+    if (shown.state === "waiting") {
+      this.primaryUrl = shown.primaryUrl;
+      this.#baseline = { primaryUrl: shown.primaryUrl };
+      this.#scope?.commit(this.#baseline);
+    }
     this.view = shown.state === "none" ? { state: "address" } : shown;
     if (shown.state === "waiting" || shown.state === "approved") this.#readLater(this.#generation);
   }
@@ -273,7 +304,7 @@ export class SetupConnectScreen extends LitElement {
   async #join(): Promise<void> {
     if (this.busy) return;
     this.#feedback.press();
-    this.message = undefined;
+    this.shownRefusal = undefined;
     this.addressRefused = false;
     if (this.#blank()) {
       void this.#feedback.focus(this.shadowRoot!);
@@ -286,7 +317,7 @@ export class SetupConnectScreen extends LitElement {
     const generation = this.#generation;
     this.busy = true;
     try {
-      const started = await this.api.startJoin(address, this.handle);
+      const started = await this.api.startJoin(address, handleOf(this.handle));
       if (generation !== this.#generation || !this.isConnected) return;
       this.handle = started.handle;
       dispatchJoinHandle(this, started.handle);
@@ -301,7 +332,7 @@ export class SetupConnectScreen extends LitElement {
         this.addressRefused = true;
         void this.#feedback.focus(this.shadowRoot!);
       } else {
-        this.message = refusalWords(refusal) ?? t("connect.refusal.generic");
+        this.shownRefusal = { refusal, routedBack: false };
       }
     } finally {
       if (generation === this.#generation) this.busy = false;
@@ -309,17 +340,17 @@ export class SetupConnectScreen extends LitElement {
   }
 
   async #startAgain(): Promise<void> {
-    if (this.busy) return;
-    this.message = undefined;
+    if (this.busy || this.finishing) return;
+    this.shownRefusal = undefined;
     this.#stopReading();
     const generation = this.#generation;
     this.busy = true;
     try {
-      await this.api.cancelJoin(this.handle);
+      await this.api.cancelJoin(handleOf(this.handle));
     } catch (error) {
       if (generation !== this.#generation || !this.isConnected) return;
       this.busy = false;
-      this.message = refusalWords((error ?? {}) as Refusal) ?? t("connect.refusal.generic");
+      this.shownRefusal = { refusal: (error ?? {}) as Refusal, routedBack: false };
       if (this.view.state === "waiting" || this.view.state === "approved")
         this.#readLater(generation);
       return;
@@ -333,6 +364,19 @@ export class SetupConnectScreen extends LitElement {
     if (this.primaryUrl.trim() !== "") await this.#join();
   }
 
+  #finish(): void {
+    if (this.finishing || this.busy) return;
+    this.finishing = true;
+    dispatchJoinFinishRequested(this);
+  }
+
+  #message(): string | undefined {
+    if (this.shownRefusal === undefined) return undefined;
+    const { refusal, routedBack } = this.shownRefusal;
+    const shellWords = routedBack && this.errorMessage !== "" ? this.errorMessage : undefined;
+    return refusalWords(refusal) ?? shellWords ?? t("connect.refusal.generic");
+  }
+
   #actions(): TemplateResult {
     const view = this.view.state;
     const startAgain = (variant: "primary" | "secondary") =>
@@ -341,7 +385,7 @@ export class SetupConnectScreen extends LitElement {
         slot=${variant === "secondary" ? "secondary" : nothing}
         data-test="start-again"
         .loading=${this.busy && view !== "address"}
-        ?disabled=${this.busy}
+        ?disabled=${this.busy || this.finishing}
         @click=${() => void this.#startAgain()}
         >${t("connect.start_again")}</wt-button
       >`;
@@ -350,7 +394,7 @@ export class SetupConnectScreen extends LitElement {
         return html``;
       case "address":
         return html`${
-            this.message === t("connect.refusal.join_waiting") ? startAgain("secondary") : nothing
+            HELD_JOIN_CODES.has(this.shownRefusal?.refusal.code) ? startAgain("secondary") : nothing
           }<wt-button
             variant="primary"
             data-test="join"
@@ -365,8 +409,9 @@ export class SetupConnectScreen extends LitElement {
         return html`${startAgain("secondary")}<wt-button
             variant="primary"
             data-test="finish"
-            ?disabled=${this.busy}
-            @click=${() => dispatchJoinFinishRequested(this)}
+            ?disabled=${this.busy || this.finishing}
+            .loading=${this.finishing}
+            @click=${() => this.#finish()}
             >${t("connect.finish")}</wt-button
           >`;
       default:
@@ -388,7 +433,7 @@ export class SetupConnectScreen extends LitElement {
       case "ended":
         return t(ENDED_WORDS[view.reason] ?? "connect.ended.unknown");
       case "failed":
-        return refusalWords({ code: view.error }) ?? t("connect.failed");
+        return t(FAILED_WORDS[view.error] ?? "connect.failed");
       default:
         return "";
     }
@@ -441,8 +486,9 @@ export class SetupConnectScreen extends LitElement {
   override render(): TemplateResult {
     const view = this.view.state;
     const fieldMarked = view === "address" && (this.#blank() || this.addressRefused);
+    const message = this.#message();
     const bottom = [
-      ...(this.message === undefined ? [] : [this.message]),
+      ...(message === undefined ? [] : [message]),
       ...(fieldMarked ? [t("connect.fix_fields")] : []),
     ].join(" ");
     return html`
@@ -460,6 +506,7 @@ export class SetupConnectScreen extends LitElement {
           variant="ghost"
           slot="cancel"
           data-test="back"
+          ?disabled=${this.busy || this.finishing}
           @click=${() => dispatchSetupGoto(this, "role")}
           >${t("connect.back")}</wt-button
         >

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, mountWithLeave } from "../widgets/test-helpers.js";
 import { localTime, setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./connect-screen.js";
 import type { SetupConnectScreen } from "./connect-screen.js";
 import type { JoinStarted, JoinState } from "../api/client.js";
@@ -58,6 +59,13 @@ async function mount(api = stubApi(), props: Partial<SetupConnectScreen> = {}) {
   await vi.waitFor(() => expect(q(mounted.el, "[data-test=reading]")).toBeNull());
   return { ...mounted, api };
 }
+
+/** The buttons drawn, in order, by their `data-test` names. */
+const buttons = (el: SetupConnectScreen) =>
+  [...el.shadowRoot!.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test"));
+
+const disabled = (el: SetupConnectScreen, button: string) =>
+  q(el, `[data-test=${button}]`)!.hasAttribute("disabled");
 
 function handles(el: SetupConnectScreen): (string | undefined)[] {
   const seen: (string | undefined)[] = [];
@@ -142,6 +150,46 @@ describe("setup-connect-screen: waiting", () => {
     }
   });
 
+  it.each([[null], [""]])(
+    "counts only a non-empty string as a handle (%o): no code is drawn and the read names none",
+    async (handle) => {
+      const { el, api } = await mount(stubApi(WAITING), {
+        handle: handle as unknown as string,
+      });
+      expect(api.joinState).toHaveBeenCalledWith(undefined);
+      expect(el.shadowRoot!.textContent).not.toMatch(/482/);
+      expect(text(el, "[data-test=state]")).toMatch(/^A join was started from another page/);
+    },
+  );
+
+  it("keeps the time left moving while its reads fail", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const api = stubApi({
+      ...WAITING,
+      expiresAt: new Date(Date.now() + 3 * 60_000).toISOString(),
+    });
+    const { el } = await mount(api, { handle: "h1" });
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 3 min");
+    api.joinState.mockRejectedValue({ code: "server.internal" });
+    await vi.advanceTimersByTimeAsync(2 * 60_000 + 1_000);
+    await el.updateComplete;
+    expect(text(el, "[data-test=time-left]")).toBe("Time left: 1 min");
+  });
+
+  it("treats a reopened tab's address, filled in by its read, as unchanged", async () => {
+    const api = stubApi(WAITING);
+    const { el, host } = await mountWithLeave<SetupConnectScreen>("setup-connect-screen", {
+      api,
+      handle: "h1",
+    });
+    await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
+    await el.updateComplete;
+    const shell = host.querySelector("setup-test-leave-shell") as HTMLElement & {
+      leave: { coordinator: { isDirty(scopes?: readonly object[]): boolean } };
+    };
+    expect(shell.leave.coordinator.isDirty([el])).toBe(false);
+  });
+
   it("reads the join every 2 seconds while it waits, but never while its own start is still waiting", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const api = stubApi(WAITING);
@@ -220,6 +268,39 @@ describe("setup-connect-screen: approved and Finish joining", () => {
     expect(q(el, "[data-test=finish]")).toBeNull();
   });
 
+  it("sends Finish joining once however often it is clicked, and shows it is working until a refusal comes back", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    const finished = vi.fn();
+    el.addEventListener("join-finish-requested", finished);
+    q(el, "[data-test=finish]")!.click();
+    q(el, "[data-test=finish]")!.click();
+    await el.updateComplete;
+    expect(finished).toHaveBeenCalledOnce();
+    expect(el.finishing).toBe(true);
+    expect(disabled(el, "finish")).toBe(true);
+    expect((q(el, "[data-test=finish]") as HTMLElement & { loading: boolean }).loading).toBe(true);
+    expect(disabled(el, "start-again")).toBe(true);
+    expect(disabled(el, "back")).toBe(true);
+    el.errorMessage = "The shell's words.";
+    el.refusal = { code: "mirror.vault_not_empty" };
+    await el.updateComplete;
+    expect(el.finishing).toBe(false);
+    expect(disabled(el, "finish")).toBe(false);
+    expect(disabled(el, "back")).toBe(false);
+    await press(el, "finish");
+    expect(finished).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the generic words for a routed-back refusal that comes with no words", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    el.refusal = { code: "mirror.vault_not_empty" };
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
+      ),
+    );
+  });
+
   it.each([
     [
       { code: "mirror.join_handle_invalid" },
@@ -283,6 +364,10 @@ describe("setup-connect-screen: the words of every state", () => {
       "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
     ],
     [
+      { state: "failed", error: "mirror.join_code_taken" },
+      `This join stopped, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
+    ],
+    [
       { state: "failed", error: "server.internal" },
       `This join stopped, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
     ],
@@ -299,83 +384,112 @@ const RETRY_AT = "2026-11-21T10:15:00.000Z";
 const PRIMARY_AT = "2026-11-21T10:00:00.000Z";
 const STANDBY_AT = "2026-11-21T10:30:00.000Z";
 
+const JOIN_ONLY = ["back", "join"];
+const START_AGAIN_TOO = ["back", "start-again", "join"];
+
 describe("setup-connect-screen: the words of every refusal of Join", () => {
-  it.each<[{ code: string; params?: Record<string, unknown> }, string]>([
+  it.each<[{ code: string; params?: Record<string, unknown> }, string, string[]]>([
     [
       { code: "mirror.join_address_mismatch" },
-      "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Start again. If it happens again, check what is connected between the two boxes.",
+      "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Join again. If it happens again, check what is connected between the two boxes.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_invalid" },
-      "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
+      "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.standby_invalid" },
-      "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
+      "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_code_taken" },
-      "The main box needs this box to ask again. Choose Start again.",
+      "The main box needs this box to ask again. Choose Join again.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_not_found" },
-      "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
+      "The main box no longer has this request: it ran out of time or the main box restarted. Choose Join again.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_full", params: { limit: "address", retryAt: RETRY_AT } },
-      "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Start again.",
+      "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_full", params: { limit: "network", retryAt: RETRY_AT } },
-      "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Start again. If this keeps happening, something on the network is sending them.",
+      "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Join again. If this keeps happening, something on the network is sending them.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_full", params: { limit: "listed", retryAt: RETRY_AT } },
-      "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Start again here.",
+      "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_full", params: { limit: "recent", retryAt: RETRY_AT } },
-      `The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until ${localTime(RETRY_AT)}, then choose Start again. Dismissing a request on its Servers page frees a place sooner.`,
+      `The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until ${localTime(RETRY_AT)}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.`,
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.join_waiting" },
       "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
+      START_AGAIN_TOO,
     ],
     [
       { code: "mirror.join_in_use" },
       "This box's join is open on another page or device right now. Finish or cancel it there. If that page is closed, wait 15 seconds and choose Start again here.",
+      START_AGAIN_TOO,
     ],
     [
       { code: "mirror.bundle_fetch_failed" },
       "This box got no usable answer from the main box at that address. Check the address and that the main box is switched on, then choose Join again.",
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.clocks_apart", params: { primaryAt: PRIMARY_AT, standbyAt: STANDBY_AT } },
       `The two boxes' clocks are more than 10 minutes apart (the main box reads ${localTime(PRIMARY_AT)}, this box ${localTime(STANDBY_AT)}). If this box's time is wrong, connect it to the internet for a minute so it sets its clock, then choose Join again.`,
+      JOIN_ONLY,
     ],
     [
       { code: "mirror.standby_name_taken" },
       "This box picked a name another box of the venue already uses. Nothing was changed. Choose Join again: it picks a new name.",
+      JOIN_ONLY,
     ],
     [
       { code: "setup.connection_insecure" },
       "This page is not using a secure connection, so this box will not join from it. Open this box's setup page at an address starting with https://, then try again.",
+      JOIN_ONLY,
     ],
     [
       { code: "setup.owner_required" },
       "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+      JOIN_ONLY,
     ],
-    [{ code: "setup.already_provisioning" }, "Setup is already in progress on this server."],
-    [{ code: "setup.not_ready" }, "The server isn't ready yet. Wait a moment, then try again."],
+    [
+      { code: "setup.already_provisioning" },
+      "Setup is already in progress on this server.",
+      JOIN_ONLY,
+    ],
+    [
+      { code: "setup.not_ready" },
+      "The server isn't ready yet. Wait a moment, then try again.",
+      JOIN_ONLY,
+    ],
     [
       { code: "setup.adopt_incomplete" },
       "An earlier join of this box stopped partway. Reload this page to see how to clear it.",
+      JOIN_ONLY,
     ],
     [
       { code: "server.internal" },
       "This box could not do that just now. Check the address and that the main box is switched on, then try again.",
+      JOIN_ONLY,
     ],
-  ])("%o", async (refusal, words) => {
+  ])("%o", async (refusal, words, drawn) => {
     const api = stubApi();
     api.startJoin.mockRejectedValue(refusal);
     const { el } = await mount(api);
@@ -384,6 +498,70 @@ describe("setup-connect-screen: the words of every refusal of Join", () => {
     await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
     expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
     expect(q(el, "[data-test=join]")!.hasAttribute("disabled")).toBe(false);
+    expect(buttons(el)).toEqual(drawn);
+  });
+
+  it("Start again after a refusal naming it cancels the held join and asks the same main box again", async () => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValueOnce({ code: "mirror.join_in_use" });
+    const { el } = await mount(api);
+    const seen = handles(el);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(() => expect(q(el, "[data-test=start-again]")).not.toBeNull());
+    await press(el, "start-again");
+    await vi.waitFor(() => expect(text(el, "[data-test=code]")).toBe("482\u00a0913"));
+    expect(api.cancelJoin).toHaveBeenCalledWith(undefined);
+    expect(api.startJoin.mock.calls).toEqual([
+      [MAIN, undefined],
+      [MAIN, undefined],
+    ]);
+    expect(seen).toEqual([undefined, "h1"]);
+  });
+
+  it("redraws a refusal in the new language when the language changes", async () => {
+    const api = stubApi();
+    api.startJoin.mockRejectedValue({ code: "mirror.join_waiting" });
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toMatch(/^This box is already waiting/),
+    );
+    setLocale("es-ES");
+    await el.updateComplete;
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(es["connect.refusal.join_waiting"]),
+    );
+    expect(text(el, "[data-test=start-again]")).toBe(es["connect.start_again"]);
+  });
+});
+
+describe("setup-connect-screen: nothing leaves the screen while a request is out", () => {
+  it("disables Back while Join's start is out, and enables it again once it answers", async () => {
+    const api = stubApi();
+    let answer!: (started: JoinStarted) => void;
+    api.startJoin.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    expect(disabled(el, "back")).toBe(false);
+    await press(el, "join");
+    expect(disabled(el, "back")).toBe(true);
+    answer(STARTED);
+    await vi.waitFor(() => expect(q(el, "[data-test=code]")).not.toBeNull());
+    expect(disabled(el, "back")).toBe(false);
+  });
+
+  it("disables Back while Start again's cancel is out", async () => {
+    const api = stubApi({ state: "elsewhere" });
+    let ended!: () => void;
+    api.cancelJoin.mockReturnValue(new Promise<void>((resolve) => (ended = resolve)));
+    const { el } = await mount(api);
+    await press(el, "start-again");
+    expect(disabled(el, "back")).toBe(true);
+    ended();
+    await vi.waitFor(() => expect(q(el, "[data-test=primaryUrl]")).not.toBeNull());
+    expect(disabled(el, "back")).toBe(false);
   });
 });
 

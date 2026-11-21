@@ -99,7 +99,6 @@ export const startEn = {
   "connect.reading": "Checking this box's join…",
   "connect.waiting.lead":
     "On the main box, open System → Servers, choose Check beside the request from this box, and tap this code:",
-  "connect.waiting.code": "Code {code}",
   "connect.waiting.addresses":
     "The request on the main box should come from one of this box's addresses: {addresses}",
   "connect.waiting.main": "Main box: {primaryUrl}",
@@ -119,24 +118,28 @@ export const startEn = {
     "This request was cancelled, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.ended.unknown":
     "The main box ended this request, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
+  "connect.ended.code_taken": "The main box needs this box to ask again. Choose Start again.",
+  "connect.ended.invalid":
+    "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
   "connect.failed":
     "This join stopped, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
-  "connect.refusal.join_invalid":
-    "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
-  "connect.refusal.join_not_found":
+  "connect.failed.not_found":
     "The main box no longer has this request: it ran out of time or the main box restarted. Choose Start again.",
+  "connect.refusal.join_invalid":
+    "The main box could not read this box's request. Choose Join again. If it happens again, check that both boxes run the same Waitron version.",
+  "connect.refusal.join_not_found":
+    "The main box no longer has this request: it ran out of time or the main box restarted. Choose Join again.",
   "connect.refusal.join_address_mismatch":
-    "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Start again. If it happens again, check what is connected between the two boxes.",
-  "connect.refusal.join_code_taken":
-    "The main box needs this box to ask again. Choose Start again.",
+    "The main box received this box's request from a network address this box does not have, so something on the network may be passing it on. Choose Join again. If it happens again, check what is connected between the two boxes.",
+  "connect.refusal.join_code_taken": "The main box needs this box to ask again. Choose Join again.",
   "connect.refusal.join_full_address":
-    "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Start again.",
+    "The main box has had too many requests from this box's address in the last minute. Wait a minute, then choose Join again.",
   "connect.refusal.join_full_network":
-    "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Start again. If this keeps happening, something on the network is sending them.",
+    "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Join again. If this keeps happening, something on the network is sending them.",
   "connect.refusal.join_full_listed":
-    "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Start again here.",
+    "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
   "connect.refusal.join_full_recent":
-    "The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Start again. Dismissing a request on its Servers page frees a place sooner.",
+    "The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
   "connect.refusal.join_waiting":
     "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_in_use":
@@ -330,7 +333,6 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.reading": "Comprobando la unión de este servidor…",
   "connect.waiting.lead":
     "En el servidor principal, abre Sistema → Servidores, elige Comprobar junto a la solicitud de este servidor y toca este código:",
-  "connect.waiting.code": "Código {code}",
   "connect.waiting.addresses":
     "La solicitud en el servidor principal debe venir de una de las direcciones de este servidor: {addresses}",
   "connect.waiting.main": "Servidor principal: {primaryUrl}",
@@ -345,29 +347,35 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.ended.wrong_code":
     "En el servidor principal se eligió un código que no es el de este servidor, así que esta solicitud ha terminado y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.dismissed":
-    "En la página Servidores del servidor principal se descartó esta solicitud. Elige Empezar de nuevo para volver a pedirlo.",
+    "En la página Servidores del servidor principal se descartó esta solicitud. Elige Empezar de nuevo para volver a pedir la unión.",
   "connect.ended.cancelled":
     "Esta solicitud se canceló, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.unknown":
     "El servidor principal terminó esta solicitud, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.code_taken":
+    "El servidor principal necesita que este servidor vuelva a pedir la unión. Elige Empezar de nuevo.",
+  "connect.ended.invalid":
+    "El servidor principal no ha podido leer la solicitud de este servidor. Elige Empezar de nuevo. Si vuelve a pasar, comprueba que los dos servidores tienen la misma versión de Waitron.",
   "connect.failed":
     "Esta unión se detuvo, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
-  "connect.refusal.join_invalid":
-    "El servidor principal no ha podido leer la solicitud de este servidor. Elige Empezar de nuevo. Si vuelve a pasar, comprueba que los dos servidores tienen la misma versión de Waitron.",
-  "connect.refusal.join_not_found":
+  "connect.failed.not_found":
     "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Elige Empezar de nuevo.",
+  "connect.refusal.join_invalid":
+    "El servidor principal no ha podido leer la solicitud de este servidor. Vuelve a elegir Unirse. Si pasa otra vez, comprueba que los dos servidores tienen la misma versión de Waitron.",
+  "connect.refusal.join_not_found":
+    "El servidor principal ya no tiene esta solicitud: se agotó el tiempo o se reinició. Vuelve a elegir Unirse.",
   "connect.refusal.join_address_mismatch":
-    "El servidor principal recibió la solicitud de este servidor desde una dirección de red que este servidor no tiene, así que algo en la red podría estar reenviándola. Elige Empezar de nuevo. Si vuelve a pasar, comprueba qué hay conectado entre los dos servidores.",
+    "El servidor principal recibió la solicitud de este servidor desde una dirección de red que este servidor no tiene, así que algo en la red podría estar reenviándola. Vuelve a elegir Unirse. Si pasa otra vez, comprueba qué hay conectado entre los dos servidores.",
   "connect.refusal.join_code_taken":
-    "El servidor principal necesita que este servidor lo pida de nuevo. Elige Empezar de nuevo.",
+    "El servidor principal necesita que este servidor vuelva a pedir la unión. Vuelve a elegir Unirse.",
   "connect.refusal.join_full_address":
-    "El servidor principal ha recibido demasiadas solicitudes desde la dirección de este servidor en el último minuto. Espera un minuto y elige Empezar de nuevo.",
+    "El servidor principal ha recibido demasiadas solicitudes desde la dirección de este servidor en el último minuto. Espera un minuto y vuelve a elegir Unirse.",
   "connect.refusal.join_full_network":
-    "El servidor principal ha recibido demasiadas solicitudes para unirse desde la red en el último minuto. Espera un minuto y elige Empezar de nuevo. Si sigue pasando, algo en la red las está enviando.",
+    "El servidor principal ha recibido demasiadas solicitudes para unirse desde la red en el último minuto. Espera un minuto y vuelve a elegir Unirse. Si sigue pasando, algo en la red las está enviando.",
   "connect.refusal.join_full_listed":
-    "Ya hay otros tres servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y elige Empezar de nuevo aquí.",
+    "Ya hay otros tres servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y vuelve a elegir Unirse aquí.",
   "connect.refusal.join_full_recent":
-    "El servidor principal ha recibido seis solicitudes para unirse en los últimos 15 minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y elige Empezar de nuevo. Descartar una solicitud en su página Servidores libera un sitio antes.",
+    "El servidor principal ha recibido seis solicitudes para unirse en los últimos 15 minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
   "connect.refusal.join_waiting":
     "Este servidor ya está esperando para unirse. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_in_use":
@@ -377,13 +385,13 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.unreachable":
     "Este servidor no ha recibido una respuesta útil del servidor principal en esa dirección. Comprueba la dirección y que el servidor principal está encendido, y vuelve a elegir Unirse.",
   "connect.refusal.clocks_apart":
-    "Los relojes de los dos servidores se separan más de 10 minutos (el principal marca {primaryAt}, este servidor {standbyAt}). Si la hora de este servidor es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y vuelve a elegir Unirse.",
+    "Los relojes de los dos servidores tienen más de 10 minutos de diferencia (el principal marca {primaryAt}, este servidor {standbyAt}). Si la hora de este servidor es incorrecta, conéctalo a internet un minuto para que ajuste su reloj y vuelve a elegir Unirse.",
   "connect.refusal.name_taken":
     "Este servidor eligió un nombre que ya usa otro servidor del local. No se ha cambiado nada. Vuelve a elegir Unirse: tomará otro nombre.",
   "connect.refusal.insecure":
     "Esta página no usa una conexión segura, así que este servidor no se unirá desde ella. Abre la página de configuración de este servidor en una dirección que empiece por https:// e inténtalo de nuevo.",
   "connect.refusal.adopt_incomplete":
-    "Una unión anterior de este servidor se detuvo a medias. Recarga esta página para ver cómo borrarla.",
+    "Una unión anterior de este servidor se detuvo a medias. Recarga esta página para ver cómo resolverlo.",
   "connect.refusal.generic":
     "Este servidor no ha podido hacerlo ahora. Comprueba la dirección y que el servidor principal está encendido, e inténtalo de nuevo.",
 
