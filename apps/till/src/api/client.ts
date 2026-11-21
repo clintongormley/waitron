@@ -3186,31 +3186,34 @@ export class TillApi {
   }
 
   /** Pay by reader. A placed order pays for the stored bill. A decline is an outcome. */
-  pay(req: {
-    expectedEdit: BillEditExpected | null;
-    id: string;
-    lines: SaleLine[];
-    /** The way the screen showed the order; refused `working_order.out_of_date` when it differs. */
-    dining: Dining;
-    invoiceType?: "F1" | "F2";
-    recipient?: {
-      taxId: string;
-      legalName: string;
-      address: string;
-      countryCode: string;
-      identifierType?: RecipientIdentifierType;
-      identifierCountryCode?: string;
-    } | null;
-    zoneId?: string;
-    tip?: string;
-    simulationOutcome?: "captured" | "declined" | "attempting";
-    readerId?: string;
-    receiptLanguage?: string;
-    kitchenNote?: string | null;
-    guestCount?: number | null;
-    lateSend?: LateSend;
-    edit?: CounterPaymentEdit;
-  }): Promise<PayOutcome> {
+  pay(
+    req: {
+      expectedEdit: BillEditExpected | null;
+      id: string;
+      lines: SaleLine[];
+      /** The way the screen showed the order; refused `working_order.out_of_date` when it differs. */
+      dining: Dining;
+      invoiceType?: "F1" | "F2";
+      recipient?: {
+        taxId: string;
+        legalName: string;
+        address: string;
+        countryCode: string;
+        identifierType?: RecipientIdentifierType;
+        identifierCountryCode?: string;
+      } | null;
+      zoneId?: string;
+      tip?: string;
+      simulationOutcome?: "captured" | "declined" | "attempting";
+      readerId?: string;
+      receiptLanguage?: string;
+      kitchenNote?: string | null;
+      guestCount?: number | null;
+      lateSend?: LateSend;
+      edit?: CounterPaymentEdit;
+    },
+    options: { onSubmission?: (id: string) => void } = {},
+  ): Promise<PayOutcome> {
     const {
       id,
       lines,
@@ -3246,6 +3249,7 @@ export class TillApi {
       },
       undefined,
       basket,
+      options.onSubmission,
     ).then((result): PayOutcome => {
       const captureWarning = result.balance.captureWarning;
       const facts = captureWarning === undefined ? {} : { captureWarning };
@@ -3716,6 +3720,7 @@ export class TillApi {
     tender: WholeBillTender,
     manualAmount?: string,
     basket?: CounterPaymentBasket,
+    onSubmission?: (id: string) => void,
   ): Promise<WholeBillResult> {
     const person = this.#personSource?.() ?? null;
     const { lateSend, ...basketFields } = basket ?? {};
@@ -3775,6 +3780,7 @@ export class TillApi {
     }
 
     const sent = { person, key, request };
+    onSubmission?.(request.submissionId);
     try {
       const result = await this.#request<WholeBillResult>(
         `/api/working-orders/${id}/payments`,

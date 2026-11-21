@@ -58,6 +58,7 @@ import type {
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "../widgets/basket.js";
+import type { ReaderStopControl } from "../widgets/card-waiting.js";
 import type { CollectCardDetail, CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
 @customElement("till-counter-screen")
@@ -259,6 +260,7 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
+  @property({ attribute: false }) readerStop?: ReaderStopControl;
   @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ type: Boolean }) sumUpConnected = false;
@@ -503,6 +505,7 @@ export class TillCounterScreen extends LitElement {
             .takesManualCard=${this.takesManualCard}
             .tipsEnabled=${this.tipsEnabled}
             .cardOutcome=${this.cardOutcome}
+            .readerStop=${this.readerStop}
             .cardRetryDetail=${this.cardRetryDetail}
             .cardAttemptsOver=${this.cardAttemptsOver}
             .sumUpConnected=${this.sumUpConnected}

@@ -2,9 +2,48 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-spinner.js";
+import "@waitron/ui/src/components/wt-button.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { payNotice, type PayNotice } from "./pay-equipment.js";
+import { refusalText, type PayRefusal } from "./pay-refusal.js";
+import type { BillReaderStopOutcome } from "../api/client.js";
+
+export type BillReaderStopStatus = BillReaderStopOutcome | "ready" | "sending";
+
+export interface ReaderStopControl {
+  status: BillReaderStopStatus;
+  refusal?: PayRefusal;
+  request: () => void;
+}
+
+export function readerStopPending(status?: BillReaderStopStatus | null): boolean {
+  return status === "sending" || status === "requested" || status === "unknown";
+}
+
+export function readerStopControl(stop?: ReaderStopControl): TemplateResult | typeof nothing {
+  if (stop === undefined) return nothing;
+  const { status, refusal, request } = stop;
+  return html`<div>
+    <wt-button
+      data-pay-cancel-reader
+      variant="secondary"
+      .loading=${status === "sending"}
+      .disabled=${readerStopPending(status)}
+      @click=${request}
+      >${t("bill_pay.cancel_reader")}</wt-button
+    >
+    <p class="muted" role="status" data-pay-stop-status>
+      ${
+        refusal !== undefined
+          ? refusalText(refusal, { billPayment: true })
+          : status === "ready" || status === "sending"
+            ? ""
+            : t(`bill_pay.stop_${status}`)
+      }
+    </p>
+  </div>`;
+}
 
 /** A card payment a pay sheet sent to a reader: the reader, the amount, and when. The phone's
  * reader may change meanwhile; this one does not. */
