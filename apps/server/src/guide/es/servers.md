@@ -77,7 +77,7 @@ registros por separado. Esta declaración no se puede deshacer.
 En una caja o un terminal de camarero, la franja roja **El servidor principal no responde** ofrece
 **Cambiar al servidor de reserva** en la pantalla de inicio de sesión, y a quien tenga **Gestionar
 servidores**. Abre esta página en el servidor de reserva, y **No cambiar, volver** (tras declarar,
-**Salir de esta página**) o **Continuar en este servidor** te devuelve a la caja. Cuando el servidor
+**Salir de esta página (el cambio está guardado)**) o **Continuar en este servidor** te devuelve a la caja. Cuando el servidor
 principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
 dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
 más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
