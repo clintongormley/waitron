@@ -345,13 +345,14 @@ describe("the setup page's join routes", () => {
   }
   function post(
     path: "adopt" | "reset-incomplete-adopt",
-    options: { handle?: string; headers?: Record<string, string>; env?: Env } = {},
+    options: { handle?: string; headers?: Record<string, string>; env?: Env; body?: string } = {},
   ) {
     const headers: Record<string, string> = { ...options.headers };
     if (options.handle !== undefined) headers["x-waitron-join-handle"] = options.handle;
+    if (options.body !== undefined) headers["content-type"] = "application/json";
     return app.request(
       `https://box.test/setup-api/${path}`,
-      { method: "POST", headers },
+      { method: "POST", headers, ...(options.body === undefined ? {} : { body: options.body }) },
       options.env ?? secure,
     );
   }
@@ -447,6 +448,33 @@ describe("the setup page's join routes", () => {
       expect(stageReset).toHaveBeenCalledWith(record?.id);
       await vi.advanceTimersByTimeAsync(0);
       expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers a stopped join's resend the same whether its body is empty or {}", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-join-adopt-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const { adoptJoined } = mountAdopt({ operations });
+      adoptJoined.mockImplementationOnce(async (_joined, hooks) => {
+        await hooks.beforeFirstWrite("preproduction");
+        throw new AppError("mirror.bundle_fetch_failed", {});
+      });
+      const handle = await started();
+      fake.approve(JOINED);
+      expect((await post("adopt", { handle })).status).toBe(502);
+
+      const resends = [
+        await post("adopt", { handle, body: "{}" }),
+        await post("adopt", { handle }),
+      ];
+      expect(await Promise.all(resends.map(refusal))).toEqual([
+        { status: 409, code: "setup.adopt_incomplete" },
+        { status: 409, code: "setup.adopt_incomplete" },
+      ]);
+      expect(adoptJoined).toHaveBeenCalledOnce();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

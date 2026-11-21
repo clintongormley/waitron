@@ -386,6 +386,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
+const JOIN_ADOPT_REQUEST = "adopt-joined";
 
 const PRIMARY_CERTIFICATE_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
@@ -1439,11 +1440,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runAdopt(c, log, async () => {
       let succeeded = false;
       try {
-        const requestHash = createHash("sha256")
-          .update(await c.req.raw.clone().text())
-          .digest("hex");
+        const bodyText = await c.req.raw.clone().text();
         const body = await readJsonBody<AdoptBody>(c);
         let run: (operation?: ActiveSetupOperation) => Promise<Response>;
+        // Finish joining reads nothing from its body, so every resend counts as the same request.
+        let requestHash = createHash("sha256").update(JOIN_ADOPT_REQUEST).digest("hex");
         if (body.primaryUrl === undefined && body.credential === undefined) {
           refuseJoinElsewhere(c);
           if (deps.adoptJoined === undefined || deps.joinAttempt === undefined)
@@ -1453,6 +1454,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           if (joined === null) throw new AppError("setup.request_invalid", { field: "join" });
           run = (operation) => executeJoined(joined, operation);
         } else {
+          requestHash = createHash("sha256").update(bodyText).digest("hex");
           run = (operation) => execute(body, operation);
         }
         const response =
