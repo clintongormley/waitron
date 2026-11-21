@@ -305,6 +305,24 @@ it("a refusal of the venue's address is the bottom message, and turning the swit
   }
 });
 
+it("an unchanged refusal with the switch on says, at the bottom, that this is already the registered address", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi(OLD);
+    api.changeTaxpayerDomicile.mockRejectedValue({
+      code: "venue.detail_invalid",
+      params: { field: "taxpayerDomicile", reason: "unchanged" },
+    });
+    const panel = await mount(api);
+    await open(panel);
+    await turn(panel, true);
+    await press(panel);
+    expect(actions(panel).error).toBe(t("venue_details.taxpayer_domicile_unchanged"));
+    expect(shownParts(panel)).toBe(0);
+    cleanupWidgets();
+  }
+});
+
 it("the switch's note says it copies the venue's address when saved, read with the switch too", async () => {
   for (const locale of ["en-GB", "es-ES"]) {
     setLocale(locale);
@@ -844,6 +862,16 @@ it("a chosen address turns the switch off, keeps a typed Line 2 when it brings n
   await type(panel, { registeredLine2: "Piso 2" });
   await choose(panel, { ...MADRID, lines: ["Calle Mayor 1"] });
   expect(values(panel)).toEqual(["Calle Mayor 1", "Piso 2", "28013", "Madrid", "Madrid"]);
+});
+
+it("a chosen address's blank later lines neither replace a typed Line 2 nor pad one", async () => {
+  const panel = await mountSearching(stubApi());
+  await open(panel);
+  await type(panel, { registeredLine2: "Piso 2" });
+  await choose(panel, { ...MADRID, lines: ["Calle Mayor 1", " ", ""] });
+  expect(values(panel)).toEqual(["Calle Mayor 1", "Piso 2", "28013", "Madrid", "Madrid"]);
+  await choose(panel, { ...MADRID, lines: ["Calle Mayor 1", "", "Puerta 4"] });
+  expect(values(panel)[1]).toBe("Puerta 4");
 });
 
 it("a refusal is not shown once a chosen address replaces the refused one", async () => {

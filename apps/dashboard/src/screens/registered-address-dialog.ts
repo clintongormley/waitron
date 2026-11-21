@@ -223,7 +223,11 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     draft: RegisteredAddressDraft,
     message: string,
   ): Record<string, string> {
-    if (draft.sameAsVenue) return { [SAME_AS_VENUE]: t("venue_details.registered_same_unusable") };
+    if (draft.sameAsVenue)
+      return {
+        [SAME_AS_VENUE]:
+          reason === "unchanged" ? message : t("venue_details.registered_same_unusable"),
+      };
     return { [reason === "postal_code" ? NAMES.postalCode : NAMES.street]: message };
   }
 
@@ -249,7 +253,8 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
     if (pack === undefined || this.foreignAddress) return;
     const area = areaOfChosenAddress(pack, address);
-    const [street = "", ...rest] = address.lines;
+    const [street = "", ...later] = address.lines;
+    const rest = later.filter((line) => line.trim() !== "");
     this.replaceDraft((draft) => ({
       ...draft,
       sameAsVenue: false,

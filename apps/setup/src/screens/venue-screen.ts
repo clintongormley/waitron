@@ -726,7 +726,8 @@ export class SetupVenueScreen extends LitElement {
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
     const area = areaOfChosenAddress(pack, address);
-    const [addressLine1 = "", ...rest] = address.lines;
+    const [addressLine1 = "", ...later] = address.lines;
+    const rest = later.filter((line) => line.trim() !== "");
     if (which === "domicile") {
       this.sameAsVenue = false;
       this.#fill({

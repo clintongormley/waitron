@@ -151,6 +151,18 @@ describe("the venue screen's address search", () => {
     expect(value(el, "addressLine2")).toBe("3º B");
   });
 
+  it("leaves blank later lines out, so they neither replace nor pad either line 2", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) });
+    await type(el, "addressLine2", "3º B");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", " ", ""] });
+    expect(value(el, "addressLine2")).toBe("3º B");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "", "Puerta 4"] });
+    expect(value(el, "addressLine2")).toBe("Puerta 4");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", "Escalera 2"] }, "domicile-lookup");
+    await choose(el, { ...MADRID, lines: ["Calle Mayor 1", " "] }, "domicile-lookup");
+    expect(value(el, "registeredLine2")).toBe("Escalera 2");
+  });
+
   it("replaces address line 2 with the chosen address's later lines", async () => {
     const el = await mount({ addressProvider: providerFor(MADRID) });
     await type(el, "addressLine2", "3º B");
