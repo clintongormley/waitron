@@ -236,7 +236,7 @@ tip. A maintenance release keeps the major version of its original release tag. 
 new minor from that line the same way.
 
 Use the release command for every tag. Only the command verifies that the branch contains the
-latest lower stable release. GitHub checks the tagged commit's history so a later tag from a
+latest lower stable release. The publish step checks the tagged commit's history so a later tag from a
 sibling branch leaves the original release eligible for a publish retry.
 
 Keep the branch and its original tag so GitHub can still publish the version if a job needs a

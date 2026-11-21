@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { publishReleaseSource } from "./release-source.mjs";
+import { main } from "./release-source.mjs";
 
 const repo = mkdtempSync(join(tmpdir(), "release-source-"));
 afterAll(() => rmSync(repo, { recursive: true, force: true }));
@@ -57,36 +57,46 @@ git("update-ref", "refs/remotes/origin/maintenance/other", untaggedFork);
 git("checkout", "-qb", "maintenance/sibling", fork);
 git("tag", "v1.2.2", commit("sibling patch tagged after 1.3.0"));
 
-const source = (head, version) =>
-  publishReleaseSource(
-    (command, args) => {
+function source(head, version) {
+  const result = { output: "", error: "" };
+  const status = main([head, version], {
+    run(command, args) {
       if (command === "git") return git(...args);
       expect(command).toBe("gh");
       return JSON.stringify(rules);
     },
-    { head, version },
-  );
+    stdout: { write: (text) => (result.output += text) },
+    stderr: { write: (text) => (result.error += text) },
+  });
+  return { ...result, status };
+}
 
-describe("publishReleaseSource", () => {
+describe("the publish source command", () => {
   it.each([
     ["a patch", patch, "1.2.1"],
     ["a new minor after the sibling also cut a tag", minor, "1.3.0"],
     ["a patch to that minor", minorPatch, "1.3.1"],
   ])("admits %s on the older line", (_, head, version) => {
-    expect(source(head, version)).toBe("maintenance");
+    expect(source(head, version)).toEqual({ status: 0, output: "maintenance\n", error: "" });
   });
 
   it("refuses a new major cut from an older maintenance line", () => {
-    expect(() => source(minorPatch, "2.0.1")).toThrow("keep the major version of its release fork");
+    const result = source(minorPatch, "2.0.1");
+    expect(result).toMatchObject({ status: 1, output: "" });
+    expect(result.error).toContain("keep the major version of its release fork");
   });
 
   it("refuses a lower version on main after a higher release", () => {
-    expect(() => source(laterMain, "1.2.1")).toThrow("v1.2.1 contains release v2.0.0");
+    expect(source(laterMain, "1.2.1")).toEqual({
+      status: 1,
+      output: "",
+      error: "v1.2.1 contains release v2.0.0\n",
+    });
   });
 
   it("refuses a maintenance branch cut from an untagged commit", () => {
-    expect(() => source(untaggedFork, "1.2.2")).toThrow(
-      "must fork from main at a lower release tag",
-    );
+    const result = source(untaggedFork, "1.2.2");
+    expect(result).toMatchObject({ status: 1, output: "" });
+    expect(result.error).toContain("must fork from main at a lower release tag");
   });
 });

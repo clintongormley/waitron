@@ -82,7 +82,7 @@ export function checkMaintenanceRelease(run, { head, branch, version, released, 
     throw new Error(`${branch} is not protected by the required maintenance branch rules`);
 }
 
-export function publishReleaseSource(run, { head, version }) {
+function publishReleaseSource(run, { head, version }) {
   if (!isNumberedVersion(version)) throw new Error(`v${version} is not a release version`);
   const { merged, fork } = releaseHistory(run, head, version);
   if (fork === head) return "main";
@@ -101,19 +101,25 @@ export function publishReleaseSource(run, { head, version }) {
   throw new Error(`the tag v${version} is not on main or a protected maintenance branch`);
 }
 
-if (isMainScript(import.meta.url)) {
-  const run = (file, args, { timeout = 90_000 } = {}) =>
-    execFileSync(file, args, {
-      encoding: "utf8",
-      timeout,
-      killSignal: "SIGKILL",
-      stdio: ["ignore", "pipe", "inherit"],
-    });
+const nodeRun = (file, args, { timeout = 90_000 } = {}) =>
+  execFileSync(file, args, {
+    encoding: "utf8",
+    timeout,
+    killSignal: "SIGKILL",
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+
+export function main(
+  [head, version],
+  { run = nodeRun, stdout = process.stdout, stderr = process.stderr } = {},
+) {
   try {
-    const [head, version] = process.argv.slice(2);
-    process.stdout.write(`${publishReleaseSource(run, { head, version })}\n`);
+    stdout.write(`${publishReleaseSource(run, { head, version })}\n`);
+    return 0;
   } catch (error) {
-    process.stderr.write(`${error.message}\n`);
-    process.exitCode = 1;
+    stderr.write(`${error.message}\n`);
+    return 1;
   }
 }
+
+if (isMainScript(import.meta.url)) process.exitCode = main(process.argv.slice(2));

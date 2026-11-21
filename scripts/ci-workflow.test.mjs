@@ -8022,9 +8022,6 @@ describe("the release job", () => {
       expect(named(step).envOf("RELEASE_PRERELEASE")).toBe(
         "${{ needs.publish.outputs.release_prerelease }}",
       );
-  });
-
-  it("passes the maintenance result to GitHub Release creation", () => {
     expect(job("publish").body).toContain(
       "      release_maintenance: ${{ steps.release_tag.outputs.release_maintenance }}",
     );
