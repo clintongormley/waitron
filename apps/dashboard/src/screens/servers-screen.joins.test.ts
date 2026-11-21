@@ -7,6 +7,7 @@ import type { BoxJoinCheck, DashboardApi, ServerListing } from "../api/client.js
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { formatRecentMinute } from "../date-utils.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { es } from "../i18n/strings.js";
 
 const REQUEST = "66666666-6666-4666-8666-666666666666";
 
@@ -458,10 +459,10 @@ describe("a box asking to join, on the Servers screen", () => {
         }),
       );
       expect(find(el, `join-row-${REQUEST}`)!.textContent).toContain(
-        "Un servidor en 192.168.1.23 está pidiendo unirse",
+        es["servers.join_asking"].replace("{address}", "192.168.1.23"),
       );
       expect(find(el, `join-started-again-${REQUEST}`)!.textContent!.trim()).toBe(
-        "Este servidor empezó de nuevo. Toca solo un código que haya mostrado después.",
+        es["servers.join_started_again"],
       );
       const api = stubApi({
         approveBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_wrong_code", status: 409 }),
@@ -471,9 +472,7 @@ describe("a box asking to join, on the Servers screen", () => {
       choiceButtons(tapped)[0]!.click();
       await flush(tapped);
       await flush(tapped);
-      expect(await message(tapped)).toBe(
-        "Ese no es el código que muestra el servidor nuevo, así que esta solicitud ha terminado y no se ha enviado nada. Si estás añadiendo un servidor ahora, elige Empezar de nuevo en él y comprueba su código nuevo.",
-      );
+      expect(await message(tapped)).toBe(codeMessage("mirror.join_wrong_code", "es"));
     } finally {
       setLocale(before);
     }
