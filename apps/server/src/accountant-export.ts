@@ -7,21 +7,16 @@ import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } 
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { strToU8, zip } from "fflate";
 import type { PurchaseInvoice } from "@waitron/purchasing";
 import {
   centsToDecimal,
   compareDecimal,
   decimal,
   sumDecimals,
-  toScale,
   type Decimal,
 } from "@waitron/shared";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
-
-const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-const SHEET = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+import { numeric, renderWorkbook, type Cell } from "./xlsx-workbook.js";
 
 export interface AccountantInvoice {
   id: string;
@@ -48,39 +43,6 @@ export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
   purchases: readonly PurchaseInvoice[];
   outsidePayments: readonly OutsidePayment[];
-}
-
-type Cell = string | null | { number: Decimal };
-const numeric = (value: string): Cell => ({ number: toScale(decimal(value), 2) });
-
-function xmlText(value: string): string {
-  return value
-    .replace(/[^\t\n\r\x20-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, "�")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;")
-    .replaceAll("\r", "&#13;");
-}
-
-async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
-  const parts = [`${XML}<worksheet xmlns="${SHEET}"><sheetData>`];
-  for (const [index, row] of rows.entries()) {
-    if (index % 250 === 0) await nextTurn();
-    parts.push(
-      `<row r="${index + 1}">${row
-        .map((cell, column) => {
-          const reference = `${String.fromCharCode(65 + column)}${index + 1}`;
-          return cell !== null && typeof cell === "object"
-            ? `<c r="${reference}" t="n" s="1"><v>${cell.number}</v></c>`
-            : `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell ?? "")}</t></is></c>`;
-        })
-        .join("")}</row>`,
-    );
-  }
-  parts.push("</sheetData></worksheet>");
-  return parts.join("");
 }
 
 export async function renderAccountantWorkbook(
@@ -166,36 +128,14 @@ export async function renderAccountantWorkbook(
     words.paymentStates[payment.state],
     numeric(payment.refunded),
   ]);
-  const parts = {
-    "[Content_Types].xml": `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-      <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-      <Default Extension="xml" ContentType="application/xml"/>
-      <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-      <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-      <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-      <Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-      <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-    </Types>`,
-    "_rels/.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
-    "xl/workbook.xml": `${XML}<workbook xmlns="${SHEET}" xmlns:r="${REL}"><sheets><sheet name="${words.invoiceSheet}" sheetId="1" r:id="rId1"/><sheet name="${words.purchaseSheet}" sheetId="2" r:id="rId2"/><sheet name="${words.outsideSheet}" sheetId="3" r:id="rId4"/></sheets></workbook>`,
-    "xl/_rels/workbook.xml.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId4" Type="${REL}/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId3" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
-    "xl/styles.xml": `${XML}<styleSheet xmlns="${SHEET}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-    "xl/worksheets/sheet1.xml": await worksheet([
-      [...words.invoiceColumns, words.saleDateColumn],
-      ...invoiceRows,
-    ]),
-    "xl/worksheets/sheet3.xml": await worksheet([words.outsideColumns, ...outsideRows]),
-    "xl/worksheets/sheet2.xml": await worksheet([words.purchaseColumns, ...purchaseRows]),
-  };
-  const entries = Object.fromEntries(
-    Object.entries(parts).map(([name, xml]) => [name, strToU8(xml)]),
-  );
-  return new Promise((resolve, reject) => {
-    zip(entries, (error, bytes) => {
-      if (error) reject(error);
-      else resolve(bytes);
-    });
-  });
+  return renderWorkbook([
+    {
+      name: words.invoiceSheet,
+      rows: [[...words.invoiceColumns, words.saleDateColumn], ...invoiceRows],
+    },
+    { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
+    { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
+  ]);
 }
 
 export async function listAccountantExport(
