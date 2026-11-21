@@ -13,9 +13,10 @@ immutable backup comparison and existing privacy and change-feed rules. Declare 
 references in the schema. Rebuild core. Expect only the new table, keys and triggers in the protection
 list.
 
-Resolve the receipt-kind printer assigned to `cash_drawer` through `apps/server/src/receipt-print.ts`
-and the device/profile lookup. A switched-off assigned printer still holds cash. Keep existing kick
-eligibility and `refunds.drawer_opened_at` unchanged. In `bill-payments.ts`, the shared os13 refund
+Share one drawer assignment resolver in `apps/server/src/receipt-print.ts`. It requires an undeleted
+receipt printer with an attached drawer and the device profile's `open-cash-drawer` capability. It
+includes a switched-off assigned printer. Kick eligibility and `refunds.drawer_opened_at` keep their
+existing checks. In `bill-payments.ts`, the shared os13 refund
 completion, and `invoice-correction-cash.ts`, write the movement with payment/refund completion,
 including tips and every cash leg of a correction. Capture card totals for the slip using the same
 assignment at completion. Only cash affects the balance. Trace direct tenders, any landed cash-return
@@ -24,7 +25,7 @@ resolves the payment still succeeds. This slice leaves fiscal annulment and card
 
 Fail first in db `drawer-entries.test.ts` and `schema/drawer-entries.test.ts` for immutable writes,
 signed cents and shared balances. Server `drawer-movements.test.ts` owns assignment changes, switched-off
-hardware, no assignment and rollback with the money write. Extend `bill-payments.cash-up.test.ts`,
+hardware, no assignment, an assigned device barred from opening and rollback with the money write. Extend `bill-payments.cash-up.test.ts`,
 the landed os13 cash refund tests and `invoice-corrections.test.ts` for both refund parents, mirrored
 tender exclusion, replay, completed card totals and correction legs that had no kick. Run those files
 and the db backup evidence, schema and unchanged fiscal write-path checks.

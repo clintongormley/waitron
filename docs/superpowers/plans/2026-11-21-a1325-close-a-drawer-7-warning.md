@@ -1,22 +1,26 @@
-# 7. Warn when a drawer has been missed
+# 7. Warn and email after the business day ends
 
-[Shared plan](2026-11-21-a1325-close-a-drawer.md). After PR 6. Estimate 430 production and 380 test
-lines. The dashboard names drawers left unclosed. Saving a close clears the warning.
+[Shared plan](2026-11-21-a1325-close-a-drawer.md). After PR 5. Estimate 350 production and 300 test
+lines. A missed drawer close appears in the dashboard and the existing daily email adds closes,
+cash differences and due warnings. This smaller slice awaits the watcher's decision on replacing
+the design's department-hours schedule and weekly/off setting.
 
-Use `resolveDepartmentsDays` from venue-service to find the end of the last active department's
-hours, including overnight service. The check is due one elapsed hour later. If the day has no
-hours, use the boundary that ends that business day. Use the existing time-zone helpers for clock
-changes. Check drawers that recorded cash since their last finish, including a net-zero movement.
-Unfinished counts still need closing. Deleted drawers are skipped. Cash posted after a close
-becomes eligible at its own next check. The warning never gates an action.
+Use the existing business-day boundary. In `apps/server/src/alert-sources.ts` show a drawer with
+cash movement from an ended day that its latest finished close has yet to cover. Include net-zero
+movement and unfinished counts. Use the same drawer assignment rule as the till. A deleted drawer
+or one with no eligible assigned till appears only in history, where the manager can see why and
+assign it again when appropriate. A finished close clears its warning. The check never gates sales
+or depends on enabling mail.
 
-Add `apps/server/src/{drawer-close-schedule,drawer-close-settings}.ts` and use the existing job runner,
-`boot.ts`, `job-catalogue.ts` and `alert-sources.ts`. Register the alert and EN/ES wording. Save daily
-(default), weekly or off through the shared settings document and the existing venue configuration
-permission. Add the dashboard choice and draft handling to drawer history. Confirm when Weekly
-first warns with the watcher. Keep the daily report mail setting independent.
+Reuse `apps/server/src/close-of-day.ts` and `daily-report-mail.ts`. Keep the existing opt-in
+recipients, business-day dedupe key and send after the automatic bill-issue pass. Include closes in
+the ended business day and their differences, even if they occurred on a day with no sales. A day
+without a close still gets its Sales email. Use the same Sales reader at send time. Reuse the
+existing recent-day-only catch-up rule and include a Sales history link to find earlier closes.
+Register the alert and EN/ES wording and update both guides.
 
-Fail first in server `drawer-close-schedule.test.ts` for latest end, overnight, no hours, a clock
-change, net-zero cash, closing and reopening activity, and cadence. Server job tests own restart and
-stepdown. Run the alert and settings tests plus the code inventories. Dashboard tests own the draft,
-save, refusal and display. Update both guides. No schema change.
+Fail first in a focused drawer warning test for a missed close, later finish, net-zero versus
+card-only activity and an unassigned/deleted drawer. Extend `daily-report-mail.test.ts` for close
+details, no close, eligible recipients and both languages. Run `close-of-day.test.ts` to prove
+the email still follows bill issuance and the same key avoids a duplicate after restart. Run the
+alert inventories. No schema change.
