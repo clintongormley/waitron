@@ -324,6 +324,16 @@ const ROUTES: readonly Row[] = [
   ["POST", `/api/sales/${id}/receipt`, "print-receipt", forbidden("receipt"), {}],
   ["POST", `/api/sales/${id}/reprint`, "print-receipt", forbidden("reprint"), {}],
   ["POST", "/api/drawer/open", "open-cash-drawer", forbidden("drawer_open"), {}],
+  ["GET", "/api/drawer/close", "open-cash-drawer", forbidden("open-cash-drawer"), undefined],
+  ["POST", "/api/drawer/close/count", "open-cash-drawer", forbidden("open-cash-drawer"), {}],
+  [
+    "POST",
+    `/api/drawer/close/${id}/recount`,
+    "open-cash-drawer",
+    forbidden("open-cash-drawer"),
+    {},
+  ],
+  ["POST", `/api/drawer/close/${id}/finish`, "open-cash-drawer", forbidden("open-cash-drawer"), {}],
   [
     "POST",
     `/api/working-orders/${id}/close-deferred`,
