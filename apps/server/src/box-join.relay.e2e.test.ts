@@ -21,6 +21,7 @@ import {
   type JoinField,
   type JoinHelloFields,
 } from "./box-join-code.js";
+import { parseEnvFile } from "./env-file.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import {
   BOOT_MS,
@@ -161,12 +162,22 @@ function readableText(crossed: readonly Crossing[]): string {
   return texts.join("\n");
 }
 
-/** Which of M's certificate authority key's base64 lines, and `PRIVATE KEY`, appear in `text`. */
-async function caKeyPartsIn(pair: JoinPair, text: string): Promise<string[]> {
+/** M's recovery key, which the bundle carries in its `backupSettings`. */
+async function recoveryKeyOf(pair: JoinPair): Promise<string> {
+  const settings = parseEnvFile(await readFile(join(pair.dirsM.state, "backup.env"), "utf8"));
+  expect(settings.WAITRON_BACKUP_RECOVERY_KEY).toEqual(expect.any(String));
+  return settings.WAITRON_BACKUP_RECOVERY_KEY!;
+}
+
+/**
+ * Which of the bundle's secrets appear in `text`: `PRIVATE KEY`, each base64 line of M's
+ * certificate authority key, and M's recovery key.
+ */
+async function bundleSecretsIn(pair: JoinPair, text: string): Promise<string[]> {
   const pem = await readFile(join(pair.dirsM.state, "tls", "ca.key"), "utf8");
   const lines = pem.split(/\r?\n/).filter((l) => l !== "" && !l.startsWith("-"));
   expect(lines.length).toBeGreaterThan(1);
-  const parts = ["PRIVATE KEY", ...lines];
+  const parts = ["PRIVATE KEY", ...lines, await recoveryKeyOf(pair)];
   return parts.filter((part) => text.includes(part));
 }
 
@@ -186,7 +197,7 @@ describe("a relay between a joining box and the main box", () => {
   });
 
   it(
-    "a relay holding the main box's certificate files carries a finished join and reads no part of the bundle",
+    "a relay holding the main box's certificate files carries a finished join and reads neither the main box's certificate authority key nor its recovery key",
     async () => {
       const pair = await pairs.start("pure", "preproduction", undefined);
       const relay = await startRelay(pair);
@@ -197,11 +208,19 @@ describe("a relay between a joining box and the main box", () => {
       // The locked bundle crossed the relay.
       const approved = relay.crossed.filter((c) => c.answered.includes('"state":"approved"'));
       expect(approved.length).toBeGreaterThan(0);
-      expect(await caKeyPartsIn(pair, readableText(relay.crossed))).toEqual([]);
+      expect(await bundleSecretsIn(pair, readableText(relay.crossed))).toEqual([]);
 
-      // Control: the key, as a bundle sent without the lock would carry it, crossing the same relay.
+      // Control, a stand-in rather than the lock switched off: the test sends through the same
+      // relay what the approve route would carry with no lock, the bundle's JSON in base64 where
+      // the ciphertext goes (`box-join-api.ts`'s `lockJoinBundle` call), with the two secrets.
       const caKeyPem = await readFile(join(pair.dirsM.state, "tls", "ca.key"), "utf8");
-      const unlocked = Buffer.from(JSON.stringify({ boxCaKeyPem: caKeyPem })).toString("base64");
+      const recoveryKey = await recoveryKeyOf(pair);
+      const unlocked = Buffer.from(
+        JSON.stringify({
+          boxCaKeyPem: caKeyPem,
+          backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
+        }),
+      ).toString("base64");
       const sent = await fetch(`${relay.loopbackUrl}/api/node/join/poll`, {
         ...pair.viaM,
         method: "POST",
@@ -209,15 +228,17 @@ describe("a relay between a joining box and the main box", () => {
         body: JSON.stringify({ state: "approved", locked: { ciphertext: unlocked } }),
       });
       await sent.arrayBuffer();
-      const found = await caKeyPartsIn(pair, readableText(relay.crossed));
+      const found = await bundleSecretsIn(pair, readableText(relay.crossed));
       expect(found).toContain("PRIVATE KEY");
-      expect(found.length).toBeGreaterThan(1);
+      expect(found).toContain(recoveryKey);
+      expect(found.length).toBeGreaterThan(2);
     },
     RELAY_TIMEOUT_MS,
   );
 
   it(
-    "a relay that points the store address at itself is refused by the new box at reveal, and the main box writes no pair link",
+    // The store address's own guard is "signs the reveal answer over every hello field, Nn and Nm" in box-join-api.test.ts.
+    "a relay that rewrites the hello and signs it with its own key is refused by the new box at reveal, and the main box writes no pair link",
     async () => {
       const pair = await pairs.start("rewrite", "preproduction", undefined);
       const relay = await startRelay(pair, { rewriteStore: true });

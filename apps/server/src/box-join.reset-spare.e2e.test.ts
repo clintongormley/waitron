@@ -1,13 +1,10 @@
 // A join approved and collected whose new box stopped before its copy store answered, then was
 // reset: the main box's chart still lists that box, and its start-up peer check counts a listed box
 // only once it holds a `nodes` row for it (`boot-peer-check.ts`, `deps.joined`).
-import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { nodes, openVenueDatabase, readNodeMembership } from "@waitron/db";
 import { readPairLink } from "@waitron/node-db";
-import { runStagedReset } from "./reset-request.js";
-import { poll, withCapturedStdout } from "./testing/boot-harness.js";
+import { withCapturedStdout } from "./testing/boot-harness.js";
 import {
   BOOT_MS,
   boundedStart,
@@ -37,38 +34,25 @@ describe("a reset spare and the main box's start", () => {
     () =>
       withCapturedStdout(async (log) => {
         const pair = await pairs.start("reset", "preproduction", undefined);
-        // A folder where `trading.env` goes fails the join's last write, after M approved it and S
-        // collected the bundle, and before S's restart opens its copy store.
-        const blocker = join(pair.dirsS.state, "trading.env");
-        await mkdir(blocker);
-        const stopped = await pair.adopt();
+        // The join's last write fails after M approved it and S collected the bundle, before
+        // S's restart opens its copy store.
+        const stopped = await pair.stopJoin();
         expect(stopped.status, JSON.stringify(stopped.body)).toBe(500);
-        await rm(blocker, { recursive: true });
-        await pair.boxS.stopForRestart();
+        expect(stopped.body).toEqual({ error: { code: "server.internal" } });
         await boundedStart(pair.boxS.start(), "S's start after its join stopped");
-        const restartsBeforeReset = pair.boxS.restarts;
-        const reset = await fetch(`${pair.urlS}/setup-api/reset-incomplete-adopt`, {
-          ...(await pairs.viaNow(pair.dirsS)),
-          method: "POST",
+        // It stopped at the last write: the database holds the venue.
+        const viaS = await pairs.viaNow(pair.dirsS);
+        const status = await fetch(`${pair.urlS}/setup-api/status`, viaS);
+        expect(await status.json()).toMatchObject({
+          operation: { kind: "adopt", phase: "venue_committed" },
         });
-        expect(reset.status, await reset.text()).toBe(202);
-        expect(
-          await poll(() => (pair.boxS.restarts > restartsBeforeReset ? true : undefined)),
-        ).toBe(true);
-        await pair.boxS.stopForRestart();
-        expect(
-          await runStagedReset({
-            stateDir: pair.dirsS.state,
-            venueDir: pair.dirsS.venue,
-            log: () => {},
-          }),
-        ).toBe(true);
-        await boundedStart(pair.boxS.start(), "S's start after the reset");
+        await pair.resetStoppedJoin(viaS);
 
         // M's chart lists S, and M holds no `nodes` row for it.
         const link = await readOutside(pair.dirsM.venue, (store) =>
           readPairLink(store.node, pair.m.nodeId),
         );
+        expect(link).not.toBeNull();
         const nodeIdS = link!.peerNodeId;
         const chart = await readOutside(pair.dirsM.venue, (store) =>
           readNodeMembership(store.venue),

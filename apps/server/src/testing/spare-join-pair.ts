@@ -2,7 +2,7 @@
 // both started in this process as `spare-join-scenario.ts` starts them. Litestream is never run:
 // no box has a bucket copy.
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
@@ -12,7 +12,8 @@ import type { StartServerSeams } from "../boot.js";
 import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
 import { formatEnvFile } from "../env-file.js";
 import { ALL_MODULES } from "../modules.js";
-import { fetchHealthOk, httpsVia } from "./boot-harness.js";
+import { runStagedReset } from "../reset-request.js";
+import { fetchHealthOk, httpsVia, poll } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { adoptRetainedListeners } from "./retained-http-adoption.mjs";
 import { retainHttpListener, type RetainedHttpListener } from "./retained-http-listener.js";
@@ -52,6 +53,16 @@ export interface JoinPair {
   primaryUrl: string;
   /** Join, Check, tap and Finish joining (`adoptFrom`), with S joining M at `primaryUrl`. */
   adopt: (primaryUrl?: string) => Promise<{ status: number; body: unknown }>;
+  /**
+   * `adopt` with a folder where S's `trading.env` goes, so the join's last write fails after M
+   * approved it and S collected the bundle; answers Finish joining's answer, with S stopped.
+   */
+  stopJoin: () => Promise<{ status: number; body: unknown }>;
+  /**
+   * On S started after a stopped join: asks for the reset (trusting S through `via`), runs it as
+   * the next start through the entrypoint runs it, and starts S again.
+   */
+  resetStoppedJoin: (via: RequestInit) => Promise<void>;
 }
 
 /** Every pair a suite starts, in one scratch folder, closed together by `close`. */
@@ -167,6 +178,26 @@ export class JoinPairs {
     const urlS = `https://127.0.0.1:${listenerS.port}`;
     const primaryUrl = ownContactUrl(boxM.origin, m.nodeId);
     expect(existsSync(join(dirsS.state, "trading.env"))).toBe(false);
+    const adopt = async (joinAt = primaryUrl) => {
+      const store = adoptRetainedListeners([storeListener]);
+      try {
+        const answer = await adoptFrom(
+          { url: urlS, via: viaS },
+          { url: urlM, via: viaM, origin: boxM.origin },
+          joinAt,
+          (what, ms, probe) => waitUntil(what, ms, probe, undefined, WAIT_POLL_MS),
+        );
+        // The joined box's restart binds its store port, which this test holds until then.
+        if (answer.status === 200)
+          await boundedStart(
+            store.bound.then(() => {}),
+            `${name}: S's store listener`,
+          );
+        return answer;
+      } finally {
+        store.restore();
+      }
+    };
     return {
       boxM,
       dirsM,
@@ -178,25 +209,30 @@ export class JoinPairs {
       envS,
       urlS,
       primaryUrl,
-      adopt: async (joinAt = primaryUrl) => {
-        const store = adoptRetainedListeners([storeListener]);
-        try {
-          const answer = await adoptFrom(
-            { url: urlS, via: viaS },
-            { url: urlM, via: viaM, origin: boxM.origin },
-            joinAt,
-            (what, ms, probe) => waitUntil(what, ms, probe, undefined, WAIT_POLL_MS),
-          );
-          // The joined box's restart binds its store port, which this test holds until then.
-          if (answer.status === 200)
-            await boundedStart(
-              store.bound.then(() => {}),
-              `${name}: S's store listener`,
-            );
-          return answer;
-        } finally {
-          store.restore();
-        }
+      adopt,
+      stopJoin: async () => {
+        const blocker = join(dirsS.state, "trading.env");
+        await mkdir(blocker);
+        const stopped = await adopt();
+        await rm(blocker, { recursive: true });
+        await boxS.stopForRestart();
+        return stopped;
+      },
+      resetStoppedJoin: async (via) => {
+        const restartsBeforeReset = boxS.restarts;
+        const reset = await fetch(`${urlS}/setup-api/reset-incomplete-adopt`, {
+          ...via,
+          method: "POST",
+        });
+        expect(reset.status, await reset.text()).toBe(202);
+        expect(await poll(() => (boxS.restarts > restartsBeforeReset ? true : undefined))).toBe(
+          true,
+        );
+        await boxS.stopForRestart();
+        expect(
+          await runStagedReset({ stateDir: dirsS.state, venueDir: dirsS.venue, log: () => {} }),
+        ).toBe(true);
+        await boundedStart(boxS.start(), `${name}: S's start after the reset`);
       },
     };
   }
