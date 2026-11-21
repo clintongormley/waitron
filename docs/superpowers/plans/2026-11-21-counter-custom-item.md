@@ -372,8 +372,7 @@ offers their id. No by-id refusals and no text guard (plan review: a standing co
 
 - [ ] **Step 1: Failing tests:**
   - Name (required, a field primitive); Price on the till's money number pad
-    (`apps/till/src/widgets/numeric-pad.ts`; a physical keyboard drives it once A1563, the keyboard
-    work in lane A, lands — this task does not wait for it); Send to (Nowhere first and selected,
+    (`apps/till/src/widgets/numeric-pad.ts`, which a physical keyboard already drives); Send to (Nowhere first and selected,
     then each station by name); the rate choice only when `takeaway`, showing `21%`, `10%`, `4%`,
     `0%` and no other words; Add disabled until name, a price above zero and (on takeaway) a rate
     are given; inline field errors per the Forms contract (`docs/developers/design-system.md` →

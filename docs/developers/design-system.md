@@ -2797,7 +2797,7 @@ About Waitron opened with help off closes after the same two idle minutes, and h
 `HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
 is on or the shell's sheet is open (its `held` option), and the shell is in kiosk mode or has the `kds` form factor and draws its corner (it is given
 `loadLocales`, so the Help switch is there): turning help on starts it, a
-`pointerdown` or `keydown` anywhere inside the shell restarts it (heard in the capture phase, so a
+`pointerdown` anywhere inside the shell, or a `keydown` anywhere on the page, restarts it (heard in the capture phase, so a
 part that stops the event still counts; `till-guide-sheet` relays a same-origin page's own), turning help off with no sheet open, closing the
 sheet with help off, or the shell leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
 off only at the lock screen. The station board (`till-station-queue`) marks its first card drawn,

@@ -619,7 +619,7 @@ export const en = {
   "card.simulation_captured": "Approve",
   "card.simulation_declined": "Decline",
   "card.simulation_attempting": "No answer",
-  // Numeric keypad (accessible names for the non-alphanumeric keys)
+  // Numeric keypad
   "pad.decimal": "Decimal point",
   "pad.backspace": "Backspace",
   "pad.clear": "Clear",
