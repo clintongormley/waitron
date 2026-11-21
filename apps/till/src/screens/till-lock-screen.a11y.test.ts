@@ -77,20 +77,11 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the server-status line (two rows + waiting, role=status)", async () => {
+  it("has no violations on the server-status line (waiting sentence and Check again, role=status)", async () => {
     const { el, host } = await mountWidget<TillLockScreen>(
       "till-lock-screen",
       {
         api: stubApi(),
-        serverStatuses: [
-          {
-            url: "https://box.deli.test",
-            label: "box.deli.test",
-            state: "unreachable",
-            term: null,
-          },
-          { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 2 },
-        ],
         serverWaiting: true,
       },
       theme,

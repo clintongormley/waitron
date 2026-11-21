@@ -146,6 +146,10 @@ Cuando la caja diga **Este servidor ya no es el servidor principal**, espera a q
 servidor principal y vuelve a intentarlo. Si ya has cobrado con tarjeta en el datáfono, devuelve
 antes el importe ahí.
 
+Cuando la caja diga **Ningún servidor acepta ventas ahora mismo**, déjala abierta: continúa en
+cuanto un servidor vuelva a aceptar ventas. En la pantalla de inicio de sesión, **Comprobar de
+nuevo** lo comprueba al momento.
+
 ## Guarda un informe sobre un problema {#problem-report}
 
 Si la caja se comporta de forma inesperada, elige **Informar de un problema** en **☰**. Antes de
