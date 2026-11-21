@@ -102,8 +102,8 @@ const period: SalesPeriodDto = {
 
 const direct = (gross: string, net: string, lines: number) => ({ gross, net, lines });
 
-// Every row kind the table draws: a parent with a Directly-in row, a leaf, No category, and Not
-// recorded with its own row and a free-text child; and the incomplete note.
+// Every row kind the table draws: a parent with a Directly-in row, a leaf, No category, Payments
+// on account, and Not recorded with its own row and a free-text child; and the incomplete note.
 const categories: CategorySalesDto = {
   mode: "at_time_of_sale",
   tree: [
@@ -139,6 +139,16 @@ const categories: CategorySalesDto = {
       children: [],
     },
     {
+      kind: "payments_on_account",
+      id: "payments_on_account",
+      name: "",
+      depth: 0,
+      gross: "-10.00",
+      net: "-9.09",
+      direct: direct("-10.00", "-9.09", 3),
+      children: [],
+    },
+    {
       kind: "not_recorded",
       id: "not_recorded",
       name: "",
@@ -160,8 +170,8 @@ const categories: CategorySalesDto = {
       ],
     },
   ],
-  gross: "24.00",
-  net: "25.70",
+  gross: "14.00",
+  net: "16.61",
   grossComplete: false,
   linesWithoutGross: 5,
 };
@@ -236,6 +246,7 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=print-categories]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=gross-incomplete]")).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("sales.payments_on_account"));
     expect(el.shadowRoot!.querySelector("[data-test=print-status]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });

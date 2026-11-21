@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -8,15 +8,12 @@ import {
   captureError,
   drawerOpens,
   invoiceCorrections,
-  parties,
   readHistoryNodes,
   readLiveSeriesIdTx,
   saleLines,
   sales,
   tenderRefunds,
   tenders,
-  workingOrderLines,
-  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -35,19 +32,16 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
+  subtractDecimal,
   sumDecimals,
 } from "@waitron/shared";
 import {
   filedInvoicesOf,
   invoiceRecords,
-  recordedInvoiceIdsOf,
   refuseRecord,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
-import { readBillEditState } from "./bill-editing.js";
-import { readCancellationContext } from "./line-cancel-context.js";
-import { readOrderRevision } from "./working-order.js";
 import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import {
@@ -58,6 +52,7 @@ import {
   type AdvanceVenue,
 } from "./testing/advance-bills.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { clockAt } from "./testing/deferred-close-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -215,42 +210,6 @@ async function correctionOf(tx: Transaction, saleId: string) {
   };
 }
 
-/** Takes the bill's line `name` off it, as the till's cancel does. */
-async function removeDish(billId: string, name: string) {
-  const ask = await inTx(venue(), async (tx) => {
-    const [line] = await tx
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, name)));
-    const [order] = await tx
-      .select({ partyId: workingOrders.partyId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, billId));
-    const partyId = order!.partyId!;
-    return {
-      lineId: line!.id,
-      partyId,
-      body: {
-        expectedEdit: await readBillEditState(tx, billId),
-        expectedPartyRevision: (await tx.select().from(parties).where(eq(parties.id, partyId)))[0]!
-          .revision,
-        expectedBillRevision: await readOrderRevision(tx, billId),
-        expectedContext: await readCancellationContext(tx, partyId, line!.id),
-        submissionId: randomUUID(),
-        quantity: "1",
-        outcome: "remove_charge",
-      },
-    };
-  });
-  return send(
-    venue().app,
-    venue().cookie,
-    "POST",
-    `/api/parties/${ask.partyId}/lines/${ask.lineId}/cancel-item`,
-    ask.body,
-  );
-}
-
 function shiftDay(day: string, days: number): string {
   const d = new Date(`${day}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
@@ -287,7 +246,7 @@ type Figures = Awaited<ReturnType<typeof reportFigures>>;
 /** How far each report moved between two readings; top sellers as the rows whose figures moved. */
 function moved(before: Figures, after: Figures) {
   const by = (a: string, b: string | undefined) =>
-    centsToDecimal(Math.round(Number(a) * 100) - Math.round(Number(b ?? "0") * 100));
+    subtractDecimal(decimal(a), decimal(b ?? "0.00"));
   const topSellers: [string, string, string][] = [];
   for (const [name, row] of after.topSellers) {
     const earlier = before.topSellers.get(name);
@@ -712,7 +671,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
   it("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10% −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were", async () => {
     const billId = await seated("Tasting menu", "Salad bowl");
     const advanceId = await advance(billId, "120.00");
-    const removed = await removeDish(billId, "Salad bowl");
+    const removed = await cancelItemHttp(venue().db, venue().app, venue().cookie, billId, 2);
     expect(removed.status, JSON.stringify(removed.json)).toBe(200);
     const finalSaleId = await restId(billId);
     const restRecord = recordOf(finalSaleId);
@@ -728,8 +687,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
       tx.select().from(sales).where(eq(sales.id, corrective)),
     );
     expect(filed!.correctsSaleId).toBe(advanceId);
-    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
-    expect(await recordedInvoiceIdsOf(venue().db, corrective)).toEqual([
+    const [advanceRecord] = filedInvoicesOf(venue().db, advanceId, new Date());
+    expect(filedInvoicesOf(venue().db, corrective, new Date())).toEqual([
       expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
     ]);
     const opens = await inTx(venue(), (tx) =>
@@ -755,7 +714,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
   it("a €0.00 rest's invoice, then the clock stepped back two minutes: €20 in cash back on the advance still files an R5 of it at 10% naming it and opens the drawer once", async () => {
     const billId = await seated("Tasting menu", "Salad bowl");
     const advanceId = await advance(billId, "120.00");
-    const removed = await removeDish(billId, "Salad bowl");
+    const removed = await cancelItemHttp(venue().db, venue().app, venue().cookie, billId, 2);
     expect(removed.status, JSON.stringify(removed.json)).toBe(200);
     const finalSaleId = await restId(billId);
     expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
@@ -792,8 +751,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
     );
     expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
     expect(filedInvoicesOf(venue().db, corrective!.id, new Date())[0]!.kind).toBe("R5");
-    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
-    expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+    const [advanceRecord] = filedInvoicesOf(venue().db, advanceId, new Date());
+    expect(filedInvoicesOf(venue().db, corrective!.id, new Date())).toEqual([
       expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
     ]);
     const opens = await inTx(venue(), (tx) =>
@@ -835,7 +794,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
           .where(eq(billAdvances.workingOrderId, billId)),
       );
       const advanceId = row!.advanceId;
-      const removed = await removeDish(billId, "Salad bowl");
+      const removed = await cancelItemHttp(venue().db, venue().app, venue().cookie, billId, 2);
       expect(removed.status, JSON.stringify(removed.json)).toBe(200);
       const finalSaleId = await restId(billId);
       expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
@@ -870,8 +829,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
       );
       expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
       expect(filedInvoicesOf(venue().db, corrective!.id, new Date())[0]!.kind).toBe("R5");
-      const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
-      expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+      const [advanceRecord] = filedInvoicesOf(venue().db, advanceId, new Date());
+      expect(filedInvoicesOf(venue().db, corrective!.id, new Date())).toEqual([
         expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
       ]);
       expect(
@@ -1185,7 +1144,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
       { override: supervisor() },
     );
     expect(closed.status, JSON.stringify(closed.json)).toBe(200);
-    const removed = await removeDish(billId, "Salad bowl");
+    const removed = await cancelItemHttp(venue().db, venue().app, venue().cookie, billId, 2);
     expect(removed.status, JSON.stringify(removed.json)).toBe(200);
     const finalSaleId = await restId(billId);
     expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
@@ -1213,8 +1172,8 @@ describe("an advance once the rest's invoice has taken it off", () => {
       tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, advanceId)),
     );
     expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
-    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
-    expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+    const [advanceRecord] = filedInvoicesOf(venue().db, advanceId, new Date());
+    expect(filedInvoicesOf(venue().db, corrective!.id, new Date())).toEqual([
       expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
     ]);
   });

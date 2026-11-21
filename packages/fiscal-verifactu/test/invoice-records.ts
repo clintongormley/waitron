@@ -74,8 +74,18 @@ export async function filedSales(
   );
 }
 
+/** An invoice as a record names it: its issuer's tax number and its number. */
+export interface RecordedInvoiceId {
+  issuer: string;
+  number: string;
+}
+
 /** A sale's filed invoice record, as AEAT receives it, under English names. */
 export interface FiledInvoice {
+  /** `IDFactura`: the invoice this record is. */
+  invoice: RecordedInvoiceId;
+  /** `FacturasRectificadas`: the invoices this record says it corrects. */
+  corrects: RecordedInvoiceId[];
   /** `TipoFactura`: F1, F2, F3, R4 or R5. */
   kind: string;
   /** `ImporteTotal`. */
@@ -98,6 +108,14 @@ export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledI
       const record = fromRegistroRow(decodeRegistroRow(row));
       if (!("TipoFactura" in record)) throw new Error(`sale ${saleId} has a cancellation record`);
       return {
+        invoice: {
+          issuer: record.IDFactura.IDEmisorFactura,
+          number: record.IDFactura.NumSerieFactura,
+        },
+        corrects: (record.FacturasRectificadas?.IDFacturaRectificada ?? []).map((corrected) => ({
+          issuer: corrected.IDEmisorFactura,
+          number: corrected.NumSerieFactura,
+        })),
         kind: record.TipoFactura,
         total: record.ImporteTotal,
         vatTotal: record.CuotaTotal,
@@ -143,33 +161,4 @@ export async function seedWaitingRecords(
 /** Marks one record's sending as stopped. */
 export async function stopRecord(db: Database, recordId: string): Promise<void> {
   await db.update(envios).set({ estado: "detenido" }).where(eq(envios.registroId, recordId));
-}
-
-/** An invoice as a record names it: its issuer's tax number and its number. */
-export interface RecordedInvoiceId {
-  issuer: string;
-  number: string;
-}
-
-/** Each record filed for the sale: the invoice it is, and the invoices it says it corrects. */
-export async function recordedInvoiceIdsOf(
-  db: Database,
-  saleId: string,
-): Promise<{ invoice: RecordedInvoiceId; corrects: RecordedInvoiceId[] }[]> {
-  const rows = await db
-    .select()
-    .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.saleId, saleId));
-  return rows.map((row) => {
-    const corrected = (
-      row as { facturasRectificadas?: { IDFacturaRectificada: Record<string, string>[] } | null }
-    ).facturasRectificadas;
-    return {
-      invoice: { issuer: row.idEmisorFactura, number: row.numSerieFactura },
-      corrects: (corrected?.IDFacturaRectificada ?? []).map((entry) => ({
-        issuer: entry.IDEmisorFactura!,
-        number: entry.NumSerieFactura!,
-      })),
-    };
-  });
 }
