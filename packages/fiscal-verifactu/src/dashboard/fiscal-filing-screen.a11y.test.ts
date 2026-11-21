@@ -81,7 +81,7 @@ async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLEleme
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await screen.updateComplete;
   expect(details.querySelector("[data-test=replacement-confirmation]")!.textContent).toContain(
-    "VAT return",
+    "The sale's VAT belongs to",
   );
   return details;
 }
