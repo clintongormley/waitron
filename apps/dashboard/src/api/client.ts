@@ -2591,27 +2591,6 @@ export interface PartialRefundView {
   remaining: string;
 }
 
-export interface StuckPaymentRow {
-  partialRefund?: PartialRefundView;
-  retention?: RetainedAllocation;
-  paymentId: string;
-  workingOrderId: string;
-  orderNumber: number;
-  label: string | null;
-  /** The device that started it, or the job source that did; the name outlives a revocation. */
-  source: string;
-  deviceId: string | null;
-  deviceName: string | null;
-  provider: string;
-  amount: string;
-  startedAt: string;
-}
-
-export type StuckPaymentResolution =
-  | { outcome: "filed"; invoiceNumber: string }
-  | { outcome: "partial"; outstanding: string }
-  | { outcome: "not_charged"; orderUnlocked: boolean };
-
 export interface StuckBillPaymentRow {
   billState?: "pending" | "failed";
   partialRefund?: PartialRefundView;
@@ -5612,10 +5591,6 @@ export class DashboardApi {
     );
   }
 
-  listStuckPayments(): Promise<StuckPaymentRow[]> {
-    return this.#request<StuckPaymentRow[]>("/management-api/payments/stuck", "GET");
-  }
-
   listAbandonedRefunds(): Promise<AbandonedRefundOutcome[]> {
     return this.#request("/management-api/payments/abandoned-refunds", "GET");
   }
@@ -5635,13 +5610,6 @@ export class DashboardApi {
       `/management-api/payments/partial-refunds/${encodeURIComponent(paymentId)}/retain`,
       "POST",
       allocation,
-    );
-  }
-
-  resolveStuckPayment(paymentId: string): Promise<StuckPaymentResolution> {
-    return this.#request<StuckPaymentResolution>(
-      `/management-api/payments/stuck/${paymentId}/resolve`,
-      "POST",
     );
   }
 

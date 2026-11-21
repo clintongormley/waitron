@@ -119,7 +119,6 @@ import {
   refundProvidersOf,
   resumeCardRefund,
 } from "./bill-refunds.js";
-import {} from "./till-sale.js";
 import {
   attestTenderRefundIn,
   readStuckTenderRefund,
@@ -305,8 +304,6 @@ async function joinReaderTakingProfiles(tx: Transaction, readerId: string): Prom
   );
 }
 
-/** `provider` with a `collect` that refuses, so a pay through it can file a payment already
- * captured but can never charge a card. */
 function parseAttestation<O extends string>(
   body: Record<string, unknown>,
   outcomes: readonly O[],

@@ -660,9 +660,8 @@ elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro
 registrado, puede cobrar la tarjeta o registrar el efectivo.
 Si un pago sigue pendiente, o la tarjeta ya se ha cobrado pero el pago no se ha registrado, elige
 **Comprobar pagos con tarjeta / acceder**. No vuelvas a cobrar una tarjeta ya cobrada. Inicia sesión para
-consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir el cobro de la
-cuenta cuando esté registrado para ver el resultado. Si Comprobar pagos con tarjeta indica **Pago registrado.
-Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
+consultar o registrar el resultado confirmado por el proveedor en **Pagos de cuentas**. Después
+de registrarlo, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
 
 Si falla esa comprobación, sigue [Falló la comprobación de un cobro con tarjeta](table-service.md#card-check-failed).
 

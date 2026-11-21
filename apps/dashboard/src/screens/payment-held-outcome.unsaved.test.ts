@@ -71,7 +71,6 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     api: {
       listPaymentProviders: async () => [],
       listReaders: async () => [],
-      listStuckPayments: async () => [],
       listStuckBillPayments: async () => [],
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: async () => [],

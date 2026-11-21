@@ -3,7 +3,7 @@ import { html } from "lit";
 import { LiveData, registerCatalogue } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
-import type { DashboardApi, HeldPaymentRow } from "../api/client.js";
+import type { DashboardApi, HeldPaymentRow, StuckBillPaymentRow } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatAlertTime } from "../widgets/alert-format.js";
@@ -57,7 +57,6 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listPaymentProviders: vi.fn().mockResolvedValue([]),
     listReaders: vi.fn().mockResolvedValue([]),
     listReaderHolders: vi.fn().mockResolvedValue([]),
-    listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
@@ -533,8 +532,8 @@ describe("the Record what was done dialog", () => {
 });
 
 describe("partly refunded charges", () => {
-  const row = {
-    paymentId: "p-part",
+  const row: StuckBillPaymentRow = {
+    billPaymentId: "bp",
     workingOrderId: "wo-part",
     orderNumber: 73,
     label: "Terrace",
@@ -542,7 +541,10 @@ describe("partly refunded charges", () => {
     deviceId: "d",
     deviceName: "Bar",
     provider: "stripe-terminal",
-    amount: "1.50",
+    method: "card",
+    applied: "1.50",
+    tip: "0.00",
+    providerState: "partially_refunded",
     startedAt: "2026-09-27T10:00:00Z",
     partialRefund: { paymentId: "p-part", captured: "1.50", refunded: "0.40", remaining: "1.10" },
   };
@@ -554,7 +556,7 @@ describe("partly refunded charges", () => {
       const retain = vi.fn().mockResolvedValue({ outcome: "retained", ...retention });
       const el = await mount(
         stubApi({
-          listStuckPayments: vi.fn().mockResolvedValue([{ ...row, retention }]),
+          listStuckBillPayments: vi.fn().mockResolvedValue([{ ...row, retention }]),
           retainPartialRefund: retain,
         }),
       );
@@ -582,7 +584,7 @@ describe("partly refunded charges", () => {
   it("keeps failed retention held without claiming it checked a full refund", async () => {
     const el = await mount(
       stubApi({
-        listStuckPayments: vi.fn().mockResolvedValue([
+        listStuckBillPayments: vi.fn().mockResolvedValue([
           {
             ...row,
             retention: { remaining: "1.10", applied: "1.10", tip: "0.00", outstanding: "0.40" },
@@ -597,69 +599,45 @@ describe("partly refunded charges", () => {
     await flush(el);
     q(el, "[data-test=confirm-partial-refund]")!.click();
     await vi.waitFor(() =>
-      expect(q(el, "[data-test=stuck-result]")!.textContent).toContain(
+      expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain(
         "could not confirm this allocation",
       ),
     );
   });
 
-  it.each(["whole order", "bill payment"])(
-    "shows honest amounts and releases a %s only after confirmation",
-    async (kind) => {
-      const release = vi.fn().mockResolvedValue({ outcome: "released" });
-      const read = vi
-        .fn()
-        .mockResolvedValueOnce(
-          kind === "whole order"
-            ? [row]
-            : [
-                {
-                  ...row,
-                  billPaymentId: "bp",
-                  method: "card",
-                  applied: "1.50",
-                  tip: "0.00",
-                  providerState: "partially_refunded",
-                },
-              ],
-        )
-        .mockResolvedValue([]);
-      const el = await mount(
-        stubApi({
-          listHeldPayments: vi.fn().mockResolvedValue([]),
-          [kind === "whole order" ? "listStuckPayments" : "listStuckBillPayments"]: read,
-          releasePartialRefund: release,
-        }),
-      );
-      const item = q(el, "[data-test=partial-refund-p-part]")!;
-      expect(item.textContent).toContain("€1.50");
-      expect(item.textContent).toContain("€0.40");
-      expect(item.textContent).toContain("€1.10");
-      expect(item.querySelector('[data-test^="attest-"]')).toBeNull();
-      expect(item.querySelector('[data-test^="check-"]')).toBeNull();
-      q(el, "[data-test=release-partial-p-part]")!.click();
-      await flush(el);
-      expect(q(el, "[data-test=partial-refund-dialog]")!.textContent).toContain(
-        "Refund the remaining",
-      );
-      expect(q(el, "[data-test=partial-refund-dialog] wt-input")).toBeNull();
-      q(el, "[data-test=cancel-partial-refund]")!.click();
-      await flush(el);
-      expect(release).not.toHaveBeenCalled();
-      q(el, "[data-test=release-partial-p-part]")!.click();
-      await flush(el);
-      q(el, "[data-test=confirm-partial-refund]")!.click();
-      await flush(el);
-      expect(release).toHaveBeenCalledExactlyOnceWith("p-part");
-      expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull();
-      expect(
-        q(
-          el,
-          kind === "whole order" ? "[data-test=stuck-result]" : "[data-test=bill-action-result]",
-        )!.textContent,
-      ).toContain("fully refunded");
-    },
-  );
+  it("shows honest amounts and releases a bill payment only after confirmation", async () => {
+    const release = vi.fn().mockResolvedValue({ outcome: "released" });
+    const read = vi.fn().mockResolvedValueOnce([row]).mockResolvedValue([]);
+    const el = await mount(
+      stubApi({
+        listHeldPayments: vi.fn().mockResolvedValue([]),
+        listStuckBillPayments: read,
+        releasePartialRefund: release,
+      }),
+    );
+    const item = q(el, "[data-test=partial-refund-p-part]")!;
+    expect(item.textContent).toContain("€1.50");
+    expect(item.textContent).toContain("€0.40");
+    expect(item.textContent).toContain("€1.10");
+    expect(item.querySelector('[data-test^="attest-"]')).toBeNull();
+    expect(item.querySelector('[data-test^="check-"]')).toBeNull();
+    q(el, "[data-test=release-partial-p-part]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=partial-refund-dialog]")!.textContent).toContain(
+      "Refund the remaining",
+    );
+    expect(q(el, "[data-test=partial-refund-dialog] wt-input")).toBeNull();
+    q(el, "[data-test=cancel-partial-refund]")!.click();
+    await flush(el);
+    expect(release).not.toHaveBeenCalled();
+    q(el, "[data-test=release-partial-p-part]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-partial-refund]")!.click();
+    await flush(el);
+    expect(release).toHaveBeenCalledExactlyOnceWith("p-part");
+    expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull();
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("fully refunded");
+  });
 
   it("keeps a provider refusal separate from a subsequent load failure", async () => {
     const release = vi
@@ -669,20 +647,20 @@ describe("partly refunded charges", () => {
       .fn()
       .mockResolvedValueOnce([row])
       .mockRejectedValue({ code: "server.internal" });
-    const el = await mount(stubApi({ listStuckPayments: read, releasePartialRefund: release }));
+    const el = await mount(stubApi({ listStuckBillPayments: read, releasePartialRefund: release }));
     q(el, "[data-test=release-partial-p-part]")!.click();
     await flush(el);
     q(el, "[data-test=confirm-partial-refund]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=stuck-result]")!.getAttribute("role")).toBe("alert");
-    expect(q(el, "[data-test=stuck-result]")!.textContent).toContain("could not confirm");
-    expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
+    expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("alert");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("could not confirm");
+    expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
   });
 
   it("explains why a refund lacking its provider number cannot be released here", async () => {
     const el = await mount(
       stubApi({
-        listStuckPayments: vi.fn().mockResolvedValue([row]),
+        listStuckBillPayments: vi.fn().mockResolvedValue([row]),
         releasePartialRefund: vi.fn().mockRejectedValue({
           code: "payment.outcome_unknown",
           params: { reason: "refund_reference_missing" },
@@ -693,10 +671,10 @@ describe("partly refunded charges", () => {
     await flush(el);
     q(el, "[data-test=confirm-partial-refund]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=stuck-result]")!.textContent).toContain(
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain(
       "without the provider’s refund number",
     );
-    expect(q(el, "[data-test=stuck-result]")!.textContent).not.toContain("try again");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).not.toContain("try again");
   });
 
   it("reports a successful release separately when the list refresh fails", async () => {
@@ -706,7 +684,7 @@ describe("partly refunded charges", () => {
       .mockRejectedValue({ code: "server.internal" });
     const el = await mount(
       stubApi({
-        listStuckPayments: read,
+        listStuckBillPayments: read,
         releasePartialRefund: vi.fn().mockResolvedValue({ outcome: "released" }),
       }),
     );
@@ -715,8 +693,8 @@ describe("partly refunded charges", () => {
     q(el, "[data-test=confirm-partial-refund]")!.click();
     await flush(el);
     expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull();
-    expect(q(el, "[data-test=stuck-result]")!.getAttribute("role")).toBe("status");
-    expect(q(el, "[data-test=stuck-result]")!.textContent).toContain("fully refunded");
-    expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
+    expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("status");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("fully refunded");
+    expect(q(el, "[data-test=bill-load-error]")).not.toBeNull();
   });
 });

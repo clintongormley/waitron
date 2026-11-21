@@ -618,9 +618,8 @@ If a payment is recorded as not taken, you can try it again. If its result is un
 may charge the card or record the cash payment.
 If a payment stays pending, or the card was charged but the payment was not recorded, choose
 **Check card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
-record the provider’s confirmed outcome. Reopen the bill payment after it is recorded to see the
-result. If Check card payments says **Payment recorded. The rest is still due.**, reopen the bill and
-collect only its outstanding balance.
+record the provider’s confirmed outcome under **Bill payments**. After recording it, reopen the
+bill and collect only its outstanding balance.
 
 If that check fails, follow [A card-payment check failed](table-service.md#card-check-failed) below.
 

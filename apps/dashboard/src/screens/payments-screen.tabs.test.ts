@@ -23,7 +23,6 @@ function api(readers: ReaderRow[] = [reader], overrides: Partial<DashboardApi> =
     listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: false }),
     availableReaders: vi.fn().mockResolvedValue([]),
-    listStuckPayments: vi.fn().mockResolvedValue([]),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
@@ -77,7 +76,6 @@ const readerReads = [
   "readerStatus",
 ] as const;
 const recoveryReads = [
-  "listStuckPayments",
   "listStuckBillPayments",
   "listStuckTenderRefunds",
   "listStuckBillRefunds",

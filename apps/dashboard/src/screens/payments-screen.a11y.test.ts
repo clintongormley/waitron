@@ -1,15 +1,9 @@
-import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
-import type {
-  DashboardApi,
-  PaymentProviderRow,
-  ReaderRow,
-  StuckPaymentRow,
-} from "../api/client.js";
+import type { DashboardApi, PaymentProviderRow, ReaderRow } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -70,37 +64,8 @@ const READERS: ReaderRow[] = [
   },
 ];
 
-const STUCK: StuckPaymentRow[] = [
-  {
-    paymentId: "pay-1",
-    workingOrderId: "wo-1",
-    orderNumber: 12,
-    label: "Terrace 3",
-    source: "device",
-    deviceId: "device-1",
-    deviceName: "Bar till",
-    provider: "acme",
-    amount: "12.50",
-    startedAt: "2026-09-26T10:05:00.000Z",
-  },
-  {
-    paymentId: "pay-2",
-    workingOrderId: "wo-2",
-    orderNumber: 13,
-    label: null,
-    source: "device",
-    deviceId: "device-1",
-    deviceName: "Bar till",
-    provider: "acme",
-    amount: "8.00",
-    startedAt: "2026-09-26T10:07:00.000Z",
-  },
-];
-
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
-    listStuckPayments: vi.fn().mockResolvedValue([]),
-    resolveStuckPayment: vi.fn().mockResolvedValue({ outcome: "not_charged", orderUnlocked: true }),
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
@@ -128,60 +93,6 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
-  it.each([
-    ["en", 390],
-    ["es-ES", 390],
-    ["en", 1280],
-    ["es-ES", 1280],
-  ] as const)(
-    "keeps failed-check guidance and evidence readable (%s, %s px)",
-    async (locale, width) => {
-      const oldWidth = window.innerWidth,
-        oldHeight = window.innerHeight;
-      setLocale(locale);
-      await page.viewport(width, 900);
-      try {
-        const { el, host } = await mountWidget<PaymentsScreen>(
-          "dashboard-payments-screen",
-          {
-            api: stubApi({
-              listStuckPayments: vi
-                .fn()
-                .mockResolvedValueOnce([
-                  {
-                    ...STUCK[0]!,
-                    paymentId: "01234567-89ab-4cde-8fab-012345678901",
-                    workingOrderId: "abcdef01-2345-4678-9abc-def012345678",
-                  },
-                ])
-                .mockResolvedValue([]),
-              resolveStuckPayment: vi.fn().mockRejectedValue({ code: "server.internal" }),
-            }),
-            panels: PANELS,
-            surface: "checks",
-          },
-          theme,
-        );
-        await flush(el);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test^=resolve-]")!.click();
-        await flush(el);
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-resolve]")!.click();
-        await flush(el);
-        expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.textContent).toContain(
-          t("payments.stuck.failed_removed"),
-        );
-        const evidence = el.shadowRoot!.querySelector<HTMLElement>(
-          "[data-test=stuck-failed-evidence]",
-        )!;
-        expect(evidence.textContent).toContain("01234567-89ab-4cde-8fab-012345678901");
-        expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
-        await expectNoA11yViolations(host);
-      } finally {
-        await page.viewport(oldWidth, oldHeight);
-      }
-    },
-  );
-
   it.each(["en", "es-ES"])(
     "shows partial-refund amounts and confirmation accessibly (%s)",
     async (locale) => {
@@ -194,9 +105,21 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
               code: "payment.outcome_unknown",
               params: { reason: "refund_reference_missing" },
             }),
-            listStuckPayments: vi.fn().mockResolvedValue([
+            listStuckBillPayments: vi.fn().mockResolvedValue([
               {
-                ...STUCK[0]!,
+                billPaymentId: "bp-1",
+                workingOrderId: "wo-1",
+                orderNumber: 12,
+                label: "Terrace 3",
+                source: "device",
+                deviceId: "device-1",
+                deviceName: "Bar till",
+                provider: "acme",
+                providerState: "partially_refunded",
+                method: "card",
+                applied: "12.50",
+                tip: "0.00",
+                startedAt: "2026-09-26T10:05:00.000Z",
                 retention: { remaining: "8.50", applied: "8.00", tip: "0.50", outstanding: "2.00" },
                 partialRefund: {
                   paymentId: "pay-1",
@@ -226,10 +149,10 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       await expectNoA11yViolations(host);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-partial-refund]")!.click();
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.getAttribute("role")).toBe(
-        "alert",
-      );
-      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.textContent).toContain(
+      expect(
+        el.shadowRoot!.querySelector("[data-test=bill-action-result]")!.getAttribute("role"),
+      ).toBe("alert");
+      expect(el.shadowRoot!.querySelector("[data-test=bill-action-result]")!.textContent).toContain(
         t("payments.partial.reference_missing"),
       );
       await expectNoA11yViolations(host);
@@ -495,81 +418,6 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         throw new Error("label");
     });
     await expectNoA11yViolations(host);
-  });
-
-  describe("the stuck card payments section", () => {
-    async function mountStuck(overrides: Partial<Record<keyof DashboardApi, unknown>>) {
-      const mounted = await mountWidget<PaymentsScreen>(
-        "dashboard-payments-screen",
-        {
-          api: stubApi(overrides),
-          request: vi.fn() as unknown as PaymentsScreen["request"],
-          panels: PANELS,
-          surface: "checks",
-          simulatedCardPayments: false,
-        },
-        theme,
-      );
-      await flush(mounted.el);
-      return mounted;
-    }
-
-    async function check(el: PaymentsScreen): Promise<void> {
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=resolve-pay-1]")!.click();
-      await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-resolve]")!.click();
-      await flush(el);
-    }
-
-    it("renders the list of stuck payments accessibly", async () => {
-      const { host } = await mountStuck({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) });
-      await expectNoA11yViolations(host);
-    });
-
-    it("renders the confirmation accessibly", async () => {
-      const { el, host } = await mountStuck({
-        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
-      });
-      el.shadowRoot!.querySelector<HTMLElement>("[data-test=resolve-pay-1]")!.click();
-      await flush(el);
-      await expectNoA11yViolations(host);
-    });
-
-    it("renders a check in progress accessibly", async () => {
-      const { el, host } = await mountStuck({
-        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
-        resolveStuckPayment: vi.fn().mockReturnValue(new Promise(() => {})),
-      });
-      await check(el);
-      await expectNoA11yViolations(host);
-    });
-
-    it("renders a result after the last payment is cleared accessibly", async () => {
-      const { el, host } = await mountStuck({
-        listStuckPayments: vi.fn().mockResolvedValueOnce(STUCK.slice(0, 1)).mockResolvedValue([]),
-      });
-      await check(el);
-      await expectNoA11yViolations(host);
-    });
-
-    it("renders a refusal beside the remaining list accessibly", async () => {
-      const { el, host } = await mountStuck({
-        listStuckPayments: vi.fn().mockResolvedValue(STUCK),
-        resolveStuckPayment: vi.fn().mockRejectedValue({
-          code: "payment.outcome_unknown",
-          params: { paymentId: "pay-1", reason: "unreachable" },
-        }),
-      });
-      await check(el);
-      await expectNoA11yViolations(host);
-    });
-
-    it("renders a failed load accessibly", async () => {
-      const { host } = await mountStuck({
-        listStuckPayments: vi.fn().mockRejectedValue({ code: "server.internal" }),
-      });
-      await expectNoA11yViolations(host);
-    });
   });
 
   it("renders bill recovery rows and the manager attestation form accessibly", async () => {

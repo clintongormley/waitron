@@ -122,7 +122,6 @@ export const QUERY_DEPENDENCIES = {
   // Scheduled runs have no live resource; the query polls passively.
   getBackupAudit: [],
   listModules: ["settings.payments", "settings.modules"],
-  listStuckPayments: ["payments", "payment_refunds", "bill_payments", "working_orders", "devices"],
   listStuckTenderRefunds: ["tender_refunds", "sales", "invoice_series"],
   listStuckBillPayments: [
     "bill_payments",

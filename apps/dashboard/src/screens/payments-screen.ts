@@ -44,8 +44,6 @@ import type {
   ReaderHolderRow,
   ReaderRow,
   ReaderStatusView,
-  StuckPaymentResolution,
-  StuckPaymentRow,
   StuckBillPaymentRow,
   StuckBillRefundRow,
   HeldOutcome,
@@ -79,19 +77,6 @@ function paymentRefusalText(error: unknown): string {
   if (code === "reader.provider_disconnected") return t("payments.stuck.provider_disconnected");
   if (code === "server.internal") return t("payments.partial.failed");
   return codeMessage(code);
-}
-
-function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
-  if (resolution.outcome === "partial") return t("payments.stuck.partial");
-  if (resolution.outcome === "filed") return t("payments.stuck.filed");
-  if (resolution.outcome === "not_charged") {
-    return t(
-      resolution.orderUnlocked
-        ? "payments.stuck.not_charged_unlocked"
-        : "payments.stuck.not_charged_locked",
-    );
-  }
-  return null;
 }
 
 type BillTarget =
@@ -442,17 +427,8 @@ export class PaymentsScreen extends LitElement {
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a list read's failure, the only message the read's recovery may clear. */
   #readErrorShown = false;
-  @state() private stuck: StuckPaymentRow[] = [];
-  @state() private stuckLoadError: string | null = null;
   @state() private retainingPartial = false;
-  @state() private confirmingPartial: StuckPaymentRow | StuckBillPaymentRow | null = null;
-  @state() private confirmingStuck: StuckPaymentRow | null = null;
-  @state() private resolvingId: string | null = null;
-  @state() private stuckResult: {
-    text: string;
-    refused: boolean;
-    evidence?: StuckPaymentRow;
-  } | null = null;
+  @state() private confirmingPartial: StuckBillPaymentRow | null = null;
   @state() private billPayments: StuckBillPaymentRow[] = [];
   @state() private billRefunds: StuckBillRefundRow[] = [];
   @state() private tenderRefunds: StuckTenderRefundRow[] = [];
@@ -496,13 +472,6 @@ export class PaymentsScreen extends LitElement {
       return this.#load();
     },
   });
-  readonly #queries = new DashboardQueries(
-    this,
-    () => this.api,
-    (error) => {
-      this.stuckLoadError = codeOf(error);
-    },
-  );
   readonly #listQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -650,12 +619,6 @@ export class PaymentsScreen extends LitElement {
       void this.#load();
       return;
     }
-    void this.#queries
-      .watch("listStuckPayments", [], (rows) => {
-        this.stuck = rows;
-        this.stuckLoadError = null;
-      })
-      .catch(() => undefined);
     void this.#billPaymentQuery
       .watch("listStuckBillPayments", [], (rows) => {
         this.billPayments = rows;
@@ -1072,14 +1035,7 @@ export class PaymentsScreen extends LitElement {
     if (refuse && open && !ours) this.#showError("reader.not_found");
   }
 
-  #stuckOrder(row: StuckPaymentRow): string {
-    const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
-    return row.label ? `${order} · ${row.label}` : order;
-  }
-
-  #billOrder(
-    row: StuckPaymentRow | StuckBillPaymentRow | StuckBillRefundRow | StuckTenderRefundRow,
-  ): string {
+  #billOrder(row: StuckBillPaymentRow | StuckBillRefundRow | StuckTenderRefundRow): string {
     if ("saleId" in row) return fill("payments.tender.sale", { id: row.invoiceNumber });
     const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
     return row.label ? `${order} · ${row.label}` : order;
@@ -1863,137 +1819,7 @@ export class PaymentsScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #openResolve(row: StuckPaymentRow): void {
-    if (this.resolvingId !== null) return;
-    this.confirmingStuck = row;
-  }
-
-  /** The list is refreshed whatever the answer; a failed refresh is a load failure, never the
-   * check's own outcome. */
-  async #resolve(): Promise<void> {
-    const row = this.confirmingStuck;
-    if (row === null) return;
-    this.confirmingStuck = null;
-    this.resolvingId = row.paymentId;
-    this.stuckResult = null;
-    const order = this.#stuckOrder(row);
-    let failedCheck = false;
-    try {
-      const outcome = stuckOutcomeText(await this.api.resolveStuckPayment(row.paymentId));
-      this.stuckResult =
-        outcome === null
-          ? { text: `${order}: ${t("payments.stuck.failed")}`, refused: true }
-          : { text: `${order}: ${outcome}`, refused: false };
-    } catch (error) {
-      failedCheck = codeOf(error) === "server.internal";
-      this.stuckResult = {
-        text: `${order}: ${failedCheck ? t("payments.stuck.failed") : paymentRefusalText(error)}`,
-        refused: true,
-        ...(failedCheck ? { evidence: row } : {}),
-      };
-    }
-    try {
-      this.stuck = await (this.api.background ?? this.api).listStuckPayments();
-      this.stuckLoadError = null;
-      if (failedCheck)
-        this.stuckResult = {
-          text: `${order}: ${t(
-            this.stuck.some((current) => current.paymentId === row.paymentId)
-              ? "payments.stuck.failed_listed"
-              : "payments.stuck.failed_removed",
-          )}`,
-          refused: true,
-          evidence: row,
-        };
-    } catch (error) {
-      this.stuckLoadError = codeOf(error);
-    } finally {
-      this.resolvingId = null;
-    }
-  }
-
-  #renderStuck(): TemplateResult | typeof nothing {
-    if (this.stuck.length === 0 && this.stuckResult === null && this.stuckLoadError === null) {
-      return nothing;
-    }
-    return html`<section
-      class="stuck-section ${this.stuck.length ? "pending" : ""}"
-      data-test="stuck-payments"
-      aria-labelledby="stuck-heading"
-    >
-      <h2 id="stuck-heading">${t("payments.stuck.heading")}</h2>
-      ${this.stuck.length ? html`<p>${t("payments.stuck.intro")}</p>` : nothing}
-      ${
-        this.stuckResult
-          ? html`<p
-              data-test="stuck-result"
-              class=${this.stuckResult.refused ? "error" : ""}
-              role=${this.stuckResult.refused ? "alert" : "status"}
-            >
-              ${this.stuckResult.text}
-            </p>`
-          : nothing
-      }
-      ${
-        this.stuckResult?.evidence
-          ? html`<p data-test="stuck-failed-evidence">
-              ${this.stuckResult.evidence.paymentId} · ${this.stuckResult.evidence.workingOrderId} ·
-              ${this.#providerName(this.stuckResult.evidence.provider)} ·
-              ${formatMoney(this.stuckResult.evidence.amount, currentLocale())} ·
-              ${sourceLabel(this.stuckResult.evidence)} ·
-              <time datetime=${this.stuckResult.evidence.startedAt}
-                >${formatAlertTime(this.stuckResult.evidence.startedAt)}</time
-              >
-            </p>`
-          : nothing
-      }
-      ${
-        this.stuckLoadError
-          ? html`<p data-test="stuck-load-error" class="error" role="alert">
-              ${codeMessage(this.stuckLoadError)}
-            </p>`
-          : nothing
-      }
-      ${
-        this.stuck.length
-          ? html`<ul class="stuck-list">
-              ${this.stuck.map((row) => this.#renderStuckRow(row))}
-            </ul>`
-          : nothing
-      }
-    </section>`;
-  }
-
-  #renderStuckRow(row: StuckPaymentRow): TemplateResult {
-    if (row.partialRefund) return this.#renderPartialRow(row);
-    const order = this.#stuckOrder(row);
-    return html`<li class="stuck" data-test="stuck-${row.paymentId}">
-      <div class="stuck-body">
-        <p class="stuck-order">${order}</p>
-        <dl class="stuck-details">
-          <dt>${t("payments.stuck.device")}</dt>
-          <dd data-test="stuck-device">${sourceLabel(row)}</dd>
-          <dt>${t("payments.stuck.provider")}</dt>
-          <dd>${this.#providerName(row.provider)}</dd>
-          <dt>${t("payments.stuck.amount")}</dt>
-          <dd>${formatMoney(row.amount, currentLocale())}</dd>
-          <dt>${t("payments.stuck.started")}</dt>
-          <dd><time datetime=${row.startedAt}>${formatAlertTime(row.startedAt)}</time></dd>
-        </dl>
-      </div>
-      <wt-button
-        variant="secondary"
-        data-test="resolve-${row.paymentId}"
-        aria-label=${`${t("payments.stuck.check")}: ${order}`}
-        ?loading=${this.resolvingId === row.paymentId}
-        ?disabled=${this.resolvingId !== null}
-        @click=${() => this.#openResolve(row)}
-        >${t("payments.stuck.check")}</wt-button
-      >
-    </li>`;
-  }
-
-  #partialAmounts(row: StuckPaymentRow | StuckBillPaymentRow): string {
+  #partialAmounts(row: StuckBillPaymentRow): string {
     const facts = row.partialRefund!;
     return fill("payments.partial.amounts", {
       captured: formatMoney(facts.captured, currentLocale()),
@@ -2002,13 +1828,13 @@ export class PaymentsScreen extends LitElement {
     });
   }
 
-  #renderPartialRow(row: StuckPaymentRow | StuckBillPaymentRow): TemplateResult {
+  #renderPartialRow(row: StuckBillPaymentRow): TemplateResult {
     const id = row.partialRefund!.paymentId;
     return html`<li class="stuck" data-test=${`partial-refund-${id}`}>
       <div class="stuck-body">
         <p class="stuck-order">${this.#billOrder(row)}</p>
         <p>${this.#providerName(row.provider!)} · ${this.#partialAmounts(row)}</p>
-        ${"billPaymentId" in row && "billState" in row && row.billState === "failed" ? html`<p>${t("payments.partial.failed_link")}</p>` : nothing}
+        ${row.billState === "failed" ? html`<p>${t("payments.partial.failed_link")}</p>` : nothing}
       </div>
       <wt-button
         variant="secondary"
@@ -2044,11 +1870,7 @@ export class PaymentsScreen extends LitElement {
     const retain = this.retainingPartial;
     this.confirmingPartial = null;
     this.billBusy = true;
-    const showResult = (result: { text: string; refused: boolean } | null) => {
-      if ("billPaymentId" in row) this.billResult = result;
-      else this.stuckResult = result;
-    };
-    showResult(null);
+    this.billResult = null;
     const operation = (this.#billOperation = {});
     const current = () => this.isConnected && this.#billOperation === operation;
     try {
@@ -2061,28 +1883,19 @@ export class PaymentsScreen extends LitElement {
         });
       } else await this.api.releasePartialRefund(row.partialRefund!.paymentId);
       if (!current()) return;
-      showResult({
+      this.billResult = {
         text: `${this.#billOrder(row)}: ${t(retain ? "payments.partial.retained" : "payments.partial.released")}`,
         refused: false,
-      });
+      };
     } catch (error) {
       if (!current()) return;
-      showResult({
+      this.billResult = {
         text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t(retain ? "payments.partial.retain_unconfirmed" : "payments.partial.unconfirmed")) : paymentRefusalText(error)}`,
         refused: true,
-      });
+      };
     }
     try {
       await this.#loadBillRecovery(true);
-      try {
-        const rows = await (this.api.background ?? this.api).listStuckPayments();
-        if (current()) {
-          this.stuck = rows;
-          this.stuckLoadError = null;
-        }
-      } catch (error) {
-        if (current()) this.stuckLoadError = codeOf(error);
-      }
     } finally {
       if (current()) {
         this.billBusy = false;
@@ -2133,42 +1946,6 @@ export class PaymentsScreen extends LitElement {
         >
         <wt-button data-test="confirm-partial-refund" @click=${() => void this.#releasePartial()}
           >${title}</wt-button
-        >
-      </wt-form-actions>
-    </wt-dialog>`;
-  }
-
-  #renderResolveDialog(): TemplateResult | typeof nothing {
-    const row = this.confirmingStuck;
-    if (row === null) return nothing;
-    const provider = this.#providerName(row.provider);
-    return html`<wt-dialog
-      data-test="resolve-dialog"
-      .open=${true}
-      heading=${fill("payments.stuck.confirm_heading", { provider })}
-      @wt-close=${() => {
-        this.confirmingStuck = null;
-      }}
-    >
-      <p>
-        ${fill("payments.stuck.confirm_body", {
-          provider,
-          amount: formatMoney(row.amount, currentLocale()),
-          order: this.#stuckOrder(row),
-        })}
-      </p>
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="cancel-resolve"
-          @click=${() => {
-            this.confirmingStuck = null;
-          }}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button data-test="confirm-resolve" @click=${() => void this.#resolve()}
-          >${t("payments.stuck.confirm")}</wt-button
         >
       </wt-form-actions>
     </wt-dialog>`;
@@ -2638,7 +2415,7 @@ export class PaymentsScreen extends LitElement {
 
   #renderChecks(): TemplateResult {
     return html`
-      ${this.#renderStuck()} ${this.#renderBillRecovery()}
+      ${this.#renderBillRecovery()}
       ${this.abandonedRefundError ? html`<p role="alert">${codeMessage(this.abandonedRefundError)}</p>` : nothing}
       ${
         this.abandonedRefunds.length
@@ -2672,8 +2449,7 @@ export class PaymentsScreen extends LitElement {
         >${t("payments.backup.title")}</wt-button
       >
       ${this.backupOpen ? html`<dashboard-backup-audit .api=${this.api}></dashboard-backup-audit>` : nothing}
-      ${this.#renderPartialDialog()} ${this.#renderResolveDialog()}
-      ${keyed(this.billAction, this.#renderBillDialog())}
+      ${this.#renderPartialDialog()} ${keyed(this.billAction, this.#renderBillDialog())}
       ${keyed(this.heldAction, this.#renderHeldDialog())}
     `;
   }
