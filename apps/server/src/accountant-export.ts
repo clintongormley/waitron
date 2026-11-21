@@ -9,6 +9,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  notExists,
   or,
   sql,
   type SQL,
@@ -18,7 +19,10 @@ import { alias } from "drizzle-orm/sqlite-core";
 import {
   billAdvances,
   billPayments,
+  invoiceCorrectionRefunds,
   invoiceSeries,
+  persons,
+  refunds,
   saleLines,
   sales,
   saleSubstitutions,
@@ -32,9 +36,14 @@ import { listPurchaseInvoices } from "@waitron/purchasing";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { PurchaseInvoice } from "@waitron/purchasing";
 import {
+  addDecimal,
   centsToDecimal,
   compareDecimal,
   decimal,
+  divideDecimal,
+  isZeroDecimal,
+  multiplyDecimal,
+  subtractDecimal,
   sumDecimals,
   type Decimal,
 } from "@waitron/shared";
@@ -73,10 +82,55 @@ export interface AdvanceCell {
   takenOffBy: string | null;
 }
 
+/** A completed Refund a payment on a ticket: no corrective invoice was filed for it. */
+export interface RefundWithoutCorrective {
+  id: string;
+  refundedAt: string;
+  amount: Decimal;
+  tip: Decimal;
+  method: "cash" | "card";
+  reason: string;
+  requestedBy: string;
+  authorizedBy: string;
+  saleId: string;
+  invoiceNumber: string;
+  /** On a part payment's ticket, the table's ticket that took it off. */
+  takenOffBy: string | null;
+  /** The refund's share of each VAT rate of the ticket, as {@link refundVatShares} divides it. */
+  vat: { rate: string; base: Decimal; tax: Decimal }[];
+}
+
 export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
   purchases: readonly PurchaseInvoice[];
   outsidePayments: readonly OutsidePayment[];
+  refundsWithoutCorrective: readonly RefundWithoutCorrective[];
+}
+
+/**
+ * `amount` shared over a ticket's VAT rates in proportion to each rate's gross, rounded to the
+ * cent, the last rate taking the remainder so the shares sum to `amount`. Within a rate the VAT is
+ * share × rate / (100 + rate), rounded to the cent, and the base is the share less that VAT. A
+ * ticket with no VAT rates, or none with any gross, gives none.
+ */
+export function refundVatShares(
+  amount: Decimal,
+  breakdown: readonly { rate: string; base: string; tax: string }[],
+): RefundWithoutCorrective["vat"] {
+  const grosses = breakdown.map((vat) => addDecimal(decimal(vat.base), decimal(vat.tax)));
+  const whole = sumDecimals(grosses);
+  if (isZeroDecimal(whole)) return [];
+  let shared = decimal("0.00");
+  return breakdown.map((vat, index) => {
+    const share =
+      index === breakdown.length - 1
+        ? subtractDecimal(amount, shared)
+        : divideDecimal(multiplyDecimal(amount, grosses[index]!), whole, 2);
+    shared = addDecimal(shared, share);
+    const rate = decimal(vat.rate);
+    const tax = divideDecimal(multiplyDecimal(share, rate), addDecimal(decimal("100"), rate), 2);
+    return { rate: vat.rate, base: subtractDecimal(share, tax), tax };
+  });
 }
 
 function paymentOnAccount(
@@ -266,6 +320,27 @@ export async function renderAccountantWorkbook(
     words.paymentStates[payment.state],
     numeric(payment.refunded),
   ]);
+  const refundRows: Cell[][] = [];
+  for (const refund of data.refundsWithoutCorrective) {
+    const groups = refund.vat.length === 0 ? [null] : refund.vat;
+    for (const [index, vat] of groups.entries())
+      refundRows.push([
+        refund.id,
+        refund.refundedAt,
+        index === 0 ? numeric(refund.amount) : null,
+        index === 0 ? numeric(refund.tip) : null,
+        words.paymentMethods[refund.method],
+        refund.reason,
+        refund.requestedBy,
+        refund.authorizedBy,
+        refund.saleId,
+        refund.invoiceNumber,
+        refund.takenOffBy,
+        vat === null ? null : numeric(vat.rate),
+        vat === null ? null : numeric(vat.base),
+        vat === null ? null : numeric(vat.tax),
+      ]);
+  }
   return renderWorkbook([
     {
       name: words.invoiceSheet,
@@ -276,6 +351,7 @@ export async function renderAccountantWorkbook(
     },
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
+    { name: words.refundSheet, rows: [words.refundColumns, ...refundRows] },
   ]);
 }
 
@@ -386,15 +462,71 @@ export async function listAccountantExport(
     to: nextDay.toISOString().slice(0, 10),
   });
   const clock = await readVenueClock(tx);
-  const outsidePayments = await listOutsidePayments(
-    tx,
-    validatedRangeWindow({
-      fromBusinessDay: range.from,
-      toBusinessDay: range.to,
-      timeZone: clock.timeZone,
-      dayCutover: "00:00",
-      cutoverChanges: [],
-    }),
-  );
-  return { invoices, purchases, outsidePayments };
+  const window = validatedRangeWindow({
+    fromBusinessDay: range.from,
+    toBusinessDay: range.to,
+    timeZone: clock.timeZone,
+    dayCutover: "00:00",
+    cutoverChanges: [],
+  });
+  const outsidePayments = await listOutsidePayments(tx, window);
+  const refundsWithoutCorrective = await listRefundsWithoutCorrective(tx, window);
+  return { invoices, purchases, outsidePayments, refundsWithoutCorrective };
+}
+
+/**
+ * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
+ * a Correct invoice. A bill refund is never listed: it is taken before the bill's invoice exists.
+ */
+async function listRefundsWithoutCorrective(
+  tx: Transaction,
+  window: (column: SQL) => SQL,
+): Promise<RefundWithoutCorrective[]> {
+  const requester = alias(persons, "requester");
+  const authorizer = alias(persons, "authorizer");
+  const rows = await tx
+    .select({
+      id: refunds.id,
+      refundedAt: sql<string>`${refunds.completedAt}`,
+      applied: refunds.appliedAmount,
+      tip: refunds.tipAmount,
+      method: refunds.method,
+      reason: refunds.reason,
+      requestedBy: requester.displayName,
+      authorizedBy: authorizer.displayName,
+      saleId: sql<string>`${refunds.saleId}`,
+      code: invoiceSeries.code,
+      number: sales.invoiceNumber,
+      vatBreakdown: sales.vatBreakdown,
+    })
+    .from(refunds)
+    .innerJoin(sales, eq(sales.id, refunds.saleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .innerJoin(requester, eq(requester.id, refunds.requestedBy))
+    .innerJoin(authorizer, eq(authorizer.id, refunds.authorizedBy))
+    .where(
+      and(
+        eq(refunds.state, "completed"),
+        window(sql`${refunds.completedAt}`),
+        notExists(
+          tx
+            .select({ id: invoiceCorrectionRefunds.id })
+            .from(invoiceCorrectionRefunds)
+            .where(eq(invoiceCorrectionRefunds.tenderRefundId, refunds.id)),
+        ),
+      ),
+    )
+    .orderBy(asc(refunds.completedAt), asc(refunds.id));
+  const takenOff = await advancesTakenOff(tx, [...new Set(rows.map((row) => row.saleId))]);
+  return rows.map(({ applied, tip, code, number, vatBreakdown, ...row }) => {
+    const amount = centsToDecimal(applied);
+    return {
+      ...row,
+      amount,
+      tip: centsToDecimal(tip),
+      invoiceNumber: formatInvoiceNumber(code, number),
+      takenOffBy: takenOff.get(row.saleId)?.invoiceNumber ?? null,
+      vat: refundVatShares(amount, vatBreakdown),
+    };
+  });
 }
