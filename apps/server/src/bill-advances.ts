@@ -291,7 +291,7 @@ export async function readBillAdvances(
   }>(sql`select a.id as advance_id, cast(c.total as text) as total, c.vat_breakdown
     from sales a join sales c on ${correctivesOf(sql`c`, sql`a.id`)}
     where a.id in (${saleIds})`);
-  const tipsGivenBack = await tx
+  const refundsBack = await tx
     .select({
       billPaymentId: tenders.billPaymentId,
       tips: sql<number>`sum(${refunds.tipAmount})`.mapWith(Number),
@@ -347,7 +347,7 @@ export async function readBillAdvances(
       gross,
     });
     credits.set(advance.workingOrderId, list);
-    const givenBack = tipsGivenBack.find((row) => row.billPaymentId === advance.billPaymentId);
+    const givenBack = refundsBack.find((row) => row.billPaymentId === advance.billPaymentId);
     payments.set(advance.billPaymentId, {
       saleId: advance.saleId,
       ticket: {
