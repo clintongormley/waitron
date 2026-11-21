@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { codeOf } from "@waitron/server-kit";
 import {
   AppError,
   isDashboardAssetPath,
@@ -13,6 +14,7 @@ import { BOX_HOSTNAME } from "./box-name.js";
 import { escapeHtml, httpsLinkLine } from "./html-page.js";
 import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import type { MainSilenceState } from "./main-silence-watch.js";
+import type { Logger } from "./logger.js";
 import "./errors.js";
 
 export function renderSparePage(
@@ -63,6 +65,7 @@ export function spareReadGate(deps: {
   main: () => MainSilenceState | undefined;
   /** The main box's address from this box's chart; a failed read only drops the link. */
   mainUrl: () => Promise<string | null>;
+  log: Logger;
   now?: () => number;
 }): MiddlewareHandler {
   const now = deps.now ?? Date.now;
@@ -89,7 +92,18 @@ export function spareReadGate(deps: {
       if (new URL(c.req.url).hostname !== BOX_HOSTNAME)
         return boxPageAnswer(
           c,
-          renderSparePage(locale, main, now(), await deps.mainUrl().catch(() => null)),
+          renderSparePage(
+            locale,
+            main,
+            now(),
+            await deps.mainUrl().catch((error: unknown) => {
+              deps.log("warn", "spare_page.main_link_failed", {
+                errorCode: codeOf(error),
+                requestId: c.get("requestId"),
+              });
+              return null;
+            }),
+          ),
           200,
           "no-store",
         );

@@ -16,7 +16,7 @@ export const SPARE_WORDS: Record<
 > = {
   "en-GB": {
     title: "This is the venue’s spare box",
-    body: "It keeps a copy and takes over if the main box fails.",
+    body: "It keeps a copy of the venue’s data, so you can switch to it if the main box fails.",
     openMain: "Open the main box",
     refusal: "This is the venue’s spare box. Use the main box.",
     mainBack: "The main box is answering again. This page reloads in a few seconds.",
@@ -27,7 +27,7 @@ export const SPARE_WORDS: Record<
   },
   "es-ES": {
     title: "Este es el servidor de reserva del local",
-    body: "Guarda una copia y sustituye al principal si falla.",
+    body: "Guarda una copia de los datos del local, para que puedas cambiar a este servidor si el principal falla.",
     openMain: "Abrir el servidor principal",
     refusal: "Este es el servidor de reserva del local. Usa el servidor principal.",
     mainBack: "El servidor principal vuelve a responder. Esta página se recarga en unos segundos.",

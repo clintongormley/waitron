@@ -4,8 +4,8 @@ Open the box’s address for the dashboard, or add `/till/` to open the till. Up
 
 ## When you open the spare box {#spare}
 
-If you see **This is the venue’s spare box**, use **Open the main box** to reach the restaurant
-screens and data. The spare takes no sales and offers no dashboard sign-in.
+If you see **This is the venue’s spare box**, open the main box to reach the restaurant screens
+and data, with **Open the main box** when the page shows it. The spare takes no sales and offers no dashboard sign-in.
 
 The spare’s page also tells you how the main box looks from the spare. If the main box has stopped
 answering, it says for how long and links to the [switch page](servers.md#emergency). If it says the spare
@@ -173,8 +173,8 @@ On a till, keep the screen open; it follows the main server once that server is 
 
 If you open a box's address, or its till or dashboard, and see a page titled **This box no longer
 runs the venue**, that box has stepped down. It takes no sales and sends nothing to the tax agency.
-The page names, in bold, the box taking over the venue; use **Open the box that runs the venue** to
-go there.
+The page names, in bold, the box taking over the venue; use **Open the box that runs the venue**,
+when the page shows it, to go there.
 
 Below that, the page lists each step of the handover that this box has recorded, in the order it
 recorded them, with the date and time of each in the venue's time zone.

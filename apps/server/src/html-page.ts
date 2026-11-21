@@ -9,9 +9,18 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function isHttpsAddress(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** A paragraph linking `text` to `url`, or nothing unless `url` is an `https://` address. */
 export function httpsLinkLine(url: string | null | undefined, text: string): string {
-  return url?.startsWith("https://") === true
+  return url != null && isHttpsAddress(url)
     ? `<p><a href="${escapeHtml(url)}">${escapeHtml(text)}</a></p>`
     : "";
 }

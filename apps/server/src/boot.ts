@@ -2511,6 +2511,7 @@ async function bootServer(
     const gate = spareReadGate({
       main: () => mainSilence?.state(),
       mainUrl: async () => mainServerUrl(await readNodeMembership(db)),
+      log,
     });
     app.use("*", gate);
     staffPageGates.push(gate);

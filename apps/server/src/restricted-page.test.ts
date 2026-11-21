@@ -9,6 +9,7 @@ import {
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
+import type { SignedMembershipDocument } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { HandoverBinding } from "@waitron/handover";
@@ -73,6 +74,10 @@ function request(
   method = "GET",
 ): Promise<Response> {
   const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("requestId", "request-1");
+    await next();
+  });
   restrictedPageRoute({
     venue,
     node: suite.node,
@@ -253,7 +258,11 @@ describe("the restricted box's own page", () => {
       expect(html).toContain(`<h1>${heading}</h1>`);
       expect(html).not.toContain("server.internal");
       expect(logged).toEqual([
-        { level: "error", event: "restricted_page.failed", fields: { errorCode: "unknown" } },
+        {
+          level: "error",
+          event: "restricted_page.failed",
+          fields: { errorCode: "unknown", requestId: "request-1" },
+        },
       ]);
     },
   );
@@ -276,7 +285,11 @@ describe("the restricted box's own page", () => {
     expect(response.status).toBe(500);
     expect(await response.text()).toContain("<h1>This page could not be shown.</h1>");
     expect(logged).toEqual([
-      { level: "error", event: "restricted_page.failed", fields: { errorCode: "unknown" } },
+      {
+        level: "error",
+        event: "restricted_page.failed",
+        fields: { errorCode: "unknown", requestId: "request-1" },
+      },
     ]);
   });
 
@@ -477,6 +490,69 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
     expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
   });
 
+  it.each([
+    ["lacks its list of boxes", { body: { term: 3 }, signerNodeId: NODE }],
+    ["has no body", { signerNodeId: NODE }],
+  ])("shows the page without the successor link when the chart %s", async (_, chart) => {
+    const successor = await seedSuccessor("Counter box");
+    await withNodeTransaction(suite.node, (tx) =>
+      recordHandoverRestrictionTx(tx, {
+        nodeId: NODE,
+        operationId: null,
+        kind: "superseded",
+        successorNodeId: successor,
+        membershipTerm: 4,
+      }),
+    );
+    await writeNodeMembership(suite.db, chart as unknown as SignedMembershipDocument);
+    logged.length = 0;
+    const response = await request("en-GB", suite.db, undefined, "/till");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("<strong>Counter box</strong>");
+    expect(html).toContain(escapeHtml(RESTRICTED_RETURN_WORDS["en-GB"].waiting));
+    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+    expect(logged).toEqual([
+      {
+        level: "warn",
+        event: "restricted_page.successor_link_failed",
+        fields: { errorCode: "unknown", requestId: "request-1" },
+      },
+    ]);
+  });
+
+  it("keeps a recorded handover's page, without its links, when the chart lacks its list of boxes", async () => {
+    await handOver(await seedSuccessor("Counter box"));
+    await writeNodeMembership(suite.db, {
+      body: { term: 3 },
+      signerNodeId: NODE,
+    } as unknown as SignedMembershipDocument);
+    logged.length = 0;
+    const response = await request("en-GB", suite.db, undefined, "/till");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    inOrder(html, [
+      "<strong>Counter box</strong>",
+      "Handover begun",
+      "Stopped taking sales",
+      escapeHtml(RESTRICTED_RETURN_WORDS["en-GB"].waiting),
+    ]);
+    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+    expect(html).not.toContain("<a ");
+    expect(logged).toEqual([
+      {
+        level: "warn",
+        event: "restricted_page.successor_link_failed",
+        fields: { errorCode: "unknown", requestId: "request-1" },
+      },
+      {
+        level: "warn",
+        event: "restricted_page.progress_link_failed",
+        fields: { errorCode: "unknown", requestId: "request-1" },
+      },
+    ]);
+  });
+
   it.each(["en-GB", "es-ES"] as const)(
     "has the guides' look and the Waitron logo: %s",
     async (language) => {
@@ -486,6 +562,8 @@ describe("the restricted page at the till's and the dashboard's addresses", () =
       const html = await response.text();
       expect(html).toContain("font-family: var(--wt-font-family)");
       expect(html).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
+      expect(html).toContain(".logo svg { display: block; }");
+      expect(html).toContain("p, li { overflow-wrap: anywhere; }");
     },
   );
 

@@ -71,7 +71,22 @@ async function readTimeZone(venue: Database): Promise<string> {
   }
 }
 
-async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
+/** A link's address, or none when reading it fails: the page stands without its links. */
+async function linkOrNone(
+  deps: RestrictedPageDeps,
+  requestId: string,
+  event: string,
+  read: () => Promise<string | undefined>,
+): Promise<string | undefined> {
+  try {
+    return await read();
+  } catch (error) {
+    deps.log("warn", event, { errorCode: codeOf(error), requestId });
+    return undefined;
+  }
+}
+
+async function readView(deps: RestrictedPageDeps, requestId: string): Promise<RestrictedView> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
   if (restriction === null) throw new Error(`no handover restriction for node ${deps.nodeId}`);
@@ -103,16 +118,26 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
     steps.push(...events);
   }
   // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
-  const successorUrl = (await readNodeMembership(deps.venue))?.body.nodes.find(
-    (entry) => entry.nodeId === restriction.successorNodeId,
-  )?.contactUrl;
+  const successorUrl = await linkOrNone(
+    deps,
+    requestId,
+    "restricted_page.successor_link_failed",
+    async () =>
+      (await readNodeMembership(deps.venue))?.body.nodes.find(
+        (entry) => entry.nodeId === restriction.successorNodeId,
+      )?.contactUrl,
+  );
   return {
     successorUrl,
     successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
     steps,
     timeZone: await readTimeZone(deps.venue),
     handoverPage:
-      operation === null ? undefined : await handoverPageOf({ db: deps.venue }, operation),
+      operation === null
+        ? undefined
+        : await linkOrNone(deps, requestId, "restricted_page.progress_link_failed", () =>
+            handoverPageOf({ db: deps.venue }, operation),
+          ),
     returnState: deps.returnState?.() ?? "waiting",
   };
 }
@@ -163,7 +188,12 @@ export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => vo
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
       try {
-        return boxPageAnswer(c, renderPage(await readView(deps), locale), 200, "no-store");
+        return boxPageAnswer(
+          c,
+          renderPage(await readView(deps, c.get("requestId")), locale),
+          200,
+          "no-store",
+        );
       } catch (error) {
         deps.log("error", "restricted_page.failed", {
           errorCode: codeOf(error),

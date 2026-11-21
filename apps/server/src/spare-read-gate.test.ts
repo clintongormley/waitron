@@ -14,6 +14,8 @@ const NOW = 1_800_000_000_000;
 const ANSWERING: MainSilenceState = { silentSinceMs: null, reached: true, silent: false };
 const SILENT: MainSilenceState = { silentSinceMs: NOW, reached: true, silent: true };
 
+const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+
 /** `null`: no watch runs. */
 function fixture(
   main: MainSilenceState | null = ANSWERING,
@@ -21,6 +23,10 @@ function fixture(
 ) {
   const mode = { mirror: true };
   const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("requestId", "request-1");
+    await next();
+  });
   app.use(
     "*",
     readOnlyGate(
@@ -33,6 +39,7 @@ function fixture(
     spareReadGate({
       main: () => main ?? undefined,
       mainUrl,
+      log: (level, event, fields) => logged.push({ level, event, fields }),
       now: () => NOW,
     }),
   );
@@ -303,6 +310,8 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(body).toContain("font-family: var(--wt-font-family)");
     expect(body).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
     expect(body).toContain(`<h1>${escapeHtml(SPARE_WORDS[locale].title)}</h1>`);
+    expect(body).toContain(".logo svg { display: block; }");
+    expect(body).toContain("p, li { overflow-wrap: anywhere; }");
   },
 );
 
@@ -332,14 +341,28 @@ it.each([
   ["an empty address", () => Promise.resolve("")],
   ["no address", () => Promise.resolve(null)],
   ["a script address", () => Promise.resolve("javascript:alert(1)")],
+  ["a bare https prefix", () => Promise.resolve("https://")],
+  ["an address that does not parse", () => Promise.resolve("https://exa mple")],
   ["a chart that cannot be read", () => Promise.reject(new Error("unreadable"))],
-] as const)("the spare's page offers no main-box link for %s", async (_, mainUrl) => {
+] as const)("the spare's page offers no main-box link for %s", async (label, mainUrl) => {
+  logged.length = 0;
   const response = await fixture(ANSWERING, mainUrl).request(`${OWN}/`);
   expect(response.status).toBe(200);
   const body = await response.text();
   expect(body).toContain(SPARE_WORDS["en-GB"].title);
   expect(body).not.toContain(SPARE_WORDS["en-GB"].openMain);
   expect(body).not.toContain("<a ");
+  expect(logged).toEqual(
+    label === "a chart that cannot be read"
+      ? [
+          {
+            level: "warn",
+            event: "spare_page.main_link_failed",
+            fields: { errorCode: "unknown", requestId: "request-1" },
+          },
+        ]
+      : [],
+  );
 });
 
 it("puts a silent main box's switch line before the main-box link", async () => {

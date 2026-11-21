@@ -601,7 +601,7 @@ it("applies the supplied main page gates in order before serving staff pages", a
     const handover = createHandoverGate();
     const gates = [
       handover.middleware,
-      spareReadGate({ main: () => undefined, mainUrl: async () => null }),
+      spareReadGate({ main: () => undefined, mainUrl: async () => null, log: () => {} }),
     ];
     const mirror = createStaffApp(new Hono(), async () => "https://staff.example.test", {
       root,
@@ -611,7 +611,7 @@ it("applies the supplied main page gates in order before serving staff pages", a
       headers: { Accept: "text/html" },
     });
     expect(await response.text()).toContain(
-      "It keeps a copy and takes over if the main box fails.",
+      "It keeps a copy of the venue’s data, so you can switch to it if the main box fails.",
     );
     handover.close({ allowed: () => false });
     const stopped = await mirror.request("https://staff.example.test/account", {
