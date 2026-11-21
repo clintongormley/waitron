@@ -133,7 +133,8 @@ export interface AdoptDeps {
   environment: DeploymentEnvironment | null;
   /** Persists `trading.env` so the next boot enters the trading branch. */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
-  /** Throws what this box's next start would refuse with `args` in `trading.env`. */
+  /** Throws what `loadConfig` or the release check would refuse at this box's next start with
+   * `args` in `trading.env`. */
   assertStartsWith: (args: PersistTradingArgs) => void;
   /** So the mirror's next boot sees the primary's enabled module set. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;

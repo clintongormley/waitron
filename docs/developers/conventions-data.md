@@ -6052,8 +6052,9 @@ A box joining another as its spare takes the main box's environment when its own
 unset or empty, and writes it to `trading.env`; when `WAITRON_ENV` is set, the environment it names
 (`dev` names preproduction) must match the main box's or the join is refused with
 `mirror.environment_mismatch` (owner, 2026-11-21). An invalid value already stops the box at start.
-Before its first write the join also refuses what the box's next start would refuse in that
-environment, such as a missing `WAITRON_MANAGEMENT_RP_ID` in production, with the start's own error.
+Before its first write the join also refuses a setting the box's next start would refuse in that
+environment, such as a missing `WAITRON_MANAGEMENT_RP_ID` in production, or an unreleased build
+joining a production venue, with the start's own error.
 It records the environment in the setup operation record before stamping the database, and a start
 with `WAITRON_ENV` unset takes it from there while that join is unfinished
 (`withUnfinishedJoinEnvironment`, `apps/server/src/unfinished-join.ts`), so a join stopped after

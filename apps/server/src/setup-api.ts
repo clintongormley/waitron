@@ -341,7 +341,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.vault_key_differs": 409,
   "mirror.primary_unconfirmed": 409,
   "mirror.environment_mismatch": 409,
-  // This box's own settings, which its start after joining would refuse.
+  // What this box's own start after joining would refuse.
   "server.config_missing": 409,
   "server.config_invalid": 409,
   "server.unreleased_build": 409,
