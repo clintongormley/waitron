@@ -378,6 +378,12 @@ describe("tagRelease", () => {
       8,
     ],
     [
+      "an unused version below a published prerelease",
+      { "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.1.0-rc.1\n` },
+      /not above 1\.1\.0-rc\.1/,
+      8,
+    ],
+    [
       "a run still in progress",
       { [runList]: '[{"status":"in_progress","conclusion":""}]' },
       /in_progress/,

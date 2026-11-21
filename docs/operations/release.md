@@ -128,7 +128,7 @@ pnpm release prepare 1.0.0 --place "<town>"
 
 It stops at the first thing that is wrong, and changes nothing until you sign. In order, it:
 
-1. checks that the version looks like `1.2.3`, that you are on `release/1.0.0` with nothing
+1. checks that the version looks like `1.2.3` or `1.2.3-rc.1`, that you are on `release/1.0.0` with nothing
    uncommitted in files git tracks (untracked files are ignored), and that the branch is
    `origin/main`'s latest commit;
 2. refuses a version that is already released, or that is not above the highest released one;

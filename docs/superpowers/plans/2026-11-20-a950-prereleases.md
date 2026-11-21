@@ -30,6 +30,10 @@ the test-box rehearsal and scheduled upgrades have separate steps.
   version with the existing `software-identity.test.ts` fixture and run the golden write-path
   and immutability suites unchanged.
 
+**21 November, 03:21.** The watcher kept the existing version order for this pull request after
+Claude showed that releasing a lower number from a later main commit could send a box back to
+earlier code. Older-line releases belong to A950-MAINTENANCE-BRANCH.
+
 ## Install by hand and keep offers readable
 
 - Require the signed prerelease flag and version suffix to agree in `scripts/box/release-list.mjs`.
