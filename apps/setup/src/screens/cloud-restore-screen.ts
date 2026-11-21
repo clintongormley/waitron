@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { FormFeedback, baseStyles, pageTitleStyles, bottomMessage, focusFirstInvalid } from "@waitron/ui";
+import {
+  FormFeedback,
+  baseStyles,
+  pageTitleStyles,
+  bottomMessage,
+  focusFirstInvalid,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { SetupApi } from "../api/client.js";

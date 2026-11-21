@@ -116,8 +116,9 @@ it("uses the shared title style in dashboard, module and setup literal-H1 owners
   const failures = sourceFilesIn(root)
     .filter(
       (path: string) =>
-        /^(apps\/dashboard\/src\/screens\/|apps\/setup\/src\/|packages\/[^/]+\/src\/dashboard\/).*\.ts$/.test(path) &&
-        !path.endsWith(".test.ts"),
+        /^(apps\/dashboard\/src\/screens\/|apps\/setup\/src\/|packages\/[^/]+\/src\/dashboard\/).*\.ts$/.test(
+          path,
+        ) && !path.endsWith(".test.ts"),
     )
     .flatMap((path: string) =>
       violations(path, readFileSync(join(root, path), "utf8")).map(
