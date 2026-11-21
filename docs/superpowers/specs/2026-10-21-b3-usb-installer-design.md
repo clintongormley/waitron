@@ -1278,6 +1278,8 @@ explanation (`packages/provisioning/src/configuration-transfer.ts:286-327`).
 | Staffing: roles, assignments and planning rows | `staff_roles`, `person_staff_roles`, `staffing_days`, `staffing_blocks` | `packages/staffing/src/configuration-transfer.ts:3-11`; `packages/composition/src/modules.ts:383` |
 | No transferred tables: scheduler, credentials, fiscal-verifactu, fiscal-none, bookings | Each declares `kind: "none"` | `packages/composition/src/modules.ts:271`, `:285`, `:313`, `:327`, `:346` |
 
+_2026-11-21: `print_agents` no longer travels (branch fix/a-import-checks); see the omissions below._
+
 **Venue defaults travel separately:** country, tax id, legal name, taxpayer domicile; location name,
 receipt languages, operation description, fiscal territory, address, time zone, current business-day
 start, fire control and default catalogue; and the three current series codes. The query reads
