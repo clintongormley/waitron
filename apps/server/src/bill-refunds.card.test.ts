@@ -1537,6 +1537,34 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     expect(missing.json).toEqual({ code: "bill.refund_not_found", params: { refundId: unknown } });
   });
 
+  it("attributes a recovered bill refund conflict to the payment check", async () => {
+    const { refundId } = await pendingRefund();
+    await inTx(venue, (tx) =>
+      tx.update(refunds).set({ providerRefundRef: "first-event" }).where(eq(refunds.id, refundId)),
+    );
+    await withProvider(
+      {
+        lookups: {
+          kind: "match",
+          outcome: "completed",
+          providerRefundRef: "other-event",
+          providerStatus: "succeeded",
+        },
+      },
+      () => runLoop(),
+    );
+    const raised = await inTx(venue, (tx) =>
+      tx.select().from(incidents).where(eq(incidents.code, "payment.refund_outcome_conflict")),
+    );
+    expect(raised).toContainEqual(
+      expect.objectContaining({
+        source: "payment_check",
+        deviceId: null,
+        params: expect.objectContaining({ refundId, providerRefundRef: "other-event" }),
+      }),
+    );
+  });
+
   it("raises the alert for a refund pending over an hour, and not for one under it", async () => {
     const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00", venue.cookie2);

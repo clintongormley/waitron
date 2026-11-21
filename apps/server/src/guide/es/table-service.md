@@ -254,7 +254,7 @@ Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha 
 Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 Cuando termine la devolución, elige **Ver justificante** junto a ella en los pagos de la cuenta.
-Elige **Imprimir** para la primera copia. Para otra copia, usa la **Cola de impresión** del panel.
+Elige **Imprimir** para la primera copia. Puedes reimprimirla desde la **Cola de impresión** del panel durante siete días.
 
 ## Cancela un plato de una cuenta guardada del mostrador {#counter-cancel-item}
 
@@ -348,9 +348,9 @@ devuelvas en una caja.
 Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha devuelto dinero.
 Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
-Para imprimir el justificante de una devolución desde un recibo, búscala en la pestaña
-**Transacciones** de **Buscar cuenta** y elige **Imprimir**. Para otra copia, usa la **Cola de
-impresión** del panel.
+Para imprimir el justificante después de facturar, busca la devolución en la pestaña
+**Transacciones** de **Buscar cuenta** y elige **Imprimir**. Puedes reimprimirlo desde la **Cola
+de impresión** del panel durante siete días.
 
 ## Rectificar una factura {#correct-invoice}
 

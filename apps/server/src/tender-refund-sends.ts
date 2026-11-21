@@ -19,7 +19,7 @@ import {
   type RefundRefusalReason,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import { AppError, centsToDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal, jobOrigin } from "@waitron/shared";
 import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
 import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import { attestationColumns, type Attestation } from "./bill-payments.js";
@@ -599,7 +599,8 @@ export async function resumeBillCardRefund(
 
 export async function recoverCardRefund(deps: TenderRefundDeps, refundId: string): Promise<void> {
   const { release } = await claimPendingRefund(deps, refundId, read);
-  if (release !== null) await resolveClaimedRefund(deps, refundId, "loop", release);
+  if (release !== null)
+    await resolveClaimedRefund(deps, refundId, "loop", release, jobOrigin("payment_check"));
 }
 
 function claimPendingRefund(

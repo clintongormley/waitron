@@ -4655,8 +4655,9 @@ export class DashboardApi {
     return this.#request<DemoPrinterJob[]>("/management-api/demo-printer/jobs", "GET");
   }
 
-  listRecentJobs(): Promise<PrintJobRow[]> {
-    return this.#request<PrintJobRow[]>("/management-api/print-jobs", "GET");
+  listRecentJobs(completedPage = 0): Promise<PrintJobRow[]> {
+    const query = completedPage === 0 ? "" : `?completedPage=${completedPage}`;
+    return this.#request<PrintJobRow[]>(`/management-api/print-jobs${query}`, "GET");
   }
 
   printEquipmentLabel(

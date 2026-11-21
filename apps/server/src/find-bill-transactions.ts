@@ -78,27 +78,32 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as methods,
       (select group_concat(m.method || coalesce(m.last4,''), ' ') from
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as method_key,
-      (select group_concat(m.last4,' ') from tender_methods m where m.sale_id = s.id) as card_search
+      (select group_concat(m.last4,' ') from tender_methods m where m.sale_id = s.id) as card_search,
+      (s.corrects_sale_id is not null or s.counterparty_tax_id is not null
+        or exists(select 1 from sale_settlements ss where ss.sale_id = s.id)) as listed
     from sales s join invoice_series sr on sr.id = s.series_id
     left join persons person on person.id = s.operator_id
     where ${scopeCondition(inZones)}
       and not exists(select 1 from sale_voids v where v.sale_id = s.id)
-      and (s.corrects_sale_id is not null or s.counterparty_tax_id is not null
-        or exists(select 1 from sale_settlements ss where ss.sale_id = s.id))
   ), refund_rows as (
-    select r.*, (select p.card_last4 from payments p
+    select r.*, coalesce(r.sale_id, (
+      select i.id from invoices i where i.working_order_id = bp.working_order_id
+        and i.type <> 'correction' order by i.issued_at desc, i.id desc limit 1
+    )) as invoice_id, (select p.card_last4 from payments p
       where p.provider = r.provider and p.payment_ref = r.provider_payment_ref) as last4
-    from refunds r where r.sale_id is not null and r.state = 'completed'
+    from refunds r left join bill_payments bp on bp.id = r.bill_payment_id
+    where r.state = 'completed'
   ), transactions as (
-    select i.*, i.id as sale_id, null as refund_id from invoices i
+    select i.*, i.id as sale_id, null as refund_id from invoices i where i.listed
     union all
     select r.id, i.working_order_id, r.completed_at, i.series_code, i.number, i.invoice_number,
       'refund', i.customer_name, r.requested_by, person.display_name,
       -(r.applied_amount + r.tip_amount), i.scope_order_ids, i.table_name, i.order_search,
       json_array(json_object('method',r.method,'last4',r.last4)),
-      r.method || coalesce(r.last4,''), r.last4, i.id, r.id
-    from refund_rows r join invoices i on i.id = r.sale_id
+      r.method || coalesce(r.last4,''), r.last4, i.listed, i.id, r.id
+    from refund_rows r join invoices i on i.id = r.invoice_id
     left join persons person on person.id = r.requested_by
+    where i.listed or r.bill_payment_id is not null
   )`;
 }
 

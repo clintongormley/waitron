@@ -284,6 +284,14 @@ it("keeps a bill refund's payment reference when the bill is later invoiced", as
   };
   expect(await get(id)).toMatchObject({ status: 200, json: reference });
   await issueOrderInvoice(deps, venue.cfg, order, venue.operatorId);
+  expect(
+    await send(venue.app, venue.supervisorTill, "GET", "/api/transactions?preset=any&type=refund"),
+  ).toMatchObject({
+    status: 200,
+    json: {
+      rows: [expect.objectContaining({ refundId: id, workingOrderId: order, amount: "-1.00" })],
+    },
+  });
   const before = await immutable(),
     jobs = await printed();
   expect(await get(id)).toMatchObject({ status: 200, json: reference });

@@ -4012,7 +4012,7 @@ export class TillApp extends LitElement {
         kind: "refund";
         refundId: string;
         saleId: string;
-        acknowledgment: Extract<TenderRefundAcknowledgment, { parent: "sale" }>;
+        acknowledgment: TenderRefundAcknowledgment;
         returnTo: "find-bill";
       }
     | null = null;
@@ -9409,7 +9409,12 @@ export class TillApp extends LitElement {
           signal: controller.signal,
         });
         if (!current()) return;
-        if (acknowledgment.parent !== "sale") {
+        if (
+          acknowledgment.refund.id !== refundId ||
+          (acknowledgment.parent === "bill"
+            ? acknowledgment.workingOrderId !== workingOrderId
+            : acknowledgment.refund.saleId !== saleId)
+        ) {
           this.errorKey = "refund_ack.load_failed";
           return;
         }
@@ -10918,7 +10923,10 @@ export class TillApp extends LitElement {
         this.reprintAsking !== null
       )
         return;
-      if (this.receiptLanguages.length > 1)
+      if (
+        this.historicalReceipt.acknowledgment.parent === "sale" &&
+        this.receiptLanguages.length > 1
+      )
         this.reprintAsking = {
           workingOrderId: this.historicalReceipt.saleId,
           refundId: this.historicalReceipt.refundId,

@@ -1743,17 +1743,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     );
   }
 
-  // Unfinished jobs are listed whatever their age; completed and exhausted history is bounded.
+  // Unfinished jobs remain visible while staff browse delivered jobs.
   app.get("/management-api/print-jobs", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
+        const completedPage = c.req.query("completedPage") ?? "0";
+        const offset = Number(completedPage) * RECENT_JOBS_LIMIT;
+        if (!/^\d+$/.test(completedPage) || !Number.isSafeInteger(offset))
+          throw new AppError("management.request_invalid", { field: "completedPage" });
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
           .where(eq(printJobs.status, "done"))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
-          .limit(RECENT_JOBS_LIMIT);
+          .limit(RECENT_JOBS_LIMIT)
+          .offset(offset);
         const recentFailed = tx
           .select({ id: printJobs.id })
           .from(printJobs)

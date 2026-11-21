@@ -25681,6 +25681,30 @@ describe("A737 Find a bill page", () => {
     last4: "0091",
   };
   const refundView = (el: TillApp) => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+  it("prints a bill refund from Transactions after the bill was invoiced", async () => {
+    const reprintTenderRefund = vi.fn().mockResolvedValue(undefined);
+    const { el, view } = await open({
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue({
+        parent: "bill",
+        workingOrderId: "working-1",
+        paymentReference: "payment-1",
+        refund: { ...acknowledgment.refund, paymentId: "payment-1" },
+        issuer: acknowledgment.issuer,
+        method: "card",
+        customerName: null,
+        last4: "0091",
+        printQueued: false,
+      }),
+      reprintTenderRefund,
+    });
+    emit(view, "find-transaction-open", { row: { ...refundRow(), workingOrderId: "working-1" } });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+    receipt.shadowRoot!.querySelector<HTMLElement>("[data-refund-reprint]")!.click();
+    await vi.waitFor(() => expect(reprintTenderRefund).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(receipt.shadowRoot!.querySelector("[data-refund-reprint]")).toBeNull();
+  });
   it("Bill gate reports an acknowledgment print refusal, permits retry, and blocks original opening while printing", async () => {
     let refuse!: (error: Error) => void;
     const reprintTenderRefund = vi

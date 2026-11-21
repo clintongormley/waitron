@@ -87,8 +87,8 @@ already printed, you get a marked copy. Use **Orders** for an A4 copy. You can a
 station ticket or refund receipt on a printer at least as wide. A printout waiting on a
 printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
 same way, and is cancelled there. Other
-printouts reprint only on their own printer. A payment slip is printed again only from here:
-reprint a lost one soon, because the list keeps only the latest finished printouts.
+printouts reprint only on their own printer. For a payment slip, reprint it from here while
+its saved data is available. Choose **Older print jobs** to find a job past the latest 100.
 
 If Print Queue says a printout’s saved data has expired, open **Orders** to print a receipt
 or invoice from the sale. Station tickets, refund receipts, payment slips and reports cannot
