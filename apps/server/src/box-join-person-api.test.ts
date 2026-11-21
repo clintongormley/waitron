@@ -375,6 +375,29 @@ describe("the main box's person routes for a joining box", () => {
     ]);
   });
 
+  it("lists no join requests to Cloud remote access, which cannot approve them", async () => {
+    mountMembershipRemovalApi(
+      app,
+      {
+        db,
+        node: suite.node,
+        ring: RING,
+        nodeId: designated.nodeId,
+        reloadStream: async () => {},
+        listJoinRequests: () => requests.listed(),
+      },
+      () => {},
+    );
+    await listedRequest("192.168.1.20");
+    const response = await app.request(
+      `${ORIGIN}/management-api/servers`,
+      { headers: { cookie } },
+      { remoteStaff: true },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).not.toHaveProperty("joinRequests");
+  });
+
   it("ends the request on a wrong tap and gives its reveal place back", async () => {
     for (let n = 0; n < 5; n++) await cancel(await listedRequest(`192.168.1.${40 + n}`));
     const sixth = await listedRequest("192.168.1.50");

@@ -15,6 +15,7 @@ import {
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { abandonReturn } from "./return-abandoned.js";
 import type { Logger } from "./logger.js";
+import { isRemoteStaffRequest } from "./request-from-box.js";
 import type { ListedJoinRequest } from "./box-join-requests.js";
 
 export interface MembershipRemovalApiDeps {
@@ -75,7 +76,10 @@ export function mountMembershipRemovalApi(
         term: listing.term,
         nodes: listing.nodes,
         ...(deps.readSpare === undefined ? {} : { spare: await deps.readSpare() }),
-        ...(deps.listJoinRequests === undefined ? {} : { joinRequests: deps.listJoinRequests() }),
+        // A join is approved only on this box's own page (`box-join-api.ts`), never through Cloud.
+        ...(deps.listJoinRequests === undefined || isRemoteStaffRequest(c)
+          ? {}
+          : { joinRequests: deps.listJoinRequests() }),
       });
     }),
   );
