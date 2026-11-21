@@ -12,7 +12,8 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     "sale.correction_amount_invalid": Record<string, never>;
     "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
-    /** `tableInvoiceNumber`: the table's invoice, refused on Correct invoice of an advance it took off. */
+    /** `tableInvoiceNumber`, here and on `sale.correction_not_admitted`: the table's invoice,
+     * refused on Correct invoice of an advance it took off. */
     "sale.correction_history_unusable": { tableInvoiceNumber?: string };
     "sale.correction_breakdown_invalid": Record<string, never>;
     "sale.correction_approval_invalid": {

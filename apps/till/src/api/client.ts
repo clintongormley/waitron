@@ -1238,7 +1238,8 @@ export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
-  /** The net applied of the received payments. */
+  /** The net applied of the received payments; on a settled bill, less the completed refunds of
+   * filed Correct invoices on its payments that paid no advance. */
   received: string;
   /** The applied amount of the pending payments. */
   reserved: string;

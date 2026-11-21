@@ -272,8 +272,8 @@ export interface BillBalance {
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: Decimal;
-  /** The net applied of the received payments; on a settled bill, less what Correct invoice gave
-   * back on its payments that paid no advance. */
+  /** The net applied of the received payments; on a settled bill, less the completed refunds of
+   * filed Correct invoices on its payments that paid no advance. */
   received: Decimal;
   /** The applied amount of the pending payments. */
   reserved: Decimal;
