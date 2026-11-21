@@ -30,7 +30,8 @@ queue item `CONTRAST-THEME-FLOOR` and [the design-system rule](../../developers/
   Keep the existing reduced-motion assertion about whether the ordinary pulse is painted. Inspect
   English and Spanish at phone and desktop widths in both themes, with forced colours active.
   Look at the shared ring on till cards, zone tabs and `wt-table-token` as well. This slice gives
-  the map a steady forgotten mark. The separate reduced-motion tab fill is outside this scope.
+  the map a steady forgotten mark. The watcher also cleared the reduced-motion zone-tab mark in
+  Lane D’s questions.md at 04:17 on 2026-11-21.
 - [ ] Replace the open-work note in `docs/developers/design-system.md` with the implemented rule.
   Remove the map and shared ring entry from `docs/backlog.md` and `docs/backlog/dashboard.md`.
   Save captures to campaign receipts, run `git diff --check` and commit with sign-off.

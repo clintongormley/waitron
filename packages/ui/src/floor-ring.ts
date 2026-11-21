@@ -74,11 +74,11 @@ export const floorRingStyles = css`
       border-width: calc(var(--wt-space-1) / 2);
     }
 
-    .ring-forgotten {
+    .ring.ring-forgotten {
       border-style: dotted;
     }
 
-    .ring-fire {
+    .ring.ring-fire {
       border-style: dashed;
     }
 

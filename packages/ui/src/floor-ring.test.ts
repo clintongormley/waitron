@@ -360,6 +360,7 @@ it.each(["light", "dark"] as const)(
       el.pulse = "fire";
       el.moving = true;
       await el.updateComplete;
+      expect(getComputedStyle(pulseOf(el)).borderTopWidth).toBe("0px");
       const box = ringOf(el).parentElement!;
       box.style.margin = "16px";
       const { left, top, height } = box.getBoundingClientRect();
@@ -370,7 +371,9 @@ it.each(["light", "dark"] as const)(
         String(at(left + 3, y)),
       );
       el.ring = "waiting";
+      el.pulse = "forgotten";
       await el.updateComplete;
+      expect(getComputedStyle(pulseOf(el)).borderTopWidth).toBe("0px");
       const waiting = await elementPixels(host);
       expect(waiting(left + 1, y)).not.toEqual(waiting(left + 3, y));
     } finally {

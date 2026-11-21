@@ -622,6 +622,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
         expect(edge.querySelector(".pulse")).toBeNull();
         // As its tab is: a forgotten zone fills red when nothing may move.
         expect(getComputedStyle(edge).backgroundColor).toBe("rgb(4, 5, 6)");
+        await emulateForcedColours("active")
+          .then(() => expect(getComputedStyle(edge).borderTopStyle).toBe("dotted"))
+          .finally(() => emulateForcedColours(null));
       },
       true,
     );
