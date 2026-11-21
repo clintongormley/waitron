@@ -11,9 +11,9 @@ export default defineConfig({
     // Thirty seconds is margin, not a need. A bound that fires under CI load makes a suite people
     // learn to rerun, and a suite people rerun no longer gates.
     testTimeout: 30_000,
-    // `useVenueDb` passes its own budget to the `beforeAll` that migrates the database
-    // (`src/testing/venue-db.ts`), and a hook's own timeout overrides this one, so this reaches only
-    // the helper's `afterEach` reset and `afterAll` close and any untimed hook.
+    // `useVenueDb` passes its own budgets to the `beforeAll` that migrates the database and to
+    // the `afterEach` reset (`src/testing/venue-db.ts`), and a hook's own timeout overrides this
+    // one, so this reaches only the helper's `afterAll` close and any untimed hook.
     hookTimeout: 120_000,
     // A cap on workers, not a need for exactly four. CI's `test-heavy` shards pass no worker count
     // of their own (`.github/workflows/ci.yml`), so they run with this one.

@@ -19,6 +19,9 @@ const realSetTimeout = globalThis.setTimeout;
 /** Setup budget for opening the files and applying the migration sets. */
 const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
+/** Per-test reset budget: far above its normal cost, below `hookTimeout` so a hang fails sooner. */
+const RESET_TIMEOUT_MS = 30_000;
+
 /**
  * A migration set a suite hands over: what drizzle needs, plus what the set's own module declared
  * append-only. A caller omitting `appendOnlyTables` gets a database where a ledger row can be
@@ -221,7 +224,7 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     // A file of synchronous database work otherwise gives the loop no timer turn, so the venue
     // watchdog kills this worker as frozen once the file outlasts `WATCHDOG_KILL_MS`.
     await new Promise((resolve) => realSetTimeout(resolve, 0));
-  });
+  }, RESET_TIMEOUT_MS);
 
   // Guarded independently and in order: the files are closed before the directory holding them is
   // removed, and a suite whose `openVenueDatabase` threw still removes the directory it made.

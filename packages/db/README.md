@@ -50,8 +50,8 @@ The `testTimeout: 30_000` in `vitest.config.ts` is margin for a loaded CI runner
 `hookTimeout` and `useVenueDb`'s default setup budget all cut to 2s. **Neither that budget nor the
 `hookTimeout: 120_000` beside it bounds the database's own setup**: `useVenueDb` hands its own
 `beforeAll` a 60-second default (`src/testing/venue-db.ts`), and a timeout passed to a hook
-overrides the config's. What `hookTimeout` reaches is any hook that passes no budget of its own —
-which includes this helper's reset and its close.
+overrides the config's. Its per-test reset passes 30 seconds of its own. What `hookTimeout` reaches
+is any hook that passes no budget of its own — which includes this helper's close.
 
 ## What CI runs
 

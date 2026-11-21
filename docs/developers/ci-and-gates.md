@@ -1469,6 +1469,12 @@ shard 11 left none); the replay counts only files with a report in that run. 828
 seconds is not a measured finishing time: the old shard 10's 1,210 took 24 min 34 s.
 Dispatched run `44875671062`, on this table over main at `3682c7536b`, finished all 13 db
 shards; the slowest, shard 6, took 21 min 03 s of job time, and the fastest, shard 1, 9 min 33 s.
+The mutant that empties the timer-turn wait at the end of `useVenueDb`'s `afterEach`
+(`src/testing/venue-db.ts`) is killed only by that hook's time limit. On 21 November, on a Mac,
+`pnpm exec stryker run --mutate "src/testing/venue-db.ts:223-223" --force --concurrency 4` in
+`packages/db` reported it Killed after 120,011 ms under the package's `hookTimeout`; with the hook
+given its own 30-second limit, the same command on line 226 (where the wait had moved) reported it
+Killed after 30,005 ms. The mutation phase took about 122 s, then about 32 s.
 
 **Refreshing the table.** Use reports only from runs after the 13 November whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
