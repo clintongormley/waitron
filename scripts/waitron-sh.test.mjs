@@ -1588,7 +1588,7 @@ describe("waitron.sh install of a release", () => {
     const release = signedRelease(sb);
     const olderDriver = join(sb.root, "older-driver.sh");
     const source = readFileSync(SCRIPT, "utf8");
-    writeFileSync(olderDriver, source.replace(/^    check-upgrade-window\).*\n/m, ""));
+    writeFileSync(olderDriver, source.replace(/^ {4}check-upgrade-window\).*\n/m, ""));
     const result = run(sb, ["install", "v1.2.3"], {
       ...release,
       WT_INSTALLED_RELEASE_REF: "v1.2.2",
