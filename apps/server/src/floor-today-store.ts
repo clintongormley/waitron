@@ -46,7 +46,7 @@ import {
   type ResetPlan,
   type Target,
 } from "./floor-reset-plan.js";
-import { foodOnItsWay } from "./delivery-release.js";
+import { deliveryTablesMatching, foodOnItsWay, openDelivery } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
 import { blocksPlaceSql, partPlaces } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
@@ -510,13 +510,15 @@ async function catchUpPass(
       ? [...ids]
       : [];
   });
-  const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup]);
-  const foodComing = await foodComingTo(
-    tx,
-    groups.flatMap((group) =>
-      group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])),
-    ),
+  const groupTableIds = groups.flatMap((group) =>
+    group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])),
   );
+  const deliveryHolds = await deliveryTablesMatching(
+    tx,
+    ids,
+    sql`(${foodOnItsWay()} or (${openDelivery()} and ${inArray(workingOrders.deliveryTableId, groupTableIds)}))`,
+  );
+  const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup, ...deliveryHolds]);
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -555,7 +557,6 @@ async function catchUpPass(
           group.rows.flatMap((r) => (r.tableId === null ? [] : [r.tableId])),
         ),
       ]),
-      foodComing,
     );
     waitingGroupRows = waitingRows;
     const live: LiveTable[] = inZone.map((table) => ({
@@ -564,6 +565,7 @@ async function catchUpPass(
       shortName: table.shortName,
       held: held.has(table.id),
       refused: refused.has(table.id),
+      deliveryWaiting: deliveryHolds.has(table.id),
       tied: held.has(table.id) || tied.has(table.id),
       hasToday: withToday.has(table.id),
       mergedWithHeld: mergedWithHeld.has(table.id),
@@ -928,7 +930,6 @@ function waitingTogether(
   merges: readonly { joinId: string; tableId: string }[],
   joinedGroups: readonly ResetGroup[],
   waiting: ReadonlySet<string>,
-  foodComing: ReadonlySet<string>,
 ): {
   mergedWithHeld: Set<string>;
   joinedBusy: Set<string>;
@@ -938,8 +939,7 @@ function waitingTogether(
   let all = new Set(waiting);
   for (;;) {
     const mergedWithHeld = mergedWith(merges, all);
-    const busy = (id: string | null) =>
-      id !== null && (all.has(id) || mergedWithHeld.has(id) || foodComing.has(id));
+    const busy = (id: string | null) => id !== null && (all.has(id) || mergedWithHeld.has(id));
     const waitingGroups = joinedGroups.filter((group) => group.rows.some((r) => busy(r.tableId)));
     const joinedBusy = new Set(
       waitingGroups.flatMap((group) =>
@@ -1226,19 +1226,6 @@ export async function placeSpareToday(
       }),
     )
     .where(eq(diningTables.id, row.tableId));
-}
-
-/** Those of `tableIds` an order with food on its way is delivered to. */
-export async function foodComingTo(
-  tx: Transaction,
-  tableIds: readonly string[],
-): Promise<Set<string>> {
-  if (tableIds.length === 0) return new Set();
-  const rows = await tx
-    .selectDistinct({ tableId: workingOrders.deliveryTableId })
-    .from(workingOrders)
-    .where(and(inArray(workingOrders.deliveryTableId, [...tableIds]), foodOnItsWay()));
-  return new Set(rows.map((row) => row.tableId!));
 }
 
 /** An order with food on its way to the table. */

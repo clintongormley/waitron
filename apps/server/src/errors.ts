@@ -658,6 +658,7 @@ declare module "@waitron/shared" {
     "table.merged": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
+    "table.open_delivery_order": { tableId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.

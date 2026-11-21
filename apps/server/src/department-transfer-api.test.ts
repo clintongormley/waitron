@@ -3,7 +3,7 @@ import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { observedClosingBody } from "./testing/party-close-fixture.js";
+import { finishTable, observedClosingBody } from "./testing/party-close-fixture.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -15,6 +15,7 @@ import {
   deviceProfiles,
   parties,
   devices,
+  floorResetTables,
   workingOrders,
   workingOrderLines,
   ticketItems,
@@ -62,9 +63,15 @@ import { openTillSession } from "./testing/session-device.js";
 import {
   setupPartyVenue,
   counterOrder,
+  OPERATOR,
+  seat,
   pricedInZone,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { standardAndDinner, todayRow } from "./testing/floor-today-venue.js";
+import { catchUpZone } from "./floor-today-store.js";
+import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
+import { splitOff } from "./floor-today-split-group.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -95,21 +102,27 @@ async function login(profileId: string) {
   };
 }
 
-async function ready() {
+async function ready(destination?: { departmentId: string; zoneId: string }) {
   const f = await withTransaction(suite.db, async (tx) => {
     const a = await createDepartment(tx, {
       name: randomUUID(),
       orderStart: "table",
     });
-    const b = await createDepartment(tx, {
-      name: randomUUID(),
-      orderStart: "table",
-    });
+    const b =
+      destination === undefined
+        ? await createDepartment(tx, {
+            name: randomUUID(),
+            orderStart: "table",
+          })
+        : { id: destination.departmentId };
     for (const department of [a, b])
       await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
     const az = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
     const hidden = await createServiceZone(tx, { name: randomUUID(), departmentId: a.id });
-    const bz = await createServiceZone(tx, { name: randomUUID(), departmentId: b.id });
+    const bz =
+      destination === undefined
+        ? await createServiceZone(tx, { name: randomUUID(), departmentId: b.id })
+        : { id: destination.zoneId };
     const profiles = [];
     for (const [departmentId, zoneId] of [
       [a.id, az.id],
@@ -306,6 +319,64 @@ describe("department transfer till writes", () => {
       status: 409,
       body: { error: { code: "department_transfer.not_pending" } },
     });
+  });
+  it("Mark moved names the split group member that accepted an open delivery", async () => {
+    const now = new Date("2026-10-10T12:00:00Z");
+    const z = await standardAndDinner(
+      v,
+      now,
+      [
+        { key: "first", label: "Transfer 1" },
+        { key: "second", label: "Transfer 2" },
+        { key: "joined", label: "Transfer group", partKeys: ["first", "second"] },
+      ],
+      {
+        standard: { joined: 10 },
+        dinner: { joined: 50 },
+      },
+    );
+    const f = await ready(z.d);
+    const [first, second] = [z.live("first"), z.live("second")];
+    await withTransaction(suite.db, (tx) =>
+      splitOff(tx, v.cfg, [], now, {
+        tableId: first,
+        partIds: [second],
+        seats: null,
+        expectedParties: [],
+      }),
+    );
+    const { partyId, revision } = await seat(v, second);
+    await z.onto(z.d.dinner);
+    const moving = () => withTransaction(suite.db, (tx) => tableNeedsMoving(tx, first));
+    await withTransaction(suite.db, async (tx) => {
+      await finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR });
+      await catchUpZone(tx, [], f.bz, now);
+    });
+    expect(await moving()).toBe(true);
+
+    const id = await pending(f);
+    expect(
+      await post(f.desk.cookie, resolutionPath(id, "accept"), {
+        revision: 0,
+        zoneId: f.bz,
+        tableId: second,
+      }),
+    ).toMatchObject({ status: 200 });
+    expect((await state(f.tab)).tab).toMatchObject({ status: "open", deliveryTableId: second });
+    const before = await todayRow(v, first);
+    const resetRows = () =>
+      withTransaction(suite.db, (tx) =>
+        tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, f.bz)),
+      );
+    const marked = await resetRows();
+    await expect(
+      withTransaction(suite.db, (tx) => markMoved(tx, [], first, now)),
+    ).rejects.toMatchObject({
+      code: "table.open_delivery_order",
+      params: { tableId: second },
+    });
+    expect(await todayRow(v, first)).toEqual(before);
+    expect(await resetRows()).toEqual(marked);
   });
   it("keeps a sent takeaway order takeaway when a department selling only eaten here accepts it (A1522)", async () => {
     const f = await ready();

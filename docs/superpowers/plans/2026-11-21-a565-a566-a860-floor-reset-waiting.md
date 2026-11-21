@@ -5,7 +5,8 @@ same place. A split group also waits for an open delivery order at a member, eve
 before anything goes to the kitchen. When the hold clears, the existing catch-up
 applies the reset or asks staff to mark a physical move. This is the Lane H queue
 ask assigned by the watcher on 21 November at 20:43 after A594. Build awaits the
-watcher's clearance of that scope.
+watcher's clearance of that scope. Claude reviewed the plan and the watcher
+cleared the two holds as described here on 21 November at 22:43.
 
 - [ ] **Ordinary tables.** In `apps/server/src/floor-today-store.test.ts`, use a paid
   Paella delivery and reset a table whose saved place changes or disappears. Check

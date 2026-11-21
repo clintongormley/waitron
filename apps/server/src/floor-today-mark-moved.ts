@@ -4,6 +4,7 @@ import { diningTables, floorResetTables, needsMoving } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
+import { deliveryTablesMatching, openDelivery } from "./delivery-release.js";
 import { catchUpZone, refuseDeliveryPending } from "./floor-today-store.js";
 import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import { refusedByAModule } from "./table-removal.js";
@@ -105,9 +106,7 @@ export async function leaveHere(
 
 /**
  * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
- * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
- * them or at a table tied to them by today's merges or a pending joined group, as the
- * catch-up's waiting rules (`waitingTogether`) tie them. `table.needs_moving` is the answer when none of those is found.
+ * its way, a party, clearing, a module's refusal or an open delivery to a pending group's member.
  */
 async function refuseHeldBack(
   tx: Transaction,
@@ -117,6 +116,7 @@ async function refuseHeldBack(
   tables: readonly string[],
 ): Promise<never> {
   const tied = new Set(tables);
+  const groupMembers = new Set<string>();
   for (let size = 0; size !== tied.size;) {
     size = tied.size;
     const ids = [...tied];
@@ -129,7 +129,10 @@ async function refuseHeldBack(
       .from(diningTables)
       .where(inArray(diningTables.mergeId, joins));
     for (const row of merged) tied.add(row.id);
-    for (const id of await pendingGroupTables(tx, ids)) tied.add(id);
+    for (const id of await pendingGroupTables(tx, ids)) {
+      tied.add(id);
+      groupMembers.add(id);
+    }
   }
   const ids = [tableId, ...[...tied].filter((id) => id !== tableId)];
   for (const id of ids) await refuseDeliveryPending(tx, id);
@@ -154,6 +157,10 @@ async function refuseHeldBack(
     const refusal = refusals.get(id);
     if (refusal !== undefined) throw refusal;
   }
+  const openDeliveries = await deliveryTablesMatching(tx, [...groupMembers], openDelivery());
+  const waitingForOrder = ids.find((id) => openDeliveries.has(id));
+  if (waitingForOrder !== undefined)
+    throw new AppError("table.open_delivery_order", { tableId: waitingForOrder });
   throw new AppError("table.needs_moving", { tableId });
 }
 
@@ -165,14 +172,15 @@ async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]):
     .where(
       and(inArray(floorResetTables.tableId, [...tableIds]), eq(floorResetTables.pending, true)),
     );
-  const members = await pendingGroupRows(tx, rows);
+  const members = await pendingGroupRows(tx, rows, true);
   return members.flatMap((member) => (member.tableId === null ? [] : [member.tableId]));
 }
 
-/** The pending rows of every pending joined group holding one of the reset rows `rowIds`. */
+/** The rows of every pending joined group holding one of the reset rows `rowIds`. */
 async function pendingGroupRows(
   tx: Transaction,
   rowIds: string[] | SQLWrapper,
+  includePlaced = false,
 ): Promise<{ id: string; tableId: string | null }[]> {
   const links = await tx
     .select({ joinedId: floorResetTables.partOfResetTableId })
@@ -201,7 +209,7 @@ async function pendingGroupRows(
     .where(
       and(
         or(inArray(floorResetTables.id, joinedIds), inArray(floorResetTables.id, parts)),
-        eq(floorResetTables.pending, true),
+        includePlaced ? undefined : eq(floorResetTables.pending, true),
       ),
     );
 }

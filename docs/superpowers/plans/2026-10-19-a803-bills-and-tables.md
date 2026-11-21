@@ -468,6 +468,9 @@ For any retained entry later authorized here, first add its named failing case a
 `pnpm --filter @waitron/server exec vitest run src/FILE.test.ts -t 'CASE'` or the till equivalent, then rerun the whole file after the fix. Replace FILE/CASE in the execution
 receipt with actual names. Do not report those proposed experiments as performed.
 
+**2026-11-21.** The watcher cleared the [A565, A566 and A860 floor reset plan](2026-11-21-a565-a566-a860-floor-reset-waiting.md).
+Its reset and transfer tests cover the two A565 and A566 holds.
+
 ## Self-review against the spec and amendments
 
 | Requirement                             | Coverage / deliberate gate                                                                                                            |

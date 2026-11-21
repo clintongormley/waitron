@@ -894,6 +894,7 @@ const TABLE_REFUSALS = new Set([
   "table.fixed",
   "table.merged",
   "table.delivery_pending",
+  "table.open_delivery_order",
   "tab.already_open",
   "party.not_open",
   "party.bill_outstanding",

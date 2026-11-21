@@ -20,6 +20,8 @@ import {
   floorZones,
   dayCutoverChanges,
   shortNameColumns,
+  ticketItems,
+  workingOrderLines,
   workingOrders,
   type Transaction,
   todayColumns,
@@ -45,6 +47,7 @@ import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./testing/party-close-fixture.js";
+import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { updateZone } from "./tables.js";
 import {
   commandFor,
@@ -1561,6 +1564,107 @@ describe("a reset over a saved group split today", () => {
     if (paid) await pay(v, order, "20.00");
     return order;
   }
+
+  const deliveryTableOf = (order: string) =>
+    inTx(v, async (tx) => {
+      const [row] = await tx
+        .select({ tableId: workingOrders.deliveryTableId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, order));
+      return row!.tableId;
+    });
+
+  it.each(["moves", "disappears"] as const)(
+    "an ordinary table waits for its food when its saved place %s",
+    async (change) => {
+      const { zoneId, table, master } = await longTable();
+      const order = await delivery(table.bar!);
+      const before = await todayRow(table.bar!);
+      if (change === "moves") await editMaster(master.bar!, { x: 100 });
+      else await deleteFromMaster(master.bar!);
+
+      await reset(zoneId);
+      expect(await todayRow(table.bar!)).toEqual(before);
+      expect(await pendingRows(zoneId)).toContainEqual(
+        expect.objectContaining({ tableId: table.bar, readyToMove: false }),
+      );
+      expect(await deliveryTableOf(order)).toBe(table.bar);
+
+      await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
+      await catchUp(zoneId);
+      if (change === "moves") {
+        expect(await readyToMoveIn(zoneId)).toEqual([table.bar]);
+        await markMovedOn(table.bar!);
+        expect(await todayRow(table.bar!)).toMatchObject({ x: 100 });
+      } else {
+        expect(await todayRow(table.bar!)).toBeUndefined();
+        expect((await liveTablesOf(zoneId)).map((row) => row.id)).not.toContain(table.bar);
+      }
+      expect(await pendingRows(zoneId)).toEqual([]);
+    },
+  );
+
+  it("an open, unsent delivery keeps the saved group split until it is abandoned", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.c3!, [table.c5!], 6);
+    const order = await delivery(table.c5!, false);
+    const before = await todayRow(table.c5!);
+    const splitGroup = await mergeOf(v, table.c3!);
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({ status: workingOrders.status, ticket: ticketItems.id })
+          .from(workingOrders)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+          .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+          .where(eq(workingOrders.id, order)),
+      ),
+    ).toEqual([{ status: "open", ticket: null }]);
+
+    await reset(zoneId);
+    expect(await todayRow(table.c5!)).toEqual(before);
+    expect(await mergeOf(v, table.c3!)).toEqual(splitGroup);
+    expect(await mergeOf(v, table.c5!)).toBeNull();
+    expect(await readyToMoveIn(zoneId)).toEqual([]);
+    expect(await deliveryTableOf(order)).toBe(table.c5);
+
+    await abandonHeldOrder({ db: v.db }, v.cfg, order);
+    await catchUp(zoneId);
+    expect(await readyToMoveIn(zoneId)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    await markMovedOn(table.c3!);
+    expect((await mergeOf(v, table.c5!))!.members.map((member) => member.tableId).sort()).toEqual(
+      [table.c3!, table.c4!, table.c5!].sort(),
+    );
+    expect(await pendingRows(zoneId)).toEqual([]);
+  });
+
+  it("food at an ordinary table holds both members of today's merge in place", async () => {
+    const { zoneId, table, master } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 20, y: 0 } },
+      ],
+      NOW,
+    );
+    await inTx(v, (tx) =>
+      writeMerge(tx, {
+        movingId: table.b!,
+        targetId: table.a!,
+        side: "right",
+        seats: 6,
+        free: true,
+      }),
+    );
+    const before = await todayRow(table.b!);
+    const group = await mergeOf(v, table.b!);
+    await delivery(table.a!);
+    await editMaster(master.b!, { x: 40 });
+    await reset(zoneId);
+    expect(await todayRow(table.b!)).toEqual(before);
+    expect(await mergeOf(v, table.b!)).toEqual(group);
+    expect(await pendingRows(zoneId)).toContainEqual(expect.objectContaining({ tableId: table.b }));
+  });
 
   it("a free reset reforms one ordinary group, with all members drawn", async () => {
     const { zoneId, table } = await longTable();

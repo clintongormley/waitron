@@ -1,4 +1,4 @@
-import { eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
@@ -28,4 +28,21 @@ export function foodOnItsWay(): SQL {
       select 1 from ${ticketItems}
       join ${workingOrderLines} on ${workingOrderLines.id} = ${ticketItems.workingOrderLineId}
       where ${workingOrderLines.workingOrderId} = ${workingOrders.id} and ${ticketItems.madeHere} = 0))`;
+}
+
+export function openDelivery(): SQL {
+  return eq(workingOrders.status, "open");
+}
+
+export async function deliveryTablesMatching(
+  tx: Transaction,
+  tableIds: readonly string[],
+  condition: SQL,
+): Promise<Set<string>> {
+  if (tableIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ tableId: workingOrders.deliveryTableId })
+    .from(workingOrders)
+    .where(and(inArray(workingOrders.deliveryTableId, tableIds), condition));
+  return new Set(rows.map((row) => row.tableId!));
 }
