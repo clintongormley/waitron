@@ -155,7 +155,7 @@ function importedOverrides(row: Record<string, unknown>): IncludeFolderOverrides
     } catch {
       refuse("folder_names");
     }
-    if (Object.entries(names).some(([language, text]) => text !== "" && saved[language] !== text))
+    if (Object.entries(names).some(([language, text]) => saved[language] !== text))
       refuse("folder_names");
   }
   for (const column of ["folder_image_fixed", "folder_color_fixed"])

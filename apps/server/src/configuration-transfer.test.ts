@@ -2016,7 +2016,11 @@ it("an include's folder photo travels with the configuration", async () => {
       kind: "section",
       sectionId: (await readMenuStructure(tx, desserts.id)).rootSectionId,
     });
-    const overrides = { image: image.filename, names: { en: "Bar", es: "" }, color: "#112233" };
+    const overrides = {
+      image: image.filename,
+      names: { en: "Bar", es: "Barra" },
+      color: "#112233",
+    };
     await tx
       .update(sectionMembers)
       .set({ ...columnsFromOverrides(overrides) })

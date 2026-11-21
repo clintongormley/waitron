@@ -396,7 +396,7 @@ describe("validateMenuConfiguration: include folders", () => {
     for (const member of [
       {
         show_as_folder: 0,
-        folder_names: '{"en":"Bar","es":""}',
+        folder_names: '{"en":"Bar","es":"Barra"}',
         folder_image: `${"a".repeat(64)}.webp`,
         folder_image_fixed: 1,
         folder_color: "#112233",
@@ -418,6 +418,15 @@ describe("validateMenuConfiguration: include folders", () => {
 
   it.each(['{"en":" Bar"}', '{"en":"Bar "}', '{"en":"Bar","es":"\\tBarra"}'])(
     "refuses an imported folder name a save would trim: %s",
+    (folder_names) => {
+      expect(() => validateMenuConfiguration(bundle({ folder_names }))).toThrowError(
+        refusedAs("section_members.folder_names"),
+      );
+    },
+  );
+
+  it.each(['{"en":"Bar","es":""}', '{"en":""}', '{"en":"  "}'])(
+    "refuses an imported folder name a save would drop as empty: %s",
     (folder_names) => {
       expect(() => validateMenuConfiguration(bundle({ folder_names }))).toThrowError(
         refusedAs("section_members.folder_names"),
