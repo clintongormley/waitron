@@ -1102,15 +1102,15 @@ it("sends staff to check the table's receipt's pending refund before correcting 
 it("names the table's receipt when its refusal is answered on Correct invoice of a payment on account", () => {
   const refused = { reason: "filing_refused", tableInvoiceNumber: "A/45" };
   expect(codeMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "Table's receipt A/45: The tax agency has not accepted this invoice's filing. Try again once it has been sent again.",
+    "Table's receipt A/45: The tax agency has not accepted this invoice's filing. Try again once it has been sent again. No money comes back on this payment on account either while that receipt has money left to give back.",
   );
   expect(codeMessage("sale.correction_not_admitted", "es", refused)).toBe(
-    "Ticket de la mesa A/45: La Agencia Tributaria no ha aceptado la presentación de esta factura. Vuelve a intentarlo cuando se haya enviado de nuevo.",
+    "Ticket de la mesa A/45: La Agencia Tributaria no ha aceptado la presentación de esta factura. Vuelve a intentarlo cuando se haya enviado de nuevo. Mientras a ese ticket le quede dinero por devolver, tampoco se devuelve dinero con este pago a cuenta.",
   );
   expect(
     codeMessage("sale.correction_history_unusable", "en", { tableInvoiceNumber: "A/45" }),
   ).toBe(
-    "Table's receipt A/45: This invoice's earlier corrections cannot be read, so it cannot be corrected.",
+    "Table's receipt A/45: This invoice's earlier corrections cannot be read, so it cannot be corrected. No money comes back on this payment on account either while that receipt has money left to give back.",
   );
   expect(codeMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" })).toMatch(
     /^The tax agency /,

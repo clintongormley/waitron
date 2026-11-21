@@ -1065,6 +1065,10 @@ const TABLE_RECEIPT_REFUSED = {
   en: "Table's receipt {tableInvoiceNumber}: ",
   es: "Ticket de la mesa {tableInvoiceNumber}: ",
 };
+const TABLE_RECEIPT_HOLDS_MONEY = {
+  en: "No money comes back on this payment on account either while that receipt has money left to give back.",
+  es: "Mientras a ese ticket le quede dinero por devolver, tampoco se devuelve dinero con este pago a cuenta.",
+};
 
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
@@ -1132,7 +1136,8 @@ export function codeMessage(
   if (typeof params?.tableInvoiceNumber === "string") {
     const said = codeMessage(code, locale, { ...params, tableInvoiceNumber: undefined });
     const lead = pickLocale(TABLE_RECEIPT_REFUSED, locale);
-    return `${lead.replace("{tableInvoiceNumber}", () => params.tableInvoiceNumber as string)}${said}`;
+    const holds = pickLocale(TABLE_RECEIPT_HOLDS_MONEY, locale);
+    return `${lead.replace("{tableInvoiceNumber}", () => params.tableInvoiceNumber as string)}${said} ${holds}`;
   }
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
   if (

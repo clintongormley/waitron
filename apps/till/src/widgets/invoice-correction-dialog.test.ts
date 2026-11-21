@@ -273,7 +273,7 @@ it("names the table's receipt when its refusal answers a payment on account, and
   const { el } = await mount(api);
 
   expect(root(el).querySelector("wt-form-actions")!.error).toBe(
-    "Table's receipt A/45: This invoice's earlier corrections cannot be read, so it cannot be corrected.",
+    "Table's receipt A/45: This invoice's earlier corrections cannot be read, so it cannot be corrected. No money comes back on this payment on account either while that receipt has money left to give back.",
   );
 });
 
@@ -289,7 +289,7 @@ it("names the table's receipt when the preview answers its refusal, and says not
   await type(el, "5");
   await vi.waitFor(() =>
     expect(root(el).querySelector("wt-form-actions")!.error).toBe(
-      "Table's receipt A/45: This invoice's filed figures cannot be checked, so it cannot be corrected.",
+      "Table's receipt A/45: This invoice's filed figures cannot be checked, so it cannot be corrected. No money comes back on this payment on account either while that receipt has money left to give back.",
     ),
   );
 });
