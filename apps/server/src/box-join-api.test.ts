@@ -347,8 +347,15 @@ describe("the main box's box-to-box join routes", () => {
       },
     );
     const behind = NOW - 11 * 60_000;
+    // A point of small order: it reads as an X25519 key, but no key can be agreed with it.
+    const unusable = Buffer.concat([
+      Buffer.from("302a300506032b656e032100", "hex"),
+      Buffer.alloc(32),
+    ]).toString("base64");
+    const unlockable = { ...box, hello: { ...box.hello, encryptionKey: unusable } };
     const cases: [string, Record<string, unknown>, number, unknown][] = [
       ["malformed", helloBody(box, { addresses: [] }), 400, err("mirror.standby_invalid")],
+      ["unusable key", helloBody(unlockable), 400, err("mirror.standby_invalid")],
       ["protocol", helloBody(box, { protocol: 2, addresses: [] }), 400, err("mirror.join_invalid")],
       ["signature", { ...helloBody(box), at: NOW + 1 }, 400, err("mirror.join_invalid")],
       [

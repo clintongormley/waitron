@@ -27,7 +27,9 @@ import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
+import { readPairLink } from "@waitron/node-db";
 import { nodeId } from "@waitron/shared";
+import { joinCode } from "./box-join-code.js";
 import type { BoxJoinRequests } from "./box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
 import { ALL_MODULES } from "./modules.js";
@@ -433,6 +435,46 @@ describe("the main box's person routes for a joining box", () => {
       listed.box.hello.contactUrl,
     );
     expect(await check(listed.requestId)).toEqual(refusal(404, "mirror.join_not_found"));
+  });
+
+  it("writes nothing for a request whose key cannot lock the copy", async () => {
+    // The hello refuses such a key, so the request is placed in the store directly.
+    const box = joiningBox("192.168.1.20", { unlikeNodeId: designated.nodeId });
+    box.hello.encryptionKey = Buffer.concat([
+      Buffer.from("302a300506032b656e032100", "hex"),
+      Buffer.alloc(32),
+    ]).toString("base64");
+    const main = { nodeId: designated.nodeId, publicKey: primaryKeyPair.publicKey };
+    expect(requests.admitHello(box.address)).toBeNull();
+    const opened = requests.openHello({
+      address: box.address,
+      hello: box.hello,
+      main,
+      at: new Date().toISOString(),
+    });
+    if ("refused" in opened) throw new Error("hello refused");
+    const revealed = requests.reveal({
+      requestId: opened.requestId,
+      newNonce: box.newNonce,
+      seq: 1,
+      signAnswer: () => "signed",
+    });
+    if ("refused" in revealed) throw new Error("reveal refused");
+    const code = joinCode({
+      ...box.hello,
+      mainNodeId: main.nodeId,
+      mainPublicKey: main.publicKey,
+      newNonce: box.newNonce,
+      mainNonce: revealed.mainNonce,
+      requestId: opened.requestId,
+    });
+    const chartBefore = await readNodeMembership(db);
+
+    expect(await approve(opened.requestId, { code })).toEqual(
+      refusal(400, "mirror.standby_invalid"),
+    );
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+    expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
   it("says the spare was listed when its request ended while the copy was built", async () => {

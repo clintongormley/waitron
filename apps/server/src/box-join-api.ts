@@ -47,7 +47,7 @@ import { isReadableChart } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { isRemoteStaffRequest, requestAddress } from "./request-from-box.js";
-import { lockJoinBundle } from "./box-join-seal.js";
+import { canLockFor, prepareJoinLock } from "./box-join-seal.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 
@@ -114,6 +114,7 @@ function parseHello(body: Record<string, unknown>): {
     !isUuid(newNodeId) ||
     !keyOfType(newPublicKey, "ed25519") ||
     !keyOfType(encryptionKey, "x25519") ||
+    !canLockFor(encryptionKey) ||
     typeof contactUrl !== "string" ||
     !isBareOrigin(contactUrl) ||
     !isStoreUrlOf(storeUrl, contactUrl) ||
@@ -409,6 +410,9 @@ export function mountBoxJoinPersonApi(
         throw new AppError("mirror.join_not_found", {});
       }
       try {
+        // Before anything is written, so a key that cannot lock the copy leaves nothing behind.
+        const lock = prepareJoinLock({ requestId, encryptionKey: begun.encryptionKey });
+        if (lock === null) throw new AppError("mirror.standby_invalid", {});
         const spare = {
           standby: { nodeId: held.hello.newNodeId, publicKey: held.hello.newPublicKey },
           contactUrl: held.hello.contactUrl,
@@ -443,12 +447,7 @@ export function mountBoxJoinPersonApi(
           deps.designated.nodeId,
         );
         const bundle = await issue();
-        const locked = lockJoinBundle({
-          requestId,
-          encryptionKey: begun.encryptionKey,
-          bundle: Buffer.from(JSON.stringify(bundle)),
-          mainPrivateKey,
-        });
+        const locked = lock(Buffer.from(JSON.stringify(bundle)), mainPrivateKey);
         if (!requests.approve.finish(requestId, locked))
           throw new AppError("mirror.join_stopped_after_listing", {});
       } catch (error) {

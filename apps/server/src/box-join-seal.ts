@@ -69,7 +69,59 @@ export function approvedSignature(
   );
 }
 
-/** Locks `bundle` so only the holder of `encryptionKey`'s private half can read it, and signs it. */
+/**
+ * Agrees the key that locks a join's bundle for `encryptionKey`, before anything is written for the
+ * join. Null when no key can be agreed with it, as with a point of small order, which still reads
+ * as an X25519 key.
+ */
+export function prepareJoinLock(input: {
+  requestId: string;
+  /** The new box's one-join X25519 public key `Ek`, base64 DER (SPKI). */
+  encryptionKey: string;
+}): ((bundle: Uint8Array, mainPrivateKey: string) => LockedJoinBundle) | null {
+  const oneUse = generateKeyPairSync("x25519");
+  const oneUsePublicKey = oneUse.publicKey
+    .export({ format: "der", type: "spki" })
+    .toString("base64");
+  let key: Buffer;
+  try {
+    const shared = diffieHellman({
+      privateKey: oneUse.privateKey,
+      publicKey: createPublicKey({
+        key: Buffer.from(input.encryptionKey, "base64"),
+        format: "der",
+        type: "spki",
+      }),
+    });
+    key = cipherKey(input.requestId, shared, oneUsePublicKey, input.encryptionKey);
+  } catch {
+    return null;
+  }
+  return (bundle, mainPrivateKey) => {
+    const iv = randomBytes(IV_BYTES);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ciphertext = Buffer.concat([
+      iv,
+      cipher.update(bundle),
+      cipher.final(),
+      cipher.getAuthTag(),
+    ]).toString("base64");
+    return {
+      oneUsePublicKey,
+      ciphertext,
+      signature: approvedSignature(input.requestId, oneUsePublicKey, ciphertext, mainPrivateKey),
+    };
+  };
+}
+
+/** Whether a join's bundle can be locked for `encryptionKey`. */
+export const canLockFor = (encryptionKey: string): boolean =>
+  prepareJoinLock({ requestId: "", encryptionKey }) !== null;
+
+/**
+ * Locks `bundle` so only the holder of `encryptionKey`'s private half can read it, and signs it.
+ * Throws for a key {@link canLockFor} refuses.
+ */
 export function lockJoinBundle(input: {
   requestId: string;
   /** The new box's one-join X25519 public key `Ek`, base64 DER (SPKI). */
@@ -78,40 +130,7 @@ export function lockJoinBundle(input: {
   /** The main box's node identity private key, base64 DER (PKCS8). */
   mainPrivateKey: string;
 }): LockedJoinBundle {
-  const oneUse = generateKeyPairSync("x25519");
-  const oneUsePublicKey = oneUse.publicKey
-    .export({ format: "der", type: "spki" })
-    .toString("base64");
-  const shared = diffieHellman({
-    privateKey: oneUse.privateKey,
-    publicKey: createPublicKey({
-      key: Buffer.from(input.encryptionKey, "base64"),
-      format: "der",
-      type: "spki",
-    }),
-  });
-  const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv(
-    "aes-256-gcm",
-    cipherKey(input.requestId, shared, oneUsePublicKey, input.encryptionKey),
-    iv,
-  );
-  const ciphertext = Buffer.concat([
-    iv,
-    cipher.update(input.bundle),
-    cipher.final(),
-    cipher.getAuthTag(),
-  ]).toString("base64");
-  return {
-    oneUsePublicKey,
-    ciphertext,
-    signature: approvedSignature(
-      input.requestId,
-      oneUsePublicKey,
-      ciphertext,
-      input.mainPrivateKey,
-    ),
-  };
+  return prepareJoinLock(input)!(input.bundle, input.mainPrivateKey);
 }
 
 /** The bundle, or null when the signature or the lock does not check out. Never throws on wire input. */
