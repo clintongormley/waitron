@@ -39,11 +39,19 @@ export interface TenderRefundView {
   completedAt: string | null;
 }
 
-export interface TenderRefundAcknowledgment {
-  refund: TenderRefundView;
-  invoiceNumber: string;
+type RefundAcknowledgmentParent =
+  | { parent: "sale"; refund: TenderRefundView; invoiceNumber: string }
+  | {
+      parent: "bill";
+      refund: Omit<TenderRefundView, "saleId" | "tenderId"> & { paymentId: string };
+      workingOrderId: string;
+      paymentReference: string;
+    };
+
+export type TenderRefundAcknowledgment = RefundAcknowledgmentParent & {
+  printQueued: boolean;
   issuer: NonNullable<TillSaleResult["issuer"]>;
   customerName: string | null;
   method: TenderMethod;
   last4: string | null;
-}
+};

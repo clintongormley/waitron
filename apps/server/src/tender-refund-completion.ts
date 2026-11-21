@@ -1,10 +1,26 @@
 import { eq } from "drizzle-orm";
 import { refunds, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
-import type { NodeId } from "@waitron/shared";
+import { centsToDecimal, type NodeId } from "@waitron/shared";
+import { recordManualRefund } from "@waitron/payments";
 import type { BillRefundDeps } from "./bill-refunds.js";
 
 type RefundRow = typeof refunds.$inferSelect;
+type RefundCompletion = {
+  beforeCompletion?: (refund: RefundRow) => Promise<void>;
+  manualPaymentRef?: (refund: RefundRow) => Promise<string>;
+  openDrawer?: (refund: RefundRow) => Promise<void>;
+};
+
+export async function refuseUntilRefundable(
+  tx: Transaction,
+  backend: BillRefundDeps["backend"],
+  nodeId: NodeId,
+  reading: TrustedReading,
+): Promise<void> {
+  await backend.refuseUntilRecordable(tx, reading);
+  await backend.refuseNewRefund(tx, nodeId);
+}
 
 /**
  * Takes a refund `reserveTenderRefund` has just written forward: refused while the clock is behind
@@ -18,14 +34,27 @@ export async function carryNewTenderRefund(
   nodeId: NodeId,
   reading: TrustedReading,
   refund: RefundRow,
-  steps: {
-    beforeCompletion?: (refund: RefundRow) => Promise<void>;
-    openDrawer?: (refund: RefundRow) => Promise<void>;
-  } = {},
+  steps: RefundCompletion = {},
 ): Promise<RefundRow> {
-  await deps.backend.refuseUntilRecordable(tx, reading);
-  await deps.backend.refuseNewRefund(tx, nodeId);
+  await refuseUntilRefundable(tx, deps.backend, nodeId, reading);
+  return completeRefundReservation(tx, deps, reading, refund, steps);
+}
+
+export async function completeRefundReservation(
+  tx: Transaction,
+  deps: Pick<BillRefundDeps, "attendance">,
+  reading: TrustedReading,
+  refund: RefundRow,
+  steps: RefundCompletion = {},
+): Promise<RefundRow> {
   await steps.beforeCompletion?.(refund);
+  if (refund.manual) {
+    await recordManualRefund(tx, {
+      paymentRef: await steps.manualPaymentRef!(refund),
+      amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
+      authorizedBy: refund.authorizedBy,
+    });
+  }
   if (refund.method === "cash" || refund.manual) {
     const [completed] = await tx
       .update(refunds)

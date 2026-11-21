@@ -25,9 +25,10 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
-import { clockStopsRefund } from "./bill-refunds.js";
+import { clockStopsRefund } from "./tender-refund-sends.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -692,6 +693,20 @@ describe("rows written within one millisecond", () => {
           })
           .returning({ id: billPayments.id }),
       );
+      if (state === "received") {
+        await inTx(venue, (tx) =>
+          insertCapturedPayment(tx, {
+            origin: venue.cfg.origin,
+            nodeId: venue.cfg.nodeId,
+            workingOrderId: brandWorkingOrderId(workingOrderId),
+            provider: "fake",
+            paymentRef: randomUUID(),
+            amount: decimal("10.00"),
+            settledAt: new Date(at),
+            billPaymentId: row!.id,
+          }),
+        );
+      }
       written.push(row!.id);
     }
     return written;
@@ -747,15 +762,29 @@ describe("rows written within one millisecond", () => {
       asked.push(row!.id);
     }
 
-    const pass = await passRefusing("refunds", asked);
-
-    expect(pass.errors).toEqual(
-      asked.map((refundId) => ({
-        refundId,
-        error: expect.stringContaining("refused for the test") as unknown,
-      })),
+    const recover = () =>
+      recoverTenderRefunds({
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        admission: testTradingAdmission(),
+      });
+    venue.db.run(
+      sql`create trigger refuse_refund_update before update on refunds
+        when old.id in (${sql.raw(asked.map(quoteLiteral).join(", "))})
+        begin select raise(abort, 'refused for the test: ' || old.id); end`,
     );
-    await settle();
+    try {
+      await expect(recover()).rejects.toMatchObject({
+        errors: asked.map((refundId) =>
+          expect.objectContaining({ message: `refused for the test: ${refundId}` }),
+        ),
+      });
+    } finally {
+      venue.db.run(sql`drop trigger refuse_refund_update`);
+    }
+    await recover();
   });
 });
 
@@ -797,9 +826,6 @@ describe("withPendingBillPayments", () => {
         return Promise.resolve({
           received: 1,
           failed: 2,
-          refundsCompleted: 0,
-          refundsFailed: 0,
-          refundsUnresolved: 0,
           pending: 0,
           errors: [],
         });
@@ -817,9 +843,6 @@ describe("withPendingBillPayments", () => {
         {
           received: 1,
           failed: 2,
-          refundsCompleted: 0,
-          refundsFailed: 0,
-          refundsUnresolved: 0,
         },
       ],
     ]);
@@ -828,9 +851,6 @@ describe("withPendingBillPayments", () => {
   const passOf = (counts: Partial<BillPaymentsPass>): BillPaymentsPass => ({
     received: 0,
     failed: 0,
-    refundsCompleted: 0,
-    refundsFailed: 0,
-    refundsUnresolved: 0,
     pending: 0,
     errors: [],
     ...counts,
@@ -851,7 +871,7 @@ describe("withPendingBillPayments", () => {
     expect(lines).toEqual([]);
   });
 
-  it("comes back within a minute while a payment or refund is pending, and never later than the pass asked", async () => {
+  it("comes back within a minute while a payment is pending, and never later than the pass asked", async () => {
     const now = new Date("2026-09-27T12:00:00.000Z");
     const inHour = { ran: [], nextDueAt: new Date("2026-09-27T13:00:00.000Z") };
     const inTenSeconds = { ran: [], nextDueAt: new Date("2026-09-27T12:00:10.000Z") };
@@ -886,9 +906,6 @@ describe("withPendingBillPayments", () => {
         Promise.resolve({
           received: 0,
           failed: 0,
-          refundsCompleted: 0,
-          refundsFailed: 0,
-          refundsUnresolved: 3,
           pending: 0,
           errors: [{ billPaymentId: "bp-1", error: "Error: nope" }],
         }),
@@ -919,7 +936,6 @@ describe("a pass while the start's time is unconfirmed", () => {
       backend: gateSeatOnStartClock(venue.backend, holds),
       clock: venue.clock,
       cfg: venue.cfg,
-      refundProviderFor: (name: string) => venue.pool.get(name),
       clockUnconfirmed: holds,
     });
   }
@@ -1079,45 +1095,5 @@ describe("a pass while the start's time is unconfirmed", () => {
 
     expect(await stateOf(id)).toBe("received");
     expect(await alertsFor(id)).toEqual([]);
-  });
-
-  it("leaves a pending refund untouched for a pass while waiting, and completes it once confirmed", async () => {
-    const billId = await tabWith(venue, "Paella");
-    const paid = await cardContribution(billId, "10.00");
-    expect(paid.status).toBe(200);
-    const paymentId = (paid.json.payment as { id: string }).id;
-    // Refunded at the provider, but the answer is lost, so the refund stays pending.
-    venue.card.scriptNextRefund({ made: "completed", answer: "throw" });
-    const asked = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
-      {
-        submissionId: randomUUID(),
-        appliedAmount: "5.00",
-        tipAmount: "0.00",
-        reason: "Overcharged",
-        override: { personId: venue.adminId, pin: "1234" },
-      },
-    );
-    expect(asked.json).toMatchObject({ refund: { state: "pending" } });
-    const rows = () =>
-      inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.billPaymentId, paymentId)));
-    const [row] = await rows();
-    const lookups = venue.card.lookupCalls.length;
-    const state = startClockState();
-
-    const paused = await gatedPass(state);
-
-    expect(paused.refundsCompleted).toBe(0);
-    expect(await rows()).toEqual([row]);
-    expect(venue.card.lookupCalls).toHaveLength(lookups);
-
-    state.confirm("by_devices", {});
-    const after = await gatedPass(state);
-
-    expect(after.refundsCompleted).toBe(1);
-    expect(await rows()).toMatchObject([{ state: "completed" }]);
   });
 });

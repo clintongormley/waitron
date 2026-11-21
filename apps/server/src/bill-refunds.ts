@@ -1,52 +1,37 @@
 import { assertStillSignedIn } from "./till-session.js";
-import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { billAdvances, refunds, billPayments, withTransaction } from "@waitron/db";
 import { refuseAdvanceRefund } from "./advance-taken-off.js";
 import type { Database, Transaction } from "@waitron/db";
-import type { TrustedReading } from "@waitron/fiscal";
-import { IssuanceRefusedError } from "@waitron/fiscal";
-import { authorize, holds, verifyThrottledCredential, type PinAttempts } from "@waitron/identity";
+import { authorize, type PinAttempts } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
-import {
-  MANUAL_PROVIDER,
-  assertReversible,
-  findPaymentByBillPayment,
-  recordManualRefund,
-  recordRefund,
-  recordedRefundRefs,
-} from "@waitron/payments";
-import type {
-  PaymentProvider,
-  RefundAnswer,
-  RefundLookup,
-  RefundOutcome,
-  RefundRefusalReason,
-} from "@waitron/payments";
-import {
-  AppError,
-  centsToDecimal,
-  compareDecimal,
-  decimal,
-  decimalToCents,
-  isAppError,
-} from "@waitron/shared";
+import { MANUAL_PROVIDER, assertReversible, findPaymentByBillPayment } from "@waitron/payments";
+import type { PaymentProvider, RefundRefusalReason } from "@waitron/payments";
+import { AppError, centsToDecimal, decimal, decimalToCents, isAppError } from "@waitron/shared";
 import { money, ZERO } from "./bill-allocation.js";
-import { raiseRefundOutcomeConflict, refundAmountOf } from "./bill-refund-alerts.js";
-import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
-  attestationColumns,
   findSubmission,
   readBillBalance,
   readOnePaymentMoney,
   requireRefundableBill,
   toRefundView,
 } from "./bill-payments.js";
-import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
-import { claimLive, perDatabase } from "./live-in-process.js";
-import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import type { BillBalance, BillRefundView } from "./bill-payments.js";
+import {
+  claimTenderRefund,
+  resolveClaimedRefund,
+  resumeBillCardRefund,
+} from "./tender-refund-sends.js";
+import { withCheck } from "./pin-check-ahead.js";
+import { confirmManualRefundAuthority, withRefundPinCheck } from "./tender-refund-authorization.js";
+import { completeRefundReservation, refuseUntilRefundable } from "./tender-refund-completion.js";
+import {
+  assertRefundReplay,
+  insertRefundReservation,
+  refundAmountsFit,
+} from "./tender-refund-reservation.js";
 import { enqueueRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
@@ -90,28 +75,6 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   clockUnconfirmed?: () => boolean;
 };
 
-/** Whether a recovery pass leaves every pending refund as it is: while the start clock gate
- * holds, while the seat would refuse a record at the reading (`clock.unusable`, before
- * 28-10-2024), or while the seat refuses a new refund. */
-export async function refundsPaused(
-  deps: BillRefundDeps,
-  reading: TrustedReading,
-): Promise<boolean> {
-  if (deps.clockUnconfirmed?.() === true) return true;
-  if (clockUnusableAt(deps.backend, reading)) return true;
-  return withTransaction(deps.db, (tx) => refundRefused(tx, deps));
-}
-
-export async function refundRefused(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
-  try {
-    await deps.backend.refuseNewRefund(tx, deps.cfg.nodeId);
-    return false;
-  } catch (error) {
-    if (error instanceof IssuanceRefusedError) return true;
-    throw error;
-  }
-}
-
 /** The practice simulator by its name, else the pooled provider of that name; a name neither
  * serves (a hand-keyed card's `manual`) is undefined. */
 export function refundProvidersOf(sources: {
@@ -131,24 +94,6 @@ export function refundProvidersOf(sources: {
 }
 
 type RefundRow = typeof refunds.$inferSelect;
-
-async function captureRefundAttendance(
-  tx: Transaction,
-  refund: RefundRow,
-  attendance: AttendanceRecorder | undefined,
-  outcome: "pending" | "qualified" | "refused",
-): Promise<void> {
-  if (attendance === undefined) return;
-  await attendance(tx, {
-    source: "refund",
-    key: refund.id,
-    personId: refund.requestedBy,
-    kind: "payment",
-    at: refund.createdAt,
-    offsetMinutes: 0,
-    outcome,
-  });
-}
 
 /** The retry fingerprint of a refund request (design §5.1). The override is left out, so a retry
  * authorised by another manager is the same refund, and no PIN is hashed into a stored value. */
@@ -172,430 +117,6 @@ async function resultOf(tx: Transaction, refund: RefundRow, workingOrderId: stri
   return { refund: toRefundView(refund), balance: await readBillBalance(tx, workingOrderId) };
 }
 
-/** What is known of a card refund, from which design §6b's table decides its outcome. */
-export type RefundEvidence =
-  | { kind: "never_sent" }
-  | { kind: "answer"; answer: RefundAnswer; sendCount: number }
-  | { kind: "lookup"; lookup: RefundLookup }
-  | { kind: "attested"; outcome: "completed" | "failed" };
-
-/**
- * Design §6b's evidence table, shared by the send, a retry, the loop and the manager, so none
- * concludes more than another. An outcome is recorded only on the provider's own record of the
- * refund, on a manager's confirmed outcome, or on a refusal the provider documents as no refund
- * made that answered the ONLY send: after a resend, a refusal answers that send alone and the
- * earlier one is still unknown.
- */
-export function refundOutcome(evidence: RefundEvidence): RefundOutcome {
-  switch (evidence.kind) {
-    case "never_sent":
-      return "failed";
-    case "attested":
-      return evidence.outcome;
-    case "lookup":
-      return evidence.lookup.kind === "match" ? evidence.lookup.outcome : "pending";
-    case "answer": {
-      const { answer } = evidence;
-      if (answer.kind === "outcome") return answer.outcome;
-      if (answer.kind === "refused" && answer.documented && evidence.sendCount === 1) {
-        return "failed";
-      }
-      return "pending";
-    }
-  }
-}
-
-function providerRefundRefOf(evidence: RefundEvidence): string | null {
-  if (evidence.kind === "answer" && evidence.answer.kind === "outcome") {
-    return evidence.answer.providerRefundRef;
-  }
-  if (evidence.kind === "lookup" && evidence.lookup.kind === "match") {
-    return evidence.lookup.providerRefundRef;
-  }
-  return null;
-}
-
-/**
- * Whether a refund's send or outcome, dated by `reading` in `tx`, is held: while the start clock
- * gate holds, or while the seat would refuse a record at `reading` (`clock.unusable`, before
- * 28-10-2024). Judged again here because a provider wait since the request's own check can end
- * after the clock moves or the gate starts holding; the refund is then left pending for a later
- * pass. A manager's confirmed outcome (`evidence` attested) is refused instead, by the seat's
- * `refuseUntilRecordable`, as their route refuses it.
- */
-export async function clockStopsRefund(
-  tx: Transaction,
-  deps: Pick<BillRefundDeps, "backend" | "clockUnconfirmed">,
-  evidence: RefundEvidence | null,
-  reading: TrustedReading,
-): Promise<boolean> {
-  if (evidence?.kind === "attested") {
-    await deps.backend.refuseUntilRecordable(tx, reading);
-    return false;
-  }
-  if (deps.clockUnconfirmed?.() === true) return true;
-  return clockUnusableAt(deps.backend, reading);
-}
-
-/** The card refunds this process is driving, by id: a pending refund missing here is one nothing is
- * still sending or looking up. */
-const liveRefundsOf = perDatabase(() => new Set<string>());
-
-export function billRefundIsLive(db: Database, refundId: string): boolean {
-  return liveRefundsOf(db).has(refundId);
-}
-
-/** A card refund, its payment's bill and its provider's `payments` row. */
-interface CardRefund {
-  refund: RefundRow;
-  workingOrderId: string;
-  provided: { provider: string; paymentRef: string; processorRef: string } | undefined;
-}
-
-async function readCardRefund(tx: Transaction, refundId: string): Promise<CardRefund | undefined> {
-  const [found] = await tx
-    .select({ refund: refunds, workingOrderId: billPayments.workingOrderId })
-    .from(refunds)
-    .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
-    .where(eq(refunds.id, refundId));
-  if (found === undefined) return undefined;
-  const provided = await findPaymentByBillPayment(tx, found.refund.billPaymentId!);
-  return {
-    ...found,
-    provided:
-      provided === undefined
-        ? undefined
-        : {
-            provider: provided.provider,
-            paymentRef: provided.paymentRef,
-            // The simulator and the test provider keep no processor reference of their own; their
-            // payment reference is the one their refund addresses.
-            processorRef: provided.externalRef ?? provided.paymentRef,
-          },
-  };
-}
-
-/**
- * R3 (design §6b): record what the evidence settles, in its own transaction. `completed` writes the
- * provider's refund record beside the bill's in the same transaction; `failed` releases the bill;
- * anything else leaves the refund pending and the bill locked. A refund already failed that the
- * provider shows made raises `payment.refund_outcome_conflict` and records nothing: the trigger
- * refuses `failed → completed`.
- */
-async function recordRefundOutcome(
-  deps: BillRefundDeps,
-  refundId: string,
-  evidence: RefundEvidence,
-  raisedBy: AlertOrigin,
-  attestation?: Attestation,
-): Promise<RefundRow> {
-  return withTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const target = (await readCardRefund(tx, refundId))!;
-    const { refund } = target;
-    const outcome = refundOutcome(evidence);
-    const reading = deps.clock.now();
-    const now = reading.instant;
-    const providerRefundRef = providerRefundRefOf(evidence);
-    if (refund.state !== "pending") {
-      if (refund.state === "failed" && outcome === "completed") {
-        await raiseRefundOutcomeConflict(
-          tx,
-          refund,
-          target.workingOrderId,
-          providerRefundRef,
-          now,
-          alertOrigin(raisedBy, refund),
-        );
-      }
-      return refund;
-    }
-    if (outcome === "pending" || (await clockStopsRefund(tx, deps, evidence, reading))) {
-      return refund;
-    }
-    const attested = attestationColumns(attestation);
-    if (outcome === "failed") {
-      const [failed] = await tx
-        .update(refunds)
-        .set({
-          state: "failed",
-          failedAt: now.toISOString(),
-          ...(providerRefundRef === null ? {} : { providerRefundRef }),
-          ...attested,
-        })
-        .where(eq(refunds.id, refundId))
-        .returning();
-      return failed!;
-    }
-    const [completed] = await tx
-      .update(refunds)
-      .set({
-        state: "completed",
-        completedAt: now.toISOString(),
-        ...(providerRefundRef === null ? {} : { providerRefundRef }),
-        ...attested,
-      })
-      .where(eq(refunds.id, refundId))
-      .returning();
-    await recordRefund(tx, {
-      provider: target.provided!.provider,
-      paymentRef: target.provided!.paymentRef,
-      amount: refundAmountOf(refund),
-      authorizedBy: refund.authorizedBy,
-      ...(providerRefundRef === null ? {} : { providerRefundRef }),
-    });
-    return completed!;
-  });
-}
-
-/**
- * R1b–R3 for one send of a card refund this process has claimed: `sent_at` (first send only) and
- * `send_count` are committed before the provider is asked, so a pending refund with no `sent_at`
- * never reached it and `send_count` above one says an earlier send is still unknown. An answer
- * with nothing to read (SumUp's 201) is looked up at once.
- *
- * Before the first send only, the provider's existing refunds are read and kept with `sent_at`, for
- * every later lookup; a reading that fails is not taken, and the lookups then attribute less.
- */
-async function sendCardRefund(
-  deps: BillRefundDeps,
-  provider: PaymentProvider,
-  refundId: string,
-  raisedBy: AlertOrigin,
-  refused?: (reason: RefundRefusalReason) => void,
-): Promise<RefundRow> {
-  // The row is pending: this process claimed it, and every writer of its outcome claims it too.
-  const before = await withTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    return readCardRefund(tx, refundId);
-  });
-  const refsBeforeSend =
-    before!.refund.sentAt === null && provider.existingRefundRefs !== undefined
-      ? await provider.existingRefundRefs(before!.provided!.processorRef).catch(() => null)
-      : null;
-  const stamped = await withTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const target = (await readCardRefund(tx, refundId))!;
-    const reading = deps.clock.now();
-    if (await clockStopsRefund(tx, deps, null, reading)) return { ...target, stopped: true };
-    if (await refundRefused(tx, deps)) return { ...target, stopped: true };
-    const [row] = await tx
-      .update(refunds)
-      .set({
-        sentAt: target.refund.sentAt ?? reading.instant.toISOString(),
-        sendCount: target.refund.sendCount + 1,
-        ...(refsBeforeSend === null ? {} : { refsBeforeSend }),
-      })
-      .where(eq(refunds.id, refundId))
-      .returning();
-    return { ...target, refund: row!, stopped: false };
-  });
-  if (stamped.stopped) return stamped.refund;
-  const { refund, provided } = stamped;
-
-  let answer: RefundAnswer;
-  try {
-    answer = await provider.sendRefund!({
-      processorRef: provided!.processorRef,
-      amount: refundAmountOf(refund),
-      idempotencyKey: `tr_${refund.id}`,
-      refundId: refund.id,
-    });
-  } catch {
-    // A throw is no answer: the provider may or may not have made the refund.
-    answer = { kind: "uncertain", reason: "network" };
-  }
-  if (answer.kind !== "accepted") {
-    const evidence: RefundEvidence = { kind: "answer", answer, sendCount: refund.sendCount };
-    const recorded = await recordRefundOutcome(deps, refundId, evidence, raisedBy);
-    if (
-      refund.state === "pending" &&
-      refund.sendCount === 1 &&
-      recorded.state === "failed" &&
-      answer.kind === "refused" &&
-      answer.documented &&
-      answer.reason === "provider_balance_unavailable"
-    ) {
-      refused?.(answer.reason);
-    }
-    return recorded;
-  }
-  const lookup = await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt!);
-  if (lookup === "stopped") return refund;
-  return recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);
-}
-
-/** The provider refund ids already attributed to the payment's other refunds, made or failed:
- * none of them can be this refund. */
-async function attributedRefundRefs(tx: Transaction, refund: RefundRow): Promise<string[]> {
-  const others = await tx
-    .select({ ref: refunds.providerRefundRef })
-    .from(refunds)
-    .where(
-      and(
-        eq(refunds.provider, refund.provider!),
-        eq(refunds.providerPaymentRef, refund.providerPaymentRef!),
-        ne(refunds.id, refund.id),
-        isNotNull(refunds.providerRefundRef),
-      ),
-    );
-  const recorded = await recordedRefundRefs(tx, refund.billPaymentId!);
-  return [
-    ...new Set([
-      ...recorded.filter((ref) => ref !== refund.providerRefundRef),
-      ...others.map((other) => other.ref!),
-    ]),
-  ];
-}
-
-async function lookUp(
-  deps: BillRefundDeps,
-  provider: PaymentProvider,
-  refund: RefundRow,
-  processorRef: string,
-  sentAt: string,
-): Promise<RefundLookup | "stopped"> {
-  deps.admission.require();
-  if (provider.lookupRefund === undefined) return { kind: "unreachable" };
-  try {
-    const excludeRefs = await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund));
-    if (deps.stopSignal?.aborted) return "stopped";
-    return await provider.lookupRefund({
-      processorRef,
-      refundId: refund.id,
-      amount: refundAmountOf(refund),
-      sentAt: new Date(sentAt),
-      excludeRefs,
-      ...(refund.refsBeforeSend === null ? {} : { refsBeforeSend: refund.refsBeforeSend }),
-    });
-  } catch {
-    return { kind: "unreachable" };
-  }
-}
-
-async function providerOf(
-  deps: BillRefundDeps,
-  target: CardRefund,
-): Promise<PaymentProvider | undefined> {
-  if (target.provided === undefined || deps.refundProviderFor === undefined) return undefined;
-  return deps.refundProviderFor(target.provided.provider);
-}
-
-/**
- * Who is resolving a pending card refund (design §6b): `retry` is the refund's own request sent
- * again, which sends a refund that never left and may resend inside the provider's key window;
- * `manager` fails one that never left and may resend inside the window; `loop` fails one that
- * never left and never sends.
- */
-export type RefundResolver = "retry" | "manager" | "loop";
-
-/** `claimed: false`: the refund was no longer pending, another resolver in this process holds it,
- * or `deps.stopSignal` was raised before a sent refund's lookup, so nothing was done. `lookup` is what
- * the provider showed, when it was asked. */
-export type ResumedRefund =
-  | { claimed: false; refund: RefundRow }
-  | { claimed: true; refund: RefundRow; lookup: RefundLookup | null; resent: boolean };
-
-/**
- * Settle a pending card refund by design §6b's rules for `resolver`, claiming it for this process
- * first. With no `sent_at`, a retry sends it now and any other resolver fails it. With `sent_at`,
- * the provider is looked up first; only a retry or the manager, only when the lookup found
- * nothing, and only while the provider's key window is open, sends again under the same key.
- * `raisedBy` is who an outcome-conflict alert names.
- */
-export async function resumeCardRefund(
-  deps: BillRefundDeps,
-  refundId: string,
-  resolver: RefundResolver,
-  raisedBy: AlertOrigin,
-  refused?: (reason: RefundRefusalReason) => void,
-): Promise<ResumedRefund> {
-  const live = liveRefundsOf(deps.db);
-  const target = await withTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const found = await readCardRefund(tx, refundId);
-    if (found === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (found.refund.state !== "pending" || live.has(refundId)) return { found, release: null };
-    return { found, release: claimLive(live, refundId) };
-  });
-  if (target.release === null) return { claimed: false, refund: target.found.refund };
-  const { refund, provided } = target.found;
-  try {
-    if (refund.sentAt === null && resolver !== "retry") {
-      const failed = await recordRefundOutcome(deps, refundId, { kind: "never_sent" }, raisedBy);
-      return { claimed: true, refund: failed, lookup: null, resent: false };
-    }
-    const provider = await providerOf(deps, target.found);
-    if (refund.sentAt === null) {
-      const sent =
-        provider?.sendRefund === undefined
-          ? refund
-          : await sendCardRefund(deps, provider, refundId, raisedBy, refused);
-      return { claimed: true, refund: sent, lookup: null, resent: false };
-    }
-    const lookup =
-      provider === undefined
-        ? ({ kind: "unreachable" } as const)
-        : await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt);
-    if (lookup === "stopped") return { claimed: false, refund };
-    const window = provider?.refundResendWindowMs ?? null;
-    const age = deps.clock.now().instant.getTime() - Date.parse(refund.sentAt);
-    if (
-      lookup.kind === "none" &&
-      resolver !== "loop" &&
-      provider?.sendRefund !== undefined &&
-      window !== null &&
-      // A first send stamped ahead, as after a backward step, is of unknown age: it is not resent.
-      age >= 0 &&
-      age < window
-    ) {
-      const resent = await sendCardRefund(deps, provider, refundId, raisedBy);
-      return { claimed: true, refund: resent, lookup, resent: true };
-    }
-    const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);
-    return { claimed: true, refund: settled, lookup, resent: false };
-  } finally {
-    target.release();
-  }
-}
-
-/**
- * A manager's confirmed outcome of a pending card refund (design §6b), kept on the row with who
- * recorded it and their note. `completed` for a refund that never reached the provider
- * is refused `bill.attestation_contradicted`.
- */
-export async function attestCardRefund(
-  deps: BillRefundDeps,
-  refundId: string,
-  outcome: "completed" | "failed",
-  attestation: Attestation,
-): Promise<RefundRow> {
-  const live = liveRefundsOf(deps.db);
-  const release = await withTransaction(deps.db, async (tx) => {
-    await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const target = await readCardRefund(tx, refundId);
-    if (target === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (target.refund.state !== "pending" || live.has(refundId)) {
-      throw new AppError("bill.refund_not_stuck", { refundId });
-    }
-    if (outcome === "completed" && target.refund.sentAt === null) {
-      throw new AppError("bill.attestation_contradicted", { id: refundId, evidence: "never_sent" });
-    }
-    return claimLive(live, refundId);
-  });
-  try {
-    return await recordRefundOutcome(
-      deps,
-      refundId,
-      { kind: "attested", outcome },
-      "stored",
-      attestation,
-    );
-  } finally {
-    release();
-  }
-}
-
 /**
  * How the payment was taken, for the profile check a refund makes before its transaction: cash, a
  * card keyed on a separate terminal (a `manual` provider row), or a card on a connected reader.
@@ -616,27 +137,6 @@ export async function refundTender(
   return (await findPaymentByBillPayment(db, paymentId))?.provider === MANUAL_PROVIDER
     ? "hand-keyed-card"
     : "reader-card";
-}
-
-/**
- * The override whose PIN the refund's transaction will check: `authorize` does for an operator
- * lacking `sale.refund`, and a hand-keyed card refund confirmed done checks it as the confirmer
- * otherwise. Read without writing; the transaction decides again.
- */
-async function refundOverrideToCheck(
-  db: Database,
-  tender: TenderKind | undefined,
-  req: BillRefundRequest,
-  sessionId: string,
-): Promise<{ personId: string; pin: string } | undefined> {
-  if (req.override === undefined) return undefined;
-  const confirmsHandKeyedCard = req.manualConfirmed === true && tender === "hand-keyed-card";
-  return overrideToCheck(
-    db,
-    { sessionId, permission: "sale.refund" },
-    req.override,
-    confirmsHandKeyedCard,
-  );
 }
 
 /**
@@ -663,198 +163,168 @@ export async function refundBillPayment(
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
   tender: TenderKind | undefined,
 ): Promise<BillRefundResult> {
-  const applied = money(decimal(req.appliedAmount));
-  const tip = money(decimal(req.tipAmount));
-  const toCheck = await refundOverrideToCheck(deps.db, tender, req, operator.sessionId);
-  let release = (): void => {};
+  const applied = decimalToCents(decimal(req.appliedAmount));
+  const tip = decimalToCents(decimal(req.tipAmount));
+  const confirmsManual = req.manualConfirmed === true && tender === "hand-keyed-card";
+  let release: (() => void) | undefined;
   try {
-    const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {
-      const override = withCheck(req.override, checked);
-      return withTransaction(deps.db, async (tx) => {
-        await requireEconomicWrite(tx, cfg, deps.admission);
-        await assertStillSignedIn(tx, {
-          deviceId: cfg.origin.deviceId,
-          personId: operator.personId,
-          sessionId: operator.sessionId,
-        });
-        const authorization = await authorize(
-          tx,
-          { sessionId: operator.sessionId, permission: "sale.refund", override },
-          operator.attempts,
-        );
-        const [found] = await tx
-          .select({ payment: billPayments, advanceSaleId: billAdvances.advanceSaleId })
-          .from(billPayments)
-          .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
-          .where(
-            and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
+    const begun = await withRefundPinCheck(
+      deps.db,
+      operator,
+      req.override,
+      confirmsManual,
+      (checked) => {
+        const override = withCheck(req.override, checked);
+        return withTransaction(deps.db, async (tx) => {
+          await requireEconomicWrite(tx, cfg, deps.admission);
+          await assertStillSignedIn(tx, {
+            deviceId: cfg.origin.deviceId,
+            personId: operator.personId,
+            sessionId: operator.sessionId,
+          });
+          const authorization = await authorize(
+            tx,
+            { sessionId: operator.sessionId, permission: "sale.refund", override },
+            operator.attempts,
           );
-        if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
-        const { payment, advanceSaleId } = found;
-        if (advanceSaleId !== null)
-          await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
-        const provided =
-          payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
-        const print = refundFingerprint(
-          paymentId,
-          req.appliedAmount,
-          req.tipAmount,
-          req.reason,
-          provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
-        );
+          const [found] = await tx
+            .select({ payment: billPayments, advanceSaleId: billAdvances.advanceSaleId })
+            .from(billPayments)
+            .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
+            .where(
+              and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
+            );
+          if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+          const { payment, advanceSaleId } = found;
+          if (advanceSaleId !== null)
+            await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
+          const provided =
+            payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
+          const print = refundFingerprint(
+            paymentId,
+            req.appliedAmount,
+            req.tipAmount,
+            req.reason,
+            provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true,
+          );
 
-        const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
-        if (earlier.refund !== undefined) {
-          if (earlier.refund.fingerprint !== print) {
+          const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
+          if (earlier.refund !== undefined) {
+            assertRefundReplay(earlier.refund, print, req.submissionId);
+            if (earlier.refund.state === "pending") {
+              await refuseUntilRefundable(tx, deps.backend, cfg.nodeId, deps.clock.now());
+              return { kind: "resume" as const, refundId: earlier.refund.id };
+            }
+            return {
+              kind: "done" as const,
+              result: await resultOf(tx, earlier.refund, workingOrderId),
+            };
+          }
+          if (earlier.payment !== undefined) {
             throw new AppError("submission.id_reused", { submissionId: req.submissionId });
           }
-          if (earlier.refund.state === "pending") {
-            await deps.backend.refuseUntilRecordable(tx, deps.clock.now());
-            await deps.backend.refuseNewRefund(tx, cfg.nodeId);
-            return { kind: "resume" as const, refundId: earlier.refund.id };
+          const reading = deps.clock.now();
+          await refuseUntilRefundable(tx, deps.backend, cfg.nodeId, reading);
+
+          if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {
+            await refuseRefundInProgress(tx, [workingOrderId]);
+            await refusePendingPartPayment(tx, [workingOrderId], "any");
+          } else {
+            await refusePaymentInFlight(tx, [workingOrderId]);
           }
-          return {
-            kind: "done" as const,
-            result: await resultOf(tx, earlier.refund, workingOrderId),
-          };
-        }
-        if (earlier.payment !== undefined) {
-          throw new AppError("submission.id_reused", { submissionId: req.submissionId });
-        }
-        const reading = deps.clock.now();
-        await deps.backend.refuseUntilRecordable(tx, reading);
-        await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
-        if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {
-          await refuseRefundInProgress(tx, [workingOrderId]);
-          await refusePendingPartPayment(tx, [workingOrderId], "any");
-        } else {
-          await refusePaymentInFlight(tx, [workingOrderId]);
-        }
-
-        const held = await readOnePaymentMoney(tx, payment);
-        const [refundable, refundableTip] =
-          payment.state === "received" ? [held.netApplied, held.netTip] : [ZERO, ZERO];
-        const whole = compareDecimal(applied, refundable) === 0;
-        if (
-          compareDecimal(applied, refundable) > 0 ||
-          (compareDecimal(tip, ZERO) !== 0 && !(whole && compareDecimal(tip, refundableTip) === 0))
-        ) {
-          throw new AppError("bill.refund_exceeds_payment", {
-            paymentId,
-            applied: money(refundable),
-            tip: money(refundableTip),
-          });
-        }
-        if (payment.kind === "items" && !whole) {
-          throw new AppError("bill.refund_not_whole", {
-            paymentId,
-            applied: money(refundable),
-            tip: money(refundableTip),
-          });
-        }
-
-        const createdAt = reading.instant.toISOString();
-        const values = {
-          billPaymentId: paymentId,
-          nodeId: cfg.nodeId,
-          method: payment.method,
-          submissionId: req.submissionId,
-          fingerprint: print,
-          appliedAmount: decimalToCents(applied),
-          tipAmount: decimalToCents(tip),
-          reason: req.reason,
-          authorizedBy: authorization.authorizedBy,
-          requestedBy: operator.personId,
-          source: cfg.origin.source,
-          deviceId: cfg.origin.deviceId,
-          createdAt,
-        };
-        if (payment.method === "cash") {
-          const [refund] = await tx
-            .insert(refunds)
-            .values({ ...values, state: "completed", completedAt: createdAt })
-            .returning();
-          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified");
-          await enqueueRefundDrawer(tx, cfg, refund!.id, operator.personId, {
-            authorizedBy: authorization.authorizedBy,
-            viaOverride: authorization.viaOverride,
-          });
-          return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
-        }
-
-        if (provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true) {
-          let confirmedBy = authorization.authorizedBy;
-          if (!authorization.viaOverride) {
-            if (override === undefined) {
-              throw new AppError("bill.manual_refund_pin_required", { paymentId });
-            }
-            const confirmer = await verifyThrottledCredential(
-              tx,
-              override.personId,
-              override.pin,
-              operator.attempts,
-              override.checked,
-            );
-            if (!holds(confirmer.authority, "sale.refund")) {
-              throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
-            }
-            confirmedBy = override.personId;
+          const held = await readOnePaymentMoney(tx, payment);
+          const [refundable, refundableTip] =
+            payment.state === "received" ? [held.netApplied, held.netTip] : [ZERO, ZERO];
+          const refundableCents = decimalToCents(refundable);
+          if (!refundAmountsFit(applied, tip, refundableCents, decimalToCents(refundableTip))) {
+            throw new AppError("bill.refund_exceeds_payment", {
+              paymentId,
+              applied: money(refundable),
+              tip: money(refundableTip),
+            });
           }
-          const [refund] = await tx
-            .insert(refunds)
-            .values({
-              ...values,
-              authorizedBy: confirmedBy,
-              manual: true,
-              state: "completed",
-              completedAt: createdAt,
-            })
-            .returning();
-          await recordManualRefund(tx, {
-            paymentRef: provided.paymentRef,
-            amount: centsToDecimal(values.appliedAmount + values.tipAmount),
-            authorizedBy: confirmedBy,
+          if (payment.kind === "items" && applied !== refundableCents) {
+            throw new AppError("bill.refund_not_whole", {
+              paymentId,
+              applied: money(refundable),
+              tip: money(refundableTip),
+            });
+          }
+
+          const manual = provided?.provider === MANUAL_PROVIDER && req.manualConfirmed === true;
+          const approver = manual
+            ? await confirmManualRefundAuthority(
+                tx,
+                authorization,
+                override,
+                operator.attempts,
+                () => new AppError("bill.manual_refund_pin_required", { paymentId }),
+              )
+            : authorization;
+          const connected = payment.method === "card" && !manual;
+          const provider =
+            connected && provided !== undefined
+              ? await deps.refundProviderFor?.(provided.provider)
+              : undefined;
+          if (connected) {
+            if (provided === undefined || provider?.sendRefund === undefined)
+              throw new AppError("bill.refund_unsupported", { paymentId });
+            await assertReversible(tx, {
+              provider: provided.provider,
+              paymentRef: provided.paymentRef,
+              kind: "refund",
+              amount: centsToDecimal(applied + tip),
+            });
+          }
+          const reserved = await insertRefundReservation(tx, cfg, {
+            billPaymentId: paymentId,
+            method: payment.method,
+            submissionId: req.submissionId,
+            fingerprint: print,
+            appliedAmount: applied,
+            tipAmount: tip,
+            reason: req.reason,
+            authorizedBy: approver.authorizedBy,
+            requestedBy: operator.personId,
+            createdAt: reading.instant.toISOString(),
+            manual,
+            provider: connected ? provided!.provider : null,
+            providerPaymentRef: connected ? provided!.paymentRef : null,
           });
-          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified");
-          return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
-        }
-        const provider =
-          provided === undefined ? undefined : await deps.refundProviderFor?.(provided.provider);
-        if (provided === undefined || provider?.sendRefund === undefined) {
-          throw new AppError("bill.refund_unsupported", { paymentId });
-        }
-        // The provider's own record must allow this refund before it is asked for it.
-        await assertReversible(tx, {
-          provider: provided.provider,
-          paymentRef: provided.paymentRef,
-          kind: "refund",
-          amount: centsToDecimal(values.appliedAmount + values.tipAmount),
+          const refund = await completeRefundReservation(tx, deps, reading, reserved, {
+            manualPaymentRef: async () => provided!.paymentRef,
+            openDrawer: (done) =>
+              enqueueRefundDrawer(tx, cfg, done.id, operator.personId, {
+                authorizedBy: approver.authorizedBy,
+                viaOverride: approver.viaOverride,
+              }),
+          });
+          if (refund.state === "completed")
+            return { kind: "done" as const, result: await resultOf(tx, refund, workingOrderId) };
+
+          // Inside the transaction, so no loop pass runs between the insert and the claim.
+          release = claimTenderRefund(deps.db, refund.id);
+          return { kind: "send" as const, refundId: refund.id, provider: provider! };
         });
-        const [refund] = await tx
-          .insert(refunds)
-          .values({
-            ...values,
-            provider: provided.provider,
-            providerPaymentRef: provided.paymentRef,
-            state: "pending",
-          })
-          .returning();
-        await captureRefundAttendance(tx, refund!, deps.attendance, "pending");
-        // Inside the transaction, so no loop pass runs between the insert and the claim.
-        release = claimLive(liveRefundsOf(deps.db), refund!.id);
-        return { kind: "send" as const, refundId: refund!.id, provider };
-      });
-    });
+      },
+    );
     if (begun.kind === "done") return begun.result;
     let refusalReason: RefundRefusalReason | undefined;
-    const refused = (reason: RefundRefusalReason) => {
-      refusalReason = reason;
-    };
     if (begun.kind === "send") {
-      await sendCardRefund(deps, begun.provider, begun.refundId, cfg.origin, refused);
+      const held = release!;
+      release = undefined;
+      const result = await resolveClaimedRefund(
+        { ...deps, refundProviderFor: async () => begun.provider },
+        begun.refundId,
+        "retry",
+        held,
+        cfg.origin,
+      );
+      refusalReason = result.refusalReason;
     } else {
-      await resumeCardRefund(deps, begun.refundId, "retry", cfg.origin, refused);
+      const result = await resumeBillCardRefund(deps, begun.refundId, "retry", cfg.origin);
+      if (result.claimed) refusalReason = result.refusalReason;
     }
     const refundId = begun.refundId;
     return await withTransaction(deps.db, async (tx) => {
@@ -866,6 +336,6 @@ export async function refundBillPayment(
       return result;
     });
   } finally {
-    release();
+    release?.();
   }
 }

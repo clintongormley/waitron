@@ -1,15 +1,25 @@
 import { and, eq } from "drizzle-orm";
-import { invoiceSeries, readTaxpayer, sales, refunds, type Transaction } from "@waitron/db";
-import { payments } from "@waitron/payments";
+import {
+  billPayments,
+  invoiceSeries,
+  printJobs,
+  readTaxpayer,
+  sales,
+  refunds,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
+import { findPaymentByBillPayment, payments } from "@waitron/payments";
+import { readReceiptLanguage } from "@waitron/menu";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
 import { AppError, addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { receiptDateTime } from "./receipt-dates.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { formatMoney } from "./receipt-money.js";
+import { toRefundView } from "./bill-payments.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundAcknowledgment } from "./tender-refund-types.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -19,11 +29,52 @@ export async function readTenderRefundAcknowledgment(
   backend: FiscalBackend,
   tx: Transaction,
   refundId: string,
-): Promise<TenderRefundAcknowledgment> {
+  checkAccess: (parent: string | { workingOrderId: string }) => Promise<unknown>,
+): Promise<{ acknowledgment: TenderRefundAcknowledgment; locale: string }> {
   const [row] = await tx.select().from(refunds).where(eq(refunds.id, refundId));
-  if (row === undefined || row.saleId === null || row.tenderId === null)
+  if (row === undefined) throw new AppError("tender.refund_not_found", { refundId });
+  const hasPrint = async () => {
+    const [job] = await tx
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(eq(printJobs.tenderRefundId, refundId))
+      .limit(1);
+    return job !== undefined;
+  };
+  if (row.billPaymentId !== null) {
+    const [bill] = await tx
+      .select({ workingOrderId: billPayments.workingOrderId, locale: workingOrders.receiptLocale })
+      .from(billPayments)
+      .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
+      .where(eq(billPayments.id, row.billPaymentId));
+    if (bill === undefined) throw new AppError("tender.refund_not_found", { refundId });
+    await checkAccess({ workingOrderId: bill.workingOrderId });
+    if (row.state !== "completed")
+      throw new AppError("tender.refund_unavailable", { tenderId: row.billPaymentId });
+    const taxpayer = await readTaxpayer(tx);
+    if (taxpayer === null) throw new AppError("tender.refund_not_found", { refundId });
+    const card =
+      row.method === "card" ? await findPaymentByBillPayment(tx, row.billPaymentId) : undefined;
+    const { id, paymentId, state, appliedAmount, tipAmount, createdAt, completedAt } =
+      toRefundView(row);
+    return {
+      locale: bill.locale ?? (await readReceiptLanguage(tx)).locale,
+      acknowledgment: {
+        parent: "bill",
+        workingOrderId: bill.workingOrderId,
+        paymentReference: paymentId,
+        refund: { id, paymentId, state, appliedAmount, tipAmount, createdAt, completedAt },
+        issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+        method: row.method,
+        customerName: null,
+        last4: card?.cardLast4 ?? null,
+        printQueued: await hasPrint(),
+      },
+    };
+  }
+  if (row.saleId === null || row.tenderId === null)
     throw new AppError("tender.refund_not_found", { refundId });
-  await resolveTransactionScope(tx, row.saleId);
+  await checkAccess(row.saleId);
   if (row.state !== "completed")
     throw new AppError("tender.refund_unavailable", { tenderId: row.tenderId });
   const [sale] = await tx
@@ -62,12 +113,17 @@ export async function readTenderRefundAcknowledgment(
             ),
           );
   return {
-    refund: toTenderRefundView(row),
-    invoiceNumber: formatInvoiceNumber(sale!.code, sale!.sale.invoiceNumber),
-    issuer,
-    customerName: sale!.sale.counterpartyLegalName,
-    method: row.method,
-    last4: card[0]?.last4 ?? null,
+    locale: sale!.sale.locale,
+    acknowledgment: {
+      parent: "sale",
+      refund: toTenderRefundView(row),
+      invoiceNumber: formatInvoiceNumber(sale!.code, sale!.sale.invoiceNumber),
+      issuer,
+      customerName: sale!.sale.counterpartyLegalName,
+      method: row.method,
+      last4: card[0]?.last4 ?? null,
+      printQueued: await hasPrint(),
+    },
   };
 }
 
@@ -95,10 +151,11 @@ export function formatTenderRefundAcknowledgment(
       b.line(line);
   };
   text(heading.refundHeading);
-  text(heading.refundNotice);
+  if (acknowledgment.parent === "sale") text(heading.refundNotice);
   text(`${acknowledgment.issuer.venueName} · ${acknowledgment.issuer.nif}`);
   if (acknowledgment.issuer.domicile !== undefined) text(acknowledgment.issuer.domicile);
-  row(labels.refundReference, acknowledgment.invoiceNumber);
+  if (acknowledgment.parent === "sale") row(labels.refundReference, acknowledgment.invoiceNumber);
+  else text(`${labels.reference} ${acknowledgment.paymentReference}`);
   text(acknowledgment.refund.id);
   if (acknowledgment.customerName !== null) row(labels.customer, acknowledgment.customerName);
   text(`${receiptDateTime(acknowledgment.refund.completedAt!, language, 0)} UTC`);

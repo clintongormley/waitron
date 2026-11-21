@@ -1,10 +1,10 @@
 import { eq, or } from "drizzle-orm";
-import { carryNewTenderRefund } from "./tender-refund-completion.js";
+import { carryNewTenderRefund, refuseUntilRefundable } from "./tender-refund-completion.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { refunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
 import { codeOf, type Logger } from "@waitron/server-kit";
-import { payments, recordManualRefund } from "@waitron/payments";
+import { payments } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import type { BillRefundDeps } from "./bill-refunds.js";
 import { fileCorrectionAutomatically } from "./invoice-correction-alerts.js";
@@ -91,32 +91,23 @@ export async function beginSettledTenderRefund(
         createdAt,
       );
       if (begun.replayed) {
-        if (begun.refund.state === "pending") {
-          await deps.backend.refuseUntilRecordable(tx, reading);
-          await deps.backend.refuseNewRefund(tx, cfg.nodeId);
-        }
+        if (begun.refund.state === "pending")
+          await refuseUntilRefundable(tx, deps.backend, cfg.nodeId, reading);
         return toTenderRefundView(begun.refund);
       }
       const refund = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {
+        manualPaymentRef: async (reserved) => (await captureFor(tx, reserved))!.paymentRef,
         beforeCompletion: async (reserved) => {
-          if (reserved.method !== "card") return;
+          if (reserved.method !== "card" || reserved.manual) return;
           const capture = (await captureFor(tx, reserved))!;
-          if (reserved.manual) {
-            await recordManualRefund(tx, {
-              paymentRef: capture.paymentRef,
-              amount: centsToDecimal(reserved.appliedAmount + reserved.tipAmount),
-              authorizedBy: reserved.authorizedBy,
-            });
-          } else {
-            const provider = await deps.refundProviderFor?.(capture.provider);
-            if (
-              provider?.provider !== capture.provider ||
-              provider.sendRefund === undefined ||
-              (!provider.capabilities.partialRefund &&
-                reserved.appliedAmount + reserved.tipAmount !== capture.amount)
-            )
-              throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
-          }
+          const provider = await deps.refundProviderFor?.(capture.provider);
+          if (
+            provider?.provider !== capture.provider ||
+            provider.sendRefund === undefined ||
+            (!provider.capabilities.partialRefund &&
+              reserved.appliedAmount + reserved.tipAmount !== capture.amount)
+          )
+            throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId! });
         },
         openDrawer: (reserved) =>
           enqueueRefundDrawer(tx, cfg, reserved.id, operator.personId, {

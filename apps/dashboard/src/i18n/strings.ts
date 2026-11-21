@@ -1092,7 +1092,9 @@ export const en = {
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
-    "All jobs awaiting delivery, plus the latest 100 printed jobs and 100 failed jobs with no retries left.",
+    "Waiting jobs, up to 100 printed jobs per page and the last 100 failures with no retries left.",
+  "printers.newer_jobs": "Newer print jobs",
+  "printers.older_jobs": "Older print jobs",
   "printers.host_required": "Enter a host name or IP address",
   "printers.probe_title": "Check a known address",
   "printers.probe_host": "IP address",
@@ -5721,7 +5723,9 @@ export const es: Record<StringKey, string> = {
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":
-    "Todos los trabajos pendientes de entrega, los últimos 100 impresos y los últimos 100 fallidos sin más reintentos.",
+    "Trabajos pendientes, hasta 100 impresos por página y los últimos 100 fallidos sin más reintentos.",
+  "printers.newer_jobs": "Trabajos de impresión más recientes",
+  "printers.older_jobs": "Trabajos de impresión anteriores",
   "printers.host_required": "Introduce un nombre de equipo o una dirección IP",
   "printers.probe_title": "Comprobar una dirección conocida",
   "printers.probe_host": "Dirección IP",

@@ -3431,6 +3431,14 @@ describe("mountPrintApi — management: recent jobs", () => {
       const created = jobs.map((job) => Date.parse(job.createdAt));
       expect(created).toEqual([...created].sort((a, b) => b - a));
       expect(jobs.every((job) => !("payload" in job))).toBe(true);
+      const older = await send(app, "GET", "/management-api/print-jobs?completedPage=1", {
+        cookie: managerCookie,
+      });
+      expect(older.status).toBe(200);
+      const olderJobs = (await older.json()) as { id: string; status: string }[];
+      expect(olderJobs.filter((job) => job.id === completed[0]!.id)).toHaveLength(1);
+      expect(olderJobs.some((job) => job.id === completed.at(-1)!.id)).toBe(false);
+      expect(olderJobs.some((job) => job.id === pending[0]!.id)).toBe(true);
     } finally {
       await suite.db.execute(sql`delete from print_jobs where printer_id = ${printerId}`);
     }

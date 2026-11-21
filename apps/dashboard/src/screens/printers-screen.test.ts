@@ -5655,6 +5655,25 @@ it.each([
   expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
 });
 
+it("opens an older finished job from Print Queue", async () => {
+  const delivered = Array.from({ length: 100 }, (_, i) => ({
+    ...jobs[1]!,
+    id: `recent-${i}`,
+    status: "done" as const,
+  }));
+  const older = { ...delivered[0]!, id: "older" };
+  const listRecentJobs = vi.fn().mockResolvedValueOnce(delivered).mockResolvedValue([older]);
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs }),
+  });
+  await flush(el);
+  const olderJobs = q(el, "[data-test=older-print-jobs]");
+  expect(olderJobs).not.toBeNull();
+  olderJobs!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=resend-job-older]")).not.toBeNull());
+  expect(listRecentJobs).toHaveBeenLastCalledWith(1);
+});
+
 it("shows office printer holds and uncertain pages without receipt actions", async () => {
   const before = currentLocale();
   onTestFinished(() => setLocale(before));

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
+  billPayments,
   devices,
   deviceProfiles,
   drawerOpens,
@@ -14,6 +15,7 @@ import {
   refunds,
   tenders,
   floorZones,
+  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -23,12 +25,17 @@ import { inTx, send, seatedWith } from "./testing/bill-venue.js";
 import {
   billlessSale,
   collect,
+  contribute,
+  parked,
   placedIssuedBill,
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { decodeTicket, opensDrawer, commandNames } from "./testing/decode-ticket.js";
 import { readOrderDetail } from "./orders-list.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -132,6 +139,8 @@ it("reads a separate payment acknowledgment with the filed issuer and immutable 
     "issuer",
     "last4",
     "method",
+    "parent",
+    "printQueued",
     "refund",
   ]);
   expect(await immutable()).toEqual(before);
@@ -230,6 +239,85 @@ it("prints one audited payment document without invoice delivery, fiscal QR or d
   const detail = await inTx(venue, (tx) => readOrderDetail(tx, row.saleId, "all", false));
   expect(detail.reprints).toEqual([]);
 });
+it("queues only the first till print even when two requests arrive together", async () => {
+  const row = await target();
+  const before = await printed();
+  const attempts = await Promise.all([print(row.id), print(row.id)]);
+  expect(attempts.map((answer) => answer.status)).toEqual([200, 200]);
+  const after = await printed();
+  expect(after.jobs).toHaveLength(before.jobs.length + 1);
+  expect(after.audits).toHaveLength(before.audits.length + 1);
+  expect(await get(row.id)).toMatchObject({ status: 200, json: { printQueued: true } });
+});
+
+it("keeps a bill refund's payment reference when the bill is later invoiced", async () => {
+  const order = await parked(venue, "Caña");
+  const deps = {
+    db: store.db,
+    backend: venue.backend,
+    clock: venue.clock,
+    admission: testTradingAdmission(),
+  };
+  await inTx(venue, (tx) =>
+    tx.update(workingOrders).set({ receiptLocale: "en-GB" }).where(eq(workingOrders.id, order)),
+  );
+  await placeOrder(deps, venue.cfg, order, venue.operatorId);
+  await contribute(venue, order, "1.00");
+  const [payment] = await store.db
+    .select()
+    .from(billPayments)
+    .where(eq(billPayments.workingOrderId, order));
+  const answer = await send(
+    venue.app,
+    venue.supervisorTill,
+    "POST",
+    `/api/working-orders/${order}/payments/${payment!.id}/refunds`,
+    { submissionId: randomUUID(), appliedAmount: "1.00", tipAmount: "0.00", reason: "Goodwill" },
+  );
+  expect(answer).toMatchObject({ status: 200, json: { refund: { state: "completed" } } });
+  const { id } = answer.json.refund as { id: string };
+  const reference = {
+    parent: "bill",
+    workingOrderId: order,
+    paymentReference: payment!.id,
+    refund: { id, paymentId: payment!.id, appliedAmount: "1.00" },
+  };
+  expect(await get(id)).toMatchObject({ status: 200, json: reference });
+  await issueOrderInvoice(deps, venue.cfg, order, venue.operatorId);
+  expect(
+    await send(venue.app, venue.supervisorTill, "GET", "/api/transactions?preset=any&type=refund"),
+  ).toMatchObject({
+    status: 200,
+    json: {
+      rows: [expect.objectContaining({ refundId: id, workingOrderId: order, amount: "-1.00" })],
+    },
+  });
+  const before = await immutable(),
+    jobs = await printed();
+  expect(await get(id)).toMatchObject({ status: 200, json: reference });
+  expect(await print(id)).toMatchObject({ status: 200 });
+  const after = await printed();
+  const job = after.jobs.at(-1)!;
+  expect(job).toMatchObject({ kind: "document", saleId: null, tenderRefundId: id });
+  expect(decodeTicket(job.payload)).toContain("REFUND ACKNOWLEDGMENT");
+  expect(decodeTicket(job.payload)).not.toContain("The original invoice is unchanged");
+  expect(after.audits).toEqual(jobs.audits);
+  expect(await immutable()).toEqual(before);
+  await inTx(venue, async (tx) => {
+    const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
+    await setProfileServiceAccess(tx, await profile(), {
+      departmentId: zone!.departmentId,
+      allowedZoneIds: [venue.zoneId],
+      startingZoneId: venue.zoneId,
+    });
+  });
+  for (const action of [get, print])
+    expect(await action(id)).toMatchObject({
+      status: 403,
+      json: { code: "service_zone.not_allowed" },
+    });
+  expect(await printed()).toEqual(after);
+});
 it("prints the refund time in UTC with a two-digit hour", async () => {
   const row = await target({ completedAt: "2026-10-16T09:05:00.000Z" });
   expect((await print(row.id)).status).toBe(200);
@@ -239,6 +327,7 @@ it("prints the stored English language and offered Spanish without changing the 
   venue.cfg.locale = "en-GB";
   [venue.cfg.locale] = ["en-GB"];
   const row = await target(),
+    second = await target(),
     before = await immutable();
   expect((await print(row.id, { language: "en-GB" })).status).toBe(200);
   const job = (await printed()).jobs.at(-1)!;
@@ -247,7 +336,7 @@ it("prints the stored English language and offered Spanish without changing the 
   expect(decodeTicket(job.payload)).toContain("2.30");
   expect(decodeTicket(job.payload)).toContain("Money returned");
   expect(decodeTicket(job.payload)).toContain("Tip returned");
-  expect((await print(row.id, { language: "es-ES" })).status).toBe(200);
+  expect((await print(second.id, { language: "es-ES" })).status).toBe(200);
   expect(decodeTicket((await printed()).jobs.at(-1)!.payload)).toContain(
     "JUSTIFICANTE DE DEVOLUCIÓN",
   );

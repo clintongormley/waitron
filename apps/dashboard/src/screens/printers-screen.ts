@@ -1138,6 +1138,8 @@ export class PrintersScreen extends LitElement {
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
+  @state() private completedJobsPage = 0;
+  @state() private readingCompletedJobs = false;
   /** The job the Reprint dialog is open on: its row in `jobs`, or the last one it had there. */
   @state() private reprintJob: PrintJobRow | null = null;
   /** Jobs whose reprint has been sent and not answered, even after the dialog closed. */
@@ -1409,9 +1411,7 @@ export class PrintersScreen extends LitElement {
           for (const { id } of gone) this.#printerGone(id, true);
           this.#restorePrinterTarget();
         }),
-        this.#queries.watch("listRecentJobs", [], (jobs) => {
-          this.jobs = jobs;
-        }),
+        this.#watchJobs(this.completedJobsPage),
         this.#queries.watch("listPrinterProfiles", [], (printerProfiles) => {
           this.printerProfiles = printerProfiles;
           this.usageRead = new Set([...this.usageRead, "profiles"]);
@@ -1443,6 +1443,32 @@ export class PrintersScreen extends LitElement {
       this.refreshErrorKey = codeOf(error);
     } finally {
       this.loading = false;
+    }
+  }
+
+  #watchJobs(page: number): Promise<void> {
+    return this.#queries.watch("listRecentJobs", page === 0 ? [] : [page], (jobs) => {
+      this.completedJobsPage = page;
+      this.jobs = jobs;
+    });
+  }
+
+  async #showCompletedJobs(page: number): Promise<void> {
+    if (this.readingCompletedJobs) return;
+    const focused = this.shadowRoot?.activeElement as HTMLElement | null | undefined;
+    this.readingCompletedJobs = true;
+    try {
+      await this.#watchJobs(page);
+    } catch (error) {
+      this.refreshErrorKey = codeOf(error);
+    } finally {
+      this.readingCompletedJobs = false;
+      await this.updateComplete;
+      if (
+        focused?.hasAttribute("disabled") &&
+        this.ownerDocument.activeElement === this.ownerDocument.body
+      )
+        this.renderRoot.querySelector<HTMLElement>("[data-history-page]:not([disabled])")?.focus();
     }
   }
 
@@ -4390,16 +4416,37 @@ export class PrintersScreen extends LitElement {
   }
 
   #renderJobsSection(): TemplateResult {
+    const delivered = this.jobs.filter((job) => job.status === "done" || job.status === "unknown");
+    const hasOlder = delivered.length >= 100;
     return html`<section>
       ${this.#unreadTable(
         this.jobs.length === 0 && this.#queries.failing("listRecentJobs"),
         (errorMessage) =>
           html`<p class="hint">${t("printers.jobs_limit")}</p>
+            ${
+              hasOlder || this.completedJobsPage > 0
+                ? html`<wt-button
+                      data-test="newer-print-jobs"
+                      data-history-page
+                      ?disabled=${this.completedJobsPage === 0}
+                      @click=${() => void this.#showCompletedJobs(this.completedJobsPage - 1)}
+                      >${t("printers.newer_jobs")}</wt-button
+                    >
+                    <wt-button
+                      data-test="older-print-jobs"
+                      data-history-page
+                      ?disabled=${!hasOlder}
+                      @click=${() => void this.#showCompletedJobs(this.completedJobsPage + 1)}
+                      >${t("printers.older_jobs")}</wt-button
+                    >`
+                : nothing
+            }
             <wt-data-table
               noMatchesMessage=${tableNoMatches()}
               filterSearchPlaceholder=${t("categories.combobox_search")}
               filterNoResultsLabel=${t("categories.combobox_no_results")}
               data-test="jobs-table"
+              aria-busy=${this.readingCompletedJobs}
               searchable
               searchLabel=${t("printers.jobs_search")}
               viewKey="waitron.printers.jobs.table"

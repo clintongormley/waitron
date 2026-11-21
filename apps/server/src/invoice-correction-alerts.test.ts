@@ -222,7 +222,7 @@ describe("the unfinished-correction alert", () => {
     at(61);
     try {
       await expect(recoverTenderRefunds(v.deps)).rejects.toMatchObject({
-        message: "Settled-tender refund recovery failed",
+        message: "Card refund recovery failed",
         errors: [
           expect.objectContaining({
             code: "ERR_SQLITE_ERROR",

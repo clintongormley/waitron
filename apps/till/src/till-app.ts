@@ -4016,6 +4016,11 @@ export class TillApp extends LitElement {
         returnTo: "find-bill";
       }
     | null = null;
+  @state() private billRefundAcknowledgment: Extract<
+    TenderRefundAcknowledgment,
+    { parent: "bill" }
+  > | null = null;
+  #openingBillRefund?: object;
   @state() private refundPrintBusy = false;
   #refundPrint?: object;
   readonly #tenderRefundAttempts = new TenderRefundAttempts();
@@ -5378,6 +5383,7 @@ export class TillApp extends LitElement {
       if (changed.get("api") !== undefined && this.#draftSync !== undefined)
         this.#resumeOrderDraft();
       this.#cancelFindBillRead();
+      void this.#closeBillRefundAcknowledgment();
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
       if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
@@ -9403,6 +9409,15 @@ export class TillApp extends LitElement {
           signal: controller.signal,
         });
         if (!current()) return;
+        if (
+          acknowledgment.refund.id !== refundId ||
+          (acknowledgment.parent === "bill"
+            ? acknowledgment.workingOrderId !== workingOrderId
+            : acknowledgment.refund.saleId !== saleId)
+        ) {
+          this.errorKey = "refund_ack.load_failed";
+          return;
+        }
         this.ticketWorkingOrderId = undefined;
         this.originalReceiptAvailable = false;
         this.#receiptPrintVisit++;
@@ -10901,8 +10916,17 @@ export class TillApp extends LitElement {
    */
   async #onReprint(): Promise<void> {
     if (this.historicalReceipt?.kind === "refund") {
-      if (this.refundPrintBusy || this.findBillBusy || this.reprintAsking !== null) return;
-      if (this.receiptLanguages.length > 1)
+      if (
+        this.historicalReceipt.acknowledgment.printQueued ||
+        this.refundPrintBusy ||
+        this.findBillBusy ||
+        this.reprintAsking !== null
+      )
+        return;
+      if (
+        this.historicalReceipt.acknowledgment.parent === "sale" &&
+        this.receiptLanguages.length > 1
+      )
         this.reprintAsking = {
           workingOrderId: this.historicalReceipt.saleId,
           refundId: this.historicalReceipt.refundId,
@@ -10980,11 +11004,14 @@ export class TillApp extends LitElement {
 
   async #sendRefundReprint(refundId: string, language?: string): Promise<void> {
     const receipt = this.historicalReceipt;
+    const bill = this.billRefundAcknowledgment;
+    const acknowledgment = bill ?? (receipt?.kind === "refund" ? receipt.acknowledgment : null);
     if (
-      receipt?.kind !== "refund" ||
-      receipt.refundId !== refundId ||
+      acknowledgment === null ||
+      acknowledgment.refund.id !== refundId ||
+      acknowledgment.printQueued ||
       this.refundPrintBusy ||
-      this.drill?.kind !== "ticket"
+      (bill === null && this.drill?.kind !== "ticket")
     )
       return;
     const operation = (this.#refundPrint = {});
@@ -10995,16 +11022,30 @@ export class TillApp extends LitElement {
       this.api === api &&
       session === this.#operatorSession &&
       this.historicalReceipt === receipt &&
+      this.billRefundAcknowledgment === bill &&
       this.#refundPrint === operation;
     this.refundPrintBusy = true;
     this.errorKey = undefined;
     try {
       await api.reprintTenderRefund(refundId, language);
     } catch (error) {
-      if (current()) this.errorKey = reprintErrorKey(error);
+      if (current()) {
+        const refusal = reprintErrorKey(error);
+        this.errorKey = refusal === "reprint.error" ? "refund_ack.print_failed" : refusal;
+      }
+      return;
     } finally {
       if (current()) this.refundPrintBusy = false;
     }
+    if (!current()) return;
+    if (bill !== null) this.billRefundAcknowledgment = { ...bill, printQueued: true };
+    else if (receipt?.kind === "refund")
+      this.historicalReceipt = {
+        ...receipt,
+        acknowledgment: { ...receipt.acknowledgment, printQueued: true },
+      };
+    await this.updateComplete;
+    this.shadowRoot!.querySelector("till-refund-acknowledgment")?.focusBack();
   }
 
   /** The languages a copy may print in: the offered ones, and the sale's own when it is not one. */
@@ -12533,6 +12574,7 @@ export class TillApp extends LitElement {
         .taken=${open.taken}
         .paymentSlip=${this.#paymentSlip(open.billId, open.taken?.pending === undefined ? open.taken?.slipPaymentId : undefined)}
         .refunded=${open.refunded}
+        .showsRefundAcknowledgment=${this.billRefundAcknowledgment !== null}
         .busy=${open.busy}
         .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
         .tipsEnabled=${this.tipsEnabled}
@@ -12577,7 +12619,35 @@ export class TillApp extends LitElement {
           if (open !== null) this.#releaseFoundCounterBill(open);
         }}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
-      ></till-bill-pay-dialog>
+        @bill-refund-acknowledgment=${(event: CustomEvent<{ refundId: string }>) =>
+          void this.#openBillRefundAcknowledgment(open, event.detail.refundId)}
+      >
+        ${
+          this.billRefundAcknowledgment === null
+            ? nothing
+            : html`
+                <till-refund-acknowledgment
+                  slot="refund-acknowledgment"
+                  .acknowledgment=${this.billRefundAcknowledgment}
+                  .busy=${this.refundPrintBusy}
+                  .canPrint=${this.#mayPrintReceipt}
+                  @reprint=${(event: Event) => {
+                    event.stopPropagation();
+                    const id = this.billRefundAcknowledgment?.refund.id;
+                    if (id !== undefined) void this.#sendRefundReprint(id);
+                  }}
+                  @back-to-find-bill=${() => void this.#closeBillRefundAcknowledgment(true)}
+                ></till-refund-acknowledgment>
+                ${
+                  this.errorKey === undefined
+                    ? nothing
+                    : html`<p slot="refund-acknowledgment" role="alert">
+                        ${errorText(this.errorKey, this.tableMenus, this.tables)}
+                      </p>`
+                }
+              `
+        }
+      </till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
   }
 
@@ -23218,7 +23288,62 @@ export class TillApp extends LitElement {
     this.counterLines = null;
   }
 
+  async #openBillRefundAcknowledgment(open: BillPaying, refundId: string): Promise<void> {
+    if (open.busy || this.#openingBillRefund !== undefined) return;
+    const operation = (this.#openingBillRefund = {});
+    const api = this.api;
+    const session = this.#operatorSession;
+    const current = () =>
+      this.isConnected &&
+      this.api === api &&
+      this.#operatorSession === session &&
+      this.#billPayingNow(open.id) !== null &&
+      this.#openingBillRefund === operation;
+    this.errorKey = undefined;
+    try {
+      const acknowledgment = await api.getTenderRefundAcknowledgment(refundId);
+      if (!current()) return;
+      if (
+        acknowledgment.parent !== "bill" ||
+        acknowledgment.workingOrderId !== open.billId ||
+        acknowledgment.refund.id !== refundId ||
+        acknowledgment.refund.state !== "completed"
+      )
+        throw new Error("Unexpected refund acknowledgment");
+      this.billRefundAcknowledgment = acknowledgment;
+      await this.updateComplete;
+      if (current()) this.shadowRoot!.querySelector("till-refund-acknowledgment")?.focusBack();
+    } catch {
+      if (!current()) return;
+      const paying = this.#billPayingNow(open.id)!;
+      this.billPaying = {
+        ...paying,
+        refusal: { code: "refund_ack.load_failed", text: t("refund_ack.load_failed") },
+      };
+    } finally {
+      if (this.#openingBillRefund === operation) this.#openingBillRefund = undefined;
+    }
+  }
+
+  async #closeBillRefundAcknowledgment(back = false): Promise<void> {
+    const refundId = this.billRefundAcknowledgment?.refund.id;
+    this.#openingBillRefund = undefined;
+    if (refundId === undefined) return;
+    this.billRefundAcknowledgment = null;
+    this.#refundPrint = undefined;
+    this.refundPrintBusy = false;
+    this.errorKey = undefined;
+    if (!back) return;
+    await this.updateComplete;
+    const dialog = this.shadowRoot!.querySelector("till-bill-pay-dialog");
+    await dialog?.updateComplete;
+    dialog?.shadowRoot
+      ?.querySelector<HTMLElement>(`[data-payment-refund-ack="${CSS.escape(refundId)}"]`)
+      ?.focus();
+  }
+
   #closeBillPaying(): void {
+    void this.#closeBillRefundAcknowledgment();
     this.#stopPendingReread();
     this.billPaying = null;
     this.payEquipmentErrors = {};

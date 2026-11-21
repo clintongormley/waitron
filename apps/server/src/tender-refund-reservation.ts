@@ -146,6 +146,31 @@ async function refuseRefundOfAdvance(
     await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", { tenderId });
 }
 
+export function refundAmountsFit(applied: number, tip: number, left: number, tipLeft: number) {
+  return applied <= left && (tip === 0 || (applied === left && tip === tipLeft));
+}
+
+export function assertRefundReplay(
+  refund: { fingerprint: string },
+  fingerprint: string,
+  submissionId: string,
+): void {
+  if (refund.fingerprint !== fingerprint)
+    throw new AppError("submission.id_reused", { submissionId });
+}
+
+export async function insertRefundReservation(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  fields: Omit<typeof refunds.$inferInsert, "state" | "source" | "deviceId" | "nodeId">,
+) {
+  const [refund] = await tx
+    .insert(refunds)
+    .values({ ...fields, ...cfg.origin, nodeId: cfg.nodeId, state: "pending" })
+    .returning();
+  return refund!;
+}
+
 export async function reserveTenderRefund(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -205,7 +230,7 @@ export async function reserveTenderRefund(
     .from(refunds)
     .where(and(eq(refunds.saleId, saleId), eq(refunds.submissionId, submissionId)));
   if (earlier !== undefined) {
-    if (earlier.fingerprint !== print) throw new AppError("submission.id_reused", { submissionId });
+    assertRefundReplay(earlier, print, submissionId);
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
@@ -224,10 +249,7 @@ export async function reserveTenderRefund(
     throw new AppError("tender.refund_in_progress", { tenderId });
   const appliedRemaining = decimalToCents(decimal(refundable.appliedRemaining));
   const tipRemaining = decimalToCents(decimal(refundable.tipRemaining));
-  if (
-    appliedAmount > appliedRemaining ||
-    (tipAmount !== 0 && (appliedAmount !== appliedRemaining || tipAmount !== tipRemaining))
-  ) {
+  if (!refundAmountsFit(appliedAmount, tipAmount, appliedRemaining, tipRemaining)) {
     throw new AppError("tender.refund_exceeds_payment", {
       tenderId,
       applied: refundable.appliedRemaining,
@@ -328,40 +350,33 @@ export async function reserveTenderRefund(
       throw error;
     }
   } else authorizedBy = actor.authorizedBy;
-  const [refund] = await tx
-    .insert(refunds)
-    .values({
-      saleId,
-      tenderId,
-      submissionId,
-      fingerprint: print,
-      appliedAmount,
-      tipAmount,
-      reason: correction?.reason ?? reason,
-      requestedBy: actor.requestedBy,
-      authorizedBy,
-      source: cfg.origin.source,
-      deviceId: cfg.origin.deviceId,
-      nodeId: cfg.nodeId,
-      method: refundable.method as "cash" | "card",
-      manual: refundable.manual,
-      provider,
-      providerPaymentRef,
-      state: "pending",
-      createdAt,
-    })
-    .returning();
+  const refund = await insertRefundReservation(tx, cfg, {
+    saleId,
+    tenderId,
+    submissionId,
+    fingerprint: print,
+    appliedAmount,
+    tipAmount,
+    reason: correction?.reason ?? reason,
+    requestedBy: actor.requestedBy,
+    authorizedBy,
+    method: refundable.method as "cash" | "card",
+    manual: refundable.manual,
+    provider,
+    providerPaymentRef,
+    createdAt,
+  });
   if (allocation !== undefined)
-    await linkRefundToCancels(tx, { tenderRefundId: refund!.id, links: allocation.links });
+    await linkRefundToCancels(tx, { tenderRefundId: refund.id, links: allocation.links });
   if (correctionLink !== undefined)
     await linkRefundToCorrection(tx, {
       invoiceCorrectionId: correctionLink.id,
-      tenderRefundId: refund!.id,
+      tenderRefundId: refund.id,
       requestId: correctionLink.requestId,
       createdAt,
     });
   return {
-    refund: refund!,
+    refund,
     replayed: false,
     ...(allocation === undefined
       ? {}

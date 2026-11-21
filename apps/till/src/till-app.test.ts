@@ -25662,6 +25662,8 @@ describe("A737 Find a bill page", () => {
       amount: "-13.75",
     });
   const acknowledgment = {
+    parent: "sale" as const,
+    printQueued: false,
     refund: {
       id: "refund-1",
       saleId: "sale-1",
@@ -25679,6 +25681,33 @@ describe("A737 Find a bill page", () => {
     last4: "0091",
   };
   const refundView = (el: TillApp) => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+  it("prints a bill refund from Transactions after the bill was invoiced", async () => {
+    const reprintTenderRefund = vi.fn().mockResolvedValue(undefined);
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES", "en-GB"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue({
+        parent: "bill",
+        workingOrderId: "working-1",
+        paymentReference: "payment-1",
+        refund: { ...acknowledgment.refund, paymentId: "payment-1" },
+        issuer: acknowledgment.issuer,
+        method: "card",
+        customerName: null,
+        last4: "0091",
+        printQueued: false,
+      }),
+      reprintTenderRefund,
+    });
+    emit(view, "find-transaction-open", { row: { ...refundRow(), workingOrderId: "working-1" } });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+    receipt.shadowRoot!.querySelector<HTMLElement>("[data-refund-reprint]")!.click();
+    await vi.waitFor(() =>
+      expect(reprintTenderRefund).toHaveBeenCalledExactlyOnceWith("refund-1", undefined),
+    );
+    await flush(el);
+    expect(receipt.shadowRoot!.querySelector("[data-refund-reprint]")).toBeNull();
+  });
   it("Bill gate reports an acknowledgment print refusal, permits retry, and blocks original opening while printing", async () => {
     let refuse!: (error: Error) => void;
     const reprintTenderRefund = vi
@@ -25707,13 +25736,18 @@ describe("A737 Find a bill page", () => {
     expect(getTransactionReceipt).not.toHaveBeenCalled();
     expect(refundView(el)).toBe(receipt);
     refuse(new TypeError("printer offline"));
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("reprint.error")));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain(t("refund_ack.print_failed")),
+    );
     expect(receipt.busy).toBe(false);
-    emit(receipt, "reprint");
+    const print = receipt.shadowRoot!.querySelector<HTMLElement>("[data-refund-reprint]")!;
+    expect(print.textContent!.trim()).toBe(t("refund_ack.print"));
+    print.click();
     await vi.waitFor(() => expect(reprintTenderRefund).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(receipt.busy).toBe(false);
-    expect(el.shadowRoot!.textContent).not.toContain(t("reprint.error"));
+    expect(receipt.shadowRoot!.querySelector("[data-refund-reprint]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("refund_ack.print_failed"));
     emit(receipt, "refund-original");
     await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
     expect(getTransactionReceipt).toHaveBeenCalledExactlyOnceWith("sale-1", {
@@ -25752,7 +25786,7 @@ describe("A737 Find a bill page", () => {
     await flush(el);
 
     expect(el.shadowRoot!.textContent).toContain(codeMessage("receipt.no_printer"));
-    expect(el.shadowRoot!.textContent).not.toContain(t("reprint.error"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("refund_ack.print_failed"));
   });
 
   it("Bill gate opens only the first transaction while its receipt is loading", async () => {
@@ -25902,7 +25936,7 @@ describe("A737 Find a bill page", () => {
     await flush(el);
     await new Promise(requestAnimationFrame);
     await flush(el);
-    expect(refundView(el)!.acknowledgment.invoiceNumber).toBe("F/0012");
+    expect(refundView(el)!.acknowledgment).toMatchObject({ invoiceNumber: "F/0012" });
   });
   it("a refund print is sent once while busy and its late refusal cannot replace a new visit's error", async () => {
     let refuse!: (error: unknown) => void;

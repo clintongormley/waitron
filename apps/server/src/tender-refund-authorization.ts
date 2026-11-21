@@ -13,6 +13,7 @@ import {
   holds,
   verifyThrottledCredential,
   type Authorization,
+  type Override,
   type PinAttempts,
   type SecretCheck,
 } from "@waitron/identity";
@@ -69,6 +70,43 @@ async function refundTenderKind(
       : "reader-card";
 }
 
+export async function withRefundPinCheck<T>(
+  db: Database,
+  operator: { sessionId: string; attempts: PinAttempts },
+  override: Override | undefined,
+  confirmsManual: boolean,
+  body: (checked: SecretCheck | undefined) => Promise<T>,
+): Promise<T> {
+  const check = await overrideToCheck(
+    db,
+    { sessionId: operator.sessionId, permission: "sale.refund" },
+    override,
+    confirmsManual,
+  );
+  return withPinCheckAhead(db, check, operator.attempts, body);
+}
+
+export async function confirmManualRefundAuthority(
+  tx: Transaction,
+  authorization: Authorization,
+  override: ReturnType<typeof withCheck>,
+  attempts: PinAttempts,
+  pinRequired: () => AppError,
+): Promise<Authorization> {
+  if (authorization.viaOverride) return authorization;
+  if (override === undefined) throw pinRequired();
+  const confirmer = await verifyThrottledCredential(
+    tx,
+    override.personId,
+    override.pin,
+    attempts,
+    override.checked,
+  );
+  if (!holds(confirmer.authority, "sale.refund"))
+    throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
+  return { ...authorization, authorizedBy: override.personId, viaOverride: true };
+}
+
 // The body must call authorizeRefund before writing. PIN derivation runs ahead of the write lock;
 // the session, device, zones and permission decision belong to the command's transaction.
 export async function withTenderRefundAuthorization<T>(
@@ -87,13 +125,7 @@ export async function withTenderRefundAuthorization<T>(
     request.override !== undefined &&
     request.manualConfirmed === true &&
     (await refundTenderKind(db, saleId, request.tenderId)) === "hand-keyed-card";
-  const toCheck = await overrideToCheck(
-    db,
-    { sessionId: operator.sessionId, permission: "sale.refund" },
-    request.override,
-    confirmsManual,
-  );
-  return withPinCheckAhead(db, toCheck, operator.attempts, (checked) =>
+  return withRefundPinCheck(db, operator, request.override, confirmsManual, (checked) =>
     withTransaction(db, async (tx) => {
       await assertStillSignedIn(tx, {
         deviceId: cfg.origin.deviceId,
@@ -149,26 +181,14 @@ export async function withTenderRefundAuthorization<T>(
           }
           if (kind === "hand-keyed-card") {
             if (request.manualConfirmed !== true) throw invalid("manualConfirmed");
-            if (!authorization.viaOverride) {
-              if (override === undefined)
-                throw new AppError("tender.manual_refund_pin_required", {
-                  tenderId: request.tenderId,
-                });
-              const confirmer = await verifyThrottledCredential(
-                tx,
-                override.personId,
-                override.pin,
-                operator.attempts,
-                override.checked,
-              );
-              if (!holds(confirmer.authority, "sale.refund"))
-                throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
-              authorization = {
-                ...authorization,
-                authorizedBy: override.personId,
-                viaOverride: true,
-              };
-            }
+            return confirmManualRefundAuthority(
+              tx,
+              authorization,
+              override,
+              operator.attempts,
+              () =>
+                new AppError("tender.manual_refund_pin_required", { tenderId: request.tenderId }),
+            );
           }
           return authorization;
         },

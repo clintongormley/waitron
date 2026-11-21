@@ -53,9 +53,6 @@ describe("pendingCardPass", () => {
             return {
               received: 0,
               failed: 0,
-              refundsCompleted: 0,
-              refundsFailed: 0,
-              refundsUnresolved: 0,
               pending: 0,
               errors: [],
             };

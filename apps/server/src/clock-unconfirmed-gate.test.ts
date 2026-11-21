@@ -36,13 +36,11 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { attestCardRefund } from "./bill-refunds.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
-import { attestTenderRefund } from "./tender-refund-sends.js";
+import { attestBillCardRefund, attestTenderRefund } from "./tender-refund-sends.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import {
   fiscalRecordCount,
@@ -1069,9 +1067,9 @@ describe("the dashboard's payment resolutions behind the start clock gate", () =
 
 // The routes check first; these reach the confirmed-outcome writers' own check (`clockStopsRefund`).
 const confirmedOutcomes = {
-  "a bill refund's confirmed outcome, written by attestCardRefund": {
+  "a bill refund's confirmed outcome, written by attestBillCardRefund": {
     kind: "bill",
-    attest: attestCardRefund,
+    attest: attestBillCardRefund,
   },
   "a tender refund's confirmed outcome, written by attestTenderRefund": {
     kind: "tender",
@@ -1185,9 +1183,9 @@ const refundWaits: Record<string, () => Promise<RefundWait>> = {
     await pendingRefund("tender");
     return { run: ({ loop }) => recoverTenderRefunds(loop) };
   },
-  "the bill-refund half of the pass": async () => {
+  "the refund loop recovering a bill refund": async () => {
     await pendingRefund("bill");
-    return { run: ({ loop }) => settlePendingBillPayments(loop) };
+    return { run: ({ loop }) => recoverTenderRefunds(loop) };
   },
   "a new tender refund on the till": async () => {
     const { saleId, tenderId } = await soldWhole("card");

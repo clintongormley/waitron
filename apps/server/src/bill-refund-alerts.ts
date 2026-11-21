@@ -1,4 +1,5 @@
-import type { refunds, Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { billPayments, type refunds, type Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError, centsToDecimal, jobOrigin, readOrigin, saleId } from "@waitron/shared";
 import type { Decimal, Origin } from "@waitron/shared";
@@ -74,11 +75,18 @@ export function raiseTenderRefundConflict(
   });
 }
 
-export function raiseTenderRefundUnresolved(
+export async function raisePendingRefundUnresolved(
   tx: Transaction,
   refund: typeof refunds.$inferSelect,
   now: Date,
 ): Promise<boolean> {
+  if (refund.billPaymentId !== null) {
+    const [parent] = await tx
+      .select({ workingOrderId: billPayments.workingOrderId })
+      .from(billPayments)
+      .where(eq(billPayments.id, refund.billPaymentId));
+    return raiseRefundUnresolved(tx, refund, parent!.workingOrderId, now);
+  }
   return recordIncidentOnce(tx, {
     origin: jobOrigin("payment_check"),
     saleId: saleId(refund.saleId!),

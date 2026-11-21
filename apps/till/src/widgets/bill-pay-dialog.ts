@@ -521,6 +521,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) taken: PayTaken | null = null;
   /** Set after each refund made from the bill's payments list. */
   @property({ attribute: false }) refunded: RefundNotice | null = null;
+  @property({ type: Boolean }) showsRefundAcknowledgment = false;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) sumUpConnected = false;
   @property({ attribute: false }) readerStop: BillReaderStopStatus | null = null;
@@ -1216,9 +1217,11 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override render() {
-    const view = this.scanning
-      ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
-      : (this.#cardWaiting() ?? this.#body());
+    const view = this.showsRefundAcknowledgment
+      ? { body: html`<slot name="refund-acknowledgment"></slot>`, actions: nothing }
+      : this.scanning
+        ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
+        : (this.#cardWaiting() ?? this.#body());
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
@@ -1440,10 +1443,22 @@ export class TillBillPayDialog extends LitElement {
         ${payment.refunds.map(
           (refund) =>
             html`<p class="muted" data-payment-refunded>
-              ${t(REFUNDS[refund.state]).replace("{amount}", () =>
-                this.#money(moneyPlus(refund.appliedAmount, refund.tipAmount)),
-              )}
-            </p>`,
+                ${t(REFUNDS[refund.state]).replace("{amount}", () =>
+                  this.#money(moneyPlus(refund.appliedAmount, refund.tipAmount)),
+                )}
+              </p>
+              ${
+                refund.state === "completed"
+                  ? html`<wt-button
+                      variant="secondary"
+                      size="sm"
+                      data-payment-refund-ack=${refund.id}
+                      .disabled=${this.busy}
+                      @click=${() => this.#emit("bill-refund-acknowledgment", { refundId: refund.id })}
+                      >${t("refund_ack.open")}</wt-button
+                    >`
+                  : nothing
+              }`,
         )}
         ${
           payment.state === "pending" && !(this.handheld && this.taken?.pending !== undefined)

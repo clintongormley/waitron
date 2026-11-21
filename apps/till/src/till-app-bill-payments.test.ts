@@ -7819,6 +7819,48 @@ describe("till-app: giving back a bill payment", () => {
     );
   });
 
+  it("opens the completed payment refund's acknowledgment and prints it once on request", async () => {
+    const refund = refundOf();
+    const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refund));
+    const getTenderRefundAcknowledgment = vi.fn().mockResolvedValue({
+      parent: "bill",
+      workingOrderId: "wo-4",
+      paymentReference: refund.paymentId,
+      refund,
+      printQueued: false,
+      issuer: { venueName: "Venue", nif: "61000002T" },
+      customerName: null,
+      method: "cash",
+      last4: null,
+    });
+    const reprintTenderRefund = vi.fn().mockResolvedValue(undefined);
+    const el = await askRefund(
+      {
+        refundBillPayment,
+        getTenderRefundAcknowledgment,
+        reprintTenderRefund,
+      },
+      cashPaid,
+    );
+    expect(reprintTenderRefund).not.toHaveBeenCalled();
+    await press(el, '[data-payment-refund-ack="r-1"]');
+    const receipt = () => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+    await expect.poll(() => receipt()).not.toBeNull();
+    expect(getTenderRefundAcknowledgment).toHaveBeenCalledWith(refund.id);
+    expect(receipt()!.shadowRoot!.textContent).not.toContain(t("tender_refund.completed"));
+    expect(reprintTenderRefund).not.toHaveBeenCalled();
+    receipt()!.shadowRoot!.querySelector<HTMLElement>("[data-refund-reprint]")!.click();
+    await expect
+      .poll(() => receipt()!.shadowRoot!.querySelector("[data-refund-reprint]"))
+      .toBeNull();
+    expect(reprintTenderRefund).toHaveBeenCalledExactlyOnceWith(refund.id, undefined);
+    expect(refundBillPayment).toHaveBeenCalledOnce();
+    receipt()!.shadowRoot!.querySelector<HTMLElement>("[data-back-to-find-bill]")!.click();
+    await expect.poll(() => receipt()).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+    expect(inDialog(el, "[data-payment-refunded]")).not.toBeNull();
+  });
+
   it("gives back a cash payment with a manager's PIN when the operator cannot, under the same submission id, opens no drawer from the till, and shows the bill after it", async () => {
     const refunded = givenBack(cashPaid, refundOf());
     let latest = holding(cashPaid);

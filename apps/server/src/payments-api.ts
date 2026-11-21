@@ -112,14 +112,11 @@ import { refuseRefundInProgress } from "./working-order.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
 import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
+import { refundProvidersOf } from "./bill-refunds.js";
 import {
-  attestCardRefund,
-  billRefundIsLive,
-  refundProvidersOf,
-  resumeCardRefund,
-} from "./bill-refunds.js";
-import {
+  attestBillCardRefundIn,
   attestTenderRefundIn,
+  resumeBillCardRefund,
   readStuckTenderRefund,
   claimTenderRefund,
   resolveClaimedTenderRefund,
@@ -1937,7 +1934,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       );
       return c.json(
         rows
-          .filter((row) => !billRefundIsLive(deps.db, row.refundId))
+          .filter((row) => !tenderRefundIsLive(deps.db, row.refundId))
           .map((row) => ({
             ...row,
             appliedAmount: centsToDecimal(row.appliedAmount),
@@ -1955,7 +1952,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "BillRefundId");
       await gated(sessionId, refuseUntilRecordable);
-      const resumed = await resumeCardRefund(refundDeps, id, "manager", "stored");
+      const resumed = await resumeBillCardRefund(refundDeps, id, "manager");
       if (!resumed.claimed) throw new AppError("bill.refund_not_stuck", { refundId: id });
       if (resumed.refund.state !== "pending") return c.json({ outcome: resumed.refund.state });
       const { lookup } = resumed;
@@ -1981,13 +1978,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await readJsonBody<Record<string, unknown>>(c),
         ["completed", "failed"] as const,
       );
-      const personId = await pinGated(sessionId, pin, async (tx, authorizedBy) => {
+      const refund = await pinGated(sessionId, pin, async (tx, personId) => {
         await refuseUntilRecordable(tx);
-        return authorizedBy;
-      });
-      const refund = await attestCardRefund(refundDeps, id, outcome, {
-        attestedBy: personId,
-        note,
+        return attestBillCardRefundIn(tx, refundDeps, id, outcome, { attestedBy: personId, note });
       });
       return c.json({ outcome: refund.state });
     }),

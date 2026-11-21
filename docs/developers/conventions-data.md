@@ -3088,8 +3088,8 @@ reader for a new sale (`payIntegrated`); and on every bill payment, cash include
 (`beginBillPayment`). The function `refuseUntilRecordable` (`packages/fiscal-verifactu/src/clock-behind.ts`)
 checks this rule, and the seat's
 `refuseUntilRecordable` calls it, so each route that calls the seat, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
-clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`
-(`apps/server/src/bill-refunds.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
+clock. The shared refund loop's check at the start of each pass (`refundsPaused`) and
+`clockStopsRefund` (`apps/server/src/tender-refund-sends.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
 provider nothing and an outcome the provider answers is not written
 (`apps/server/src/tender-refund-recovery.test.ts`, "refund recovery under a clock before
 28-10-2024"); and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
@@ -4756,7 +4756,7 @@ and its four writers (`recordSale`, `recordVoid`, `recordCorrection`, `recordSub
 the same, so no path through the seat writes a record. Both wrappers are needed: the plan's R6 run
 showed that wrapping the writers alone charged a card and then answered `507`. A card already
 charged when a writer refuses is answered `507 sale.charged_not_recorded` with reason
-`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the two refund recovery loops leave
+`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the shared refund recovery loop leaves
 pending refunds alone, a card refund on the till or the dashboard whose provider wait ends once the
 gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` to both route
 mounts, which `boot.start-clock-gate.test.ts` checks; the refund-wait rows in
@@ -5221,7 +5221,7 @@ See the [steady-clock plan and changed checks](https://github.com/clintongormley
 | Account-action links (`packages/identity/src/account-action.ts`: `inspectAccountAction`, `completeAccountAction`, `confirmEmailChangeByCode`) | every outstanding link refused | a password-reset, invitation or email-change link stays usable for 400 days plus its limit | fixed: a link whose expiry lies further ahead than its purpose's lifetime is refused `account_action.invalid`, and the next issue deletes it as it deletes an expired one (test: `account-action.test.ts`, "an account action issued before a backward clock step") |
 | Join requests (`apps/server/src/join-requests.ts`: `sweepLapsed`, `returningOf`) | every pending request deleted; devices ask again | a request stays approvable for 400 days plus 15 minutes | fixed for −400: a request made further ahead than its 15 minutes has lapsed, swept as an old one is, and is no returning device's request (tests: `join-requests.test.ts`, "a request stamped ahead of the clock" and "is not a returning device's request once it lies further ahead"). Accepted: a device request stamped less than 15 minutes ahead survives the window reopening, since it is not earlier than the new opening (Task 15c-3's review, M3, run); it still needs its number matched and lapses within 15 minutes. +400 accepted: the device asks again |
 | Google sign-in state, authenticator enrolment (`packages/identity/src/google-oidc.ts`, `claimGoogleState`; `profile.ts`, `finishOwnTotpEnrollment`) | refused | usable for 400 days plus 10 minutes | fixed: an expiry further ahead than its 10 minutes is refused (`google.invalid`, `totp.invalid`), and the next Google sign-in or link to begin sweeps such a state (tests: `google-oidc.test.ts`, "stored before a backward clock step"; `profile.test.ts`, "begun before a backward clock step") |
-| Card-refund resend window (`apps/server/src/bill-refunds.ts`, `resumeCardRefund`) | never resent; waits for a manager | resent under the same key past the provider's window | fixed: a first send stamped ahead of now at all is of unknown age and is not resent, as the tender-refund path already did (`tender-refund-sends.ts`); the refund waits for a manager (tests: `bill-refunds.card.test.ts`, "stamped 25 hours ahead" and "stamped a minute ahead") |
+| Card-refund resend window (`apps/server/src/tender-refund-sends.ts`, `resolve`) | never resent; waits for a manager | the old bill refund path resent under the same key past the provider's window | fixed: a first send stamped ahead of now is of unknown age and the refund waits for a manager (`tender-refunds.test.ts`, "never resends at an expired or negative key age") |
 | Pairing window (`apps/server/src/pairing-mode.ts`, `prune`, in memory) | shuts | stays open for 400 days plus 3 minutes | fixed: a hold's 3 minutes, and the timer that announces its lapse, are measured on the steady clock, so a wall step neither shuts nor stretches the window; the lapse times it answers are wall-clock. When the window opened (`openSince`) is wall-clock too, and moves back with a backward step while the window is open, never forward, because `discardLapsedDeviceRequests` deletes a device request stamped before it: a request made after the step is kept. Accepted: an unclaimed device request from an earlier window that no discard reached is kept too if the wall steps back past its stamp before a discard runs in the new window; it still needs its number matched and lapses 15 minutes after its stamp (`JOIN_TTL_MS`) (tests: `pairing-mode.test.ts`, "times holds on the steady clock, answers wall-clock times, and moves openSince back but never forward with the wall clock"; `device-api.test.ts`, "keeps the requests made before and after the wall clock steps back behind the window's opening") |
 | Payments reconcile scheduler (`packages/payments/src/reconciliation-schedule/derive.ts`: `retryDue`, `claimLapsed`; `store.ts`: `claimRow`, `reclaimStale`; `run.ts`: `longestWait`) | runs due at once | a stuck run is not reclaimed and a failed one not retried for 400 days | fixed for −400: a retry time further ahead than the duty's longest wait (the last backoff before a park, a parked day's retry, or the longest re-sweep the duty declares as `longestResweepMs`) is due, and a run started further ahead than its hour is reclaimed; a re-sweep a duty asks for later than its longest wait is enqueued at that limit, so it cannot read as stamped ahead (tests: `derive.test.ts`, `store.test.ts`, `run.test.ts`, "…stamped ahead of the clock"; `resweep.test.ts`, "…later than the duty declares…"; `reconcile-duty.test.ts` pins the declaration) |
 | Cloud archive destination (`apps/server/src/cloud-archive-target.ts`, `pendingExpired`) | The backup schedule decides when Cloud runs. A pending capture whose publication retry fails expires after a day. | A pending capture more than a day ahead may also be abandoned. | The next scheduled run tries publication once before dropping the expired capture. An interrupted attempt keeps the pending file for the next run. Tests in `cloud-archive-target.test.ts` pin expiry and shutdown. |
@@ -6706,6 +6706,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 2026-11-12 (A1420 PR 5) the clock entry's first rule was replaced by the one that took its place in `CLAUDE.md`.
 
 ### Who may confirm or set the clock
+
+**2026-11-21, os13:** the two refund recovery loops named in the excerpt below now run as one.
+See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trades).
 
 - **A record's time is never compared with the latest record's: the start confirms the time, and
   once it is confirmed the box records with its clock however far a later sync moves it** (owner,

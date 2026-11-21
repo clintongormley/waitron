@@ -5,7 +5,6 @@ import {
   deviceProfiles,
   refunds,
   receiptReprints,
-  sales,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -58,7 +57,7 @@ export function pathId(value: string, kind: "sale" | "refund"): string {
 export async function checkAccess(
   tx: Transaction,
   session: Pick<Session, "deviceId" | "personId" | "sessionId">,
-  saleId: string,
+  parent: string | { workingOrderId: string },
 ) {
   await assertStillSignedIn(tx, session);
   const [row] = await tx
@@ -72,11 +71,14 @@ export async function checkAccess(
     throw new AppError("device.forbidden_action", { action: "refund" });
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
-  const scope = await resolveTransactionScope(tx, saleId);
+  const orderIds =
+    typeof parent === "string"
+      ? (await resolveTransactionScope(tx, parent)).workingOrderIds
+      : [parent.workingOrderId];
   await assertSubjectZones(
     tx,
     device.deviceProfileId,
-    scope.workingOrderIds.map((orderId) => ({ orderId })),
+    orderIds.map((orderId) => ({ orderId })),
   );
   return device;
 }
@@ -201,12 +203,12 @@ export function mountTenderRefundApi(
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
       const id = pathId(c.req.param("refundId"), "refund");
-      const result = await withTransaction(deps.db, async (tx) => {
-        const row = await readRefund(tx, id);
-        await checkAccess(tx, session, row.saleId);
-        return readTenderRefundAcknowledgment(deps.backend, tx, id);
-      });
-      return c.json(result);
+      const { acknowledgment } = await withTransaction(deps.db, (tx) =>
+        readTenderRefundAcknowledgment(deps.backend, tx, id, (parent) =>
+          checkAccess(tx, session, parent),
+        ),
+      );
+      return c.json(acknowledgment);
     }),
   );
   app.post("/api/tender-refunds/:refundId/reprint", (c) =>
@@ -221,32 +223,35 @@ export function mountTenderRefundApi(
       if (language !== undefined && typeof language !== "string")
         throw new AppError("management.request_invalid", { field: "language" });
       await withTransaction(deps.db, async (tx) => {
-        const row = await readRefund(tx, id);
-        await checkAccess(tx, session, row.saleId);
-        const acknowledgment = await readTenderRefundAcknowledgment(deps.backend, tx, id);
-        const [sale] = await tx
-          .select({ locale: sales.locale })
-          .from(sales)
-          .where(eq(sales.id, row.saleId));
+        const { acknowledgment, locale } = await readTenderRefundAcknowledgment(
+          deps.backend,
+          tx,
+          id,
+          (parent) => checkAccess(tx, session, parent),
+        );
         if (
           language !== undefined &&
-          language !== sale!.locale &&
+          language !== locale &&
           !(await readOfferedReceiptLanguages(tx)).includes(language)
         )
           throw new AppError("management.request_invalid", { field: "language" });
+        if (acknowledgment.printQueued) return;
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
         if (printer === undefined) throw new AppError("receipt.no_printer", {});
         const payload = formatTenderRefundAcknowledgment(
           acknowledgment,
-          language ?? sale!.locale,
+          language ?? locale,
           printer,
         );
         const job = await enqueuePrintJob(tx, printer.id, payload, "document", {
-          tenderRefundId: row.id,
+          tenderRefundId: id,
         });
-        await tx
-          .insert(receiptReprints)
-          .values({ saleId: row.saleId, printJobId: job.jobId, personId: session.personId });
+        if (acknowledgment.parent === "sale")
+          await tx.insert(receiptReprints).values({
+            saleId: acknowledgment.refund.saleId,
+            printJobId: job.jobId,
+            personId: session.personId,
+          });
       });
       return c.body(null, 200);
     }),
