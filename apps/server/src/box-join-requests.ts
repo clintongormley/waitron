@@ -185,14 +185,20 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
    * Counts a hello from `address` against the hello limits, or refuses it. The route calls this
    * before its own refusals that read the venue, so a refused hello is slowed by the same limits.
    */
-  function admitHello(address: string): JoinFull | null {
-    const now = steadyNow();
-    sweep(now);
+  function unrevealedFrom(address: string): JoinFull | null {
     for (const r of requests.values()) {
       if (r.address === address && r.phase === "unrevealed") {
         return full("address", r.helloAt + HELLO_REVEAL_MS);
       }
     }
+    return null;
+  }
+
+  function admitHello(address: string): JoinFull | null {
+    const now = steadyNow();
+    sweep(now);
+    const held = unrevealedFrom(address);
+    if (held) return held;
     const fresh = { end: now + HELLO_WINDOW_MS, count: 0 };
     const byAddress = helloWindows.get(address) ?? fresh;
     if (byAddress.count >= HELLOS_PER_ADDRESS) return full("address", byAddress.end);
@@ -204,14 +210,20 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     return null;
   }
 
-  /** Holds a hello {@link admitHello} has admitted. */
+  /**
+   * Holds a hello {@link admitHello} has admitted. Checks the one unrevealed hello per address
+   * again: the caller awaits between the two, so another hello from the address may be held by now.
+   */
   function openHello(input: {
     address: string;
     hello: JoinHello;
     main: MainIdentity;
     at: string;
-  }): { requestId: string; commitment: Buffer; expiresAt: string } {
+  }): { requestId: string; commitment: Buffer; expiresAt: string } | JoinFull {
     const now = steadyNow();
+    sweep(now);
+    const held = unrevealedFrom(input.address);
+    if (held) return held;
     const id = newId();
     const mainNonce = newMainNonce(id);
     requests.set(id, {
@@ -236,15 +248,6 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
   return {
     admitHello,
     openHello,
-
-    hello(input: {
-      address: string;
-      hello: JoinHello;
-      main: MainIdentity;
-      at: string;
-    }): { requestId: string; commitment: Buffer; expiresAt: string } | JoinFull {
-      return admitHello(input.address) ?? openHello(input);
-    },
 
     /** The caller has checked the reveal's signature. `signAnswer` is called once per request. */
     reveal(input: {

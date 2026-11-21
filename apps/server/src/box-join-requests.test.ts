@@ -51,7 +51,8 @@ function setup() {
     clock.wall += ms;
   };
   const hello = (address: string) =>
-    store.hello({ address, hello: helloFrom(address), main: MAIN, at: iso(0) });
+    store.admitHello(address) ??
+    store.openHello({ address, hello: helloFrom(address), main: MAIN, at: iso(0) });
   const signAnswer = vi.fn((mainNonce: Buffer) => `signed ${mainNonce.toString("hex", 0, 4)}`);
   const reveal = (id: string, address: string, nonce = newNonceOf(address), seq = 1) =>
     store.reveal({ requestId: id, newNonce: nonce, seq, signAnswer });

@@ -145,8 +145,27 @@ describe("the main box's box-to-box join routes", () => {
     const response = await post("hello", helloBody(box), "192.168.1.66");
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual(err("mirror.join_address_mismatch"));
-    // Not stored: one unrevealed hello per address would refuse the next one.
-    expect((await post("hello", helloBody(box), box.address)).status).toBe(200);
+    // Not stored: a held hello from 192.168.1.66 would refuse the next one from it.
+    box.hello = { ...box.hello, addresses: [...box.hello.addresses, "192.168.1.66"] };
+    expect((await post("hello", helloBody(box), "192.168.1.66")).status).toBe(200);
+  });
+
+  it("holds one unrevealed hello from an address when two arrive at once", async () => {
+    const box = newBox("192.168.1.20");
+    const responses = await Promise.all([
+      post("hello", helloBody(box), box.address),
+      post("hello", helloBody(box), box.address),
+    ]);
+    const answers = await Promise.all(
+      responses.map(async (r) => [
+        r.status,
+        ((await r.json()) as { error?: { code: string } }).error?.code,
+      ]),
+    );
+    expect(answers.sort()).toEqual([
+      [200, undefined],
+      [429, "mirror.join_full"],
+    ]);
   });
 
   it.each([

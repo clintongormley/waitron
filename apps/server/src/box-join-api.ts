@@ -244,6 +244,7 @@ export function mountBoxJoinApi(
         main,
         at: new Date(at).toISOString(),
       });
+      if ("refused" in answer) throw full(answer);
       return c.json({
         requestId: answer.requestId,
         mainNodeId: main.nodeId,
