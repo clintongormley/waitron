@@ -7,6 +7,9 @@ import {
 } from "./index.js";
 
 const spain = getCountryPack("ES")!;
+const area = (code: string) => spain.administrativeAreas.find((each) => each.code === code)!;
+// Names spelt with Spanish letters are read from the pack: general code is English only.
+const coruna = area("15");
 const madrid = {
   street: "Calle Mayor 1",
   line2: "",
@@ -40,29 +43,14 @@ describe("joinRegisteredAddress", () => {
 
 describe("registeredAddressParts", () => {
   it.each([
-    [
-      "Carrer Major 1, 07001 Palma, Balears, Illes",
-      "Carrer Major 1",
-      "07001",
-      "Palma",
-      "Balears, Illes",
-    ],
-    ["Rúa Real 1, 15001 A Coruña, Coruña, A", "Rúa Real 1", "15001", "A Coruña", "Coruña, A"],
-    [
-      "Calle Portales 1, 26001 Logroño, Rioja, La",
-      "Calle Portales 1",
-      "26001",
-      "Logroño",
-      "Rioja, La",
-    ],
-    [
-      "Calle Triana 1, 35002 Las Palmas de Gran Canaria, Palmas, Las",
-      "Calle Triana 1",
-      "35002",
-      "Las Palmas de Gran Canaria",
-      "Palmas, Las",
-    ],
-  ])("reads the comma province of %j", (line, street, postalCode, city, province) => {
+    ["Carrer Major 1", "07001", "Palma", "07"],
+    ["Calle Real 1", "15001", coruna.aliases![0]!, "15"],
+    ["Calle Portales 1", "26001", "Calahorra", "26"],
+    ["Calle Triana 1", "35002", "Las Palmas de Gran Canaria", "35"],
+  ])("reads the comma province after %j", (street, postalCode, city, code) => {
+    const province = area(code).name;
+    expect(province).toContain(", ");
+    const line = `${street}, ${postalCode} ${city}, ${province}`;
     const parts = registeredAddressParts(line, spain);
     expect(parts).toEqual({ street, line2: "", postalCode, city, province });
     expect(joinRegisteredAddress(parts)).toBe(line);
@@ -199,7 +187,7 @@ describe("registeredAddressErrors", () => {
   it("accepts a province by its other name", () => {
     expect(
       registeredAddressErrors(
-        { ...madrid, postalCode: "15001", city: "A Coruña", province: "A Coruña" },
+        { ...madrid, postalCode: "15001", city: "Ferrol", province: coruna.aliases![0]! },
         spain,
       ),
     ).toEqual({});

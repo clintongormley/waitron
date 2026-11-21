@@ -313,47 +313,33 @@ describe("recipientAddressFields", () => {
 });
 
 describe("recipientAddressFields reading a Spanish province name", () => {
+  const spain = addresses.getCountryPack("ES")!;
+  const area = (code: string) => spain.administrativeAreas.find((each) => each.code === code)!;
+  // Names spelt with Spanish letters are read from the pack: general code is English only.
+  const corunaCity = area("15").aliases![0]!;
+
   it.each([
-    [
-      "Carrer Major 1, 07001 Palma, Balears, Illes",
-      "Carrer Major 1",
-      "07001",
-      "Palma",
-      "Balears, Illes",
-    ],
-    ["Rúa Real 1, 15001 A Coruña, Coruña, A", "Rúa Real 1", "15001", "A Coruña", "Coruña, A"],
-    [
-      "Calle Portales 1, 26001 Logroño, Rioja, La",
-      "Calle Portales 1",
-      "26001",
-      "Logroño",
-      "Rioja, La",
-    ],
-    [
-      "Calle Triana 1, 35002 Las Palmas de Gran Canaria, Palmas, Las",
-      "Calle Triana 1",
-      "35002",
-      "Las Palmas de Gran Canaria",
-      "Palmas, Las",
-    ],
-  ])("reads %j as its province", (address, streetAddress, postalCode, locality, province) => {
+    ["Carrer Major 1", "07001", "Palma", "07"],
+    ["Calle Real 1", "15001", corunaCity, "15"],
+    ["Calle Portales 1", "26001", "Calahorra", "26"],
+    ["Calle Triana 1", "35002", "Las Palmas de Gran Canaria", "35"],
+  ])("reads the comma province after %j", (streetAddress, postalCode, locality, code) => {
+    const province = area(code).name;
+    expect(province).toContain(", ");
+    const address = `${streetAddress}, ${postalCode} ${locality}, ${province}`;
     const split = addresses.recipientAddressFields(address, "ES");
     expect(split).toEqual({ streetAddress, postalCode, locality, province });
     expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
   });
 
   it.each([
-    ["28013 Madrid, Madrid", "Madrid"],
-    ["15001 A Coruña, Coruña, A", "Coruña, A"],
-  ])("reads %j, with no street, as its province", (address, province) => {
+    ["28013", "Madrid", "28"],
+    ["15001", corunaCity, "15"],
+  ])("reads %j, with no street, as postcode, city and province", (postalCode, locality, code) => {
+    const province = area(code).name;
+    const address = `${postalCode} ${locality}, ${province}`;
     const split = addresses.recipientAddressFields(address, "ES");
-    const [postalCode, ...locality] = address.slice(0, -(province.length + 2)).split(" ");
-    expect(split).toEqual({
-      streetAddress: "",
-      postalCode,
-      locality: locality.join(" "),
-      province,
-    });
+    expect(split).toEqual({ streetAddress: "", postalCode, locality, province });
     expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
   });
 
