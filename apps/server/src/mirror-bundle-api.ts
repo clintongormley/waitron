@@ -14,6 +14,7 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  type NodeTransaction,
 } from "@waitron/db";
 import {
   refuseUnverifiableChart,
@@ -37,6 +38,7 @@ import {
   assembleMirrorBundle,
   refuseFullChart,
   refuseRemovedStandby,
+  type MirrorBundle,
   type PairStoreKey,
 } from "./mirror-bundle.js";
 import {
@@ -104,11 +106,8 @@ export const JOIN_REFUSAL_STATUS = Object.fromEntries(
   JOIN_REFUSALS.map((code) => [code, 409]),
 ) as Record<(typeof JOIN_REFUSALS)[number], ContentfulStatusCode>;
 
-// `membership.write_contended` is transient, so the caller retries.
-const STATUS: Record<string, ContentfulStatusCode> = {
-  "password.invalid": 401,
-  "totp.required": 401,
-  "password.throttled": 429,
+/** What {@link issueMirrorBundle} refuses. `membership.write_contended` is transient, so the caller retries. */
+export const ISSUE_STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
@@ -119,6 +118,13 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
+};
+
+const STATUS: Record<string, ContentfulStatusCode> = {
+  "password.invalid": 401,
+  "totp.required": 401,
+  "password.throttled": 429,
+  ...ISSUE_STATUS,
 };
 
 export function mountMirrorBundleApi(
@@ -177,71 +183,14 @@ export function mountMirrorBundleApi(
       // refuses after the same hashing work as a wrong password.
       const personId = await personIdForLoginEmail(deps.appDb, email);
 
-      const assemble = async (moduleOperations?: ModuleOperations) => {
-        // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
-        // reservation. Each mint round below checks the chart it re-reads again.
-        const held = await readNodeMembership(deps.appDb);
-        assertHeldDocumentReadable(held);
-        // Unsealed once for the whole request: the check below, the bundle's endorsement and every
-        // chart round sign or verify with it.
-        const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
-        await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
-        await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
-        const moduleConfig = await readModuleConfig(deps.appDb);
-
-        const store = mintPairStoreKey();
-        // node.db's lock is taken before venue.db's and held to the link write, so no other link
-        // turns streaming between this check and that write. venue.db commits first: a crash
-        // before the link write leaves the chart listing a spare that was never sent its bundle.
-        const bundle = await withNodeTransaction(deps.node, async (tx) => {
-          // One pair link per box: a second spare would replace a joined one's.
-          const link = await readPairLink(tx, deps.designated.nodeId);
-          if (
-            link?.state === "streaming" &&
-            !(held !== null && standingOf(held, link.peerNodeId) === "evicted")
-          )
-            throw new AppError("mirror.spare_already_joined", {});
-          // Again, under node.db's lock: bucket Save checks for a link and stores its settings
-          // under the same lock (`stream-api.ts`), so one of the two sees the other.
-          await refuseWhileBucketStream(deps);
-          const assembled = await assembleMirrorBundle({
-            appDb: deps.appDb,
-            node: deps.node,
-            ring: deps.ring,
-            stateDir: deps.stateDir,
-            primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
-            store,
-            boxHostname: deps.boxHostname,
-            designated: deps.designated,
-            standby,
-
-            moduleOperations,
-            moduleConfig,
-            primaryPrivateKey: signingKey,
-          });
-          // Before the response, so no bundle is handed out for a node the chart omits: a till
-          // reroutes by the chart's `contactUrl`.
-          await appendStandbyToChart(
+      const assemble = async (moduleOperations?: ModuleOperations) =>
+        c.json(
+          await issueMirrorBundle(
             deps,
-            signingKey,
-            standby.nodeId,
-            standbyContactUrl,
-            assembled.reservedIdentity.endorsement,
-          );
-          await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
-            role: "streams",
-            state: "pending",
-            peerNodeId: standby.nodeId,
-            peerPublicKey: standby.publicKey,
-            storeUrl: standbyStoreUrl,
-            ...store,
-          });
-          return assembled;
-        });
-        deps.wakeSpareJoin();
-
-        return c.json(bundle);
-      };
+            { standby, contactUrl: standbyContactUrl, storeUrl: standbyStoreUrl, at: standbyAt },
+            moduleOperations,
+          ),
+        );
       // By the id, which an address keeps whether or not it has an account, so the limit is reached
       // after the same attempts either way.
       const finishAttempt = throttle.begin(`person:${personId}`);
@@ -307,6 +256,116 @@ export function isStoreUrlOf(storeUrl: unknown, contactUrl: string): boolean {
   return store.protocol === "https:" && store.hostname === new URL(contactUrl).hostname;
 }
 
+export type MirrorBundleIssueDeps = Omit<MirrorBundleApiDeps, "credentialKeyRing">;
+
+/** The joining box, as its own request named it. */
+export interface JoiningSpare {
+  standby: { nodeId: string; publicKey: string };
+  contactUrl: string;
+  storeUrl: string;
+  /** The joining box's clock, for the clock check. */
+  at: number;
+}
+
+/**
+ * Reserves the spare's identity, lists it in the chart and records its pending pair link, then
+ * answers its bundle. `moduleOperations` carry the caller's authority to each module.
+ */
+export async function issueMirrorBundle(
+  deps: MirrorBundleIssueDeps,
+  spare: JoiningSpare,
+  moduleOperations?: ModuleOperations,
+): Promise<MirrorBundle> {
+  const { standby } = spare;
+  // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
+  // reservation. Each mint round below checks the chart it re-reads again.
+  const held = await readNodeMembership(deps.appDb);
+  assertHeldDocumentReadable(held);
+  // Unsealed once for the whole request: the check below, the bundle's endorsement and every
+  // chart round sign or verify with it.
+  const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
+  await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
+  await refuseBeforeReserving(deps, held, standby.nodeId, spare.at);
+  const moduleConfig = await readModuleConfig(deps.appDb);
+
+  const store = mintPairStoreKey();
+  // node.db's lock is taken before venue.db's and held to the link write, so no other link
+  // turns streaming between this check and that write. venue.db commits first: a crash
+  // before the link write leaves the chart listing a spare that was never sent its bundle.
+  const bundle = await withNodeTransaction(deps.node, async (tx) => {
+    // One pair link per box: a second spare would replace a joined one's.
+    await refuseJoinedSpare(tx, deps, held);
+    // Again, under node.db's lock: bucket Save checks for a link and stores its settings
+    // under the same lock (`stream-api.ts`), so one of the two sees the other.
+    await refuseWhileBucketStream(deps);
+    const assembled = await assembleMirrorBundle({
+      appDb: deps.appDb,
+      node: deps.node,
+      ring: deps.ring,
+      stateDir: deps.stateDir,
+      primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
+      store,
+      boxHostname: deps.boxHostname,
+      designated: deps.designated,
+      standby,
+
+      moduleOperations,
+      moduleConfig,
+      primaryPrivateKey: signingKey,
+    });
+    // Before the response, so no bundle is handed out for a node the chart omits: a till
+    // reroutes by the chart's `contactUrl`.
+    await appendStandbyToChart(
+      deps,
+      signingKey,
+      standby.nodeId,
+      spare.contactUrl,
+      assembled.reservedIdentity.endorsement,
+    );
+    await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
+      role: "streams",
+      state: "pending",
+      peerNodeId: standby.nodeId,
+      peerPublicKey: standby.publicKey,
+      storeUrl: spare.storeUrl,
+      ...store,
+    });
+    return assembled;
+  });
+  deps.wakeSpareJoin();
+  return bundle;
+}
+
+/**
+ * The refusals of a join that need no writes, for a person about to approve one: those
+ * {@link issueMirrorBundle} gives before reserving, except the box name, which the hello checked.
+ */
+export async function refuseJoinBeforeApproving(
+  deps: MirrorBundleIssueDeps,
+  standbyNodeId: string,
+  standbyAt: number,
+): Promise<void> {
+  const held = await readNodeMembership(deps.appDb);
+  assertHeldDocumentReadable(held);
+  await refuseBeforeReserving(deps, held, standbyNodeId, standbyAt, { checkName: false });
+  refuseRemovedStandby(held, standbyNodeId);
+  refuseFullChart(held, standbyNodeId);
+  await refuseJoinedSpare(deps.node, deps, held);
+}
+
+async function refuseJoinedSpare(
+  node: NodeDatabase | NodeTransaction,
+  deps: MirrorBundleIssueDeps,
+  held: SignedMembershipDocument | null,
+): Promise<void> {
+  const link = await readPairLink(node, deps.designated.nodeId);
+  if (
+    link?.state === "streaming" &&
+    !(held !== null && standingOf(held, link.peerNodeId) === "evicted")
+  )
+    throw new AppError("mirror.spare_already_joined", {});
+}
+
 /** A fresh key for each join; the access key id has the store's own shape. */
 function mintPairStoreKey(): PairStoreKey {
   return {
@@ -318,10 +377,11 @@ function mintPairStoreKey(): PairStoreKey {
 
 /** The refusals a join gets before anything is reserved or listed. */
 async function refuseBeforeReserving(
-  deps: MirrorBundleApiDeps,
+  deps: MirrorBundleIssueDeps,
   held: SignedMembershipDocument | null,
   standbyNodeId: string,
   standbyAt: number,
+  { checkName = true }: { checkName?: boolean } = {},
 ): Promise<void> {
   const primaryAt = (deps.now ?? (() => new Date()))().getTime();
   if (Math.abs(primaryAt - standbyAt) >= MAX_CLOCK_GAP_MS) {
@@ -337,14 +397,17 @@ async function refuseBeforeReserving(
   );
   if (key === undefined) throw new AppError("backup.recovery_key_missing", {});
   if (
-    sameBoxName(deps.designated.nodeId, standbyNodeId) ||
-    held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
+    checkName &&
+    (sameBoxName(deps.designated.nodeId, standbyNodeId) ||
+      held?.body.nodes.some(
+        (n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId),
+      ))
   )
     throw new AppError("mirror.standby_name_taken", {});
   if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
 }
 
-async function refuseWhileBucketStream(deps: MirrorBundleApiDeps): Promise<void> {
+async function refuseWhileBucketStream(deps: MirrorBundleIssueDeps): Promise<void> {
   if (
     (await withTransaction(deps.appDb, (tx) =>
       credentialRevision(tx, { purpose: STREAM_PURPOSE }),
@@ -354,13 +417,13 @@ async function refuseWhileBucketStream(deps: MirrorBundleApiDeps): Promise<void>
 }
 
 /** The designated main box's own stored keys, which it trusts the held chart against. */
-function trustDeps(deps: MirrorBundleApiDeps, privateKey: string): StoredTrustDeps {
+function trustDeps(deps: MirrorBundleIssueDeps, privateKey: string): StoredTrustDeps {
   return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId, privateKey };
 }
 
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.
 async function appendStandbyToChart(
-  deps: MirrorBundleApiDeps,
+  deps: MirrorBundleIssueDeps,
   signingKey: string,
   standbyNodeId: string,
   standbyContactUrl: string,

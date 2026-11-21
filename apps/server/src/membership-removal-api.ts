@@ -15,6 +15,7 @@ import {
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { abandonReturn } from "./return-abandoned.js";
 import type { Logger } from "./logger.js";
+import type { ListedJoinRequest } from "./box-join-requests.js";
 
 export interface MembershipRemovalApiDeps {
   readSpare?: () => Promise<import("./spare-follow.js").SpareFollowView | null>;
@@ -25,6 +26,8 @@ export interface MembershipRemovalApiDeps {
   reloadStream: () => Promise<void>;
   /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
   authorityFingerprint: () => Promise<string | null>;
+  /** The boxes asking to join that the Servers page lists. */
+  listJoinRequests?: () => ListedJoinRequest[];
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -75,6 +78,7 @@ export function mountMembershipRemovalApi(
         authorityFingerprint: await deps.authorityFingerprint(),
         nodes: listing.nodes,
         ...(deps.readSpare === undefined ? {} : { spare: await deps.readSpare() }),
+        ...(deps.listJoinRequests === undefined ? {} : { joinRequests: deps.listJoinRequests() }),
       });
     }),
   );

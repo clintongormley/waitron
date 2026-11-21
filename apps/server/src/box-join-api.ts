@@ -8,8 +8,10 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isUuid } from "@waitron/shared";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
-import { readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
-import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
+import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
+import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
+import { withOperationAuthority } from "@waitron/module";
 import {
   JOIN_CANCEL_LABEL,
   JOIN_HELLO_LABEL,
@@ -32,10 +34,20 @@ import {
 import { sameBoxName } from "./box-name.js";
 import { isBareOrigin } from "./config.js";
 import type { Logger } from "./logger.js";
-import { isStoreUrlOf, MAX_CLOCK_GAP_MS } from "./mirror-bundle-api.js";
+import {
+  ISSUE_STATUS,
+  issueMirrorBundle,
+  isStoreUrlOf,
+  MAX_CLOCK_GAP_MS,
+  refuseJoinBeforeApproving,
+  type MirrorBundleIssueDeps,
+} from "./mirror-bundle-api.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
-import { requestAddress } from "./request-from-box.js";
+import { isRemoteStaffRequest, requestAddress } from "./request-from-box.js";
+import { lockJoinBundle } from "./box-join-seal.js";
+import { requireNodeOperationHttps } from "./node-operation-https.js";
+import { parseStandbyOperationInput } from "./recovery-module-operation.js";
 
 const BODY_LIMIT = 65536;
 const NONCE_BYTES = 32;
@@ -314,4 +326,144 @@ export function mountBoxJoinApi(
   );
 
   return requests;
+}
+
+export interface BoxJoinPersonApiDeps extends MirrorBundleIssueDeps {
+  /** The store {@link mountBoxJoinApi} answers the new box from. */
+  requests: BoxJoinRequests;
+}
+
+const PERSON_STATUS: Record<string, ContentfulStatusCode> = {
+  "management_session.required": 401,
+  "management_session.expired": 401,
+  "person.suspended": 403,
+  "node.operation_page_required": 403,
+  "mirror.join_not_found": 404,
+  "mirror.join_wrong_code": 409,
+  "mirror.join_in_progress": 409,
+  ...ISSUE_STATUS,
+};
+
+/**
+ * `POST /management-api/box-joins/:id/{check,approve,dismiss}`, for a person signed in on this
+ * box's own page with `node.manage`; Check and approve also need a fresh password or passkey.
+ */
+export function mountBoxJoinPersonApi(
+  app: Hono,
+  deps: BoxJoinPersonApiDeps,
+  log: Logger = () => {},
+): void {
+  const run = createErrorBoundary(PERSON_STATUS, "mirror.join_failed");
+  const { requests } = deps;
+  const now = () => (deps.now ?? (() => new Date()))().getTime();
+
+  /** The approver's person id. */
+  async function guard(c: Context, fresh: boolean): Promise<string> {
+    requireNodeOperationHttps(c);
+    if (isRemoteStaffRequest(c)) throw new AppError("node.operation_page_required", {});
+    const token = requireManagementSession(c);
+    return withTransaction(deps.appDb, async (tx) => {
+      const { authorizedBy } = await authorizeManager(tx, {
+        managementSessionId: token,
+        permission: "node.manage",
+      });
+      if (fresh) await requireFreshManagementSignIn(tx, token, { allowRecoveryCode: false });
+      return authorizedBy;
+    });
+  }
+
+  /** The new box's clock now, from its latest poll's reading and when it arrived. */
+  function newBoxNow(view: { at: string; atReceivedAt: string }): number {
+    return Date.parse(view.at) + (now() - Date.parse(view.atReceivedAt));
+  }
+
+  function listedView(requestId: string) {
+    const view = requests.check(requestId);
+    const held = requests.requestFor(requestId);
+    if ("refused" in view || held === null) throw new AppError("mirror.join_not_found", {});
+    return { view, held };
+  }
+
+  app.post("/management-api/box-joins/:id/check", (c) =>
+    run(c, log, async () => {
+      await guard(c, true);
+      const { view, held } = listedView(c.req.param("id"));
+      await refuseJoinBeforeApproving(deps, held.hello.newNodeId, newBoxNow(view));
+      return c.json({
+        address: view.address,
+        askedAt: view.askedAt,
+        startedAgain: view.startedAgain,
+        choices: view.choices,
+      });
+    }),
+  );
+
+  app.post("/management-api/box-joins/:id/approve", (c) =>
+    run(c, log, async () => {
+      const approverId = await guard(c, true);
+      const body = await readJsonBody<{ code?: unknown; moduleOperation?: unknown }>(c);
+      const requestId = c.req.param("id");
+      const { view, held } = listedView(requestId);
+      const begun = requests.approve.begin(
+        requestId,
+        typeof body.code === "string" ? body.code : "",
+      );
+      if ("refused" in begun) {
+        if (begun.refused === "wrong_code") throw new AppError("mirror.join_wrong_code", {});
+        if (begun.refused === "in_progress") throw new AppError("mirror.join_in_progress", {});
+        throw new AppError("mirror.join_not_found", {});
+      }
+      try {
+        const spare = {
+          standby: { nodeId: held.hello.newNodeId, publicKey: held.hello.newPublicKey },
+          contactUrl: held.hello.contactUrl,
+          storeUrl: held.hello.storeUrl,
+          at: newBoxNow(view),
+        };
+        let issue = () => issueMirrorBundle(deps, spare);
+        if (body.moduleOperation !== undefined) {
+          const operation = parseStandbyOperationInput(body.moduleOperation);
+          if (operation === null)
+            throw new AppError("module.operation_invalid", { module: "unknown" });
+          const { binding } = operation;
+          if (
+            binding.action !== "reserve" ||
+            binding.sourceId !== deps.designated.nodeId ||
+            binding.targetNodeId !== spare.standby.nodeId
+          )
+            throw new AppError("module.operation_invalid", { module: binding.module });
+          issue = () =>
+            withOperationAuthority({ ...binding }, approverId, (authority) =>
+              issueMirrorBundle(
+                deps,
+                spare,
+                new Map([[binding.module, { ...operation, authority }]]),
+              ),
+            );
+        }
+        const bundle = await issue();
+        const locked = lockJoinBundle({
+          requestId,
+          encryptionKey: begun.encryptionKey,
+          bundle: Buffer.from(JSON.stringify(bundle)),
+          mainPrivateKey: await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
+        });
+        if (!requests.approve.finish(requestId, locked))
+          throw new AppError("mirror.join_not_found", {});
+      } catch (error) {
+        requests.approve.abandon(requestId);
+        throw error;
+      }
+      return c.body(null, 202);
+    }),
+  );
+
+  app.post("/management-api/box-joins/:id/dismiss", (c) =>
+    run(c, log, async () => {
+      await guard(c, false);
+      const answer = requests.dismiss(c.req.param("id"));
+      if ("refused" in answer) throw new AppError("mirror.join_not_found", {});
+      return c.body(null, 204);
+    }),
+  );
 }

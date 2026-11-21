@@ -385,7 +385,8 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountPersonalDataExportApi, personalDataServerParts } from "./personal-data-export-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
-import { mountBoxJoinApi } from "./box-join-api.js";
+import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
+import { createBoxJoinRequests } from "./box-join-requests.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
@@ -4161,6 +4162,8 @@ async function bootServer(
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
+  // One store, so the Servers page lists the requests the new boxes' routes hold.
+  const boxJoinRequests = createBoxJoinRequests();
   mountMembershipRemovalApi(
     app,
     {
@@ -4173,6 +4176,7 @@ async function bootServer(
       // `/ca.crt` serves no authority when the operator supplies the certificate files.
       authorityFingerprint: () =>
         config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
+      listJoinRequests: () => boxJoinRequests.listed(),
     },
     log,
   );
@@ -4330,22 +4334,23 @@ async function bootServer(
   );
 
   if (isSingletonPrimary) {
-    mountMirrorBundleApi(
+    const bundleDeps = {
+      appDb: db,
+      node: store.node,
+      ring,
+      stateDir: config.stateDir,
+      boxHostname: BOX_HOSTNAME,
+      advertisedOrigin: config.managementOrigin,
+      designated: config.node,
+      wakeSpareJoin: () => spareJoin?.wake(),
+    };
+    mountMirrorBundleApi(app, { ...bundleDeps, credentialKeyRing: ring }, log);
+    mountBoxJoinApi(
       app,
-      {
-        appDb: db,
-        node: store.node,
-        ring,
-        stateDir: config.stateDir,
-        boxHostname: BOX_HOSTNAME,
-        advertisedOrigin: config.managementOrigin,
-        designated: config.node,
-        credentialKeyRing: ring,
-        wakeSpareJoin: () => spareJoin?.wake(),
-      },
+      { appDb: db, node: store.node, ring, designated: config.node, requests: boxJoinRequests },
       log,
     );
-    mountBoxJoinApi(app, { appDb: db, node: store.node, ring, designated: config.node }, log);
+    mountBoxJoinPersonApi(app, { ...bundleDeps, requests: boxJoinRequests }, log);
   }
 
   const promoteDeps: PromoteDeps = {

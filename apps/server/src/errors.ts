@@ -1581,6 +1581,10 @@ declare module "@waitron/shared" {
     "mirror.join_code_taken": Record<string, never>;
     /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */
     "mirror.join_not_found": Record<string, never>;
+    /** A person tapped a code that is not the new box's; the request ended and nothing was sent. */
+    "mirror.join_wrong_code": Record<string, never>;
+    /** A right tap arrived while an earlier one was still preparing the new box's copy. */
+    "mirror.join_in_progress": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;

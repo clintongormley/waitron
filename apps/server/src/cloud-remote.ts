@@ -146,9 +146,9 @@ export function createStaffApp(
     const url = new URL(c.req.url);
     const path = url.pathname;
     if (/%2f|%5c|%00/i.test(path)) return c.notFound();
-    // These machine operations check a password outside the dashboard sign-in throttle.
+    // Joining and machine operations stay off remote access.
     if (
-      ["membership", "mirror-bundle", "promote"].some(
+      ["membership", "mirror-bundle", "promote", "box-joins"].some(
         (name) => path === `/management-api/${name}` || path.startsWith(`/management-api/${name}/`),
       )
     )
