@@ -439,6 +439,19 @@ it("saves editable hours, rejects a stale edit and reads the cleared window afte
 });
 
 it.each([
+  ["no edit", []],
+  ["malformed JSON", ["{"]],
+  ["an invalid revision", ['{"revision":"0","automatic":true,"start":null,"end":null}']],
+])("refuses a settings save with %s without creating a file", async (_label, edit) => {
+  const { box } = await fixture();
+  expect(await runUpgradeCli(["save-upgrade-settings", box, ...edit])).toEqual({
+    ok: false,
+    reason: "settings_invalid",
+  });
+  await expect(fs.stat(`${box}.upgrade-settings.json`)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it.each([
   '{"version":',
   '{"version":2,"revision":0,"automatic":true,"start":"03:00","end":"05:00"}',
 ])("leaves unreadable settings in place (%s)", async (bytes) => {
@@ -451,10 +464,10 @@ it.each([
     },
   });
   await expect(window).rejects.toThrow("the saved upgrade settings are unreadable");
-  expect(await runUpgradeCli(["read-upgrade-settings", box])).toEqual({
-    ok: false,
-    reason: "host_failed",
-  });
+  const stdout = { write: vi.fn() };
+  const stderr = { write: vi.fn() };
+  expect(await runUpgradeCliMain(["read-upgrade-settings", box], { stdout, stderr })).toBe(1);
+  expect(stdout.write).toHaveBeenCalledExactlyOnceWith('{"ok":false,"reason":"host_failed"}\n');
   expect(
     await runUpgradeCli([
       "save-upgrade-settings",
