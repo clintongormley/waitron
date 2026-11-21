@@ -7,11 +7,13 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments, type RefundAnswer } from "@waitron/payments";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 import { takeReaderBillPayment } from "./bill-payments.js";
-import { refundBillPayment, resumeCardRefund, attestCardRefund } from "./bill-refunds.js";
+import { refundBillPayment } from "./bill-refunds.js";
 import { beginSettledTenderRefund } from "./tender-refunds.js";
 import {
   resumeTenderRefund,
+  attestBillCardRefund,
   attestTenderRefund,
+  resumeBillCardRefund,
   stopTenderRefundResolvers,
   startTenderRefundResolvers,
 } from "./tender-refund-sends.js";
@@ -95,49 +97,62 @@ async function billRefund() {
     },
   };
 }
-it("answers a bill refund at the response deadline while its provider finishes", async () => {
-  const bill = await billRefund();
-  let release!: (answer: RefundAnswer) => void;
-  const providerAnswer = new Promise<RefundAnswer>((resolve) => {
-    release = resolve;
-  });
-  const send = vi.spyOn(v.card, "sendRefund").mockImplementation(() => providerAnswer);
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const request = refundBillPayment(
-    v.deps,
-    v.cfg,
-    bill.id,
-    bill.paymentId,
-    bill.request,
-    v.operator,
-    "reader-card",
-  );
-  try {
-    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(await Promise.race([request, Promise.resolve("waiting")])).toMatchObject({
-      refund: { state: "pending" },
+it.each(["first send", "retry"] as const)(
+  "answers a bill refund %s at the response deadline while its provider finishes",
+  async (attempt) => {
+    const bill = await billRefund();
+    const submit = () =>
+      refundBillPayment(
+        v.deps,
+        v.cfg,
+        bill.id,
+        bill.paymentId,
+        bill.request,
+        v.operator,
+        "reader-card",
+      );
+    if (attempt === "retry") {
+      vi.spyOn(v.card, "sendRefund").mockResolvedValueOnce({
+        kind: "uncertain",
+        reason: "network",
+      });
+      expect((await submit()).refund.state).toBe("pending");
+    }
+    let release!: (answer: RefundAnswer) => void;
+    const providerAnswer = new Promise<RefundAnswer>((resolve) => {
+      release = resolve;
     });
-  } finally {
-    release({
-      kind: "outcome",
-      outcome: "completed",
-      providerRefundRef: "bill-refund-after-deadline",
-      providerStatus: "completed",
+    const send = vi.spyOn(v.card, "sendRefund").mockImplementation(() => providerAnswer);
+    const callsBefore = send.mock.calls.length;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const request = submit();
+    try {
+      await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(callsBefore + 1));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await Promise.race([request, Promise.resolve("waiting")])).toMatchObject({
+        refund: { state: "pending" },
+      });
+    } finally {
+      release({
+        kind: "outcome",
+        outcome: "completed",
+        providerRefundRef: "bill-refund-after-deadline",
+        providerStatus: "completed",
+      });
+      await request;
+      vi.useRealTimers();
+    }
+    await vi.waitFor(async () => {
+      const saved = await v.db
+        .select()
+        .from(refunds)
+        .where(eq(refunds.billPaymentId, bill.paymentId));
+      expect(saved).toMatchObject([
+        { state: "completed", providerRefundRef: "bill-refund-after-deadline" },
+      ]);
     });
-    await request;
-    vi.useRealTimers();
-  }
-  await vi.waitFor(async () => {
-    const saved = await v.db
-      .select()
-      .from(refunds)
-      .where(eq(refunds.billPaymentId, bill.paymentId));
-    expect(saved).toMatchObject([
-      { state: "completed", providerRefundRef: "bill-refund-after-deadline" },
-    ]);
-  });
-});
+  },
+);
 
 it("recovers bill and receipt refunds in one pass and saves the retry time", async () => {
   const bill = await billRefund();
@@ -157,7 +172,9 @@ it("recovers bill and receipt refunds in one pass and saves the retry time", asy
   await expect(resumeTenderRefund(v.deps, pendingBill.id, "loop")).rejects.toMatchObject({
     code: "tender.refund_not_found",
   });
-  await expect(resumeCardRefund(v.deps, pendingSale.id, "loop", "stored")).rejects.toMatchObject({
+  await expect(
+    resumeBillCardRefund(v.deps, pendingSale.id, "loop", "stored"),
+  ).rejects.toMatchObject({
     code: "bill.refund_not_found",
   });
 
@@ -480,21 +497,26 @@ describe("bill refund admission", () => {
     const before = v.snapshot(),
       calls = v.card.lookupCalls.length;
     await expect(
-      resumeCardRefund({ ...v.deps, admission: closed("invalid") }, refund!.id, "loop", "stored"),
+      resumeBillCardRefund(
+        { ...v.deps, admission: closed("invalid") },
+        refund!.id,
+        "loop",
+        "stored",
+      ),
     ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
     await expect(
-      attestCardRefund({ ...v.deps, admission: closed("invalid") }, refund!.id, "completed", {
+      attestBillCardRefund({ ...v.deps, admission: closed("invalid") }, refund!.id, "completed", {
         attestedBy: v.adminId,
         note: "Provider confirmed",
       }),
     ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
     expect(v.snapshot()).toEqual(before);
     expect(v.card.lookupCalls).toHaveLength(calls);
-    expect((await resumeCardRefund(v.deps, refund!.id, "loop", "stored")).refund.state).toBe(
+    expect((await resumeBillCardRefund(v.deps, refund!.id, "loop", "stored")).refund.state).toBe(
       "completed",
     );
     const saved = v.snapshot();
-    await resumeCardRefund(v.deps, refund!.id, "loop", "stored");
+    await resumeBillCardRefund(v.deps, refund!.id, "loop", "stored");
     expect(v.snapshot()).toEqual(saved);
   });
 });

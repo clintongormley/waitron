@@ -1,4 +1,5 @@
-import { refundsPaused, refundRefused, type BillRefundDeps } from "./bill-refunds.js";
+import type { BillRefundDeps } from "./bill-refunds.js";
+import { refundsPaused, refundRefused } from "./tender-refund-sends.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import type { Purpose } from "@waitron/credentials";

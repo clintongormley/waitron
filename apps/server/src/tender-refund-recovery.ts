@@ -5,13 +5,13 @@ import { raisePendingRefundUnresolved } from "./bill-refund-alerts.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import {
   recoverCardRefund,
+  refundsPaused,
   tenderRefundIsLive,
   startTenderRefundResolvers,
   stopTenderRefundResolvers,
 } from "./tender-refund-sends.js";
 import { realSleep, sleepMsFor } from "./loop.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
-import { refundsPaused } from "./bill-refunds.js";
 
 const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;

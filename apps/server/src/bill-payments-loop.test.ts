@@ -28,7 +28,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
-import { clockStopsRefund } from "./bill-refunds.js";
+import { clockStopsRefund } from "./tender-refund-sends.js";
 import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { decodeTicket } from "./testing/decode-ticket.js";

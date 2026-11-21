@@ -7,8 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { devices, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
-import { resumeCardRefund } from "./bill-refunds.js";
-import { tenderRefundIsLive } from "./tender-refund-sends.js";
+import { resumeBillCardRefund, tenderRefundIsLive } from "./tender-refund-sends.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { loginWithPin, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -453,7 +452,7 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
   expect(pending).toMatchObject({ state: "pending", applied_amount: 50 });
   await revoke("signed out");
   await revoke("switched off");
-  const recovered = await resumeCardRefund(
+  const recovered = await resumeBillCardRefund(
     {
       db: suite.db,
       backend: venue.backend,

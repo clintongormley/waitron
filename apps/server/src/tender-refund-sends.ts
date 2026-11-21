@@ -1,4 +1,6 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { IssuanceRefusedError, type TrustedReading } from "@waitron/fiscal";
+import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import {
   billPayments,
@@ -13,24 +15,106 @@ import {
   type PaymentProvider,
   type RefundAnswer,
   type RefundLookup,
+  type RefundOutcome,
   type RefundRefusalReason,
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
-import { alertOrigin } from "./request-config.js";
-import {
-  clockStopsRefund,
-  refundRefused,
-  refundOutcome,
-  type RefundEvidence,
-} from "./bill-refunds.js";
+import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import { attestationColumns, type Attestation } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import "./errors.js";
 
 type RefundRow = typeof refunds.$inferSelect;
+type RefundResolver = "retry" | "manager" | "loop";
+
+interface Resolution {
+  signal: AbortSignal;
+  expired: () => boolean;
+  raisedBy: AlertOrigin;
+  lookup: RefundLookup | null;
+  resent: boolean;
+  refusalReason?: RefundRefusalReason;
+}
+
+/** Whether a recovery pass leaves every pending refund as it is: while the start clock gate
+ * holds, while the seat would refuse a record at the reading (`clock.unusable`, before
+ * 28-10-2024), or while the seat refuses a new refund. */
+export async function refundsPaused(
+  deps: TenderRefundDeps,
+  reading: TrustedReading,
+): Promise<boolean> {
+  if (deps.clockUnconfirmed?.() === true) return true;
+  if (clockUnusableAt(deps.backend, reading)) return true;
+  return withTransaction(deps.db, (tx) => refundRefused(tx, deps));
+}
+
+export async function refundRefused(tx: Transaction, deps: TenderRefundDeps): Promise<boolean> {
+  try {
+    await deps.backend.refuseNewRefund(tx, deps.cfg.nodeId);
+    return false;
+  } catch (error) {
+    if (error instanceof IssuanceRefusedError) return true;
+    throw error;
+  }
+}
+
+/** What is known of a card refund, from which design §6b's table decides its outcome. */
+export type RefundEvidence =
+  | { kind: "never_sent" }
+  | { kind: "answer"; answer: RefundAnswer; sendCount: number }
+  | { kind: "lookup"; lookup: RefundLookup }
+  | { kind: "attested"; outcome: "completed" | "failed" };
+
+/**
+ * Design §6b's evidence table, shared by the send, a retry, the loop and the manager, so none
+ * concludes more than another. An outcome is recorded only on the provider's own record of the
+ * refund, on a manager's confirmed outcome, or on a refusal the provider documents as no refund
+ * made that answered the ONLY send: after a resend, a refusal answers that send alone and the
+ * earlier one is still unknown.
+ */
+export function refundOutcome(evidence: RefundEvidence): RefundOutcome {
+  switch (evidence.kind) {
+    case "never_sent":
+      return "failed";
+    case "attested":
+      return evidence.outcome;
+    case "lookup":
+      return evidence.lookup.kind === "match" ? evidence.lookup.outcome : "pending";
+    case "answer": {
+      const { answer } = evidence;
+      if (answer.kind === "outcome") return answer.outcome;
+      if (answer.kind === "refused" && answer.documented && evidence.sendCount === 1) {
+        return "failed";
+      }
+      return "pending";
+    }
+  }
+}
+
+/**
+ * Whether a refund's send or outcome, dated by `reading` in `tx`, is held: while the start clock
+ * gate holds, or while the seat would refuse a record at `reading` (`clock.unusable`, before
+ * 28-10-2024). Judged again here because a provider wait since the request's own check can end
+ * after the clock moves or the gate starts holding; the refund is then left pending for a later
+ * pass. A manager's confirmed outcome (`evidence` attested) is refused instead, by the seat's
+ * `refuseUntilRecordable`, as their route refuses it.
+ */
+export async function clockStopsRefund(
+  tx: Transaction,
+  deps: Pick<TenderRefundDeps, "backend" | "clockUnconfirmed">,
+  evidence: RefundEvidence | null,
+  reading: TrustedReading,
+): Promise<boolean> {
+  if (evidence?.kind === "attested") {
+    await deps.backend.refuseUntilRecordable(tx, reading);
+    return false;
+  }
+  if (deps.clockUnconfirmed?.() === true) return true;
+  return clockUnusableAt(deps.backend, reading);
+}
 const SHUTDOWN_GRACE_MS = 2_000;
 const liveOf = perDatabase(() => new Set<string>());
 const resolversOf = perDatabase(() => ({
@@ -94,7 +178,20 @@ async function readTenderRefund(tx: Transaction, id: string): Promise<RefundRow>
   return refund;
 }
 
-async function raiseConflict(tx: Transaction, refund: RefundRow, ref: string | null, now: Date) {
+async function readBillRefund(tx: Transaction, id: string): Promise<RefundRow> {
+  const [refund] = await tx.select().from(refunds).where(eq(refunds.id, id));
+  if (refund === undefined || refund.billPaymentId === null)
+    throw new AppError("bill.refund_not_found", { refundId: id });
+  return refund;
+}
+
+async function raiseConflict(
+  tx: Transaction,
+  refund: RefundRow,
+  ref: string | null,
+  now: Date,
+  raisedBy: AlertOrigin,
+) {
   if (refund.billPaymentId === null) {
     return raiseTenderRefundConflict(tx, refund, ref, now);
   }
@@ -108,7 +205,7 @@ async function raiseConflict(tx: Transaction, refund: RefundRow, ref: string | n
     parent!.workingOrderId,
     ref,
     now,
-    alertOrigin("stored", refund),
+    alertOrigin(raisedBy, refund),
   );
 }
 
@@ -155,10 +252,12 @@ async function recordOutcome(
   deps: TenderRefundDeps,
   id: string,
   evidence: RefundEvidence,
-  signal: AbortSignal,
+  { signal, raisedBy }: Resolution,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
-  return withTransaction(deps.db, (tx) => recordOutcomeIn(tx, deps, id, evidence, signal));
+  return withTransaction(deps.db, (tx) =>
+    recordOutcomeIn(tx, deps, id, evidence, signal, raisedBy),
+  );
 }
 async function recordOutcomeIn(
   tx: Transaction,
@@ -166,6 +265,7 @@ async function recordOutcomeIn(
   id: string,
   evidence: RefundEvidence,
   signal: AbortSignal,
+  raisedBy: AlertOrigin,
   attestation?: Attestation,
 ): Promise<RefundRow> {
   signal.throwIfAborted();
@@ -181,7 +281,7 @@ async function recordOutcomeIn(
         : null;
   if (refund.state !== "pending") {
     if (outcome !== "pending" && outcome !== refund.state)
-      await raiseConflict(tx, refund, providerRef, reading.instant);
+      await raiseConflict(tx, refund, providerRef, reading.instant, raisedBy);
     return refund;
   }
   if (
@@ -189,7 +289,7 @@ async function recordOutcomeIn(
     ((refund.providerRefundRef !== null && refund.providerRefundRef !== providerRef) ||
       (await excludedRefs(tx, refund)).includes(providerRef))
   ) {
-    await raiseConflict(tx, refund, providerRef, reading.instant);
+    await raiseConflict(tx, refund, providerRef, reading.instant, raisedBy);
     return refund;
   }
   if (outcome !== "pending" && (await clockStopsRefund(tx, deps, evidence, reading))) return refund;
@@ -211,11 +311,24 @@ async function recordOutcomeIn(
       provider: refund.provider!,
       paymentRef: refund.providerPaymentRef!,
       amount: amount(refund),
-      authorizedBy: attestation?.attestedBy ?? refund.authorizedBy,
+      authorizedBy:
+        refund.billPaymentId === null
+          ? (attestation?.attestedBy ?? refund.authorizedBy)
+          : refund.authorizedBy,
       ...(providerRef === null ? {} : { providerRefundRef: providerRef }),
     });
   signal.throwIfAborted();
   return saved!;
+}
+
+function canResolve(db: Database, refund: RefundRow): boolean {
+  return (
+    refund.state === "pending" &&
+    refund.method === "card" &&
+    !refund.manual &&
+    !tenderRefundIsLive(db, refund.id) &&
+    !resolversOf(db).stopping
+  );
 }
 
 export async function readStuckTenderRefund(
@@ -224,15 +337,37 @@ export async function readStuckTenderRefund(
   id: string,
 ): Promise<RefundRow> {
   const refund = await readTenderRefund(tx, id);
-  if (
-    refund.state !== "pending" ||
-    refund.method !== "card" ||
-    refund.manual ||
-    tenderRefundIsLive(db, id) ||
-    resolversOf(db).stopping
-  )
-    throw new AppError("tender.refund_not_stuck", { refundId: id });
+  if (!canResolve(db, refund)) throw new AppError("tender.refund_not_stuck", { refundId: id });
   return refund;
+}
+
+async function attestRefundIn(
+  tx: Transaction,
+  deps: TenderRefundDeps,
+  refund: RefundRow,
+  outcome: "completed" | "failed",
+  attestation: Attestation,
+) {
+  if (outcome === "completed" && refund.sentAt === null) {
+    if (refund.billPaymentId !== null)
+      throw new AppError("bill.attestation_contradicted", {
+        id: refund.id,
+        evidence: "never_sent",
+      });
+    throw new AppError("tender.attestation_contradicted", {
+      refundId: refund.id,
+      evidence: "never_sent",
+    });
+  }
+  return recordOutcomeIn(
+    tx,
+    deps,
+    refund.id,
+    { kind: "attested", outcome },
+    new AbortController().signal,
+    "stored",
+    attestation,
+  );
 }
 
 export async function attestTenderRefundIn(
@@ -244,17 +379,30 @@ export async function attestTenderRefundIn(
 ) {
   await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const refund = await readStuckTenderRefund(tx, deps.db, refundId);
-  if (outcome === "completed" && refund.sentAt === null)
-    throw new AppError("tender.attestation_contradicted", { refundId, evidence: "never_sent" });
-  return toTenderRefundView(
-    await recordOutcomeIn(
-      tx,
-      deps,
-      refundId,
-      { kind: "attested", outcome },
-      new AbortController().signal,
-      attestation,
-    ),
+  return toTenderRefundView(await attestRefundIn(tx, deps, refund, outcome, attestation));
+}
+
+export async function attestBillCardRefundIn(
+  tx: Transaction,
+  deps: TenderRefundDeps,
+  refundId: string,
+  outcome: "completed" | "failed",
+  attestation: Attestation,
+) {
+  await requireEconomicWrite(tx, deps.cfg, deps.admission);
+  const refund = await readBillRefund(tx, refundId);
+  if (!canResolve(deps.db, refund)) throw new AppError("bill.refund_not_stuck", { refundId });
+  return attestRefundIn(tx, deps, refund, outcome, attestation);
+}
+
+export function attestBillCardRefund(
+  deps: TenderRefundDeps,
+  refundId: string,
+  outcome: "completed" | "failed",
+  attestation: Attestation,
+) {
+  return withTransaction(deps.db, (tx) =>
+    attestBillCardRefundIn(tx, deps, refundId, outcome, attestation),
   );
 }
 
@@ -312,10 +460,9 @@ async function send(
   deps: TenderRefundDeps,
   provider: PaymentProvider,
   refund: RefundRow,
-  expired: () => boolean,
-  signal: AbortSignal,
-  refused?: (reason: RefundRefusalReason) => void,
+  resolution: Resolution,
 ): Promise<RefundRow> {
+  const { expired, signal } = resolution;
   signal.throwIfAborted();
   const payment = await capture(deps.db, refund);
   const refs =
@@ -369,7 +516,7 @@ async function send(
     answer.kind === "accepted"
       ? { kind: "lookup", lookup: await lookup(deps, provider, stamped, signal) }
       : { kind: "answer", answer, sendCount: stamped.sendCount };
-  const recorded = await recordOutcome(deps, refund.id, evidence, signal);
+  const recorded = await recordOutcome(deps, refund.id, evidence, resolution);
   if (
     stamped.state === "pending" &&
     stamped.sendCount === 1 &&
@@ -378,22 +525,21 @@ async function send(
     answer.documented &&
     answer.reason === "provider_balance_unavailable"
   ) {
-    refused?.(answer.reason);
+    resolution.refusalReason = answer.reason;
   }
   return recorded;
 }
 async function resolve(
   deps: TenderRefundDeps,
   refund: RefundRow,
-  resolver: "retry" | "manager" | "loop",
-  expired: () => boolean,
-  signal: AbortSignal,
-  refused?: (reason: RefundRefusalReason) => void,
+  resolver: RefundResolver,
+  resolution: Resolution,
 ): Promise<RefundRow> {
+  const { expired, signal } = resolution;
   signal.throwIfAborted();
   await withTransaction(deps.db, (tx) => requireEconomicWrite(tx, deps.cfg, deps.admission));
   if (refund.sentAt === null && resolver !== "retry")
-    return recordOutcome(deps, refund.id, { kind: "never_sent" }, signal);
+    return recordOutcome(deps, refund.id, { kind: "never_sent" }, resolution);
   const provider = await providerResult(signal, async () => {
     try {
       return await deps.refundProviderFor?.(refund.provider!);
@@ -402,12 +548,16 @@ async function resolve(
       return undefined;
     }
   });
-  if (provider === undefined || provider.provider !== refund.provider) return refund;
+  if (provider === undefined || provider.provider !== refund.provider) {
+    if (refund.sentAt !== null) resolution.lookup = { kind: "unreachable" };
+    return refund;
+  }
   if (refund.sentAt === null)
     return provider.sendRefund === undefined || expired()
       ? refund
-      : send(deps, provider, refund, expired, signal, refused);
+      : send(deps, provider, refund, resolution);
   const found = await lookup(deps, provider, refund, signal);
+  resolution.lookup = found;
   const window = provider.refundResendWindowMs ?? null;
   const age = deps.clock.now().instant.getTime() - Date.parse(refund.sentAt);
   if (
@@ -418,19 +568,33 @@ async function resolve(
     age >= 0 &&
     age < window &&
     !expired()
-  )
-    return send(deps, provider, refund, expired, signal);
-  return recordOutcome(deps, refund.id, { kind: "lookup", lookup: found }, signal);
+  ) {
+    resolution.resent = true;
+    return send(deps, provider, refund, resolution);
+  }
+  return recordOutcome(deps, refund.id, { kind: "lookup", lookup: found }, resolution);
 }
 
 export async function resumeTenderRefund(
   deps: TenderRefundDeps,
   refundId: string,
-  resolver: "retry" | "manager" | "loop",
+  resolver: RefundResolver,
 ) {
   const { refund, release } = await claimPendingRefund(deps, refundId, readTenderRefund);
   if (release === null) return toTenderRefundView(refund);
   return resolveClaimedTenderRefund(deps, refundId, resolver, release);
+}
+
+export async function resumeBillCardRefund(
+  deps: TenderRefundDeps,
+  refundId: string,
+  resolver: RefundResolver,
+  raisedBy: AlertOrigin = "stored",
+) {
+  const { refund, release } = await claimPendingRefund(deps, refundId, readBillRefund);
+  if (release === null) return { claimed: false as const, refund };
+  const result = await resolveClaimedRefund(deps, refundId, resolver, release, raisedBy);
+  return { claimed: true as const, ...result };
 }
 
 export async function recoverCardRefund(deps: TenderRefundDeps, refundId: string): Promise<void> {
@@ -446,14 +610,7 @@ function claimPendingRefund(
   return withTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const refund = await readRefund(tx, refundId);
-    const release =
-      refund.state === "pending" &&
-      refund.method === "card" &&
-      !refund.manual &&
-      !resolversOf(deps.db).stopping &&
-      !tenderRefundIsLive(deps.db, refundId)
-        ? claimTenderRefund(deps.db, refundId)
-        : null;
+    const release = canResolve(deps.db, refund) ? claimTenderRefund(deps.db, refundId) : null;
     return { refund, release };
   });
 }
@@ -461,7 +618,7 @@ function claimPendingRefund(
 export async function resolveClaimedTenderRefund(
   deps: TenderRefundDeps,
   refundId: string,
-  resolver: "retry" | "manager" | "loop",
+  resolver: RefundResolver,
   release: () => void,
 ) {
   const { refund, refusalReason } = await resolveClaimedRefund(deps, refundId, resolver, release);
@@ -474,30 +631,28 @@ export async function resolveClaimedTenderRefund(
 export async function resolveClaimedRefund(
   deps: TenderRefundDeps,
   refundId: string,
-  resolver: "retry" | "manager" | "loop",
+  resolver: RefundResolver,
   release: () => void,
+  raisedBy: AlertOrigin = "stored",
 ) {
   let expired = false;
-  let refusalReason: RefundRefusalReason | undefined;
   let timer: ReturnType<typeof setTimeout>;
   // A response deadline does not end the actual provider call or release its resolver ownership.
   const state = resolversOf(deps.db);
   const pending = state.pending;
   const controller = new AbortController();
+  const resolution: Resolution = {
+    signal: controller.signal,
+    expired: () => expired,
+    raisedBy,
+    lookup: null,
+    resent: false,
+  };
   const task: Promise<RefundRow> = read(deps.db, refundId)
     .then(async (refund) => {
       if (state.stopping) return refund;
       try {
-        return await resolve(
-          deps,
-          refund,
-          resolver,
-          () => expired,
-          controller.signal,
-          (reason) => {
-            refusalReason = reason;
-          },
-        );
+        return await resolve(deps, refund, resolver, resolution);
       } catch (error) {
         if (controller.signal.aborted) return refund;
         if (deps.stopSignal?.aborted && error === deps.stopSignal.reason) return refund;
@@ -519,9 +674,16 @@ export async function resolveClaimedRefund(
     return await Promise.race([
       task.then((row) => ({
         refund: row,
-        refusalReason: row.state === "failed" ? refusalReason : undefined,
+        lookup: resolution.lookup,
+        resent: resolution.resent,
+        refusalReason: row.state === "failed" ? resolution.refusalReason : undefined,
       })),
-      deadline.then((refund) => ({ refund, refusalReason: undefined })),
+      deadline.then((refund) => ({
+        refund,
+        lookup: null,
+        resent: false,
+        refusalReason: undefined,
+      })),
     ]);
   } finally {
     clearTimeout(timer!);

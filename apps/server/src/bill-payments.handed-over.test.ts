@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction, writeNodeMembership } from "@waitron/db";
-import { refundRefused } from "./bill-refunds.js";
+import { refundRefused } from "./tender-refund-sends.js";
 import {
   paymentRows,
   provisionBillVenue,

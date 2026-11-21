@@ -33,12 +33,8 @@ import { AppError, decimal, jobOrigin } from "@waitron/shared";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
-import {
-  refundFingerprint,
-  refundOutcome,
-  refundProvidersOf,
-  resumeCardRefund,
-} from "./bill-refunds.js";
+import { refundFingerprint, refundProvidersOf } from "./bill-refunds.js";
+import { refundOutcome, resumeBillCardRefund } from "./tender-refund-sends.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import type { Logger } from "./logger.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -935,7 +931,7 @@ describe("the provider refunds another refund of the payment already accounts fo
       await refund(billId, card.id, { applied: "4.00" });
       await refund(billId, card.id, { applied: "4.00" });
       const [, second] = await refundRowsOf(card.id);
-      const resumed = await resumeCardRefund(
+      const resumed = await resumeBillCardRefund(
         {
           db: venue.db,
           backend: venue.backend,
@@ -986,7 +982,7 @@ describe("the provider refunds another refund of the payment already accounts fo
       from payments where bill_payment_id = ${card.id}`);
 
     await withProvider({ lookups: { kind: "none" } }, () =>
-      resumeCardRefund(
+      resumeBillCardRefund(
         {
           db: venue.db,
           backend: venue.backend,
@@ -1060,7 +1056,7 @@ describe("the provider's refunds read before the first send", () => {
     try {
       await refund(billId, card.id, { applied: "4.00" });
       const [row] = await refundRowsOf(card.id);
-      const unseen = await resumeCardRefund(
+      const unseen = await resumeBillCardRefund(
         {
           db: venue.db,
           backend: venue.backend,
@@ -1075,7 +1071,7 @@ describe("the provider's refunds read before the first send", () => {
       );
       // SumUp stamps the refund our send made 30 s before our own clock's `sent_at`.
       events.push(refunded("ours", Date.now() - Date.parse(row!.sentAt!) + 30_000));
-      const seen = await resumeCardRefund(
+      const seen = await resumeBillCardRefund(
         {
           db: venue.db,
           backend: venue.backend,
@@ -1903,7 +1899,7 @@ describe("the provider a card refund goes back through", () => {
 
 describe("a refund the provider here cannot answer for", () => {
   const resume = (refundId: string, refundProviderFor?: RefundProviderFor) =>
-    resumeCardRefund(
+    resumeBillCardRefund(
       {
         db: venue.db,
         backend: venue.backend,
@@ -2024,7 +2020,7 @@ describe("a refund the provider here cannot answer for", () => {
         .returning(),
     );
 
-    const resumed = await resumeCardRefund(
+    const resumed = await resumeBillCardRefund(
       {
         db: venue.db,
         backend: venue.backend,
