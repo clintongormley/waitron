@@ -398,6 +398,18 @@ test("stays masked when the visibility option is removed and restored", async ()
   expect(input.type).toBe("password");
 });
 
+test("leaves the end slot empty when the opted-in field is a text or decimal input", async () => {
+  const { field, input } = await mountPassword();
+  field.type = "text";
+  await field.updateComplete;
+  expect(page.getByRole("button").query()).toBeNull();
+  field.type = "password";
+  field.decimalLocale = "en-GB";
+  await field.updateComplete;
+  expect(input.type).toBe("text");
+  expect(page.getByRole("button").query()).toBeNull();
+});
+
 test("gives the caller's end action precedence and masks the password when it returns", async () => {
   const { field, input } = await mountPassword('<button slot="end">Other action</button>');
   const other = page.getByRole("button", { name: "Other action" });
@@ -419,7 +431,6 @@ test.each(["light", "dark"])(
     host.setAttribute("data-theme", theme);
     host.style.setProperty("--wt-color-text", "rgb(24, 25, 26)");
     const show = page.getByRole("button", { name: "Show password", exact: true });
-    expect(show.query()).not.toBeNull();
     const eye = field.shadowRoot!.querySelector("svg path")!;
     expect(getComputedStyle(eye).stroke).toBe("rgb(24, 25, 26)");
     const button = show.element();
@@ -430,7 +441,8 @@ test.each(["light", "dark"])(
       input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight),
     ).toBeLessThanOrEqual(button.getBoundingClientRect().left);
     await show.click();
-    expect(getComputedStyle(eye).stroke).toBe("rgb(24, 25, 26)");
+    const slash = field.shadowRoot!.querySelector("svg path:last-child")!;
+    expect(getComputedStyle(slash).stroke).toBe("rgb(24, 25, 26)");
   },
 );
 

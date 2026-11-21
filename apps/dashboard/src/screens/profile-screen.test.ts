@@ -637,10 +637,9 @@ describe("your profile", () => {
     await click(el, "cancel");
     await closed;
     await click(el, "change-password");
-    expect(native("password").type).toBe("password");
-    expect(native("confirmPassword").type).toBe("password");
-    expect(native("password").value).toBe("");
-    expect(native("confirmPassword").value).toBe("");
+    for (const name of ["password", "confirmPassword"]) {
+      expect([native(name).type, native(name).value]).toEqual(["password", ""]);
+    }
   });
 
   it("validates matching new passwords before the shared confirmation", async () => {

@@ -144,13 +144,8 @@ export class WtInput extends LitElement {
     this.#typedValue = undefined;
   }
 
-  private async togglePassword(): Promise<void> {
-    if (this.disabled) return;
-    const input = this.shadowRoot!.querySelector("input")!;
-    const { selectionStart, selectionEnd, selectionDirection } = input;
+  private togglePassword(): void {
     this.visibility = this.visibility === "shown" ? "hidden" : "shown";
-    await this.updateComplete;
-    input.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? undefined);
   }
 
   /** Selects the whole value, so typing replaces it. Does nothing before the first render. */
@@ -171,7 +166,7 @@ export class WtInput extends LitElement {
     });
     const showLabel = this.label !== "" && !this.hideLabel;
     const passwordVisibility = this.visibilityText;
-    const revealed = passwordVisibility !== undefined && this.visibility === "shown";
+    const revealed = this.visibility === "shown";
     return html`
       <div class="row">
         <div

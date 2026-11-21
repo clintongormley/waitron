@@ -351,7 +351,6 @@ export async function verifyPackage(
       };
     });
     const field = single.locator("wt-input input");
-    await single.getByRole("button", { name: "Show password", exact: true }).waitFor();
     assert.equal(await field.getAttribute("type"), "password");
     await single.getByRole("button", { name: "Show password", exact: true }).click();
     assert.equal(await field.getAttribute("type"), "text");
