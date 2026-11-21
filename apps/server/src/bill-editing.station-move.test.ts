@@ -50,7 +50,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function save(p: Fixture, personId = venue.operatorId) {
   const expectedEdit = await edit(p.tabId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, personId, {
+    saveDraft(tx, p.partyId, personId, {
       billId: p.tabId,
       expectedEdit,
       draftId: expectedEdit.draftId,
@@ -270,7 +270,7 @@ describe("station movement checks bill editing authority", () => {
       submissionId = randomUUID();
     const result = await move(p, owned.edit, { submissionId });
     await inTx(venue, (tx) =>
-      takeOverDraft(tx, venue.cfg, p.partyId, owned.draft!.id, venue.adminId, {
+      takeOverDraft(tx, p.partyId, owned.draft!.id, venue.adminId, {
         revision: owned.draft!.revision,
         expectedEdit: owned.edit,
         submissionId: randomUUID(),

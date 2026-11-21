@@ -158,7 +158,7 @@ describe("permanent course deletion", () => {
         const { partyId, tabId } = await seat(v, await v.table("Reference"));
         if (reference === "draft") {
           await inTx(v, (tx) =>
-            saveDraft(tx, v.cfg, partyId, OPERATOR, {
+            saveDraft(tx, partyId, OPERATOR, {
               billId: tabId,
               draftId: null,
               revision: 0,

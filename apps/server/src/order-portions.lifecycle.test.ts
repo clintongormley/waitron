@@ -313,7 +313,7 @@ describe("A803 portion lifecycle: moves", () => {
     // A save after the request read the source bill makes its expectation stale.
     const expectedEdit = await edit(p.billId);
     await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+      saveDraft(tx, p.partyId, venue.adminId, {
         billId: p.billId,
         draftId: expectedEdit.draftId,
         revision: expectedEdit.draftRevision ?? 0,
@@ -536,7 +536,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
       };
     });
     const saved = await inTx(venue, async (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+      saveDraft(tx, p.partyId, venue.adminId, {
         billId: p.billId,
         draftId: null,
         revision: 0,
@@ -789,7 +789,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     const stale = await edit(p.billId);
     const current = await edit(p.billId);
     await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+      saveDraft(tx, p.partyId, venue.adminId, {
         billId: p.billId,
         draftId: current.draftId,
         revision: current.draftRevision ?? 0,

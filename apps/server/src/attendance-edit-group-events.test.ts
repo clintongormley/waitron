@@ -55,7 +55,7 @@ async function prepare(action: Action) {
   const party = await seatedWith(v);
   if (action === "submit-draft") {
     const draft = await run((tx) =>
-      saveDraft(tx, v.cfg, party.partyId, v.operatorId, {
+      saveDraft(tx, party.partyId, v.operatorId, {
         billId: party.tabId,
         draftId: null,
         revision: 0,

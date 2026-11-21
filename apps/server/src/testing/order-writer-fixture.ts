@@ -49,7 +49,6 @@ export async function sendLines(
 }
 export async function setLineCourse(
   tx: Transaction,
-  cfg: Parameters<typeof course>[1],
   id: string,
   lineNo: number,
   courseId: string | null,
@@ -57,7 +56,6 @@ export async function setLineCourse(
 ) {
   return course(
     tx,
-    cfg,
     id,
     lineNo,
     courseId,

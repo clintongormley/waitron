@@ -59,7 +59,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function save(p: Fixture, operatorId = venue.staffId) {
   const expectedEdit = await edit(p.billId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, operatorId, {
+    saveDraft(tx, p.partyId, operatorId, {
       billId: p.billId,
       expectedEdit,
       draftId: expectedEdit.draftId,
@@ -266,7 +266,7 @@ for (const op of ["apply", "cancel", "cancel-keep"] as const)
       result = await run(p, op, ask);
     const current = await edit(p.billId);
     await inTx(venue, (tx) =>
-      takeOverDraft(tx, venue.cfg, p.partyId, current.draftId!, venue.managerId, {
+      takeOverDraft(tx, p.partyId, current.draftId!, venue.managerId, {
         revision: current.draftRevision!,
         expectedEdit: current,
         submissionId: randomUUID(),

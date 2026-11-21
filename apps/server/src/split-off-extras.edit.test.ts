@@ -310,7 +310,7 @@ describe("editing split-off extras", () => {
         const request =
           action === "send"
             ? sendLines(tx, venue.cfg, venue.party.tabId, [extraNo])
-            : setLineCourse(tx, venue.cfg, venue.party.tabId, extraNo, null);
+            : setLineCourse(tx, venue.party.tabId, extraNo, null);
         await expect(request).rejects.toMatchObject({
           code: "management.request_invalid",
           params: { field: "lineNo" },

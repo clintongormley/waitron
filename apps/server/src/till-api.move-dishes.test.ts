@@ -374,7 +374,7 @@ describe("A803 move dishes route:", () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     const [, beerLineId] = lineIdsOf(tabId);
     await inTx(venue, (tx) =>
-      saveDraftForTest(tx, venue.cfg, partyId, venue.adminId, {
+      saveDraftForTest(tx, partyId, venue.adminId, {
         billId: tabId,
         draftId: null,
         revision: 0,

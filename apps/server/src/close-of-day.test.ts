@@ -601,7 +601,7 @@ describe("issueBillAtClose", () => {
       const party = await seatedWith(venue, "Red wine bottle");
       await insertPayment(party.tabId, "received", 3000);
       await inTx(venue, (tx) =>
-        saveDraft(tx, venue.cfg, party.partyId, venue.operatorId, {
+        saveDraft(tx, party.partyId, venue.operatorId, {
           billId: party.tabId,
           draftId: null,
           revision: 0,

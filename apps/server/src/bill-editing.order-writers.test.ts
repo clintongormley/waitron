@@ -46,7 +46,7 @@ const edit = (id: string) => inTx(venue, (tx) => readBillEditState(tx, id));
 async function save(p: Fixture, operatorId = venue.operatorId) {
   const expectedEdit = await edit(p.id);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, operatorId, {
+    saveDraft(tx, p.partyId, operatorId, {
       billId: p.id,
       expectedEdit,
       draftId: expectedEdit.draftId,
@@ -116,7 +116,7 @@ async function run(
           { ...authority, admission: testTradingAdmission() },
         );
       case "course":
-        return setLineCourse(tx, venue.cfg, p.id, p.line.lineNo, null, authority);
+        return setLineCourse(tx, p.id, p.line.lineNo, null, authority);
       case "send":
         return sendLines(tx, venue.cfg, p.id, [], authority);
     }

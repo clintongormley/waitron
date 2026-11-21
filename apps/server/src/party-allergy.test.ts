@@ -83,7 +83,7 @@ function fresh(overrides: Partial<FreshDraftLineInput> = {}): FreshDraftLineInpu
 
 async function draft(p: { partyId: string; tabId: string }) {
   return inTx(v, (tx) =>
-    saveDraftForTest(tx, v.cfg, p.partyId, OPERATOR, {
+    saveDraftForTest(tx, p.partyId, OPERATOR, {
       billId: p.tabId,
       draftId: null,
       revision: 0,
@@ -118,8 +118,8 @@ async function held(p: { partyId: string; tabId: string }, count = 1) {
 function view(partyId: string, target?: AllergySendTarget) {
   return inTx(v, (tx) =>
     target === undefined
-      ? readPartyAllergyView(tx, v.cfg, partyId)
-      : readAllergySendView(tx, v.cfg, partyId, target),
+      ? readPartyAllergyView(tx, partyId)
+      : readAllergySendView(tx, partyId, target),
   );
 }
 
@@ -349,7 +349,7 @@ describe("A669 candidate sets", () => {
       ],
     });
     const d = await inTx(v, (tx) =>
-      saveDraftForTest(tx, v.cfg, p.partyId, OPERATOR, {
+      saveDraftForTest(tx, p.partyId, OPERATOR, {
         billId: p.tabId,
         draftId: null,
         revision: 0,

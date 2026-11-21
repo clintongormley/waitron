@@ -294,7 +294,7 @@ describe("switching an order's way of selling", () => {
   it("refuses a table bill another waiter is editing", async () => {
     const { partyId, tabId } = await unsentTab([{ productId: menu.cola }]);
     await inTx(venue, (tx) =>
-      saveDraftForTest(tx, venue.cfg, partyId, venue.adminId, {
+      saveDraftForTest(tx, partyId, venue.adminId, {
         billId: tabId,
         draftId: null,
         revision: 0,

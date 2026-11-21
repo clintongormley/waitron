@@ -69,7 +69,7 @@ async function edit(billId: string) {
 async function save(p: Fixture, billId: string, operatorId = venue.operatorId) {
   const expectedEdit = await edit(billId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, operatorId, {
+    saveDraft(tx, p.partyId, operatorId, {
       billId,
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,

@@ -123,7 +123,7 @@ async function portionLines(p: Sent) {
 }
 async function edit(p: Sent, remove = false) {
   await inTx(v, async (tx) => {
-    const view = await readPartyAllergyView(tx, v.cfg, p.partyId);
+    const view = await readPartyAllergyView(tx, p.partyId);
     const allergy: AllergyPatch = remove
       ? { party: { answer: "none", guests: [] }, ticks: [] }
       : {

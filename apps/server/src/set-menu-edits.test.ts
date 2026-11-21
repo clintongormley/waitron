@@ -248,7 +248,7 @@ it("leaves the whole bill as it was if an added dish has no available place", as
 it("keeps the set-menu classification when the kitchen course changes", async () => {
   const tab = await bill();
   await inTx(venue, async (tx) =>
-    setLineCourse(tx, venue.cfg, tab.tabId, tab.lineNo, null, {
+    setLineCourse(tx, tab.tabId, tab.lineNo, null, {
       operatorId: venue.operator.personId,
       expectedEdit: await readBillEditState(tx, tab.tabId),
     }),

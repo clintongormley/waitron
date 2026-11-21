@@ -259,7 +259,7 @@ function deps() {
 async function unsent(billId: string, ownerId = venue.operatorId, quantity = "2") {
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, bill!.partyId!, ownerId, {
+    saveDraft(tx, bill!.partyId!, ownerId, {
       billId,
       draftId: null,
       revision: 0,

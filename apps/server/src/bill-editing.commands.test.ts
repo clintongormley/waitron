@@ -71,7 +71,7 @@ function save(
   operatorId = venue.operatorId,
 ) {
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, partyId, operatorId, {
+    saveDraft(tx, partyId, operatorId, {
       billId: expectedEdit.billId,
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,
@@ -88,7 +88,7 @@ function take(
   submissionId = randomUUID(),
 ) {
   return inTx(venue, (tx) =>
-    takeOverDraft(tx, venue.cfg, partyId, expectedEdit.draftId!, operatorId, {
+    takeOverDraft(tx, partyId, expectedEdit.draftId!, operatorId, {
       revision: expectedEdit.draftRevision!,
       expectedEdit,
       submissionId,
@@ -370,7 +370,7 @@ describe("bill editor in real save and takeover commands", () => {
       const p = await fixture();
       const before = await rows();
       const error = await inTx(venue, (tx) =>
-        saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+        saveDraft(tx, p.partyId, venue.operatorId, {
           billId: p.tabId,
           draftId: null,
           revision: 0,

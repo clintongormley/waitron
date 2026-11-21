@@ -75,7 +75,7 @@ async function command(p: Fixture) {
 async function save(p: Fixture, billId = p.tabId, operatorId = venue.operatorId) {
   const expectedEdit = await edit(billId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, operatorId, {
+    saveDraft(tx, p.partyId, operatorId, {
       billId,
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,
@@ -200,7 +200,7 @@ for (const operation of operations)
         args = await command(p);
       const result = await run(p, operation, own.edit, args);
       const moved = await inTx(venue, (tx) =>
-        takeOverDraft(tx, venue.cfg, p.partyId, own.draft!.id, venue.adminId, {
+        takeOverDraft(tx, p.partyId, own.draft!.id, venue.adminId, {
           revision: own.draft!.revision,
           expectedEdit: own.edit,
           submissionId: randomUUID(),

@@ -43,7 +43,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function save(p: Fixture, operatorId = venue.operatorId) {
   const current = await edit(p.id);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId!, operatorId, {
+    saveDraft(tx, p.partyId!, operatorId, {
       billId: p.id,
       expectedEdit: current,
       draftId: current.draftId,

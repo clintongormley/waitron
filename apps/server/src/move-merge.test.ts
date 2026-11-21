@@ -1264,7 +1264,7 @@ describe("A803 split: what the kitchen is told", () => {
     await order(v, tabId, "Burger");
     const burger = await lineId(v, tabId, "Burger");
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+      saveDraft(tx, partyId, OPERATOR, {
         billId: tabId,
         draftId: null,
         revision: 0,
@@ -2223,7 +2223,7 @@ describe("A803 split: what the kitchen is told", () => {
       const table = await bothSent();
       const { v, partyId, tabId, leave, picked } = table;
       const draft = await inTx(v, (tx) =>
-        saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        saveDraft(tx, partyId, OPERATOR, {
           billId: tabId,
           draftId: null,
           revision: 0,

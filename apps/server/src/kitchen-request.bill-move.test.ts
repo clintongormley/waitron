@@ -184,7 +184,7 @@ describe("A773 requested lifecycle: bill move", () => {
       const before = await itemOf(tx, burger!.id);
 
       await expect(
-        setLineCourse(tx, venue.cfg, venue.party.tabId, burger!.lineNo, desserts.id),
+        setLineCourse(tx, venue.party.tabId, burger!.lineNo, desserts.id),
       ).rejects.toMatchObject({
         code: "ticket.already_fired",
         params: { workingOrderId: venue.party.tabId },
@@ -210,7 +210,7 @@ describe("A773 requested lifecycle: bill move", () => {
       const [held] = await linesOf(tx, venue.party.tabId);
       expect(await itemOf(tx, held!.id)).toMatchObject({ requestedAt: null, firedAt: null });
 
-      await setLineCourse(tx, venue.cfg, venue.party.tabId, held!.lineNo, desserts.id);
+      await setLineCourse(tx, venue.party.tabId, held!.lineNo, desserts.id);
 
       expect((await linesOf(tx, venue.party.tabId))[0]!.courseId).toBe(desserts.id);
       expect((await itemOf(tx, held!.id)).courseId).toBe(desserts.id);

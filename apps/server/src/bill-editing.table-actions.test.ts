@@ -79,7 +79,7 @@ async function otherBill(partyId: string) {
 }
 async function save(partyId: string, billId: string, operatorId = venue.operatorId) {
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, partyId, operatorId, {
+    saveDraft(tx, partyId, operatorId, {
       billId,
       draftId: null,
       revision: 0,
@@ -370,7 +370,7 @@ describe("table composition compares every affected bill before moving anything"
       await save(into.partyId, into.tabId);
       const old = await edits(from.partyId, into.partyId);
       await inTx(venue, (tx) =>
-        takeOverDraft(tx, venue.cfg, from.partyId, saved.draft!.id, venue.operatorId, {
+        takeOverDraft(tx, from.partyId, saved.draft!.id, venue.operatorId, {
           revision: saved.draft!.revision,
           expectedEdit: saved.edit,
           submissionId: randomUUID(),
@@ -416,7 +416,7 @@ describe("table composition compares every affected bill before moving anything"
       await refused(
         () =>
           inTx(venue, (tx) =>
-            saveDraft(tx, venue.cfg, into.partyId, venue.adminId, {
+            saveDraft(tx, into.partyId, venue.adminId, {
               billId: from.tabId,
               draftId: saved.draft!.id,
               revision: saved.draft!.revision,
@@ -889,7 +889,7 @@ describe("A803 race replay: Split a table against another command, from one read
       const anna = await seatedWith(venue, "Octopus");
       const table = await joinFree(anna.partyId);
       const saved = await inTx(venue, async (tx) =>
-        saveDraft(tx, venue.cfg, anna.partyId, venue.adminId, {
+        saveDraft(tx, anna.partyId, venue.adminId, {
           billId: anna.tabId,
           draftId: null,
           revision: 0,
@@ -911,9 +911,7 @@ describe("A803 race replay: Split a table against another command, from one read
           venue.adminId,
         ),
         takeOver: () =>
-          inTx(venue, (tx) =>
-            takeOverDraft(tx, venue.cfg, anna.partyId, draftId, venue.operatorId, asked),
-          ),
+          inTx(venue, (tx) => takeOverDraft(tx, anna.partyId, draftId, venue.operatorId, asked)),
       };
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });

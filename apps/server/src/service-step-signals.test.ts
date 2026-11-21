@@ -170,7 +170,7 @@ function draftLine(v: PartyVenue, name: string) {
 
 async function openDraft(v: PartyVenue, partyId: string, billId: string): Promise<void> {
   await inTx(v, (tx) =>
-    saveDraft(tx, v.cfg, partyId, OPERATOR, {
+    saveDraft(tx, partyId, OPERATOR, {
       billId,
       draftId: null,
       revision: 0,

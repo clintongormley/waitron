@@ -3033,8 +3033,7 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
           state: "queued",
         },
       ]);
-      const edit = () =>
-        withTransaction(suite.db, (tx) => setLineCourse(tx, cfg, tabId, 1, other.id));
+      const edit = () => withTransaction(suite.db, (tx) => setLineCourse(tx, tabId, 1, other.id));
       const fire = () => withTransaction(suite.db, (tx) => sendLines(tx, cfg, tabId, [1]));
       const operations = sequence === "edit first" ? [edit, fire] : [fire, edit];
       const results = await Promise.allSettled(operations.map((operation) => operation()));

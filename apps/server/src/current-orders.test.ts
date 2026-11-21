@@ -1840,20 +1840,14 @@ describe("where each submission's groups go (spec §3)", () => {
     courseId: null,
     noMerge: false,
   });
-  const save = (
-    v: Venue,
-    partyId: string,
-    operatorId: string,
-    lines: DraftLineInput[],
-    billId?: string,
-  ) =>
+  const save = (partyId: string, operatorId: string, lines: DraftLineInput[], billId?: string) =>
     inTx(async (tx) => {
       const [bill] = await tx
         .select({ id: workingOrders.id })
         .from(workingOrders)
         .where(eq(workingOrders.partyId, partyId))
         .limit(1);
-      return saveDraft(tx, v.cfg, partyId, operatorId, {
+      return saveDraft(tx, partyId, operatorId, {
         billId: billId ?? bill!.id,
         draftId: null,
         revision: 0,
@@ -1888,7 +1882,7 @@ describe("where each submission's groups go (spec §3)", () => {
   it("numbers a draft's partial sends, and drafts sent after them, in the order they were sent", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
+    const alex = await save(s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
     const miaBillId = await inTx(async (tx) => {
       const bill = await seedWorkingOrder(tx, {
         source: "dashboard",
@@ -1898,13 +1892,13 @@ describe("where each submission's groups go (spec §3)", () => {
       await VENUE_SERVICE.recordOrderContext(tx, bill!.id, v.zoneId);
       return bill!.id;
     });
-    const mia = await save(v, s.partyId, MIA, [item(v, "water")], miaBillId);
+    const mia = await save(s.partyId, MIA, [item(v, "water")], miaBillId);
     const { draft: rest } = await submit(v, s.partyId, alex, [
       { lineIds: [alex.lines[0]!.id], release: "fire" },
     ]);
     await submit(v, s.partyId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]);
     await submit(v, s.partyId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]);
-    const dessert = await save(v, s.partyId, ALEX, [item(v, "flan")]);
+    const dessert = await save(s.partyId, ALEX, [item(v, "flan")]);
     await submit(v, s.partyId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]);
 
     expect(await placed(s.partyId)).toEqual([

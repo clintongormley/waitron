@@ -634,7 +634,7 @@ const adminId = () =>
 async function saveCakeDraft(partyId: string, billId: string, operatorId: string) {
   const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));
   return inTx(v, (tx) =>
-    saveDraft(tx, v.cfg, partyId, operatorId, {
+    saveDraft(tx, partyId, operatorId, {
       billId,
       draftId: expectedEdit.draftId,
       revision: expectedEdit.draftRevision ?? 0,

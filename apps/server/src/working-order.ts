@@ -3707,7 +3707,6 @@ export function quantityOfLine(
  */
 export async function setLineCourse(
   tx: Transaction,
-  _cfg: TradingContext,
   tabId: string,
   lineNo: number,
   courseId: string | null,

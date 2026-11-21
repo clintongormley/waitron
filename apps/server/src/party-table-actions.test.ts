@@ -1204,7 +1204,7 @@ describe("drafts when parties combine", () => {
       [lewis.partyId, lewis.tabId, "Water"],
     ] as const) {
       await act((tx) =>
-        saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        saveDraft(tx, partyId, OPERATOR, {
           billId,
           draftId: null,
           revision: 0,
@@ -2533,7 +2533,7 @@ describe("A803 split", () => {
       [b3, "Caña"],
     ] as const) {
       await act((tx) =>
-        saveDraft(tx, v.cfg, anna.partyId, OPERATOR, {
+        saveDraft(tx, anna.partyId, OPERATOR, {
           billId,
           draftId: null,
           revision: 0,
@@ -3182,7 +3182,7 @@ describe("A803 split", () => {
         expect(bare).toMatchObject(refusal);
 
         await act((tx) =>
-          saveDraft(tx, v.cfg, anna.partyId, OPERATOR, {
+          saveDraft(tx, anna.partyId, OPERATOR, {
             billId: b1,
             draftId: null,
             revision: 0,

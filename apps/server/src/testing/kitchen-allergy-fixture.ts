@@ -182,7 +182,7 @@ export async function kitchenCommand(
   }
   if (caller === "draft") {
     const draft = await inTx(v, (tx) =>
-      saveDraftForTest(tx, v.cfg, party.partyId, OPERATOR, {
+      saveDraftForTest(tx, party.partyId, OPERATOR, {
         billId: party.tabId,
         draftId: null,
         revision: 0,

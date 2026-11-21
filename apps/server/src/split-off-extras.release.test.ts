@@ -184,7 +184,7 @@ describe("releasing split-off extras", () => {
       expect(
         (await rows(tx, venue.party.tabId)).items.every((item) => item.courseId === first),
       ).toBe(true);
-      await setLineCourse(tx, venue.cfg, venue.party.tabId, dish.lineNo, second.id);
+      await setLineCourse(tx, venue.party.tabId, dish.lineNo, second.id);
       expect((await rows(tx, venue.party.tabId)).items.map((item) => item.courseId)).toEqual([
         second.id,
         second.id,
@@ -201,7 +201,7 @@ describe("releasing split-off extras", () => {
         (line) => line.parentLineId === null,
       )!;
       await expect(
-        setLineCourse(tx, venue.cfg, venue.party.tabId, dish.lineNo, later.id),
+        setLineCourse(tx, venue.party.tabId, dish.lineNo, later.id),
       ).rejects.toMatchObject({ code: "ticket.already_fired" });
       expect((await rows(tx, venue.party.tabId)).items[0]?.courseId).toBeNull();
     });

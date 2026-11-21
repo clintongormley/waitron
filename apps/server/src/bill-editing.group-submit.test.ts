@@ -68,7 +68,7 @@ async function command(p: Fixture, billId = p.tabId) {
 async function save(p: Fixture, id = p.tabId, operatorId = venue.operatorId) {
   const expectedEdit = await edit(id);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, operatorId, {
+    saveDraft(tx, p.partyId, operatorId, {
       billId: id,
       expectedEdit,
       draftId: expectedEdit.draftId,
@@ -217,7 +217,7 @@ describe("submitted groups retain original ownership observations", () => {
       ask = await command(p);
     const result = await inTx(venue, (tx) => submitGroups(tx, venue.cfg, p.partyId, ask));
     const taken = await inTx(venue, (tx) =>
-      takeOverDraft(tx, venue.cfg, p.partyId, owned.draft!.id, venue.adminId, {
+      takeOverDraft(tx, p.partyId, owned.draft!.id, venue.adminId, {
         revision: owned.draft!.revision,
         expectedEdit: owned.edit,
         submissionId: randomUUID(),

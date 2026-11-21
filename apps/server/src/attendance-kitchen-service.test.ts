@@ -110,7 +110,7 @@ async function prepare(action: Action) {
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, party.tabId));
   await withTransaction(suite.db, async (tx) => {
-    await setLineCourse(tx, v.cfg, party.tabId, 1, courseId);
+    await setLineCourse(tx, party.tabId, 1, courseId);
     if (action === "group-fire")
       await tx
         .update(orderGroups)
