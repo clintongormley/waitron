@@ -248,6 +248,32 @@ describe("setup-connect-screen: Start again", () => {
   });
 });
 
+describe("setup-connect-screen: the main box's join limits", () => {
+  it("fills in the limits the main box sends, in Spanish too", async () => {
+    setLocale("es-ES");
+    const api = stubApi();
+    api.startJoin
+      .mockRejectedValueOnce({
+        code: "mirror.join_full",
+        params: { limit: "listed", retryAt: "2026-11-21T10:15:00.000Z", max: 4, minutes: 20 },
+      })
+      .mockRejectedValueOnce({
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: "2026-11-21T10:15:00.000Z", max: 7, minutes: 20 },
+      });
+    const { el } = await mount(api);
+    await type(el, MAIN);
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toMatch(/^Ya hay otros 4 servidores pidiendo unirse/),
+    );
+    await press(el, "join");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toMatch(/ha recibido 7 solicitudes .* los últimos 20 minutos/),
+    );
+  });
+});
+
 describe("setup-connect-screen: Start again while the main box approves", () => {
   it.each([
     [
@@ -465,13 +491,19 @@ describe("setup-connect-screen: the words of every refusal of Join", () => {
       JOIN_ONLY,
     ],
     [
-      { code: "mirror.join_full", params: { limit: "listed", retryAt: RETRY_AT } },
-      "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+      {
+        code: "mirror.join_full",
+        params: { limit: "listed", retryAt: RETRY_AT, max: 4, minutes: 20 },
+      },
+      "The main box already has 4 other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
       JOIN_ONLY,
     ],
     [
-      { code: "mirror.join_full", params: { limit: "recent", retryAt: RETRY_AT } },
-      `The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until ${localTime(RETRY_AT)}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.`,
+      {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt: RETRY_AT, max: 7, minutes: 20 },
+      },
+      `The main box has had 7 requests to join in the last 20 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until ${localTime(RETRY_AT)}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.`,
       JOIN_ONLY,
     ],
     [

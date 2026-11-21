@@ -1566,8 +1566,11 @@ declare module "@waitron/shared" {
      * box also uses it when the main box's reveal or approved answer does not check.
      */
     "mirror.join_invalid": Record<string, never>;
-    /** A join limit was reached; `retryAt` is when it frees, as an ISO time on the main box's clock. */
-    "mirror.join_full": { limit: JoinLimit; retryAt: string };
+    /**
+     * A join limit was reached; `retryAt` is when it frees, as an ISO time on the main box's clock;
+     * `max` and `minutes` are the limit itself (`JoinFull` in `box-join-requests.ts`).
+     */
+    "mirror.join_full": { limit: JoinLimit; retryAt: string; max: number; minutes: number };
     /** A reveal's code equals one a listed request shows; the request ended and no nonce was sent. */
     "mirror.join_code_taken": Record<string, never>;
     /** The main box holds no such join request: unknown, expired, ended, or the main box restarted. */

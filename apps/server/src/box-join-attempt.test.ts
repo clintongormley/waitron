@@ -525,8 +525,14 @@ describe("the new box's join attempt", () => {
     [
       "a limit and when it frees",
       429,
-      refusal("mirror.join_full", { limit: "address", retryAt: T2 }),
-      { code: "mirror.join_full", params: { limit: "address", retryAt: T2 } },
+      refusal("mirror.join_full", { limit: "address", retryAt: T2, max: 5, minutes: 1 }),
+      { code: "mirror.join_full", params: { limit: "address", retryAt: T2, max: 5, minutes: 1 } },
+    ],
+    [
+      "no limit without its numbers",
+      429,
+      refusal("mirror.join_full", { limit: "address", retryAt: T2, max: "5", minutes: 1 }),
+      failed,
     ],
     [
       "no limit it does not know",

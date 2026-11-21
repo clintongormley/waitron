@@ -89,7 +89,13 @@ describe("hello", () => {
     const { hello, reveal, advance } = setup();
     hello("10.0.0.1");
     advance(1_000);
-    expect(hello("10.0.0.1")).toEqual({ refused: "full", limit: "address", retryAt: iso(30_000) });
+    expect(hello("10.0.0.1")).toEqual({
+      refused: "full",
+      limit: "address",
+      retryAt: iso(30_000),
+      max: 5,
+      minutes: 1,
+    });
     reveal("req-1", "10.0.0.1");
     expect(hello("10.0.0.1")).toMatchObject({ requestId: "req-2" });
   });
@@ -101,7 +107,13 @@ describe("hello", () => {
       store.cancel({ requestId: `req-${n}`, seq: 1 });
       advance(1_000);
     }
-    expect(hello("10.0.0.1")).toEqual({ refused: "full", limit: "address", retryAt: iso(60_000) });
+    expect(hello("10.0.0.1")).toEqual({
+      refused: "full",
+      limit: "address",
+      retryAt: iso(60_000),
+      max: 5,
+      minutes: 1,
+    });
     advance(55_000);
     expect(hello("10.0.0.1")).toMatchObject({ requestId: "req-6" });
   });
@@ -110,7 +122,13 @@ describe("hello", () => {
     const { hello, advance } = setup();
     for (let n = 1; n <= 20; n++) hello(`10.0.0.${n}`);
     advance(10_000);
-    expect(hello("10.0.1.1")).toEqual({ refused: "full", limit: "network", retryAt: iso(60_000) });
+    expect(hello("10.0.1.1")).toEqual({
+      refused: "full",
+      limit: "network",
+      retryAt: iso(60_000),
+      max: 20,
+      minutes: 1,
+    });
     advance(50_000);
     expect(hello("10.0.1.1")).toMatchObject({ requestId: "req-21" });
   });
@@ -274,6 +292,8 @@ describe("reveal", () => {
       refused: "full",
       limit: "listed",
       retryAt: iso(15 * 60_000),
+      max: 3,
+      minutes: 15,
     });
     expect(revealFrom("10.0.0.1").revealed).toHaveProperty("mainNonce");
     expect(store.poll({ requestId: "req-1", seq: 2, at: iso(0) })).toEqual({
@@ -304,6 +324,8 @@ describe("reveal", () => {
       refused: "full",
       limit: "recent",
       retryAt: iso(29_000 + 15 * 60_000),
+      max: 6,
+      minutes: 15,
     });
   });
 

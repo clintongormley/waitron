@@ -308,12 +308,15 @@ describe("the setup page's join routes", () => {
     expect(await refusal(await start())).toEqual({ status: 409, code: "mirror.join_waiting" });
     const retryAt = "2026-11-21T10:01:00.000Z";
     fake.attempt.start.mockRejectedValueOnce(
-      new AppError("mirror.join_full", { limit: "recent", retryAt }),
+      new AppError("mirror.join_full", { limit: "recent", retryAt, max: 6, minutes: 15 }),
     );
     const full = await start();
     expect(full.status).toBe(429);
     expect(await full.json()).toEqual({
-      error: { code: "mirror.join_full", params: { limit: "recent", retryAt } },
+      error: {
+        code: "mirror.join_full",
+        params: { limit: "recent", retryAt, max: 6, minutes: 15 },
+      },
     });
     expect(await read()).toEqual({ state: "none" });
   });

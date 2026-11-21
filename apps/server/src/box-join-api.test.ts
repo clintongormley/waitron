@@ -285,7 +285,7 @@ describe("the main box's box-to-box join routes", () => {
     async (limit, at) => {
       const retryAt = "2026-11-21T10:15:00.000Z";
       const real = createBoxJoinRequests();
-      const refusal = { refused: "full" as const, limit, retryAt };
+      const refusal = { refused: "full" as const, limit, retryAt, max: 4, minutes: 20 };
       mount({
         ...real,
         ...(at === "hello" ? { admitHello: () => refusal } : { reveal: () => refusal }),
@@ -296,7 +296,9 @@ describe("the main box's box-to-box join routes", () => {
           ? await post("hello", helloBody(box), box.address)
           : await post("reveal", revealBody(box, (await hello(box)).requestId), box.address);
       expect(response.status).toBe(429);
-      expect(await response.json()).toEqual(err("mirror.join_full", { limit, retryAt }));
+      expect(await response.json()).toEqual(
+        err("mirror.join_full", { limit, retryAt, max: 4, minutes: 20 }),
+      );
     },
   );
 

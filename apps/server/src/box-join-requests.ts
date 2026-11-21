@@ -41,7 +41,21 @@ export const JOIN_END_REASONS = [
 ] as const;
 export type JoinEndReason = (typeof JOIN_END_REASONS)[number];
 
-export type JoinFull = { refused: "full"; limit: JoinLimit; retryAt: string };
+/** `max` requests in `minutes`; for `listed`, `max` listed at once, each for up to `minutes`. */
+export type JoinFull = {
+  refused: "full";
+  limit: JoinLimit;
+  retryAt: string;
+  max: number;
+  minutes: number;
+};
+
+const LIMIT_TERMS: Record<JoinLimit, { max: number; minutes: number }> = {
+  address: { max: HELLOS_PER_ADDRESS, minutes: HELLO_WINDOW_MS / MINUTE },
+  network: { max: HELLOS_IN_TOTAL, minutes: HELLO_WINDOW_MS / MINUTE },
+  listed: { max: LISTED_MAX, minutes: JOIN_REQUEST_TTL_MS / MINUTE },
+  recent: { max: REVEALS_MAX, minutes: REVEAL_WINDOW_MS / MINUTE },
+};
 export type JoinNotFound = { refused: "not_found" };
 export type JoinInvalid = { refused: "invalid" };
 
@@ -153,6 +167,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     refused: "full",
     limit,
     retryAt: wallAt(at),
+    ...LIMIT_TERMS[limit],
   });
   const isListed = (r: JoinRequest) => r.phase === "waiting" || r.phase === "building";
   const listedRequests = () => [...requests.values()].filter(isListed);

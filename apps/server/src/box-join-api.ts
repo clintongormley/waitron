@@ -160,7 +160,8 @@ function listedSource(c: Context, addresses: readonly string[]): string {
 }
 
 function full(refusal: JoinFull): AppError {
-  return new AppError("mirror.join_full", { limit: refusal.limit, retryAt: refusal.retryAt });
+  const { limit, retryAt, max, minutes } = refusal;
+  return new AppError("mirror.join_full", { limit, retryAt, max, minutes });
 }
 
 function endedRefusal(reason: JoinEndReason): AppError {

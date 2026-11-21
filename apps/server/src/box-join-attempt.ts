@@ -134,10 +134,20 @@ function refusalOf(text: string): AppError {
   if (code === "mirror.clocks_apart" && isIsoTime(params.primaryAt) && isIsoTime(params.standbyAt))
     return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
   const limit = JOIN_LIMITS.find((l) => l === params.limit);
-  if (code === "mirror.join_full" && limit !== undefined && isIsoTime(params.retryAt))
-    return new AppError(code, { limit, retryAt: params.retryAt });
+  const { max, minutes } = params;
+  if (
+    code === "mirror.join_full" &&
+    limit !== undefined &&
+    isIsoTime(params.retryAt) &&
+    isCount(max) &&
+    isCount(minutes)
+  )
+    return new AppError(code, { limit, retryAt: params.retryAt, max, minutes });
   return fetchFailed();
 }
+
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
 function slot(ms: number): { ended: Promise<void>; clear: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined;

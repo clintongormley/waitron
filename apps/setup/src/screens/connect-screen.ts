@@ -92,10 +92,12 @@ const FULL_WORDS: Record<string, StringKey> = {
 
 /** The words for a refusal this screen knows, or undefined. */
 function refusalWords({ code, params }: Refusal): string | undefined {
-  const { limit, retryAt, primaryAt, standbyAt } = params ?? {};
+  const { limit, retryAt, primaryAt, standbyAt, max, minutes } = params ?? {};
   if (code === "mirror.join_full" && typeof limit === "string" && FULL_WORDS[limit] !== undefined)
     return format(FULL_WORDS[limit], {
       retryAt: typeof retryAt === "string" ? (localTime(retryAt) ?? retryAt) : "",
+      max: typeof max === "number" ? max : "",
+      minutes: typeof minutes === "number" ? minutes : "",
     });
   if (
     code === "mirror.clocks_apart" &&

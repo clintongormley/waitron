@@ -139,9 +139,9 @@ export const startEn = {
   "connect.refusal.join_full_network":
     "The main box has had too many requests to join from the network in the last minute. Wait a minute, then choose Join again. If this keeps happening, something on the network is sending them.",
   "connect.refusal.join_full_listed":
-    "Three other boxes are already asking to join the main box. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
+    "The main box already has {max} other boxes asking to join. On its Servers page, dismiss any you do not recognise, then choose Join again here.",
   "connect.refusal.join_full_recent":
-    "The main box has had six requests to join in the last 15 minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
+    "The main box has had {max} requests to join in the last {minutes} minutes, counting ones ended by Start again, which its Servers page no longer lists. Wait until {retryAt}, then choose Join again. Dismissing a request on its Servers page frees a place sooner.",
   "connect.refusal.join_waiting":
     "This box is already waiting to join. Choose Start again to cancel that request and make a new one.",
   "connect.refusal.join_approving":
@@ -379,9 +379,9 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.refusal.join_full_network":
     "El servidor principal ha recibido demasiadas solicitudes para unirse desde la red en el último minuto. Espera un minuto y vuelve a elegir Unirse. Si sigue pasando, algo en la red las está enviando.",
   "connect.refusal.join_full_listed":
-    "Ya hay otros tres servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y vuelve a elegir Unirse aquí.",
+    "Ya hay otros {max} servidores pidiendo unirse al servidor principal. En su página Servidores, descarta los que no reconozcas y vuelve a elegir Unirse aquí.",
   "connect.refusal.join_full_recent":
-    "El servidor principal ha recibido seis solicitudes para unirse en los últimos 15 minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
+    "El servidor principal ha recibido {max} solicitudes para unirse en los últimos {minutes} minutos, contando las terminadas con Empezar de nuevo, que su página Servidores ya no muestra. Espera hasta las {retryAt} y vuelve a elegir Unirse. Descartar una solicitud en su página Servidores libera un sitio antes.",
   "connect.refusal.join_waiting":
     "Este servidor ya está esperando para unirse. Elige Empezar de nuevo para cancelar esa solicitud y hacer otra.",
   "connect.refusal.join_approving":
