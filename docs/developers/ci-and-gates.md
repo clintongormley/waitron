@@ -1466,9 +1466,9 @@ of that run and all thirteen reports of each of scheduled runs `44678716690` and
 seconds over the new packing gives about 828 seconds for its slowest shard (new shard 2),
 against 1,210 for the old packing's shard 10, the slowest with a report in that run (cancelled
 shard 11 left none); the replay counts only files with a report in that run. 828 modelled
-seconds is not a measured finishing time: the old shard 10's 1,210 took 24 min 34 s. Verify
-with a manual `mutation.yml` run on main using `packages=db`, retaining the slowest shard's job
-and mutation-phase times.
+seconds is not a measured finishing time: the old shard 10's 1,210 took 24 min 34 s.
+Dispatched run `44875671062`, on this table over main at `3682c7536b`, finished all 13 db
+shards; the slowest, shard 6, took 21 min 03 s of job time, and the fastest, shard 1, 9 min 33 s.
 
 **Refreshing the table.** Use reports only from runs after the 13 November whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
