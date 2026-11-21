@@ -1,6 +1,4 @@
-import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { nodes, type Database } from "@waitron/db";
 import {
   FALLBACK_LOCALE,
   isAppError,
@@ -21,24 +19,6 @@ export function failureFields(error: unknown): Record<string, string | null> {
   return { errorCode: codeOf(error), errno: errnoOf(error) ?? null };
 }
 
-/** Each box's name from this box's `nodes` rows, or `null` where it has no row or no name. */
-export async function readPeerNames(
-  venue: Database,
-  ids: readonly string[],
-): Promise<(string | null)[]> {
-  if (ids.length === 0) return [];
-  const rows = await venue
-    .select({ id: nodes.id, name: nodes.name })
-    .from(nodes)
-    .where(inArray(nodes.id, [...ids]));
-  const named = new Map(rows.map((r) => [r.id, r.name]));
-  return ids.map((id) => {
-    const name = named.get(id);
-    return name === undefined || name === "" ? null : name;
-  });
-}
-
-/** The other boxes as one phrase: their names joined, or "the other box" where none has one. */
 export function otherBoxPhrase(names: readonly (string | null)[], locale: SupportedLocale): string {
   const text = WAITING_PAGE_WORDS[locale];
   const shown = [...new Set(names.map((name) => name ?? text.otherBox))];
@@ -110,7 +90,7 @@ export type WaitingPageSection = (
   locale: SupportedLocale,
 ) => Promise<string | { page: string }>;
 
-/** The page a person opening a box that waits for its peers sees; `names` is read per request. */
+/** The page a person opening a box that waits for its peers sees; the addresses are read per request. */
 export function waitingPageRoute(
   names: () => Promise<readonly (string | null)[]>,
   log: Logger,

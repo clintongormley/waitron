@@ -3418,7 +3418,9 @@ and nothing guards it across screens:
   A405), whose leave cases are in `printer-details-a4.unsaved.test.ts`;
 - A1321: Servers' Remove dialog (`apps/dashboard/src/screens/servers-screen.ts`) takes no draft
   scope and has no `*.unsaved.test.ts`: its two statements are a confirmation, not staged input,
-  and each opening of the dialog starts with both off;
+  and each opening of the dialog starts with both off. The same holds for Remove's reset statement
+  on a former main server and the Will not return dialog's confirmation (A1561): one switch each,
+  off at every opening;
 - A585-1: the Staff roles page's staff-role dialog (`packages/staffing/src/dashboard/staff-role-dialog.ts`).
   Its leave cases are in `packages/staffing/src/dashboard/staff-role-dialog.unsaved.test.ts`;
 - A585-4: the season and special-day staffing painters

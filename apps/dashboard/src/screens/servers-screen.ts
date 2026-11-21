@@ -39,7 +39,7 @@ function webAddress(contactUrl: string): boolean {
   return /^https?:\/\//i.test(contactUrl) && URL.canParse(contactUrl);
 }
 
-type Action = "remove" | "clear";
+type Action = "remove" | "clear" | "abandon";
 
 const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanation: StringKey }> = {
   remove: {
@@ -51,6 +51,11 @@ const ACTION_KEYS: Record<Action, { verb: StringKey; title: StringKey; explanati
     verb: "servers.clear",
     title: "servers.clear_title",
     explanation: "servers.clear_explanation",
+  },
+  abandon: {
+    verb: "servers.abandon",
+    title: "servers.abandon_title",
+    explanation: "servers.abandon_explanation",
   },
 };
 
@@ -206,6 +211,10 @@ export class ServersScreen extends LitElement {
   /** Set when a Remove without the declarations was refused because the spare finished joining
    * after the list was read. */
   @state() private askDeclarations = false;
+  /** The reset statement on Remove, or the confirmation on Will not return. */
+  @state() private ticked = false;
+  /** Set when a Remove was refused for want of the reset statement the listing did not ask for. */
+  @state() private askResetStatement = false;
   /** A menu item's popover closes on the click, so the dialog has nothing visible to hand focus
    * back to; the row menu's trigger takes it instead, or the heading after a Remove or Clear. */
   #focusTarget: HTMLElement | null = null;
@@ -292,6 +301,20 @@ export class ServersScreen extends LitElement {
             [400, 401, 403, 429].includes(Number(error.status))
           ) {
             this.#handoverSent = false;
+            this.handoverError = codeMessage(codeOf(error));
+            return;
+          }
+          const named = (error as { params?: { operationId?: unknown } } | null)?.params
+            ?.operationId;
+          if (
+            ["handover.operation_in_progress", "handover.return_outstanding"].includes(
+              codeOf(error),
+            ) &&
+            typeof named === "string" &&
+            named !== operationId
+          ) {
+            this.#handoverSent = false;
+            this.#operationId = crypto.randomUUID();
             this.handoverError = codeMessage(codeOf(error));
             return;
           }
@@ -417,6 +440,16 @@ export class ServersScreen extends LitElement {
   #forgetDeclarations(): void {
     this.declared = { switchedOff: false, noRecovery: false };
     this.askDeclarations = false;
+    this.ticked = false;
+    this.askResetStatement = false;
+  }
+
+  #statingReset(action: Action, row: ServerRow): boolean {
+    return action === "remove" && (row.needsResetStatement || this.askResetStatement);
+  }
+
+  #unticked(action: Action, row: ServerRow): boolean {
+    return (action === "abandon" || this.#statingReset(action, row)) && !this.ticked;
   }
 
   #declaring(action: Action, row: ServerRow): boolean {
@@ -440,11 +473,20 @@ export class ServersScreen extends LitElement {
 
   async #confirm(): Promise<void> {
     const target = this.target;
-    if (target === null || this.busy || this.#undeclared(target.action, target.row)) return;
+    if (
+      target === null ||
+      this.busy ||
+      this.#undeclared(target.action, target.row) ||
+      this.#unticked(target.action, target.row)
+    )
+      return;
     this.busy = true;
     this.actionErrorKey = null;
     try {
       if (target.action === "clear") await this.api.clearServer(target.row.nodeId);
+      else if (target.action === "abandon") await this.api.abandonServerReturn(target.row.nodeId);
+      else if (this.#statingReset(target.action, target.row))
+        await this.api.removeServer(target.row.nodeId, { resetStatement: true });
       else if (this.#declaring(target.action, target.row))
         await this.api.removeServer(target.row.nodeId, {
           spareSwitchedOff: true,
@@ -454,6 +496,8 @@ export class ServersScreen extends LitElement {
     } catch (error) {
       this.actionErrorKey = codeOf(error);
       if (this.actionErrorKey === "membership.standby_joined") this.askDeclarations = true;
+      if (this.actionErrorKey === "membership.reset_statement_required")
+        this.askResetStatement = true;
       return;
     } finally {
       this.busy = false;
@@ -549,7 +593,17 @@ export class ServersScreen extends LitElement {
               >${t(STANDING_KEY[row.standing])}</span
             >
             ${
-              row.standing === "sell-only"
+              row.returnOutstanding
+                ? html`<div
+                    part="server-progress server-warning"
+                    data-test=${`return-${row.nodeId}`}
+                  >
+                    ${t("servers.return_waiting")}
+                  </div>`
+                : nothing
+            }
+            ${
+              row.standing === "sell-only" && row.returnOutstanding
                 ? html`<span part="server-replaced" data-test=${`replaced-note-${row.nodeId}`}
                     >${t("servers.replaced_note")}
                     <a
@@ -584,8 +638,12 @@ export class ServersScreen extends LitElement {
         label: t("servers.actions"),
         pinned: "end",
         cell: (row) => {
-          const actions = (["remove", "clear"] as const).filter((action) =>
-            action === "remove" ? row.removable : row.canClear,
+          const actions = (["abandon", "remove", "clear"] as const).filter((action) =>
+            action === "abandon"
+              ? row.returnOutstanding
+              : action === "remove"
+                ? row.removable
+                : row.canClear,
           );
           const handover =
             this.canPromote &&
@@ -614,10 +672,15 @@ export class ServersScreen extends LitElement {
   #renderDialog(action: Action): TemplateResult {
     const target = this.target?.action === action ? this.target.row : null;
     const keys = ACTION_KEYS[action];
-    const undeclared = target !== null && this.#undeclared(action, target);
+    const undeclared =
+      target !== null && (this.#undeclared(action, target) || this.#unticked(action, target));
+    const title =
+      action === "remove" && target?.standing === "sell-only"
+        ? "servers.remove_former_title"
+        : keys.title;
     return html`<wt-dialog
       data-test=${`${action}-dialog`}
-      heading=${t(keys.title)}
+      heading=${t(title)}
       .open=${target !== null}
       .dismissible=${!this.busy}
       @wt-close=${() => {
@@ -632,8 +695,22 @@ export class ServersScreen extends LitElement {
               <p class="machine" data-test=${`${action}-machine`}>
                 ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
               </p>
-              <p class="explanation">${t(keys.explanation)}</p>
-              ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}`
+              <p class="explanation" data-test=${`${action}-warning`}>${t(keys.explanation)}</p>
+              ${this.#declaring(action, target) ? this.#renderDeclarations(target) : nothing}
+              ${
+                action === "abandon"
+                  ? this.#renderTick("abandon-confirm", "willNotReturn", "servers.abandon_confirm")
+                  : this.#statingReset(action, target)
+                    ? this.#renderTick(
+                        "reset-statement",
+                        "resetConfirmed",
+                        "servers.reset_statement",
+                        html`<p class="explanation" data-test="reset-warning">
+                          ${t("servers.reset_warning")}
+                        </p>`,
+                      )
+                    : nothing
+              }`
       }
       <wt-form-actions
         slot="footer"
@@ -688,6 +765,27 @@ export class ServersScreen extends LitElement {
     </div>`;
   }
 
+  #renderTick(
+    test: string,
+    name: string,
+    label: StringKey,
+    warning: TemplateResult | typeof nothing = nothing,
+  ): TemplateResult {
+    return html`<div class="declarations">
+      ${warning}
+      <wt-switch
+        data-test=${test}
+        name=${name}
+        label=${`${t(label)} *`}
+        .checked=${this.ticked}
+        ?disabled=${this.busy}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          this.ticked = event.detail.checked;
+        }}
+      ></wt-switch>
+    </div>`;
+  }
+
   override render(): TemplateResult {
     return html`
       <h1 class="title" tabindex="-1">${t("servers.title")}</h1>
@@ -719,7 +817,8 @@ export class ServersScreen extends LitElement {
         .emptyMessage=${t("servers.empty")}
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
-      ${this.#renderDialog("remove")} ${this.#renderDialog("clear")} ${this.#renderHandover()}
+      ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
+      ${this.#renderDialog("abandon")} ${this.#renderHandover()}
       ${
         this.switchLabel === null
           ? nothing

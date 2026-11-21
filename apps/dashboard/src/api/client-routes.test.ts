@@ -1500,6 +1500,62 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("removes a former main box with the reset statement, passing its refusal's code through", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(refusal("membership.reset_statement_required", 409))
+      .mockResolvedValueOnce(jsonResponse({ removed: true, term: 6 }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.removeServer("55555555-5555-4555-8555-555555555555")).rejects.toMatchObject({
+      code: "membership.reset_statement_required",
+      status: 409,
+    });
+    await expect(
+      api.removeServer("55555555-5555-4555-8555-555555555555", { resetStatement: true }),
+    ).resolves.toEqual({ removed: true, term: 6 });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/servers/55555555-5555-4555-8555-555555555555/remove", "POST", undefined],
+      [
+        "/management-api/servers/55555555-5555-4555-8555-555555555555/remove",
+        "POST",
+        { resetStatement: true },
+      ],
+    ]);
+  });
+
+  it("confirms an old main box will not return, passing a refusal's code through", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          operationId: "66666666-6666-4666-8666-666666666666",
+          state: "return_abandoned",
+        }),
+      )
+      .mockResolvedValueOnce(refusal("handover.return_not_outstanding", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.abandonServerReturn("55555555-5555-4555-8555-555555555555")).resolves.toEqual({
+      operationId: "66666666-6666-4666-8666-666666666666",
+      state: "return_abandoned",
+    });
+    await expect(api.abandonServerReturn("a/b")).rejects.toMatchObject({
+      code: "handover.return_not_outstanding",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/servers/55555555-5555-4555-8555-555555555555/return-abandoned",
+        "POST",
+        { confirmed: true },
+      ],
+      ["/management-api/servers/a%2Fb/return-abandoned", "POST", { confirmed: true }],
+    ]);
+  });
+
   it("clears a removed server by its id, passing a refusal's code through", async () => {
     const fetchImpl = vi
       .fn()
@@ -2403,6 +2459,42 @@ it("sends recovery discovery and both decisions as explicit POSTs with only thei
       url: "/management-api/cloud/owner-recovery/refuse",
       method: "POST",
       body: { request: cloudOwnerRecoveryRequest },
+    },
+  ]);
+});
+
+it("asks for a fresh sign-in and resends Will not return once it is given", async () => {
+  const calls: { url: string; method: string | undefined; body: unknown }[] = [];
+  const prompt = vi.fn(async () => true);
+  const gate = createFreshSignInGate({ sessionGeneration: () => 0, prompt });
+  const api = new DashboardApi(
+    "",
+    async (url, init) => {
+      calls.push({ url: String(url), method: init?.method, body: JSON.parse(String(init?.body)) });
+      return calls.length === 1
+        ? refusal("management_session.proof_required", 400)
+        : jsonResponse({ operationId: "op", state: "return_abandoned" });
+    },
+    undefined,
+    undefined,
+    false,
+    { freshSignIn: gate },
+  );
+  await expect(api.abandonServerReturn("old")).resolves.toEqual({
+    operationId: "op",
+    state: "return_abandoned",
+  });
+  expect(prompt).toHaveBeenCalledTimes(1);
+  expect(calls).toEqual([
+    {
+      url: "/management-api/servers/old/return-abandoned",
+      method: "POST",
+      body: { confirmed: true },
+    },
+    {
+      url: "/management-api/servers/old/return-abandoned",
+      method: "POST",
+      body: { confirmed: true },
     },
   ]);
 });

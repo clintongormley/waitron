@@ -2329,6 +2329,17 @@ export const en = {
   "servers.declare_switched_off": "This spare is switched off",
   "servers.declare_no_recovery":
     "Nobody is restoring this venue from a backup or switching it to another server right now",
+  "servers.remove_former_title": "Remove this former main server?",
+  "servers.reset_warning":
+    "The former main server has not returned its invoice records. Switched on again with its data, it could sell beside this main server. If it does come back, reset it, and never choose “Carry on as the main box” on it.",
+  "servers.reset_statement":
+    "The former main server has been reset, or will never be switched on again",
+  "servers.return_waiting": "Waiting for the former main server to return its invoice records",
+  "servers.abandon": "Will not return",
+  "servers.abandon_title": "Stop waiting for the former main server's invoice records?",
+  "servers.abandon_explanation":
+    "Choose this only if the former main server will not be switched on again with its data, for example because it has been reset. The last handover stops waiting for its invoice records. Any it made after the copy this main server started from stay only on it; switched on again before you remove it, it still sends them. After a planned handover there are none: the copy was taken after it stopped selling.",
+  "servers.abandon_confirm": "Stop waiting for its invoice records",
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
@@ -6983,6 +6994,19 @@ export const es: Record<StringKey, string> = {
   "servers.declare_switched_off": "Este servidor en espera está apagado",
   "servers.declare_no_recovery":
     "Nadie está restaurando este local desde una copia de seguridad ni pasándolo a otro servidor en este momento",
+  "servers.remove_former_title": "¿Retirar este antiguo servidor principal?",
+  "servers.reset_warning":
+    "El antiguo servidor principal no ha devuelto sus registros de facturación. Si se vuelve a encender con sus datos, podría vender a la vez que este servidor principal. Si vuelve, restablécelo y no elijas nunca «Seguir como equipo principal» en él.",
+  "servers.reset_statement":
+    "El antiguo servidor principal se ha restablecido o no se volverá a encender nunca",
+  "servers.return_waiting":
+    "Esperando a que el antiguo servidor principal devuelva sus registros de facturación",
+  "servers.abandon": "No volverá",
+  "servers.abandon_title":
+    "¿Dejar de esperar los registros de facturación del antiguo servidor principal?",
+  "servers.abandon_explanation":
+    "Elige esto solo si el antiguo servidor principal no se va a volver a encender con sus datos, por ejemplo porque se ha restablecido. El último traspaso deja de esperar sus registros de facturación. Los que hizo después de la copia con la que empezó este servidor principal se quedan solo en él; si se vuelve a encender antes de que lo retires, los sigue enviando. Tras un traspaso planificado no hay ninguno: la copia se hizo después de que dejara de vender.",
+  "servers.abandon_confirm": "Dejar de esperar sus registros de facturación",
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":

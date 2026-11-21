@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { returnedInvoices } from "@waitron/fiscal-verifactu/src/returned-invoices.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -12,6 +14,8 @@ import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
   type Database,
+  handoverActivations,
+  withNodeTransaction,
   tenders,
   tenderRefunds,
   sales,
@@ -22,6 +26,12 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  appendHandoverEventTx,
+  beginHandoverOperationTx,
+  readHandoverOperation,
+  readOpenHandoverOperation,
+} from "@waitron/node-db";
 import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { payments, recordRefund } from "@waitron/payments";
 import { getHeldOrder, listHeldOrders } from "./working-order.js";
@@ -52,6 +62,7 @@ import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import {
   formerMainForReturn,
+  returnDigest,
   runReturnRecordsPass,
   startReturnRecordsDuty,
 } from "./return-records.js";
@@ -212,6 +223,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     ring,
     nodeId: source.nodeId,
     modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
     log: () => {},
     fetch: async (url, init) => app.request(String(url), init),
   });
@@ -367,6 +379,145 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     read.mockRestore();
   }
 });
+
+it.each([
+  ["no records", false],
+  ["one record", false],
+  ["one record", true],
+] as const)(
+  "closes the new main box's takeover once a return holding %s is accounted (confirmation held: %s)",
+  async (holding, held) => {
+    const source = await seedNode(old.db, "Source");
+    const receiverId = await bareNode(old.db);
+    await stampDeployment(old.db, "preproduction");
+    await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
+    await copyBase();
+    await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
+    const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
+    const receiverKey = await readNodeIdentityKey(current.node, ring, receiverId);
+    await pinMainBoxKey(current.node, receiverId, {
+      nodeId: source.nodeId,
+      publicKey: nodeSigningPublicKey(sourceKey),
+    });
+    const body = {
+      term: 2,
+      nodes: [
+        {
+          nodeId: receiverId,
+          contactUrl: "https://receiver.test",
+          standing: "serving-primary" as const,
+        },
+        {
+          nodeId: source.nodeId,
+          contactUrl: "https://source.test",
+          standing: "sell-only" as const,
+        },
+      ],
+    };
+    const chart = {
+      body,
+      signerNodeId: receiverId,
+      signature: signDocumentBody(body, receiverKey),
+      endorsements: [
+        endorseKey(receiverId, nodeSigningPublicKey(receiverKey), source.nodeId, sourceKey),
+      ],
+    };
+    await writeNodeMembership(current.db, chart);
+    if (holding === "one record") {
+      const pending = await originalFor(old.db, source, await seedSale(old.db, source, 1));
+      await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
+    }
+    await writeNodeMembership(old.db, chart);
+    const operationId = "real-takeover";
+    await withNodeTransaction(current.node, (tx) =>
+      beginHandoverOperationTx(tx, {
+        nodeId: receiverId,
+        operationId,
+        role: "destination",
+        scenario: "emergency",
+        sourceNodeId: source.nodeId,
+        destinationNodeId: receiverId,
+        binding: {},
+        fingerprint: "real-takeover",
+        state: "activated",
+        waitingReason: null,
+      }),
+    );
+    await current.db.insert(handoverActivations).values({
+      operationId,
+      scenario: "emergency",
+      sourceNodeId: source.nodeId,
+      destinationNodeId: receiverId,
+      evidence: {
+        purpose: "waitron.handover.declaration.v1",
+        body: {},
+        signerNodeId: receiverId,
+        signature: "signature",
+      },
+      personId: "person",
+      activatedAt: "2026-07-20T10:00:00.000Z",
+    });
+    const app = new Hono();
+    mountReturnRecordsApi(
+      app,
+      {
+        db: current.db,
+        node: current.node,
+        ring,
+        nodeId: receiverId,
+        modules,
+        requireWritable: () => {},
+        wake: () => {},
+        now: () => now,
+      },
+      () => {},
+    );
+    if (held) {
+      // As if confirmed by this box before it was restored from a copy taken earlier.
+      const batches: string[] = [];
+      for (const module of modules)
+        for (const payload of (await module.handover?.returnRecords?.read(old.db, source.nodeId)) ??
+          [])
+          batches.push(returnDigest({ module: module.name, payload }));
+      await withNodeTransaction(old.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: source.nodeId,
+          operationId: null,
+          kind: "return_confirmed",
+          detail: { destinationNodeId: receiverId, inventory: returnDigest(batches) },
+          envelope: "{}",
+        }),
+      );
+    }
+    const requests: string[] = [];
+    expect(
+      await runReturnRecordsPass({
+        db: old.db,
+        node: old.node,
+        ring,
+        nodeId: source.nodeId,
+        modules,
+        stopped: () => false,
+        fetch: async (url, init) => {
+          requests.push(String(url));
+          return app.request(String(url), init);
+        },
+      }),
+    ).toBe("confirmed");
+    expect(requests).toHaveLength(1);
+    expect(
+      (
+        await withTransaction(current.db, (tx) =>
+          returnedInvoices(tx, { search: "", page: 0, sortKey: "", sortDirection: "descending" }),
+        )
+      ).rows,
+    ).toHaveLength(holding === "one record" ? 1 : 0);
+    expect((await readHandoverOperation(current.node, receiverId, operationId))?.state).toBe(
+      "return_complete",
+    );
+    expect(await readOpenHandoverOperation(current.node, receiverId)).toBeNull();
+  },
+);
 
 async function copyBase() {
   await withTransaction(current.db, async (tx) => {

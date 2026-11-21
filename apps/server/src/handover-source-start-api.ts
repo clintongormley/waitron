@@ -64,6 +64,7 @@ import {
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
+import { awaitsReturn, refuseReturnOutstanding } from "./return-abandoned.js";
 import "./errors.js";
 
 export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
@@ -97,6 +98,7 @@ const STATUS = {
   "handover.promotion_running": 409,
   "handover.membership_mismatch": 409,
   "handover.operation_in_progress": 409,
+  "handover.return_outstanding": 409,
   "handover.operation_conflict": 409,
   "handover.not_main_box": 409,
   "handover.venue_not_supported": 409,
@@ -445,6 +447,8 @@ export function mountHandoverSourceStartApi(
     personId: string,
   ): Promise<{ handoverPage: string }> => {
     const { operationId, destinationNodeId } = request;
+    const open = await readOpenHandoverOperation(deps.node, deps.nodeId);
+    if (awaitsReturn(open)) refuseReturnOutstanding(open);
     const held = await readNodeMembership(deps.db);
     if (held === null || servingPrimaryNodeId(held) !== deps.nodeId) {
       throw new AppError("handover.not_main_box", {});

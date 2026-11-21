@@ -718,7 +718,7 @@ describe("the start check on a real start", () => {
     const page = await fetch(`http://127.0.0.1:${httpPort()}/`, {
       headers: { "accept-language": "en-GB" },
     });
-    expect(await page.text()).toContain("<h1>This box is waiting for Spare</h1>");
+    expect(await page.text()).toContain(`<h1>This box is waiting for ${new URL(url).host}</h1>`);
   }, 60_000);
 
   describe("while it waits", () => {
@@ -811,7 +811,7 @@ describe("the start check on a real start", () => {
       expect(second).toHaveBeenCalledTimes(1);
       expect(await acceptingSales()).toBe(false);
       const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
-      expect(await page.text()).toContain("This box is waiting for Spare");
+      expect(await page.text()).toContain("This box is waiting for box.example");
     }, 60_000);
 
     it("closed while it waits, lets go of the state folder it kept checked addresses in before the waiting server closes", async () => {
@@ -904,7 +904,7 @@ describe("the start check on a real start", () => {
           await adoption.bound;
           expect(waiting.acceptingSales).toBe(false);
           const page = await fetch(`http://127.0.0.1:${port}/`);
-          expect(await page.text()).toContain("This box is waiting for Spare");
+          expect(await page.text()).toContain("This box is waiting for box.example");
 
           answer({ result: "proceed", successorNodeId: null });
           await vi.waitFor(

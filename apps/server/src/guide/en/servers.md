@@ -126,6 +126,18 @@ Invoice records and their recorded payment facts can return to the new main box;
 replay orders, stock changes, printing or drawer openings. Do not reset the old box while you
 still need its data.
 
+Switch the old box on and keep it connected: it returns its invoice records by itself. Until they
+arrive, its row in **System → Servers** on the new main box says **Waiting for the former main server to
+return its invoice records**, and the venue cannot be handed over again or that box removed.
+
+If the old box will never come back with its data, choose **Will not return** in its row menu.
+Invoice records it made after the copy the new main box started from stay only on it, unless it is
+switched on again before you remove it.
+
+To remove a former main box, choose **Remove** in its row menu. If it has not returned its invoice
+records, tick that it has been reset or will never be switched on again. If it does come back,
+reset it, and never choose **Carry on as the main box** on it.
+
 ## Hand over to a spare box {#hand-over}
 
 Use this flow only with a spare that has finished joining the venue.
@@ -167,7 +179,9 @@ If the copy check keeps failing, read [how to switch to a spare](servers.md#emer
 ## After the handover {#after-hand-over}
 
 Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
-handover on the spare. Keep the old box and its data.
+handover on the spare. Keep the old box and its data, switched on and connected: it returns its
+invoice records to the new box by itself, and until they arrive the venue cannot be handed over
+again ([read more](servers.md#old-box-returns)).
 
 On a till, keep the screen open; it follows the main server once that server is taking sales.
 
@@ -243,7 +257,7 @@ do not add the list’s amounts to report totals.
 
 When a box starts and cannot reach the other box the venue runs on, it waits instead of selling,
 because the other box may have taken over. Its page, titled **This box is waiting for** and the
-other box's name, says so. While it waits it takes no sales and sends nothing to the tax agency.
+other box's address, says so. While it waits it takes no sales and sends nothing to the tax agency.
 It asks again every 15 seconds; once the other box answers, this box starts normally or, if the
 other box has taken over, says so.
 

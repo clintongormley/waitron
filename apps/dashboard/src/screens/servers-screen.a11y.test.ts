@@ -22,6 +22,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: STANDBY,
@@ -31,6 +33,8 @@ const listing: ServerListing = {
       removable: true,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: "33333333-3333-4333-8333-333333333333",
@@ -40,6 +44,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: false,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
     {
       nodeId: "44444444-4444-4444-8444-444444444444",
@@ -49,6 +55,8 @@ const listing: ServerListing = {
       removable: false,
       canClear: true,
       requiresRetirementConfirmation: false,
+      returnOutstanding: false,
+      needsResetStatement: false,
     },
   ],
 };
@@ -210,6 +218,8 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           removable: true,
           canClear: false,
           requiresRetirementConfirmation: false,
+          returnOutstanding: false,
+          needsResetStatement: false,
         },
       ],
     };
@@ -322,6 +332,88 @@ describe.each(["light", "dark"] as const)("controlled handover form (%s)", (them
         ).disabled,
       ).toBe(!hasPassword),
     );
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("a former main box's row and dialogs (%s)", (theme) => {
+  const FORMER = "33333333-3333-4333-8333-333333333333";
+  const withFormer = (changes: Partial<ServerListing["nodes"][number]>): ServerListing => ({
+    ...listing,
+    nodes: listing.nodes.map((n) => (n.nodeId === FORMER ? { ...n, ...changes } : n)),
+  });
+  const waiting = withFormer({ returnOutstanding: true });
+
+  async function openOn(el: ServersScreen, action: string): Promise<void> {
+    rowMenu(el, FORMER).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    rowMenu(el, FORMER).querySelector<HTMLElement>(`[data-test="${action}-${FORMER}"]`)!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+      `wt-dialog[data-test=${action}-dialog]`,
+    )!;
+    expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  }
+
+  it("renders a row waiting for its records accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi({ listServers: vi.fn().mockResolvedValue(waiting) }) },
+      theme,
+    );
+    await flush(el);
+    expect(
+      el
+        .shadowRoot!.querySelector("wt-data-table")!
+        .shadowRoot!.querySelector(`[data-test="return-${FORMER}"]`),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the Will not return confirmation, and its refusal, accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi.fn().mockResolvedValue(waiting),
+          abandonServerReturn: vi
+            .fn()
+            .mockRejectedValue({ code: "handover.return_not_outstanding", status: 409 }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openOn(el, "abandon");
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("wt-switch[data-test=abandon-confirm]")!
+      .shadowRoot!.querySelector("input")!
+      .click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-abandon]")!.click();
+    await flush(el);
+    await flush(el);
+    const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-dialog[data-test=abandon-dialog] wt-form-actions",
+    )!;
+    expect(await formMessageOf(actions)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders Remove with the reset statement accessibly", async () => {
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      {
+        api: stubApi({
+          listServers: vi
+            .fn()
+            .mockResolvedValue(withFormer({ removable: true, needsResetStatement: true })),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openOn(el, "remove");
+    expect(el.shadowRoot!.querySelector("wt-switch[data-test=reset-statement]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

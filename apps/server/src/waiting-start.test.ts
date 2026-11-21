@@ -7,7 +7,13 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { generateSync } from "otplib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
+import {
+  nodes,
+  withNodeTransaction,
+  withTransaction,
+  writeNodeMembership,
+  type NodeDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnTotpEnrollment,
@@ -18,6 +24,7 @@ import {
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  appendHandoverEventTx,
   beginHandoverOperationTx,
   nodeHandoverEvents,
   readHandoverRestriction,
@@ -33,6 +40,7 @@ import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
+import { readBoxAddresses } from "./restricted-page.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
 
 const NODE_ID = "00000000-0000-4000-8000-0000000000aa";
@@ -80,7 +88,7 @@ function harness(
     readMembership: () => Promise.resolve(CHART),
     cors: corsForVenue((origin) => Promise.resolve(origin === "https://m2.test")),
     waitingOn: [SPARE_ID],
-    namesOf: (ids) => Promise.resolve(ids.map((id) => NAMES[id] ?? null)),
+    addressesOf: (ids) => Promise.resolve(ids.map((id) => NAMES[id] ?? null)),
     routes: [],
     node: undefined as never,
     recheck,
@@ -752,6 +760,18 @@ describe("the waiting start", () => {
     const BOTH = { switchedOff: "yes", noOtherRecovery: "yes" };
     const ADMIN = { email: "owner@example.test", password: "dashPass123" };
     const events = () => suite.node.select().from(nodeHandoverEvents);
+    /** This box's held chart in its venue copy, where the known-handover sentence reads addresses. */
+    const holdChart = () =>
+      writeNodeMembership(suite.db, {
+        ...CHART,
+        body: {
+          ...CHART.body,
+          nodes: [
+            ...CHART.body.nodes,
+            { nodeId: TERRACE_ID, contactUrl: "https://terrace.example", standing: "sell-only" },
+          ],
+        },
+      });
     const stillWaiting = async () =>
       expect(
         await Promise.race([
@@ -1032,6 +1052,7 @@ describe("the waiting start", () => {
     });
 
     it("a box with a restriction refuses `handover.known_handover`", async () => {
+      await holdChart();
       await withNodeTransaction(suite.node, (tx) =>
         recordHandoverRestrictionTx(tx, {
           nodeId: NODE_ID,
@@ -1042,7 +1063,7 @@ describe("the waiting start", () => {
         }),
       );
       const sentence =
-        "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.";
+        "This box has already handed over to <strong>spare.example</strong>. It cannot carry on as the main box.";
       const shown = await page();
       expect(shown).toContain("<h1>This box has already handed over</h1>");
       expect(shown).toContain(sentence);
@@ -1061,6 +1082,7 @@ describe("the waiting start", () => {
     });
 
     it("a box that is the source of an open handover refuses `handover.known_handover`", async () => {
+      await holdChart();
       await withNodeTransaction(suite.node, (tx) =>
         beginHandoverOperationTx(tx, {
           nodeId: NODE_ID,
@@ -1078,10 +1100,86 @@ describe("the waiting start", () => {
       const answer = await post({ ...ADMIN, ...BOTH });
       expect(answer.status).toBe(409);
       expect(await answer.text()).toContain(
-        "This box has already handed over to <strong>Terrace</strong>. It cannot carry on as the main box.",
+        "This box has already handed over to <strong>terrace.example</strong>. It cannot carry on as the main box.",
       );
       await stillWaiting();
       expect(await events()).toEqual([]);
+    });
+
+    it("names the box it handed over to by its address and role, never its venue name", async () => {
+      await suite.db.insert(nodes).values({ id: SPARE_ID, name: "Bar Pepe (standby)" });
+      await h.waiting.server.close();
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        addressesOf: (ids) => readBoxAddresses(suite.db, ids),
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+      });
+      await holdChart();
+      await withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+        }),
+      );
+      const shown = async (language: string) =>
+        (
+          await h
+            .app()
+            .request("https://box.test/", { headers: { "accept-language": language } }, tls())
+        ).text();
+      const english = await shown("en-GB");
+      expect(english).toContain("handed over to <strong>spare.example</strong>. It cannot");
+      expect(english).not.toContain("Bar Pepe");
+      const spanish = await shown("es-ES");
+      expect(spanish).toContain("ha pasado el local a <strong>spare.example</strong>. No puede");
+      expect(spanish).not.toContain("Bar Pepe");
+
+      await withNodeTransaction(suite.node, (tx) =>
+        appendHandoverEventTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "return_confirmed",
+          detail: { destinationNodeId: SPARE_ID, inventory: "a".repeat(64) },
+          envelope: "{}",
+        }),
+      );
+      expect(await shown("en-GB")).toContain(
+        "handed over to <strong>spare.example</strong> (main box). It cannot",
+      );
+      expect(await shown("es-ES")).toContain(
+        "ha pasado el local a <strong>spare.example</strong> (equipo principal). No puede",
+      );
+    });
+
+    it("names the boxes it waits for by their address, never their venue name", async () => {
+      await suite.db.insert(nodes).values({ id: SPARE_ID, name: "Bar Pepe (standby)" });
+      await h.waiting.server.close();
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        addressesOf: (ids) => readBoxAddresses(suite.db, ids),
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+      });
+      await holdChart();
+      const english = await page();
+      expect(english).toContain("<title>This box is waiting for spare.example</title>");
+      expect(english).toContain("<strong>spare.example</strong>");
+      expect(english).not.toContain("Bar Pepe");
+      const spanish = await (
+        await h
+          .app()
+          .request("https://box.test/", { headers: { "accept-language": "es-ES" } }, tls())
+      ).text();
+      expect(spanish).toContain("<strong>spare.example</strong>");
+      expect(spanish).not.toContain("Bar Pepe");
+      const refused = await post({ ...ADMIN });
+      const refusedPage = await refused.text();
+      expect(refusedPage).toContain("<strong>spare.example</strong>");
+      expect(refusedPage).not.toContain("Bar Pepe");
     });
 
     /** Replaces the case's waiting start with one whose first re-ask is held until `answer`. */
@@ -1108,11 +1206,12 @@ describe("the waiting start", () => {
     };
 
     it("a peer's takeover answer already on its way wins over a carry-on: refused, nothing recorded", async () => {
+      await holdChart();
       await heldReAsk({ result: "superseded", successorNodeId: SPARE_ID });
       const refused = await post({ ...ADMIN, ...BOTH });
       expect(refused.status).toBe(409);
       expect(await refused.text()).toContain(
-        "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.",
+        "This box has already handed over to <strong>spare.example</strong>. It cannot carry on as the main box.",
       );
       expect(await h.waiting.ended).toEqual({
         kind: "checked",

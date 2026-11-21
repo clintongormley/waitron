@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import * as handover from "@waitron/handover";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { openBackupQuery } from "@waitron/store";
 import * as nodeDatabase from "@waitron/node-db";
@@ -36,8 +36,13 @@ import {
   returnVenue,
 } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { abandonReturn } from "./return-abandoned.js";
+import { advanceHandover } from "./handover-store.js";
+import { listServers, removeStandby } from "./membership-removal.js";
 import { signAsThisBox } from "./handover-signing.js";
 import { AppError } from "@waitron/shared";
+import { caCertPath } from "./box-secrets.js";
+import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const ring = loadKeyRing({
@@ -415,6 +420,7 @@ it.each([
       ring,
       nodeId: source,
       modules,
+      stateDir: join(tmpdir(), "waitron-return-no-state"),
       log: () => {},
       fetch: async (url, init) => {
         batchesSent++;
@@ -465,6 +471,7 @@ it("waits for the active exchange to end before shutdown and starts no later bat
     ring,
     nodeId: source,
     modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
     log: () => {},
     fetch: async (url, init) => {
       begun();
@@ -495,6 +502,7 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
     ring,
     nodeId: source,
     modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
     log: () => {},
     fetch: async (url, init) => app.request(String(url), init),
   });
@@ -628,6 +636,10 @@ it("accepts two signed clashing batches separately across restarted duties and r
     await rm(directory, { recursive: true, force: true });
   }
   for (const kind of ["return-clash-evidence", "return-clash-acceptance"]) {
+    // The sender remembers its confirmed return; forgetting it makes the next pass resend.
+    await suite.node
+      .delete(nodeDatabase.nodeHandoverEvents)
+      .where(eq(nodeDatabase.nodeHandoverEvents.kind, "return_confirmed"));
     const [event] = await suite.node
       .select()
       .from(nodeDatabase.nodeHandoverEvents)
@@ -877,6 +889,7 @@ async function completionBinding(
     activation?: boolean;
     scenario?: "controlled" | "emergency";
     source?: string;
+    state?: nodeDatabase.HandoverOperation["state"];
   } = {},
 ) {
   const operationId = "receiver-emergency";
@@ -891,7 +904,7 @@ async function completionBinding(
         destinationNodeId: receiver,
         binding: {},
         fingerprint: "receiver",
-        state: "activated",
+        state: options.state ?? "activated",
         waitingReason: null,
       }),
     );
@@ -934,13 +947,22 @@ it("records accounted batches against its open emergency takeover and keeps repl
   );
 });
 
-it.each(["no operation", "no activation", "controlled", "other source"])(
+const batchRows = (operationId: string) =>
+  [0, 1].map((index) => ({
+    operationId,
+    inventory: returnDigest(
+      ["first", "second"].map((payload) => returnDigest({ module: "sample", payload })),
+    ),
+    batchIndex: index,
+    batchCount: 2,
+    batchDigest: returnDigest({ module: "sample", payload: ["first", "second"][index]! }),
+  }));
+
+it.each(["no activation", "other source"])(
   "accepts without completion when binding is %s",
   async (kind) => {
     await completionBinding({
-      operation: kind !== "no operation",
       activation: kind !== "no activation",
-      scenario: kind === "controlled" ? "controlled" : "emergency",
       source: kind === "other source" ? receiver : source,
     });
     const app = destination();
@@ -949,6 +971,209 @@ it.each(["no operation", "no activation", "controlled", "other source"])(
     expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
   },
 );
+
+async function pastActivation(
+  operationId: string,
+  activatedAt: string,
+  ends: { source?: string; destination?: string } = {},
+) {
+  await suite.db.insert(database.handoverActivations).values({
+    operationId,
+    scenario: "emergency",
+    sourceNodeId: ends.source ?? source,
+    destinationNodeId: ends.destination ?? receiver,
+    evidence: {
+      purpose: "waitron.handover.declaration.v1",
+      body: {},
+      signerNodeId: receiver,
+      signature: "signature",
+    },
+    personId: "person",
+    activatedAt,
+  });
+}
+
+it("records a return with no open takeover against this box's latest activation from that box", async () => {
+  const third = await seedNode(suite.db);
+  await pastActivation("b-older", "2026-11-10T10:00:00.000Z");
+  await pastActivation("a-latest", "2026-11-11T10:00:00.000Z");
+  await pastActivation("c-other-destination", "2026-11-12T10:00:00.000Z", {
+    destination: third,
+  });
+  await pastActivation("d-other-source", "2026-11-12T10:00:00.000Z", { source: third });
+  const app = destination();
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("a-latest"),
+  );
+});
+
+it.each(["activated", "emergency_declared"] as const)(
+  "records a return against a past activation and leaves an open takeover from another box in %s alone",
+  async (state) => {
+    const third = await seedNode(suite.db);
+    await database.withNodeTransaction(suite.node, (tx) =>
+      nodeDatabase.beginHandoverOperationTx(tx, {
+        nodeId: receiver,
+        operationId: "receiver-from-third",
+        role: "destination",
+        scenario: "emergency",
+        sourceNodeId: third,
+        destinationNodeId: receiver,
+        binding: {},
+        fingerprint: "receiver",
+        state,
+        waitingReason: null,
+      }),
+    );
+    await pastActivation("receiver-from-third", "2026-11-12T10:00:00.000Z", { source: third });
+    await pastActivation("receiver-earlier", "2026-11-10T10:00:00.000Z");
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+      batchRows("receiver-earlier"),
+    );
+    expect(
+      (await nodeDatabase.readHandoverOperation(suite.node, receiver, "receiver-from-third"))
+        ?.state,
+    ).toBe(state);
+  },
+);
+
+const takeoverState = async () =>
+  (await nodeDatabase.readHandoverOperation(suite.node, receiver, "receiver-emergency"))?.state;
+
+function sendWatchingState(app: Hono, states: unknown[]) {
+  return send(async (url, init) => {
+    const response = await app.request(String(url), init);
+    states.push(await takeoverState());
+    return response;
+  });
+}
+
+it.each(["emergency", "controlled"] as const)(
+  "steps its open %s takeover to return_pending at the first batch and closes it once every batch is accounted",
+  async (scenario) => {
+    await completionBinding({ scenario });
+    const app = destination();
+    const states: unknown[] = [];
+    expect(await sendWatchingState(app, states)).toBe("confirmed");
+    expect(states).toEqual(["return_pending", "return_complete"]);
+    expect(await nodeDatabase.readOpenHandoverOperation(suite.node, receiver)).toBeNull();
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+      [0, 1].map((index) => ({
+        operationId: "receiver-emergency",
+        inventory: returnDigest(
+          ["first", "second"].map((payload) => returnDigest({ module: "sample", payload })),
+        ),
+        batchIndex: index,
+        batchCount: 2,
+        batchDigest: returnDigest({ module: "sample", payload: ["first", "second"][index]! }),
+      })),
+    );
+  },
+);
+
+it("closes its open takeover on a return of one batch holding no records", async () => {
+  await completionBinding();
+  const read = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "read")
+    .mockResolvedValue([{ records: [] }]);
+  try {
+    const app = destination();
+    const states: unknown[] = [];
+    expect(await sendWatchingState(app, states)).toBe("confirmed");
+    expect(states).toEqual(["return_complete"]);
+    expect(received).toEqual([{ records: [] }]);
+  } finally {
+    read.mockRestore();
+  }
+});
+
+it("moves its takeover only to return_pending while a return is unaccounted", async () => {
+  await completionBinding();
+  accounted = false;
+  const app = destination();
+  const states: unknown[] = [];
+  expect(await sendWatchingState(app, states)).toBe("clash");
+  expect(states).toEqual(["return_pending"]);
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
+});
+
+it.each(["no operation", "no activation", "other source"])(
+  "leaves the takeover where it was when the binding is %s",
+  async (kind) => {
+    await completionBinding({
+      operation: kind !== "no operation",
+      activation: kind !== "no activation",
+      source: kind === "other source" ? receiver : source,
+    });
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+    expect(await takeoverState()).toBe(kind === "no operation" ? undefined : "activated");
+  },
+);
+
+it("takes in a batch but sends no receipt while its takeover is before activated, and the resend closes it", async () => {
+  await completionBinding({ state: "emergency_declared" });
+  const app = destination();
+  const answers: { status: number; body: unknown }[] = [];
+  expect(
+    await send(async (url, init) => {
+      const response = await app.request(String(url), init);
+      answers.push({ status: response.status, body: await response.clone().json() });
+      return response;
+    }),
+  ).toBe("waiting");
+  expect(answers).toEqual([
+    {
+      status: 409,
+      body: { error: { code: "handover.return_refused", params: { reason: "activating" } } },
+    },
+  ]);
+  expect(received).toEqual(["first"]);
+  expect(await takeoverState()).toBe("emergency_declared");
+
+  await advanceHandover(
+    { node: suite.node, nodeId: receiver },
+    "receiver-emergency",
+    "activated",
+    {},
+  );
+  const states: unknown[] = [];
+  expect(await sendWatchingState(app, states)).toBe("confirmed");
+  expect(states).toEqual(["return_pending", "return_complete"]);
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("receiver-emergency"),
+  );
+});
+
+it("sends no receipt when closing the takeover fails, and the resend closes it", async () => {
+  await completionBinding();
+  await suite.node.execute(
+    sql`create trigger refuse_return_complete before update on node_handover_operations when new.state = 'return_complete' begin select raise(abort, 'test node write failed'); end`,
+  );
+  const app = destination();
+  const statuses: number[] = [];
+  try {
+    expect(
+      await send(async (url, init) => {
+        const response = await app.request(String(url), init);
+        statuses.push(response.status);
+        return response;
+      }),
+    ).toBe("needs-attention");
+    expect(statuses).toEqual([200, 500]);
+    expect(await takeoverState()).toBe("return_pending");
+    expect(await suite.db.select().from(database.handoverReturnBatches)).toHaveLength(2);
+  } finally {
+    await suite.node.execute(sql`drop trigger refuse_return_complete`);
+  }
+  const states: unknown[] = [];
+  expect(await sendWatchingState(app, states)).toBe("confirmed");
+  expect(states).toEqual(["return_complete", "return_complete"]);
+  expect(await nodeDatabase.readOpenHandoverOperation(suite.node, receiver)).toBeNull();
+});
 
 it.each(["false", "refused"])("records no completion fact for a %s batch", async (outcome) => {
   await completionBinding();
@@ -998,4 +1223,458 @@ it("rolls back the received facts when recording the batch fails", async () => {
     await suite.db.execute(sql`drop trigger fail_return_fact`);
     receive.mockRestore();
   }
+});
+
+async function receiverOverTls(held: "venue authority" | "another authority" | "no authority") {
+  const authority = await mintBoxAuthority();
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-return-tls-"));
+  if (held !== "no authority") {
+    await mkdir(dirname(caCertPath(stateDir)), { recursive: true });
+    await writeFile(
+      caCertPath(stateDir),
+      held === "venue authority" ? authority.caPem : (await mintBoxAuthority()).caPem,
+    );
+  }
+  const app = destination();
+  const server = await startBoxServer(authority, async (req) => {
+    const response = await app.request(req.path, {
+      method: req.method,
+      headers: { "content-type": "application/json" },
+      body: req.body,
+    });
+    return { status: response.status, body: await response.text() };
+  });
+  const chart = (await database.readNodeMembership(suite.db))!;
+  const receiverKey = await readNodeIdentityKey(suite.node, ring, receiver);
+  const body = {
+    ...chart.body,
+    nodes: chart.body.nodes.map((row) =>
+      row.nodeId === receiver ? { ...row, contactUrl: server.url } : row,
+    ),
+  };
+  await writeNodeMembership(suite.db, {
+    ...chart,
+    body,
+    signature: signDocumentBody(body, receiverKey),
+  });
+  const lookups: string[] = [];
+  const logs: { event: string; fields: unknown }[] = [];
+  const pass = () =>
+    runReturnRecordsPass({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules,
+      stateDir,
+      lookup: async (hostname) => {
+        lookups.push(hostname);
+        return { addresses: ["127.0.0.1"], remembered: false };
+      },
+      log: (_level, event, fields) => logs.push({ event, fields }),
+      stopped: () => false,
+    });
+  const close = async () => {
+    await server.close();
+    await rm(stateDir, { recursive: true, force: true });
+  };
+  return { server, pass, lookups, logs, close };
+}
+
+it("returns the records to the main box over the box transport under the venue authority", async () => {
+  const receiving = await receiverOverTls("venue authority");
+  try {
+    expect(await receiving.pass()).toBe("confirmed");
+    expect(received).toEqual(["first", "second"]);
+    expect(receiving.server.requests.map((req) => req.path)).toEqual([
+      "/api/node/return-records",
+      "/api/node/return-records",
+    ]);
+    expect(receiving.lookups).toContain("localhost");
+    expect(receiving.logs).toEqual([]);
+  } finally {
+    await receiving.close();
+  }
+});
+
+it("waits and logs the certificate refusal when this box holds no venue authority", async () => {
+  const receiving = await receiverOverTls("no authority");
+  try {
+    expect(await receiving.pass()).toBe("waiting");
+    expect(receiving.server.requests).toEqual([]);
+    expect(received).toEqual([]);
+    expect(receiving.logs).toEqual([
+      {
+        event: "return-records.unreachable",
+        fields: { errorClass: "PeerCertificateRefused", errno: null },
+      },
+    ]);
+  } finally {
+    await receiving.close();
+  }
+});
+
+it("logs the errno under a certificate refusal from a main box the held authority did not sign", async () => {
+  const receiving = await receiverOverTls("another authority");
+  try {
+    expect(await receiving.pass()).toBe("waiting");
+    expect(received).toEqual([]);
+    expect(receiving.logs).toEqual([
+      {
+        event: "return-records.unreachable",
+        fields: { errorClass: "PeerCertificateRefused", errno: expect.stringMatching(/CERT/) },
+      },
+    ]);
+  } finally {
+    await receiving.close();
+  }
+});
+
+it("names a timed-out send by its error name", async () => {
+  const logs: unknown[] = [];
+  const result = await runReturnRecordsPass({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    fetch: () =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = AbortSignal.timeout(1);
+        signal.addEventListener("abort", () => reject(signal.reason as Error));
+      }),
+    log: (_level, event, fields) => logs.push({ event, fields }),
+    stopped: () => false,
+  });
+  expect(result).toBe("waiting");
+  expect(logs).toEqual([
+    {
+      event: "return-records.unreachable",
+      fields: { errorClass: "TimeoutError", errno: null },
+    },
+  ]);
+});
+
+it.each([
+  [200, "not json"],
+  [200, "null"],
+  [409, "not json"],
+  [409, "null"],
+])(
+  "needs attention, and logs no outage, when a reachable main box answers %i with %j",
+  async (status, text) => {
+    const logs: unknown[] = [];
+    const result = await runReturnRecordsPass({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules,
+      fetch: async () => new Response(text, { status }),
+      log: (_level, event, fields) => logs.push({ event, fields }),
+      stopped: () => false,
+    });
+    expect(result).toBe("needs-attention");
+    expect(logs).toEqual([]);
+  },
+);
+
+it("logs an unreachable main box once per change of cause across the duty's passes", async () => {
+  const sleep = vi.spyOn(loop, "realSleep").mockResolvedValue(undefined);
+  const app = destination();
+  const failures = ["ECONNREFUSED", "ECONNREFUSED", "ETIMEDOUT"];
+  const logs: { event: string; fields: unknown }[] = [];
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: (_level, event, fields) => logs.push({ event, fields }),
+    fetch: async (url, init) => {
+      const code = failures.shift();
+      if (code !== undefined) throw Object.assign(new Error("unreachable"), { code });
+      return app.request(String(url), init);
+    },
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+    expect(logs).toEqual([
+      {
+        event: "return-records.unreachable",
+        fields: { errorClass: "Error", errno: "ECONNREFUSED" },
+      },
+      {
+        event: "return-records.unreachable",
+        fields: { errorClass: "Error", errno: "ETIMEDOUT" },
+      },
+    ]);
+  } finally {
+    await duty.stop();
+    sleep.mockRestore();
+  }
+});
+
+const bindingRefusal = () =>
+  Response.json(
+    { error: { code: "handover.return_refused", params: { reason: "binding" } } },
+    {
+      status: 409,
+    },
+  );
+
+const expectedInventory = () =>
+  returnDigest(["first", "second"].map((payload) => returnDigest({ module: "sample", payload })));
+
+it("remembers a confirmed return, so a later duty still sends and answers confirmed when refused", async () => {
+  const app = destination();
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  const events = await suite.node
+    .select()
+    .from(nodeDatabase.nodeHandoverEvents)
+    .where(eq(nodeDatabase.nodeHandoverEvents.kind, "return_confirmed"));
+  expect(events).toEqual([
+    expect.objectContaining({
+      nodeId: source,
+      operationId: null,
+      detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+      envelope: expect.stringContaining('"waitron.handover.return-receipt.v1"'),
+    }),
+  ]);
+  received = [];
+  let calls = 0;
+  const sleep = vi.spyOn(loop, "realSleep").mockResolvedValue(undefined);
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    stateDir: join(tmpdir(), "waitron-return-no-state"),
+    log: () => {},
+    fetch: async () => {
+      calls++;
+      return bindingRefusal();
+    },
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+    await duty.stop();
+    // One refused send, and no second turn once confirmed.
+    expect(calls).toBe(1);
+    expect(received).toEqual([]);
+  } finally {
+    await duty.stop();
+    sleep.mockRestore();
+  }
+});
+
+it("resends to a main box that has its records again, and holds one confirmation for one inventory", async () => {
+  const app = destination();
+  const through = async (url: string | URL | Request, init?: RequestInit) =>
+    app.request(String(url), init);
+  expect(await send(through)).toBe("confirmed");
+  received = [];
+  expect(await send(through)).toBe("confirmed");
+  expect(received).toEqual(["first", "second"]);
+  expect(
+    await nodeDatabase.readHandoverEvents(suite.node, source, null, "return_confirmed"),
+  ).toHaveLength(1);
+});
+
+it("answers from the confirmation of the inventory it would send now, not the first one it held", async () => {
+  let payloads = ["first", "second"];
+  const changing: WaitronModule[] = [
+    {
+      ...modules[0]!,
+      handover: {
+        ...modules[0]!.handover!,
+        returnRecords: { ...modules[0]!.handover!.returnRecords!, read: async () => payloads },
+      },
+    },
+  ];
+  const pass = (fetch: typeof globalThis.fetch) =>
+    runReturnRecordsPass({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules: changing,
+      fetch,
+      stopped: () => false,
+    });
+  const app = destination();
+  expect(await pass(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  payloads = ["first", "second", "third"];
+  expect(await pass(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  const held = await nodeDatabase.readHandoverEvents(suite.node, source, null, "return_confirmed");
+  expect(new Set(held.map((event) => event.detail.inventory)).size).toBe(2);
+
+  // A restart whose send is refused answers from the second inventory's confirmation.
+  expect(await pass(async () => bindingRefusal())).toBe("confirmed");
+});
+
+it("answers a held confirmation's records' clash as a clash, and an unreachable main box as confirmed", async () => {
+  const app = destination();
+  const through = async (url: string | URL | Request, init?: RequestInit) =>
+    app.request(String(url), init);
+  expect(await send(through)).toBe("confirmed");
+  expect(
+    await send(async () => {
+      throw Object.assign(new Error("unreachable"), { code: "ECONNREFUSED" });
+    }),
+  ).toBe("confirmed");
+  expect(
+    await send(async () =>
+      Response.json({ error: { code: "fiscal.return_clock_ahead" } }, { status: 409 }),
+    ),
+  ).toBe("clock");
+  expect(
+    await send(async () =>
+      Response.json({ error: { code: "fiscal.return_record_clash" } }, { status: 409 }),
+    ),
+  ).toBe("record-clash");
+  accounted = false;
+  received = [];
+  expect(await send(through)).toBe("clash");
+  expect(received).toEqual(["first"]);
+});
+
+async function chartNaming(primary: string, term: number) {
+  const signer = primary === source ? source : receiver;
+  const signerKey = await readNodeIdentityKey(suite.node, ring, signer);
+  const body = {
+    term,
+    nodes: [
+      {
+        nodeId: receiver,
+        contactUrl: "https://receiver.test",
+        standing: primary === receiver ? ("serving-primary" as const) : ("sell-only" as const),
+      },
+      {
+        nodeId: source,
+        contactUrl: "https://source.test",
+        standing: primary === source ? ("serving-primary" as const) : ("sell-only" as const),
+      },
+    ],
+  };
+  const sourceKey = await readNodeIdentityKey(suite.node, ring, source);
+  await writeNodeMembership(suite.db, {
+    body,
+    signerNodeId: signer,
+    signature: signDocumentBody(body, signerKey),
+    endorsements:
+      signer === source
+        ? []
+        : [endorseKey(receiver, nodeSigningPublicKey(signerKey), source, sourceKey)],
+  });
+}
+
+it("sends to the successor its restriction names while its held chart still names itself main", async () => {
+  await chartNaming(source, 3);
+  await database.withNodeTransaction(suite.node, (tx) =>
+    nodeDatabase.recordHandoverRestrictionTx(tx, {
+      nodeId: source,
+      operationId: "source-handover",
+      kind: "handed-over",
+      successorNodeId: receiver,
+      membershipTerm: 3,
+    }),
+  );
+  const app = destination();
+  const urls: string[] = [];
+  const through = async (url: string | URL | Request, init?: RequestInit) => {
+    urls.push(String(url));
+    return app.request(String(url), init);
+  };
+  expect(await send(through)).toBe("waiting");
+  expect(received).toEqual([]);
+  expect(urls).toEqual(["https://receiver.test/api/node/return-records"]);
+  await chartNaming(receiver, 4);
+  expect(await send(through)).toBe("confirmed");
+  expect(received).toEqual(["first", "second"]);
+  expect(
+    await nodeDatabase.readHandoverEvent(suite.node, source, "source-handover", "return_confirmed"),
+  ).toEqual(
+    expect.objectContaining({
+      detail: { destinationNodeId: receiver, inventory: expectedInventory() },
+    }),
+  );
+});
+
+it("still needs attention when a main box its held chart names refuses the binding", async () => {
+  expect(await send(async () => bindingRefusal())).toBe("needs-attention");
+});
+
+it("still takes in and confirms a batch the old main box sends after Will not return", async () => {
+  await completionBinding();
+  const { personId } = await acceptanceSession();
+  await abandonReturn(
+    { db: suite.db, node: suite.node, nodeId: receiver },
+    { sourceNodeId: source, personId },
+  );
+  expect(await takeoverState()).toBe("return_abandoned");
+
+  const app = destination();
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+
+  expect(received).toEqual(["first", "second"]);
+  expect(await takeoverState()).toBe("return_abandoned");
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual(
+    batchRows("receiver-emergency"),
+  );
+});
+
+it("lets the old main box be removed without the reset statement once it returns after Will not return", async () => {
+  await completionBinding();
+  const { personId } = await acceptanceSession();
+  const receiverDeps = { db: suite.db, node: suite.node, nodeId: receiver };
+  await abandonReturn(receiverDeps, { sourceNodeId: source, personId });
+  const app = destination();
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+
+  const listed = await listServers(suite.db, suite.node, receiver);
+  expect(listed.nodes.find((n) => n.nodeId === source)).toMatchObject({
+    standing: "sell-only",
+    removable: true,
+    needsResetStatement: false,
+  });
+  expect(
+    await removeStandby(
+      { ...receiverDeps, ring, log: () => {} },
+      { targetNodeId: source, personId },
+    ),
+  ).toMatchObject({ removed: true });
+});
+
+it("refuses a batch the old main box signed once it is removed after Will not return", async () => {
+  await completionBinding();
+  const { personId } = await acceptanceSession();
+  const receiverDeps = { db: suite.db, node: suite.node, nodeId: receiver };
+  await abandonReturn(receiverDeps, { sourceNodeId: source, personId });
+  // Both boxes share one database here, so the batch is signed while the shared chart still lists it.
+  const signed: { url: string; init: RequestInit }[] = [];
+  await send(async (url, init) => {
+    signed.push({ url: String(url), init: init! });
+    return new Response(null, { status: 503 });
+  });
+  expect(signed).toHaveLength(1);
+  await removeStandby(
+    { ...receiverDeps, ring, log: () => {} },
+    { targetNodeId: source, personId, resetStatement: true },
+  );
+  expect(
+    (await database.readNodeMembership(suite.db))!.body.nodes.find((n) => n.nodeId === source)
+      ?.standing,
+  ).toBe("evicted");
+
+  const response = await destination().request(signed[0]!.url, signed[0]!.init);
+
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "handover.return_refused", params: { reason: "signature" } },
+  });
+  expect(received).toEqual([]);
+  expect(await suite.db.select().from(database.handoverReturnBatches)).toEqual([]);
 });

@@ -44,8 +44,8 @@ export interface WaitingStartDeps {
   pageCheck: MiddlewareHandler;
   /** The boxes this one waits for, as the check that began the wait named them. */
   waitingOn: readonly string[];
-  /** The page's name for each box, or `null` where it has none. */
-  namesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
+  /** The page's name for each box (`readBoxAddresses`: its address, never its venue name). */
+  addressesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
   /** Signs in the person who carries on as the main box; without it the page offers no form. */
   carryOn?: {
     db: Database;
@@ -127,12 +127,12 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
           node: deps.node,
           nodeId: deps.nodeId,
           peerNodeIds: () => waitingOn,
-          namesOf: deps.namesOf,
+          addressesOf: deps.addressesOf,
           chartTerm: async () => (await deps.readMembership())?.body.term ?? 0,
           beginCarryOn: () => beginCarryOn(),
           log,
         });
-  waitingPageRoute(() => deps.namesOf(waitingOn), log, section)(app);
+  waitingPageRoute(() => deps.addressesOf(waitingOn), log, section)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
   let failEnd: (error: unknown) => void = () => {};

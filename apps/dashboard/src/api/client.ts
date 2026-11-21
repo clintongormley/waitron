@@ -1973,6 +1973,10 @@ export interface ServerRow {
   canClear: boolean;
   /** A spare that finished joining: Remove must send both declarations. */
   requiresRetirementConfirmation: boolean;
+  /** A handover here still waits for this old main box to return its invoice records. */
+  returnOutstanding: boolean;
+  /** Remove of this former main box is refused unless it sends `resetStatement`. */
+  needsResetStatement: boolean;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */
@@ -5240,12 +5244,20 @@ export class DashboardApi {
   /** `removed` is false when the machine was already removed and nothing was written. */
   removeServer(
     nodeId: string,
-    declarations?: { spareSwitchedOff: true; noParallelRecovery: true },
+    declarations?: { spareSwitchedOff: true; noParallelRecovery: true } | { resetStatement: true },
   ): Promise<{ removed: boolean; term: number }> {
     return this.#request(
       `/management-api/servers/${encodeURIComponent(nodeId)}/remove`,
       "POST",
       declarations,
+    );
+  }
+
+  abandonServerReturn(nodeId: string): Promise<{ operationId: string; state: "return_abandoned" }> {
+    return this.#request(
+      `/management-api/servers/${encodeURIComponent(nodeId)}/return-abandoned`,
+      "POST",
+      { confirmed: true },
     );
   }
 

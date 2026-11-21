@@ -99,6 +99,11 @@ export interface ActivityKindData {
     readonly sourceNodeId: string;
     readonly module: string;
   };
+  /** The subject is the former main box; ids only. */
+  readonly "handover.return_abandoned": {
+    readonly operationId: string;
+    readonly sourceNodeId: string;
+  };
 
   /** Who saved which document and its new revision; never a document value. */
   readonly "settings.saved": { readonly revision: number };
@@ -159,6 +164,7 @@ export const ACTIVITY_KINDS = {
   "station.closed_for_day": { subject: "station" },
   "station.reopened": { subject: "station" },
   "handover.return_clash_accepted": { subject: "node" },
+  "handover.return_abandoned": { subject: "node" },
   "settings.saved": { subject: "settings" },
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },

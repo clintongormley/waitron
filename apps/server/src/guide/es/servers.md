@@ -139,6 +139,19 @@ devolución. Los registros de facturación y sus hechos de pago registrados pued
 servidor principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
 cajón. No restablezcas el servidor anterior mientras necesites sus datos.
 
+Enciende el servidor anterior y mantenlo conectado: devuelve sus registros de facturación por sí
+solo. Hasta que lleguen, su fila en **Sistema → Servidores** del nuevo servidor principal dice
+**Esperando a que el antiguo servidor principal devuelva sus registros de facturación**, y no se puede volver a
+traspasar el local ni retirar ese servidor.
+
+Si el servidor anterior no va a volver nunca con sus datos, elige **No volverá** en el menú de su
+fila. Los registros de facturación que hizo después de la copia con la que empezó el nuevo servidor
+principal se quedan solo en él, salvo que se vuelva a encender antes de que lo retires.
+
+Para retirar un antiguo servidor principal, elige **Retirar** en el menú de su fila. Si no ha
+devuelto sus registros de facturación, marca que se ha restablecido o que no se volverá a encender
+nunca. Si vuelve, restablécelo y no elijas nunca **Seguir como equipo principal** en él.
+
 ## Traspasar el local a un servidor de reserva {#hand-over}
 
 Usa este proceso solo con un servidor de reserva que haya terminado de unirse al local.
@@ -186,7 +199,9 @@ Si sigue fallando la comprobación de la copia, consulta [cómo cambiar al servi
 ## Después del traspaso {#after-hand-over}
 
 Usa la dirección del nuevo servidor. Si la página del servidor anterior ofrece **Progreso**, sigue el
-enlace para continuar el traspaso en el de reserva. Conserva el servidor anterior y sus datos.
+enlace para continuar el traspaso en el de reserva. Conserva el servidor anterior y sus datos,
+encendido y conectado: devuelve sus registros de facturación al nuevo servidor por sí solo y, hasta
+que lleguen, no se puede volver a traspasar el local ([más información](servers.md#old-box-returns)).
 
 En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese servidor acepte ventas.
 
@@ -272,7 +287,7 @@ totales del informe.
 
 Cuando un servidor se inicia y no consigue contactar con el otro servidor del local, espera en lugar de
 vender, porque el otro quizá ha pasado a llevar el local. Su página, titulada **Este equipo está
-esperando a** y el nombre del otro servidor, lo indica. Mientras espera no hace ventas ni envía nada
+esperando a** y la dirección del otro servidor, lo indica. Mientras espera no hace ventas ni envía nada
 a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro servidor responde, este se inicia con
 normalidad o, si el otro ha pasado a llevar el local, lo indica.
 

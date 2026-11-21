@@ -1929,6 +1929,10 @@ loop test (`apps/server/src/stream-loop.e2e.test.ts`), which grows into the two-
     `return_abandoned` (read). So after one emergency switch the venue cannot hand over again, and
     the replaced box's row (labelled "Former primary, now only sells", though it neither sells nor
     files) has no way to be removed. Campaign item A1561; a go-live blocker for failover.
+    _2026-11-21, A1561: an empty return was already confirmed; the likeliest reason the return
+    never arrived, not reproduced on the boxes, is that the start gave the return sender no venue
+    certificate authority. The new main box now closes the handover once the old box's records are confirmed, or when an administrator
+    chooses **Will not return** on Servers, and a former main box can then be removed._
   - **Test set-up effect, not the box image:** after the old box returned, `waitron.local` from the
     Mac resolved to it again, because that test box's operating system is named "Waitron" and runs
     avahi. The box image (`deploy/box/mkosi.conf`) installs no mDNS daemon; a `waitron.sh` install

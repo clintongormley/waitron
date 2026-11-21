@@ -6,12 +6,14 @@ import { mountBuiltApps } from "./spa-api.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { nodes } from "@waitron/db";
+import { nodes, writeNodeMembership } from "@waitron/db";
+import type { SignedMembershipDocument } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
-import { readPeerNames, renderWaitingPage, waitingPageRoute } from "./waiting-page.js";
+import { renderWaitingPage, waitingPageRoute } from "./waiting-page.js";
+import { readBoxAddresses } from "./restricted-page.js";
 
 async function page(names: readonly (string | null)[], language: string): Promise<string> {
   const app = new Hono();
@@ -266,16 +268,31 @@ describe("the waiting page", () => {
   });
 });
 
-describe("readPeerNames", () => {
+describe("readBoxAddresses", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-  it("reads a box's name, and gives null where it has no row or no name", async () => {
+  it("names each box by its address in the held chart, or by nothing, never by its venue name", async () => {
     const venue = await setupVenue(suite.db);
     const own = venue.cfg.nodeId;
     await suite.db.update(nodes).set({ name: "Main" }).where(eq(nodes.id, own));
-    expect(await readPeerNames(suite.db, [])).toEqual([]);
-    expect(await readPeerNames(suite.db, [own, "unknown-box"])).toEqual(["Main", null]);
-    await suite.db.update(nodes).set({ name: "" }).where(eq(nodes.id, own));
-    expect(await readPeerNames(suite.db, [own])).toEqual([null]);
+    expect(await readBoxAddresses(suite.db, [own])).toEqual([null]);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 1,
+        nodes: [
+          { nodeId: own, contactUrl: "https://main.example:8443/", standing: "serving-primary" },
+          { nodeId: "no-address", contactUrl: "not an address", standing: "serving-secondary" },
+        ],
+      },
+      signerNodeId: own,
+      signature: "",
+      endorsements: [],
+    } as unknown as SignedMembershipDocument);
+    expect(await readBoxAddresses(suite.db, [])).toEqual([]);
+    expect(await readBoxAddresses(suite.db, [own, "no-address", "unknown-box"])).toEqual([
+      "main.example:8443",
+      null,
+      null,
+    ]);
   });
 });

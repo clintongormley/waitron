@@ -5,13 +5,11 @@ export interface CarryOnWords {
   heading: string;
   bucketMain: string;
   openMain: string;
-  /** The words around the other box's name. */
   intro: readonly [string, string];
   email: string;
   password: string;
   totp: string;
   recoveryCode: string;
-  /** The first statement's words around the other box's name. */
   switchedOff: readonly [string, string];
   noOtherRecovery: string;
   action: string;
@@ -28,7 +26,6 @@ export interface CarryOnWords {
   /** In place of the form when it could not be drawn. */
   unavailable: string;
   failed: string;
-  /** The refusal's words around the successor's name. */
   knownHandover: readonly [string, string];
   back: string;
   knownTitle: string;
@@ -47,11 +44,8 @@ export const WAITING_PAGE_WORDS: Readonly<
   Record<
     SupportedLocale,
     {
-      /** The title's words before and after the other box's name. */
       title: readonly [string, string];
-      /** The body's words around the other box's name. */
       body: readonly [string, string];
-      /** Named when the check said which boxes it waited for and none could be named. */
       otherBox: string;
       carryOn: CarryOnWords;
     }
