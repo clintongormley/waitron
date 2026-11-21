@@ -231,7 +231,8 @@ check in CI. A green scoped run does not overrule the hook's failure.
 
 One line each; the receipt for every one is in its topic file. **Read that file before working in the
 area** — these lines tell you what the rule is, not why it exists or how it broke. Where a guard is
-called weaker than its name, the topic file lists what it does not see.
+called weaker than its name, the topic file lists what it does not see. Receipts moved on 2026-11-21:
+[ui](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-21).
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
@@ -312,7 +313,7 @@ called weaker than its name, the topic file lists what it does not see.
   text. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
-- **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts`, weaker than its name: it checks declared names against the server's resources and refuses a non-empty inline `dependencies: [` by reading text; it misses missing SQL dependencies, disabled-module combinations and a list passed in by variable. [Detail](docs/developers/conventions-ui.md).
+- **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts`, weaker than its name. [Detail](docs/developers/conventions-ui.md).
 - **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
   venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
   Nothing guards the second half. See [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -344,16 +345,14 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that
   literal key; a data column must use another key.
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a
-  CSS class.** Guard: `scripts/data-table-cell-classes.test.ts`, weaker than its name: reads each
-  file's text alone, so imported helpers and styles, inherited methods and `class=${…}` escape it.
+  CSS class.** Guard: `scripts/data-table-cell-classes.test.ts`, weaker than its name.
   Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours,
   `rem` or `em`; system colours only inside `@media (forced-colors: active)`, which nothing guards.** Guards:
   `packages/ui/src/no-hardcoded-chrome.test.ts` (UI package only),
-  `scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name: values in the `css` tags of
-  the dashboard, the till and modules' dashboard screens only, no `px`
+  `scripts/no-hardcoded-chrome-views.test.ts`, weaker than its name
   ([limits](docs/developers/conventions-ui.md#no-hardcoded-chrome)), and
-  `scripts/style-token-names.test.ts`, weaker than its name: text match against declarations anywhere.
+  `scripts/style-token-names.test.ts`, weaker than its name.
 - **Text in the brand colour reads `--wt-color-primary-text`; `--wt-color-primary` paints fills,
   lines and icons.** Guard: `scripts/primary-coloured-text.test.ts`, weaker than its name — it reads
   `color:` declarations as text, in tracked files only; what it misses is in
@@ -912,8 +911,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 [printing](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26),
 [stream tests](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26),
 [data, 2026-11-11](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-11),
-[data, 2026-11-14](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-14) and
-[data, 2026-11-15](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15).
+[data, 2026-11-14](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-14),
+[data, 2026-11-15](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-15) and
+[data, 2026-11-21](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-21).
 
 - **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
   jobs; documents contain no drawer commands and connected-card payments open nothing.** Taking cash
@@ -990,8 +990,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `apps/server/src/clock-watch.start-up.test.ts`, `apps/server/src/clock-correction.test.ts`,
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-watch.future-date.test.ts`,
   `apps/server/src/boot.start-clock-gate.test.ts` and
-  `packages/fiscal-verifactu/src/drain.future-date.test.ts`, weaker than the rule: named cases only,
-  the watch's cases on a stand-in for the filing read.
+  `packages/fiscal-verifactu/src/drain.future-date.test.ts`, weaker than the rule.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **A record's time is never compared with the latest record's: the start confirms the time, and
   once it is confirmed the box records with its clock however far a later sync moves it** (owner,
@@ -1032,15 +1031,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Restore and promotion start a new chain under a new installation name.**
   Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
-  on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
-  2026-11-13: "b", AEAT no longer counts);
+  on by itself, and AEAT's time is not read for it (owner, 2026-11-11; 2026-11-13);
   another machine's clock counts only once the person proved on that page (the setup password on
   setup, the backup's node recovery key on restore, a `node.manage` sign-in on promotion, the box's
   current recovery key on the conflict switch) confirms both times or sets the box's clock from that
-  machine (owner, 2026-11-13: "we should never just accept another device's match automatically.
-  instead, we should always ask for confirmation, and that confirmation should be protected"; the
-  conflict switch's proof is not owner-approved: the proposal the owner agreed named an
-  administrator sign-in). A restore's start uses the restore page's choice while the box's boot id
+  machine (owner, 2026-11-13; the conflict switch's proof is not owner-approved). A restore's start uses the restore page's choice while the box's boot id
   is unchanged and its clock has not been stepped since. Otherwise it waits until the time service
   synchronises or the node recovery key confirms again, held by the browser that pressed Restore
   backup or typed on the waiting page. The setup page's Provision likewise uses a device time the
@@ -1052,7 +1047,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   Restore takes one source; working-time chain continues from its head. Guards:
   hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/hour-setup-defaults/hosted-hour-recovery/start-clock-waiting/minute-selection-unknown-name
   suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`,
-  weaker than the rule: the server checks the `confirmed` flag, not that the page showed both times.
+  weaker than the rule.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
   background duty is stopped through `apps/server/src/background-duties.ts`, or is a job on the
   runner whose mark in `apps/server/src/job-catalogue.ts` says it stops at a stepdown or why it
