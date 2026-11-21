@@ -1,6 +1,6 @@
 # A1558 Adding, recovering and switching to a second box: plan
 
-> Lane B, 21 November 2026. Written from the owner's notes during the two-box rehearsal of 20 November; lane B's queue, A1558, quotes them word for word. A fresh Claude read this plan on 21 November, and this revision answers its findings. The watcher has not cleared it yet. Code facts were read on main at 260e14bbb4, not run, unless a line says otherwise.
+> Lane B, 21 November 2026. Written from the owner's notes during the two-box rehearsal of 20 November; lane B's queue, A1558, quotes them word for word. A fresh Claude read this plan on 21 November, and this revision answers its findings. The watcher cleared it on 21 November at 00:11 (lane B's `questions.md`). Code facts were read on main at 260e14bbb4, not run, unless a line says otherwise.
 
 **What a person can do when this is done.** A manager adding a spare box, or recovering a failed one, is taken to the right box, is not asked to install a certificate the box is about to replace, and sees short ticked steps with links instead of paragraphs. During an emergency switch, the spare's pages say what is happening and what to press, and they show the venue's own time zone. Afterwards the till says nothing about boxes while all is well, and the Servers page lists the main box first, with clickable addresses and a true label for a replaced box.
 
