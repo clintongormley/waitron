@@ -1,15 +1,27 @@
-import { html, nothing, type PropertyValues } from "lit";
+import { css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TillTicketView } from "../screens/till-ticket-view.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { formatMoney } from "@waitron/shared";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { paymentSlipButton, type PaymentSlipAction } from "./pay-equipment.js";
 import { trackDialog } from "./track-dialog.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
 @customElement("till-settlement-document-dialog")
 export class TillSettlementDocumentDialog extends TillTicketView {
+  static override styles = [
+    ...TillTicketView.styles,
+    css`
+      .payment-slip {
+        margin-block: var(--wt-space-2);
+      }
+    `,
+  ];
+
+  @property({ attribute: false }) paymentSlip?: PaymentSlipAction;
+
   @property({ attribute: false }) cashChange: string | null = null;
 
   @state() private choice: "receipt" | "invoice" = "receipt";
@@ -171,7 +183,13 @@ export class TillSettlementDocumentDialog extends TillTicketView {
                 >${this.renderReceiptPrinterNote(designation)}`
           : this.renderInvoicePrint()
       }
-      ${this.renderOriginalDelivery(true)} ${this.renderDrawer()}
+      ${this.renderOriginalDelivery(true)}
+      ${
+        this.paymentSlip === undefined
+          ? nothing
+          : html`<div class="payment-slip">${paymentSlipButton(this.paymentSlip)}</div>`
+      }
+      ${this.renderDrawer()}
       ${
         this.emailOpen && this.canPrintReceipt
           ? html`<till-invoice-email-dialog

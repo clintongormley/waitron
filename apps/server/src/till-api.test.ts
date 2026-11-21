@@ -1682,6 +1682,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // Cookieless: no device → no reader to resolve → `none`; the venue has no readers configured.
       cardProvider: "none",
       activeReaders: [],
+      sumUpConnected: false,
       tipsEnabled: false,
       formFactor: "till",
       // A cookieless request has no device profile, so no capabilities.

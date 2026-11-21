@@ -1,7 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BillLookupRow } from "../api/client.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
@@ -56,46 +54,3 @@ describe.each(["light", "dark"] as const)("Selected bill collection a11y (%s the
     await expectNoA11yViolations(host);
   });
 });
-
-for (const theme of ["light", "dark"] as const) {
-  for (const locale of ["en", "es"]) {
-    for (const width of [390, 1280]) {
-      it.each(["cash", "card"] as const)(
-        `labels and keyboard-toggles the requested slip for %s in ${locale}/${theme}/${width}`,
-        async (method) => {
-          const previousLocale = currentLocale();
-          const viewport = { width: window.innerWidth, height: window.innerHeight };
-          setLocale(locale);
-          await page.viewport(width, 900);
-          try {
-            const { el, host } = await mountWidget<TillFindBillDialog>(
-              "till-find-bill-dialog",
-              { bill: debt, takesCash: true, takesManualCard: true, slipPrinterAvailable: true },
-              theme,
-            );
-            el.shadowRoot!.querySelector<HTMLElement>(`[data-${method}]`)!.click();
-            await el.updateComplete;
-            const field =
-              el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-                '[name="printSlip"]',
-              )!;
-            await field.updateComplete;
-            const input = field.shadowRoot!.querySelector("input")!;
-            expect(input.getAttribute("aria-label")).toBe(t("payment_slip.request"));
-            input.focus();
-            await userEvent.keyboard(" ");
-            expect(input.checked).toBe(true);
-            await expectNoA11yViolations(host);
-            expect(window.innerWidth).toBe(width);
-            await page.screenshot({
-              path: `__screenshots__/a739-slip4-find-bill-dialog-${method}-${locale}-${theme}-${width}.png`,
-            });
-          } finally {
-            setLocale(previousLocale);
-            await page.viewport(viewport.width, viewport.height);
-          }
-        },
-      );
-    }
-  }
-}

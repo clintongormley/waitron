@@ -130,7 +130,12 @@ it("card collection keeps its reference after refusal and submits the existing e
   expect(app.submitted).toEqual([
     {
       workingOrderId: "collection-1",
-      tender: { method: "card", amount: "30.00", externalRef: "receipt-7" },
+      tender: {
+        method: "card",
+        amount: "30.00",
+        externalProvider: "other",
+        externalRef: "receipt-7",
+      },
       invoiced: true,
     },
   ]);
@@ -298,15 +303,17 @@ it("an obsolete selection cannot replace the cash draft when the bill changes as
 
 it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
   const { form } = await mount({ takesCash: false });
+  form.sumUpConnected = true;
+  await form.updateComplete;
   expect(unload()).toBe(false);
   await fill(form, "externalMachine", " Spare ");
   expect(unload()).toBe(true);
   await fill(form, "externalMachine", "   ");
   expect(unload()).toBe(false);
-  click(form, 'input[name="external-provider"][value="connected_account"]');
+  click(form, 'input[name="external-provider"][value="other"]');
   await form.updateComplete;
   expect(unload()).toBe(true);
-  click(form, 'input[name="external-provider"][value=""]');
+  click(form, 'input[name="external-provider"][value="connected_account"]');
   await form.updateComplete;
   expect(unload()).toBe(false);
 });

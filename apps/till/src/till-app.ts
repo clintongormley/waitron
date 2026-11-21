@@ -1,3 +1,4 @@
+import type { PaymentSlipAction } from "./widgets/pay-equipment.js";
 import { outsideCardValues } from "./widgets/outside-card.js";
 import type { UnreadDiningChoice } from "./widgets/dining-choice.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
@@ -28,7 +29,7 @@ import type {
   LateSend,
   SplitSelection,
   SplitSources,
-  SlipTender,
+  Tender,
 } from "./api/client.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
@@ -523,7 +524,11 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 type Screen = "lock" | "counter" | "floor" | "station";
 
-type SettlementDocument = { surface: "counter" | "table"; cashChange: string | null };
+type SettlementDocument = {
+  surface: "counter" | "table";
+  cashChange: string | null;
+  slipPaymentId?: string;
+};
 
 type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
@@ -1584,7 +1589,7 @@ interface WholePayment {
   invoiced: boolean;
   outstanding: string;
   bill: BillLookupRow | null;
-  tender: SlipTender;
+  tender: Tender;
   guestCount?: number | null;
   expectedEdit: BillEditExpected | null;
 }
@@ -4149,6 +4154,8 @@ export class TillApp extends LitElement {
   /** Defaults to `"none"`, so an unresolved boot never shows the integrated-card controls. */
   @state() private cardProvider: TillInfo["cardProvider"] = "none";
   @state() private tipsEnabled = false;
+  @state() private sumUpConnected = false;
+
   @state() private activeReaders: TillActiveReader[] = [];
   /** The reader `till-tender-pay` shows before the operator picks one. */
   @state() private defaultReaderId?: string;
@@ -4413,6 +4420,10 @@ export class TillApp extends LitElement {
   @state() private deferredClosing: DeferredClosing | null = null;
   #deferredCloses = 0;
   @state() private settlementDocument: SettlementDocument | null = null;
+  @state() private slipRequest?: {
+    paymentId: string;
+    state: NonNullable<PaymentSlipAction["state"]>;
+  };
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
@@ -7749,6 +7760,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id, true, {
         surface: "counter",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
+        slipPaymentId: result.slipPaymentId,
       });
       if (result.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       paid = true;
@@ -7887,6 +7899,7 @@ export class TillApp extends LitElement {
     this.#counterSends++;
     const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
+    const readerMakesSlip = this.#readerMakesSlip(detail.readerId);
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
     const lines = this.#currentSaleLines();
@@ -7930,7 +7943,6 @@ export class TillApp extends LitElement {
               : { simulationOutcome: detail.simulationOutcome }),
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
-            ...(detail.printCardSlip === undefined ? {} : { printCardSlip: detail.printCardSlip }),
             ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
@@ -7946,14 +7958,14 @@ export class TillApp extends LitElement {
       if (out.outcome === "partial") {
         await this.#reloadCounterOrder(id, session);
         if (this.#hasLeftCounterOrder(id, session)) return;
-        this.#moveSlipFailureIntoPay(
-          await this.#openBillPaying(
-            "contribution",
-            payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-            out.balance.outstanding,
-            { surface: "counter", billId: id, visit: session },
-          ),
+        const open = await this.#openBillPaying(
+          "contribution",
+          payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+          out.balance.outstanding,
+          { surface: "counter", billId: id, visit: session },
         );
+        this.#moveSlipFailureIntoPay(open);
+        if (!readerMakesSlip) this.#offerShortCaptureSlip(open, out.slipPaymentId);
         return;
       }
       this.captureWarning = out.captureWarning ?? null;
@@ -7961,7 +7973,11 @@ export class TillApp extends LitElement {
         this.result = out.ticket;
         if (this.#store.id === id && basketVisit === this.#store.loadGeneration)
           this.#commitBasket(payload);
-        this.#showTicket(id, true, { surface: "counter", cashChange: null });
+        this.#showTicket(id, true, {
+          surface: "counter",
+          cashChange: null,
+          slipPaymentId: readerMakesSlip ? undefined : out.ticket.slipPaymentId,
+        });
         paid = true;
       } else {
         if (
@@ -9092,6 +9108,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id, true, {
         surface: "counter",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
+        slipPaymentId: result.slipPaymentId,
       });
       if (result.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       collected = true;
@@ -10022,11 +10039,7 @@ export class TillApp extends LitElement {
 
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
-    const { workingOrderId, invoiced, printCardSlip, ...detail } = (
-      event as CustomEvent<FindBillPayDetail>
-    ).detail;
-    const tender: SlipTender =
-      printCardSlip === undefined ? detail.tender : { ...detail.tender, printCardSlip };
+    const { workingOrderId, invoiced, tender } = (event as CustomEvent<FindBillPayDetail>).detail;
     const held = this.#holdRefusal(workingOrderId);
     if (held !== null) {
       this.findBillError = held;
@@ -10105,6 +10118,7 @@ export class TillApp extends LitElement {
       this.#showTicket(workingOrderId, !payment.invoiced, {
         surface: "counter",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
+        slipPaymentId: result.slipPaymentId,
       });
       if (result.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       collected = true;
@@ -12069,6 +12083,7 @@ export class TillApp extends LitElement {
     this.courses = till.courses;
     this.cloudEmergency = till.cloudEmergency;
     this.cardProvider = till.cardProvider;
+    this.sumUpConnected = till.sumUpConnected === true;
     this.tipsEnabled = till.tipsEnabled;
     // A server too old to send it sets no limit.
     this.#simplifiedInvoiceLimit = till.simplifiedInvoiceLimit ?? null;
@@ -12397,13 +12412,49 @@ export class TillApp extends LitElement {
     );
   }
 
+  #readerMakesSlip(readerId = this.#payDefaultReaderId()): boolean {
+    return (
+      this.#payReaders().find((reader) => reader.id === readerId)?.printsOwnSlipAutomatically ===
+      true
+    );
+  }
+
+  #offerShortCaptureSlip(open: BillPaying | null, slipPaymentId: string | undefined): void {
+    const now = open === null ? null : this.#billPayingNow(open.id);
+    if (now !== null && slipPaymentId !== undefined && this.#slipPrinterAvailable())
+      this.billPaying = { ...now, taken: { change: null, settled: true, slipPaymentId } };
+  }
+
+  #paymentSlip(
+    orderId: string | undefined,
+    paymentId: string | undefined,
+  ): PaymentSlipAction | undefined {
+    if (orderId === undefined || paymentId === undefined || !this.#slipPrinterAvailable()) return;
+    return {
+      state: this.slipRequest?.paymentId === paymentId ? this.slipRequest.state : undefined,
+      print: () => void this.#printPaymentSlip(orderId, paymentId),
+    };
+  }
+
+  async #printPaymentSlip(orderId: string, paymentId: string): Promise<void> {
+    if (this.slipRequest?.paymentId === paymentId && this.slipRequest.state !== "failed") return;
+    const request = { paymentId, state: "sending" as const };
+    this.slipRequest = request;
+    try {
+      await this.api.printPaymentSlip(orderId, paymentId);
+      if (this.slipRequest === request) this.slipRequest = { paymentId, state: "queued" };
+    } catch {
+      if (this.slipRequest === request) this.slipRequest = { paymentId, state: "failed" };
+    }
+  }
+
   #renderBillPaying(): TemplateResult | typeof nothing {
     const open = this.billPaying;
     if (open === null) return nothing;
     const pending = this.#unansweredPayments.get(open.billId);
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
-        .slipPrinterAvailable=${this.#slipPrinterAvailable()}
+        .sumUpConnected=${this.sumUpConnected}
         .checkTimeOffered=${this.checkTimeOffered}
         .balance=${open.balance}
         .lines=${open.lines}
@@ -12413,6 +12464,7 @@ export class TillApp extends LitElement {
         .preview=${open.preview}
         .refusal=${open.refusal}
         .taken=${open.taken}
+        .paymentSlip=${this.#paymentSlip(open.billId, open.taken?.pending === undefined ? open.taken?.slipPaymentId : undefined)}
         .refunded=${open.refunded}
         .busy=${open.busy}
         .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
@@ -12994,7 +13046,7 @@ export class TillApp extends LitElement {
       !this.#unknownCardOutcome.has(open.billId) &&
       compareDecimal(decimal(bill.outstanding), decimal("0")) > 0;
     return html`<till-presented-pay-dialog
-      .slipPrinterAvailable=${this.#slipPrinterAvailable()}
+      .sumUpConnected=${this.sumUpConnected}
       .checkTimeOffered=${this.checkTimeOffered}
       .open=${true}
       .amount=${bill.outstanding}
@@ -21829,6 +21881,7 @@ export class TillApp extends LitElement {
       this.#showTicket(id, !payment.invoiced, {
         surface: "table",
         cashChange: result.tender.method === "cash" ? result.tender.change : null,
+        slipPaymentId: result.slipPaymentId,
       });
       if (result.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       paid = true;
@@ -21939,27 +21992,19 @@ export class TillApp extends LitElement {
     const detail = (event as CustomEvent<PresentedPayDetail>).detail;
     this.presentedPaying = { ...open, refusal: null };
     if (detail.method === "card") {
-      await this.#payPresentedOnReader(
-        open.id,
-        bill,
-        detail.readerId,
-        detail.guestCount,
-        detail.printCardSlip,
-      );
+      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guestCount);
       return;
     }
     const guestCount = detail.guestCount === undefined ? {} : { guestCount: detail.guestCount };
-    const slip = detail.printCardSlip === undefined ? {} : { printCardSlip: detail.printCardSlip };
     const tender: ConfirmPaymentDetail =
       detail.method === "cash"
-        ? { method: "cash", amount: detail.tendered, ...guestCount, ...slip }
+        ? { method: "cash", amount: detail.tendered, ...guestCount }
         : {
             method: "card",
             amount: bill.outstanding,
             ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
             ...outsideCardValues(detail),
             ...guestCount,
-            ...slip,
           };
     const paid = await this.#payWholeTab(tender, (error, earlierUnanswered) => {
       if (this.#presentedNow(open.id) === null) return false;
@@ -22007,12 +22052,12 @@ export class TillApp extends LitElement {
     bill: PartyBill,
     readerId: string | undefined,
     guestCount: number | null | undefined,
-    printCardSlip?: boolean,
   ): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
     this.errorKey = undefined;
     const billId = bill.workingOrderId;
+    const readerMakesSlip = this.#readerMakesSlip(readerId);
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     const api = this.api;
@@ -22039,7 +22084,6 @@ export class TillApp extends LitElement {
               lines: [],
               dining: this.#tableBillDining(billId),
               ...(readerId === undefined ? {} : { readerId }),
-              ...(printCardSlip === undefined ? {} : { printCardSlip }),
               ...(guestCount === undefined ? {} : { guestCount }),
             })
             .then(
@@ -22062,10 +22106,11 @@ export class TillApp extends LitElement {
         this.#closePresented(id);
         this.billBalance = out.balance;
         await this.#loadPartyBills();
-        if (!left())
-          this.#moveSlipFailureIntoPay(
-            await this.#openBillPaying("whole", this.#payLinesOnScreen()),
-          );
+        if (!left()) {
+          const open = await this.#openBillPaying("whole", this.#payLinesOnScreen());
+          this.#moveSlipFailureIntoPay(open);
+          if (!readerMakesSlip) this.#offerShortCaptureSlip(open, out.slipPaymentId);
+        }
         return;
       }
       this.captureWarning = out.captureWarning ?? null;
@@ -22075,6 +22120,7 @@ export class TillApp extends LitElement {
         this.#showTicket(billId, bill.receiptAvailable !== true, {
           surface: "table",
           cashChange: null,
+          slipPaymentId: readerMakesSlip ? undefined : out.ticket.slipPaymentId,
         });
         return;
       }
@@ -22479,7 +22525,7 @@ export class TillApp extends LitElement {
       const now = own();
       if (now !== null) {
         dialog()?.paymentAccepted();
-        await this.#showPaidTicket(now, ticket, payment.change);
+        await this.#showPaidTicket(now, ticket, payment.change, taken.slipPaymentId);
         return true;
       }
     }
@@ -22490,7 +22536,10 @@ export class TillApp extends LitElement {
         asked: null,
         preview: null,
         ...(payment.state === "received"
-          ? { taken: { change: payment.change, settled: true }, refusal: null }
+          ? {
+              taken: { change: payment.change, settled: true, slipPaymentId: taken.slipPaymentId },
+              refusal: null,
+            }
           : {
               taken: null,
               refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
@@ -22710,6 +22759,8 @@ export class TillApp extends LitElement {
       ? readyPayReader(this.deviceEquipment, this.#fixedPayReader())
       : null;
     const readerName = ready?.id === readerId ? ready?.name : undefined;
+    const readerMakesSlip =
+      asked.card?.entry === "reader" && this.#readerMakesSlip(readerId ?? asked.card.readerId);
     const key = open.billId;
     const previous = this.#unansweredPayments.get(key);
     const keyed = submissionFor(open.billId, { ...confirmation, ...detail }, previous ?? null);
@@ -22788,7 +22839,7 @@ export class TillApp extends LitElement {
         );
         if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
         settle(undefined, result.payment.state === "pending");
-        await this.#onBillPaid(open, result, readerName);
+        await this.#onBillPaid(open, result, readerName, readerMakesSlip);
         if (result.slipPrintFailed && session === this.#operatorSession) {
           this.errorKey = "payment_slip.capture_failed";
           this.#moveSlipFailureIntoPay(open);
@@ -22841,7 +22892,8 @@ export class TillApp extends LitElement {
   async #onBillPaid(
     open: BillPaying,
     result: BillPaymentResult,
-    readerName?: string,
+    readerName: string | undefined,
+    readerMakesSlip: boolean,
   ): Promise<void> {
     const now = this.#billPayingNow(open.id);
     if (now === null) return;
@@ -22876,16 +22928,18 @@ export class TillApp extends LitElement {
       return;
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
+    const slipPaymentId = readerMakesSlip ? undefined : result.payment.id;
     if (result.invoice !== undefined) {
       this.captureWarning = result.balance.captureWarning ?? null;
-      await this.#showPaidTicket(open, result.invoice, result.payment.change);
+      await this.#showPaidTicket(open, result.invoice, result.payment.change, slipPaymentId);
       return;
     }
     const taken: PayTaken =
       result.payment.state === "pending"
-        ? { change: null, pending: result.payment.applied }
+        ? { change: null, pending: result.payment.applied, slipPaymentId }
         : {
             change: result.payment.change,
+            slipPaymentId,
             ...(readerName === undefined || result.payment.entry !== "reader"
               ? {}
               : {
@@ -22911,12 +22965,17 @@ export class TillApp extends LitElement {
     open: BillPaying,
     invoice: TillSaleResult,
     cashChange: string | null,
+    slipPaymentId?: string,
   ): Promise<void> {
     this.#closeBillPaying();
     this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
-    this.#showTicket(open.billId, open.printed !== true, { surface: open.surface, cashChange });
+    this.#showTicket(open.billId, open.printed !== true, {
+      surface: open.surface,
+      cashChange,
+      slipPaymentId,
+    });
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
@@ -23672,6 +23731,7 @@ export class TillApp extends LitElement {
       const bill = this.#currentCounterSetMenuBill;
       const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
+        .sumUpConnected=${this.sumUpConnected}
         .setMenuBill=${bill?.setMenus}
         .setMenuCopies=${copies}
         .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
@@ -23721,7 +23781,6 @@ export class TillApp extends LitElement {
         .cardOutcome=${this.cardOutcome}
         .cardRetryDetail=${this.cardRetryDetail}
         .cardAttemptsOver=${this.cardAttemptsOver}
-        .slipPrinterAvailable=${this.#slipPrinterAvailable()}
         .activeReaders=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .receiptLanguages=${this.receiptLanguages}
@@ -24691,12 +24750,12 @@ export class TillApp extends LitElement {
         ${
           this.findingBill
             ? html`<till-find-bill-dialog
+                .sumUpConnected=${this.sumUpConnected}
                 .bill=${this.collectionBill}
                 .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredWholePayments.get(this.collectionBill.workingOrderId)?.tender}
                 .unconfirmed=${this.collectionBill !== null && this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)}
                 .takesCash=${this.#takesCash()}
                 .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
-                .slipPrinterAvailable=${this.#slipPrinterAvailable()}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`
@@ -24738,6 +24797,7 @@ export class TillApp extends LitElement {
                 .simulatedCardPayment=${this.result?.simulatedCardPayment === true}
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
+                .paymentSlip=${this.#paymentSlip(this.ticketWorkingOrderId, this.settlementDocument.slipPaymentId)}
                 .canOpenDrawer=${this.#mayOpenDrawer}
                 .invoiceLocale=${this.invoiceLocale}
                 .originalReceiptAvailable=${this.originalReceiptAvailable}

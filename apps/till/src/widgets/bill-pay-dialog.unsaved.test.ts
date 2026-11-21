@@ -120,7 +120,7 @@ it("manual card references compare trimmed values and keep invalid money disting
     {
       choice: { kind: "contribution", amount: "10.00" },
       pay: { method: "card" },
-      card: { entry: "manual", externalRef: "slip-9" },
+      card: { entry: "manual", externalProvider: "other", externalRef: "slip-9" },
     },
   ]);
   expect((await question(app)).open).toBe(false);
@@ -327,15 +327,17 @@ it("on a handheld opens unchanged on its default method, and a change of method 
 
 it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
   const { form } = await mount({ takesCash: false });
+  form.sumUpConnected = true;
+  await form.updateComplete;
   expect(unload()).toBe(false);
   await fill(form, "externalMachine", " Spare ");
   expect(unload()).toBe(true);
   await fill(form, "externalMachine", "   ");
   expect(unload()).toBe(false);
-  click(form, 'input[name="external-provider"][value="connected_account"]');
+  click(form, 'input[name="external-provider"][value="other"]');
   await form.updateComplete;
   expect(unload()).toBe(true);
-  click(form, 'input[name="external-provider"][value=""]');
+  click(form, 'input[name="external-provider"][value="connected_account"]');
   await form.updateComplete;
   expect(unload()).toBe(false);
 });

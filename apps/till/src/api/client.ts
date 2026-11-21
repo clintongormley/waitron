@@ -215,6 +215,8 @@ export interface TillInfo {
   defaultReaderId?: string;
   /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
   activeReaders: TillActiveReader[];
+  /** Whether the venue has saved a SumUp connection, including without a reader. */
+  sumUpConnected?: boolean;
   tipsEnabled: boolean;
   formFactor: FormFactor;
   /** The CALLING device's capability set from its profile; `[]` for a no-profile or cookieless request. */
@@ -996,9 +998,6 @@ export interface CardTender extends OutsideCardDetails {
 /** A cash or hand-keyed card tender. */
 export type Tender = CashTender | CardTender;
 
-/** A tender with the payer's payment slip choice, which the client sends beside the tender. */
-export type SlipTender = Tender & { printCardSlip?: boolean };
-
 /**
  * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e): `descriptions`
  * in the invoice locale, the display `quantity`, and the GROSS line total. The receipt renders THESE,
@@ -1060,6 +1059,7 @@ export type TenderBlock =
 
 /** The recorded ticket carried by payment answers and receipt reads. */
 export interface TillSaleResult extends ReceiptPresentation {
+  slipPaymentId?: string;
   slipPrintFailed?: true;
   receiptPreview?: readonly ReceiptElement[];
   simulatedCardPayment?: boolean;
@@ -1154,7 +1154,6 @@ export interface BillPaymentAsk {
  * number) or `reader`.
  */
 export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
-  printCardSlip?: boolean;
   submissionId: string;
   applied: string;
   tip: string;
@@ -2161,7 +2160,7 @@ export interface PassReleaseResult {
  */
 export type PayOutcome = (
   | { outcome: "captured"; ticket: TillSaleResult }
-  | { outcome: "partial"; balance: BillBalance }
+  | { outcome: "partial"; balance: BillBalance; slipPaymentId?: string }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" }
@@ -3139,7 +3138,7 @@ export class TillApi {
    */
   recordSale(
     lines: SaleLine[],
-    tender: SlipTender,
+    tender: Tender,
     workingOrderId: string,
     zoneId: string | undefined,
     invoice:
@@ -3206,7 +3205,6 @@ export class TillApi {
     } | null;
     zoneId?: string;
     tip?: string;
-    printCardSlip?: boolean;
     simulationOutcome?: "captured" | "declined" | "attempting";
     readerId?: string;
     receiptLanguage?: string;
@@ -3256,10 +3254,12 @@ export class TillApi {
       if (result.outcome === "settled")
         return { ...facts, outcome: "captured", ticket: result.invoice };
       const print = result.slipPrintFailed === true ? { slipPrintFailed: true as const } : {};
+      const slipPaymentId = result.payment?.state === "received" ? result.payment.id : undefined;
+      const slip = slipPaymentId === undefined ? {} : { slipPaymentId };
       if (result.invoice !== undefined)
-        return { ...facts, ...print, outcome: "captured", ticket: result.invoice };
+        return { ...facts, ...print, outcome: "captured", ticket: { ...result.invoice, ...slip } };
       if (result.outcome === "received")
-        return { ...facts, ...print, outcome: "partial", balance: result.balance };
+        return { ...facts, ...print, ...slip, outcome: "partial", balance: result.balance };
       if (result.outcome === "pending" || result.outcome === "timeout")
         return { ...facts, outcome: "timeout" };
       if (result.outcome === "network_unavailable")
@@ -3270,6 +3270,10 @@ export class TillApi {
         ...(result.failureReason === undefined ? {} : { failureReason: result.failureReason }),
       };
     });
+  }
+
+  async printPaymentSlip(orderId: string, paymentId: string): Promise<void> {
+    await this.#request(`/api/working-orders/${orderId}/payment-slip`, "POST", { paymentId });
   }
 
   /**
@@ -3668,7 +3672,7 @@ export class TillApi {
   /** Collect the remaining balance of a placed order and return its ticket. */
   collectOrder(
     id: string,
-    tender: SlipTender,
+    tender: Tender,
     receiptLanguage: string | undefined,
     guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
@@ -3683,16 +3687,15 @@ export class TillApi {
   async #collectWholeBill(
     id: string,
     status: "open" | "placed",
-    tender: SlipTender,
+    tender: Tender,
     bill: Pick<WholeBillTender, "expectedEdit" | "receiptLanguage" | "guestCount" | "dining">,
     basket?: CounterPaymentBasket,
   ): Promise<TillSaleResult> {
-    const { amount, printCardSlip, ...details } = tender;
-    const slip = printCardSlip === undefined ? {} : { printCardSlip };
+    const { amount, ...details } = tender;
     const ask: WholeBillTender =
       details.method === "cash"
-        ? { ...bill, ...slip, method: "cash", tendered: amount }
-        : { ...bill, ...details, ...slip, entry: "manual" };
+        ? { ...bill, method: "cash", tendered: amount }
+        : { ...bill, ...details, entry: "manual" };
     const result = await this.#payWholeBill(
       id,
       status,
@@ -3701,9 +3704,12 @@ export class TillApi {
       basket,
     );
     if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
-    return result.outcome !== "settled" && result.slipPrintFailed === true
-      ? { ...result.invoice, slipPrintFailed: true }
-      : result.invoice;
+    if (result.outcome === "settled") return result.invoice;
+    return {
+      ...result.invoice,
+      ...(result.slipPrintFailed === true ? { slipPrintFailed: true } : {}),
+      ...(result.payment?.state === "received" ? { slipPaymentId: result.payment.id } : {}),
+    };
   }
 
   async #payWholeBill(
@@ -3729,7 +3735,6 @@ export class TillApi {
       tender.simulationOutcome,
       tender.dining,
       tender.receiptLanguage,
-      tender.printCardSlip,
       basket === undefined ? null : [basketFields, lateSend?.menuIds],
     ]);
     const pending = this.#unansweredWholeBills.get(id);

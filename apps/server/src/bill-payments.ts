@@ -2031,6 +2031,7 @@ export async function takeBillPayment(
         workingOrderId,
         req.printCardSlip,
         {
+          id: payment.id,
           method: req.method,
           charged: payment.applied + payment.tip,
           tip: payment.tip,

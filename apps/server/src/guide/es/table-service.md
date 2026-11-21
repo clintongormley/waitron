@@ -36,10 +36,11 @@ la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guar
 
 ## Usar otro datáfono {#outside-card}
 
-Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono** e introduce
-su número de operación y el datáfono utilizado. Puedes elegir **Esta cuenta de SumUp** si usa la
-cuenta conectada, o **Cobrado fuera de Waitron** si es de otro proveedor. Los campos son
-opcionales; la cuenta conserva los datos que introduzcas.
+Cobra primero la tarjeta en el otro datáfono. En **Cobrar**, elige **Otro datáfono**. Si tu local
+tiene SumUp conectado, **Esta cuenta de SumUp** aparece seleccionada. Elige **Cobrado fuera de
+Waitron** si el datáfono utiliza otra cuenta u otro proveedor. Si no hay una conexión con SumUp,
+Waitron registra el pago como **Cobrado fuera de Waitron**. Puedes indicar el número de operación
+y el nombre del datáfono para identificar el pago más adelante.
 
 Si el local acepta propinas, introduce en **Propina** la que has cobrado en ese datáfono.
 La propina que escribas antes de elegir **Otro datáfono** se conserva; comprueba que el total
@@ -194,19 +195,16 @@ o **Cancelar** para salir sin imprimir.
 
 ## Justificantes de pago {#reader-slips}
 
-El justificante de pago es opcional; el ticket o la factura, no. Si quien paga quiere justificante,
-activa **Imprimir justificante de pago** antes de cobrar, en efectivo, con **Otro datáfono** o con
-lector de tarjetas. Aparece cuando tu dispositivo tiene impresora de justificantes de pago y empieza
-desactivado para cada pago. El justificante muestra ese pago y cómo se pagó, no lo que queda por
-pagar; con **Otro datáfono** muestra también el datáfono y el número de operación si los indicaste.
-Si un pago con tarjeta no se realiza, el justificante dice **PAGO NO REALIZADO**. Si se pierde la
-respuesta del lector, el justificante se imprime cuando el pago se resuelve, que puede ser más tarde,
-en el dispositivo donde empezó el pago.
+Si quien paga quiere justificante, elige **Imprimir justificante de pago** después de cobrar en
+efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, imprímelo desde
+la confirmación antes de cobrar el siguiente. Tras el último pago, usa **Documento para el cliente**.
+El botón aparece cuando tu dispositivo tiene impresora de justificantes. Si el lector imprime su
+propio justificante, el lector se encarga de ese pago. El justificante muestra el
+pago y cómo se hizo. Con **Otro datáfono**, incluye el datáfono y el número de operación que indicaste.
 
-Un justificante se imprime una sola vez; la caja no puede volver a imprimirlo. Para sustituir uno
-perdido, usa **Reimprimir** en la [Cola de impresión](printers.md#print-queue). Si la caja muestra
-**Pago recibido, pero no se pudo imprimir el justificante de pago.**, el pago está registrado: no
-lo cobres de nuevo.
+Si falla tu solicitud de impresión, puedes pulsar **Imprimir justificante de pago** de nuevo.
+Para sustituir un justificante que ya se imprimió, usa
+**Reimprimir** en la [Cola de impresión](printers.md#print-queue).
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
 panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige

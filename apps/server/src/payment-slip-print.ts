@@ -1,3 +1,4 @@
+import "./errors.js";
 import type { Logger } from "./logger.js";
 import { and, eq } from "drizzle-orm";
 import {
@@ -5,6 +6,7 @@ import {
   BUSINESS_DAY_SETTINGS,
   decodeSettingsRow,
   workingOrders,
+  printJobs,
   settings,
   taxpayer,
   sales,
@@ -14,6 +16,7 @@ import {
 } from "@waitron/db";
 import { cardReaders, payments, type PaymentResult } from "@waitron/payments";
 import {
+  AppError,
   centsToDecimal,
   decimalToCents,
   decimal,
@@ -214,6 +217,7 @@ export async function enqueueRequestedPaymentSlip(
   workingOrderId: string,
   requested: boolean | undefined,
   payment: {
+    id?: string;
     method: "cash" | "card";
     charged: number;
     tip: number;
@@ -233,7 +237,14 @@ export async function enqueueRequestedPaymentSlip(
       if (printer === undefined) return false;
       const card = { scheme: null, last4: null, entryMode: null, authCode: null };
       const locale = await orderSlipLocale(tx, workingOrderId);
-      await enqueueSlips(tx, printer, workingOrderId, [{ ...payment, ...card }], locale);
+      await enqueueSlips(
+        tx,
+        printer,
+        workingOrderId,
+        [{ ...payment, ...card }],
+        locale,
+        payment.id,
+      );
       return true;
     },
   );
@@ -307,6 +318,64 @@ export async function printCapturedCardSlip(
   }
 }
 
+export async function printReceivedPaymentSlip(
+  tx: Transaction,
+  cfg: OriginConfig,
+  orderId: string,
+  paymentId: string,
+): Promise<void> {
+  const [payment] = await tx
+    .select()
+    .from(billPayments)
+    .where(
+      and(
+        eq(billPayments.workingOrderId, orderId),
+        eq(billPayments.id, paymentId),
+        eq(billPayments.state, "received"),
+      ),
+    );
+  if (payment?.receivedAt == null) throw new AppError("bill.payment_not_found", { paymentId });
+  if (payment.slipWanted) return;
+  const [existing] = await tx
+    .select({ id: printJobs.id })
+    .from(printJobs)
+    .where(eq(printJobs.id, payment.id));
+  if (existing !== undefined) return;
+
+  const [provided] = await tx.select().from(payments).where(eq(payments.billPaymentId, paymentId));
+  if (provided?.readerId != null) {
+    const [reader] = await tx
+      .select({ ownSlip: cardReaders.printsOwnSlipAutomatically })
+      .from(cardReaders)
+      .where(eq(cardReaders.id, provided.readerId));
+    if (reader?.ownSlip === true) return;
+  }
+  const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
+  if (printer === undefined) throw new AppError("receipt.no_printer", {});
+  const readerPayment = provided !== undefined && provided.provider !== "manual";
+  await enqueueSlips(
+    tx,
+    printer,
+    orderId,
+    [
+      {
+        ...(readerPayment ? {} : { method: payment.method }),
+        charged: payment.applied + payment.tip,
+        tip: payment.tip,
+        paidAt: readerPayment ? (provided.settledAt ?? payment.receivedAt) : payment.receivedAt,
+        reference: readerPayment ? null : provided?.externalRef,
+        machine: readerPayment ? null : provided?.externalMachine,
+        scheme: provided?.cardScheme ?? null,
+        last4: provided?.cardLast4 ?? null,
+        entryMode: provided?.cardEntryMode ?? null,
+        authCode: provided?.cardAuthCode ?? null,
+      },
+    ],
+    await orderSlipLocale(tx, orderId),
+    payment.id,
+  );
+}
+
 async function enqueueSlips(
   tx: Transaction,
   printer: DevicePrinter,
@@ -326,6 +395,7 @@ async function enqueueSlips(
     notTaken?: true;
   }[],
   locale: string,
+  jobId?: string,
 ): Promise<void> {
   const [header] = await tx
     .select({
@@ -360,6 +430,6 @@ async function enqueueSlips(
       invoiceLocale: locale,
       printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
     });
-    await enqueuePrintJob(tx, printer.id, payload, "document");
+    await enqueuePrintJob(tx, printer.id, payload, "document", { id: jobId });
   }
 }

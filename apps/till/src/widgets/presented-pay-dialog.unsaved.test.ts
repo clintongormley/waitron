@@ -116,7 +116,9 @@ it("a typed operation number counts, compared trimmed", async () => {
   await answer(app, "keep");
   click(form, "[data-presented-pay-take]");
   await expect.poll(() => app.paid.length).toBe(1);
-  expect(app.paid).toEqual([{ method: "manual", externalRef: "slip-9" }]);
+  expect(app.paid).toEqual([
+    { method: "manual", externalProvider: "other", externalRef: "slip-9" },
+  ]);
 });
 
 it("a payment being sent drops a pending question and blocks closing; a refusal keeps the draft", async () => {
@@ -162,6 +164,8 @@ it("a removed sheet holds nothing", async () => {
 
 it("outside-card details alone protect the draft and normalized reverts are clean", async () => {
   const { form } = await mount();
+  form.sumUpConnected = true;
+  await form.updateComplete;
   click(form, 'input[name="method"][value="manual"]');
   await form.updateComplete;
   expect(unload()).toBe(false);
@@ -169,10 +173,10 @@ it("outside-card details alone protect the draft and normalized reverts are clea
   expect(unload()).toBe(true);
   await fill(form, "externalMachine", "   ");
   expect(unload()).toBe(false);
-  click(form, 'input[name="external-provider"][value="connected_account"]');
+  click(form, 'input[name="external-provider"][value="other"]');
   await form.updateComplete;
   expect(unload()).toBe(true);
-  click(form, 'input[name="external-provider"][value=""]');
+  click(form, 'input[name="external-provider"][value="connected_account"]');
   await form.updateComplete;
   expect(unload()).toBe(false);
 });

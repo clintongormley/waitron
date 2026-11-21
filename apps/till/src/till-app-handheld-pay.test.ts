@@ -432,7 +432,7 @@ describe("a presented bill on a handheld", () => {
     expect(stubs.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
   });
 
-  it("forwards the presented slip choice and warns after successful money", async () => {
+  it("warns about a slip failure after a presented reader payment", async () => {
     const { el } = await openPresented({
       pay: vi.fn().mockResolvedValue({
         outcome: "captured",
@@ -440,8 +440,7 @@ describe("a presented bill on a handheld", () => {
         slipPrintFailed: true,
       }),
     });
-    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
-    expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
+    await payFromSheet(el, { method: "card", readerId: "r2" });
     expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
       t("payment_slip.capture_failed"),
     );
@@ -451,17 +450,66 @@ describe("a presented bill on a handheld", () => {
   it.each([
     ["cash", { method: "cash", tendered: "150.00" }],
     ["Other card machine", { method: "manual", externalProvider: "other" }],
-  ] as const)(
-    "sends the presented sheet's %s slip request and says when it failed",
-    async (_, detail) => {
+  ] as const)("reports a slip failure after a presented %s payment", async (_, detail) => {
+    const { el } = await openPresented({
+      collectOrder: vi.fn().mockResolvedValue({ ...ticket(), slipPrintFailed: true }),
+    });
+    await payFromSheet(el, detail);
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
+      t("payment_slip.capture_failed"),
+    );
+  });
+
+  it.each([false, true])(
+    "offers a slip after a confirmed reader payment only if the reader leaves printing to Waitron (own slip: %s)",
+    async (printsOwnSlipAutomatically) => {
+      const printer = roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER]);
+      const reader = roleOf("card_terminal", SECOND_READER, [SECOND_READER]);
+      reader.resolved = { ...reader.resolved!, printsOwnSlipAutomatically };
+      const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
       const { el } = await openPresented({
-        collectOrder: vi.fn().mockResolvedValue({ ...ticket(), slipPrintFailed: true }),
+        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [printer, reader] }),
+        pay: vi.fn().mockResolvedValue({
+          outcome: "captured",
+          ticket: { ...saleOf("120.00"), slipPaymentId: "reader-payment" },
+        }),
+        printPaymentSlip,
       });
-      await payFromSheet(el, { ...detail, printCardSlip: true });
-      expect(vi.mocked(api.collectOrder).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
-      expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
-        t("payment_slip.capture_failed"),
+      await payFromSheet(el, { method: "card", readerId: "r2" });
+      expect(printPaymentSlip).not.toHaveBeenCalled();
+      const button = documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>(
+        "[data-print-payment-slip]",
       );
+      expect(button === null).toBe(printsOwnSlipAutomatically);
+      if (button === null) return;
+      button.click();
+      await flush(el);
+      expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "reader-payment");
+    },
+  );
+
+  it.each([true, false])(
+    "offers the confirmed reader payer a slip when a printer is available: %s",
+    async (printer) => {
+      const balance = balanceOf({ status: "placed", received: "110.00", outstanding: "10.00" });
+      const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
+      const { el } = await openPresented({
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [
+            ...(printer ? [roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER])] : []),
+            roleOf("card_terminal", SECOND_READER, [SECOND_READER]),
+          ],
+        }),
+        getBillBalance: vi.fn().mockResolvedValue(balance),
+        pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPaymentId: "part" }),
+        printPaymentSlip,
+      });
+      await payFromSheet(el, { method: "card", readerId: "r2" });
+      expect(printPaymentSlip).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-taken]") !== null).toBe(printer);
+      if (!printer) return;
+      await press(el, "[data-print-payment-slip]");
+      expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "part");
     },
   );
 
@@ -471,7 +519,7 @@ describe("a presented bill on a handheld", () => {
       getBillBalance: vi.fn().mockResolvedValue(balance),
       pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPrintFailed: true }),
     });
-    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
+    await payFromSheet(el, { method: "card", readerId: "r2" });
     expect(presented(el)).toBeNull();
     expect(dialog(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('.error[role="alert"]')).toBeNull();
@@ -486,7 +534,7 @@ describe("a presented bill on a handheld", () => {
       pay: vi.fn().mockResolvedValue({ outcome: "partial", balance, slipPrintFailed: true }),
     });
     getBillBalance.mockRejectedValue(new Error("offline"));
-    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
+    await payFromSheet(el, { method: "card", readerId: "r2" });
     expect(dialog(el)).not.toBeNull();
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.read_failed"));
     expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(
@@ -1275,27 +1323,6 @@ describe("an unanswered presented payment on a handheld", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("a resent cash payment keeps the slip it first asked for", async () => {
-    const send = vi
-      .fn()
-      .mockRejectedValueOnce(noAnswer())
-      .mockResolvedValueOnce(invoiceOf("120.00", "F2"));
-    const { el } = await mountApp(
-      onPhone({ getPartyBills: vi.fn().mockResolvedValue([placedBill]), collectOrder: send }),
-    );
-    const order = await openPhoneTable(el);
-    await pressPaySheet(el, order);
-    emit(presented(el)!, "presented-pay", { ...asked.cash, printCardSlip: true });
-    await flush(el);
-    await pressPaySheet(el, order);
-    await presented(el)!.updateComplete;
-    await resend(el);
-
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
-    expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
   });
 
   it("a resend with no answer keeps the sheet open and locked on the same payment", async () => {

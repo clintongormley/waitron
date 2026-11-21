@@ -433,8 +433,39 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     expect(paid).toEqual([{ method: "cash", tendered: "62.40" }]);
   });
 
-  it("Other card machine sends manual, with the operation number only when typed", async () => {
+  it.each([
+    [true, "connected_account", 2],
+    [false, "other", 0],
+  ] as const)(
+    "records the default card source with SumUp connected=%s",
+    async (sumUpConnected, source, count) => {
+      const el = await mount({ sumUpConnected });
+      const paid = capture<PresentedPayDetail>(el, "presented-pay");
+      await pick(el, "manual");
+
+      const choices = root(el).querySelectorAll<HTMLInputElement>(
+        'input[name="external-provider"]',
+      );
+      expect(choices).toHaveLength(count);
+      if (sumUpConnected)
+        expect(Array.from(choices).find((choice) => choice.checked)?.value).toBe(source);
+      await take(el);
+      expect(paid).toEqual([{ method: "manual", externalProvider: source }]);
+    },
+  );
+
+  it("offers no slip choice before paying", async () => {
     const el = await mount();
+    await pick(el, "cash");
+    expect(root(el).querySelector('[name="printSlip"]')).toBeNull();
+    await type(el, "tendered", "70");
+    const paid = capture<PresentedPayDetail>(el, "presented-pay");
+    await take(el);
+    expect(paid).toEqual([{ method: "cash", tendered: "70" }]);
+  });
+
+  it("Other card machine sends manual, with the operation number only when typed", async () => {
+    const el = await mount({ sumUpConnected: true });
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
     await pick(el, "manual");
 
@@ -451,7 +482,7 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     await type(el, "externalMachine", "Bank counter");
     await take(el);
     expect(paid).toEqual([
-      { method: "manual" },
+      { method: "manual", externalProvider: "connected_account" },
       {
         method: "manual",
         externalRef: "4821",
@@ -502,7 +533,7 @@ describe("till-presented-pay-dialog: the receipt's guests", () => {
     await take(el);
     expect(paid).toEqual([
       { method: "card", readerId: "r2", guestCount: 4 },
-      { method: "manual", guestCount: 6 },
+      { method: "manual", guestCount: 6, externalProvider: "other" },
       { method: "cash", tendered: "70", guestCount: null },
     ]);
   });
@@ -983,67 +1014,6 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     await el.updateComplete;
 
     await expectInView(el, "[data-pay-scan-back]", false);
-  });
-});
-
-it("offers an initially off slip only with a printer and forgets it on reopening", async () => {
-  const el = await mount({ slipPrinterAvailable: true });
-  const box = () =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-  expect(box()).not.toBeNull();
-  expect(box()!.checked).toBe(false);
-  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
-  await el.updateComplete;
-  const seen = capture<PresentedPayDetail>(el, "presented-pay");
-  await take(el);
-  expect(seen.at(-1)).toMatchObject({ method: "card", printCardSlip: true });
-  el.open = false;
-  await el.updateComplete;
-  el.open = true;
-  await el.updateComplete;
-  expect(box()!.checked).toBe(false);
-  await pick(el, "cash");
-  expect(box()).not.toBeNull();
-});
-
-describe("till-presented-pay-dialog: a payment slip for cash and another card machine", () => {
-  const slip = (el: TillPresentedPayDialog) =>
-    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printSlip"]');
-
-  it.each(["cash", "manual"] as const)(
-    "offers %s a slip unticked, sends the choice, and forgets it for the next payer",
-    async (method) => {
-      const el = await mount({ slipPrinterAvailable: true });
-      await pick(el, method);
-      if (method === "cash") await type(el, "tendered", "62.40");
-      expect(slip(el)!.checked).toBe(false);
-      slip(el)!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }),
-      );
-      await el.updateComplete;
-      const seen = capture<PresentedPayDetail>(el, "presented-pay");
-      await take(el);
-      expect(seen.at(-1)).toMatchObject({ method, printCardSlip: true });
-      el.open = false;
-      await el.updateComplete;
-      el.open = true;
-      await el.updateComplete;
-      await pick(el, method);
-      expect(slip(el)!.checked).toBe(false);
-      el.slipPrinterAvailable = false;
-      await el.updateComplete;
-      expect(slip(el)).toBeNull();
-    },
-  );
-
-  it("offers cash a slip beside a reader that prints its own, but not that reader's card", async () => {
-    const equipment = equipmentWith(SECOND_READER);
-    const terminal = equipment.roles.find((role) => role.role === "card_terminal")!;
-    terminal.resolved = { ...terminal.resolved!, printsOwnSlipAutomatically: true };
-    const el = await mount({ slipPrinterAvailable: true, equipment });
-    expect(slip(el)).toBeNull();
-    await pick(el, "cash");
-    expect(slip(el)).not.toBeNull();
   });
 });
 

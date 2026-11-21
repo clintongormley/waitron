@@ -14,10 +14,13 @@ import {
   stubApi,
   till,
   shell,
+  equipmentItem,
+  equipmentWith,
+  roleOf,
 } from "../test/bill-pay-app.js";
 
+import { deferred } from "../test/clock-app.js";
 import { transactionRow } from "../test/find-bill-fixtures.js";
-import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import type {
   DeviceEquipmentRead,
   InvoiceDeliveryStatus,
@@ -129,6 +132,44 @@ it("offers documents to the active editor when changing a line settles its bill"
       .shadowRoot!.querySelector("[data-settlement-change]"),
   ).toBeNull();
 });
+
+it.each(["cash", "other card machine"] as const)(
+  "offers a slip after %s and disables the print action while it sends",
+  async (method) => {
+    const pending = deferred<void>();
+    const printPaymentSlip = vi.fn().mockReturnValue(pending.promise);
+    const api = stubApi({
+      recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), slipPaymentId: "payment-1" }),
+      printPaymentSlip,
+      getDeviceEquipment: vi.fn().mockResolvedValue({
+        ...equipmentWith(null),
+        roles: [roleOf("payment_slip", equipmentItem("slips", "Slips"), [])],
+        notices: [],
+      }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    emit(order, "pay-tab", {
+      method: method === "cash" ? "cash" : "card",
+      amount: "120.00",
+      ...(method === "cash" ? {} : { externalProvider: "other" }),
+    });
+    await flush(el);
+
+    expect(printPaymentSlip).not.toHaveBeenCalled();
+    const chooser = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+    const button = chooser.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-print-payment-slip]",
+    );
+    expect(button).not.toBeNull();
+    button!.click();
+    await flush(el);
+    expect(button!.disabled).toBe(true);
+    expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-4", "payment-1");
+    pending.resolve(undefined);
+    await flush(el);
+  },
+);
 
 it("offers documents after the retained whole-payment handler completes", async () => {
   const api = stubApi({

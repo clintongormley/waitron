@@ -955,6 +955,19 @@ describe("a payment after the ticket was issued", () => {
       expect(beforeTicket).toHaveLength(1);
       expectPaymentSlip(beforeTicket[0]!, "5,00", "A/");
       expect(methodLine(beforeTicket[0]!, line)).toBe(true);
+      const [payment] = await venue.db
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, open));
+      const repeated = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${open}/payment-slip`,
+        { paymentId: payment!.id },
+      );
+      expect(repeated.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(1);
       expect((await billPayment(open, pay("5.00"))).status).toBe(200);
       expect(await slipsSince(before)).toHaveLength(1);
 
@@ -972,6 +985,131 @@ describe("a payment after the ticket was issued", () => {
       expect(await slipsSince(afterPrint)).toHaveLength(1);
     },
   );
+
+  it.each([
+    ["cash", cash("10.00"), "Efectivo"],
+    ["reader", readerContribution, "Tarjeta"],
+    [
+      "another card machine",
+      {
+        ...typedCard("10.00"),
+        externalProvider: "other",
+        externalRef: "OP-77",
+        externalMachine: "Solo",
+      },
+      "Tarjeta · Solo",
+    ],
+  ] as const)(
+    "queues one original on request after a %s part payment",
+    async (_method, tender, line) => {
+      const id = await tabWith(venue, "Red wine bottle");
+      const before = await jobCount();
+      const paid = await billPayment(id, { ...tender, tip: "0.00" });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(0);
+      const [payment] = await venue.db
+        .select()
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, id));
+      const print = (orderId: string) =>
+        send(venue.app, venue.cookie, "POST", `/api/working-orders/${orderId}/payment-slip`, {
+          paymentId: payment!.id,
+        });
+
+      const otherOrder = await tabWith(venue, "Red wine bottle");
+      const wrongOrder = await print(otherOrder);
+      expect(wrongOrder.json).toMatchObject({ code: "bill.payment_not_found" });
+      expect(wrongOrder.status).toBe(400);
+      expect(await slipsSince(before)).toHaveLength(0);
+
+      const first = await print(id);
+      expect(first.status, JSON.stringify(first.json)).toBe(200);
+      expect((await print(id)).json).toEqual(first.json);
+      const slips = await slipsSince(before);
+      expect(slips).toHaveLength(1);
+      expect(slips[0]!.id).toBe(payment!.id);
+      expectPaymentSlip(slips[0]!, "10,00", "A/");
+      expect(decodeTicket(slips[0]!.payload)).toContain(line);
+    },
+  );
+
+  it("does not infer a payment to print from a settled order", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const before = await jobCount();
+    const paid = await billPayment(bill.id, cash("30.00"));
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const response = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${bill.id}/payment-slip`,
+      {},
+    );
+    expect(response.status).toBe(400);
+    expect(response.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "paymentId" },
+    });
+    expect(await slipsSince(before)).toHaveLength(0);
+  });
+
+  it.each([true, false])(
+    "does not queue a second reader slip when the reader makes its own (%s) or a slip was already requested",
+    async (ownSlip) => {
+      await withTransaction(venue.db, (tx) =>
+        tx.update(cardReaders).set({ printsOwnSlipAutomatically: ownSlip }),
+      );
+      const id = await tabWith(venue, "Red wine bottle");
+      const before = await jobCount();
+      const paid = await billPayment(id, { ...readerContribution, printCardSlip: !ownSlip });
+      expect(paid.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(ownSlip ? 0 : 1);
+      const [payment] = await venue.db
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, id));
+      const print = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payment-slip`,
+        {
+          paymentId: payment!.id,
+        },
+      );
+      expect(print.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(ownSlip ? 0 : 1);
+    },
+  );
+
+  it("retries a slip after an enqueue refusal on a paid bill", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const before = await jobCount();
+    const paid = await billPayment(bill.id, cash("30.00"));
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [payment] = await venue.db
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, bill.id));
+    const print = () =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/payment-slip`, {
+        paymentId: payment!.id,
+      });
+    expect(await slipsSince(before)).toHaveLength(0);
+
+    refuseSlips();
+    expect((await print()).status).toBe(500);
+    expect(await slipsSince(before)).toHaveLength(0);
+    venue.db.run(sql`drop trigger refuse_slip`);
+
+    const result = await print();
+    expect(result.status, JSON.stringify(result.json)).toBe(200);
+    expect((await print()).json).toEqual(result.json);
+    const slips = await slipsSince(before);
+    expect(slips).toHaveLength(1);
+    expect(methodLine(slips[0]!, labels.cash)).toBe(true);
+    expectPaymentSlip(slips[0]!, "30,00", "A/");
+  });
 
   it("a counter cash sale prints a slip only when asked", async () => {
     const before = await jobCount();

@@ -113,7 +113,7 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
       {
         choice: { kind: "contribution", amount: "10" },
         pay: { method: "card", addedTip: "5.50" },
-        card: { entry: "manual" },
+        card: { entry: "manual", externalProvider: "other" },
       },
     ]);
   });

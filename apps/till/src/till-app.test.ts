@@ -13571,19 +13571,28 @@ describe("till-app", () => {
       roles: [roleOf("payment_slip", equipmentItem("s1", "Slips"), [])],
       notices: [],
     };
-    it("Find a bill offers the slip switch when the device has a payment slip printer", async () => {
+    it("Find a bill offers to print the slip after collection", async () => {
+      const printPaymentSlip = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({
         getFindBill: vi.fn().mockResolvedValue(debtSelection()),
         getDeviceEquipment: vi.fn().mockResolvedValue(slipPrinter),
+        collectOrder: vi.fn().mockResolvedValue({ ...saleResult, slipPaymentId: "collection-1" }),
+        printPaymentSlip,
       });
       const form = await openCollection(el);
-      expect(form.slipPrinterAvailable).toBe(true);
+      form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
+      await flush(el);
+      expect(printPaymentSlip).not.toHaveBeenCalled();
+      const documents = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+      documents.shadowRoot!.querySelector<HTMLElement>("[data-print-payment-slip]")!.click();
+      await flush(el);
+      expect(printPaymentSlip).toHaveBeenCalledExactlyOnceWith("wo-debt", "collection-1");
     });
     it.each([
       ["cash", { method: "cash", amount: "30.00" }],
       ["Other card machine", { method: "card", amount: "30.00", externalProvider: "other" }],
     ] as const)(
-      "Find a bill's %s Pay sends the slip request and says when it failed",
+      "Find a bill's %s Pay reports an earlier slip request that failed",
       async (_, tender) => {
         const { el } = await mountApp({
           getFindBill: vi.fn().mockResolvedValue(debtSelection()),
@@ -13594,19 +13603,15 @@ describe("till-app", () => {
           workingOrderId: "wo-debt",
           tender,
           invoiced: true,
-          printCardSlip: true,
         });
         await flush(el);
-        expect(vi.mocked(currentApi.collectOrder).mock.calls[0]![1]).toEqual({
-          ...tender,
-          printCardSlip: true,
-        });
+        expect(vi.mocked(currentApi.collectOrder).mock.calls[0]![1]).toEqual(tender);
         expect(
           el.shadowRoot!.querySelector<HTMLElement>('.error[role="alert"]')?.textContent?.trim(),
         ).toBe(t("payment_slip.capture_failed"));
       },
     );
-    it("Find a bill resends a lost collection with the slip choice it first sent", async () => {
+    it("Find a bill resends the same collection after no answer", async () => {
       const collect = vi
         .fn()
         .mockRejectedValueOnce(new TypeError("Failed to fetch"))
@@ -13621,18 +13626,15 @@ describe("till-app", () => {
         workingOrderId: "wo-debt",
         tender,
         invoiced: true,
-        printCardSlip: true,
       });
       await flush(el);
       emit(form, "find-bill-pay", {
         workingOrderId: "wo-debt",
         tender,
         invoiced: true,
-        printCardSlip: false,
       });
       await flush(el);
       expect(collect).toHaveBeenCalledTimes(2);
-      expect(collect.mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
       expect(collect.mock.calls[1]).toEqual(collect.mock.calls[0]);
     });
     it.each([true, false])(

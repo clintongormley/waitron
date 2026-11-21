@@ -1,10 +1,18 @@
+import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { customThemes, deviceProfiles, roles, withTransaction } from "@waitron/db";
+import {
+  customThemes,
+  deviceProfiles,
+  readSettings,
+  roles,
+  saveSettings,
+  withTransaction,
+} from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
-import { cardReaders, setProfileReaderList } from "@waitron/payments";
+import { cardReaders, PAYMENTS_SETTINGS, setProfileReaderList } from "@waitron/payments";
 import { Hono } from "hono";
 import { readCurrentImage, renderRendition, saveImage, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -174,6 +182,47 @@ async function menuStateRevision(till: Pick<Till, "app" | "cookie">): Promise<un
   expect(answer.status).toBe(200);
   return answer.body.setupRevision;
 }
+
+it("refreshes whether the venue is connected to SumUp without a reader", async () => {
+  const till = await setupTill();
+  const before = await sendAsTill(till, "GET", "/api/till");
+  expect(before.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, ring, {
+      personId: null,
+      purpose: "payments.sumup",
+      value: { apiKey: "test-key", merchantCode: "test-merchant" },
+    }),
+  );
+  const connected = await sendAsTill(till, "GET", "/api/till");
+  expect(connected.body).toMatchObject({ sumUpConnected: true, activeReaders: [] });
+  expect(connected.body.setupRevision).not.toBe(before.body.setupRevision);
+  expect(await menuStateRevision(till)).toBe(connected.body.setupRevision);
+  const setSumUp = (sumup: boolean) =>
+    withTransaction(suite.db, async (tx) => {
+      const { revision } = await readSettings(tx, PAYMENTS_SETTINGS);
+      await saveSettings(tx, PAYMENTS_SETTINGS, {
+        expectedRevision: revision,
+        doc: { providers: { sumup } },
+        personId: null,
+      });
+    });
+  await setSumUp(false);
+  const disabled = await sendAsTill(till, "GET", "/api/till");
+  expect(disabled.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  expect(await menuStateRevision(till)).toBe(disabled.body.setupRevision);
+  await setSumUp(true);
+  await withTransaction(suite.db, (tx) =>
+    deleteCredential(tx, { personId: null, purpose: "payments.sumup" }),
+  );
+  const disconnected = await sendAsTill(till, "GET", "/api/till");
+  expect(disconnected.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  expect(await menuStateRevision(till)).toBe(before.body.setupRevision);
+});
 
 describe("the till's setup revision", () => {
   it("the start read and menu-state name the same setup revision for one till", async () => {

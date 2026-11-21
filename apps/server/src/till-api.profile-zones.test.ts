@@ -148,6 +148,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/sales/:id                                     | order                  | refuses GET /api/sales/:id                           |
  * | GET  /api/sales/:id/receipt                             | order                  | refuses GET /api/sales/:id/receipt                   |
  * | POST /api/sales/:id/receipt/handover                    | order                  | refuses POST .../receipt/handover                    |
+ * | POST /api/working-orders/:id/payment-slip              | order                  | refuses POST .../payment-slip                        |
  * | POST /api/sales/:id/receipt/retry                       | order                  | refuses POST .../receipt/retry                       |
  * | GET  /api/sales/:id/deliveries                          | order                  | refuses GET /api/sales/:id/deliveries                |
  * | POST /api/sales/:id/deliveries                          | order                  | refuses POST /api/sales/:id/deliveries               |
@@ -717,6 +718,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/sales/${x.deliOrder}/receipt/handover`,
     () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/working-orders/:id/payment-slip",
+    "POST",
+    (x) => `/api/working-orders/${x.deliOrder}/payment-slip`,
+    (x) => ({ paymentId: x.deliOrder }),
     deliOrderZone,
   ],
   [

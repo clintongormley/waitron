@@ -7715,26 +7715,21 @@ describe("till-app counter: a payment slip that was asked for", () => {
   it.each([
     ["cash", { method: "cash", amount: "5" }],
     ["Other card machine", { method: "card", amount: "1.50", externalProvider: "other" }],
-  ] as const)(
-    "a walk-up %s sale sends the slip request and says when it failed",
-    async (_, pay) => {
-      const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(failed) });
-      const c = await toCounter(el);
-      c.store.addProduct(c.products[0]!, "1");
-      emit(c, "confirm-payment", { ...pay, printCardSlip: true });
-      await flush(el);
-      expect(vi.mocked(api.recordSale).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
-      expect(alert(el)).toBe(SLIP_FAILED());
-    },
-  );
+  ] as const)("a walk-up %s sale reports an earlier slip request that failed", async (_, pay) => {
+    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(failed) });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", pay);
+    await flush(el);
+    expect(alert(el)).toBe(SLIP_FAILED());
+  });
 
-  it("collecting a placed order in cash sends the slip request and says when it failed", async () => {
+  it("collecting a placed order in cash reports an earlier slip request that failed", async () => {
     const { el } = await mountApp({ collectOrder: vi.fn().mockResolvedValue(failed) });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
-    emit(c, "collect-order", { method: "cash", amount: "5", printCardSlip: true });
+    emit(c, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
-    expect(vi.mocked(api.collectOrder).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
     expect(alert(el)).toBe(SLIP_FAILED());
   });
 });
