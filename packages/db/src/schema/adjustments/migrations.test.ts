@@ -14,7 +14,7 @@ import {
   type Database,
 } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedVenue, seedWorkingOrder as seedOrder } from "../../testing/seed.js";
+import { seedPerson, seedVenue, seedWorkingOrder as seedOrder } from "../../testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -166,7 +166,7 @@ async function adjustmentRow(
     line_name: "Steak",
     line_quantity: 2000,
     line_list_unit_price: 2500,
-    credited_to: randomUUID(),
+    credited_to: await seedPerson(db, { id: "server", displayName: "Server" }),
     reason_id: reason.id,
     reason_name: "Complaint",
     policy_snapshot: "{}",
@@ -177,7 +177,7 @@ async function adjustmentRow(
     after_amount: 2500,
     reduction: 2500,
     nominal_value: 2500,
-    requested_by: randomUUID(),
+    requested_by: await seedPerson(db, { id: "requester", displayName: "Requester" }),
     approved_by: null,
     note: null,
     stage: "served",
@@ -235,7 +235,6 @@ describe("the adjustments table", () => {
       working_order_id: 1,
       line_id: 0,
       splits: 1,
-      comped_extras: 1,
       line_name: 0,
       line_quantity: 0,
       line_list_unit_price: 0,

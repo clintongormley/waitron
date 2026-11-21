@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_CLASSIFICATION, CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
@@ -26,8 +27,10 @@ const absent = useVenueDb({
     for (const table of [...ADJUSTMENTS_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
   },
 });
-beforeEach(() => {
+beforeEach(async () => {
   for (const db of [original.db, restored.db]) {
+    for (const id of ["former-person", "requester", "approver"])
+      await seedPerson(db, { id, displayName: id });
     db.run(
       sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"privacyNoticeUrl":null,"privacyEmail":null,"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
     );
@@ -41,7 +44,7 @@ beforeEach(() => {
       sql`insert into adjustment_reasons (id,name,names,kind,actions,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]',0,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into adjustments (id,working_order_id,line_id,splits,comped_extras,line_name,line_quantity,line_list_unit_price,credited_to,reason_id,reason_name,policy_snapshot,action,quantity,percent_bp,before_amount,after_amount,reduction,nominal_value,requested_by,approved_by,note,stage,by_guest,created_at) values ('adjustment','order','deleted-line','[{"from":"old","to":"split"}]','["deleted-extra"]','Recorded dish',2000,500,'former-person','removed-reason','Issued reason','{"actions":["cancel"],"maxBillComp":null,"maxPercentBp":null,"maxAmount":null,"noteRequired":true}','cancel',1000,null,1000,500,500,500,'requester','approver','Recorded note','fired',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into adjustments (id,working_order_id,line_id,splits,line_name,line_quantity,line_list_unit_price,credited_to,reason_id,reason_name,policy_snapshot,action,quantity,percent_bp,before_amount,after_amount,reduction,nominal_value,requested_by,approved_by,note,stage,by_guest,created_at) values ('adjustment','order','deleted-line','[{"from":"old","to":"split"}]','Recorded dish',2000,500,'former-person','removed-reason','Issued reason','{"actions":["cancel"],"maxBillComp":null,"maxPercentBp":null,"maxAmount":null,"noteRequired":true}','cancel',1000,null,1000,500,500,500,'requester','approver','Recorded note','fired',1,'2026-10-20T08:00:00.000Z')`,
     );
   }
 });
@@ -133,7 +136,7 @@ function hideTable(table: string) {
 }
 
 describe("adjustment backup evidence", () => {
-  it("retains issued adjustments after reason line and staff removal", async () => {
+  it("retains issued adjustments after reason and line removal", async () => {
     expect(await run()).toEqual(passed);
   });
   it("declares every adjustment table without extra obligations", () => {
@@ -158,7 +161,6 @@ describe("adjustment backup evidence", () => {
     "policy_snapshot='{}'",
     "line_name='Current dish'",
     "splits='[]'",
-    "comped_extras='[]'",
     "line_id='replacement'",
     "line_quantity=3000",
     "line_list_unit_price=600",
@@ -195,6 +197,15 @@ describe("adjustment backup evidence", () => {
       await corrupt(db, "update adjustments set working_order_id='missing'");
     expect((await run()).status).toBe("invalid");
   });
+  it.each(["original", "restored"] as const)(
+    "refuses a missing requester in the %s copy",
+    async (copy) => {
+      expect(await run()).toEqual(passed);
+      const db = copy === "original" ? original.db : restored.db;
+      await corrupt(db, "delete from persons where id='requester'");
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("checks source references separately from migrated references", async () => {
     expect(await run()).toEqual(passed);
     expect((await run({ wrap: hideTable("working_orders") })).status).toBe("invalid");

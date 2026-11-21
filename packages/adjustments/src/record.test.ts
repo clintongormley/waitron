@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adjustmentLines,
   adjustments,
@@ -11,6 +11,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
@@ -30,6 +31,11 @@ beforeAll(() => {
 
 const WAITER = "11111111-1111-4111-8111-111111111111";
 const MANAGER = "22222222-2222-4222-8222-222222222222";
+
+beforeEach(async () => {
+  await seedPerson(db, { id: WAITER, displayName: "Waiter" });
+  await seedPerson(db, { id: MANAGER, displayName: "Manager" });
+});
 
 /** A €12.00 comp of a whole Burger ×1 under `reason`, on `workingOrderId`. */
 function comp(
@@ -181,7 +187,6 @@ describe("recordAdjustment", () => {
           to: "44444444-4444-4444-8444-444444444444",
         },
       ],
-      compedExtras: [],
       lineName: "Steak",
       lineQuantity: 2000,
       lineListUnitPrice: 2500,

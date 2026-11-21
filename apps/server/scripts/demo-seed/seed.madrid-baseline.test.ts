@@ -262,6 +262,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
   device_profile_admission_roles: ["role"],
   nodes: ["location_id"],
   adjustment_reasons: ["apply_roles", "approver_roles"],
+  adjustments: ["comped_extras"],
   devices: ["location_id", "created_at"],
   working_orders: ["location_id"],
   refunds: ["location_id"],
@@ -377,7 +378,6 @@ const REMOVED_TABLES = [
 // The baseline rebuild moves these columns before the named anchor, retaining their metadata.
 const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
   adjustments: [
-    ["line_name", "comped_extras"],
     ["created_at", "charge_kept", "preparation_started", "refund_handoff", "refund_value"],
   ],
   bookings: [["tab_id", "table_label"]],
@@ -2913,6 +2913,7 @@ for (const locale of ["en", "es"] as const) {
       ];
 
       for (const [name, columns] of [
+        ["adjustments", ["credited_to", "approved_by", "requested_by"]],
         ["bill_payments", ["attested_by", "requested_by"]],
         ["department_transfer_requests", ["resolved_by", "sender_id"]],
         ["line_service_cancellations", ["actor_id"]],

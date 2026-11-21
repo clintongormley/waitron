@@ -23,6 +23,7 @@ import {
   orderGroups,
   parties,
   printJobs,
+  products,
   saleLines,
   sales,
   ticketItems,
@@ -31,6 +32,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  adjustmentLines,
   adjustments,
   computeAdjustmentReport,
   createAdjustmentReason,
@@ -39,7 +41,15 @@ import {
   updateAdjustmentReason,
   type AdjustmentAction,
 } from "@waitron/adjustments";
-import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/menu";
+import {
+  createExtraList,
+  createProduct,
+  localToday,
+  rateLines,
+  writeProductModifiers,
+  type GrossLines,
+  type VatClass,
+} from "@waitron/menu";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
@@ -452,7 +462,7 @@ describe("a comp (plan D4)", () => {
   });
 });
 
-describe("the extras rows an adjustment records as comped with their dish (B11f)", () => {
+describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
   /** A bill of Pizza × `quantity` with olives, and the ids of the pizza and its one extras row. */
   async function pizzaWithOlives(quantity = "1") {
     const { billId } = await bill([{ name: "Pizza", quantity, olives: 1 }]);
@@ -465,17 +475,22 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     return { billId, pizza, target, extras };
   }
 
-  it("records the dish's extras row on a whole comp of the dish", async () => {
+  it("lowers the dish's extras row with it on a whole comp", async () => {
     const { billId, pizza, extras } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: pizza, action: "comp" });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: pizza, action: "comp", splits: [], compedExtras: extras },
-    ]);
+    const records = await recordedOn(billId);
+    expect(records).toMatchObject([{ lineId: pizza, action: "comp", splits: [] }]);
+    const lowered = await inTx(venue, (tx) =>
+      tx.select().from(adjustmentLines).where(eq(adjustmentLines.adjustmentId, records[0]!.id)),
+    );
+    expect(lowered).toContainEqual(
+      expect.objectContaining({ lineId: extras[0], reduction: 150, quantity: 1000 }),
+    );
   });
 
-  it("records none on a comp of part of the dish", async () => {
+  it("records the splits on a comp of part of the dish", async () => {
     const { billId, pizza, target } = await pizzaWithOlives("2");
 
     await adjust(billId, { ...target, action: "comp", quantity: "1" });
@@ -483,27 +498,75 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ lineId: pizza, action: "comp", quantity: 1000 });
     expect(row!.splits).not.toEqual([]);
-    expect(row!.compedExtras).toEqual([]);
   });
 
-  it("records none on a comp of the extras row on its own", async () => {
+  it("records the free extra's split without a reduction row on a partial comp", async () => {
+    const { menuItemId, pizzaExtras } = await inTx(venue, async (tx) => {
+      const [pizza] = await tx
+        .select({ categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.name, "Pizza"));
+      const product = await createProduct(tx, {
+        categoryId: pizza!.categoryId,
+        name: "Pizza with free olives",
+        pricingUnit: "each",
+        unitPrice: "12.00",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Free toppings",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 2,
+          active: true,
+          items: [{ productId: venue.olivesId, maxQuantity: 2, preselected: false, price: "0.00" }],
+        },
+        venue.venueLocale,
+      );
+      await writeProductModifiers(tx, product.id, [{ kind: "extras", id: list.id }]);
+      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      return { menuItemId: offers.offerFor(product.id), pizzaExtras: list.id };
+    });
+    const { billId } = await billWith({ ...venue, item: () => menuItemId, pizzaExtras }, [
+      { name: "Pizza with free olives", quantity: "2", olives: 1 },
+    ]);
+    const target = await todayLine(venue, billId, 1);
+    const freeExtra = (await rowsOf(venue, billId)).find(
+      (row) => row.parentLineId === target.lineId,
+    );
+    expect(freeExtra).toMatchObject({ unitPriceGross: "0.00" });
+
+    await adjust(billId, { ...target, action: "comp", quantity: "1" });
+
+    const [row] = await recordedOn(billId);
+    const split = row!.splits.find(({ from }) => from === freeExtra!.id);
+    expect(split?.to).toEqual(expect.any(String));
+    const lowered = await inTx(venue, (tx) =>
+      tx
+        .select({ lineId: adjustmentLines.lineId })
+        .from(adjustmentLines)
+        .where(eq(adjustmentLines.adjustmentId, row!.id)),
+    );
+    expect(lowered.map(({ lineId }) => lineId)).not.toContain(split!.to);
+  });
+
+  it("records a comp of the extras row on its own", async () => {
     const { billId, extras } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: extras[0]!, action: "comp" });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: extras[0], action: "comp", compedExtras: [] },
-    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ lineId: extras[0], action: "comp" }]);
   });
 
-  it("records none on a percent discount of the dish", async () => {
+  it("records a percent discount of the dish", async () => {
     const { billId, pizza } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: pizza, action: "discount_percent", percentBp: 1000 });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: pizza, action: "discount_percent", compedExtras: [] },
-    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ lineId: pizza, action: "discount_percent" }]);
   });
 });
 

@@ -7,6 +7,9 @@ describe("adjustments declarations", () => {
   it("declares its keys, index and every check by name, so a regeneration carries them", () => {
     const config = getTableConfig(adjustments);
     expect(config.foreignKeys.map((key) => [key.getName(), key.onDelete]).sort()).toEqual([
+      ["adjustments_approved_by_fk", "restrict"],
+      ["adjustments_credited_to_fk", "restrict"],
+      ["adjustments_requested_by_fk", "restrict"],
       ["adjustments_working_order_fk", "restrict"],
     ]);
     expect(config.indexes.map((index) => [index.config.name, index.config.unique])).toEqual([

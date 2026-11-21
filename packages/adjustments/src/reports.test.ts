@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  persons,
   settings,
   withTransaction,
   workingOrderLines,
@@ -12,7 +13,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 
 import {
   addDecimal,
@@ -61,6 +62,16 @@ async function person(name: string, status?: "suspended"): Promise<string> {
     ...(status === undefined ? {} : { status }),
   });
   return row!.id;
+}
+
+/** Simulate a damaged directory while keeping the adjustment rows for these reader tests. */
+async function removePersonFromDirectory(personId: string): Promise<void> {
+  db.run(sql`pragma foreign_keys = off`);
+  try {
+    await db.delete(persons).where(eq(persons.id, personId));
+  } finally {
+    db.run(sql`pragma foreign_keys = on`);
+  }
 }
 
 let orderNumber = 0;
@@ -1338,7 +1349,7 @@ describe("stages, reasons and guests", () => {
   it("names a person the directory no longer holds as nobody", async () => {
     const reason = await seedReason(db);
     const visit = await bill();
-    const gone = randomUUID();
+    const gone = await seedPerson(db, { displayName: "Former server" });
     await adjust({
       bill: visit.id,
       reason,
@@ -1350,6 +1361,7 @@ describe("stages, reasons and guests", () => {
       by: gone,
       at: "2026-09-15T19:00:00.000Z",
     });
+    await removePersonFromDirectory(gone);
 
     const read = await report();
 
@@ -1364,7 +1376,10 @@ describe("the order of the rows", () => {
     const [firstAna, secondAna] = [await person("Ana"), await person("Ana", "suspended")].sort();
     const bea = await person("Bea");
     const carl = await person("Carl");
-    const [gone, alsoGone] = [randomUUID(), randomUUID()].sort();
+    const [gone, alsoGone] = [
+      await seedPerson(db, { displayName: "Former waiter" }),
+      await seedPerson(db, { displayName: "Former manager" }),
+    ].sort();
     const house = await seedReason(db);
     const late = await seedReason(db);
     const large = await seedReason(db);
@@ -1404,6 +1419,8 @@ describe("the order of the rows", () => {
     await comp(carl, undefined, twinA, "Twin");
     await comp(secondAna, undefined, twinB, "Twin");
     await comp(carl, undefined, large, "Zulu", "9.00");
+    await removePersonFromDirectory(gone!);
+    await removePersonFromDirectory(alsoGone!);
 
     const read = await report();
 

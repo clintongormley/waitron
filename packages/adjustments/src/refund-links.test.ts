@@ -16,6 +16,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import {
   seedBillPayment,
@@ -38,8 +39,9 @@ let db: Database;
 beforeAll(() => {
   db = suite.db;
 });
-beforeEach(() => {
+beforeEach(async () => {
   venue = undefined;
+  await seedPerson(db, { id: WAITER, displayName: "Waiter" });
 });
 
 const WAITER = "11111111-1111-4111-8111-111111111111";
@@ -206,7 +208,7 @@ describe("the link from a refund to its cancels", () => {
   it("reads each cancel's stored refund value", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedVoidReason(db);
-    const approver = "22222222-2222-4222-8222-222222222222";
+    const approver = await seedPerson(db, { displayName: "Approver" });
     const handed = await cancel(order, reason, "3.33", "1", true, approver);
     const kept = await cancel(order, reason, null, "2", false);
     const rows = await read([handed, kept]);

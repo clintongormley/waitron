@@ -27,8 +27,6 @@ export interface NewAdjustment {
   } | null;
   /** The rows this adjustment split off, each with the row it came from. */
   splits?: readonly AdjustmentSplit[];
-  /** On a whole comp of a dish, its extras rows, which the comp priced at zero with it. */
-  compedExtras?: readonly string[];
   /** How much of the line the adjustment covered; null exactly when `line` is. */
   quantity: string | null;
   reason: { id: string; name: string; policy: AdjustmentPolicySnapshot };
@@ -58,7 +56,6 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
       workingOrderId: row.workingOrderId,
       lineId: line?.id ?? null,
       splits: [...(row.splits ?? [])],
-      compedExtras: [...(row.compedExtras ?? [])],
       lineName: line?.name ?? null,
       lineQuantity: line === null ? null : stringToThousandths(line.quantity),
       lineListUnitPrice: line === null ? null : decimalToCents(line.listUnitPriceGross),

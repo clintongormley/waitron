@@ -338,7 +338,6 @@ async function outcomeOf(billId: string) {
       splits: sortedJson(
         (record!.splits ?? []).map(({ from, to }) => ({ from: ids.get(from), to: ids.get(to) })),
       ),
-      compedExtras: (record!.compedExtras ?? []).map((id) => ids.get(id)).sort(),
     },
     filed: sortedJson(
       filed.map(({ id, parent, ...row }) => {
@@ -380,21 +379,19 @@ async function bothShapes(lines: RoundLine[], target: string, ask: Ask) {
   return {
     grouped: await outcomeOf(grouped.billId),
     portions: await outcomeOf(portions.billId),
+    groupedBill: grouped,
     portionsBill: portions,
   };
 }
 
-/** The two outcomes equal on everything but the receipt's row order and the comped extras' ids
- * (one per portion where today has one per line). */
+/** Compare the two outcomes independently of the receipt's row order. */
 function expectSameMoney(
   grouped: Awaited<ReturnType<typeof outcomeOf>>,
   portions: Awaited<ReturnType<typeof outcomeOf>>,
 ) {
-  const strip = ({ blocks, record, ...rest }: typeof grouped) => {
+  const strip = ({ blocks, ...rest }: typeof grouped) => {
     void blocks;
-    const { compedExtras, ...kept } = record;
-    void compedExtras;
-    return { ...rest, record: kept };
+    return rest;
   };
   expect(strip(portions)).toEqual(strip(grouped));
 }
@@ -481,7 +478,7 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     expectSameMoney(grouped, portions);
   });
 
-  it("A803 portions: a comp of a row of three croquettes zeroes all three, lists none as comped extras, and prints one comp under the row", async () => {
+  it("A803 portions: a comp of a row of three croquettes zeroes all three and prints one comp under the row", async () => {
     const {
       grouped,
       portions,
@@ -492,7 +489,6 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     });
 
     expect(grouped.record.reduction).toBe(999);
-    expect(grouped.record.compedExtras).toEqual([]);
     expectSameMoney(grouped, portions);
     expect((await rowsOf(venue, bill.billId)).map((row) => [row.name, row.unitPriceGross])).toEqual(
       [
@@ -504,17 +500,25 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     );
   });
 
-  it("A803 portions: a comp of a row of two pizzas with an olive each records both olives as comped extras", async () => {
-    const { grouped, portions } = await bothShapes(
+  it("A803 portions: a comp of a row of two pizzas lowers both olives with the pizzas", async () => {
+    const { grouped, portions, groupedBill, portionsBill } = await bothShapes(
       [{ name: "Pizza", quantity: "2", olives: 1 }, bread],
       "Pizza",
       { action: "comp", reasonId: venue.reasonId.complaint },
     );
 
     expectSameMoney(grouped, portions);
-    // Today's one olives line is one comped extra; the row's two olives lines are both listed.
-    expect(grouped.record.compedExtras).toEqual(["Olives 0.00"]);
-    expect(portions.record.compedExtras).toEqual(["Olives 0.00", "Olives 0.00"]);
+    const groupedExtras = (await takenOn(groupedBill.billId))[0]!.filter((line) =>
+      line.startsWith("Olives "),
+    );
+    const portionExtras = (await takenOn(portionsBill.billId))[0]!.filter((line) =>
+      line.startsWith("Olives "),
+    );
+    expect(groupedExtras).toEqual(["Olives 0.00 off 3.00 of 2.000"]);
+    expect(portionExtras).toEqual([
+      "Olives 0.00 off 1.50 of 1.000",
+      "Olives 0.00 off 1.50 of 1.000",
+    ]);
   });
 });
 
