@@ -1224,7 +1224,7 @@ LATER-SALE-DATE._
 _2026-11-20 (LATER-SALE-DATE): an invoice an order issues on a later calendar day than the moment
 its meal ended files that day as `FechaOperacion`, uses its VAT rates, prints it as the date of the
 sale, keeps it in `sales.supply_day`, and counts in that day's period on the VAT return and in the
-accountant export, which picks it by that day, else its issue date, and shows it in its last column.
+accountant export, which picks it by that day, else its issue date, and shows it in its sale-date column.
 The meal ends at whichever comes first: printing the bill, taking the last payment, or the close of
 the business day (the owner's words of 18 November, in the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md));
 its day is the calendar day of that moment (the owner's D1, "Calendar day it ended", relayed by the
