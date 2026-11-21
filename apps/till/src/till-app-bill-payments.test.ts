@@ -8115,32 +8115,45 @@ describe("till-app: giving back a bill payment", () => {
     expect(refunds().map(({ request }) => request.reason)).toEqual(["Charged twice"]);
   });
 
-  it("shows the refusal naming the table's receipt, not Correct invoice on the advance, when its payment is refunded after that receipt took it off", async () => {
+  it("opens Correct invoice on the advance's ticket, and no bill refund, once the table's receipt is printed", async () => {
     const advancePaid = paymentOf({ hasTicket: true, saleId: "advance-sale" });
-    const refundBillPayment = vi.fn().mockRejectedValue({
-      code: "advance.taken_off_final_invoice",
-      status: 409,
-      saleId: "advance-sale",
-      finalSaleId: "final-sale",
-      invoiceNumber: "A/45",
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...partly, invoiceNumber: "A/45", status: "placed" }]),
+      getBillBalance: vi.fn().mockResolvedValue(holding(advancePaid)),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
+      getTransactionReceipt: vi.fn().mockResolvedValue(invoiceOf("50.00")),
+      getRefundableTenders: vi.fn().mockResolvedValue([
+        {
+          tenderId: "11111111-1111-4111-8111-111111111111",
+          method: "cash",
+          last4: null,
+          appliedRemaining: "50.00",
+          tipRemaining: "0.00",
+          pendingRefundId: null,
+          manual: false,
+        },
+      ]),
+      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      refundBillPayment: vi.fn(),
     });
-    const el = await askRefund(
-      {
-        getPartyBills: vi
-          .fn()
-          .mockResolvedValue([{ ...partly, invoiceNumber: "A/45", status: "placed" }]),
-        refundBillPayment,
-        getTransactionReceipt: vi.fn(),
-      },
-      advancePaid,
-    );
+    await openTable(el);
+    await openDialog(el, "rest");
 
-    expect(refundBillPayment).toHaveBeenCalledOnce();
-    expect(inRefund(el, "wt-form-actions")!.error).toBe(
-      "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+    await press(el, `[data-payment-refund="${advancePaid.id}"]`);
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
     );
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
-    expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")!.saleId).toBe(
+      "advance-sale",
+    );
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
 
   it("puts a refusal of the reason under the reason", async () => {

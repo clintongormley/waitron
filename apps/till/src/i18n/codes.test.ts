@@ -1033,16 +1033,16 @@ it.each([
 it("sends staff to Correct invoice on a payment on account's own ticket, naming it", () => {
   const ticket = { invoiceNumber: "A/12" };
   expect(codeMessage("tender.refund_of_advance", "en", ticket)).toBe(
-    "This ticket A/12 is a payment on account, so its money is not refunded here. While the table's bill is still open, give it back with Correct invoice on this ticket: that gives the money back and takes it off the bill.",
+    "This ticket A/12 is a payment on account, so its money is not refunded here. Give it back with Correct invoice on this ticket: that gives the money back, and while the bill is open takes it off the bill.",
   );
   expect(codeMessage("tender.refund_of_advance", "es", ticket)).toBe(
-    "Este ticket A/12 es un pago a cuenta, así que su dinero no se devuelve aquí. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y se quita de la cuenta.",
+    "Este ticket A/12 es un pago a cuenta, así que su dinero no se devuelve aquí. Devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   );
   expect(codeMessage("bill.refund_of_advance", "en", ticket)).toBe(
-    "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
+    "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. Give it back with Correct invoice on that ticket: that gives the money back, and while the bill is open takes it off the bill.",
   );
   expect(codeMessage("bill.refund_of_advance", "es", ticket)).toBe(
-    "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
+    "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   );
   expect(codeMessage("bill.refund_of_advance", "en")).toMatch(
     /^This payment was taken on account and has its own ticket, so /,
@@ -1052,17 +1052,35 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
   );
 });
 
-it("sends staff to Correct invoice on the table's receipt once it took the advance off, naming it", () => {
+it("sends staff back to Correct invoice on the advance after the table's receipt took it off, naming that receipt", () => {
   const final = { invoiceNumber: "A/45" };
   expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
-    "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+    "This correction was opened before the table's receipt A/45 took this payment on account off. Choose Discard, then open Correct invoice on this ticket again.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
-    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+    "Esta rectificación se abrió antes de que el ticket de la mesa A/45 descontara este pago a cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
-    /^This payment on account was already taken off the table's receipt\. /,
+    /^This correction was opened before the table's receipt took /,
   );
+});
+
+it("sends staff to Correct invoice on the table's receipt first, naming it, the money it can still give back and the advance's rate", () => {
+  const final = { invoiceNumber: "A/45", rate: "10.00", moneyLeft: "90.00" };
+  expect(codeMessage("advance.final_invoice_first", "en", final)).toBe(
+    "The table's receipt A/45 can still give back €90.00 for dishes at 10% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
+  );
+  expect(codeMessage("advance.final_invoice_first", "es", final)).toBe(
+    "El ticket de la mesa A/45 todavía puede devolver 90,00\u00a0€ de platos al 10 % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
+  );
+  expect(codeMessage("advance.final_invoice_first", "es", { ...final, rate: "5.50" })).toContain(
+    " al 5,5 % de IVA,",
+  );
+  expect(
+    codeMessage("advance.final_invoice_first", "en", { rate: "10.00", moneyLeft: "90.00" }),
+  ).toMatch(/^The table's receipt can still give back /);
+  for (const locale of ["en", "es"])
+    expect(codeMessage("advance.final_invoice_first", locale)).not.toMatch(/[{}]/);
 });
 
 it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {

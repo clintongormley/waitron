@@ -1,4 +1,4 @@
-import { PORTIONS_AT_ONCE } from "@waitron/shared";
+import { PORTIONS_AT_ONCE, formatMoney } from "@waitron/shared";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -654,16 +654,20 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
   },
   "tender.refund_of_advance": {
-    en: "This ticket{invoiceNumber} is a payment on account, so its money is not refunded here. While the table's bill is still open, give it back with Correct invoice on this ticket: that gives the money back and takes it off the bill.",
-    es: "Este ticket{invoiceNumber} es un pago a cuenta, así que su dinero no se devuelve aquí. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y se quita de la cuenta.",
+    en: "This ticket{invoiceNumber} is a payment on account, so its money is not refunded here. Give it back with Correct invoice on this ticket: that gives the money back, and while the bill is open takes it off the bill.",
+    es: "Este ticket{invoiceNumber} es un pago a cuenta, así que su dinero no se devuelve aquí. Devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   },
   "bill.refund_of_advance": {
-    en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
-    es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
+    en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. Give it back with Correct invoice on that ticket: that gives the money back, and while the bill is open takes it off the bill.",
+    es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   },
   "advance.taken_off_final_invoice": {
-    en: "This payment on account was already taken off the table's receipt{invoiceNumber}. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
-    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+    en: "This correction was opened before the table's receipt{invoiceNumber} took this payment on account off. Choose Discard, then open Correct invoice on this ticket again.",
+    es: "Esta rectificación se abrió antes de que el ticket de la mesa{invoiceNumber} descontara este pago a cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
+  },
+  "advance.final_invoice_first": {
+    en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
+    es: "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft} de platos al {rate} % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
   },
   "advance.correction_open": {
     en: "The table's receipt cannot be issued while a correction of the payment on account{invoiceNumber} is open. In Correct invoice, use Finish now or Discard, then try again.",
@@ -1047,6 +1051,11 @@ const FIGURES_UNCHECKED = {
   es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar.",
 };
 
+const FINAL_INVOICE_FIRST_UNNAMED = {
+  en: "The table's receipt{invoiceNumber} can still give back money for dishes at this payment on account's VAT rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
+  es: "El ticket de la mesa{invoiceNumber} todavía puede devolver dinero de platos al tipo de IVA de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta.",
+};
+
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   replaced: {
@@ -1105,6 +1114,8 @@ export function codeMessage(
     dishName?: unknown;
     dishNames?: unknown;
     invoiceNumber?: unknown;
+    rate?: unknown;
+    moneyLeft?: unknown;
   },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
@@ -1135,10 +1146,17 @@ export function codeMessage(
     code === "advance.taken_off_final_invoice" ||
     code === "advance.correction_open"
   )
-    return message.replace(
-      "{invoiceNumber}",
-      typeof params?.invoiceNumber === "string" ? ` ${params.invoiceNumber}` : "",
-    );
+    return message.replace("{invoiceNumber}", () => invoiceNumberOf(params));
+  if (code === "advance.final_invoice_first") {
+    const { rate, moneyLeft } = params ?? {};
+    const named = typeof rate === "string" && typeof moneyLeft === "string";
+    return (named ? message : pickLocale(FINAL_INVOICE_FIRST_UNNAMED, locale))
+      .replace("{invoiceNumber}", () => invoiceNumberOf(params))
+      .replace("{moneyLeft}", () => formatMoney(moneyLeft as string, locale))
+      .replace("{rate}", () =>
+        new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(rate)),
+      );
+  }
   if (typeof code !== "string" || !code.startsWith("set_menu.")) return message;
   const setMenuName =
     typeof params?.setMenuName === "string"
@@ -1160,6 +1178,10 @@ export function codeMessage(
     if (field === "dishName") return dishName;
     return listed;
   });
+}
+
+function invoiceNumberOf(params?: { invoiceNumber?: unknown }): string {
+  return typeof params?.invoiceNumber === "string" ? ` ${params.invoiceNumber}` : "";
 }
 
 function zoneAdmissionMessage(reason: unknown, locale: string): string {

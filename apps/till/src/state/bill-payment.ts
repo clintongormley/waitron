@@ -284,6 +284,8 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     reason?: unknown;
     recoveryUrl?: unknown;
     invoiceNumber?: unknown;
+    rate?: unknown;
+    moneyLeft?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -298,6 +300,8 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     ...(typeof refused.reason === "string" ? { reason: refused.reason } : {}),
     ...(typeof refused.recoveryUrl === "string" ? { recoveryUrl: refused.recoveryUrl } : {}),
     ...(typeof refused.invoiceNumber === "string" ? { invoiceNumber: refused.invoiceNumber } : {}),
+    ...(typeof refused.rate === "string" ? { rate: refused.rate } : {}),
+    ...(typeof refused.moneyLeft === "string" ? { moneyLeft: refused.moneyLeft } : {}),
   };
 }
 

@@ -23127,7 +23127,7 @@ export class TillApp extends LitElement {
   }
 
   #refundPayment(open: BillPaying, payment: BillPaymentView, suggested: string | null): void {
-    if (payment.hasTicket === true && payment.saleId !== undefined && open.printed !== true) {
+    if (payment.hasTicket === true && payment.saleId !== undefined) {
       const saleId = payment.saleId;
       this.#requestLeave(() => this.#correctAdvance(open, saleId));
       return;
@@ -23135,8 +23135,8 @@ export class TillApp extends LitElement {
     this.#openBillRefunding(open, payment, suggested);
   }
 
-  /** Before the bill has an invoice, Refund on a payment that paid an advance opens Correct
-   * invoice on the advance's own ticket, closing the Pay window. */
+  /** Refund on a payment that paid an advance opens Correct invoice on the advance's own ticket,
+   * closing the Pay window: the server refuses its money as a bill refund. */
   async #correctAdvance(open: BillPaying, saleId: string): Promise<void> {
     if (this.#billPayingNow(open.id) === null) return;
     const origin = this.drill;

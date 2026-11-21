@@ -24,6 +24,10 @@ export interface PayRefusal {
   reason?: string;
   /** The ticket a payment on account was issued on, which gives it back. */
   invoiceNumber?: string;
+  /** An `advance.final_invoice_first`'s VAT rate of the advance and money its table's receipt can
+   * still give back at that rate. */
+  rate?: string;
+  moneyLeft?: string;
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }

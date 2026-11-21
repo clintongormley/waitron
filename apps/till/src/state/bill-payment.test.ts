@@ -517,6 +517,28 @@ describe("refusalOf", () => {
     });
   });
 
+  it("keeps the rate and money left the table's-receipt-first refusal names, as text only", () => {
+    const refused = {
+      code: "advance.final_invoice_first",
+      status: 409,
+      saleId: "advance-sale",
+      finalSaleId: "final-sale",
+      invoiceNumber: "A/45",
+      rate: "10.00",
+      moneyLeft: "90.00",
+    };
+    expect(refusalOf(refused)).toEqual({
+      code: "advance.final_invoice_first",
+      invoiceNumber: "A/45",
+      rate: "10.00",
+      moneyLeft: "90.00",
+    });
+    expect(refusalOf({ ...refused, rate: 10, moneyLeft: 90 })).toEqual({
+      code: "advance.final_invoice_first",
+      invoiceNumber: "A/45",
+    });
+  });
+
   it("keeps the permission a refusal names as text", () => {
     expect(
       refusalOf({ code: "authorization.not_permitted", status: 403, permission: "sale.refund" }),

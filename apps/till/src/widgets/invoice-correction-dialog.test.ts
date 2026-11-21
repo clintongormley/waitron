@@ -243,6 +243,26 @@ it("explains on opening an invoice the preview would refuse, offering only Cance
   expect(confirm(el)).toBeNull();
 });
 
+it("sends staff to the table's receipt first on opening a payment on account it can still correct", async () => {
+  const api = fakeApi();
+  api.readInvoiceCorrectionLines.mockRejectedValue({
+    code: "advance.final_invoice_first",
+    status: 409,
+    saleId: "sale-1",
+    finalSaleId: "final-sale",
+    invoiceNumber: "A/45",
+    rate: "10.00",
+    moneyLeft: "90.00",
+  });
+  const { el } = await mount(api);
+
+  expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+    "The table's receipt A/45 can still give back €90.00 for dishes at 10% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has no dish at that rate left to correct, correct this payment on account.",
+  );
+  expect(grossField(el)).toBeNull();
+  expect(confirm(el)).toBeNull();
+});
+
 it("puts an amount the preview refuses under the money field, leaving the action enabled", async () => {
   const api = fakeApi();
   api.previewInvoiceCorrection.mockRejectedValue({ code: "sale.correction_amount_invalid" });
