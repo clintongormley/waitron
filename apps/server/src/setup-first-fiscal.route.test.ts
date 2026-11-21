@@ -412,6 +412,7 @@ it.each([
   expect(await result.text()).not.toContain("SECRET-SENTINEL");
 });
 it.each([
+  ["blank", "   "],
   ["without a postcode", "Mayor 1, Madrid"],
   ["the box's own floor and door alone", "2º 1ª"],
   ["with a postcode outside its province", "Mayor 1, 08010 Madrid, Madrid"],

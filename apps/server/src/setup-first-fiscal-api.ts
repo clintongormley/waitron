@@ -433,8 +433,8 @@ export function mountSetupFirstFiscalApi(
         pin = text(admin.pin);
       if (Buffer.byteLength(password) > 1024 || Buffer.byteLength(pin) > 1024) invalid();
       const venue = parseVenue(raw, c.req.header("Accept-Language"));
-      if (!venue.taxpayerDomicile?.trim()) invalid();
       if (
+        !venue.taxpayerDomicile?.trim() ||
         registeredAddressRefusal(
           venue.taxpayerDomicile,
           getVenueSetupCountryPack(venue.country)!,
