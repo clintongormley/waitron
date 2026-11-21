@@ -8,13 +8,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
 import {
-  persistNodeMembershipIfNewer,
+  persistNodeMembershipIfNewerTx,
   readNodeMembership,
   withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
   type NodeTransaction,
+  type Transaction,
 } from "@waitron/db";
 import {
   refuseUnverifiableChart,
@@ -312,16 +313,18 @@ export async function issueMirrorBundle(
       moduleOperations,
       moduleConfig,
       primaryPrivateKey: signingKey,
+      // With the reservation, so no bundle is handed out for a node the chart omits (a till
+      // reroutes by the chart's `contactUrl`), and a chart write that gives up reserves nothing.
+      reservationTransaction: (endorsement, reserve) =>
+        listStandbyThenReserve(
+          deps,
+          signingKey,
+          standby.nodeId,
+          spare.contactUrl,
+          endorsement,
+          reserve,
+        ),
     });
-    // Before the response, so no bundle is handed out for a node the chart omits: a till
-    // reroutes by the chart's `contactUrl`.
-    await appendStandbyToChart(
-      deps,
-      signingKey,
-      standby.nodeId,
-      spare.contactUrl,
-      assembled.reservedIdentity.endorsement,
-    );
     await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
       role: "streams",
       state: "pending",
@@ -421,14 +424,19 @@ function trustDeps(deps: MirrorBundleIssueDeps, privateKey: string): StoredTrust
   return { node: deps.node, ring: deps.ring, nodeId: deps.designated.nodeId, privateKey };
 }
 
-// A refused write means this mint was built on a stale chart: re-read and mint again, never force.
-async function appendStandbyToChart(
+/**
+ * Lists the standby in the next chart and runs `reserve` after it in the same transaction, so the
+ * two commit together. A refused write means this mint was built on a stale chart: re-read and
+ * mint again, never force.
+ */
+async function listStandbyThenReserve<T>(
   deps: MirrorBundleIssueDeps,
   signingKey: string,
   standbyNodeId: string,
   standbyContactUrl: string,
   endorsement: Endorsement,
-): Promise<void> {
+  reserve: (tx: Transaction) => Promise<T>,
+): Promise<T> {
   const signerContactUrl = ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId);
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
@@ -447,7 +455,10 @@ async function appendStandbyToChart(
         endorsements: [endorsement],
       },
     );
-    if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;
+    const reserved = await withTransaction(deps.appDb, async (tx) =>
+      (await persistNodeMembershipIfNewerTx(tx, document)) ? { value: await reserve(tx) } : null,
+    );
+    if (reserved !== null) return reserved.value;
   }
   throw new AppError("membership.write_contended", { attempts: MAX_CHART_WRITE_ROUNDS });
 }

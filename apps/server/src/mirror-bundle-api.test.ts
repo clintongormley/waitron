@@ -49,7 +49,7 @@ import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/tes
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { fiscalAllocations, registroSif } from "@waitron/fiscal-verifactu";
 import type { WaitronModule } from "@waitron/module";
-import { nodeId } from "@waitron/shared";
+import { AppError, nodeId } from "@waitron/shared";
 import {
   standbyContract,
   allocatedStandbyModules,
@@ -87,6 +87,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 const pause = vi.hoisted(() => ({
   beforeModuleConfigRead: undefined as (() => Promise<void>) | undefined,
   beforeChartMint: undefined as (() => Promise<void>) | undefined,
+  beforeReserve: undefined as (() => Promise<void>) | undefined,
   moduleConfigReads: 0,
 }));
 
@@ -359,6 +360,9 @@ async function post(
         standby: {
           ...standby,
           async reserve(...args: Parameters<typeof standby.reserve>) {
+            const hook = pause.beforeReserve;
+            pause.beforeReserve = undefined;
+            await hook?.();
             const result = await standby.reserve(...args);
             outsideReservations.push(structuredClone(fixture.state));
             return result;
@@ -407,6 +411,7 @@ beforeEach(async () => {
 afterEach(() => {
   pause.beforeModuleConfigRead = undefined;
   pause.beforeChartMint = undefined;
+  pause.beforeReserve = undefined;
 });
 
 afterAll(async () => {
@@ -765,6 +770,56 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       await db.execute(sql.raw("drop trigger test_node_membership_contended"));
     }
     expect((await readNodeMembership(db))?.body.term).toBe(seedTerm);
+  });
+
+  it("reserves once when a join is sent again after membership.write_contended", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+    const standby = validStandby();
+    await db.execute(
+      sql.raw(
+        "create trigger test_node_membership_contended before update on node_membership begin select raise(ignore); end",
+      ),
+    );
+    try {
+      const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.write_contended", params: { attempts: 8 } },
+      });
+    } finally {
+      await db.execute(sql.raw("drop trigger test_node_membership_contended"));
+    }
+    expect(outsideReservations).toEqual([]);
+
+    const again = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...standby });
+
+    expect(again.status, JSON.stringify(await again.clone().json())).toBe(200);
+    expect(outsideReservations).toHaveLength(1);
+    expect((await readNodeMembership(db))?.body.term).toBe(seedTerm + 1);
+  });
+
+  it("lists nothing in the chart when a module's reserve refuses", async () => {
+    const { designated } = await setupVenue();
+    const app = mountApp(designated);
+    const seedTerm = await holdChartWithStandby(designated, crypto.randomUUID());
+    pause.beforeReserve = async () => {
+      // The chart round has already written its term in this transaction.
+      expect((await readNodeMembership(db))?.body.term).toBe(seedTerm + 1);
+      throw new AppError("mirror.not_provisioned", {});
+    };
+
+    const res = await post(app, {
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(pause.beforeReserve).toBeUndefined();
+    expect(res.status).toBe(409);
+    expect((await readNodeMembership(db))?.body.term).toBe(seedTerm);
+    expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
   it("refuses a non-admin (staff) credential with 403", async () => {
@@ -2645,24 +2700,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(pause.beforeChartMint).toBeUndefined();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
-      // The chart refusal does not undo the outside reservation returned during assembly.
-      expect(await allocationSnapshot()).toEqual({
-        ...counterBefore,
-        outsideReservations: [
-          ...counterBefore.outsideReservations,
-          expect.objectContaining({
-            version: 1,
-            evidence: expect.objectContaining({
-              reservation: expect.objectContaining({
-                payload: expect.objectContaining({
-                  targetNodeId: standbyNodeId,
-                  allocationId: "contract-P000042",
-                }),
-              }),
-            }),
-          }),
-        ],
-      });
+      // The chart is written before any module reserves, so its refusal reserves nothing.
+      expect(await allocationSnapshot()).toEqual(counterBefore);
       // The removal's chart is the one held: the request wrote no later term over it.
       const after = (await readNodeMembership(db))!;
       expect(after.body.term).toBe(seedTerm + 1);

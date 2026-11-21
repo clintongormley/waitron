@@ -10,6 +10,7 @@ import {
   withTransaction,
   type Database,
   type NodeDatabase,
+  type Transaction,
 } from "@waitron/db";
 import {
   endorseKey,
@@ -104,6 +105,14 @@ export interface AssembleDeps {
   moduleConfig?: ModuleConfig;
   /** The designated node's private key, when the caller has already unsealed it. */
   primaryPrivateKey?: string;
+  /**
+   * Opens the transaction every module reserves in, so a caller's own writes in it commit with the
+   * reservation or not at all. Defaults to one `withTransaction` on `appDb`.
+   */
+  reservationTransaction?: <T>(
+    endorsement: Endorsement,
+    reserve: (tx: Transaction) => Promise<T>,
+  ) => Promise<T>;
 }
 
 export function refuseRemovedStandby(
@@ -179,44 +188,49 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     [...operations].filter(([name]) => reserving.some(({ module }) => module.name === name)),
   );
 
-  // Every module's reservation shares one transaction, so their reads and allocations agree.
-  const [reserved, primaryPrivateKey, boxCaPem, boxCaKeyPem] = await Promise.all([
-    withPreparedModuleOperations(
-      reserving.map(({ module }) => module),
-      reservingOperations,
-      standby.nodeId,
-      "reserve",
-      (prepared) =>
-        withTransaction(deps.appDb, async (tx) => {
-          // In the reservation's own transaction, so a removal commits wholly before or after it.
-          const held = await readNodeMembership(tx);
-          refuseRemovedStandby(held, deps.standby.nodeId);
-          refuseFullChart(held, deps.standby.nodeId);
-          const primary = { nodeId: brandNodeId(deps.designated.nodeId) };
-          const states: Record<string, unknown> = {};
-          const series: { code: string; purpose: string }[] = [];
-          for (const { module, provision } of reserving) {
-            const operation = moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
-            const r = await provision.reserve(tx, primary, standby, operation);
-            moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
-            states[module.name] = r.state;
-            series.push(...(r.series ?? []));
-          }
-          for (const { module } of reserving)
-            moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
-          return { modules: states, series };
-        }),
-    ),
+  // Read before reserving, so a missing file fails the join before the caller's writes commit.
+  const [primaryPrivateKey, boxCaPem, boxCaKeyPem] = await Promise.all([
     deps.primaryPrivateKey ?? readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
     readFile(caCertPath(deps.stateDir), "utf8"),
     readFile(caKeyPath(deps.stateDir), "utf8"),
   ]);
-
   const endorsement = endorseKey(
     deps.standby.nodeId,
     deps.standby.publicKey,
     deps.designated.nodeId,
     primaryPrivateKey,
+  );
+  const reservationTransaction =
+    deps.reservationTransaction ??
+    (<T>(_: Endorsement, reserve: (tx: Transaction) => Promise<T>) =>
+      withTransaction(deps.appDb, reserve));
+
+  // Every module's reservation shares one transaction, so their reads and allocations agree.
+  const reserved = await withPreparedModuleOperations(
+    reserving.map(({ module }) => module),
+    reservingOperations,
+    standby.nodeId,
+    "reserve",
+    (prepared) =>
+      reservationTransaction(endorsement, async (tx) => {
+        // In the reservation's own transaction, so a removal commits wholly before or after it.
+        const held = await readNodeMembership(tx);
+        refuseRemovedStandby(held, deps.standby.nodeId);
+        refuseFullChart(held, deps.standby.nodeId);
+        const primary = { nodeId: brandNodeId(deps.designated.nodeId) };
+        const states: Record<string, unknown> = {};
+        const series: { code: string; purpose: string }[] = [];
+        for (const { module, provision } of reserving) {
+          const operation = moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+          const r = await provision.reserve(tx, primary, standby, operation);
+          moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+          states[module.name] = r.state;
+          series.push(...(r.series ?? []));
+        }
+        for (const { module } of reserving)
+          moduleOperationFor(prepared, module.name, standby.nodeId, "reserve");
+        return { modules: states, series };
+      }),
   );
 
   return {
