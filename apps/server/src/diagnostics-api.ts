@@ -90,7 +90,8 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
         : DEFAULT_LIMIT;
       const filter = c.req.query("level");
       const minimum = filter === "error" || filter === "info" ? filter : "warn";
-      const cutoff = deps.now().getTime() - ALL_LEVELS_WINDOW_MS;
+      const cutoff =
+        filter === "all" ? deps.now().getTime() - ALL_LEVELS_WINDOW_MS : Number.NEGATIVE_INFINITY;
       const tail = deps.reader
         .recent({ limit: MAX_LIMIT })
         .filter(
@@ -108,7 +109,9 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
         )
         .slice(-limit);
       const oldestScannedAt = tail.length
-        ? new Date(Math.min(...tail.map((line) => Date.parse(line.at)))).toISOString()
+        ? new Date(
+            Math.max(cutoff, Math.min(...tail.map((line) => Date.parse(line.at)))),
+          ).toISOString()
         : null;
       // A rotated file may predate the write-time masks.
       return c.body(

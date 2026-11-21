@@ -338,7 +338,9 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
           },
         ],
       });
-      expect((await read("level=all")).lines.map(({ event }) => event)).toEqual([
+      const all = await read("level=all");
+      expect(all.oldestScannedAt).toBe("2026-08-31T11:55:00.000Z");
+      expect(all.lines.map(({ event }) => event)).toEqual([
         "mail.retry",
         "loop.sleeping",
         "mail.ready",
