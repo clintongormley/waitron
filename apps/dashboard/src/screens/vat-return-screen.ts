@@ -90,12 +90,6 @@ export class VatReturnScreen extends LitElement {
    * over a mark an earlier press left.
    */
   @state() private refusal = "";
-  #presses = 0;
-  /**
-   * The press whose failure is shown, or 0 when none has been since the last press. Both downloads
-   * can be waiting at once: a failure replaces an earlier press's, never a later one's.
-   */
-  #failureFrom = 0;
 
   constructor() {
     super();
@@ -104,6 +98,11 @@ export class VatReturnScreen extends LitElement {
     this.#thisYear = now.getFullYear();
     this.year = String(last.year);
     this.period = `${last.quarter}T`;
+  }
+
+  /** One download at a time, so what the form shows after a failure always comes from the last press. */
+  get #waiting(): boolean {
+    return this.busy || this.correctionsBusy;
   }
 
   get #typeMissing(): boolean {
@@ -117,13 +116,7 @@ export class VatReturnScreen extends LitElement {
     this.refused = refused;
   }
 
-  /** Clears the last refusal, the bottom one and those under `fields`, and numbers the press. */
-  #press(fields: readonly Field[]): number {
-    this.#clearRefusals(fields);
-    this.#failureFrom = 0;
-    return ++this.#presses;
-  }
-
+  /** Clears the last refusal: the bottom one, and those under `fields`. */
   #clearRefusals(fields: readonly Field[]): void {
     this.refusal = "";
     const refused = { ...this.refused };
@@ -141,10 +134,7 @@ export class VatReturnScreen extends LitElement {
   }
 
   /** A refusal naming a field that was sent, and is still as sent, goes under that field. */
-  #refuse(error: unknown, sent: Partial<Record<Field, string>>, press: number): void {
-    if (press < this.#failureFrom) return;
-    if (this.#failureFrom !== 0) this.#clearRefusals(Object.keys(sent) as Field[]);
-    this.#failureFrom = press;
+  #refuse(error: unknown, sent: Partial<Record<Field, string>>): void {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     if (
@@ -159,9 +149,9 @@ export class VatReturnScreen extends LitElement {
   }
 
   async #download(): Promise<void> {
-    if (this.busy) return;
+    if (this.#waiting) return;
     this.#feedback.press();
-    const press = this.#press(["year", "period", "declarationType"]);
+    this.#clearRefusals(["year", "period", "declarationType"]);
     if (this.declarationType === "") {
       void this.#feedback.focus(this.shadowRoot!);
       return;
@@ -174,7 +164,7 @@ export class VatReturnScreen extends LitElement {
       this.#save(file, `modelo-303-${sent.year}-${sent.period}.txt`);
       this.#feedback.reset();
     } catch (error) {
-      this.#refuse(error, sent, press);
+      this.#refuse(error, sent);
     } finally {
       this.busy = false;
     }
@@ -182,15 +172,15 @@ export class VatReturnScreen extends LitElement {
 
   /** Needs year and period only, so it leaves the declaration type and its mark alone. */
   async #downloadCorrections(): Promise<void> {
-    if (this.correctionsBusy) return;
-    const press = this.#press(["year", "period"]);
+    if (this.#waiting) return;
+    this.#clearRefusals(["year", "period"]);
     const sent = { year: this.year, period: this.period };
     this.correctionsBusy = true;
     try {
       const file = await this.api.downloadVatCorrections({ ...sent, year: Number(sent.year) });
       this.#save(file, `corrections-${sent.year}-${sent.period}.xlsx`);
     } catch (error) {
-      this.#refuse(error, sent, press);
+      this.#refuse(error, sent);
     } finally {
       this.correctionsBusy = false;
     }
@@ -254,7 +244,7 @@ export class VatReturnScreen extends LitElement {
             variant="primary"
             data-test="download"
             ?loading=${this.busy}
-            ?disabled=${this.#typeMissing}
+            ?disabled=${this.#typeMissing || this.correctionsBusy}
             @click=${() => void this.#download()}
             >${t("vat_return.download")}</wt-button
           >
@@ -262,6 +252,7 @@ export class VatReturnScreen extends LitElement {
             variant="secondary"
             data-test="download-corrections"
             ?loading=${this.correctionsBusy}
+            ?disabled=${this.busy}
             @click=${() => void this.#downloadCorrections()}
             >${t("vat_return.download_corrections")}</wt-button
           >

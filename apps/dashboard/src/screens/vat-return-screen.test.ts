@@ -2,7 +2,7 @@ import { formMessageOf, chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtButton, WtCombobox, WtFormActions } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi } from "../api/client.js";
-import { codeMessage, codeOf } from "../i18n/codes.js";
+import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./vat-return-screen.js";
@@ -413,131 +413,73 @@ describe("dashboard-vat-return-screen", () => {
       expect(await bottom(el)).toBe(t("form.fix_fields"));
     });
 
-    describe("with both downloads asked for at once", () => {
-      const NOT_PERMITTED = { code: "authorization.not_permitted" };
-      const OLDER_FAILURES = [
-        ["a failure naming no field", new TypeError("Failed to fetch")],
-        [
-          "a refusal naming the period",
-          { code: "management.request_invalid", params: { field: "period" } },
-        ],
-      ] as const;
-
-      async function bothInFlight(first: "file" | "corrections") {
+    describe("while one download is waiting", () => {
+      async function waiting(first: "file" | "corrections") {
         const file = deferred<Blob>();
         const corrections = deferred<Blob>();
-        const clicked = captureDownloads();
-        const el = await mount(
-          stubApi(
-            () => file.promise,
-            () => corrections.promise,
-          ),
+        captureDownloads();
+        const api = stubApi(
+          () => file.promise,
+          () => corrections.promise,
         );
+        const el = await mount(api);
         await chooseOption(field(el, "declarationType"), "I");
-        if (first === "file") {
-          await press(el);
-          await pressCorrections(el);
-          return { el, clicked, older: file, newer: corrections };
-        }
-        await pressCorrections(el);
-        await press(el);
-        return { el, clicked, older: corrections, newer: file };
+        if (first === "file") await press(el);
+        else await pressCorrections(el);
+        const [pressed, other] =
+          first === "file"
+            ? [button(el), correctionsButton(el)]
+            : [correctionsButton(el), button(el)];
+        return { el, api, pressed, other, request: first === "file" ? file : corrections };
       }
 
-      it("shows the file's failure once a later press has cleared the workbook's refusal", async () => {
-        const { el, older, newer } = await bothInFlight("file");
-        const api = el.api;
-        newer.reject(NOT_PERMITTED);
-        await flush(el);
-        vi.mocked(api.downloadVatCorrections).mockImplementation(() => new Promise<Blob>(() => {}));
+      it("sends no workbook request when Corrections is pressed while the file is downloading", async () => {
+        const { el, api } = await waiting("file");
+
         await pressCorrections(el);
-        expect(await bottom(el)).toBeNull();
 
-        older.reject(new TypeError("Failed to fetch"));
-        await flush(el);
-
-        expect(await bottom(el)).toBe(codeMessage(codeOf(new TypeError("Failed to fetch"))));
+        expect(api.downloadVatCorrections).not.toHaveBeenCalled();
+        expect(api.downloadVatReturnFile).toHaveBeenCalledOnce();
       });
 
-      describe.each(["file", "corrections"] as const)(
-        "when the %s was asked for first",
-        (first) => {
-          it.each(OLDER_FAILURES)(
-            "keeps the later press's refusal when the earlier request then fails with %s",
-            async (_, failure) => {
-              const { el, older, newer } = await bothInFlight(first);
+      it("sends no file request when Download file is pressed while the workbook is downloading", async () => {
+        const { el, api } = await waiting("corrections");
 
-              newer.reject(NOT_PERMITTED);
-              await flush(el);
-              expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+        await press(el);
 
-              older.reject(failure);
-              await flush(el);
+        expect(api.downloadVatReturnFile).not.toHaveBeenCalled();
+        expect(api.downloadVatCorrections).toHaveBeenCalledOnce();
+      });
 
-              expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
-              for (const name of ["year", "period", "declarationType"]) {
-                expect(field(el, name).error).toBe("");
-              }
-              expect(button(el).loading).toBe(false);
-              expect(correctionsButton(el).loading).toBe(false);
-            },
-          );
+      describe.each(["file", "corrections"] as const)("when the %s was pressed", (first) => {
+        it("shows the pressed button busy and the other unavailable", async () => {
+          const { pressed, other } = await waiting(first);
 
-          it("keeps the later press's field mark when the earlier request then fails", async () => {
-            const { el, older, newer } = await bothInFlight(first);
+          expect(pressed.loading).toBe(true);
+          expect(pressed.disabled).toBe(false);
+          expect(other.loading).toBe(false);
+          expect(other.disabled).toBe(true);
+        });
 
-            newer.reject({ code: "management.request_invalid", params: { field: "year" } });
-            await flush(el);
-            older.reject(NOT_PERMITTED);
-            await flush(el);
+        it.each([
+          ["succeeds", (request: ReturnType<typeof deferred<Blob>>) => request.resolve(FILE)],
+          [
+            "fails",
+            (request: ReturnType<typeof deferred<Blob>>) =>
+              request.reject({ code: "authorization.not_permitted" }),
+          ],
+        ] as const)("makes both buttons available again once it %s", async (_, settle) => {
+          const { el, pressed, other, request } = await waiting(first);
 
-            expect(field(el, "year").error).toBe(t("vat_return.year_refused"));
-            expect(await bottom(el)).toBe(t("form.fix_fields"));
-          });
+          settle(request);
+          await flush(el);
 
-          it("keeps the later press's refusal when the earlier request then succeeds, and saves its download", async () => {
-            const { el, clicked, older, newer } = await bothInFlight(first);
-
-            newer.reject(NOT_PERMITTED);
-            await flush(el);
-            older.resolve(first === "file" ? FILE : WORKBOOK);
-            await flush(el);
-
-            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
-            expect(clicked.map((link) => link.download)).toEqual([
-              first === "file" ? "modelo-303-2026-3T.txt" : "corrections-2026-3T.xlsx",
-            ]);
-            expect(button(el).loading).toBe(false);
-            expect(correctionsButton(el).loading).toBe(false);
-          });
-
-          it("shows the earlier request's failure when the later press succeeded, so no failure goes unsaid", async () => {
-            const { el, clicked, older, newer } = await bothInFlight(first);
-
-            newer.resolve(first === "file" ? WORKBOOK : FILE);
-            await flush(el);
-            older.reject(NOT_PERMITTED);
-            await flush(el);
-
-            expect(clicked).toHaveLength(1);
-            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
-          });
-
-          it("shows the earlier request's failure while the later one is still waiting, until the later one fails", async () => {
-            const { el, older, newer } = await bothInFlight(first);
-
-            older.reject(NOT_PERMITTED);
-            await flush(el);
-            expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
-
-            newer.reject({ code: "management.request_invalid", params: { field: "period" } });
-            await flush(el);
-
-            expect(field(el, "period").error).toBe(t("vat_return.period_refused"));
-            expect(await bottom(el)).toBe(t("form.fix_fields"));
-          });
-        },
-      );
+          for (const action of [pressed, other]) {
+            expect(action.loading).toBe(false);
+            expect(action.disabled).toBe(false);
+          }
+        });
+      });
     });
 
     it("shows its own action busy, and sends one request however often it is pressed", async () => {
