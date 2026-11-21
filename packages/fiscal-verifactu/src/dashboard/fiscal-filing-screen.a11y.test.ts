@@ -71,18 +71,30 @@ const FUTURE_DATE = overview({
 /** The same case on a box whose day is two days behind this device's, so the dates differ. */
 const DAYS_DIFFER: FilingOverviewAnswer = { ...FUTURE_DATE, today: deviceToday(-2) };
 
-/** Opens the case and chooses a valid day, so the confirmation names the VAT period. */
-async function confirmReplacement(screen: FiscalFilingScreen): Promise<HTMLElement> {
+/**
+ * Opens the case and chooses a valid day. Send, held until a day is chosen, then becomes
+ * available, unless `sendable` is false because the screen rules Send out whatever the day.
+ */
+async function confirmReplacement(
+  screen: FiscalFilingScreen,
+  sendable = true,
+): Promise<HTMLElement> {
   const details = await openDetails(screen);
-  const input = details
-    .querySelector("wt-input[name=operationDate]")!
-    .shadowRoot!.querySelector("input") as HTMLInputElement;
+  const send = details.querySelector("[data-test=put-right]") as HTMLElement & {
+    disabled: boolean;
+  };
+  expect(send.disabled).toBe(true);
+  const field = details.querySelector("wt-input[name=operationDate]") as HTMLElement & {
+    value: string;
+    error: string;
+  };
+  const input = field.shadowRoot!.querySelector("input") as HTMLInputElement;
   input.value = "2026-11-02";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await screen.updateComplete;
-  expect(details.querySelector("[data-test=replacement-confirmation]")!.textContent).toContain(
-    "The sale's VAT belongs to",
-  );
+  expect(field.value).toBe("2026-11-02");
+  expect(field.error).toBe("");
+  expect(send.disabled).toBe(!sendable);
   return details;
 }
 
@@ -206,7 +218,7 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
   it("draws the replacement saying the server's date and this device's differ", async () => {
     await page.viewport(1280, 1000);
     const screen = await show(DAYS_DIFFER, theme);
-    const details = await confirmReplacement(screen);
+    const details = await confirmReplacement(screen, false);
     const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
     expect(actions.error).toContain("differ");
     await expectNoA11yViolations(host);

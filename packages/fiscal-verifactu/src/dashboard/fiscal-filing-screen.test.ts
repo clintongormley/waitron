@@ -1390,7 +1390,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(action(details).disabled).toBe(true);
   });
 
-  it("names the invoice, its total, the VAT period and the replacement's date before Send", async () => {
+  it("names the invoice, its total and the replacement's date before Send, and no VAT period", async () => {
     const { screen } = await mount(
       replacementServer(futureCase("2026-11-03")),
       continuation(["fiscal.remedy"]).value,
@@ -1403,11 +1403,14 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     expect(confirmation()).toContain(
       "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
     );
-    expect(confirmation()).not.toContain("The sale's VAT belongs to");
+    expect(confirmation()).not.toContain("VAT belongs to");
     await pick(screen, details, "2026-10-31");
+    expect(dateField(details).error).toBe("");
+    expect(action(details).disabled).toBe(false);
     expect(confirmation()).toContain(
-      "The sale's VAT belongs to October 2026. If that period has ended, the change goes on the corrections of the period you send this in.",
+      "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
     );
+    expect(confirmation()).not.toContain("VAT belongs to");
   });
 
   it("keeps Send disabled, saying so under the actions, when the server's date and this device's differ", async () => {
