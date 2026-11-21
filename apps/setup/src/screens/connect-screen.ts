@@ -18,9 +18,6 @@ import { format, localTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
-/** The shell's adopt field maps still name the old login fields; only the address is drawn. */
-export type ConnectField = "primaryUrl" | "email" | "password" | "totp";
-
 /** The holding tab reads every 2 seconds, which keeps it counted as open on the server. */
 const READ_EVERY_MS = 2_000;
 

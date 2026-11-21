@@ -1,6 +1,6 @@
 import type { RecoveryRestoreCredentials } from "./api/client.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
-import type { AdoptBody, ProvisionBody, ResetCredential } from "./api/client.js";
+import type { ProvisionBody } from "./api/client.js";
 
 /** Typed dispatchers for the events the wizard screens emit up to the shell. */
 
@@ -27,16 +27,6 @@ export function dispatchProvisionRequested(el: EventTarget): void {
   el.dispatchEvent(new CustomEvent("provision-requested", { bubbles: true, composed: true }));
 }
 
-/**
- * Carries the whole {@link AdoptBody}, unlike `provision-requested`: the primary's address and login
- * never enter the shell's draft.
- */
-export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
-  el.dispatchEvent(
-    new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
-  );
-}
-
 /** The join's new handle, or none once Start again ended the join; the shell keeps it for the tab. */
 export function dispatchJoinHandle(el: EventTarget, handle: string | undefined): void {
   el.dispatchEvent(
@@ -51,11 +41,8 @@ export function dispatchJoinFinishRequested(el: EventTarget): void {
   );
 }
 
-/** Carries the login itself; the shell does not keep it. */
-export function dispatchResetRequested(el: EventTarget, credential: ResetCredential): void {
-  el.dispatchEvent(
-    new CustomEvent("reset-requested", { detail: { credential }, bubbles: true, composed: true }),
-  );
+export function dispatchResetRequested(el: EventTarget): void {
+  el.dispatchEvent(new CustomEvent("reset-requested", { bubbles: true, composed: true }));
 }
 
 export interface RestoreRequestDetail extends RecoveryRestoreCredentials {

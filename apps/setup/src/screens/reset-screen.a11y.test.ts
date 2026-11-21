@@ -27,31 +27,15 @@ describe.each(["light", "dark"] as const)("setup-reset-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the message above the reset button and invalid fields shown", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {}, theme);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations with the refused login shown", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>(
-      "setup-reset-screen",
-      { credentialsRejected: true },
-      theme,
-    );
-    expect(await bottomOf(el)).toContain("not the admin login");
-    await expectNoA11yViolations(host);
-  });
-
   it("has no violations with a routed-back message shown", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>(
       "setup-reset-screen",
-      { errorMessage: "Too many attempts. Wait 30 seconds, then try again." },
+      { errorMessage: "The server could not be reset. Check the connection and try again." },
       theme,
     );
-    expect(await bottomOf(el)).toBe("Too many attempts. Wait 30 seconds, then try again.");
+    expect(await bottomOf(el)).toBe(
+      "The server could not be reset. Check the connection and try again.",
+    );
     await expectNoA11yViolations(host);
   });
 

@@ -137,14 +137,6 @@ export interface ProvisionResult {
   cloudStaffEmailUnavailable?: true;
 }
 
-export interface AdoptBody {
-  primaryUrl: string;
-  /** `totp` is omitted, not `""`, when blank: the server refuses an empty string. */
-  credential: { email: string; password: string; totp?: string };
-  /** The main box's authority certificate the person compared; absent for a plain-http address. */
-  confirmedCaPem?: string;
-}
-
 /** The main box's authority certificate, read before anything secret is sent to it. */
 export interface PrimaryCertificate {
   pem: string;
@@ -180,12 +172,6 @@ export type JoinState =
   | { state: "approved"; code: string }
   | { state: "ended"; reason: string }
   | { state: "failed"; error: string };
-
-/** The admin login used on the connect screen for the join that stopped partway. */
-export interface ResetCredential {
-  email: string;
-  password: string;
-}
 
 export interface ResetOutcome {
   resetStaged: true;
@@ -631,16 +617,12 @@ export class SetupApi {
   }
 
   /** Finish joining: the server reads nothing from the body, so every resend is the same request. */
-  finishJoin(handle: string): Promise<AdoptOutcome> {
+  finishJoin(handle: string | undefined): Promise<AdoptOutcome> {
     return this.#request("/setup-api/adopt", "POST", {}, joinHeaders(handle));
   }
 
-  adopt(body: AdoptBody): Promise<AdoptOutcome> {
-    return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
-  }
-
-  resetIncompleteAdopt(credential: ResetCredential): Promise<ResetOutcome> {
-    return this.#request<ResetOutcome>("/setup-api/reset-incomplete-adopt", "POST", credential);
+  resetIncompleteAdopt(): Promise<ResetOutcome> {
+    return this.#request<ResetOutcome>("/setup-api/reset-incomplete-adopt", "POST");
   }
 
   startCloudRecovery(): Promise<CloudRecoveryView> {
