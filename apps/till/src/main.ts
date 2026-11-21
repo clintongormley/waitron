@@ -17,6 +17,7 @@ import { withDevDeviceHeader } from "./api/dev-device.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag, setReportBuild } from "./diagnostics.js";
 import { installPressBuzz } from "./press-buzz.js";
+import { watchKeyboardInsets } from "./state/keyboard-inset.js";
 import { isTrustBroken } from "./trust-check.js";
 import { trustInstructions } from "./trust-instructions.js";
 import "./till-app.js";
@@ -38,6 +39,7 @@ startThemeChoice(document.documentElement);
 
 installErrorCapture(window, diag);
 installPressBuzz(document);
+watchKeyboardInsets(window, document.documentElement);
 
 const app = document.querySelector<HTMLElement>("#app")!;
 

@@ -15,9 +15,7 @@ export class WtModal extends WtDialog {
     ...WtDialog.styles,
     css`
       dialog {
-        margin: auto;
-        height: calc(100dvh - 2 * var(--wt-space-5));
-        max-height: calc(100dvh - 2 * var(--wt-space-5));
+        height: calc(var(--wt-dialog-band) - 2 * var(--wt-dialog-margin));
         width: min(var(--wt-modal-max-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
         max-width: none;
       }
@@ -37,9 +35,12 @@ export class WtModal extends WtDialog {
       }
 
       :host([size="full"]) dialog {
+        --wt-dialog-margin: min(
+          var(--wt-modal-inline-margin),
+          max(var(--wt-space-2), var(--wt-space-5) - var(--wt-keyboard-inset))
+        );
         width: calc(100dvw - 2 * var(--wt-modal-inline-margin));
-        height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
-        max-height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
+        height: calc(var(--wt-dialog-band) - 2 * var(--wt-dialog-margin));
       }
 
       /* After the size rules, which it overrides; each size's max-height still bounds it. */

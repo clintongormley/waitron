@@ -60,6 +60,11 @@
   /* wt-modal's height="medium": a fixed height for a short notice or form, at any size. */
   --wt-modal-medium-height: 32rem;
   --wt-dialog-max-width: min(90vw, 48rem);
+  /* How much of the page a device's own keyboard hides below the visible area, and how far the
+     visible area is panned down while it is up. Only the till sets them, from visualViewport; the
+     dashboard never does, so they stay 0px there. */
+  --wt-keyboard-inset: 0px;
+  --wt-keyboard-top: 0px;
   /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and
      which wt-modal sets to --wt-form-max-width on its body. */
   --wt-form-max-width: 36rem;

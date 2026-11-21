@@ -46,6 +46,15 @@ export class WtDialog extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         max-width: var(--wt-dialog-max-width);
+        /* Declared on each dialog rather than inherited, so a dialog nested in another reads its
+           own. While a keyboard covers the page, the margin shrinks to leave the room to content. */
+        --wt-dialog-margin: max(var(--wt-space-2), var(--wt-space-5) - var(--wt-keyboard-inset));
+        --wt-dialog-band: calc(100dvh - var(--wt-keyboard-top) - var(--wt-keyboard-inset));
+        /* The auto margins centre the window inside the visible part of the page. */
+        margin: auto;
+        inset-block: calc(var(--wt-keyboard-top) + var(--wt-dialog-margin))
+          calc(var(--wt-keyboard-inset) + var(--wt-dialog-margin));
+        max-height: calc(var(--wt-dialog-band) - 2 * var(--wt-dialog-margin));
       }
 
       /* The native modal dialog's own height limit bounds this column, so a long body scrolls
