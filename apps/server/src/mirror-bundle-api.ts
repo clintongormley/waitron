@@ -399,15 +399,26 @@ async function refuseBeforeReserving(
     checkedRecoveryKey((await readBackupSettings(deps.stateDir))?.WAITRON_BACKUP_RECOVERY_KEY),
   );
   if (key === undefined) throw new AppError("backup.recovery_key_missing", {});
+  if (checkName) refuseTakenBoxName(deps.designated.nodeId, held, standbyNodeId);
+  if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
+}
+
+/**
+ * Refuses a held chart that cannot be read, then a joining box whose name is the main box's or
+ * another listed box's. Its own listing is no clash, so a box the chart lists can join again. The
+ * hello and {@link issueMirrorBundle} both check through this, so the two cannot disagree.
+ */
+export function refuseTakenBoxName(
+  mainNodeId: string,
+  held: SignedMembershipDocument | null,
+  standbyNodeId: string,
+): void {
+  assertHeldDocumentReadable(held);
   if (
-    checkName &&
-    (sameBoxName(deps.designated.nodeId, standbyNodeId) ||
-      held?.body.nodes.some(
-        (n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId),
-      ))
+    sameBoxName(mainNodeId, standbyNodeId) ||
+    held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
   )
     throw new AppError("mirror.standby_name_taken", {});
-  if (held !== null) refuseUnverifiableChart(held.body.nodes, held.body.revoked ?? []);
 }
 
 async function refuseWhileBucketStream(deps: MirrorBundleIssueDeps): Promise<void> {

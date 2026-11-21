@@ -31,7 +31,6 @@ import {
   type JoinFull,
   type JoinHello,
 } from "./box-join-requests.js";
-import { sameBoxName } from "./box-name.js";
 import { isBareOrigin } from "./config.js";
 import type { Logger } from "./logger.js";
 import {
@@ -40,8 +39,10 @@ import {
   isStoreUrlOf,
   MAX_CLOCK_GAP_MS,
   refuseJoinBeforeApproving,
+  refuseTakenBoxName,
   type MirrorBundleIssueDeps,
 } from "./mirror-bundle-api.js";
+import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { isRemoteStaffRequest, requestAddress } from "./request-from-box.js";
@@ -71,6 +72,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.join_code_taken": 409,
   "mirror.join_not_found": 404,
   "mirror.join_full": 429,
+  ...HELD_DOCUMENT_REFUSALS,
 };
 
 const invalid = () => new AppError("mirror.join_invalid", {});
@@ -242,12 +244,11 @@ export function mountBoxJoinApi(
           primaryAt: new Date(mainAt).toISOString(),
           standbyAt: new Date(at).toISOString(),
         });
-      const held = await readNodeMembership(deps.appDb);
-      if (
-        sameBoxName(deps.designated.nodeId, hello.newNodeId) ||
-        held?.body.nodes.some((n) => sameBoxName(n.nodeId, hello.newNodeId))
-      )
-        throw new AppError("mirror.standby_name_taken", {});
+      refuseTakenBoxName(
+        deps.designated.nodeId,
+        await readNodeMembership(deps.appDb),
+        hello.newNodeId,
+      );
 
       const main = { nodeId: deps.designated.nodeId, publicKey: await mainPublicKey() };
       const answer = requests.openHello({

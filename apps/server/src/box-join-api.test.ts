@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { signDocumentBody, type MembershipDocumentBody } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   JOIN_CANCEL_LABEL,
@@ -368,6 +369,42 @@ describe("the main box's box-to-box join routes", () => {
       results.push([name, response.status, await response.json()]);
     }
     expect(results).toEqual(cases.map(([name, , status, body]) => [name, status, body]));
+  });
+
+  it("admits a hello from a box the chart already lists, and still refuses another box with its name", async () => {
+    const listed = newBox("192.168.1.20");
+    const other = generateStandbyIdentity();
+    const clashing = newBox("192.168.1.21", {
+      ...other,
+      nodeId: `${listed.identity.nodeId.slice(0, 4)}${other.nodeId.slice(4)}`,
+    });
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId: mainNodeId, contactUrl: "https://waitron.local" },
+      { nodeId: listed.identity.nodeId, contactUrl: "https://192.168.1.20:8443" },
+    );
+
+    expect((await post("hello", helloBody(listed), listed.address)).status).toBe(200);
+    const refused = await post("hello", helloBody(clashing), clashing.address);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual(err("mirror.standby_name_taken"));
+  });
+
+  it("refuses a hello while the held chart cannot be read, as the bundle does", async () => {
+    const body = { term: 1 } as unknown as MembershipDocumentBody;
+    await writeNodeMembership(suite.db, {
+      body,
+      signerNodeId: mainNodeId,
+      signature: signDocumentBody(body, await readNodeIdentityKey(suite.node, RING, mainNodeId)),
+      endorsements: [],
+    });
+    const box = newBox("192.168.1.20");
+
+    const response = await post("hello", helloBody(box), box.address);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual(
+      err("membership.held_untrusted", { reason: "malformed" }),
+    );
   });
 
   it("answers mirror.join_not_found for a request it does not hold", async () => {
