@@ -519,7 +519,7 @@ describe("an advance corrected before the meal ends", () => {
 
 describe("an advance once the rest's invoice has taken it off", () => {
   /** A bill whose €30 advance the rest's invoice took off; the advance, its payment and tender,
-   * and the refusal every way of giving it back meets. */
+   * and the params naming the rest's invoice that a refusal sending staff to it carries. */
   async function takenOff() {
     const billId = await seated("Tasting menu");
     const advanceId = await advance(billId, "30.00");
@@ -533,7 +533,6 @@ describe("an advance once the rest's invoice has taken it off", () => {
         .where(eq(billAdvances.advanceSaleId, advanceId)),
     );
     const refusal = {
-      code: "advance.taken_off_final_invoice",
       params: {
         saleId: advanceId,
         finalSaleId,
@@ -720,6 +719,91 @@ describe("an advance once the rest's invoice has taken it off", () => {
     ).toEqual([]);
   });
 
+  for (const entry of ["manual", "reader"] as const) {
+    it(`a €0.00 rest's invoice: €20 back by the card leg of a ${entry} card advance files an R5 of it at 10% −18.18 and −1.82 and opens no drawer`, async () => {
+      const billId = await seated("Tasting menu", "Salad bowl");
+      const paid = await send(
+        venue().app,
+        venue().cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "120.00",
+          method: "card",
+          entry,
+          ...(entry === "manual" ? { externalRef: `OP-${randomUUID().slice(0, 8)}` } : {}),
+          applied: "120.00",
+          tip: "0.00",
+          ownReceipt: true,
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const [row] = await inTx(venue(), (tx) =>
+        tx
+          .select({ advanceId: billAdvances.advanceSaleId, tenderId: tenders.id })
+          .from(billAdvances)
+          .innerJoin(tenders, eq(tenders.saleId, billAdvances.advanceSaleId))
+          .where(eq(billAdvances.workingOrderId, billId)),
+      );
+      const advanceId = row!.advanceId;
+      const removed = await removeDish(billId, "Salad bowl");
+      expect(removed.status, JSON.stringify(removed.json)).toBe(200);
+      const finalSaleId = await restId(billId);
+      expect(recordOf(finalSaleId)).toEqual([["10.00", "0.00", "0.00"]]);
+      const opensBefore = await inTx(venue(), (tx) => tx.select().from(drawerOpens));
+      const sentBefore = venue().card.refundCalls.length;
+
+      const opened = await open(advanceId, "20.00", [
+        { rate: "10.00", base: "18.18", tax: "1.82" },
+      ]);
+      expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+      const correctionId = (opened.json as { correction: { id: string } }).correction.id;
+      const leg = await send(
+        venue().app,
+        venue().cookie,
+        "POST",
+        `/api/transactions/${advanceId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          tenderId: row!.tenderId,
+          appliedAmount: "20.00",
+          tipAmount: "0.00",
+          reason: "Sent back",
+          ...(entry === "manual" ? { manualConfirmed: true } : {}),
+          invoiceCorrectionId: correctionId,
+          override: supervisor(),
+        },
+      );
+
+      expect(leg.status, JSON.stringify(leg.json)).toBe(200);
+      const [corrective] = await inTx(venue(), (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.correctsSaleId, advanceId)),
+      );
+      expect(recordOf(corrective!.id)).toEqual([["10.00", "-18.18", "-1.82"]]);
+      expect(filedInvoicesOf(venue().db, corrective!.id, new Date())[0]!.kind).toBe("R5");
+      const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
+      expect(await recordedInvoiceIdsOf(venue().db, corrective!.id)).toEqual([
+        expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
+      ]);
+      expect(
+        await inTx(venue(), (tx) =>
+          tx
+            .select({ tenderId: tenderRefunds.tenderId, state: tenderRefunds.state })
+            .from(tenderRefunds)
+            .where(eq(tenderRefunds.saleId, advanceId)),
+        ),
+      ).toEqual([{ tenderId: row!.tenderId, state: "completed" }]);
+      expect(await inTx(venue(), (tx) => tx.select().from(drawerOpens))).toEqual(opensBefore);
+      expect(
+        venue()
+          .card.refundCalls.slice(sentBefore)
+          .map((call) => String(call.amount)),
+      ).toEqual(entry === "reader" ? ["20.00"] : []);
+    });
+  }
+
   it("example 2: €20 of food back on the advance while the rest's invoice still holds €50 at 21% files 10% −18.18 and −1.82", async () => {
     const rest = await restOf(["Salad bowl", "Wine case"], ["50.00"], "50.00");
 
@@ -754,8 +838,9 @@ describe("an advance once the rest's invoice has taken it off", () => {
     expect(recordOf(corrective)).toEqual([["10.00", "-9.09", "-0.91"]]);
   });
 
-  it("refuses a plain refund of the advance's ticket and a bill refund of its payment with the same words", async () => {
-    const { billId, advanceId, paymentId, tenderId, refusal } = await takenOff();
+  it("refuses a plain refund of the advance's ticket and a bill refund of its payment, naming the advance's ticket", async () => {
+    const { billId, advanceId, paymentId, tenderId } = await takenOff();
+    const { invoiceNumber } = await advanceFacts(advanceId);
 
     const tenderRefund = await send(
       venue().app,
@@ -785,10 +870,16 @@ describe("an advance once the rest's invoice has taken it off", () => {
       },
     );
 
-    for (const refused of [tenderRefund, billRefund]) {
-      expect(refused.status, JSON.stringify(refused.json)).toBe(409);
-      expect(refused.json).toEqual(refusal);
-    }
+    expect(tenderRefund.status, JSON.stringify(tenderRefund.json)).toBe(409);
+    expect(tenderRefund.json).toEqual({
+      code: "tender.refund_of_advance",
+      params: { tenderId, saleId: advanceId, invoiceNumber },
+    });
+    expect(billRefund.status, JSON.stringify(billRefund.json)).toBe(409);
+    expect(billRefund.json).toEqual({
+      code: "bill.refund_of_advance",
+      params: { paymentId, saleId: advanceId, invoiceNumber },
+    });
     expect(
       await inTx(venue(), (tx) =>
         tx.select().from(tenderRefunds).where(eq(tenderRefunds.saleId, advanceId)),

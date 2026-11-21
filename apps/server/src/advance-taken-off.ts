@@ -44,17 +44,6 @@ function takenOffParams(saleId: string, final: { id: string; code: string; numbe
 }
 
 /**
- * Refuses `advance.taken_off_final_invoice` once an invoice has taken the advance `saleId` off: a
- * sale of its own (not a corrective) has a line deducting it. A whole credit of that invoice
- * leaves the refusal in place.
- */
-export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Promise<void> {
-  const final = await readTakingInvoice(tx, saleId);
-  if (final === undefined) return;
-  throw new AppError("advance.taken_off_final_invoice", takenOffParams(saleId, final));
-}
-
-/**
  * Refuses `advance.taken_off_final_invoice` for a leg of the correction `correctionId` of the
  * advance `saleId` when that correction was opened before the invoice that took the advance off
  * was issued: that invoice took the advance off whole, so the correction's money is already on it.
@@ -129,17 +118,14 @@ export async function refuseFinalInvoiceFirst(
 
 type AdvanceRefundCode = "tender.refund_of_advance" | "bill.refund_of_advance";
 
-/**
- * Refuses a refund of the advance `saleId`'s money: {@link refuseTakenOffAdvance}'s refusal once an
- * invoice took the advance off, else `code`, naming the advance and its invoice number.
- */
+/** Refuses a refund of the advance `saleId`'s money with `code`, naming the advance and its
+ * invoice number, whether or not an invoice has taken the advance off. */
 export async function refuseAdvanceRefund<C extends AdvanceRefundCode>(
   tx: Transaction,
   saleId: string,
   code: C,
   params: Omit<ErrorParams[C], "saleId" | "invoiceNumber">,
 ): Promise<never> {
-  await refuseTakenOffAdvance(tx, saleId);
   const invoiceNumber = await readInvoiceNumber(tx, brandSaleId(saleId));
   throw new AppError<AdvanceRefundCode>(code, {
     ...params,

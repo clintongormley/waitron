@@ -877,8 +877,8 @@ declare module "@waitron/shared" {
     /** A payer asked for their own receipt for part of a bill set for a full invoice, which the
      * till cannot issue as an advance yet. */
     "advance.full_invoice_unsupported": { workingOrderId: string };
-    /** A refund of the advance `saleId`, or a leg of a correction of it opened before the invoice
-     * `finalSaleId`, numbered `invoiceNumber`, took it off. */
+    /** A leg of a correction of the advance `saleId` opened before the invoice `finalSaleId`,
+     * numbered `invoiceNumber`, took it off. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
@@ -981,8 +981,7 @@ declare module "@waitron/shared" {
     "tender.refund_exceeds_payment": { tenderId: string; applied: string; tip: string };
     "tender.refund_exceeds_cancelled": { tenderId: string; cancelled: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
-     * `invoiceNumber`) took: a payment on account is not refunded this way. Once an invoice took
-     * it off, `advance.taken_off_final_invoice` instead. */
+     * `invoiceNumber`) took: a payment on account is not refunded this way. */
     "tender.refund_of_advance": { tenderId: string; saleId: string; invoiceNumber: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
@@ -997,8 +996,7 @@ declare module "@waitron/shared" {
      */
     "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
     /** A bill refund of a payment that paid for its own ticket, an advance (`saleId`, numbered
-     * `invoiceNumber`): a payment on account is not refunded this way. Once an invoice took
-     * it off, `advance.taken_off_final_invoice` instead. */
+     * `invoiceNumber`): a payment on account is not refunded this way. */
     "bill.refund_of_advance": { paymentId: string; saleId: string; invoiceNumber: string };
     /**
      * A standalone-terminal refund lacks explicit confirmation, or the connected provider offers
