@@ -299,8 +299,8 @@ export async function computeCategorySales(
   let grossCents = 0;
   for (const line of lines) {
     const { row } = line;
-    // An advance's line, its deduction and their correctives are money paid ahead, not dishes: they
-    // net to what was given back, whatever product or category they recorded.
+    // An advance's line, its deduction and their correctives are money paid ahead, not dishes,
+    // whatever product or category they recorded.
     const path = row.advance_role === null ? classify(line) : PAYMENTS_ON_ACCOUNT;
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
