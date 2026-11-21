@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -28,7 +28,6 @@ import {
   currentBusinessDay,
   resolveVenueClock,
 } from "@waitron/reporting";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   centsToDecimal,
@@ -38,7 +37,12 @@ import {
   seriesId as brandSeriesId,
   sumDecimals,
 } from "@waitron/shared";
-import { filedInvoicesOf, refuseRecord } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  filedInvoicesOf,
+  invoiceRecords,
+  recordedInvoiceIdsOf,
+  refuseRecord,
+} from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
 import { readBillBalance } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -215,16 +219,6 @@ async function removeDish(billId: string, name: string) {
     `/api/parties/${ask.partyId}/lines/${ask.lineId}/cancel-item`,
     ask.body,
   );
-}
-
-/** The filed records of `saleId`, with the fields naming a corrected invoice. */
-async function registrosOf(saleId: string) {
-  const rows = await inTx(venue(), (tx) =>
-    tx.select().from(registrosFacturacion).where(eq(registrosFacturacion.saleId, saleId)),
-  );
-  return rows as ((typeof rows)[number] & {
-    facturasRectificadas: { IDFacturaRectificada: Record<string, string>[] } | null;
-  })[];
 }
 
 function shiftDay(day: string, days: number): string {
@@ -666,8 +660,11 @@ describe("an advance once the rest's invoice has taken it off", () => {
 
   it("a rest's invoice AEAT refused: Correct invoice on the advance answers that invoice's refusal", async () => {
     const { advanceId, finalSaleId } = await takenOff();
-    const [row] = venue().db.all<{ id: string }>(
-      sql`select id from registros_facturacion where sale_id = ${finalSaleId}`,
+    const [row] = await inTx(venue(), (tx) =>
+      tx
+        .select({ id: invoiceRecords.id })
+        .from(invoiceRecords)
+        .where(eq(invoiceRecords.saleId, finalSaleId)),
     );
     await refuseRecord(venue().db, row!.id, "1100");
 
@@ -699,13 +696,9 @@ describe("an advance once the rest's invoice has taken it off", () => {
       tx.select().from(sales).where(eq(sales.id, corrective)),
     );
     expect(filed!.correctsSaleId).toBe(advanceId);
-    const [advanceRecord] = await registrosOf(advanceId);
-    const [r5] = await registrosOf(corrective);
-    expect(r5!.facturasRectificadas?.IDFacturaRectificada).toEqual([
-      expect.objectContaining({
-        IDEmisorFactura: advanceRecord!.idEmisorFactura,
-        NumSerieFactura: advanceRecord!.numSerieFactura,
-      }),
+    const [advanceRecord] = await recordedInvoiceIdsOf(venue().db, advanceId);
+    expect(await recordedInvoiceIdsOf(venue().db, corrective)).toEqual([
+      expect.objectContaining({ corrects: [advanceRecord!.invoice] }),
     ]);
     const opens = await inTx(venue(), (tx) =>
       tx

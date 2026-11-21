@@ -144,3 +144,32 @@ export async function seedWaitingRecords(
 export async function stopRecord(db: Database, recordId: string): Promise<void> {
   await db.update(envios).set({ estado: "detenido" }).where(eq(envios.registroId, recordId));
 }
+
+/** An invoice as a record names it: its issuer's tax number and its number. */
+export interface RecordedInvoiceId {
+  issuer: string;
+  number: string;
+}
+
+/** Each record filed for the sale: the invoice it is, and the invoices it says it corrects. */
+export async function recordedInvoiceIdsOf(
+  db: Database,
+  saleId: string,
+): Promise<{ invoice: RecordedInvoiceId; corrects: RecordedInvoiceId[] }[]> {
+  const rows = await db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.saleId, saleId));
+  return rows.map((row) => {
+    const corrected = (
+      row as { facturasRectificadas?: { IDFacturaRectificada: Record<string, string>[] } | null }
+    ).facturasRectificadas;
+    return {
+      invoice: { issuer: row.idEmisorFactura, number: row.numSerieFactura },
+      corrects: (corrected?.IDFacturaRectificada ?? []).map((entry) => ({
+        issuer: entry.IDEmisorFactura!,
+        number: entry.NumSerieFactura!,
+      })),
+    };
+  });
+}
