@@ -1,6 +1,6 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, onTestFinished, test } from "vitest";
 import { cleanup, mount } from "./test-helpers.js";
-import { holdsTabbable, isTabbable, tabbables } from "./tabbable.js";
+import { holdsTabbable, inInertTree, isTabbable, tabbables } from "./tabbable.js";
 
 afterEach(cleanup);
 
@@ -77,4 +77,43 @@ test("holdsTabbable finds a Tab stop among the elements or inside them, and noth
   expect(holdsTabbable([self!])).toBe(true);
   expect(holdsTabbable([text!])).toBe(false);
   expect(holdsTabbable([text!, holder!])).toBe(true);
+});
+
+function box(parent: Node = document.body): HTMLElement {
+  const element = document.createElement("div");
+  parent.appendChild(element);
+  onTestFinished(() => element.remove());
+  return element;
+}
+
+test("an element inside an inert container is in an inert tree", () => {
+  const container = box();
+  container.inert = true;
+  expect(inInertTree(box(box(container)))).toBe(true);
+  expect(inInertTree(container)).toBe(true);
+});
+
+test("an element inside a component whose host sits in an inert container is in an inert tree", () => {
+  const container = box();
+  container.inert = true;
+  const root = box(container).attachShadow({ mode: "open" });
+  expect(inInertTree(box(root))).toBe(true);
+});
+
+test("an element slotted into an inert part of a component's drawing is in an inert tree", () => {
+  const host = box();
+  const root = host.attachShadow({ mode: "open" });
+  const inertPart = box(root);
+  inertPart.inert = true;
+  inertPart.appendChild(document.createElement("slot"));
+  const slotted = box(host);
+  expect(slotted.assignedSlot).not.toBeNull();
+  expect(inInertTree(slotted)).toBe(true);
+});
+
+test("an element with no inert ancestor is not in an inert tree", () => {
+  const sibling = box();
+  sibling.inert = true;
+  const root = box().attachShadow({ mode: "open" });
+  expect(inInertTree(box(root))).toBe(false);
 });

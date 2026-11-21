@@ -1,6 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  inInertTree,
   modalClosed,
   modalOpen,
   modalOpened,
@@ -178,38 +177,6 @@ test("a window is open only between its opening and its closing", () => {
   expect(modalOpen()).toBe(true);
   modalClosed(modal);
   expect(modalOpen()).toBe(false);
-});
-
-test("an element inside an inert container is in an inert tree", () => {
-  const container = box();
-  container.inert = true;
-  expect(inInertTree(box(box(container)))).toBe(true);
-  expect(inInertTree(container)).toBe(true);
-});
-
-test("an element inside a component whose host sits in an inert container is in an inert tree", () => {
-  const container = box();
-  container.inert = true;
-  const root = box(container).attachShadow({ mode: "open" });
-  expect(inInertTree(box(root))).toBe(true);
-});
-
-test("an element slotted into an inert part of a component's drawing is in an inert tree", () => {
-  const host = box();
-  const root = host.attachShadow({ mode: "open" });
-  const inertPart = box(root);
-  inertPart.inert = true;
-  inertPart.appendChild(document.createElement("slot"));
-  const slotted = box(host);
-  expect(slotted.assignedSlot).not.toBeNull();
-  expect(inInertTree(slotted)).toBe(true);
-});
-
-test("an element with no inert ancestor is not in an inert tree", () => {
-  const sibling = box();
-  sibling.inert = true;
-  const root = box().attachShadow({ mode: "open" });
-  expect(inInertTree(box(root))).toBe(false);
 });
 
 function openPopover(parent: Node = document.body): HTMLElement {
