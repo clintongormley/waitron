@@ -479,4 +479,29 @@ describe.each(["light", "dark"] as const)("a box asking to join (%s)", (theme) =
     expect(await formMessageOf(dialog.querySelector("wt-form-actions")!)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it("renders an approved join accessibly", async () => {
+    const { el, host } = await mountAsking({
+      approveBoxJoin: vi.fn().mockResolvedValue(undefined),
+    });
+    await flush(el);
+    const dialog = await openJoin(el);
+    dialog.querySelector<HTMLElement>("[data-choice]")!.click();
+    await flush(el);
+    await flush(el);
+    expect(dialog.querySelector('[data-test="join-approved"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a refused Dismiss accessibly", async () => {
+    const { el, host } = await mountAsking({
+      dismissBoxJoin: vi.fn().mockRejectedValue({ code: "mirror.join_in_progress", status: 409 }),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="join-dismiss-${JOIN}"]`)!.click();
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="join-list-error"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });
