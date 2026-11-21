@@ -62,6 +62,7 @@ function run({
   signedAsset,
   prerelease = "false",
   isPrerelease = "false",
+  maintenance = "false",
 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "github-release-"));
   try {
@@ -83,6 +84,7 @@ function run({
         STUB_CP_FAILS: cpFails,
         STUB_SIGNED_ASSET: signedAsset ?? "",
         STUB_IS_PRERELEASE: isPrerelease,
+        ...(maintenance === null ? {} : { RELEASE_MAINTENANCE: maintenance }),
         ...(prerelease === null ? {} : { RELEASE_PRERELEASE: prerelease }),
       },
     });
@@ -106,6 +108,24 @@ const ghCalls = (calls) => calls.filter((call) => call.startsWith("gh "));
 const VIEW = "gh release view v1.2.3 --json isPrerelease --jq .isPrerelease";
 
 describe("github-release.sh", () => {
+  it.each([null, "unknown"])(
+    "refuses to create a release with an invalid maintenance result (%s)",
+    (maintenance) => {
+      const result = run({ maintenance });
+      expect(result.status).toBe(2);
+      expect(result.stderr).toContain("RELEASE_MAINTENANCE must be true or false");
+      expect(result.calls).toEqual([]);
+    },
+  );
+
+  it("creates a stable maintenance release without taking GitHub's Latest slot", () => {
+    const result = run({ maintenance: "true" });
+    expect(result.status, result.stderr).toBe(0);
+    const create = result.calls.find((line) => line.startsWith("gh release create"));
+    expect(create).toContain("--latest=false");
+    expect(create).not.toContain("--prerelease");
+  });
+
   it("copies both files out of the image and makes the Release when there is none", () => {
     const result = run({ release: "absent" });
     expect(result.status, result.stderr).toBe(0);

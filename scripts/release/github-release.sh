@@ -30,13 +30,24 @@ image=$2
 tag="v$version"
 release_flags=(--verify-tag)
 case "${RELEASE_PRERELEASE-}" in
-  true) release_flags+=(--prerelease --latest=false) ;;
+  true) release_flags+=(--prerelease) ;;
   false) ;;
   *)
     echo "RELEASE_PRERELEASE must be true or false" >&2
     exit 2
     ;;
 esac
+
+case "${RELEASE_MAINTENANCE-}" in
+  true|false) ;;
+  *)
+    echo "RELEASE_MAINTENANCE must be true or false" >&2
+    exit 2
+    ;;
+esac
+if [ "$RELEASE_PRERELEASE" = "true" ] || [ "$RELEASE_MAINTENANCE" = "true" ]; then
+  release_flags+=(--latest=false)
+fi
 
 work=$(mktemp -d)
 container=""

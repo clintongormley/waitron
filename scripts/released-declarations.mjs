@@ -6,7 +6,7 @@ const isVersionTag = (name) => name.startsWith("v") && isNumberedVersion(name.sl
 
 /**
  * What breaks "a released declaration never changes" in `repo` at `HEAD`, one line per problem:
- * a release tag whose declaration is missing at `HEAD` or differs from the tag's copy; a
+ * a declaration missing on its release line or different from the tagged copy; a
  * declaration below the highest version with no tag of its own; any declaration in a checkout with
  * no tags at all, which cannot tell a released version from a prepared one.
  *
@@ -23,14 +23,18 @@ export function releasedDeclarationProblems(repo) {
         `${FOLDER}/${name}.md exists but this checkout holds no tags at all, so it cannot tell a released version from a prepared one`,
     );
 
-  const problems = [];
   const released = tags.filter(isVersionTag);
+  if (released.length > 0 && git(repo, "rev-parse", "--is-shallow-repository")[0] !== "false")
+    return ["Release declarations require a checkout with full Git history"];
+  const inHistory = new Set(git(repo, "tag", "--merged", "HEAD", "--list"));
+  const problems = [];
   for (const name of released) {
     const path = `${FOLDER}/${name}.md`;
     const atTag = blobs(repo, name).get(name);
     if (atTag === undefined) problems.push(`tag ${name} holds no ${path}`);
-    else if (!atHead.has(name)) problems.push(`${path} was released as ${name} but is missing`);
-    else if (atHead.get(name) !== atTag) problems.push(`${path} differs from its release ${name}`);
+    else if (atHead.has(name)) {
+      if (atHead.get(name) !== atTag) problems.push(`${path} differs from its release ${name}`);
+    } else if (inHistory.has(name)) problems.push(`${path} was released as ${name} but is missing`);
   }
   const highest = declared.reduce((a, b) => (compare(a, b) >= 0 ? a : b), declared[0]);
   for (const name of declared)

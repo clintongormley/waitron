@@ -51,7 +51,7 @@ runs skip coverage transfers and merge jobs. Shards retain their existing alloca
 that their test script exists before running, including when result uploads are skipped.
 
 After full verification on main, the run publishes its pinned SHA images and asks the existing
-`main-tag-guard.sh` before moving `:main`. Ordinary main pushes publish no container image.
+`main-tag-guard.sh` before moving `:main`. Ordinary main pushes and pushes to `maintenance/*` publish no container image.
 A manual full run on another branch verifies without publishing. The private UI-package workflow
 `publish-ui.yml` retains its separate publication policy. `image-nightly.yml` remains available
 for manual smoke checks; its former nightly schedule is replaced by full CI.
@@ -2456,12 +2456,16 @@ to the app build only. In order, the publish job:
    whose app image is published is then a whole publication, and a run after either push failed
    pushes both.
 
-On a `v*` tag it checks that the commit is on `main` and that the tag annotation agrees with
-its version suffix before step 1. The tags step accepts `vX.Y.Z` and
+On a `v*` tag it checks whether the annotated commit is on `main` or a protected
+`maintenance/*` branch cut from an older release tag of the same major. The commit cannot
+contain another release tag for the same or a higher version. The publish and root-guard checkouts fetch full history with blobs
+fetched on demand so those jobs can compare Git ancestry. The declaration guard requires
+a file at HEAD for each release tag in its history and compares any tagged declaration present. The tags step accepts `vX.Y.Z` and
 `vX.Y.Z-{alpha,beta,rc}.N`. Before step 7 it runs `check-release <version>` in the loaded image
 and refuses a version the registry already holds. Runs for one tag publish one at a time.
 The `release` job uses the suffix's prerelease flag when publishing the GitHub Release and
-signing the release file. [Release runbook](../operations/release.md)
+signing the release file. Prereleases and maintenance releases leave GitHub's Latest slot alone.
+[Release runbook](../operations/release.md)
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:

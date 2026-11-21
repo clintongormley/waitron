@@ -138,7 +138,7 @@ function fakeRun(answers = {}) {
   return { run, calls };
 }
 
-async function prepare({ answers, answer = "yes", version = "1.0.0" } = {}) {
+async function prepare({ answers, answer = "yes", version = "1.0.0", base } = {}) {
   const { run, calls } = fakeRun(answers);
   const printed = [];
   const prompts = [];
@@ -151,6 +151,7 @@ async function prepare({ answers, answer = "yes", version = "1.0.0" } = {}) {
     await prepareRelease({
       version,
       place: "Elche",
+      base,
       run,
       ask,
       now: NOW,
@@ -262,6 +263,12 @@ describe("prepareRelease", () => {
   });
 
   const refusals = [
+    [
+      "a base outside the release branches",
+      { base: "side" },
+      /base must be main or a maintenance branch/,
+      0,
+    ],
     ["a version that does not parse", { version: "1.0" }, /is not a version/, 0],
     [
       "a branch other than release/<version>",
@@ -328,6 +335,106 @@ describe("prepareRelease", () => {
     });
     expect(error).toBeUndefined();
     expect(calls).toEqual(happyPath());
+  });
+});
+
+describe("maintenance release CLI", () => {
+  const base = "maintenance/1.x";
+  const version = "1.2.1";
+  const rulesCall = "gh api repos/{owner}/{repo}/rules/branches/maintenance%2F1.x?per_page=100";
+  const rules = (context = "ci", strict = true) => [
+    { type: "creation" },
+    { type: "deletion" },
+    { type: "non_fast_forward" },
+    { type: "pull_request" },
+    {
+      type: "required_status_checks",
+      parameters: {
+        required_status_checks: [{ context }],
+        strict_required_status_checks_policy: strict,
+      },
+    },
+  ];
+  const answers = {
+    "git rev-parse --abbrev-ref HEAD": `release/${version}\n`,
+    [`git rev-parse origin/${base}`]: `${HEAD_SHA}\n`,
+    "git rev-parse origin/main": `${OTHER_SHA}\n`,
+    "git rev-parse --is-shallow-repository": "false\n",
+    "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v2.0.0\n${HEAD_SHA}\trefs/tags/v1.2.0\n`,
+    [`git tag --merged ${HEAD_SHA} --list v*`]: "v1.2.0\n",
+    [`git merge-base --all ${HEAD_SHA} origin/main`]: `${HEAD_SHA}\n`,
+    [`git tag --points-at ${HEAD_SHA} --list v*`]: "v1.2.0\n",
+    [rulesCall]: JSON.stringify(rules()),
+  };
+
+  it("opens the declaration PR on maintenance from a fresh release fork", async () => {
+    const result = await prepare({ base, version, answers });
+    expect(result.error).toBeUndefined();
+    expect(result.calls.at(-1).slice(0, 5)).toEqual(["gh", "pr", "create", "--base", base]);
+  });
+
+  it("does not ask for a signature if the branch lacks the latest lower stable release", async () => {
+    const result = await prepare({
+      base,
+      version,
+      answers: { ...answers, [`git tag --merged ${HEAD_SHA} --list v*`]: "v1.1.0\n" },
+    });
+    expect(result.error?.message).toContain("latest lower stable release v1.2.0");
+    expect(result.prompts).toEqual([]);
+  });
+
+  it.each([
+    ["no rules", "[]"],
+    ["an unavailable API", new Error("GitHub unavailable")],
+    ["no restriction on creation", JSON.stringify(rules().slice(1))],
+    ["a loose CI rule", JSON.stringify(rules("ci", false))],
+    ["another check instead of ci", JSON.stringify(rules("lint"))],
+  ])("refuses to sign with %s", async (_, rulesAnswer) => {
+    const result = await prepare({
+      base,
+      version,
+      answers: { ...answers, [rulesCall]: rulesAnswer },
+    });
+    expect(result.error?.message).toContain("protected");
+    expect(result.prompts).toEqual([]);
+  });
+
+  const runList = `gh run list --workflow ci.yml --branch ${base} --event push --commit ${HEAD_SHA} --json status,conclusion --limit 1`;
+  const tagAnswers = {
+    ...answers,
+    "git rev-parse --abbrev-ref HEAD": `${base}\n`,
+    [`git merge-base --all ${HEAD_SHA} origin/main`]: `${OTHER_SHA}\n`,
+    [`git tag --points-at ${OTHER_SHA} --list v*`]: "v1.2.0\n",
+  };
+
+  it("tags only after finding green push CI on the exact maintenance branch tip", async () => {
+    const { run, calls } = fakeRun(tagAnswers);
+    await tagRelease({ version, run });
+    expect(argvOnly(calls).map((call) => call.join(" "))).toContain(runList);
+    expect(calls.at(-1)).toEqual(["git", "push", "origin", `v${version}`, SHOWN]);
+  });
+
+  it("refuses a maintenance tag without its own green push CI", async () => {
+    const { run, calls } = fakeRun({ ...tagAnswers, [runList]: "[]" });
+    await expect(tagRelease({ version, run })).rejects.toThrow(`no CI run on ${base}`);
+    expect(calls.some(([file, command]) => file === "git" && command === "push")).toBe(false);
+  });
+
+  it("refuses to tag from a maintenance branch still pointing at a commit of main", async () => {
+    const { run, calls } = fakeRun({ ...answers, "git rev-parse --abbrev-ref HEAD": `${base}\n` });
+    await expect(tagRelease({ version, run })).rejects.toThrow("still points at a commit of main");
+    expect(calls.some(([file, command]) => file === "git" && command === "push")).toBe(false);
+  });
+
+  it("rechecks the latest lower stable release before tagging", async () => {
+    const { run, calls } = fakeRun({
+      ...tagAnswers,
+      [`git tag --merged ${HEAD_SHA} --list v*`]: "v1.1.0\n",
+    });
+    await expect(tagRelease({ version, run })).rejects.toThrow(
+      "latest lower stable release v1.2.0",
+    );
+    expect(calls.some(([file, command]) => file === "git" && command === "push")).toBe(false);
   });
 });
 
