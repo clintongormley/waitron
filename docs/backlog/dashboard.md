@@ -138,13 +138,6 @@ The review left detached `readOnly` changes and a retained table's scroll/sort u
 
 The historical menu-only warning was not reproduced.
 
-## Text size after A179 (#988)
-
-Open: setup headings and the excluded fiscal-verifactu, staff and staff-role
-screens still need checking against the Typography roles in `docs/developers/design-system.md`.
-The floor-plan editor's modal heading keeps the LG role. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
-cloud-recovery code.
-
 ## Bundle: One session with real phones and password managers
 
 13 entries, size M. Real-device checks remain open.
@@ -182,8 +175,8 @@ cloud-recovery code.
   [Detail](dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 - Still open from #298/#305/#317, device checks before deployment
   [Detail](dashboard.md#still-open-from-298305317-device-checks-before-deployment)
-- **Check field focus on a real iPhone and finish the remaining typography-role audit.**
-  [Detail](dashboard.md#text-size-after-a179-988)
+- **Check field focus on a real iPhone.**
+  [Detail](../developers/design-system.md#structure)
 
 ## Bundle: Wt dialog lifecycle
 
@@ -270,6 +263,7 @@ show a cost during service.
   “yes for now, then we can revisit later”. The owner's 15 November “Both now” choice keeps those
   normal-browser role sizes, uses rem for browser text preferences, and gives shared typing
   controls a 16px minimum. See [Structure](../developers/design-system.md#structure).
+  Left alone on purpose, sized in `rem`: the till's enrolment number.
 
 - **Database-backed tables** (owner, 2026-09-12): 50 rows per page with a server-enforced maximum;
   search/sort over the whole dataset, debounced typing, reset on filter change, ignored superseded
