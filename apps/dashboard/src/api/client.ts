@@ -1992,9 +1992,6 @@ export interface ServerRow {
 export interface ServerListing {
   spare?: SpareFollowView | null;
   term: number | null;
-  /** This box's authority fingerprint, which a joining spare asks the person to compare; null
-   * when the box serves no authority of its own. */
-  authorityFingerprint: string | null;
   nodes: ServerRow[];
   /** Boxes asking to join that the main box lists; absent on a box that answers none. */
   joinRequests?: BoxJoinRequestRow[];

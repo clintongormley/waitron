@@ -34,13 +34,9 @@ it("notifies subscribers on setLocale and stops after unsubscribe", () => {
 });
 
 it("fills each named placeholder, in the active locale", () => {
-  expect(format("shell.throttle_wait", { seconds: 30 })).toBe(
-    "Too many attempts. Wait 30 seconds, then try again.",
-  );
+  expect(format("connect.waiting.time_left", { minutes: 30 })).toBe("Time left: 30 min");
   setLocale("es-ES");
-  expect(format("shell.throttle_wait", { seconds: 30 })).toBe(
-    "Demasiados intentos. Espera 30 segundos y vuelve a intentarlo.",
-  );
+  expect(format("connect.waiting.time_left", { minutes: 30 })).toBe("Tiempo restante: 30 min");
 });
 
 it("inserts a value holding a replacement pattern as written", () => {

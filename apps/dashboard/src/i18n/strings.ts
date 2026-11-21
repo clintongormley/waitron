@@ -2320,7 +2320,6 @@ export const en = {
   "servers.handover_stop": "Stop",
   "servers.handover_sent":
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
-  "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
     "Every machine on this venue's list of servers. A standby can be removed, so tills stop trying to reach it. To use that machine again, reset it and add it as a new spare. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
@@ -7022,7 +7021,6 @@ export const es: Record<StringKey, string> = {
   "servers.handover_stop": "Parar",
   "servers.handover_sent":
     "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
-  "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
     "Todas las máquinas de la lista de servidores del local. Un servidor en espera se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, restablécela y añádela como un nuevo servidor en espera. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",

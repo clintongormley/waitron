@@ -137,12 +137,6 @@ export interface ProvisionResult {
   cloudStaffEmailUnavailable?: true;
 }
 
-/** The main box's authority certificate, read before anything secret is sent to it. */
-export interface PrimaryCertificate {
-  pem: string;
-  fingerprint256: string;
-}
-
 export interface AdoptOutcome {
   adopted: true;
   /** The offline promote fallback. The server returns it once, so the wizard must show it before
@@ -594,13 +588,6 @@ export class SetupApi {
         ? {}
         : { "x-waitron-recovery-pack-locale": recoveryPackLocale }),
       ...(cloudSignInTab === undefined ? {} : { "X-Waitron-Setup-Cloud-Tab": cloudSignInTab }),
-    });
-  }
-
-  /** `null` for a plain-http address, which only this machine can answer. */
-  primaryCertificate(primaryUrl: string): Promise<PrimaryCertificate | null> {
-    return this.#request<PrimaryCertificate | null>("/setup-api/primary-certificate", "POST", {
-      primaryUrl,
     });
   }
 

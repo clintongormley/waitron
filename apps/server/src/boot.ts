@@ -439,7 +439,6 @@ import { dailyReportMail } from "./daily-report-mail.js";
 import { closeOfDayJob } from "./close-of-day.js";
 import { housekeepingJob } from "./housekeeping.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
-import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
   caCertPath,
@@ -4173,9 +4172,6 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       reloadStream: () => backupTurns(() => streamHost.reload()),
       readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
-      // `/ca.crt` serves no authority when the operator supplies the certificate files.
-      authorityFingerprint: () =>
-        config.tls === undefined ? readBoxCaFingerprint(config.stateDir) : Promise.resolve(null),
       listJoinRequests: () => boxJoinRequests.listed(),
     },
     log,

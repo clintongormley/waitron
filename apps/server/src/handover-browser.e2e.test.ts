@@ -305,7 +305,6 @@ it("hands over from built Servers through a real copy, placement restart and clo
     source.use("*", gate.middleware);
     const listing = {
       term: 1,
-      authorityFingerprint: null,
       nodes: body.nodes.map((node) => ({
         ...node,
         isSelf: node.nodeId === primary.nodeId,

@@ -299,23 +299,6 @@ describe("SetupApi", () => {
     await expect(api.provision(provisionBody)).resolves.toBeUndefined();
   });
 
-  it("primaryCertificate POSTs the address and returns the certificate, or null for plain http", async () => {
-    const certificate = { pem: "-----BEGIN CERTIFICATE-----", fingerprint256: "AA:BB" };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(certificate))
-      .mockResolvedValueOnce(jsonResponse(null));
-    const api = new SetupApi("", fetchImpl);
-    expect(await api.primaryCertificate("https://waitron.local")).toEqual(certificate);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/primary-certificate", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ primaryUrl: "https://waitron.local" }),
-    });
-    expect(await api.primaryCertificate("http://127.0.0.1:8080")).toBeNull();
-  });
-
   it("sends the join's handle on every join request that has one, and the same empty body to finish", async () => {
     const started = { code: "482913", addresses: ["192.168.1.23"], expiresAt: "x", handle: "h1" };
     const fetchImpl = vi

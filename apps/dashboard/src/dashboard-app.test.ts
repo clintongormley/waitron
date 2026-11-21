@@ -3859,7 +3859,7 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/servers");
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
-        listServers: vi.fn().mockResolvedValue({ term: 0, authorityFingerprint: null, nodes: [] }),
+        listServers: vi.fn().mockResolvedValue({ term: 0, nodes: [] }),
         liveData: new LiveData(),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

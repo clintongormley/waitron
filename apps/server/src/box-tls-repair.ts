@@ -132,18 +132,6 @@ export async function readBoxPublicCa(stateDir: string, now = new Date()): Promi
         .replaceAll("\n", served.pem.includes("-----BEGIN CERTIFICATE-----\r\n") ? "\r\n" : "\n");
 }
 
-/** The fingerprint of the authority `/ca.crt` serves, as the connection page shows it. */
-export async function readBoxCaFingerprint(
-  stateDir: string,
-  now = new Date(),
-): Promise<string | null> {
-  try {
-    return (await readServedCa(stateDir, now))?.ca.fingerprint256 ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function signingAuthority(s: Snapshot, now: Date): boolean {
   try {
     return (

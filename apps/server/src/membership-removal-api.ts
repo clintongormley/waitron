@@ -24,8 +24,6 @@ export interface MembershipRemovalApiDeps {
   ring: KeyRing;
   nodeId: string;
   reloadStream: () => Promise<void>;
-  /** The Servers screen shows it so a joining spare's person can compare it; null without one. */
-  authorityFingerprint: () => Promise<string | null>;
   /** The boxes asking to join that the Servers page lists. */
   listJoinRequests?: () => ListedJoinRequest[];
 }
@@ -75,7 +73,6 @@ export function mountMembershipRemovalApi(
       const listing = await listServers(deps.db, deps.node, deps.nodeId);
       return c.json({
         term: listing.term,
-        authorityFingerprint: await deps.authorityFingerprint(),
         nodes: listing.nodes,
         ...(deps.readSpare === undefined ? {} : { spare: await deps.readSpare() }),
         ...(deps.listJoinRequests === undefined ? {} : { joinRequests: deps.listJoinRequests() }),

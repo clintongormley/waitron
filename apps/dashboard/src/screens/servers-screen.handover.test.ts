@@ -9,7 +9,6 @@ import { ServersScreen } from "./servers-screen.js";
 import { DashboardApi, type ServerListing } from "../api/client.js";
 const listing: ServerListing = {
   term: 2,
-  authorityFingerprint: null,
   nodes: [
     {
       nodeId: "old",

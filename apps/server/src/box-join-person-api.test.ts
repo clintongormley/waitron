@@ -353,7 +353,6 @@ describe("the main box's person routes for a joining box", () => {
         ring: RING,
         nodeId: designated.nodeId,
         reloadStream: async () => {},
-        authorityFingerprint: async () => null,
         listJoinRequests: () => requests.listed(),
       },
       () => {},

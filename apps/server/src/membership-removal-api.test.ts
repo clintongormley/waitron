@@ -70,8 +70,6 @@ const RING: KeyRing = loadKeyRing({
 });
 
 const BOX_URL = "https://box.deli.test";
-const FINGERPRINT =
-  "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16";
 const CLOUD_URL = "https://cloud.deli.test";
 
 const suite = useVenueDb({
@@ -92,10 +90,7 @@ interface Primary {
 }
 
 /** A provisioned venue whose node holds its sealed identity key, and an admin's dashboard session. */
-async function primary(
-  authorityFingerprint: () => Promise<string | null> = async () => FINGERPRINT,
-  readSpare?: MembershipRemovalApiDeps["readSpare"],
-): Promise<Primary> {
+async function primary(readSpare?: MembershipRemovalApiDeps["readSpare"]): Promise<Primary> {
   const db = suite.db;
   const venue = await setupVenue(db);
   const nodeId = venue.cfg.nodeId;
@@ -116,7 +111,7 @@ async function primary(
   const reloadStream = vi.fn(async () => {});
   mountMembershipRemovalApi(
     app,
-    { db, node: suite.node, ring: RING, nodeId, authorityFingerprint, reloadStream, readSpare },
+    { db, node: suite.node, ring: RING, nodeId, reloadStream, readSpare },
     log,
   );
   return {
@@ -1369,7 +1364,7 @@ describe("GET /management-api/servers", () => {
       clockAt: null,
     };
     const readSpare = vi.fn(async () => cached);
-    const p = await primary(undefined, readSpare);
+    const p = await primary(readSpare);
     expect((await list(p, p.managerCookie)).status).toBe(403);
     expect(readSpare).not.toHaveBeenCalled();
     const before = await (await list(p, p.adminCookie)).json();
@@ -1402,7 +1397,6 @@ describe("GET /management-api/servers", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       term: await heldTerm(p.db),
-      authorityFingerprint: FINGERPRINT,
       nodes: [
         {
           ...self(p),
@@ -1565,19 +1559,17 @@ describe("GET /management-api/servers", () => {
     const res = await list(p, p.adminCookie);
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ term: null, authorityFingerprint: FINGERPRINT, nodes: [] });
+    expect(await res.json()).toEqual({ term: null, nodes: [] });
   });
 
-  it("answers this box's authority fingerprint, or null when it serves no authority", async () => {
-    const p = await primary(async () => null);
+  it("answers no authority fingerprint: a joining box is checked by its code", async () => {
+    const p = await primary();
     await holdChart(p, [self(p)]);
 
     const res = await list(p, p.adminCookie);
 
     expect(res.status).toBe(200);
-    expect(
-      ((await res.json()) as { authorityFingerprint: unknown }).authorityFingerprint,
-    ).toBeNull();
+    expect(await res.json()).not.toHaveProperty("authorityFingerprint");
   });
 
   it("refuses no session with 401 and a manager with 403", async () => {

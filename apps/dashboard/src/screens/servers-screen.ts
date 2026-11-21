@@ -3,7 +3,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, pageTitleStyles, breakAfterColons, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -205,14 +205,6 @@ export class ServersScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text);
       }
-      .fingerprint {
-        max-width: 70ch;
-        margin: 0 0 var(--wt-space-4);
-        color: var(--wt-color-text);
-      }
-      .fingerprint-value {
-        font-family: var(--wt-font-family-mono);
-      }
       a {
         color: var(--wt-color-primary-text);
       }
@@ -297,7 +289,6 @@ export class ServersScreen extends LitElement {
 
   @state() private servers: ServerRow[] = [];
   @state() private spare: SpareFollowView | null = null;
-  @state() private authorityFingerprint: string | null = null;
   @state() private joinRequests: BoxJoinRequestRow[] = [];
   @state() private joinListError = "";
   /** The request whose Check dialog is open, with what Check answered. */
@@ -382,7 +373,6 @@ export class ServersScreen extends LitElement {
     this.#newestApplied = read;
     this.servers = inStandingOrder(listing.nodes);
     this.spare = listing.spare ?? null;
-    this.authorityFingerprint = listing.authorityFingerprint;
     this.joinRequests = listing.joinRequests ?? [];
     this.loadErrorKey = null;
     this.#syncJoinPoll(this.joinRequests.length > 0);
@@ -1133,16 +1123,6 @@ export class ServersScreen extends LitElement {
     return html`
       <h1 class="title" tabindex="-1">${t("servers.title")}</h1>
       <p class="intro">${t("servers.intro")}</p>
-      ${
-        this.authorityFingerprint === null
-          ? nothing
-          : html`<p class="fingerprint" data-test="authority-fingerprint">
-              ${t("servers.fingerprint")}:
-              <span class="fingerprint-value" data-test="fingerprint-value"
-                >${breakAfterColons(this.authorityFingerprint)}</span
-              >
-            </p>`
-      }
       ${
         // An empty list comes back whenever no chart is held, primary or not, so it says nothing.
         this.loading || this.loadErrorKey !== null || this.servers.length === 0 || this.#onPrimary()

@@ -33,7 +33,6 @@ const asking = {
 
 const listing = (joinRequests = [asking]): ServerListing => ({
   term: 3,
-  authorityFingerprint: null,
   nodes: [primaryRow],
   joinRequests,
 });

@@ -917,7 +917,6 @@ describe("the owner's case: an emergency switch while the old main box stays off
           ring: RING,
           nodeId: spareId,
           reloadStream: async () => {},
-          authorityFingerprint: async () => null,
         },
         () => undefined,
       );

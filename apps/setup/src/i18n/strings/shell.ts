@@ -117,9 +117,6 @@ export const shellEn = {
     "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
   "shell.reset.unavailable":
     "There is no half-finished join to reset on this server. Reload to start setup again.",
-  "shell.throttle": "Too many attempts. Wait a few minutes, then try again.",
-  "shell.throttle_wait": "Too many attempts. Wait {seconds} seconds, then try again.",
-  "shell.throttle_wait_one": "Too many attempts. Wait 1 second, then try again.",
 
   "shell.restore.upload_interrupted":
     "The backup upload did not finish. Connect this device by cable or to the venue’s network, then try again.",
@@ -344,9 +341,6 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El servidor se está restableciendo y se reiniciará. Espera un minuto y recarga esta página para volver a empezar la configuración. Si al unirlo de nuevo se indica que la unión anterior se detuvo a medias, el restablecimiento no se ha hecho: vuelve a pulsar Restablecer este servidor.",
   "shell.reset.unavailable":
     "No hay ninguna unión a medias que restablecer en este servidor. Recarga para volver a empezar la configuración.",
-  "shell.throttle": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
-  "shell.throttle_wait": "Demasiados intentos. Espera {seconds} segundos y vuelve a intentarlo.",
-  "shell.throttle_wait_one": "Demasiados intentos. Espera 1 segundo y vuelve a intentarlo.",
 
   "shell.restore.upload_interrupted":
     "La carga de la copia de seguridad no ha terminado. Conecta este dispositivo por cable o a la red del local y vuelve a intentarlo.",
