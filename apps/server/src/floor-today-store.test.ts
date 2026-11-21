@@ -1574,33 +1574,22 @@ describe("a reset over a saved group split today", () => {
         .get(),
     );
 
-  it.each(["moves", "disappears"] as const)(
-    "an ordinary table waits for its food when its saved place %s",
-    async (change) => {
-      const { zoneId, table, master } = await longTable();
-      const order = await delivery(table.bar!);
-      const before = await todayRow(table.bar!);
-      if (change === "moves") await editMaster(master.bar!, { x: 100 });
-      else await deleteFromMaster(master.bar!);
+  it("an ordinary table waits for its food when its saved place moves", async () => {
+    const { zoneId, table, master } = await longTable();
+    const order = await delivery(table.bar!);
+    const before = await todayRow(table.bar!);
+    await editMaster(master.bar!, { x: 100 });
+    await reset(zoneId);
+    expect(await todayRow(table.bar!)).toEqual(before);
+    expect(await pendingRows(zoneId)).toMatchObject([{ tableId: table.bar, readyToMove: false }]);
 
-      await reset(zoneId);
-      expect(await todayRow(table.bar!)).toEqual(before);
-      expect(await pendingRows(zoneId)).toMatchObject([{ tableId: table.bar, readyToMove: false }]);
-      expect(await deliveryDestination(order)).toEqual({ tableId: table.bar });
-
-      await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
-      await catchUp(zoneId);
-      if (change === "moves") {
-        expect(await readyToMoveIn(zoneId)).toEqual([table.bar]);
-        await markMovedOn(table.bar!);
-        expect(await todayRow(table.bar!)).toMatchObject({ x: 100 });
-      } else {
-        expect(await todayRow(table.bar!)).toBeUndefined();
-        expect((await liveTablesOf(zoneId)).map((row) => row.id)).not.toContain(table.bar);
-      }
-      expect(await pendingRows(zoneId)).toEqual([]);
-    },
-  );
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
+    await catchUp(zoneId);
+    expect(await readyToMoveIn(zoneId)).toEqual([table.bar]);
+    await markMovedOn(table.bar!);
+    expect(await todayRow(table.bar!)).toMatchObject({ x: 100 });
+    expect(await pendingRows(zoneId)).toEqual([]);
+  });
 
   it.each(["c3", "c5"] as const)("an open order to %s keeps the group split", async (key) => {
     const { zoneId, table } = await longTable();
@@ -1640,7 +1629,6 @@ describe("a reset over a saved group split today", () => {
     const order = await delivery(table.c5!, false);
     expect(await todayRow(table.c5!)).toMatchObject({ x: 26 });
     await editMaster(master.long!, { x: 40 });
-
     await reset(zoneId);
 
     expect(await todayRow(table.c5!)).toMatchObject({ x: 56 });

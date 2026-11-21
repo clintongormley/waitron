@@ -9,8 +9,8 @@ the plan and the watcher cleared the two holds at 22:43. At 23:59 the watcher
 clarified that the open-order hold applies when the reset would join separate
 tables. A group that is already together can move with its open order.
 
-- [x] **Ordinary tables.** In `apps/server/src/floor-today-store.test.ts`, use a paid
-  Paella delivery and reset a table whose saved place changes or disappears. Check
+- [x] **Ordinary tables.** Use a paid Paella delivery in `floor-today-store.test.ts`
+  for a saved place that moves and in `table-removal.test.ts` for a dropped table. Check
   that its place and order link survive and its reset row stays pending. Collect
   the order and check that catch-up marks the move or removes the table. Food at
   one member also holds today's merge together. Extend the existing saved-group

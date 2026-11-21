@@ -30,7 +30,7 @@ import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { catchUpZone, resetZone } from "./floor-today-store.js";
+import { catchUpZone, placeSpareToday, resetZone } from "./floor-today-store.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { finishTable, leaveTables } from "./testing/party-close-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
@@ -328,11 +328,12 @@ describe("removing a live table the master no longer has", () => {
     ["a party that moved away and is still open"],
     ["an unpaid order to it"],
     ["food still on its way to it"],
-  ])("hides rather than removes a table tied by %s, and removes it once free", async (tie) => {
+  ])("keeps a table tied by %s, and removes it once free", async (tie) => {
     const {
       zoneId,
       ids: [t1, t2],
     } = await plannedZone(`Tie 1 ${tie}`, `Tie 2 ${tie}`);
+    let foodOrder: string | undefined;
     let free: () => Promise<void>;
     if (tie.startsWith("a party")) {
       const { partyId } = await seat(v, t1!);
@@ -346,17 +347,22 @@ describe("removing a live table the master no longer has", () => {
         await madeHereOnly(order);
       };
     } else {
+      await inTx(v, (tx) => placeSpareToday(tx, t1!, { x: 0, y: 0 }));
       const order = await delivery(t1!);
+      foodOrder = order;
       await pay(v, order, "20.00");
       expect(await kitchenItemsOf(order)).toBeGreaterThan(0);
       free = () => inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
     }
+    const before = await todayRow(t1!);
     await deleteFromMaster(t1!);
 
     await reset(zoneId);
 
     expect(await tableRow(v, t1!)).toMatchObject({ id: t1! });
-    expect(await todayRow(t1!)).toBeUndefined();
+    expect(await todayRow(t1!)).toEqual(foodOrder === undefined ? undefined : before);
+    if (foodOrder !== undefined)
+      expect(await billRow(v, foodOrder)).toMatchObject({ deliveryTableId: t1 });
     expect(await resetRowOf(t1!)).toMatchObject({ remove: true, pending: true });
 
     await free();
@@ -671,7 +677,7 @@ describe("a catch-up that changes nothing", () => {
       }
     });
 
-    expect(statements).toBe(9);
+    expect(statements).toBe(10);
     expect(await pendingOf(zoneId)).toEqual(before);
     expect(await tableRow(v, tied!)).toMatchObject({ id: tied! });
     expect(await todayRow(tied!)).toBeUndefined();
@@ -712,7 +718,7 @@ describe("a catch-up that removes two tables", () => {
     expect(await tableExists(t1!)).toBe(false);
     expect(await tableExists(t2!)).toBe(false);
     expect(await pendingOf(zoneId)).toEqual([]);
-    expect(statements).toBe(25);
+    expect(statements).toBe(26);
   });
 });
 
