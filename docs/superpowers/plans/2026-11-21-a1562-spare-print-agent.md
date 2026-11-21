@@ -10,7 +10,8 @@ within 1.5 s; the main box counts a request against its rate limit only once the
 and refuses a request signed by itself; every print agent's sign-in (`requireAgent`,
 `apps/server/src/print-agent-session.ts`) refuses an agent whose box the held chart has removed,
 before it is marked as seen; and an agent stopped after its token was refused asks its own box for
-a new one again, at most every 30 seconds, as does a spare's agent its box refuses.
+a new one again, at most every 30 seconds, as does a refused agent whose box, at its loopback
+address, answers as the spare.
 
 ## What the owner asked for
 
