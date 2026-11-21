@@ -1,7 +1,8 @@
 # 6. Retire the frozen day report
 
-[Shared plan and Sales decision](2026-11-21-a1325-close-a-drawer.md). After PR 5. Estimate 300 production and 330 test additions/edits, plus deletions and the core
-baseline. Sales reads figures for the selected dates, including later writes with those dates.
+[Shared plan and Sales decision](2026-11-21-a1325-close-a-drawer.md). After PR 5. Sales reads figures for the selected dates, including later writes with those dates.
+Estimate production +300/−950, tests +330/−1,800 and test support +0/−225, plus the generated core
+baseline. Report the actual added and removed lines for each of those three groups.
 
 In `apps/server/src/daily-sales-figures.ts`, use `computeDailyClose` directly. Keep the report route,
 existing date rules, node scope, top sellers and outside payments. The daily email uses the same

@@ -1,6 +1,6 @@
-# 4. Read drawer counts and print a close from Sales
+# 3. Read drawer counts and print a close from Sales
 
-[Shared plan](2026-11-21-a1325-close-a-drawer.md). After PR 3. Estimate 440 production and 360 test
+[Shared plan](2026-11-21-a1325-close-a-drawer.md). After PR 2. Estimate 440 production and 360 test
 lines. A Sales viewer can find unfinished counts and reprint a saved close. This also gives the
 till flow somewhere to recover a slip when the drawer printer cannot print it.
 

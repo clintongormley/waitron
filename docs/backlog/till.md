@@ -485,9 +485,9 @@ address has not been looked at.
 A close is a counted withdrawal from one drawer, at any time, covering everything since that drawer's
 last close. It takes in A239, so the two are built together, and A240 can land after them. The
 [implementation plan](../superpowers/plans/2026-11-21-a1325-close-a-drawer.md) replaces `daily_closes`
-and starts building after A1308 os13.
-Sales shows frozen figures once a node's day has a saved close. The closer must decide where a later
-write dated to that day goes; A897 does not settle that rule (watcher, 2026-11-11 22:09).
+and builds on the completed refund flow (#3971). Sales and the daily email keep each figure on its
+existing reporting date, including later writes dated to that day. A saved drawer close keeps its
+count and withdrawal, and later cash movement belongs to the next close.
 
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
