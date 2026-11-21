@@ -651,7 +651,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 ### The till, devices and table service
 
 - **Check the till above an Android device's own keyboard (left open by A1563, typing on the
-  till with a keyboard).** The till now asks Android to shrink the page when its keyboard
+  till with a keyboard, #3986).** The till now asks Android to shrink the page when its keyboard
   opens; nobody has yet checked that on a real phone and tablet. The owner opens a line note, the
   bill name window and Find a bill's search on each; a fix is built only for a device that fails
   (plan `docs/superpowers/plans/2026-11-21-till-keyboard-input.md`, Task 5 steps 2 and 3). Safari
