@@ -404,16 +404,15 @@ async function refuseBeforeReserving(
 }
 
 /**
- * Refuses a held chart that cannot be read, then a joining box whose name is the main box's or
- * another listed box's. Its own listing is no clash, so a box the chart lists can join again. The
- * hello and {@link issueMirrorBundle} both check through this, so the two cannot disagree.
+ * Refuses a joining box whose name is the main box's or another listed box's. Its own listing is
+ * no clash, so a box the chart lists can join again. The hello and {@link issueMirrorBundle} both
+ * check through this. `held` must already be readable (`isReadableChart`).
  */
 export function refuseTakenBoxName(
   mainNodeId: string,
   held: SignedMembershipDocument | null,
   standbyNodeId: string,
 ): void {
-  assertHeldDocumentReadable(held);
   if (
     sameBoxName(mainNodeId, standbyNodeId) ||
     held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))

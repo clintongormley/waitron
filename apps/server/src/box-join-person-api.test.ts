@@ -17,7 +17,12 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import type { NodeKeyPair } from "@waitron/membership";
+import {
+  signDocumentBody,
+  type MembershipDocumentBody,
+  type NodeKeyPair,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
@@ -382,6 +387,22 @@ describe("the main box's person routes for a joining box", () => {
     expect(await poll(sixth)).toEqual({ state: "ended", reason: "wrong_code" });
     // Six reveals in 15 minutes is the limit; the wrong tap's no longer counts.
     await listedRequest("192.168.1.51");
+  });
+
+  it("refuses Check and approve while the held chart cannot be read, leaving the request waiting", async () => {
+    const body = { term: ((await readNodeMembership(db))?.body.term ?? -1) + 1 };
+    await writeNodeMembership(db, {
+      body,
+      signerNodeId: designated.nodeId,
+      signature: signDocumentBody(body as MembershipDocumentBody, primaryKeyPair.privateKey),
+      endorsements: [],
+    } as unknown as SignedMembershipDocument);
+    const listed = await listedRequest("192.168.1.20");
+    const broken = refusal(409, "membership.held_untrusted", { reason: "malformed" });
+
+    expect(await check(listed.requestId)).toEqual(broken);
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(broken);
+    expect(await poll(listed)).toEqual({ state: "waiting" });
   });
 
   it("keeps only the locked bundle, which the new box's key opens", async () => {

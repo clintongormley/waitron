@@ -390,7 +390,7 @@ describe("the main box's box-to-box join routes", () => {
     expect(await refused.json()).toEqual(err("mirror.standby_name_taken"));
   });
 
-  it("refuses a hello while the held chart cannot be read, as the bundle does", async () => {
+  it("does not tell a hello that the held chart cannot be read", async () => {
     const body = { term: 1 } as unknown as MembershipDocumentBody;
     await writeNodeMembership(suite.db, {
       body,
@@ -400,11 +400,7 @@ describe("the main box's box-to-box join routes", () => {
     });
     const box = newBox("192.168.1.20");
 
-    const response = await post("hello", helloBody(box), box.address);
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual(
-      err("membership.held_untrusted", { reason: "malformed" }),
-    );
+    expect((await post("hello", helloBody(box), box.address)).status).toBe(200);
   });
 
   it("answers mirror.join_not_found for a request it does not hold", async () => {

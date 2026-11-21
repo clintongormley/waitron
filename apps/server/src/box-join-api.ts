@@ -42,7 +42,7 @@ import {
   refuseTakenBoxName,
   type MirrorBundleIssueDeps,
 } from "./mirror-bundle-api.js";
-import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
+import { isReadableChart } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { isRemoteStaffRequest, requestAddress } from "./request-from-box.js";
@@ -72,7 +72,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.join_code_taken": 409,
   "mirror.join_not_found": 404,
   "mirror.join_full": 429,
-  ...HELD_DOCUMENT_REFUSALS,
 };
 
 const invalid = () => new AppError("mirror.join_invalid", {});
@@ -244,9 +243,12 @@ export function mountBoxJoinApi(
           primaryAt: new Date(mainAt).toISOString(),
           standbyAt: new Date(at).toISOString(),
         });
+      const held = await readNodeMembership(deps.appDb);
+      // An unreadable chart is a venue fact, so the hello checks only the main box's name against
+      // it; Check and approve refuse the chart to the signed-in person.
       refuseTakenBoxName(
         deps.designated.nodeId,
-        await readNodeMembership(deps.appDb),
+        held !== null && isReadableChart(held) ? held : null,
         hello.newNodeId,
       );
 
