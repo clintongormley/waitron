@@ -36,6 +36,7 @@ async function pending(boxDirectory) {
 }
 
 const offerVerb = "check-upgrade-offer";
+const downloadOfferVerb = "download-upgrade-offer";
 const deferred = (reason) => ({ status: "deferred", reason });
 const offerUrl =
   "https://github.com/clintongormley/waitron/releases/download/upgrade-offer/waitron-offer.json";
@@ -59,7 +60,36 @@ async function readOfferState(path) {
   return state;
 }
 
-async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory, run) {
+async function downloadUpgradeOffer(run) {
+  const limit = 16 * 1024;
+  try {
+    const { stdout } = await run(
+      "curl",
+      [
+        "-q",
+        "-fsSL",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
+        "--connect-timeout",
+        "15",
+        "--max-time",
+        "60",
+        "--max-filesize",
+        String(limit),
+        offerUrl,
+      ],
+      undefined,
+      { encoding: "buffer", maxBuffer: limit },
+    );
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
+async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory, stagedOffer, run) {
   try {
     if (await pending(boxDirectory)) return deferred("upgrade-pending");
   } catch {
@@ -96,36 +126,13 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
     return deferred("offer-state-unreadable");
   }
 
-  const limit = selector.MAX_SIGNED_RELEASE_BYTES;
-  let bytes;
-  try {
-    ({ stdout: bytes } = await run(
-      "curl",
-      [
-        "-q",
-        "-fsSL",
-        "--proto",
-        "=https",
-        "--proto-redir",
-        "=https",
-        "--connect-timeout",
-        "15",
-        "--max-time",
-        "60",
-        "--max-filesize",
-        String(limit),
-        offerUrl,
-      ],
-      undefined,
-      { encoding: "buffer", maxBuffer: limit },
-    ));
-  } catch {
-    return deferred("offer-download-failed");
-  }
-
   let selected;
   try {
-    selected = selector.selectUpgradeOffer(bytes, keys, { boxId, installedVersion, previous });
+    selected = selector.selectUpgradeOffer(await fs.readFile(stagedOffer), keys, {
+      boxId,
+      installedVersion,
+      previous,
+    });
   } catch {
     return deferred("invalid-offer");
   }
@@ -143,15 +150,24 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
 // Mutating callers hold <box>.upgrade.lock; status takes no lock and writes nothing.
 export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = command } = {}) {
   if (
-    !["apply", "status", "restore", "keep", "recover", "offline-recovery", offerVerb].includes(
-      verb,
-    ) ||
+    ![
+      "apply",
+      "status",
+      "restore",
+      "keep",
+      "recover",
+      "offline-recovery",
+      offerVerb,
+      downloadOfferVerb,
+    ].includes(verb) ||
     !boxDirectory?.startsWith("/")
   )
     throw new Error(
       "Expected apply, status, restore, keep or offline-recovery, or check-upgrade-offer, and an absolute box directory",
     );
-  if (verb === offerVerb) return checkUpgradeOffer(boxDirectory, prepare[0], prepare[1], run);
+  if (verb === downloadOfferVerb) return downloadUpgradeOffer(run);
+  if (verb === offerVerb)
+    return checkUpgradeOffer(boxDirectory, prepare[0], prepare[1], prepare[2], run);
   let current = await pending(boxDirectory);
   if (verb === "status") return current?.marker ?? null;
   if (current?.marker === null) {
@@ -198,7 +214,8 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
 export async function runUpgradeCliMain(args, { stdout, stderr } = process) {
   try {
     const result = await runUpgradeCli(args);
-    stdout.write(JSON.stringify(result) + "\n");
+    if (args[0] === downloadOfferVerb && result === null) return 1;
+    stdout.write(args[0] === downloadOfferVerb ? result : JSON.stringify(result) + "\n");
     return args[0] === offerVerb && result.status === "deferred" ? 1 : 0;
   } catch (error) {
     stderr.write(String(error instanceof Error ? error.message : error) + "\n");

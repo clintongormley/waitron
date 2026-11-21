@@ -190,17 +190,19 @@ async function offerFixture() {
       },
       privateKey.export({ type: "pkcs8", format: "pem" }),
     );
-  const check = (download, version = "1.2.3-rc.1", trustDirectory = link) =>
-    runUpgradeCli([offerVerb, box, version, trustDirectory], {
-      run: async (command, args, input, options) => {
+  const check = async (bytes, version = "1.2.3-rc.1", trustDirectory = link) => {
+    const stagedOffer = join(root, "offer");
+    await fs.writeFile(stagedOffer, bytes);
+    return runUpgradeCli([offerVerb, box, version, trustDirectory, stagedOffer], {
+      run: async (command, args) => {
         if (command === "docker" && args.includes("config"))
           return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
         if (command === "docker" && args.join(" ") === "volume inspect test_state")
           return { stdout: JSON.stringify([{ Mountpoint: state }]) };
-        if (command === "curl") return { stdout: await download(args, options) };
         throw new Error(`unexpected command ${command} ${args.join(" ")}`);
       },
     });
+  };
   return { check, offer, state, trust, record: `${box}.upgrade-offer.json` };
 }
 
@@ -208,13 +210,13 @@ it("checks the installed box's signed offer and remembers a newer pause across c
   const f = await offerFixture();
   const offered = f.offer(4, "1.2.3");
   const paused = f.offer(5, "none");
-  expect(await f.check(() => offered)).toEqual({ status: "offered", version: "1.2.3" });
+  expect(await f.check(offered)).toEqual({ status: "offered", version: "1.2.3" });
   expect(JSON.parse(await fs.readFile(f.record, "utf8"))).toEqual({
     serial: 4,
     digest: createHash("sha256").update(offered).digest("hex"),
   });
-  expect(await f.check(() => paused)).toEqual({ status: "none" });
-  expect(await f.check(() => offered)).toEqual(deferred("invalid-offer"));
+  expect(await f.check(paused)).toEqual({ status: "none" });
+  expect(await f.check(offered)).toEqual(deferred("invalid-offer"));
   expect(JSON.parse(await fs.readFile(f.record, "utf8"))).toEqual({
     serial: 5,
     digest: createHash("sha256").update(paused).digest("hex"),
@@ -245,23 +247,24 @@ it.each([
 ])("defers for %s", async (_name, reason, arrange) => {
   const f = await offerFixture();
   await arrange(f);
-  expect(await f.check(() => f.offer(1, "1.2.3"))).toEqual(deferred(reason));
+  expect(await f.check(f.offer(1, "1.2.3"))).toEqual(deferred(reason));
 });
 
 it("defers on an unnumbered version even when the signed list has no offer", async () => {
   const f = await offerFixture();
-  expect(await f.check(() => f.offer(1, "none"), "main")).toEqual(
+  expect(await f.check(f.offer(1, "none"), "main")).toEqual(
     deferred("installed-version-unavailable"),
   );
 });
 
-it.each([22, 63])("defers when curl exits %i and leaves no replay state", async (code) => {
-  const f = await offerFixture();
-  const download = vi.fn(() => {
+it.each([22, 63])("refuses to stage anything when curl exits %i", async (code) => {
+  const { box } = await fixture();
+  const run = vi.fn(() => {
     throw Object.assign(new Error("curl failed"), { code });
   });
-  expect(await f.check(download)).toEqual(deferred("offer-download-failed"));
-  expect(download).toHaveBeenCalledExactlyOnceWith(
+  expect(await runUpgradeCli(["download-upgrade-offer", box], { run })).toBeNull();
+  expect(run).toHaveBeenCalledExactlyOnceWith(
+    "curl",
     [
       "-q",
       "-fsSL",
@@ -277,33 +280,25 @@ it.each([22, 63])("defers when curl exits %i and leaves no replay state", async 
       "16384",
       "https://github.com/clintongormley/waitron/releases/download/upgrade-offer/waitron-offer.json",
     ],
+    undefined,
     { encoding: "buffer", maxBuffer: 16384 },
   );
-  await expect(fs.access(f.record)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("refuses the legacy trust directory even when it contains matching keys", async () => {
   const f = await offerFixture();
-  expect(await f.check(() => f.offer(1, "1.2.3"), "1.2.3-rc.1", f.trust)).toEqual(
+  expect(await f.check(f.offer(1, "1.2.3"), "1.2.3-rc.1", f.trust)).toEqual(
     deferred("trust-unavailable"),
   );
 });
 
 it("writes one JSON line or an error and returns the command's exit code", async () => {
-  const { box, directory } = await fixture();
+  const { box } = await fixture();
   const stdout = { write: vi.fn() };
   const stderr = { write: vi.fn() };
   const output = { stdout, stderr };
   expect(await runUpgradeCliMain(["status", box], output)).toBe(0);
   expect(stdout.write).toHaveBeenCalledExactlyOnceWith("null\n");
-  expect(stderr.write).not.toHaveBeenCalled();
-
-  await fs.mkdir(directory, { recursive: true });
-  stdout.write.mockClear();
-  expect(await runUpgradeCliMain([offerVerb, box], output)).toBe(1);
-  expect(stdout.write).toHaveBeenCalledExactlyOnceWith(
-    '{"status":"deferred","reason":"upgrade-pending"}\n',
-  );
   expect(stderr.write).not.toHaveBeenCalled();
 
   stdout.write.mockClear();

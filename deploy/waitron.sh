@@ -949,17 +949,22 @@ defer_upgrade_offer() {
 }
 
 cmd_check_upgrade_offer() (
-  local current result status=0
+  local current result offer status=0
+  [ -x "$HOST_NODE" ] || defer_upgrade_offer offer-check-unavailable
+  offer="$(mktemp "${TMPDIR:-/tmp}/waitron-offer.XXXXXX")" || defer_upgrade_offer offer-check-unavailable
+  trap 'rm -f -- "$offer"' EXIT
+  trap 'exit 1' HUP INT TERM
+  upgrade_cli download-upgrade-offer > "$offer" || defer_upgrade_offer offer-download-failed
   exec 9>"${WAITRON_DIR}.upgrade.lock" && command -v flock >/dev/null \
     || defer_upgrade_offer upgrade-lock-unavailable
   flock -n 9 || defer_upgrade_offer upgrade-busy
   if upgrade_pending; then defer_upgrade_offer upgrade-pending; fi
   current="$(installed_app_ref)" && is_release_tag "$current" \
     || defer_upgrade_offer installed-version-unavailable
-  result="$(upgrade_cli check-upgrade-offer "${current#v}" "$RELEASE_TRUST")" || status=$?
+  result="$(upgrade_cli check-upgrade-offer "${current#v}" "$RELEASE_TRUST" "$offer")" || status=$?
   [ -n "$result" ] || defer_upgrade_offer offer-check-unavailable
   printf '%s\n' "$result"
-  return "$status"
+  exit "$status"
 )
 
 cmd_upgrade_choice() (

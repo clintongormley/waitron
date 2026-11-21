@@ -4168,6 +4168,25 @@ it.each([
 
 describe("waitron.sh check-upgrade-offer", () => {
   const cmd = ["check-upgrade-offer"];
+  function installOfferRuntime(sb, check = "", whileDownloading = "") {
+    const host = join(sb.root, "host");
+    mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+    writeFileSync(
+      join(host, "node-v26.7.0/bin/node"),
+      `#!/bin/bash
+if [ "$2" = download-upgrade-offer ]; then
+  ${whileDownloading}
+  printf 'signed fixture'
+  exit 0
+fi
+test "$(cat "$6")" = 'signed fixture' || exit 90
+printf 'host:%s\n' "$*" >> "$WT_LOG"
+${check}
+`,
+      { mode: 0o700 },
+    );
+    return host;
+  }
 
   it.each([
     [
@@ -4183,31 +4202,49 @@ describe("waitron.sh check-upgrade-offer", () => {
     "passes the installed version to the retained CLI for %s",
     (_name, ref, version, output, status) => {
       const sb = sandbox();
-      const host = join(sb.root, "host");
-      mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
-      writeFileSync(
-        join(host, "node-v26.7.0/bin/node"),
-        `#!/bin/bash\nprintf 'host:%s\\n' "$*" >> "$WT_LOG"\n${output ? `echo '${output}'\n` : ""}exit ${status}\n`,
-        { mode: 0o700 },
-      );
+      const check = output ? `printf '%s\n' '${output}'` : "";
+      const host = installOfferRuntime(sb, `${check}\nexit ${status}`);
       const result = run(sb, cmd, { WT_INSTALLED_RELEASE_REF: ref });
       expect(result.status).toBe(status);
       expect(result.stdout).toBe(
         (output || '{"status":"deferred","reason":"offer-check-unavailable"}') + "\n",
       );
-      expect(loggedCalls(sb)).toContain(
-        `host:${host}/box/upgrades/cli.mjs check-upgrade-offer ${sb.boxDir} ${version} ${host}/release-trust`,
+      expect(loggedCalls(sb)).toContainEqual(
+        expect.stringContaining(
+          `host:${host}/box/upgrades/cli.mjs check-upgrade-offer ${sb.boxDir} ${version} ${host}/release-trust `,
+        ),
       );
     },
   );
 
+  it("lets boot recovery take the host lock while the offer is downloading", () => {
+    const sb = sandbox();
+    installOfferRuntime(
+      sb,
+      `printf '{"status":"none"}\n'`,
+      `/bin/bash "$WT_BOOT_RECOVERY" offline >/dev/null 2>&1
+  printf '%s' "$?" > "$WT_LOG.boot"`,
+    );
+    const result = run(sb, cmd, {
+      WT_INSTALLED_RELEASE_REF: "v1.2.3",
+      WT_BOOT_RECOVERY: join(HERE, "../deploy/box/upgrade-restart.sh"),
+      WT_REAL_FLOCK: "1",
+      TMPDIR: sb.root,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('{"status":"none"}\n');
+    expect(readFileSync(`${sb.log}.boot`, "utf8")).toBe("0");
+    expect(readdirSync(sb.root).filter((name) => name.startsWith("waitron-offer."))).toEqual([]);
+  });
+
   it("defers as lock unavailable when the lock file cannot be opened", () => {
     const sb = sandbox();
+    installOfferRuntime(sb);
     mkdirSync(`${sb.boxDir}.upgrade.lock`);
     const result = run(sb, cmd, { WT_INSTALLED_RELEASE_REF: "v1.2.3" });
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('{"status":"deferred","reason":"upgrade-lock-unavailable"}\n');
-    expect(existsSync(sb.log)).toBe(false);
+    expect(loggedCalls(sb)).not.toContain("flock -n 9");
   });
 
   it.each([
@@ -4216,6 +4253,7 @@ describe("waitron.sh check-upgrade-offer", () => {
     ["installed-version-unavailable", false, false, "main"],
   ])("defers for %s", (reason, busy, pending, ref) => {
     const sb = sandbox();
+    installOfferRuntime(sb);
     if (pending) mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
     const result = run(sb, cmd, {
       WT_INSTALLED_RELEASE_REF: ref,

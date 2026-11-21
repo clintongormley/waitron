@@ -7,10 +7,11 @@ a signed file for rollout groups (Lane F queue, A950-LATER).
 [Upgrade plan](2026-11-09-a950-shorter-upgrades.md) · [Offer format](2026-11-19-a950-staged-offers.md)
 
 1. In `deploy/waitron.sh`, add `check-upgrade-offer` to dispatch and help. Use the retained
-   installer, take its existing upgrade lock without waiting, and defer if an upgrade is
-   held. That attempt can make the candidate look installed. Reuse `installed_app_ref`,
-   validate with `is_release_tag`, and strip the leading `v`. Main and branch builds defer.
-   Numbered prereleases check for a newer stable offer.
+   installer. Download before taking its upgrade lock so boot recovery can take that lock
+   during a network wait (watcher, 21 November at 06:00 CET). Stage only the capped bytes
+   and remove them on exit. Then take the lock without waiting and defer if an upgrade is
+   held. Reuse `installed_app_ref`, validate with `is_release_tag`, and strip the leading `v`.
+   Main and branch builds defer. Numbered prereleases check for a newer stable offer.
 2. Add a verb in the already-retained `scripts/box/upgrades/cli.mjs` that branches before
    the recovery path. In `host.mjs`, extract the mount lookup from Apply's volume loop
    with the same Apply behaviour. The check reuses Compose config and volume inspection
@@ -36,7 +37,7 @@ a signed file for rollout groups (Lane F queue, A950-LATER).
    Box ID read failures belong in `host.test.mjs`. Group, signature and 16 KiB boundary
    tests stay in `scripts/box/release-list.test.mjs`. `scripts/waitron-sh.test.mjs` pins
    version lookup, busy lock and held-attempt refusals and the empty-output fallback.
-   Run those files with `pnpm exec vitest run`. Update `deploy/README.md` and
+   Run the actual boot lock step during a held download to pin the ordering. Run those files with `pnpm exec vitest run`. Update `deploy/README.md` and
    `docs/backlog/box.md`, including that a lost state file loses replay history.
 
 For the rehearsal, seed the driver and selector from the recipe or main, then take a checked
