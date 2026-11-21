@@ -137,7 +137,8 @@ in **Departments and zones**, in the dashboard.
 
 Every full invoice prints your business's registered address. If it is wrong or incomplete,
 correct it in **Venue settings → Venue details**: choose **Change registered address** on the
-**Business** card. Invoices issued afterwards print the new address; invoices
+**Business** card. If you use **Same as the venue's address**, correct the venue's address
+first. Invoices issued afterwards print the new address; invoices
 already issued keep the one they were issued with.
 
 ## Choose a document and printer {#invoice-printer}

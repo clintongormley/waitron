@@ -3927,9 +3927,18 @@ setup venue screen takes the province from the address's area code, else its pos
 dashboard's Venue card never fills the province, which the server keeps, refuses an address whose
 area names another province (other mismatches are refused by the server's postcode check at Save),
 and offers the search only while the street, line 2, postcode and city can all
-change. A one-line address (the registered business address, on the setup screen and in Venue
-details' Change registered address dialog) is filled as "lines, postcode city, province", by
-`oneLineAddress` in `@waitron/country-packs`. The till's invoice recipient dialog asks in the country chosen
+change. The registered business address, on the setup screen and in Venue details' Change
+registered address dialog, is asked for in parts (street, line 2, postcode, city, province) behind
+a **Same as the venue's address** switch; while the switch is on the parts are hidden and the
+venue's address is used, copied when the form is saved. The parts are saved as one line,
+"street, line 2, postcode city, province" leaving blank parts out (`joinRegisteredAddress` in
+`@waitron/country-packs`), and opening splits that line back into them (`registeredAddressParts`).
+Street, postcode and city are required; the server refuses a line it cannot split back into
+them, for a country whose pack has a postcode rule (`apps/server/src/registered-address-check.ts`).
+Setup opens with the switch on unless a different line was saved; the dialog opens with it on
+only when the saved line is the venue's address. Choosing a suggestion fills the parts, as for
+the venue's address, takes the province from the address's area code, else its postcode, and turns
+the switch off. The till's invoice recipient dialog asks in the country chosen
 below its fields, which its label names, and fills its one street line with every line of the
 address, joined by commas, so a typed floor or unit is replaced; the province is the comma-free
 name of the area Waitron knows for the address's area code, else its postcode, and is emptied when

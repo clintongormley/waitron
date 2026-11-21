@@ -148,7 +148,8 @@ del pedido lo muestra en el idioma de tu pantalla.
 
 Cada factura completa muestra el domicilio fiscal de tu negocio. Si es incorrecto o está
 incompleto, corrígelo en **Ajustes del local → Datos del local**: elige **Cambiar domicilio
-fiscal** en la tarjeta **Negocio**. Las facturas que se emitan después
+fiscal** en la tarjeta **Negocio**. Si usas **Igual que la dirección del local**, corrige antes la dirección del
+local. Las facturas que se emitan después
 muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirse.
 
 ## Elegir un documento y una impresora {#invoice-printer}
