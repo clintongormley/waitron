@@ -54,7 +54,7 @@ import {
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
@@ -75,7 +75,6 @@ import {
   refundableOf,
   typedAmount,
   typedMoney,
-  vatSplitText,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";

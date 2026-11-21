@@ -361,11 +361,13 @@ describe("accountant workbook", () => {
       issuedAt,
       method: "cash" as const,
     });
-    // As two reads might return them: the later part payment's read first.
+    // As two reads might return them: the later part payment's read first, and one part payment
+    // found by both reads.
     const rows = [
       part("advance-3", 3, "2026-11-20T10:00:00.000Z"),
       part("advance-2", 2, "2026-11-20T09:00:00.000Z"),
       part("advance-1", 1, "2026-11-20T09:00:00.000Z"),
+      part("advance-2", 2, "2026-11-20T09:00:00.000Z"),
     ];
     const linked = linkPaymentsOnAccount(rows, new Map(rows.map((row) => [row.saleId, table])));
     expect(linked.takesOff.get("table-45")).toEqual(["A/1", "A/2", "A/3"]);

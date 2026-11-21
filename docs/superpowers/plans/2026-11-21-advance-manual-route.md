@@ -222,7 +222,7 @@ PRs, costed before the ticket-view link and the VAT columns were added, which it
    steps, though no cap on the amount is possible, since Waitron cannot know how much is owed back;
    cost: about 15 lines, and staff cannot use the plain refund while A/45 still holds money, even
    for a reason that has nothing to do with A/45). The watcher's call, or the owner's if the watcher
-   prefers.
+   prefers. The watcher chose (ii) at 16:54.
 3. **Also point to Refund a payment when Correct invoice on a table's ticket runs short of money**
    and that ticket took off a part payment. (i) Yes (recommended: that is where staff land after
    step one; cost: one extra read when refusing). (ii) No. Cleared at 15:37.
@@ -260,7 +260,7 @@ recommend the owner lands both.
    nothing is filed for it, its VAT (€0.91 at 10%) stays declared, and the accountant's export lists
    it. Ask the adviser to confirm or say what is needed; quote the owner's words.
 1. **Server, link on the bill.** A bill with a part payment then its table's ticket answers the
-   part payment's number, date, VAT and "taken off by"; after a credit note of the table's ticket,
+   part payment's number, date, total, VAT and "taken off by"; after a credit note of the table's ticket,
    still only the original's number.
 2. **Server, link on the ticket.** `getTransactionReceipt`'s read (`/api/transactions/:id/receipt`,
    `apps/till/src/api/client.ts:4388`) answers `takenOffBy: { saleId, invoiceNumber }` for a part

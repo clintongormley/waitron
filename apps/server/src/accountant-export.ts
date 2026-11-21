@@ -127,6 +127,8 @@ export function partPaymentsAmong(tx: Transaction, saleIds: readonly string[]) {
           billAdvances.advanceSaleId,
           tx
             .select({ id: sql<string>`${saleLines.deductsSaleId}` })
+            // Unnamed, the planner took `sale_lines_line_no_key` (node:26-slim, SQLite 3.54.1),
+            // reading every line of every sale named.
             .from(sql`${saleLines} indexed by sale_lines_deducts_sale_idx`)
             .where(
               and(isNotNull(saleLines.deductsSaleId), inArray(saleLines.saleId, [...saleIds])),

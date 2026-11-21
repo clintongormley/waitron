@@ -19,7 +19,7 @@ import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import "./supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, t, vatSplitText } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type { RefundableTender } from "../api/tender-refund-types.js";
@@ -32,7 +32,7 @@ import type {
 import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
-import { REASON_MAX, refusalOf, typedMoney, vatSplitText } from "../state/bill-payment.js";
+import { REASON_MAX, refusalOf, typedMoney } from "../state/bill-payment.js";
 import { refundMethodAllowed } from "../state/tender-refund.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import type { StringKey } from "../i18n/strings.js";
