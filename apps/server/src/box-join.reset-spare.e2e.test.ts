@@ -40,7 +40,6 @@ describe("a reset spare and the main box's start", () => {
         expect(stopped.status, JSON.stringify(stopped.body)).toBe(500);
         expect(stopped.body).toEqual({ error: { code: "server.internal" } });
         await boundedStart(pair.boxS.start(), "S's start after its join stopped");
-        // It stopped at the last write: the database holds the venue.
         const viaS = await pairs.viaNow(pair.dirsS);
         const status = await fetch(`${pair.urlS}/setup-api/status`, viaS);
         expect(await status.json()).toMatchObject({
