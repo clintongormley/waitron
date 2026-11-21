@@ -460,6 +460,7 @@ describe("TillApi", () => {
     const beforePosts: string[] = [];
     const fetchStub = vi.fn(() => {
       beforePosts.push(onSubmission.mock.lastCall?.[0]);
+      onSubmission.mockClear();
       return Promise.reject(new TypeError("Failed to fetch"));
     });
     const api = new TillApi("", fetchStub);

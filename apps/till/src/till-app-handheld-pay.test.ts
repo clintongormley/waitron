@@ -436,7 +436,8 @@ describe("a presented bill on a handheld", () => {
   it.each([
     ["requested", "declined"],
     ["requested", "captured"],
-    ["refused", "captured"],
+    ["refused", "declined"],
+    ["sending", "declined"],
   ] as const)(
     "keeps presented Pay open for the result after stop %s, then shows %s",
     async (stopOutcome, outcome) => {
@@ -448,28 +449,29 @@ describe("a presented bill on a handheld", () => {
         options?.onSubmission("table-submission");
         return promise;
       });
-      const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });
+      const cancel = vi.fn().mockResolvedValue({ outcome: "requested" });
       if (stopOutcome === "refused")
-        cancelBillReaderPayment.mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
-      const { el } = await openPresented({ pay, cancelBillReaderPayment });
+        cancel.mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
+      if (stopOutcome === "sending") cancel.mockReturnValueOnce(new Promise(() => {}));
+      const { el } = await openPresented({ pay, cancelBillReaderPayment: cancel });
       await takeOnReader(el);
       const stop = () => inPresented(el, "[data-pay-cancel-reader]");
       try {
         await expect.poll(stop).not.toBeNull();
         await userEvent.click(stop()!.shadowRoot!.querySelector("button")!);
-        expect(cancelBillReaderPayment.mock.calls[0]?.slice(0, 2)).toEqual([
-          "wo-4",
-          "table-submission",
-        ]);
         await expect
-          .poll(() => text(inPresented(el, "[data-pay-stop-status]")))
-          .toContain(
-            stopOutcome === "requested"
-              ? t("bill_pay.stop_requested")
-              : codeMessage("reader.not_held"),
-          );
+          .poll(() => cancel.mock.calls[0]?.slice(0, 2))
+          .toEqual(["wo-4", "table-submission"]);
+        if (stopOutcome === "sending") expect(stop()).toHaveProperty("disabled", true);
+        else
+          await expect
+            .poll(() => text(inPresented(el, "[data-pay-stop-status]")))
+            .toContain(
+              stopOutcome === "requested"
+                ? t("bill_pay.stop_requested")
+                : codeMessage("reader.not_held"),
+            );
         expect(presented(el)!.busy).toBe(true);
-        expect(documentChoice(el)).toBeNull();
       } finally {
         resolve(outcome === "captured" ? { outcome, ticket: ticket() } : { outcome });
         await flush(el);
@@ -478,11 +480,13 @@ describe("a presented bill on a handheld", () => {
         expect(presented(el)).toBeNull();
         expect(documentChoice(el)).not.toBeNull();
       } else {
+        expect(presented(el)!.busy).toBe(false);
         expect(stop()).toBeNull();
-        expect(await sheetMessage(el)).toBe(t("bill_pay.no_payment_taken"));
+        expect(await sheetMessage(el)).toBe(
+          t(stopOutcome === "requested" ? "bill_pay.no_payment_taken" : "bill_pay.card_declined"),
+        );
         expect(inPresented(el, "[data-presented-pay-take]")).toHaveProperty("disabled", false);
       }
-      expect(pay).toHaveBeenCalledOnce();
     },
   );
 

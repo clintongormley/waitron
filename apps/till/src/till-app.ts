@@ -4526,11 +4526,14 @@ export class TillApp extends LitElement {
    * {@link #onPayWaitingOrder}; a no-op once it has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
   #adjustOpening = false;
-  #directReaderStop?: BillReaderStop & ReaderStopControl & { billId: string; dialogId?: number };
+  #directReaderStop?: BillReaderStop &
+    ReaderStopControl & { billId: string; dialogId?: number; visible: () => boolean };
 
   #directReaderControl(billId: string, dialogId?: number): ReaderStopControl | undefined {
     const stop = this.#directReaderStop;
-    return stop?.billId === billId && stop.dialogId === dialogId ? { ...stop } : undefined;
+    return stop?.billId === billId && stop.dialogId === dialogId && stop.visible()
+      ? { ...stop }
+      : undefined;
   }
 
   async #payDirectReader(
@@ -4540,18 +4543,21 @@ export class TillApp extends LitElement {
   ): Promise<PayOutcome & { cancelled?: true }> {
     const api = this.api;
     if (this.#cardReader() !== "sumup_cloud") return api.pay(req);
+    const session = this.#operatorSession;
+    const sameSession = () => api === this.api && session === this.#operatorSession;
     let stop: BillReaderStop | undefined;
     try {
       const out = await api.pay(req, {
         onSubmission: (submissionId) => {
-          if (!here() || api !== this.api) return;
+          if (!sameSession()) return;
           const live = {
             billId: req.id,
             dialogId,
             submissionId,
             status: "ready" as const,
+            visible: () => sameSession() && here(),
             request: () => {
-              if (this.#directReaderStop === live && here() && api === this.api)
+              if (this.#directReaderStop === live && live.visible())
                 void this.#requestReaderStop(api, req.id, live);
             },
           };
@@ -4561,7 +4567,7 @@ export class TillApp extends LitElement {
       });
       if (
         (out.outcome === "declined" || out.outcome === "network_unavailable") &&
-        (await stop?.answer) === "requested"
+        stop?.status === "requested"
       )
         return { ...out, cancelled: true };
       return out;
@@ -8002,7 +8008,7 @@ export class TillApp extends LitElement {
               ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
               ...(lateSend === undefined ? {} : { lateSend }),
             },
-            () => session === this.#operatorSession && basketVisit === this.#store.loadGeneration,
+            () => id === this.#store.id,
           ),
         id,
       );

@@ -953,7 +953,8 @@ export class TillTenderPay extends LitElement {
     if (this.view === "paying") return this.#renderPaying();
     if (this.view === "holding") return nothing;
     if (this.view === "card") return this.#renderCard();
-    if (this.view === "collecting") return this.#renderCollecting();
+    if (this.view === "collecting" || this.readerStop !== undefined)
+      return this.#renderCollecting();
     if (this.view === "card_outcome") return this.#renderCardOutcome();
     return this.#renderIdle();
   }
@@ -1282,7 +1283,7 @@ export class TillTenderPay extends LitElement {
       </div>
       <div class="actions">
         ${
-          this.readerStop !== undefined || this.cardProvider === "sumup_cloud"
+          this.readerStop !== undefined
             ? readerStopControl(this.readerStop)
             : html`<wt-button
                 class="cancel"

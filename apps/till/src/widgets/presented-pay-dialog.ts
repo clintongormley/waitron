@@ -225,8 +225,8 @@ export class TillPresentedPayDialog extends LitElement {
   /** The row's QR has put the camera in place of the form. */
   @state() private scanning = false;
   #rowWanted = false;
-  /** The card payment out on a reader. */
   @property({ attribute: false }) readerStop?: ReaderStopControl;
+  /** The card payment out on a reader. */
   #sent: SentCard | null = null;
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<EntryDraft>;

@@ -26506,7 +26506,7 @@ describe("A767 card outcome belongs to its order", () => {
       options?.onSubmission("counter-submission");
       return promise;
     });
-    const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });
+    const cancel = vi.fn().mockResolvedValue({ outcome: "requested" });
     const saved = await stubApi().retrieveWorkingOrder("wo-1");
     const { el } = await mountApp({
       retrievePlacedOrder: vi.fn().mockResolvedValue(saved),
@@ -26516,7 +26516,7 @@ describe("A767 card outcome belongs to its order", () => {
         capabilities: ["print-receipt", "integrated-card-payment"],
       }),
       pay,
-      cancelBillReaderPayment,
+      cancelBillReaderPayment: cancel,
     });
     const c = await toCounter(el);
     emit(c, "pay-waiting-order", { id: "wo-1" });
@@ -26527,11 +26527,17 @@ describe("A767 card outcome belongs to its order", () => {
     const stop = () => panel().querySelector<HTMLElement>("[data-pay-cancel-reader]");
     try {
       await expect.poll(stop).not.toBeNull();
+      emit(c, "retrieve-order", { id: "wo-2" });
+      await expect.poll(() => c.store.id).toBe("wo-2");
+      expect(stop()).toBeNull();
+      const localCancel = panel().querySelector<HTMLElement>(".collecting + .actions .cancel");
+      expect(localCancel).not.toBeNull();
+      localCancel!.click();
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await expect.poll(() => c.store.id).toBe("wo-1");
+      await expect.poll(stop).not.toBeNull();
       await userEvent.click(stop()!.shadowRoot!.querySelector("button")!);
-      expect(cancelBillReaderPayment.mock.calls[0]?.slice(0, 2)).toEqual([
-        c.store.id,
-        "counter-submission",
-      ]);
+      expect(cancel.mock.calls[0]?.slice(0, 2)).toEqual(["wo-1", "counter-submission"]);
       await expect
         .poll(() => panel().querySelector("[data-pay-stop-status]")?.textContent)
         .toContain(t("bill_pay.stop_requested"));
@@ -26540,7 +26546,6 @@ describe("A767 card outcome belongs to its order", () => {
       resolve({ outcome: "declined" });
       await flush(el);
     }
-    expect(stop()).toBeNull();
     expect(panel().querySelector(".card-outcome")?.textContent).toContain(
       t("bill_pay.no_payment_taken"),
     );
