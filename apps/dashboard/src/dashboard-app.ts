@@ -2828,7 +2828,10 @@ export class DashboardApp extends LitElement {
       return;
     }
     if (requested === "payments" && this.#url.read("view") === "providers") {
-      this.#url.write({ dashboard: "modules", view: "card-providers", state: "all" }, true);
+      this.#url.write(
+        { dashboard: "modules", view: "card-providers", state: "all", returnTo: "card-readers" },
+        true,
+      );
       requested = "modules";
     }
     if (requested === "printing-rules") {

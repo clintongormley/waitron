@@ -1064,7 +1064,7 @@ describe("payments-screen remaining edges", () => {
     const { el } = await mount(stubApi({ listPaymentProviders: vi.fn().mockResolvedValue([]) }));
 
     expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(
-      "/modules/view/card-providers/state/all",
+      "/modules/view/card-providers/state/all/return-to/card-readers",
     );
     expect(q(el, "[data-test=add-reader]")).toBeNull();
     expect(q(el, ".providers")).toBeNull();

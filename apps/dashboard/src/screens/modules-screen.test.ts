@@ -1,7 +1,9 @@
 import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { registerIcons } from "@waitron/ui";
+import { html } from "lit";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import type { CardProviderPanel } from "@waitron/dashboard-kit";
+import { NavigationGuard, registerIcons, type NavigationLeave } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -406,4 +408,111 @@ it("offers localized column choices and restores a hidden module state", async (
   } finally {
     localStorage.removeItem("waitron.modules.table:columns");
   }
+});
+
+const FAKE_SUMUP = {
+  providerId: "sumup",
+  displayNameKey: "modules.providers",
+  strings: { en: {}, es: {} },
+  renderConnectForm: ({ onConnected }: { onConnected: () => void }) =>
+    html`<button data-test="fake-connect" @click=${onConnected}>Connect</button>`,
+} as unknown as CardProviderPanel;
+
+async function connectFakeSumup(el: ModulesScreen): Promise<void> {
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=configure-sumup]")!
+    .click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("wt-dialog [data-test=fake-connect]")!.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull());
+}
+
+it("returns to Card readers after a provider connects, when Card readers sent the person here", async () => {
+  history.replaceState(null, "", "/modules/view/card-providers/state/all/return-to/card-readers");
+  const { el } = await mountWidget<ModulesScreen>("dashboard-modules-screen", {
+    api: modulesClient(),
+    panels: [FAKE_SUMUP],
+  });
+  await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
+  change(el, "state", "enabled");
+  await el.updateComplete;
+  expect(location.pathname).toBe(
+    "/modules/view/card-providers/state/enabled/return-to/card-readers",
+  );
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  onTestFinished(() => {
+    push.mockRestore();
+    replace.mockRestore();
+  });
+  await connectFakeSumup(el);
+  await vi.waitFor(() => expect(location.pathname).toBe("/payments"));
+  expect(replace).toHaveBeenCalledTimes(1);
+  expect(new URL(String(replace.mock.calls[0]![2])).pathname).toBe(
+    "/modules/view/card-providers/state/enabled",
+  );
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(new URL(String(push.mock.calls[0]![2])).pathname).toBe("/payments");
+  expect(replace.mock.invocationCallOrder[0]).toBeLessThan(push.mock.invocationCallOrder[0]!);
+});
+
+async function connectWithUnsavedInput(outcome: "kept" | "proceeded") {
+  history.replaceState(null, "", "/modules/view/card-providers/state/all/return-to/card-readers");
+  const api = modulesClient();
+  const { el } = await mountWidget<ModulesScreen>("dashboard-modules-screen", {
+    api,
+    panels: [FAKE_SUMUP],
+  });
+  await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
+  const request = vi.fn<NavigationLeave["request"]>(async (proceed) => {
+    if (outcome === "proceeded") await proceed();
+    return outcome;
+  });
+  const guard = new NavigationGuard(window, { isDirty: () => true, request });
+  onTestFinished(() => guard.dispose());
+  const reads = vi.mocked(api.listModules).mock.calls.length;
+  await connectFakeSumup(el);
+  await vi.waitFor(() => expect(request).toHaveBeenCalled());
+  return { api, request, reads };
+}
+
+it("clears the return without asking, then stays on Modules and reloads when leaving for Card readers is refused", async () => {
+  const { api, request, reads } = await connectWithUnsavedInput("kept");
+  await vi.waitFor(() =>
+    expect(vi.mocked(api.listModules).mock.calls.length).toBeGreaterThan(reads),
+  );
+  expect(request).toHaveBeenCalledOnce();
+  expect(new URL(request.mock.calls[0]![2]).pathname).toBe("/payments");
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
+});
+
+it("asks the leave question once, for the move to Card readers, when unsaved input is held", async () => {
+  const { request } = await connectWithUnsavedInput("proceeded");
+  await vi.waitFor(() => expect(location.pathname).toBe("/payments"));
+  expect(request).toHaveBeenCalledOnce();
+  expect(new URL(request.mock.calls[0]![2]).pathname).toBe("/payments");
+});
+
+it("stays on Modules after a provider connects when nothing sent the person here", async () => {
+  history.replaceState(null, "", "/modules/view/card-providers/state/all");
+  const api = modulesClient();
+  const { el } = await mountWidget<ModulesScreen>("dashboard-modules-screen", {
+    api,
+    panels: [FAKE_SUMUP],
+  });
+  await vi.waitFor(() => expect(rows(el)).toHaveLength(2));
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  onTestFinished(() => {
+    push.mockRestore();
+    replace.mockRestore();
+  });
+  const reads = vi.mocked(api.listModules).mock.calls.length;
+  await connectFakeSumup(el);
+  expect(push).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
+  await vi.waitFor(() =>
+    expect(vi.mocked(api.listModules).mock.calls.length).toBeGreaterThan(reads),
+  );
 });
