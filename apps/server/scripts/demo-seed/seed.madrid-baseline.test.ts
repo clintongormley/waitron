@@ -30,8 +30,10 @@ import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
 import { getCountryPack } from "@waitron/country-packs";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage } from "@waitron/media";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
+import { demoMediaPath } from "./seed-media.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-name-changes.js";
 import {
@@ -529,6 +531,28 @@ for (const locale of ["en", "es"] as const) {
       provisioned: await canonicalMadridSemantics(provisioned),
       seeded: await canonicalMadridSemantics(seeded),
     };
+    const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
+    expect(root).toBeInstanceOf(URL);
+    const previousPhotoHashes = JSON.parse(
+      await readFile(new URL("madrid-before-photo-refresh.json", root), "utf8"),
+    ) as Record<string, string>;
+    const photoAliases = new Map(
+      await Promise.all(
+        Object.entries(previousPhotoHashes).map(async ([basename, previousHash]) => {
+          const source = demoMediaPath(CASA_DELGADO_ES.mediaDataSet, basename, undefined);
+          const { filename } = await prepareImage(await readFile(source), {
+            maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+          });
+          return [filename.split(".")[0]!, previousHash] as const;
+        }),
+      ),
+    );
+    expect(photoAliases.size).toBe(Object.keys(previousPhotoHashes).length);
+    // The frozen capture's row identities use the old photos' hashes.
+    recomputeMadridHashes(canonical.seeded, {
+      alias: (value) =>
+        value.replace(/\b[a-f0-9]{64}\b/g, (hash) => photoAliases.get(hash) ?? hash),
+    });
     const historicalSeeded = madridWithRenamedTables(canonical.seeded, { menus: "catalogues" });
     for (const row of Object.values(historicalSeeded.tables.sections!.rows))
       if (row.role === "menu_root")
@@ -549,8 +573,6 @@ for (const locale of ["en", "es"] as const) {
       ])
         delete row[column];
     }
-    const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
-    expect(root).toBeInstanceOf(URL);
     const fixtureName = `madrid-before-move.${locale}.json`;
     const text = await readFile(new URL(fixtureName, root), "utf8");
     const expected = JSON.parse(text) as Record<
