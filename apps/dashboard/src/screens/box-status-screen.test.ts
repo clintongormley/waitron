@@ -158,6 +158,12 @@ describe("dashboard-box-status-screen", () => {
   it.each([
     ["en", "upgraded", "Last offered upgrade", "Upgraded from 1.2.2 to 1.2.3"],
     [
+      "en",
+      "rolled-back",
+      "Last offered upgrade",
+      "Reopened version 1.2.2. The offer was for 1.2.3.",
+    ],
+    [
       "es",
       "rolled-back",
       "Última actualización ofrecida",

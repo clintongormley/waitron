@@ -6819,8 +6819,8 @@ alert list.
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Spare box (only while
   this box copies to a paired spare), Printers, Card readers (left out when the payments module is
   off), Clock and Disk space. Last offered upgrade appears below them after a recorded offered
-  install or rollback. It shows the result and time, with no status dot. Each live row has a dot, the part's name
-  in bold, a line of state, a muted line of detail, the sentence of each bell alert on that row, and
+  install or rollback. It shows the result and time, with no status dot. Each live row has a dot,
+  the part's name in bold, a line of state, a muted line of detail, the sentence of each bell alert, and
   its actions: a Go to for the row's own screen and its alerts' screens, each once, never this page,
   and only those the person can open, then Free or Check with this device's time (below). The rows share one
   grid, so on a wide page the dots, names, words and actions each line up in a column across the
@@ -6833,8 +6833,7 @@ alert list.
   read's `clock.waiting`); amber is any other notice and any bell alert on that row,
   whatever the alert's own severity, and the Clock row when the box's own read
   of AEAT's time is at `warning`, and the Spare box row when the spare is not following, its delay
-  is unknown, or it is more than 60 seconds behind, because amber means everything still
-  works. The legend says "red: something can't be saved or paid", not "nothing", because an
+  is unknown, or it is more than 60 seconds behind. Amber means everything still works. The legend says "red: something can't be saved or paid", not "nothing", because an
   unusable clock refuses sales while orders still save, and a waiting start takes no payment.
 - **Under the rows.** A note when a staff-notice check, or the read of the records waiting to be
   sent, could not be made; a note when the bell's

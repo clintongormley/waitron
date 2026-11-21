@@ -183,7 +183,8 @@ A timer enabled by hand stays enabled through driver refreshes. Step 7 still nee
 what happens to those boxes when `waitron-upgrade.service` starts installing.
 Box status shows the latest offered upgrade or rollback once the box reopens. The baseline
 release needs this read before unattended installs start, so it can show a rollback after it
-reopens. Rollback email remains open.
+reopens. Step 7 still needs rollback email so an administrator can learn what happened while
+away from Box status.
 
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the

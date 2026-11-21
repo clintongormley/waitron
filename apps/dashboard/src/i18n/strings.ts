@@ -4472,7 +4472,8 @@ export const en = {
   "box_status.part.disk": "Disk space",
   "box_status.part.upgrade": "Last offered upgrade",
   "box_status.upgrade.upgraded": "Upgraded from {fromVersion} to {toVersion}",
-  "box_status.upgrade.rolled_back": "Reopened version {fromVersion}. Offered version {toVersion}.",
+  "box_status.upgrade.rolled_back":
+    "Reopened version {fromVersion}. The offer was for {toVersion}.",
   "box_status.state.ok": "Fine",
   "box_status.state.attention": "Needs attention",
   "box_status.state.stopped": "Something can't be saved or paid",
