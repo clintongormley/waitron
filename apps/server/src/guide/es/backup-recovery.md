@@ -213,7 +213,7 @@ página compara los relojes y crea las series de facturas sola, también tras cu
 muestre; no hay ningún código de instalación que escribir. Si el servidor no puede comprobar su hora
 por internet, la página muestra antes la hora del servidor y la de este dispositivo: comprueba que las
 dos son correctas y elige **Confirmar la hora**. Después muestra **Hemos creado estas
-series de facturas:** con las nuevas series de facturas. Si cambias la clave o desmarcas una casilla, la página se
+series de facturas:** con cada serie nueva y para qué sirve. Si cambias la clave o desmarcas una casilla, la página se
 detiene hasta que vuelvas a elegir **Continuar**. Antes de **Continuar**, **Editar estos datos**
 vuelve a la elección de la copia.
 

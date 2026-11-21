@@ -27,6 +27,7 @@ import {
   focusNewScreen,
   regionName,
 } from "./check-venue.js";
+import { fiscalSetupStrings } from "./strings.js";
 
 type RecoveryContext = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotion"]>>[0] & {
@@ -69,10 +70,11 @@ interface Draft {
   detailsCorrect: boolean;
 }
 const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false, detailsCorrect: false });
+const purposes = ["standard", "full", "rectificative"] as const;
 interface Selected {
   status: "selected";
   identity: string;
-  input: { allocation: { series: { code: string }[] } };
+  input: { allocation: { series: { code: string; purpose: (typeof purposes)[number] }[] } };
 }
 const strings = {
   en: {
@@ -93,8 +95,8 @@ const strings = {
       "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete.",
     stopped: "The old box is stopped and will stay offline.",
     sole: "I am the only person recovering this taxpayer, across all venues.",
-    seriesLine:
-      "When you press Proceed, Waitron creates new invoice series for this box, so its invoice numbers never repeat the old box's. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
+    seriesLine: "Waitron will start new invoice series for this box.",
+    continue: "Continue",
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
     secondClockLead:
@@ -123,8 +125,8 @@ const strings = {
       "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta.",
     stopped: "El servidor anterior está apagado y seguirá desconectado.",
     sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-    seriesLine:
-      "Cuando pulses Continuar, Waitron creará series de facturas nuevas para este servidor, para que sus números de factura nunca repitan los del servidor anterior. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
+    seriesLine: "Waitron creará series de facturas nuevas para este servidor.",
+    continue: "Continuar",
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
     secondClockLead:
@@ -194,6 +196,8 @@ export class RecoveryHourEntry extends LitElement {
   #seriesShown = false;
   /** Proceed was pressed and no field has changed since: the page carries on to the series. */
   #confirmed = false;
+  /** A handover's Continue was pressed under the series now shown. */
+  @state() private continued = false;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -245,6 +249,7 @@ export class RecoveryHourEntry extends LitElement {
   #invalidate(): void {
     ++this.#generation;
     this.#confirmed = false;
+    this.continued = false;
     this.busy = false;
     this.sending = undefined;
     this.comparison = undefined;
@@ -334,6 +339,7 @@ export class RecoveryHourEntry extends LitElement {
   readOperation(): ReturnType<ModulePromotionEntry["readOperation"]> {
     if (
       !isPromotion(this.context) ||
+      !this.continued ||
       this.busy ||
       !this.draft.detailsCorrect ||
       this.#wait.result?.status !== "selected"
@@ -423,7 +429,11 @@ export class RecoveryHourEntry extends LitElement {
           selected.input.allocation.installationIdentity !== selected.identity ||
           !Array.isArray(selected.input.allocation.series) ||
           !selected.input.allocation.series.every(
-            (series) => record(series) && typeof series.code === "string" && series.code !== "",
+            (series) =>
+              record(series) &&
+              typeof series.code === "string" &&
+              series.code !== "" &&
+              purposes.some((purpose) => purpose === series.purpose),
           )
         )
           throw new Error("invalid selection");
@@ -611,7 +621,9 @@ export class RecoveryHourEntry extends LitElement {
           ? html`<section data-test="selected-hour" role="status">
               <h4 tabindex="-1">${words.chosen}</h4>
               <ul>
-                ${selectedHour.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
+                ${selectedHour.input.allocation.series.map(
+                  (s) => html`<li>${s.code} — ${fiscalSetupStrings[this.locale][s.purpose]}</li>`,
+                )}
               </ul>
             </section>`
           : nothing
@@ -633,6 +645,19 @@ export class RecoveryHourEntry extends LitElement {
                   this.sending = this.busy ? action : undefined;
                 }}
                 >${words[action]}</wt-button
+              >`
+            : nothing
+        }
+        ${
+          promote && selectedHour && !this.continued
+            ? html`<wt-button
+                data-test="continue"
+                variant="primary"
+                @click=${() => {
+                  this.continued = true;
+                  this.#notify();
+                }}
+                >${words.continue}</wt-button
               >`
             : nothing
         }

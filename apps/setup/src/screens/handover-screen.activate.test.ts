@@ -158,10 +158,39 @@ async function select(el: SetupHandoverScreen) {
 }
 const activations = (requests: { path: string }[]) =>
   requests.filter((row) => row.path.endsWith("/activate"));
+/** Presses Continue under the new series, the step that lets the venue start. */
+async function continueOn(el: SetupHandoverScreen) {
+  const clockEntry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(clockEntry, "[data-test=continue]")).not.toBeNull());
+  q(clockEntry, "[data-test=continue]").click();
+  await el.updateComplete;
+}
+it("starts the venue only after Continue is pressed under the new series", async () => {
+  const { el, requests } = await mount();
+  await select(el);
+  const clockEntry = q<LitElement>(el, "vf-recovery-hour");
+  await vi.waitFor(() => expect(q(clockEntry, "[data-test=continue]")).not.toBeNull());
+  expect(
+    [...clockEntry.shadowRoot!.querySelectorAll("[data-test=selected-hour] li")].map((li) =>
+      li.textContent!.trim(),
+    ),
+  ).toEqual(["A-0CSQW — Standard", "FF-0CSQW — Full invoice", "R-0CSQW — Correction"]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await el.updateComplete;
+  expect(activations(requests)).toHaveLength(0);
+  expect((Reflect.get(el, "entry") as { readOperation(): unknown }).readOperation()).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("This box has taken over the venue");
+  q(clockEntry, "[data-test=continue]").click();
+  await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+  );
+});
 it("sends the same administrator and selected minute to activation and clears secrets on success", async () => {
   const { el, requests } = await mount();
   expect(q(el, "wt-form-actions wt-button")).toBeNull();
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
   );
@@ -180,6 +209,7 @@ it("sends the same administrator and selected minute to activation and clears se
 it("keeps the successful restart visible while every progress read fails", async () => {
   const { el, fetcher } = await mount({ restartOutage: true });
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(
       "The venue has started here; this box is restarting",
@@ -210,6 +240,7 @@ it.each(["password", "code"] as const)(
     expect(q(el, "vf-recovery-hour")).toBe(clockEntry);
     expect(requests).toHaveLength(0);
     await select(el);
+    await continueOn(el);
     await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
     const key = field === "password" ? "password" : "totp";
     expect(requests.map((row) => (row.body.signIn as Record<string, string>)[key])).toEqual(
@@ -221,6 +252,7 @@ it.each(["password", "code"] as const)(
 it("clears the stored secrets and selected clock on leaving", async () => {
   const { el, requests } = await mount({ holdActivation: true });
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
   const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
   expect(selected.readOperation()).not.toBeNull();
@@ -239,6 +271,7 @@ it.each(["activated", "abandoned"])(
   async (state) => {
     const { el, requests, showState } = await mount({ holdActivation: true });
     await select(el);
+    await continueOn(el);
     await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
     const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
     expect(selected.readOperation()).not.toBeNull();
@@ -260,6 +293,7 @@ it("removes the clock entry and the secrets when the administrator's email chang
 it("starts the venue once, showing that it is starting, when the series report ready again", async () => {
   const { el, requests, release } = await mount({ holdActivation: true });
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(activations(requests)).toHaveLength(1));
   expect(q(el, '[role="status"]').textContent).toBe("Starting the venue on this box…");
   for (const name of ["handover-email", "handover-password", "handover-code"])
@@ -275,6 +309,7 @@ it("starts the venue once, showing that it is starting, when the series report r
 it("recovers an activation whose answer was lost by reading status", async () => {
   const { el } = await mount({ loseAnswer: true });
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
   );
@@ -304,6 +339,7 @@ it("asks for a fresh code when one runs out during the automatic clock check, an
     await edit(el, "handover-code", "654321");
     expect(q(el, "vf-recovery-hour")).toBe(clockEntry);
     q(clockEntry, "[data-test=compare]").click();
+    await continueOn(el);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
     );
@@ -336,6 +372,7 @@ it("sends nothing while the password is empty during the automatic clock wait, a
     await edit(el, "handover-password", "new password");
     expect(q(el, "vf-recovery-hour")).toBe(clockEntry);
     await vi.advanceTimersByTimeAsync(15_000);
+    await continueOn(el);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
     );
@@ -355,6 +392,7 @@ it("holds the venue start when the password is emptied while the series are bein
   );
   await edit(el, "handover-password", "");
   release();
+  await continueOn(el);
   await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
   expect(activations(requests)).toHaveLength(0);
   const retry = q<HTMLElement & { disabled: boolean }>(el, "[data-test=retry-activation]");
@@ -397,6 +435,7 @@ it("sends nothing when Proceed is pressed with an empty password, and the clock 
   await clockEntry.updateComplete;
   expect(retry.disabled).toBe(false);
   retry.click();
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
   );
@@ -407,6 +446,7 @@ it("asks for a fresh code when one runs out just before the venue starts, keepin
   const { el, requests, expireCode } = await mount();
   expireCode("activate");
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() =>
     expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).toContain(
       "Use a fresh authenticator code",
@@ -435,6 +475,7 @@ it("Try again refuses an emptied password the way the clock-check button does, a
   const { el, requests, expireCode } = await mount();
   expireCode("activate");
   await select(el);
+  await continueOn(el);
   await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
   expect(activations(requests)).toHaveLength(1);
   await edit(el, "handover-password", "");
@@ -499,6 +540,7 @@ it.each([
   async (refuse, message) => {
     const { el } = await mount({ refuse });
     await select(el);
+    await continueOn(el);
     await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).toBeNull());
     expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).toContain(message);
     expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=authenticate]").disabled).toBe(
@@ -510,6 +552,7 @@ it.each([
 it("keeps the completed status when a lost activation answer settles after polling clears its clock entry", async () => {
   const { el, release } = await mount({ loseAnswer: true, waitForStatus: true });
   await select(el);
+  await continueOn(el);
   await vi.waitFor(
     () => expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
     { timeout: 4000 },
@@ -535,6 +578,7 @@ it.each([false, true])(
     q(el, "[data-test=authenticate]").click();
     await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
     await select(el);
+    await continueOn(el);
     if (refuse) {
       await vi.waitFor(() =>
         expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).not.toBe(""),

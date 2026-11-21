@@ -109,8 +109,8 @@ se uniera a su principal actual.
 
 Marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
-y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
-el local en este servidor sola. Si este servidor no puede comprobar su hora por internet, la página
+y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas y muestra
+para qué sirve cada una. Elige **Continuar** otra vez para iniciar el local en este servidor. Si este servidor no puede comprobar su hora por internet, la página
 muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y
 elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
 hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
@@ -165,7 +165,8 @@ Mantén los dos servidores conectados. La página de traspaso se abre en el serv
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige
 **Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
-cualquier espera, y después inicia el local en el servidor de reserva. Si el servidor de reserva no
+cualquier espera, y muestra para qué sirve cada una. Elige **Continuar** otra vez para iniciar el
+local en el servidor de reserva. Si el servidor de reserva no
 puede comprobar su hora por internet, la página muestra antes la hora del servidor de reserva y la de
 este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y elige **Confirmar la hora**. Si los relojes
 no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
