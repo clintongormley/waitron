@@ -650,12 +650,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **Check the till above an Android device's own keyboard (left open by A1563, typing on the
-  till with a keyboard, #3986).** The till now asks Android to shrink the page when its keyboard
-  opens; nobody has yet checked that on a real phone and tablet. The owner opens a line note, the
-  bill name window and Find a bill's search on each; a fix is built only for a device that fails
-  (plan `docs/superpowers/plans/2026-11-21-till-keyboard-input.md`, Task 5 steps 2 and 3). Safari
-  is untested: there is no Apple device.
+- **Check the till above a tablet's own keyboard again (left open by A1563, typing on the till
+  with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
+  tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a
+  window's buttons sat under it. Windows now fit in the part of the page left visible (#3986);
+  that was checked only in desktop emulation. The owner opens a line note, the bill name window and
+  Find a bill's search on the tablet in landscape. Safari is untested: there is no Apple device.
+
+- **A1565. The till's order panel squeezed on a landscape tablet.** At about 640 CSS pixels tall
+  (the Pixel tablet in landscape, no keyboard), the order panel's buttons leave the list of lines
+  a sliver one line high, on the Counter and on a table's order. Seen by the owner on 21 November,
+  and in desktop emulation at 1280 by 640. Not investigated.
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
