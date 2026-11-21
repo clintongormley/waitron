@@ -142,6 +142,7 @@ export class BoxStatusScreen extends LitElement {
       }
       .words {
         grid-area: words;
+        overflow-wrap: anywhere;
       }
       .line,
       .detail,
@@ -784,10 +785,17 @@ export class BoxStatusScreen extends LitElement {
     ].filter((sentence) => sentence !== row.line);
     const disk = row.id === "disk";
     const outbox = row.id === "tax" ? health.outbox : null;
-    return html`<li data-test="row-${row.id}" data-state=${row.state}>
-      <span class="dot ${row.state}"
-        ><span class="state-words">${t(`box_status.state.${row.state}` as StringKey)}</span></span
-      >
+    const historical = row.id === "upgrade";
+    return html`<li data-test="row-${row.id}" data-state=${historical ? nothing : row.state}>
+      ${
+        historical
+          ? nothing
+          : html`<span class="dot ${row.state}"
+              ><span class="state-words"
+                >${t(`box_status.state.${row.state}` as StringKey)}</span
+              ></span
+            >`
+      }
       <div class="name">${t(`box_status.part.${row.id}` as StringKey)}</div>
       <div class="words">
         <p class="line">${wholeTimes(row.line)}</p>

@@ -174,7 +174,6 @@ export function boxStatusRows(
         : notices.length > 0 ||
             rowAlerts.length > 0 ||
             (id === "spare" && spareNeedsAttention(health.spare!)) ||
-            (id === "upgrade" && health.lastOfferedUpgrade!.status === "rolled-back") ||
             clockOff(id, health)
           ? "attention"
           : "ok";

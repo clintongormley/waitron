@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData, formatBytes } from "@waitron/dashboard-kit";
@@ -161,7 +161,7 @@ describe("dashboard-box-status-screen", () => {
       "es",
       "rolled-back",
       "Última actualización ofrecida",
-      "Volvió a la versión 1.2.2 tras intentar instalar la 1.2.3",
+      "Volvió a la versión 1.2.2. La versión ofrecida era la 1.2.3.",
     ],
   ] as const)("shows the finished upgrade in %s after %s", async (locale, status, label, line) => {
     setLocale(locale);
@@ -184,6 +184,31 @@ describe("dashboard-box-status-screen", () => {
     expect(text(row?.querySelector(".name") ?? null)).toBe(label);
     expect(text(row?.querySelector(".line") ?? null)).toBe(line);
     expect(text(row?.querySelector(".detail") ?? null)).toBe(formatIsoMinute(finishedAt));
+    expect(row?.querySelector(".dot")).toBeNull();
+  });
+
+  it("wraps a long release version inside the upgrade row on a phone", async () => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(previous.width, previous.height));
+    const toVersion = "9".repeat(46) + ".0.0";
+    const { el } = await mount(
+      stubApi(
+        {},
+        health({
+          lastOfferedUpgrade: {
+            attemptId: "attempt-1",
+            finishedAt: "2026-11-21T03:45:00.000Z",
+            fromVersion: "1.2.2",
+            toVersion,
+            status: "upgraded",
+          },
+        }),
+      ),
+    );
+    const line = q(el, "[data-test=row-upgrade] .line")!;
+    expect(text(line)).toContain(toVersion);
+    expect(line.scrollWidth).toBeLessThanOrEqual(line.clientWidth);
   });
 
   it("omits upgrade history when the box has no offered result", async () => {

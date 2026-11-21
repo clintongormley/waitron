@@ -145,7 +145,7 @@ it.each(["late busy stop", "marker without versions"])(
       f.host.resume = async () => false;
       await applyUpgrade({ ...input, versions: undefined });
       f.host.resume = async () => undefined;
-      await recoverUpgrade(input);
+      expect(await recoverUpgrade(input)).not.toHaveProperty("finishedAt");
     }
     expect(await fs.readFile(input.resultPath, "utf8")).toBe(previous);
   },

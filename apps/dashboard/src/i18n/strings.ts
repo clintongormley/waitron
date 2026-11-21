@@ -4472,7 +4472,7 @@ export const en = {
   "box_status.part.disk": "Disk space",
   "box_status.part.upgrade": "Last offered upgrade",
   "box_status.upgrade.upgraded": "Upgraded from {fromVersion} to {toVersion}",
-  "box_status.upgrade.rolled_back": "Reopened version {fromVersion} after trying {toVersion}",
+  "box_status.upgrade.rolled_back": "Reopened version {fromVersion}. Offered version {toVersion}.",
   "box_status.state.ok": "Fine",
   "box_status.state.attention": "Needs attention",
   "box_status.state.stopped": "Something can't be saved or paid",
@@ -9183,7 +9183,7 @@ export const es: Record<StringKey, string> = {
   "box_status.part.upgrade": "Última actualización ofrecida",
   "box_status.upgrade.upgraded": "Se actualizó de la versión {fromVersion} a la {toVersion}",
   "box_status.upgrade.rolled_back":
-    "Volvió a la versión {fromVersion} tras intentar instalar la {toVersion}",
+    "Volvió a la versión {fromVersion}. La versión ofrecida era la {toVersion}.",
   "box_status.state.ok": "Bien",
   "box_status.state.attention": "Necesita atención",
   "box_status.state.stopped": "Algo no se puede guardar o cobrar",
