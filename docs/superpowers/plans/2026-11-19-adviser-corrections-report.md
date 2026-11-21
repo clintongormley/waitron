@@ -1,8 +1,10 @@
 # Plan: the accountant's corrections report (ADVISER-CORRECTIONS-REPORT)
 
-Status: written 2026-11-19, lane L; revised the same day after one fresh-context read. Not built.
-FISCAL: the owner lands it. Read at main `9faf8661eb`. **RAN** = a command was run and its output
-read; every other citation was read at that commit, not run. Unmarked reasoning is inference.
+Status: written 2026-11-19, lane L; revised the same day after one fresh-context read; **revised
+2026-11-21 on main `557b2e2e3c`, the owner's D1–D4 folded in** (D3 and D4 CHANGED), with
+PRs #3398, #3916 and #3890 now on main. Not built. FISCAL: the owner lands both PRs. **RAN** = a
+command was run and its output read; a `file:line` citation was read at `557b2e2e3c`, not run. Unmarked
+reasoning is inference.
 
 Words used below. The **VAT return** is the quarterly tax form (modelo 303) that Waitron's
 dashboard builds as a file for the accountant to upload. A **corrective** is an invoice that changes
@@ -10,156 +12,217 @@ an earlier one, for example the credit note filed with a correction of a paid bi
 back with no corrective changes no VAT, `docs/compliance/2026-11-15-adviser-answers.md` Part B12).
 A **replacement** is the kind of corrective that repeats a refused ticket in full with the day the
 sale really happened. A **void** (annulment) cancels a record outright. A **comp** is a dish given
-free with a reason.
+free with a reason. A **late ticket** is an invoice issued on a later day than the meal it is for,
+which since #3398 records the meal's day. A **department** is one of the venue's selling areas
+(for example Restaurant and Bar), each with its own zones, menus and receipt name, edited in the
+dashboard under **Departments and zones**. A **payment on account** («Pago a cuenta») is the ticket
+a guest who pays part of a table's bill can ask for since #3890; the table's own invoice later
+takes it off.
 
 ## Part 1, for the owner
 
 **What you asked for.** Your decisions D6 and D12 of 16 November
-(`docs/compliance/2026-11-15-adviser-answers.md:340-343`, `:524-527`): "a filed report never
+(`docs/compliance/2026-11-15-adviser-answers.md:342-346`, `:526-529`): "a filed report never
 changes", and "we use a corrections report instead of just adding the transaction to the current
 period". Your answers of 18 November (`docs/compliance/2026-11-19-adviser-meeting.md`): to the VAT
 plan, "yes", and "any correctives to the previous quarter should be reported in the correctives
-report" (`:202`); a rate set too low, "it should be per invoice line. but we should just produce a
-corrections report which goes to the accountant" (`:154`); a rate set too high, "Again, we just
-produce a correction report which goes to the accountant" (`:155`); a meal given free, "this should
-be part of some report that we make available to the accountant to decide what to do" (`:165`).
-These are your answers, not the adviser's; the adviser will come back with more details (`:22-23`).
+report" (`:204`); a rate set too low, "it should be per invoice line. but we should just produce a
+corrections report which goes to the accountant" (`:156`); a rate set too high, "Again, we just
+produce a correction report which goes to the accountant" (`:157`); a meal given free, "this should
+be part of some report that we make available to the accountant to decide what to do" (`:167`).
+These are your answers, not the adviser's; the adviser will come back with more details (`:24-25`).
+Your answers to this plan's four questions are under **Your decisions** below.
 
 **What the accountant gets when this lands.**
 
 1. The sales side of the VAT return file for a period counts that period's invoices and the
    corrections made to them in the same period, and nothing else. Once the period has ended,
-   nothing done later on the sales side changes its file. Today it does (a later void or a date
-   replacement rewrites an ended quarter's figures, RAN, see "What happens today"). The purchases
-   side is unchanged: a supplier invoice can still be edited or deleted, including the date that
-   decides its period (`apps/server/src/purchasing-api.ts:114`, `:195`).
+   nothing done later on the sales side changes its file. Today it does: a void, a date
+   replacement or a late ticket made after a quarter ends rewrites that ended quarter's figures
+   (RAN, see "What happens today"). The purchases side is unchanged: a supplier invoice can still
+   be edited or deleted, including the date that decides its period
+   (`apps/server/src/purchasing-api.ts:114`, `:195`, `:200-204`).
 2. On the same screen, a second button, **Download corrections (XLSX)**, for the same year and
    period. It lists every correction made in that period to an invoice whose VAT belongs to an
    earlier period: a summary by the earlier period and VAT rate, reductions and additions apart, and
-   one row per correction with both invoice numbers and dates. The accountant decides whether to
-   file each as a complementary return, ask for the old return to be corrected, or take it in the
-   current return.
-3. A third sheet in that workbook lists what was given free in the period, with the reason and note
-   staff gave, its menu price and the ticket it was on.
+   one row per correction with both invoice numbers and dates. A late ticket for an earlier
+   period's meal is on it too. The accountant decides whether to file each as a complementary
+   return, ask for the old return to be corrected, or take it in the current return.
+3. A third sheet in that workbook lists what was given free in the period (comps, and discounts
+   that took a dish or a whole bill to zero), with the reason and note staff gave, the menu price,
+   the ticket it was on, its department, and an **estimated cost** worked out from the department's
+   **estimated margin**, a new setting you fill in per department in the dashboard.
 
 **Warning: the VAT file alone is no longer the whole story.** A corrective issued on 2 April for a
-31 March meal, a void made after the quarter ends, or (once #3398 lands) a ticket issued on 1 April
-for a 31 March meal appears in no period's VAT file. It is only on the corrections list of the
-period in which it was made. Uploading the file without reading that list pays too much or too
-little VAT. The screen and the guide say so.
+31 March meal, a void made after the quarter ends, or a ticket issued on 1 April for a 31 March
+meal appears in no period's VAT file. It is only on the corrections list of the period in which it
+was made. The last case can arise at any period's end since #3398: for example a card taken on
+31 March whose answer the box only learns on 1 April is filed as a 31 March sale on a 1 April
+ticket (`apps/server/src/sale-day.ts:31-41`, read). Uploading the file without reading that list pays too
+much or too little VAT. The screen and the guide say so.
 
 **What is not in it.** A VAT rate found wrong later (too low or too high) is not built: Waitron has
 no way yet to record that a product's rate was wrong from a given day, and that belongs to the
-"VAT rates per product" design, which is not written yet (`docs/backlog/fiscal.md:873-874`). Once a
+"VAT rates per product" design, which is not written yet (`docs/backlog/fiscal.md:883-904`). Once a
 product has dated rates, the wrong-rate section can be worked out per invoice line from what each
 ticket stored, as you asked; it is a later item. Waitron files nothing here: no change to the tax
 records, their fingerprints, the chain, invoice numbers or the record builders.
 
-**Your decisions** (default first):
+**Your decisions** (all four answered; where recorded: `~/waitron-campaign-l/questions.md`):
 
-- **D1. When a period counts as "filed".** Nothing in Waitron records that a return was filed
-  (RAN, see below). Default: **a period counts as closed the day it ends.** A correction made after
-  the end goes on the corrections list, never into that period's file. This is D12's wording ("a
-  correction made later to an earlier quarter's invoice is never counted in the current quarter",
-  `adviser-answers.md:516-519`) and gives your 18 November example the answer the sheet gave
-  (`adviser-meeting.md:192`, worked through under Design). It needs no new table. That matters now
-  because, while lane A's A1308 work reorganises the database's tables, new tables and columns wait
-  for it to finish (the "A1308 table hold", `docs/backlog.md:1605`). The cost: whatever happens
-  between the end of a quarter and the day the accountant files it (a corrective issued on 3 April
-  for a 30 March meal, a void, a late ticket) is not in that quarter's file even if the accountant
-  files on 20 April. It is on the second quarter's corrections list, which can be downloaded at any
-  time, and the accountant adds it by hand if they want it in the first return. The same rule
-  applies to monthly returns, which the screen also offers. Alternatives: (b) a person presses
-  **Mark as filed** for a quarter: a new table (waits for the A1308 hold), a quarter someone forgets
-  to mark keeps changing after it was filed, and a wrong press needs undoing; (c) the legal filing
-  deadline: the accountant may file earlier, and the file would then change after filing.
-- **D2. Build now or wait for the adviser.** Default: build now; you land it. Nothing stored
-  changes: every figure is worked out again from the invoices each time, so if the adviser answers
-  differently, a later change to this rule harms no data.
-- **D3. What counts as "given free".** Default: a dish comped that still reached the bill or was
-  made by the kitchen; a discount that left a dish or a bill at zero (an amount, or 100%); and a
-  dish already served that was cancelled without keeping the charge, so it was served and not
-  charged. A comp later cancelled before the kitchen made the dish is left out, and a dish is
-  listed once even when it was comped and then cancelled. Each row says which kind it is.
-  Alternative: comps only.
-- **D4. The 30% margin.** You wrote "Saying that our margin is 30% so our cost is 70% gives you a
-  basis for working out the VAT to invoice" (`adviser-meeting.md:165`). Default: leave it out. The
-  free list shows each item's menu price with VAT included; the accountant applies their own basis.
-  The rate of a free dish is not stored per dish today (only per rate total on the ticket), so a
-  "VAT at cost" column could not be filled reliably before "VAT rates per product" lands.
-  Alternative: a column "70% of the menu price".
+- **D1. When a period counts as "filed": the day it ends.** Your answer, 19 November ~17:00:
+  "The day it ends (Recommended)" (entry "WATCHER 2026-11-19 17:05", line 291), repeated on
+  20 November (entry "WATCHER 2026-11-20 22:48"). A correction made after the end goes on the
+  corrections list, never into that period's file. Whatever happens between the end of a quarter
+  and the day the accountant files it (a corrective issued on 3 April for a 30 March meal, a void, a
+  late ticket) is not in that quarter's file even if the accountant files on 20 April; it is on the
+  second quarter's corrections list, which can be downloaded at any time. The same rule applies to
+  monthly returns. **Correction to what you were told:** the first version said that a **Mark as
+  filed** button would need a new table that had to wait for lane A's "A1308 table hold". That was
+  wrong when written: the hold was lifted on 7 November
+  (`~/waitron-campaign-shared/a1308-hold.md:3`). Your choice stands on its other reasons (it is
+  D12's wording, and a button a person forgets to press leaves a filed quarter changing), so
+  nothing is changed here; the watcher may tell you.
+- **D2. Build now.** Your answer: "Accept all three (Recommended)" for D2–D4 on 19 November (same
+  entry, line 291), then "build now" on 20 November (entry "WATCHER 2026-11-20 22:51"). Nothing
+  stored is rewritten: every figure is worked out again from the invoices each time, so if the
+  adviser answers differently, a later change to this rule harms no data. The margin setting (D4)
+  is a new stored value, entered by you.
+- **D3 CHANGED. What counts as "given free": comps, and discounts that took a dish or a bill to
+  zero; never a cancelled dish.** Your words, 20 November: "comps and zero discounts, cancels were
+  never made, were they?" (22:48), then "if a dish is cancelled without being charged for, then i
+  think it just disappears. it is like it never happened" (22:49) (entries "WATCHER 2026-11-20
+  22:48" and "22:49"). So the earlier default's third kind (a served dish cancelled without its
+  charge) is dropped. **How this plan reads "it just disappears" for a comp:** a dish that was
+  comped and later taken off the bill is left out of the list, whether the kitchen had made it or
+  not; a comped dish that stays on the bill (including one cancelled with its charge kept, which
+  leaves it on the bill) is listed. One limit: if only part of a comped quantity is later taken
+  off (comp three glasses, then take one off), the row still shows the quantity comped. Each row
+  says which kind it is.
+- **D4 CHANGED. An estimated margin per department.** Your words, 20 November: "i think we need a
+  setting per department for an estimated margin, which we can use for this value" (entry
+  "WATCHER 2026-11-20 22:51"). So each department gets an **Estimated margin (%)** field in the
+  dashboard (Departments and zones, the department's **Details** tab), empty until you fill it. The
+  free list gets an **Estimated cost** column: the menu price less that margin (a 30% margin makes
+  an €11.00 dish €7.70), left empty where the department has no margin. It is worked out on the
+  menu price as listed, VAT included, because Waitron does not store a free dish's VAT rate on the
+  bill (`packages/db/src/schema/orders.ts:235-237`). It carries no VAT figure: whether a free meal
+  owes VAT is the accountant's call, as you said. This adds one stored value to each department,
+  so the pull request that carries it (PR 2) resets the test venues, and says so in its first line.
 
-**Size.** Two pull requests, no database change, no generated files. PR 1 (the period rule and the
-corrections list): about 490 lines of code and 880 of tests, plus about 45 lines of guide and
-backlog text, about 18 files. PR 2 (the free list, built on the existing Adjustments report's
-entries): about 70 lines of code and 170 of tests, about 6 files.
+**Size.** Two pull requests. PR 1 (the period rule and the corrections list): about 510 lines of
+code and 950 of tests, plus about 55 lines of guide and backlog text, about 33 files, no generated
+files, no database change. PR 2 (the margin setting and the free list): about 265 lines of code and
+530 of tests, plus about 35 of guide and backlog text and about 25 generated lines (the rebuilt
+starting database layout), about 34 files; it resets the test venues.
 
 ## Should this exist?
 
 1. **Need.** In the owner's words above: a filed quarter's figures never change, and later
-   corrections, wrong rates and free meals go on a report the accountant acts on. When this lands
-   the accountant can download, per period, a VAT file whose sales side stays fixed once the period
-   ends, and a workbook of later corrections by earlier period and rate, plus the free list. Still
-   unavailable: the wrong-rate section (waits on "VAT rates per product"). **Simplest
-   alternatives.** Changing nothing leaves the VAT file contradicting D12 (a later void or date
-   replacement rewrites an ended quarter, RAN). Adding columns to the existing **Download for
-   accountant (XLSX)** workbook (`apps/server/src/accountant-export.ts:28-44` already lists
-   correctives with the original's number) was considered and rejected: that workbook takes any
-   date range, while "an earlier period" depends on whether the venue files monthly or quarterly; a
-   quarterly filer handed a month-based list would add May's corrections of April sales twice. So
-   the list sits beside the VAT file, on the same chosen period. For the free list, the existing
-   Adjustments report already lists every comp, discount and cancellation with its reason, stage and
-   amounts (`listAdjustmentEntries`, `packages/adjustments/src/reports.ts:519`); PR 2 filters those
-   entries rather than writing a second query. Beyond the minimum: the free list (asked for) and
-   the summary sheet (asked for: "listed by original quarter and rate").
-2. **True size.** Estimated above: about 24 files, about 560 lines of code and 1,050 of tests, no
-   generated files, no migration. Later changes get smaller: the VAT period rule lives in one
-   function, which #3398 (LATER-SALE-DATE) then needs not edit (see Interplay).
-3. **Approval.** D6 and D12 are recorded at `adviser-answers.md:340-343` and `:524-527`; the 18
-   November answers at `adviser-meeting.md:154-155`, `:165`, `:202`. This plan's design (D1-D10) is
-   not approved by anyone yet; the watcher queued the item ("Medium; plan first", per the brief).
-   One fresh-context reviewer read the first version and re-ran its A/B/C test.
+   corrections, wrong rates and free meals go on a report the accountant acts on; for free meals,
+   "a setting per department for an estimated margin, which we can use for this value". When this
+   lands the accountant can download, per period, a VAT file whose sales side stays fixed once the
+   period ends, and a workbook of later corrections by earlier period and rate, plus the free list
+   with an estimated cost. Still unavailable: the wrong-rate section (waits on "VAT rates per
+   product"). **Simplest alternatives.** Changing nothing leaves the VAT file contradicting the owner's D12 (a
+   later void, date replacement or late ticket rewrites an ended quarter, RAN). Adding columns to
+   the existing **Download for accountant (XLSX)** workbook (`apps/server/src/accountant-export.ts`
+   already lists correctives with the original's number, `:26-45`) was considered and rejected:
+   that workbook takes any date range, while "an earlier period" depends on whether the venue files
+   monthly or quarterly; a quarterly filer handed a month-based list would add May's corrections of
+   April sales twice. So the list sits beside the VAT file, on the same chosen period. For the free
+   list, the existing Adjustments report already lists every comp and discount with its reason and
+   amounts (`listAdjustmentEntries`, `packages/adjustments/src/reports.ts:513-575`); PR 2 filters
+   those entries rather than writing a second query. For the margin, a column on the department's
+   own row is the smallest store the house rules allow (see Design, "Where the margin lives").
+   Beyond the minimum: the summary sheet (asked for: "listed by original quarter and rate") and the
+   department name on each free row (so the estimated cost can be checked against its margin).
+2. **True size.** Estimated above: about 67 files (counted from the task lists below); about 775
+   lines of code, 1,480 of tests and 90 of docs; about 25 generated lines in PR 2
+   (`packages/db/drizzle/0000_baseline.sql`, `meta/0000_snapshot.json`, `meta/_journal.json`,
+   `scripts/migration-baseline-epoch.json`), one migration rebuild, one venue reset. Later changes
+   get smaller: the VAT period rule lives in one function.
+3. **Approval.** D6 and D12 are recorded at `adviser-answers.md:342-346` and `:526-529`; the 18
+   November answers at `adviser-meeting.md:156-157`, `:167`, `:204`. D1–D4 are the owner's,
+   relayed by the watcher (`~/waitron-campaign-l/questions.md`, entries "WATCHER 2026-11-19 17:05",
+   "WATCHER 2026-11-20 22:48", "22:49", "22:51"); I read them there, not from the owner directly.
+   D5–D10 were cleared by the watcher at the plan's defaults, not by the owner (same file, entry
+   "WATCHER 2026-11-19 15:55", line 281). D11, D13 and D14 are new in this revision and approved
+   by nobody. One fresh-context reviewer read the first version and re-ran its A/B/C test; this revision has
+   not been read by anyone else.
 
 ## What happens today
 
-- **The VAT return counts a sale by its issue date, or by its replacement's real day**
-  (`packages/reporting/src/vat-return.ts:35-43`), leaves out every voided sale whenever the void was
-  made, every replacement and every exchange invoice (`packages/reporting/src/business-day.ts:206-230`),
-  and counts each corrective in its own issue period at the rates of its own stored VAT split.
-  **RAN** a throwaway test (`packages/reporting/src/zz-throwaway-filed-quarter.test.ts`, deleted
-  after; `pnpm --filter @waitron/reporting exec vitest run src/zz-throwaway-filed-quarter.test.ts`,
-  3 passed), one ticket at 10%, €11.00:
+- **The VAT return counts a sale by the day its VAT belongs to, whenever that sale was made.** The
+  day is its replacement's `supply_day`, else its own `supply_day` (a late ticket, since #3398),
+  else its issue date (`vatReturnDay`, `packages/reporting/src/vat-return.ts:10-25`, used at
+  `:50-62`). It leaves out every voided sale whenever the void was made, every replacement and
+  every exchange invoice (`activeSalesClause`, `packages/reporting/src/business-day.ts:220-230`, its
+  only caller `vat-return.ts:62`, RAN `git grep -n activeSalesClause`), and counts each corrective
+  by its own issue date at the rates of its own stored VAT split. **RAN** a throwaway test
+  (`packages/reporting/src/zz-throwaway-filed-quarter.test.ts`, deleted after; from
+  `packages/reporting`, `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run
+  src/zz-throwaway-filed-quarter.test.ts --reporter=verbose --silent=false`, 5 passed), one ticket
+  at 10%, €11.00, first and second quarter printed before and after the later step:
   - A, ticket 10 Feb, corrective −€5.50 issued 10 May: first quarter before and after
-    `[{"rate":"10.00","base":"10.00","tax":"1.00"}]`, second quarter
-    `[{"rate":"10.00","base":"-5.00","tax":"-0.50"}]`. The first quarter does not change; the
-    reduction lands in the second.
-  - B, ticket stamped 1 April, replacement on 10 May naming 31 March: first quarter before `[]`,
-    after `[{"rate":"10.00","base":"10.00","tax":"1.00"}]`; second quarter before that line, after
-    `[]`. **An ended quarter's figures change.**
-  - C, ticket 10 Feb, void recorded 10 May: first quarter before the line, after `[]`; second
-    quarter `[]`. **An ended quarter's figures change.**
-  So the backlog's "read, not run" sentence (`docs/backlog/fiscal.md:944-946`) holds for A and B,
-  and C (voids) is a third case. Three existing tests pin today's replacement,
-  refund-of-replacement and void behaviour by month
-  (`packages/reporting/src/vat-return.test.ts:168-177`, `:190-207`, `:221-234`).
-- **A rate line that nets to zero stays in the result.** RAN a second throwaway test (deleted):
-  a 10 February ticket and a full corrective on 10 March gave the first quarter
-  `[{"rate":"10.00","base":"0.00","tax":"0.00"}]`. The summing loop makes one line per rate it sees
-  (`packages/reporting/src/vat-summary.ts:71-82`).
-- **Voids have no product caller.** `recordVoid` (`packages/core/src/record-void.ts:24`) is called
-  outside tests only by `apps/server/src/testing/order-venue.ts:241` (RAN `git grep -n "recordVoid("`
-  over `apps/` and `packages/`). The rule must still treat them correctly.
+    `[{"rate":"10.00","base":"10.00","tax":"1.00"}]`; second quarter `[]`, then
+    `[{"rate":"10.00","base":"-5.00","tax":"-0.50"}]`. The first quarter does not change.
+  - B, ticket stamped 1 April, replacement on 10 May naming 31 March: first quarter `[]`, then the
+    10.00 line; second quarter the 10.00 line, then `[]`. **An ended quarter's figures change.**
+  - C, ticket 10 Feb, void recorded 10 May: first quarter the 10.00 line, then `[]`; second quarter
+    `[]` both times. **An ended quarter's figures change.**
+  - D, a late ticket issued 1 April for 31 March (#3398): first quarter `[]`, then the 10.00 line;
+    second quarter `[]` both times. **An ended quarter's figures change.**
+  - E, a 10 February ticket and a full corrective on 10 March: the first quarter is
+    `[{"rate":"10.00","base":"0.00","tax":"0.00"}]`. A rate line that nets to zero stays in the
+    result; the summing loop makes one line per rate it sees
+    (`packages/reporting/src/vat-summary.ts:71-82`). No existing test expects such a line (RAN
+    `grep -n 'base: "0.00"'` over `vat-return.test.ts`, `modelo-303.test.ts` and the four
+    `apps/server` tests that call `computeVatReturn`: no match).
+  So the backlog's "read, not run" sentence (`docs/backlog/fiscal.md:974-975`) holds for A and B;
+  C and D are two more cases. Four existing tests pin today's replacement, refund-of-replacement,
+  late-ticket and later-void behaviour (`packages/reporting/src/vat-return.test.ts:168-177`,
+  `:190-207`, `:210-224`, `:237-250`), and one server test ties the accountant workbook to the
+  return (`apps/server/src/accountant-export.test.ts:803-874`).
+- **Late tickets come from real paths since #3398.** A card payment whose answer the box learns
+  later dates its sale by when the card was taken (`apps/server/src/sale-day.ts:31-41`), and a
+  bill's invoice issued after its meal ended is dated by the meal's end, a bill the end of the
+  business day issues late no later than that day's end (`:44-66`); the meal's day goes in
+  `sales.supply_day` when it is earlier than the issue day (read, not run; the column's rule
+  `packages/db/src/schema/sales.ts:103-108`, `:152-155`). #3916 then counts a bill the end of the
+  business day issued on the trading day it opened, in the daily close only
+  (`packages/reporting/src/business-day.ts:232-257`); the VAT return does not read that clause.
+- **Payments on account (#3890) are ordinary invoices.** RAN a throwaway test (deleted after;
+  `apps/server/src/zz-throwaway-advance-vat.test.ts`, copied from `advance-final.test.ts`'s setup,
+  run from `apps/server` with `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run
+  src/zz-throwaway-advance-vat.test.ts`, 1 passed): a €30 payment on account on a €120 meal at 10%
+  is a sale with no `corrects_sale_id`, not a replacement, no `supply_day`, breakdown
+  `[{"rate":"10.00","base":"27.27","tax":"2.73"}]`; the table's invoice is another such sale,
+  breakdown `[{"rate":"10.00","base":"81.82","tax":"8.18"}]` (the meal less the advance); that
+  month's return gave `[{"rate":"10.00","base":"109.09","tax":"10.91"}]`, the whole meal once. The
+  table's invoice can carry a negative rate line when the advance (always 10%) covers more than the
+  meal's 10% dishes (`apps/server/src/advance-final.test.ts:470`, "leaves 10% negative"). Piece 1
+  takes a payment on account only on an open bill at the till
+  (`docs/superpowers/plans/2026-11-19-adviser-advances.md:229-242`); paying days ahead for a
+  booking is piece 4, not built (`:252-261`). So an advance and its table's invoice fall in
+  different periods only across the night a period ends; neither is a correction, and each counts
+  in its own period, today and under the rule below. A refund of a payment on account is an
+  ordinary corrective of its ticket.
+- **Voids have no product caller.** Core's `recordVoid` (`packages/core/src/record-void.ts:24`) is
+  called outside tests only by `apps/server/src/testing/order-venue.ts:240` (RAN `git grep -n
+  "recordVoid("` over `apps/` and `packages/`; the other hits are the fiscal backends' own
+  `recordVoid` and the payments package's unrelated one). The rule must still treat them correctly.
 - **Replacements come only from a ticket AEAT refused as dated in the future** (`1112`), put right
-  from the case dialog with the real day (`packages/fiscal-verifactu/src/record-remedy-replacement.ts:20-25`,
-  stored as `sales.supply_day`, `packages/db/src/schema/sales.ts:103-105`, `:149`). A replacement
-  carries the original's own total and VAT split (`packages/core/src/record-replacement.ts:41-46`)
-  and is refused once the original has any corrective (`:111-114`); later correctives go to the
-  replacement (`packages/core/src/correction-target.ts:12-18`). So a corrective chain is at most
+  from the case dialog with the real day (`packages/fiscal-verifactu/src/record-remedy-replacement.ts:20-25`).
+  A replacement carries the original's own total and VAT split
+  (`packages/core/src/record-replacement.ts:41-46`) and is refused once the original has any
+  corrective (`:112-114`); later correctives go to the replacement
+  (`packages/core/src/correction-target.ts:12-18`). So a corrective chain is at most
   corrective → replacement → original.
-- **Nothing records that a return was filed.** RAN `git grep -n -i "quarter.*filed\|filed_at\|period_closed\|vat_period\|return_filed\|closed_period\|period_lock"`
-  over `packages/db/src/schema`, `packages/reporting/src` and `apps/server/src`: no match. The VAT
-  file download writes no activity (`apps/server/src/report-api.ts:297-335`), and `activity_log` may
-  not drive a product decision anyway (CLAUDE.md §3).
+- **Nothing records that a return was filed.** RAN at `9faf8661eb` (19 November) `git grep -n -i
+  "quarter.*filed\|filed_at\|period_closed\|vat_period\|return_filed\|closed_period\|period_lock"`
+  over `packages/db/src/schema`, `packages/reporting/src` and `apps/server/src`: no match; not re-run
+  since. The VAT file download writes no activity (`apps/server/src/report-api.ts:290-326`).
 - **The purchases side** groups supplier invoices by `received_on`
   (`packages/reporting/src/input-vat.ts:47`), which a manager can edit later
   (`apps/server/src/purchasing-api.ts:114`, `:195`; `packages/purchasing/src/operations.ts:284-299`).
@@ -167,24 +230,40 @@ entries): about 70 lines of code and 170 of tests, about 6 files.
 - **Where it is shown.** **VAT return (modelo 303)** in the dashboard
   (`apps/dashboard/src/screens/vat-return-screen.ts`) downloads the file from
   `GET /management-api/reports/modelo-303` under permission `report.export`
-  (`apps/server/src/report-api.ts:83`, `:297-335`), held by managers by default
-  (`packages/identity/src/permissions.ts:25`). The screen offers quarters and months. No guide
-  section describes it (RAN `grep -rn -i "303\|vat return" apps/server/src/guide/en/*.md`: none).
+  (`apps/server/src/report-api.ts:76`, `:290-326`), held by managers by default
+  (`packages/identity/src/permissions.ts:25`). The screen offers quarters and months
+  (`packages/reporting/src/period.ts:22-28`). No guide section describes the screen; one guide
+  sentence names it (`apps/server/src/guide/en/table-service.md:614-615`, added by #3916) (RAN
+  `grep -rn -i "303\|vat return"` over `apps/server/src/guide/*/`).
 - **Free dishes carry a reason.** Every comp, discount and cancellation is an `adjustments` row with
   the reason's name and the staff note copied at the time, the action, the amounts (VAT included,
   stored in cents), the dish's stage and whether a cancel kept the charge
-  (`packages/db/src/schema/adjustments/adjustments.ts:53-83`). The rows are never changed, and a
-  cancel deletes the dish's line, so the row keeps a line id that may no longer exist (`:44-46`).
-  The Adjustments report's drill-down already returns these rows as decimals with reason, note,
-  stage and order (`listAdjustmentEntries`, `packages/adjustments/src/reports.ts:519-575`, entry
-  shape `:100-133`), paged up to 500 (`packages/adjustments/src/entry-pages.ts:3`), chosen by the
-  business day the bill was opened (`reports.ts:166-168`); it does not return the line id.
-  New venues start with the reasons Complaint, On the house, Staff meal and Discount
-  (`packages/adjustments/src/starter-content.ts:36-49`). The adjustments module is mandatory and
-  keeps its tables in core's set (`packages/composition/src/modules.ts:363-377`), and `apps/server`
-  already imports it.
-- **Wrong rates.** Products still carry VAT classes (`packages/db/src/schema/orders.ts:228-235`); no
-  dated rate history exists, and its design is not written (`docs/backlog/fiscal.md:873-874`).
+  (`packages/db/src/schema/adjustments/adjustments.ts:42-83`). The rows are never changed, and a
+  cancel can delete the dish's line, so the row keeps a line id that may no longer exist (`:44-46`).
+  A whole-bill discount has no line id (`:116-121`). The Adjustments report's drill-down returns
+  these rows as decimals with reason, note, stage and order (`listAdjustmentEntries`,
+  `packages/adjustments/src/reports.ts:513-575`, entry shape `:99-133`, rows read at `:316-356`),
+  paged up to 500 (`packages/adjustments/src/entry-pages.ts:3`), chosen by the business day the bill
+  was opened (`reports.ts:166-168`); it does not return the line id. Moving a dish to another bill
+  keeps its line's id and changes its bill (`apps/server/src/working-order.ts:4342`, read).
+  The adjustments module is mandatory and keeps its tables in core's set
+  (`packages/composition/src/modules.ts:363-377`), and `apps/server` already imports it.
+- **Departments.** A department is a row of `departments`
+  (`packages/db/src/schema/venue-service/service.ts:15-38`), in core's migration set
+  (`packages/db/drizzle/0000_baseline.sql:2421`). A bill records its zone's department
+  (`working_orders.department_id`, both null or both set with the zone,
+  `packages/db/src/schema/orders.ts:122`, `:174-175`); each line ordered from a menu records the
+  department it was offered in (`working_order_lines.offer_department_id`, `orders.ts:278`, set
+  from the bill's zone, `packages/venue-service/src/operations.ts:1411`), null for an item not from
+  a menu (`orders.ts:437`). A department's other settings are columns on its row, saved by
+  `PUT /management-api/venue-service/departments/:departmentId/settings`
+  (`packages/venue-service/src/routes.ts:782`, `updateDepartment`,
+  `packages/venue-service/src/operations.ts:214-245`) from the dashboard's department editor
+  (`packages/venue-service/src/dashboard/department-settings.ts`, its **Details** tab
+  `:1098-1146`).
+- **Wrong rates.** Products still carry VAT classes; an order line stores a class, not a rate
+  (`packages/db/src/schema/orders.ts:235-237`); no dated rate history exists, and its design is not
+  written (`docs/backlog/fiscal.md:883-904`).
 
 ## Design
 
@@ -194,53 +273,91 @@ an ordinary invoice's *own day* is `coalesce(its supply_day, its issue date)`.
 
 | Row | Movement | Made | Belongs to |
 | --- | --- | --- | --- |
-| Ordinary invoice (not an exchange, not a corrective) | + its VAT split | its issue date | its own day |
+| Ordinary invoice (not an exchange, not a corrective; payments on account included) | + its VAT split | its issue date | its own day |
 | Corrective that is not a replacement | + its (usually negative) split | its issue date | where its target's VAT belongs: a replacement target's `supply_day` when set, else the original's own day |
 | Replacement with a `supply_day` | − the split, and + the split | its issue date | the original's own day, and the `supply_day` |
 | Replacement without one | none | | |
 | Void of any row | the negation of that row's movements | the void's date (in the voided sale's offset, D7) | as for that row |
 | Exchange invoice (F3) | none (its tickets carry the VAT) | | |
 
-Using the original's *own day* (not its issue date) matters once #3398 lets an ordinary invoice
-carry a `supply_day`: a late ticket later replaced would otherwise be counted twice.
+Using the original's *own day* (not its issue date) for a replacement's "−" is what keeps a late
+ticket later replaced counted once.
 
 A period P's **VAT return** sums the movements that belong to P and were made on or before P's
 last day, then drops any rate line whose base and VAT are both zero (a line with base zero and VAT
 not zero stays). The drop is in `computeVatReturn` only; the daily close keeps its zero lines. It
 changes one thing today too: a sale and its full corrective in the same quarter now give no line,
-where today they give a 0.00 line (RAN above); no existing test expects such a line (RAN `grep -n
-'base: "0.00"'` over `vat-return.test.ts` and `modelo-303.test.ts`: none). P's **corrections** are
-the movements made in P that belong before P's first day. Every movement lands exactly once: in the
-return of the period it belongs to, when it was made no later than that period ends, otherwise on
-the corrections of the period it was made in. On the sales side, a period that has ended never
-changes, except for a record stamped with a wrong clock, which A1420 D8 leaves uncorrected.
+where today they give a 0.00 line (RAN, case E). P's **corrections** are the movements made in P
+that belong before P's first day. Every movement lands exactly once: in the return of the period it
+belongs to, when it was made no later than that period ends, otherwise on the corrections of the
+period it was made in. On the sales side, a period that has ended never changes, except for a
+record stamped with a wrong clock, which A1420 D8 leaves uncorrected.
 
-**The 18 November example, under the rule.** Ticket stamped 1 April, really 31 March, replacement
-in May: the second quarter's return holds +ticket (1 April) and −ticket (made May, belongs 1 April),
-so it stops counting it; the first quarter's return is unchanged; the second quarter's corrections
-show +ticket as an addition for the first quarter. Found in August instead: the third quarter's
-corrections show a reduction for the second and an addition for the first ("any correctives to the
-previous quarter should be reported in the correctives report").
+**The 18 November example, under the rule** (`adviser-meeting.md:194`). Ticket stamped 1 April,
+really 31 March, replacement in May: the second quarter's return holds +ticket (1 April) and
+−ticket (made May, belongs 1 April), so it stops counting it; the first quarter's return is
+unchanged; the second quarter's corrections show +ticket as an addition for the first quarter.
+Found in August instead: the third quarter's corrections show a reduction for the second and an
+addition for the first ("any correctives to the previous quarter should be reported in the
+correctives report").
 
 **What changes for monthly periods.** A May correction of an April sale is in neither month's
 return; it is on May's corrections. So a quarter no longer always equals the sum of its months
-(today's comment `packages/reporting/src/period.ts:88-97` says it does; it stays true of the date
-filter, and `vat-return.ts`'s header says the rule). A year period (`period.ts:22-28`; no route
-offers it) follows the same rule, its "belongs to" label being the year.
+(the comment at `packages/reporting/src/period.ts:87-95` says it does; it stays true of the date
+filter, and `vat-return.ts`'s header says the rule). A year period (`period.ts:13`; no route offers
+it) follows the same rule, its "belongs to" label being the year.
 
 **Reductions and additions** are split per rate line by the sign of its base, or of its VAT when
-the base is zero (D5).
+the base is zero (D5). A late table's invoice whose advance left its 10% line negative therefore
+lists a reduction at 10% and an addition at its other rate.
 
-**The workbook** (`corrections-<year>-<period>.xlsx`, in the venue's language like the accountant
-workbook): sheet **Summary** (made period, belongs to, rate, reduction or addition, base, VAT,
-sorted by belongs-to then rate, reductions first; one line "No corrections" when empty), sheet
-**Corrections** (made date, kind, invoice number, corrects invoice number and its date, belongs to,
-rate, base, VAT, reduction or addition), and in PR 2 sheet **Given free** (date, ticket number when
-one exists, item or "Whole bill", quantity, kind, menu price, amount taken off, reason, note). Kinds
-on main: Correction, Void, Date moved out, Date moved in. #3398 adds "Issued after its sale's
-period" (see Interplay). No staff or customer names.
+**The corrections workbook** (`corrections-<year>-<period>.xlsx`, in the venue's language like the
+accountant workbook): sheet **Summary** (made period, belongs to, rate, reduction or addition,
+base, VAT, sorted by belongs-to then rate, reductions first; one line "No corrections" when empty),
+sheet **Corrections** (made date, kind, invoice number, corrects invoice number and its date,
+belongs to, rate, base, VAT, reduction or addition), and in PR 2 sheet **Given free** (below).
+Kinds: Correction, Void, Date moved out, Date moved in, Issued after its sale's period (an ordinary
+invoice whose own day lies in an earlier period than its issue date). No staff or customer names.
 
-**Watcher decisions** (default first):
+**The Given free sheet** (PR 2). One row per comp or discount whose amount after it is zero
+(actions `comp`, `discount_amount`, `discount_percent`; D3), on a bill opened in the period (D10),
+except a dish comp or discount whose line no longer exists (D3: taken off the bill). Columns: date,
+ticket number (the invoice of the bill the dish is on now, or of the discounted bill; blank when
+none was issued), item or "Whole bill", quantity, kind (Comp, Discount to zero), department, menu
+price, amount taken off, estimated cost, reason, note. **Menu price** is the entry's
+`nominalValue` (its list value, so a dish discounted earlier still shows its menu price), **amount
+taken off** is its `reduction`. **Estimated cost** = menu price × (10000 − margin in basis
+points) ÷ 10000, exact decimals rounded half up to the cent, blank when the department has none
+(D14). The department is the dish's line's `offer_department_id`, else the bill's `department_id`
+(D11).
+
+**Where the margin lives.** A nullable column `departments.estimated_margin_bp` (basis points,
+`rate()` from `packages/db/src/schema/columns.ts:71`, CHECK between 0 and 10000), not a settings
+document. Why: a module's settings document must keep row ids out (`docs/developers/conventions-data.md:6838`),
+and a per-department value kept there would be a map keyed by department id; a department keeps its
+other settings on its own row (`conventions-data.md:5500`). A schema change rebuilds core's one
+starting migration (`pnpm --filter @waitron/server migration-baseline rebuild --set core`, as
+`packages/db/package.json:30` runs it), never a new migration (CLAUDE.md §3). A box already
+migrated refuses to start on a changed starting migration (`provisioning.database_ahead`, CLAUDE.md
+§3), so PR 2 resets the test venues and says so in its first line, as #3398, #3916 and #3890 did.
+The column travels with the department in a configuration copy; the copy's format number goes up by
+one, as #3783 did for a new `menus` column (`packages/provisioning/src/configuration-transfer.ts:146`,
+`:574`, read).
+
+**The margin field.** In the department editor's **Details** tab, after the trading name: a
+`wt-input` named `estimatedMargin`, label **Estimated margin (%)** / **Margen estimado (%)**, not
+required, `decimal-locale=${currentLocale()}` (design-system Forms: a percentage takes `2.80` or
+`2,80`, `docs/developers/design-system.md:2947-2962`), hint as the placeholder text ("For the
+estimated cost of free items in the corrections workbook"). Empty means none. A value outside 0 to
+100, or with more than two decimals, is marked beside the field with a localized message once Save
+is pressed, Save stays disabled until fixed, as the editor's other fields behave. The draft, the
+unsaved-changes guard and Save's quiet state follow the editor's existing `draftScopeFor` and
+`saveActionState` handling. The route takes `estimatedMargin` as a dot-decimal string or `null`
+and refuses anything else with the route's existing `management.request_invalid` and `field:
+"estimatedMargin"` (`routes.ts:797-807` does the same for `lateSendNeedsManager`).
+
+**Watcher decisions** (default first; D5–D10 cleared at these defaults on 19 November; D11, D13
+and D14 new):
 
 - **D5.** Reduction or addition by the sign of each rate line's base (VAT when the base is zero).
 - **D6.** Delivery: a button on the VAT return screen, same year and period as the file,
@@ -251,114 +368,163 @@ period" (see Interplay). No staff or customer names.
   (`packages/db/src/schema/sale-voids.ts:12-39`) and no product path voids today.
 - **D8.** A corrective of an exchange invoice (F3) belongs to the F3's own date.
 - **D9.** A new guide section "VAT return and corrections" `{#vat-return}` in `invoices.md`, English
-  and Spanish; the screen has none today.
+  and Spanish; the screen has none today. The sentence at `table-service.md:614-615` links to it.
 - **D10.** The free list reuses the Adjustments report's entries, so it is chosen the same way:
-  by the business day each bill was opened, over the period's first to last business day. Its
-  rows then match what a manager sees in the Adjustments report; a bill opened at 02:00 on
-  1 April in a venue whose day starts at 05:00 falls in March's business day, so in the first
-  quarter, while its ticket's date is in the second. Alternative: a query of its own by calendar
-  day, which duplicates the report's reading of the same rows.
+  by the business day each bill was opened, over the period's first to last business day. A bill
+  opened at 02:00 on 1 April in a venue whose day starts at 05:00 falls in March's business day,
+  so in the first quarter, while its ticket's date is in the second. Unchanged by D3 and D4.
+- **D11 (new).** A free row's department is the department the dish was ordered in
+  (`offer_department_id`), else, for a whole-bill discount or an item not from a menu, the bill's
+  department; none, no estimated cost. The two differ only for a dish moved between departments'
+  bills. Alternative: the bill's department for every row.
+- **D13 (new).** The **Download for accountant (XLSX)** workbook keeps listing what #3398 made it
+  list (each invoice in its sale day's range, each corrective by its own issue date). Its test
+  that each quarter's rows equal that quarter's VAT return
+  (`apps/server/src/accountant-export.test.ts:803-874`) cannot hold under the owner's 16 November
+  rule (their D12), so it is restated (Task 2): the first quarter's return is the March original
+  alone, the second's is empty, and over both quarters together the workbook's VAT equals the two returns plus the second
+  quarter's corrections. Alternative: list each corrective in its target's period, which keeps a
+  per-quarter identity but moves May's credit note for a February meal into the January–March
+  workbook.
+- **D14 (new; there is no plan D12, to keep it apart from the owner's D12 of 16 November).** The
+  estimated cost is worked out on the VAT-included menu price, one column, with the department's
+  name beside it and no VAT figure. Alternatives: on the price without VAT, which needs each free
+  dish's rate looked up from its class, dining and the day (about 40 more lines); or an extra
+  column showing the margin used.
 
 ## Interplay
 
-- **#3398 LATER-SALE-DATE** (`feat/later-sale-date` at `a20aed887b`, not on main). It lets an
-  ordinary sale carry `sales.supply_day` and edits `vat-return.ts:40` to count by it, through a new
-  `vatReturnDay` helper (read: `git diff main...feat/later-sale-date -- packages/reporting/src/`);
-  its D4 (unapproved) hands "invoices issued after their sale day's quarter was filed" to this item
-  (`docs/superpowers/plans/2026-11-15-later-sale-date.md:575-590`, in that worktree). The rule above
-  already reads an ordinary invoice's own day as `coalesce(supply_day, issue date)`; on main the
-  column is always null there (`sales_supply_day_ck`, `packages/db/src/schema/sales.ts:149`), so
-  the coalesce changes nothing until #3398 lands. The kind "Issued after its sale's period" cannot
-  be produced or tested on main for the same reason, so it is not built here: on main such a
-  movement cannot exist. Whichever branch lands second:
-  - #3398's test "counts a sale issued on a later day in its sale day's period" (its
-    `vat-return.test.ts`, F2 issued 1 April with `supply_day` 31 March, expecting it in the first
-    quarter) changes: the first quarter's return no longer holds it, because it was made after the
-    first quarter ended; the second quarter's return does not either; the second quarter's
-    corrections list it as an addition for the first quarter, under the new kind.
-  - Add the kind label (English and Spanish) and that test, plus "a late ticket later replaced is
-    counted once".
-  - **If this lands first:** #3398's rebase drops its `vat-return.ts` and `vatReturnDay` change to
-    the return (keeping its accountant-workbook sale-date column and the helper that feeds it) and
-    does the two points above. Recommend the runner add this to #3398's queue entry. **If #3398
-    lands first:** Task 1 here removes main's `vatReturnDay` call from `computeVatReturn`, and
-    Task 2 does the two points above.
-- **Other lanes.** RAN `git diff --stat main...<branch>` over `packages/reporting`, `sales.ts`,
-  `sale-voids.ts`, the adjustments schema, `accountant-export.ts`, `report-api.ts` and
-  `vat-return-screen.ts` for every branch in `git worktree list` (advances, close-of-day ticket,
-  goodwill corrective, no-none, one-way-to-pay and its till half, meal-end ticket, receipt owed,
-  A1308 OS8 pre-plan): only `feat/later-sale-date` touches them. The goodwill corrective and
-  advances branches create invoices through the existing paths, so their correctives would appear on
-  this report with no change here (inferred from their names and the paths above, not read).
-- **A1308 table hold.** No new table or column, so the hold does not apply. D1 (b) would add a table
-  and wait for it.
+- **#3398 LATER-SALE-DATE landed** (`cc73fe7dc3`). It lets an ordinary sale carry
+  `sales.supply_day` (`packages/db/src/schema/sales.ts:152-155`), counts it by that day through
+  `vatReturnDay` (`vat-return.ts:10-25`, `:54-59`), lists the accountant workbook by the same day
+  (`apps/server/src/accountant-export.ts:209-222`, with its sale-date column at `:258-260`), and
+  pins it with "counts a sale issued on a later day in its sale day's period"
+  (`vat-return.test.ts:210-224`) and `accountant-export.test.ts:803-874`. Its D4 handed "invoices
+  issued after their sale day's quarter was filed" to this item as a go-live condition
+  (`docs/superpowers/plans/2026-11-15-later-sale-date.md:601-611`). So, in this plan:
+  - Task 2 removes `vatReturnDay` from `computeVatReturn` and renames it `saleVatDay` ("the day a
+    sale's VAT belongs to"), which the movements and the accountant workbook keep using; its two
+    callers and the barrel export move with it.
+  - #3398's test changes: the first quarter's return no longer holds the late ticket (made after
+    the first quarter ended), the second's does not either, and the second quarter's corrections
+    list it as an addition for the first, kind "Issued after its sale's period" (Tasks 2 and 3).
+  - The kind's label (English and Spanish) and the test "a late ticket later replaced is counted
+    once" are built here (Tasks 1, 3 and 5).
+  - `accountant-export.ts:209`'s comment ("The day `computeVatReturn` counts the sale in") becomes
+    false and is reworded; its test is restated (D13).
+- **#3916** (`8b8d85fb6f`) changed `issuedSalesClause` and `reversedSalesClause`
+  (`business-day.ts:232-257`), which the daily VAT summary, record counts, category sales and top
+  sellers read (RAN `git grep -n "issuedSalesClause\|reversedSalesClause"` over
+  `packages/reporting/src`), not the VAT return. Nothing here changes them. Task 2 deletes `activeSalesClause` (`:220-230`), whose
+  only caller is `vat-return.ts`; `notSubstituteClause` and `notReplacementClause` (`:206-218`)
+  stay, as #3916's clauses use them.
+- **#3890 ADVISER-ADVANCES piece 1** (`ff01506dc8`): no change needed (RAN, "What happens today").
+  Task 3 adds the late-table-invoice-with-a-negative-line case.
+- **Open #3961** (`feat/payments-on-account-reporting`) changes category sales, find-a-bill and two
+  shared dashboard files this plan also edits, `apps/dashboard/src/api/client.ts` and
+  `apps/dashboard/src/i18n/strings.ts` (RAN `gh pr view 3961 --json files`); different sections, so
+  whichever lands second rebases. `feat/advance-refund-after-final` touches only category sales.
+  `feat/h-a1308-os12-common-refunds` changes two lines of `packages/adjustments/src/reports.ts`,
+  which Task 9 edits (RAN `git diff --stat main...<branch>` over this plan's files for every branch
+  in `git worktree list`; no other branch touches them).
+- **A1308 table hold.** Lifted on 7 November (`~/waitron-campaign-shared/a1308-hold.md:3`), so it
+  does not apply to PR 2's column. Three backlog entries still say they wait for it
+  (`docs/backlog.md:1264`, `:1604`, `:1814`); they belong to other items and are left to the
+  watcher.
 - **Guards this touches.** `scripts/corrective-sums.test.ts` flags any SQL equality on
-  `corrects_sale_id` (`:21-22`) and allows `vat-return.ts`'s join by name (`:69-74`); the movement
-  query's joins replace that entry with entries of their own, each with its reason. It reads text.
+  `corrects_sale_id` (`:21-22`) and allows `vat-return.ts`'s join (`:68-74`) and the accountant
+  workbook's (`:75-81`) by fragment; the movement query's joins replace the `vat-return.ts` entry
+  with entries of their own, each with its reason. It reads text. For PR 2's column, Task 7 runs the
+  schema guards CLAUDE.md §3 names for a starting-migration rebuild
+  (`scripts/schema-constraints.test.ts`, `scripts/starting-migrations.test.ts` and the others
+  listed there), each weaker than its name as §3 says.
 
 ## Tasks
 
 Every task: test first, watch it fail, then the code. Focused runs use
 `env -u AI_AGENT -u CLAUDECODE pnpm --filter <pkg> exec vitest run <files>` and read the `Tests`
-count (`pnpm test <file> -t` drops `-t`). Every task ends with the package typecheck, `pnpm exec
-prettier --check` on the changed files, and the fiscal gate, unedited:
+count (`pnpm test <file> -t` drops `-t`). Browser suites (dashboard, venue-service's dashboard
+files) check `memory_pressure | grep free` first. Every task ends with the package typecheck,
+`pnpm exec prettier --check` on the changed files, and the fiscal gate, unedited:
 
 ```
 env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/fiscal-verifactu exec vitest run src/sale-amount.huella.test.ts src/correction-amount.huella.test.ts src/money-conversion.huella.test.ts src/inmutabilidad.test.ts
-git diff --exit-code "$(git merge-base main HEAD)" -- packages/fiscal-verifactu packages/core/src packages/db/src/schema packages/db/triggers
+git diff --exit-code "$(git merge-base main HEAD)" -- packages/fiscal-verifactu packages/core/src packages/db/src/schema packages/db/triggers ':(exclude)packages/db/src/schema/venue-service/service.ts'
 ```
 
-(RAN the first line at `9faf8661eb`: 4 files, 15 tests passed.) The second line compares with the
-point the branch left main, so it does not fail when main moves on. `git commit -s` per task.
+(RAN the first line at `557b2e2e3c`: 4 files, 15 tests passed. RAN the second at `4cedb44322`: exit
+0; with a line appended to `service.ts` it still exited 0, and the same diff without the exclusion
+exited 1, so the exclusion lets only Task 7's department column through.) The second line compares
+with the point the branch left main, so it does not fail when main moves on. `git commit -s` per
+task. An implementer that passes about 150 tool calls with the task unfinished stops at a passing
+or cleanly failing point, commits, and hands over.
 
 ### PR 1: the period rule and the corrections list
 
 #### Task 1. VAT movements (`@waitron/reporting`)
 
-**Files:** new `packages/reporting/src/vat-movements.ts` and `vat-movements.test.ts`;
-`scripts/corrective-sums.test.ts` (allowlist entries for the new joins).
+**Files:** new `packages/reporting/src/vat-movements.ts` and `vat-movements.test.ts`; `index.ts`
+(export, for Task 2's server test); `scripts/corrective-sums.test.ts` (allowlist entries for the new
+joins).
 
 - `vatMovements(tx, { year, period })` returns one row per stored rate line of each movement in the
   table above that belongs to P or was made in P, with: rate, base, tax (signed), made day, belongs
-  day, kind, the row's sale id, and the corrected sale's id. One SQL statement (a `with` of `union
-  all` branches plus the voids' negation, `json_each` over `vat_breakdown`), dates as in
-  `vat-return.ts:35`; awaited, no `Promise.all`.
+  day, kind (`correction`, `void`, `date_moved_out`, `date_moved_in`, `issued_late`, or `invoice`
+  for an ordinary invoice made in its own period), the row's sale id, and the corrected sale's id.
+  One SQL statement (a `with` of `union all` branches plus the voids' negation, `json_each` over
+  `vat_breakdown`), the issue date as `vat-return.ts:23` builds it; awaited, no `Promise.all`.
 - **Failing tests first** (seeded with `packages/reporting/test/fixtures.ts`): each table row's
-  movements; a refund of a replacement belongs to the replacement's `supply_day`; a void of a
-  corrective negates the corrective; an F3 makes none; a movement outside P in both dates is not
-  returned.
-- Commands: `vitest run src/vat-movements.test.ts`, then `pnpm exec vitest run
+  movements; a late ticket (`supplyDay` before its issue date) gives `issued_late` when the two
+  dates are in different periods and `invoice` when not; a refund of a replacement belongs to the
+  replacement's `supply_day`; a late ticket later replaced gives +ticket (belongs to its
+  `supply_day`), −ticket (belongs to that same day) and +ticket (belongs to the replacement's day);
+  a void of a corrective negates the corrective; an F3 makes none; a payment on account and its
+  table's invoice (seeded with `advanceRole` lines) each make one ordinary movement; a movement
+  outside P in both dates is not returned.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/reporting exec vitest run
+  src/vat-movements.test.ts`, then `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run
   scripts/corrective-sums.test.ts` at the root.
 
-#### Task 2. The VAT return under the rule (`@waitron/reporting`)
+#### Task 2. The VAT return under the rule (`@waitron/reporting`, plus its server callers' tests)
 
 **Files:** `packages/reporting/src/vat-return.ts`, `vat-return.test.ts`, `vat-summary.ts` (factor
-the per-rate summing loop of `aggregateVatByRate`, `:71-99`, into an exported `sumByRate(rows)` it
-keeps using, unchanged), `business-day.ts` (delete `activeSalesClause`, `:220-230`, once unused),
-`period.ts` (comment), `scripts/corrective-sums.test.ts` (drop the old `vat-return.ts` entry).
+the per-rate summing of `aggregateVatByRate`, `:71-100`, into an exported `sumByRate(rows)` it keeps
+using, unchanged), `business-day.ts` (delete `activeSalesClause`, `:220-230`), `index.ts` (export
+rename), `period.ts` (comment), `examples/modelo-303.md` (`:29-31` states today's rule);
+`apps/server/src/accountant-export.ts` (rename, comment at `:209`), `accountant-export.test.ts`;
+`scripts/corrective-sums.test.ts` (drop the `vat-return.ts` entry).
 
 - `computeVatReturn` sums the movements that belong to P and were made by P's last day through
   `sumByRate`, then drops rate lines with base and VAT both zero. Its result shape is unchanged.
-- **Failing tests first** in `vat-return.test.ts`: A, B and C from "What happens today" by quarter,
-  each ended quarter unchanged by the later step; a sale and its full corrective in one quarter
-  give `[]`; a line with base 0.00 and VAT not zero is kept; "every movement lands once": for a year
-  seeded with every kind, the four quarterly returns plus, for each quarter, the movements made in
-  it that belong to an earlier quarter (from `vatMovements`) equal the net of every movement of the
-  year.
+  `vatReturnDay` becomes `saleVatDay`, same body.
+- **Failing tests first** in `vat-return.test.ts`: A, B, C and D from "What happens today" by
+  quarter, each ended quarter unchanged by the later step; E gives `[]`; a line with base 0.00 and
+  VAT not zero is kept; "every movement lands once": for a year seeded with every kind (late
+  tickets and a payment on account included), the four quarterly returns plus, for each quarter,
+  the movements made in it that belong to an earlier quarter (from `vatMovements`) equal the net of
+  every movement of the year.
 - **Deliberately changed checks** (name them in the PR): `vat-return.test.ts:168-177` (February no
-  longer holds the replacement: it was made in March; March's corrections do), `:190-207`
-  (February holds nothing, March nothing: the refund and the move are March corrections of
-  February), `:221-234` (August keeps the sale; the September void is a September correction; the
-  third quarter gives `[]`). `:210` ("excludes a voided sale", same month) keeps expecting `[]`
-  thanks to the zero-line drop; every other case passes unedited, including the
-  quarter-equals-months case at `:472`, whose data has no correction.
-- Doc: `vat-return.ts`'s header states the rule in a few lines; `period.ts:88-97` narrowed to "the
-  date filter", not the return.
-- Commands: `vitest run src/vat-movements.test.ts src/vat-return.test.ts src/modelo-303.test.ts
-  src/dr303.test.ts src/vat-summary.test.ts src/vat-summary-period.test.ts src/daily-close.test.ts`;
-  then, because PR CI tests only the changed packages, the server's callers locally:
-  `pnpm --filter @waitron/server exec vitest run src/report-api.test.ts
-  src/reporting-write-workflows.test.ts src/return-records.real.test.ts`.
+  longer holds the replacement, made in March: February `[]`, March `[]`; March's corrections hold
+  it), `:190-207` (February `[]`, March `[]`: the refund and the move are March corrections of
+  February), `:210-224` (#3398's case: the first quarter `[]`, the second `[]`), `:237-250` (August
+  keeps the sale, 100.00 at 21%; September `[]`; the third quarter `[]`; its name and its comment
+  about Q25 change with it), and `apps/server/src/accountant-export.test.ts:803-874` (D13: its id
+  lists stay; the per-quarter "equals the return" check becomes: the first quarter's return tax is
+  `3.30` (the March original), the second's is `0.00` with no lines, and the two quarters' workbook
+  VAT together equals the two returns plus the second quarter's corrections, read from
+  `vatMovements`, `6.30`). `vat-return.test.ts:226-235` ("excludes a voided sale", same month) keeps expecting `[]` thanks to the zero-line drop; every
+  other case passes unedited, including the quarter-equals-months case at `vat-return.test.ts:488-582`, whose data
+  has no correction.
+- Doc: `vat-return.ts`'s header states the rule in a few lines; `period.ts:87-95` narrowed to "the
+  date filter", not the return; the example's `:29-31` sentence rewritten from the code.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/reporting exec vitest run
+  src/vat-movements.test.ts src/vat-return.test.ts src/modelo-303.test.ts src/dr303.test.ts
+  src/vat-summary.test.ts src/vat-summary-period.test.ts src/daily-close.test.ts
+  src/business-day.test.ts`; then, because PR CI tests only the changed packages, the server's
+  callers locally: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
+  src/report-api.test.ts src/reporting-write-workflows.test.ts src/return-records.real.test.ts
+  src/accountant-export.test.ts src/report-api.accountant-export.test.ts`; then the root guard as
+  in Task 1.
 
 #### Task 3. The corrections list (`@waitron/reporting`)
 
@@ -372,48 +538,54 @@ keeps using, unchanged), `business-day.ts` (delete `activeSalesClause`, `:220-23
   or `"2026"` for a year), rate, base, tax and `direction: "reduction" | "addition"` (D5).
   `summary`: sums by (belongs-to, rate, direction), sorted as in Design, base and VAT summed at
   money scale.
-- **Failing tests first:** the August case (third-quarter corrections: −second, +first); a corrective
-  with one line up and one down splits into an addition and a reduction; a monthly P lists a
-  cross-month correction that a quarterly P of the same quarter does not; a year P lists a
-  correction of the previous year; empty period → empty.
-- Commands: `vitest run src/vat-corrections.test.ts`.
+- **Failing tests first:** the August case (third-quarter corrections: −second, +first); #3398's
+  late ticket (second-quarter corrections: +first, kind `issued_late`); a late table's invoice whose
+  10% line is negative and 21% line positive lists a 10% reduction and a 21% addition for the
+  earlier period; a corrective with one line up and one down splits into an addition and a
+  reduction; a monthly P lists a cross-month correction that a quarterly P of the same quarter does
+  not; a year P lists a correction of the previous year; empty period → empty.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/reporting exec vitest run
+  src/vat-corrections.test.ts src/vat-movements.test.ts`.
 
 #### Task 4. One workbook writer (`apps/server`, a move)
 
 **Files:** new `apps/server/src/xlsx-workbook.ts`; `apps/server/src/accountant-export.ts`.
 
-- Move `worksheet`, the styles and the zip step (`accountant-export.ts:51-82`, `:165-192`) into
-  `renderWorkbook(sheets: { name: string; rows: Cell[][] }[])`; the accountant workbook calls it.
+- Move `Cell`, `numeric`, `xmlText`, `worksheet`, the styles and the zip step
+  (`accountant-export.ts:53-84`, `:169-198`) into `renderWorkbook(sheets: { name: string; rows:
+  Cell[][] }[])`; the accountant workbook calls it.
 - **Gate:** `accountant-export.test.ts` and `report-api.accountant-export.test.ts` pass unedited
-  (they read the produced workbook). Add `xlsx-workbook.test.ts` only for what they do not cover (a
-  sheet name escaped; a 250-row yield is already covered at `accountant-export.test.ts:146`).
-- Commands: `pnpm --filter @waitron/server exec vitest run src/accountant-export.test.ts
-  src/report-api.accountant-export.test.ts src/xlsx-workbook.test.ts`.
+  beyond Task 2's change (they read the produced workbook). Add `xlsx-workbook.test.ts` only for
+  what they do not cover (a sheet name escaped; the yield to the event loop is already covered at
+  `accountant-export.test.ts:154`).
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
+  src/accountant-export.test.ts src/report-api.accountant-export.test.ts src/xlsx-workbook.test.ts`.
 
 #### Task 5. The corrections workbook and its route (`apps/server`)
 
 **Files:** new `apps/server/src/corrections-report.ts`, `corrections-report.test.ts`,
-`apps/server/src/i18n/corrections-report.ts` (English and Spanish words);
+`apps/server/src/i18n/corrections-report.ts` (English and Spanish words, the five kinds included);
 `apps/server/src/report-api.ts`, new `report-api.corrections.test.ts`.
 
 - `GET /management-api/reports/corrections?year=&period=`: `requireYear` and
-  `requireLiquidationPeriod` as the VAT file route does (`report-api.ts:300-301`), gated by
+  `requireLiquidationPeriod` as the VAT file route does (`report-api.ts:293-294`), gated by
   `report.export`, one transaction, `Cache-Control: no-store`, attachment
   `corrections-<year>-<token>.xlsx`, venue language (`toLanguage(deps.venueLocale)`).
 - **Failing tests first:** a manager gets a workbook whose Summary and Corrections sheets hold the
-  August example's rows with formatted invoice numbers, in English and in Spanish; a person without
-  `report.export` gets 403; a bad period gets 400 naming `period`; no session 401.
-- Commands: `pnpm --filter @waitron/server exec vitest run src/corrections-report.test.ts
-  src/report-api.corrections.test.ts src/accountant-export.test.ts`.
+  August example's rows with formatted invoice numbers, in English and in Spanish; a late ticket's
+  row reads "Issued after its sale's period" / its Spanish label; a person without `report.export`
+  gets 403; a bad period gets 400 naming `period`; no session 401.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
+  src/corrections-report.test.ts src/report-api.corrections.test.ts src/accountant-export.test.ts`.
 
 #### Task 6. The button, the guide and the backlog
 
 **Files:** `apps/dashboard/src/api/client.ts` (`downloadVatCorrections`, beside
-`downloadVatReturnFile`, `:5030-5040`), `apps/dashboard/src/screens/vat-return-screen.ts`,
+`downloadVatReturnFile`, `:5076-5086`), `apps/dashboard/src/screens/vat-return-screen.ts`,
 `vat-return-screen.test.ts`, `vat-return-screen.a11y.test.ts`, `apps/dashboard/src/i18n/strings.ts`
 (English and Spanish: the button, the intro's warning); `apps/server/src/guide/en/invoices.md` and
-`es/invoices.md`; `docs/backlog.md:282-285`, `:367-371`, `docs/backlog/fiscal.md:170-176`,
-`:915-948`.
+`es/invoices.md`, `en/table-service.md:614-615` and its Spanish twin (the link); `docs/backlog.md:278-281`,
+`:363-367`, `docs/backlog/fiscal.md:200-208`, `:944-978`.
 
 - A secondary button **Download corrections (XLSX)** in the same `wt-form-actions`
   (`vat-return-screen.ts:196-205`), with its own busy state. It needs year and period only, so it
@@ -424,8 +596,8 @@ keeps using, unchanged), `business-day.ts` (delete `activeSalesClause`, `:220-23
   `period` marks that field, as the file's does; any other corrections refusal goes in `refusal`
   and shows when no field is marked. Pressing the corrections button does not clear the
   declaration type's "required" mark left by an earlier file press.
-- The intro gains the warning in plain words: corrections made after a period ends are not in its
-  file; download the corrections too before filing.
+- The intro gains the warning in plain words: corrections and late tickets made after a period ends
+  are not in its file; download the corrections too before filing.
 - **Failing tests first:** pressing it with no declaration type chosen asks the client for the
   chosen year and period and saves `corrections-2026-1T.xlsx`; a server refusal shows as the bottom
   message and the next press of either button clears it; a refusal naming `period` marks the period
@@ -433,62 +605,138 @@ keeps using, unchanged), `business-day.ts` (delete `activeSalesClause`, `:220-23
 - Guide (D9): a short section on what the file holds, what the corrections workbook holds, the
   warning above and that an ended period's sales side never changes, written from the code; same
   `{#vat-return}` id in both languages.
-- Backlog: delete the corrections part of the fiscal.md entry and its "read, not run" sentence,
-  keep "a VAT rate set too low or too high" as the remaining part (waits on VAT rates per product)
-  and the free list until PR 2; update the void decision's "keeps its old behaviour" text at
-  `docs/backlog.md:283` and `fiscal.md:174-176`.
-- Commands: `pnpm --filter @waitron/dashboard exec vitest run src/screens/vat-return-screen.test.ts
-  src/screens/vat-return-screen.a11y.test.ts` (browser: check `memory_pressure | grep free` first),
-  then `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and `pnpm exec
-  vitest run scripts/guide-links.test.ts`.
+- Backlog: delete the corrections part of the fiscal.md entry and its "read, not run" sentence
+  (`:974-975`), keep "a VAT rate set too low or too high" (waits on VAT rates per product) and the
+  free list until PR 2; rewrite the void decision's "keeps its old behaviour" text at
+  `docs/backlog.md:279` and `fiscal.md:202-205`.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/dashboard exec vitest run
+  src/screens/vat-return-screen.test.ts src/screens/vat-return-screen.a11y.test.ts`, then
+  `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
+  src/guide-content.test.ts` and `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run
+  scripts/guide-links.test.ts`.
 
-### PR 2: the free list
+### PR 2: the margin setting and the free list
 
-#### Task 7. Line ids on the Adjustments report's entries (`@waitron/adjustments`)
+The PR's first line starts "Reset test venues:" (Task 7 rebuilds core's starting migration).
 
-**Files:** `packages/adjustments/src/reports.ts` (`AdjustmentEntry` `:100-133`, `readEntryRows`
-`:121-150`), its test.
+#### Task 7. A department's estimated margin is stored, saved and copied (`@waitron/db`, `@waitron/venue-service`, `@waitron/provisioning`)
 
-- Add `lineId: string | null` to each entry. Nothing else changes.
+**Files:** `packages/db/src/schema/venue-service/service.ts` (column `estimatedMarginBp:
+rate("estimated_margin_bp")`, CHECK `departments_estimated_margin_ck`: null or 0–10000), the
+rebuilt `packages/db/drizzle/0000_baseline.sql`, `meta/0000_snapshot.json`, `meta/_journal.json`,
+`scripts/migration-baseline-epoch.json` (generated); `packages/venue-service/src/operations.ts`
+(`updateDepartment` and `listDepartments`), `routes.ts` (the settings route, `:782-860`),
+`packages/venue-service/src/dashboard/client.ts` (the type and the request body);
+`packages/provisioning/src/configuration-transfer.ts` (format number up by one) and the tests that
+pin it (`packages/provisioning/test/configuration-bundle.ts`,
+`packages/provisioning/src/configuration-transfer.privacy-contact.test.ts`,
+`apps/server/src/configuration-transfer.test.ts`, `apps/server/src/configuration-import.test.ts`,
+as #3783 touched them); `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (its
+departments column list, `:391-393`, if the rebuild moves the column); tests in
+`packages/venue-service/src/routes.test.ts` and `packages/venue-service/src/schema/service.test.ts`
+(its expected checks for `departments`, `:33-46`, gain the new one).
+
+- The route reads `estimatedMargin`: absent leaves it, `null` clears it, a dot-decimal string from
+  `0` to `100` with at most two decimals is stored as basis points; anything else is
+  `management.request_invalid` with `field: "estimatedMargin"`. The department read returns it as
+  the same string, or `null`.
+- **Failing tests first:** the CHECK refuses −1 and 10001 and takes 0, 3000 and 10000 (asserting the
+  constraint by name); the route saves `"30"` as 3000 and reads back `"30.00"`, clears with `null`,
+  leaves it on a save without the key, and refuses `"101"`, `"-1"`, `"30.001"`, `"abc"` and `30`
+  (a number) naming the field; a configuration copy carries `estimated_margin_bp` on the exported
+  departments row and to the importing venue (copy `configuration-transfer.test.ts:3778-3818`, the
+  late-send case).
+- Then `pnpm --filter @waitron/server migration-baseline rebuild --set core`, and RUN, as CLAUDE.md
+  §3 asks: `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run scripts/schema-constraints.test.ts
+  scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
+  scripts/starting-migrations.test.ts` and `env -u AI_AGENT -u CLAUDECODE pnpm --filter
+  @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/venue-service exec vitest run
+  src/routes.test.ts src/operations.test.ts src/schema/service.test.ts`, `env -u AI_AGENT -u
+  CLAUDECODE pnpm --filter @waitron/provisioning exec vitest run`, `env -u AI_AGENT -u CLAUDECODE
+  pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts
+  src/configuration-import.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts`.
+
+#### Task 8. The margin field in the department editor (`@waitron/venue-service` dashboard)
+
+**Files:** `packages/venue-service/src/dashboard/department-settings.ts` (Details tab,
+`:1098-1146`; tab map `:86-102`, field list `:103-119`; draft comparison `:140-152`),
+`packages/venue-service/src/dashboard/strings.ts` (English and Spanish: label, hint, the out-of-range
+message), `department-settings.test.ts`, `department-settings.unsaved.test.ts`,
+`department-settings.a11y.test.ts`.
+
+- As Design, "The margin field".
+- **Failing tests first:** the field shows a saved `"30.50"` in the screen's decimal mark (`30,50` in
+  Spanish); typing `30,5` saves `"30.5"`; clearing it saves `null`; `101` is marked beside the field
+  after Save is pressed, with the one bottom message, and Save stays disabled until it is fixed;
+  an unchanged draft leaves Save quiet; leaving with a changed margin asks to discard
+  (`*.unsaved.test.ts`); the a11y test covers the field empty, filled and refused in both themes.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/venue-service exec vitest run
+  src/dashboard/department-settings.test.ts src/dashboard/department-settings.unsaved.test.ts
+  src/dashboard/department-settings.a11y.test.ts` (browser: check `memory_pressure | grep free`
+  first).
+
+#### Task 9. Line ids on the Adjustments report's entries (`@waitron/adjustments`)
+
+**Files:** `packages/adjustments/src/reports.ts` (`AdjustmentEntry` `:99-133`, `readEntryRows`
+`:316-356`), its test.
+
+- Add `lineId: string | null` to each entry. Nothing else changes. `feat/h-a1308-os12-common-refunds`
+  changes two lines of this file; whichever lands second rebases.
 - **Failing test first:** an entry for a comp carries its line's id, a bill discount `null`. Update
   any `toEqual` on whole entries in the module's tests and route tests to include the field (name
   them in the PR).
-- Commands: `pnpm --filter @waitron/adjustments exec vitest run src/reports.test.ts` and the
-  module's route tests found by `git grep -ln listAdjustmentEntries packages/adjustments apps`.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/adjustments exec vitest run
+  src/reports.test.ts` and the module's route tests found by `git grep -ln listAdjustmentEntries
+  packages/adjustments apps`.
 
-#### Task 8. The Given free sheet (`apps/server`)
+#### Task 10. The Given free sheet (`apps/server`)
 
 **Files:** new `apps/server/src/free-items.ts`, `free-items.test.ts`;
 `apps/server/src/corrections-report.ts`, its test and words; the guide section (both languages);
-the backlog entry (delete the free-meals part; the entry then holds only the wrong-rate part).
+the backlog entry (`docs/backlog/fiscal.md:944-978`: delete the free-meals part; the entry then
+holds only the wrong-rate part; `docs/backlog/fiscal.md:28`, A445's pointer, still holds).
 
-- First establish, with a test through `apps/server/src/testing/adjustment-venue.ts`, whether a
-  bill comped in full issues a ticket; record the answer in the PR. The list does not depend on it.
+- First establish, with a test through `apps/server/src/testing/adjustment-venue.ts`, which row an
+  adjustment's `line_id` names when the comp covers part of a line (the row split off or the one it
+  came from, see its `splits`), and that a settled bill's comped line is still found after
+  settlement; record both in the PR. Then establish that a comped dish taken off the bill after
+  serving leaves no `working_order_lines` row (the schema's comment says a cancel deletes the line,
+  `adjustments.ts:44-46`); if a row stays, stop and report, since D3's reading then needs the
+  cancel's own adjustment row instead.
 - `listFreeItems(tx, clock, { year, period })` pages through `listAdjustmentEntries` (500 a page)
   over the period's first to last business day (`resolveVenueClock`, as `report-api.ts` does), and
-  keeps D3's rows: a comp whose line still exists in `working_order_lines` or that a later cancel at
-  stage `fired` or `served` names; a discount to zero (`discount_amount` with after 0, or
-  `discount_percent` at 10000); a cancel at stage `served` with the charge not kept and a reduction
-  above zero (a dish comped then cancelled is listed once, as the comp). One query reads which line
-  ids still exist, one reads each order's ticket (series code, number). Amounts are the entries'
-  decimals: **menu price** is `nominalValue` (the list value, so a dish discounted earlier still
-  shows its menu price) and **amount taken off** is `reduction`. Staff names in the entries are
-  not used.
-- **Failing tests first:** listed: a comp on a dish that reached the bill, a 100% discount, an
-  amount discount to zero, a served dish cancelled without the charge; listed once: a dish comped
-  then cancelled after serving; not listed: a comp whose dish was cancelled before firing, a
-  partial discount, a cancel before firing, a served cancel that kept the charge, an adjustment on
-  a bill opened outside the period. The workbook's third sheet holds these rows with the formatted
-  ticket number, in both languages.
-- Commands: `pnpm --filter @waitron/server exec vitest run src/free-items.test.ts
-  src/corrections-report.test.ts src/report-api.corrections.test.ts`, then the two guide guards as
-  in Task 6.
+  keeps the entries whose action is not `cancel` and whose `afterAmount` is zero, dropping a dish
+  entry when neither its `lineId` nor any row its `splits` names still exists in
+  `working_order_lines` (D3). One query reads, for the kept line ids, whether each exists, its
+  current bill, its `offer_department_id`; one reads each bill's department and its invoice
+  (series code, number; `sales_working_order_id_key` makes it one); one reads the departments'
+  names and margins. Amounts are the entries' decimals; the estimated cost as Design. Staff names in
+  the entries are not used.
+- **Failing tests first:** listed: a comp on a dish that reached the bill; a 100% discount; an
+  amount discount to zero on a dish; a whole-bill discount to zero ("Whole bill", the bill's
+  department); a comped dish cancelled with its charge kept; a comped dish moved to another bill
+  (the new bill's ticket number). Not listed: a comped dish later taken off the bill, before firing
+  and after serving; a partial discount; any cancel; an adjustment on a bill opened outside the
+  period. Estimated cost: €11.00 at a 30% margin gives €7.70; €0.05 at 33.33% gives €0.03 (half
+  up); a department with no margin, and a bill with no department, leave it blank; a dish ordered
+  in the Bar and moved to a Restaurant bill takes the Bar's margin (D11). The workbook's third
+  sheet holds these rows with the formatted ticket number, in both languages.
+- Guide: the `{#vat-return}` section gains the free list and where to set the margin (Departments
+  and zones › the department › Details › Estimated margin), written from the code, both languages.
+- Commands: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run
+  src/free-items.test.ts src/corrections-report.test.ts src/report-api.corrections.test.ts`, then
+  the two guide guards as in Task 6.
 
 ## Left open
 
 - The wrong-rate section, after "VAT rates per product" lands.
-- Whether the adviser agrees with D12 and with D1's reading of "filed"; both are reversible (D2).
+- Whether the adviser agrees with the owner's 16 November D12 and with D1's reading of "filed";
+  both are reversible (D2).
 - The purchases side of the return still follows edits to a supplier invoice's received date; the
   owner's decisions speak only of sales corrections, so this plan leaves it as it is.
 - A cross-check that a quarter's file plus later quarters' corrections equal what the chain filed is
   not built; Task 2's "every movement lands once" test covers the arithmetic only.
+- D3's limit: a comp later cut to a smaller quantity shows the quantity comped.
+- Three backlog entries still wait for the lifted A1308 hold (`docs/backlog.md:1264`, `:1604`,
+  `:1814`); for the watcher, not changed here.
