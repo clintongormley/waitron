@@ -32,6 +32,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  adjustmentLines,
   adjustments,
   computeAdjustmentReport,
   createAdjustmentReason,
@@ -461,7 +462,7 @@ describe("a comp (plan D4)", () => {
   });
 });
 
-describe("the extras rows an adjustment records as comped with their dish (B11f)", () => {
+describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
   /** A bill of Pizza × `quantity` with olives, and the ids of the pizza and its one extras row. */
   async function pizzaWithOlives(quantity = "1") {
     const { billId } = await bill([{ name: "Pizza", quantity, olives: 1 }]);
@@ -474,17 +475,22 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     return { billId, pizza, target, extras };
   }
 
-  it("records the dish's extras row on a whole comp of the dish", async () => {
+  it("lowers the dish's extras row with it on a whole comp", async () => {
     const { billId, pizza, extras } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: pizza, action: "comp" });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: pizza, action: "comp", splits: [], compedExtras: extras },
-    ]);
+    const records = await recordedOn(billId);
+    expect(records).toMatchObject([{ lineId: pizza, action: "comp", splits: [] }]);
+    const lowered = await inTx(venue, (tx) =>
+      tx.select().from(adjustmentLines).where(eq(adjustmentLines.adjustmentId, records[0]!.id)),
+    );
+    expect(lowered).toContainEqual(
+      expect.objectContaining({ lineId: extras[0], reduction: 150, quantity: 1000 }),
+    );
   });
 
-  it("records none on a comp of part of the dish", async () => {
+  it("records the splits on a comp of part of the dish", async () => {
     const { billId, pizza, target } = await pizzaWithOlives("2");
 
     await adjust(billId, { ...target, action: "comp", quantity: "1" });
@@ -492,7 +498,6 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ lineId: pizza, action: "comp", quantity: 1000 });
     expect(row!.splits).not.toEqual([]);
-    expect(row!.compedExtras).toEqual([]);
   });
 
   it("records the free extra's split when comping part of a dish", async () => {
@@ -540,24 +545,20 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
     expect(row!.splits).toContainEqual({ from: freeExtra!.id, to: expect.any(String) });
   });
 
-  it("records none on a comp of the extras row on its own", async () => {
+  it("records a comp of the extras row on its own", async () => {
     const { billId, extras } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: extras[0]!, action: "comp" });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: extras[0], action: "comp", compedExtras: [] },
-    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ lineId: extras[0], action: "comp" }]);
   });
 
-  it("records none on a percent discount of the dish", async () => {
+  it("records a percent discount of the dish", async () => {
     const { billId, pizza } = await pizzaWithOlives();
 
     await adjust(billId, { lineId: pizza, action: "discount_percent", percentBp: 1000 });
 
-    expect(await recordedOn(billId)).toMatchObject([
-      { lineId: pizza, action: "discount_percent", compedExtras: [] },
-    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ lineId: pizza, action: "discount_percent" }]);
   });
 });
 

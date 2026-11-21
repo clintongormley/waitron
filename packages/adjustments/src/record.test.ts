@@ -181,7 +181,6 @@ describe("recordAdjustment", () => {
           to: "44444444-4444-4444-8444-444444444444",
         },
       ],
-      compedExtras: [],
       lineName: "Steak",
       lineQuantity: 2000,
       lineListUnitPrice: 2500,

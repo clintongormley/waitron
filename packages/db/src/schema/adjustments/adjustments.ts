@@ -47,9 +47,6 @@ export const adjustments = table(
     /** Each row this adjustment split off, with the row it came from. A bill discount records its
      * splits too. */
     splits: json<AdjustmentSplit[]>("splits").notNull(),
-    /** The extras rows a whole comp of a dish priced at zero with it; empty on every other
-     * adjustment, which no check holds. */
-    compedExtras: json<string[]>("comped_extras").notNull().default([]),
     lineName: label("line_name"),
     lineQuantity: quantity("line_quantity"),
     /** The line's unit price before any adjustment touched it. */

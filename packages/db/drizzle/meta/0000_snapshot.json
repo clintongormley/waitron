@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7c4016ea-cf61-44a2-a454-4322770eb236",
+  "id": "52460e69-a7d9-4518-a9e5-b0d4d0a7361f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15217,14 +15217,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "comped_extras": {
-          "name": "comped_extras",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
         },
         "line_name": {
           "name": "line_name",

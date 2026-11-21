@@ -214,8 +214,6 @@ interface Plan {
   stamped: string[];
   /** On a row, the split one grouped line's second price would record (plan D33). */
   rowSplits: AdjustmentSplit[];
-  /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
-  compedExtras: string[];
   reduction: Decimal;
   nominal: Decimal;
   before: Decimal;
@@ -829,7 +827,6 @@ export async function planAdjustment(
   const rowSplits: AdjustmentSplit[] = [];
   let row: StandIn | null = null;
   let view: readonly Row[] = rows;
-  let compedExtras: string[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
   let before: Decimal;
@@ -970,12 +967,6 @@ export async function planAdjustment(
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
       const covering = family.flatMap(standingFor);
-      if (ask.action === "comp" && !partial) {
-        compedExtras = family
-          .slice(1)
-          .flatMap(standingFor)
-          .map((one) => one.id);
-      }
       if (row !== null) {
         const { membersOf } = row;
         const taken = partial
@@ -1065,7 +1056,6 @@ export async function planAdjustment(
     writes: writes ?? changes,
     stamped,
     rowSplits,
-    compedExtras,
     reduction,
     nominal,
     before,
@@ -1448,7 +1438,6 @@ export async function applyAdjustment(
                 stage: plan.stage!,
               },
         splits,
-        compedExtras: plan.compedExtras,
         quantity: plan.covered === null ? null : thousandthsToDecimal(plan.covered),
         reason: {
           id: plan.reason.id,

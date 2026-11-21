@@ -2323,7 +2323,6 @@ CREATE TABLE `adjustments` (
 	`working_order_id` text NOT NULL,
 	`line_id` text,
 	`splits` text NOT NULL,
-	`comped_extras` text DEFAULT '[]' NOT NULL,
 	`line_name` text,
 	`line_quantity` integer,
 	`line_list_unit_price` integer,

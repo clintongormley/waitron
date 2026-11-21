@@ -1,6 +1,6 @@
 // Weaker than its name. It knows an actor column only by its name, so a person column under any
 // other name is missed until someone reads it; a person id inside any JSON column (such as
-// `splits`, `comped_extras` or `policy_snapshot`) is not seen; and it proves a column was
+// `splits` or `policy_snapshot`) is not seen; and it proves a column was
 // classified, not that ADJUSTMENTS_PERSONAL_DATA honours the classification (personal-data.test.ts
 // does that).
 import { readFileSync, readdirSync } from "node:fs";
@@ -45,7 +45,6 @@ const ADJUSTMENTS_COLUMNS = {
     "credited_to",
     "line_id",
     "splits",
-    "comped_extras",
     "reason_id",
     "policy_snapshot",
     "line_quantity",
