@@ -850,10 +850,10 @@ describe("the link between an advance and the rest's invoice that took it off", 
     const byId = new Map(exported.invoices.map((invoice) => [invoice.id, invoice]));
     for (const advanceId of rest.advanceIds)
       expect(byId.get(advanceId)).toMatchObject({
-        advance: { paidBy: ["cash"], takenOffBy: final },
+        advance: { paidBy: "cash", takenOffBy: final },
       });
     expect(byId.get(notYetTakenOff)).toMatchObject({
-      advance: { paidBy: ["cash"], takenOffBy: null },
+      advance: { paidBy: "cash", takenOffBy: null },
     });
     expect(byId.get(rest.saleId)).toMatchObject({ takesOff: [first, second] });
     expect(byId.get(rest.saleId)).not.toHaveProperty("advance");

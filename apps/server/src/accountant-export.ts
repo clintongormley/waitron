@@ -16,12 +16,12 @@ import {
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   billAdvances,
+  billPayments,
   invoiceSeries,
   saleLines,
   sales,
   saleSubstitutions,
   saleVoids,
-  tenders,
   type Transaction,
 } from "@waitron/db";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
@@ -60,13 +60,12 @@ export interface AccountantInvoice {
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
   /** On a part payment's ticket: how it was paid, and the table's ticket that took it off. */
-  advance?: { paidBy: TenderMethod[]; takenOffBy: string | null };
+  advance?: { paidBy: PaymentMethod; takenOffBy: string | null };
   /** On a table's ticket (never a corrective): the part payments it took off. */
   takesOff?: string[];
 }
 
-type TenderMethod = (typeof tenders.$inferSelect)["method"];
-const TENDER_ORDER: readonly TenderMethod[] = ["cash", "card", "voucher", "deferred", "other"];
+type PaymentMethod = (typeof billPayments.$inferSelect)["method"];
 
 export interface AccountantExport {
   invoices: readonly AccountantInvoice[];
@@ -81,8 +80,7 @@ function paymentOnAccount(
   if (invoice.takesOff !== undefined)
     return words.takesOff.replace("{numbers}", () => invoice.takesOff!.join(", "));
   if (invoice.advance === undefined) return null;
-  const methods = invoice.advance.paidBy.map((method) => words.tenderMethods[method]).join(", ");
-  const paid = methods.charAt(0).toUpperCase() + methods.slice(1);
+  const paid = words.paymentMethods[invoice.advance.paidBy];
   const takenOffBy = invoice.advance.takenOffBy;
   return takenOffBy === null
     ? paid
@@ -102,7 +100,7 @@ async function readPaymentsOnAccount(
   advances: Map<string, NonNullable<AccountantInvoice["advance"]>>;
   takesOff: Map<string, string[]>;
 }> {
-  const found = new Map<string, { number: string; paidBy: Set<TenderMethod> }>();
+  const found = new Map<string, { number: string; paidBy: PaymentMethod }>();
   const half = Math.floor(SQL_VARIABLE_LIMIT / 2);
   for (let start = 0; start < saleIds.length; start += half) {
     const chunk = saleIds.slice(start, start + half);
@@ -111,12 +109,12 @@ async function readPaymentsOnAccount(
         saleId: billAdvances.advanceSaleId,
         code: invoiceSeries.code,
         number: sales.invoiceNumber,
-        method: tenders.method,
+        method: billPayments.method,
       })
       .from(billAdvances)
       .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
       .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-      .leftJoin(tenders, eq(tenders.saleId, billAdvances.advanceSaleId))
+      .innerJoin(billPayments, eq(billPayments.id, billAdvances.billPaymentId))
       .where(
         or(
           inArray(billAdvances.advanceSaleId, chunk),
@@ -130,14 +128,11 @@ async function readPaymentsOnAccount(
         ),
       )
       .orderBy(asc(sales.issuedAt), asc(sales.invoiceNumber));
-    for (const row of rows) {
-      const advance = found.get(row.saleId) ?? {
+    for (const row of rows)
+      found.set(row.saleId, {
         number: formatInvoiceNumber(row.code, row.number),
-        paidBy: new Set<TenderMethod>(),
-      };
-      if (row.method !== null) advance.paidBy.add(row.method);
-      found.set(row.saleId, advance);
-    }
+        paidBy: row.method,
+      });
   }
   const ids = [...found.keys()];
   const taken = new Map<string, { saleId: string; invoiceNumber: string }>();
@@ -152,7 +147,7 @@ async function readPaymentsOnAccount(
   for (const [id, advance] of found) {
     const final = taken.get(id);
     advances.set(id, {
-      paidBy: TENDER_ORDER.filter((method) => advance.paidBy.has(method)),
+      paidBy: advance.paidBy,
       takenOffBy: final?.invoiceNumber ?? null,
     });
     if (final !== undefined)

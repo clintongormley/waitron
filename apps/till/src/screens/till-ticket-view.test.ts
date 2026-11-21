@@ -543,7 +543,7 @@ describe("till-ticket-view", () => {
       setLocale("es-ES");
       const { el } = await mount({ takenOffBy } as Partial<TillSaleResult>);
       expect(el.shadowRoot!.querySelector("[data-taken-off-by]")?.textContent?.trim()).toBe(
-        "Descontado en el recibo A/45",
+        "Descontado en el ticket A/45",
       );
     });
 

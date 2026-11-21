@@ -42,13 +42,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     unreconciled: "Total differs from VAT lines",
     saleDateColumn: "Sale date, when earlier than the issue date",
     paymentOnAccountColumn: "Payment on account",
-    tenderMethods: {
-      cash: "cash",
-      card: "card",
-      voucher: "voucher",
-      deferred: "deferred payment",
-      other: "other",
-    },
+    paymentMethods: { cash: "Cash", card: "Card" },
     takenOffBy: "taken off by {number}",
     takesOff: "Takes off {numbers}",
     invoiceColumns: [
@@ -136,13 +130,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     unreconciled: "El total no coincide con las líneas de IVA",
     saleDateColumn: "Fecha de operación, si es anterior a la de expedición",
     paymentOnAccountColumn: "Pago a cuenta",
-    tenderMethods: {
-      cash: "efectivo",
-      card: "tarjeta",
-      voucher: "vale",
-      deferred: "pago aplazado",
-      other: "otro",
-    },
+    paymentMethods: { cash: "Efectivo", card: "Tarjeta" },
     takenOffBy: "descontado en {number}",
     takesOff: "Descuenta {numbers}",
     invoiceColumns: [

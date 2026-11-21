@@ -4185,7 +4185,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.refunded": "Devuelto: {amount}",
   "bill_pay.payment_vat": "{rate} %: {base} + {tax}",
   "bill_pay.taken_off_on": "Descontado en {number}",
-  "ticket_view.taken_off_by": "Descontado en el recibo {number}",
+  "ticket_view.taken_off_by": "Descontado en el ticket {number}",
   "bill_pay.refund_waiting": "Devolución de {amount} esperando al proveedor de pagos",
   "bill_pay.refund_failed_row": "La devolución de {amount} no se completó",
   "bill_pay.refund": "Devolver",

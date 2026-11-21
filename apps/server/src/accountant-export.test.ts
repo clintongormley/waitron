@@ -288,7 +288,7 @@ describe("accountant workbook", () => {
     [
       "en",
       "Payment on account",
-      ["Cash; taken off by A/45", "Card; taken off by A/45", "Cash, card", "Takes off A/12, A/13"],
+      ["Cash; taken off by A/45", "Card; taken off by A/45", "Card", "Takes off A/12, A/13"],
     ],
     [
       "es",
@@ -296,7 +296,7 @@ describe("accountant workbook", () => {
       [
         "Efectivo; descontado en A/45",
         "Tarjeta; descontado en A/45",
-        "Efectivo, tarjeta",
+        "Tarjeta",
         "Descuenta A/12, A/13",
       ],
     ],
@@ -311,18 +311,18 @@ describe("accountant workbook", () => {
               {
                 ...plain,
                 id: "advance-12",
-                advance: { paidBy: ["cash"], takenOffBy: "A/45" },
+                advance: { paidBy: "cash", takenOffBy: "A/45" },
               },
               {
                 ...plain,
                 id: "advance-13",
                 saleDate: "2026-10-31",
-                advance: { paidBy: ["card"], takenOffBy: "A/45" },
+                advance: { paidBy: "card", takenOffBy: "A/45" },
               },
               {
                 ...plain,
                 id: "advance-14",
-                advance: { paidBy: ["cash", "card"], takenOffBy: null },
+                advance: { paidBy: "card", takenOffBy: null },
               },
               { ...plain, id: "table-45", takesOff: ["A/12", "A/13"] },
               { ...plain, id: "credit-46", invoiceType: "corrective", correctsSaleId: "table-45" },
