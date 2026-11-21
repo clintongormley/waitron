@@ -841,7 +841,7 @@ describe("an advance once the rest's invoice has taken it off", () => {
           },
         );
         expect(refunded.json).toMatchObject({ state: "pending" });
-        // Opened after the rest's invoice, as Open let it through before this refusal existed.
+        // Written directly, opened after the rest's invoice: Open refuses a correction while the refund waits.
         const correctionId = randomUUID();
         await inTx(venue(), (tx) =>
           tx.insert(invoiceCorrections).values({
