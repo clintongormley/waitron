@@ -1,20 +1,35 @@
 import { EventEmitter } from "node:events";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import type { LookupFunction } from "node:net";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalNameLookup, type MdnsSocket } from "./local-name-lookup.js";
 
+/**
+ * A socket on a network whose responders answer only to the mDNS group, as the `multicast-dns`
+ * library the box's server answers with does: `fromGroup` reaches the socket only once it is bound
+ * to 5353 and has joined 224.0.0.251. A plain `emit("message")` is an answer sent to it directly.
+ */
 class FakeSocket extends EventEmitter implements MdnsSocket {
   readonly sent: { msg: Buffer; port: number; address: string }[] = [];
+  readonly joined: string[] = [];
+  boundPort: number | undefined;
   closed = false;
-  bind(callback: () => void): void {
+  bind(...args: [number, () => void] | [() => void]): void {
+    const [port, callback] = args.length === 2 ? args : [undefined, args[0]];
+    this.boundPort = port;
     queueMicrotask(callback);
+  }
+  addMembership(group: string): void {
+    this.joined.push(group);
   }
   send(msg: Buffer, port: number, address: string): void {
     this.sent.push({ msg, port, address });
   }
   close(): void {
     this.closed = true;
+  }
+  fromGroup(msg: Buffer): void {
+    if (this.boundPort === 5353 && this.joined.includes("224.0.0.251")) this.emit("message", msg);
   }
 }
 
@@ -60,8 +75,8 @@ describe("createLocalNameLookup", () => {
     const lookup = createLocalNameLookup({ openSocket: () => socket });
     const answer = ask(lookup, "box-0793.waitron.local", { all: true });
     await sentQuestion(socket);
-    socket.emit("message", reply([{ name: "box-0793.waitron.local", rdata: [192, 168, 1, 20] }]));
-    socket.emit("message", reply([{ name: "box-0793.waitron.local", rdata: [192, 168, 1, 99] }]));
+    socket.fromGroup(reply([{ name: "box-0793.waitron.local", rdata: [192, 168, 1, 20] }]));
+    socket.fromGroup(reply([{ name: "box-0793.waitron.local", rdata: [192, 168, 1, 99] }]));
     expect(await answer).toEqual({
       error: null,
       address: [{ address: "192.168.1.20", family: 4 }],
@@ -81,7 +96,7 @@ describe("createLocalNameLookup", () => {
     const lookup = createLocalNameLookup({ openSocket: () => socket });
     const answer = ask(lookup, "box-1.local", {});
     await sentQuestion(socket);
-    socket.emit("message", reply([{ name: "box-1.local", rdata: [10, 0, 0, 7] }]));
+    socket.fromGroup(reply([{ name: "box-1.local", rdata: [10, 0, 0, 7] }]));
     expect(await answer).toEqual({ error: null, address: "10.0.0.7", family: 4 });
   });
 
@@ -93,7 +108,7 @@ describe("createLocalNameLookup", () => {
     expect(socket.sent[0]!.msg.subarray(12)).toEqual(
       Buffer.from([...encodeName("Box-1.Waitron.LOCAL"), 0, 1, 0, 1]),
     );
-    socket.emit("message", reply([{ name: "box-1.waitron.local", rdata: [10, 0, 0, 8] }]));
+    socket.fromGroup(reply([{ name: "box-1.waitron.local", rdata: [10, 0, 0, 8] }]));
     expect((await answer).address).toEqual([{ address: "10.0.0.8", family: 4 }]);
   });
 
@@ -102,20 +117,81 @@ describe("createLocalNameLookup", () => {
     const lookup = createLocalNameLookup({ openSocket: () => socket });
     const answer = ask(lookup, "box-1.local", { all: true });
     await sentQuestion(socket);
-    socket.emit("message", reply([{ name: "printer.local", rdata: [10, 0, 0, 1] }]));
-    socket.emit("message", reply([{ name: "box-1.local", type: 16, rdata: [3, 97, 61, 98] }]));
-    socket.emit("message", reply([{ name: "box-1.local", rdata: [10, 0, 0] }]));
-    socket.emit("message", Buffer.from([0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0, 9, 1]));
-    socket.emit("message", Buffer.from([1, 2, 3]));
+    socket.fromGroup(reply([{ name: "printer.local", rdata: [10, 0, 0, 1] }]));
+    socket.fromGroup(reply([{ name: "box-1.local", type: 16, rdata: [3, 97, 61, 98] }]));
+    socket.fromGroup(reply([{ name: "box-1.local", rdata: [10, 0, 0] }]));
+    socket.fromGroup(Buffer.from([0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0, 9, 1]));
+    socket.fromGroup(Buffer.from([1, 2, 3]));
     expect(socket.closed).toBe(false);
-    socket.emit(
-      "message",
+    socket.fromGroup(
       reply([
         { name: "printer.local", rdata: [10, 0, 0, 1] },
         { name: "box-1.local", rdata: [10, 0, 0, 2] },
       ]),
     );
     expect((await answer).address).toEqual([{ address: "10.0.0.2", family: 4 }]);
+  });
+
+  it("listens on the mDNS port in the group, and also takes an answer sent to it directly", async () => {
+    const socket = new FakeSocket();
+    const lookup = createLocalNameLookup({ openSocket: () => socket });
+    const answer = ask(lookup, "box-1.local", { all: true });
+    await sentQuestion(socket);
+    expect({ port: socket.boundPort, joined: socket.joined }).toEqual({
+      port: 5353,
+      joined: ["224.0.0.251"],
+    });
+    socket.emit("message", reply([{ name: "box-1.local", rdata: [10, 0, 0, 3] }]));
+    expect((await answer).address).toEqual([{ address: "10.0.0.3", family: 4 }]);
+    expect(socket.closed).toBe(true);
+  });
+
+  describe("on a clock", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("asks again at 250 ms and 1 s, then gives up at 2 s and leaves no timer behind", async () => {
+      const socket = new FakeSocket();
+      const lookup = createLocalNameLookup({ openSocket: () => socket });
+      let settled: Answer | undefined;
+      void ask(lookup, "box-1.local", { all: true }).then((a) => (settled = a));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(socket.sent).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(249);
+      expect(socket.sent).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(749);
+      expect(socket.sent).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(socket.sent).toHaveLength(3);
+      expect(new Set(socket.sent.map((q) => q.msg.toString("hex"))).size).toBe(1);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled?.error?.code).toBe("ENOTFOUND");
+      expect(socket.sent).toHaveLength(3);
+      expect(socket.closed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("is answered after a lost first question, and stops every timer once answered", async () => {
+      const socket = new FakeSocket();
+      const lookup = createLocalNameLookup({ openSocket: () => socket });
+      const answer = ask(lookup, "box-1.local", { all: true });
+      // The first question is lost: nothing answers until the second one goes out.
+      await vi.advanceTimersByTimeAsync(250);
+      expect(socket.sent).toHaveLength(2);
+      socket.fromGroup(reply([{ name: "box-1.local", rdata: [10, 0, 0, 4] }]));
+      expect((await answer).address).toEqual([{ address: "10.0.0.4", family: 4 }]);
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(socket.sent).toHaveLength(2);
+    });
   });
 
   it("answers ENOTFOUND and closes the socket when no reply comes in time", async () => {
@@ -134,6 +210,18 @@ describe("createLocalNameLookup", () => {
     socket.emit("error", new Error("bind EADDRNOTAVAIL"));
     const settled = await answer;
     expect(settled.error?.code).toBe("ENOTFOUND");
+    expect(socket.closed).toBe(true);
+  });
+
+  it("answers ENOTFOUND, without asking, when the group cannot be joined", async () => {
+    const socket = new FakeSocket();
+    socket.addMembership = () => {
+      throw new Error("addMembership ENODEV");
+    };
+    const lookup = createLocalNameLookup({ openSocket: () => socket });
+    const settled = await ask(lookup, "box-1.local", { all: true });
+    expect(settled.error?.code).toBe("ENOTFOUND");
+    expect(socket.sent).toHaveLength(0);
     expect(socket.closed).toBe(true);
   });
 

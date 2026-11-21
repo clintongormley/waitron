@@ -16,7 +16,8 @@ export interface RouterOptions {
   environment?: string;
   initialServers?: ServerEntry[];
   probe: AgentClient["probeNode"];
-  /** Asked on the configured address in a round where it answers as the spare. */
+  /** Asked on the configured address in a round where it answers as the spare and no known server
+   * accepts sales. */
   mainServer?: AgentClient["mainServer"];
 }
 
@@ -130,7 +131,10 @@ export class Router {
 
   async #runRound(): Promise<ProbeRound> {
     const configuredIsSpare = await this.#probeAll(this.#servers);
-    if (configuredIsSpare && this.#mainServer !== undefined) {
+    // A main box once heard of stays in the list, so it is asked for again only when nobody known
+    // accepts (it moved, or it is down).
+    const noneAccepting = !this.#servers.some((s) => s.state === "primary");
+    if (configuredIsSpare && noneAccepting && this.#mainServer !== undefined) {
       const main = await this.#mainServer(this.#configured);
       const origin = main.ok && main.value !== null ? parseHttpOrigin(main.value) : undefined;
       if (origin !== undefined && !this.#servers.some((s) => s.url === origin)) {

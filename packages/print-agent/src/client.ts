@@ -533,7 +533,11 @@ function boundInventory(inventory: AgentInventory): AgentInventory {
   };
 }
 
-export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }): AgentClient {
+export function createClient(opts: {
+  fetch: typeof fetch;
+  /** Every request's limit; a value given here also replaces `ENROL_SELF_TIMEOUT_MS`. */
+  timeoutMs?: number;
+}): AgentClient {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return {
     probeNode(url) {

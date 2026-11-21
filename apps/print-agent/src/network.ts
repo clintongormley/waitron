@@ -101,8 +101,7 @@ interface SrvRecord {
   target: string;
 }
 
-/** A one-question mDNS query for `name`'s A record, sent from an ephemeral port so responders
- * answer by unicast (RFC 6762 §6.7). */
+/** A one-question mDNS query for `name`'s A record. */
 export function buildAddressQuery(name: string): Buffer {
   const header = Buffer.alloc(12);
   header.writeUInt16BE(1, 4);
