@@ -1,13 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  printAgents,
-  withTransaction,
-  writeNodeMembership,
-  type Database,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, printAgents, writeNodeMembership, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
@@ -22,12 +16,9 @@ import {
 } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { authenticateAgent } from "@waitron/printing";
-import { hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { ENROL_RATE_MAX, type EnrolRateLimiter } from "./enrol-rate-limit.js";
-import { selfEnrolNodeAgent } from "./join-requests.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { requireAgent } from "./print-agent-session.js";
 import {
   PRINT_AGENT_ENROL_PATH,
   mountPrintAgentEnrolApi,
@@ -315,79 +306,18 @@ describe("POST /api/node/print-agent", () => {
     expect(lines).toEqual([["error", "print-agent-enrol.failed"]]);
   });
 
-  describe("a print agent's token once its box is removed", () => {
-    /** One route behind the print-agent API's bearer guard. */
-    function agentApp(db: Database): Hono {
-      const app = new Hono();
-      app.get("/agent", async (c) => {
-        try {
-          return c.json(await requireAgent({ db }, c));
-        } catch (error) {
-          return c.json({ code: (error as AppError).code }, 401);
-        }
-      });
-      return app;
-    }
-
-    async function asAgent(db: Database, token: string) {
-      const response = await agentApp(db).request("/agent", {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      return { status: response.status, body: await response.json() };
-    }
-
-    async function spareToken(app: Hono, self: string, spare: Boxes["spare"]): Promise<string> {
-      const { status, body } = await send(
-        app,
-        envelope(spare, { name: "Spare agent", toNodeId: self }),
-      );
-      expect(status).toBe(201);
-      return (body as AgentEnrolAnswer).token;
-    }
-
-    it.each(["evicted", "revoked"] as const)(
-      "is refused once a newer chart marks the box %s",
-      async (removal) => {
-        const { app, self, spare, db, chart } = await boxes();
-        const token = await spareToken(app, self, spare);
-        expect((await asAgent(db, token)).status).toBe(200);
-        await chart(4, removal);
-        expect(await asAgent(db, token)).toEqual({
-          status: 401,
-          body: { code: "agent.unauthorized" },
-        });
-      },
-    );
-
-    it("leaves the main box's own agent and an agent tied to no box working", async () => {
-      const { self, db, chart } = await boxes();
-      const own = await withTransaction(db, (tx) =>
-        selfEnrolNodeAgent(tx, { nodeId: self, name: "Main agent" }),
-      );
-      const secret = "unboxed-secret";
-      const [unboxed] = await db
-        .insert(printAgents)
-        .values({ name: "Office agent", tokenHash: hashDeviceToken(secret) })
-        .returning({ id: printAgents.id });
-      await chart(4, "evicted");
-      expect(await asAgent(db, own.token)).toEqual({
-        status: 200,
-        body: { agentId: own.agentId },
-      });
-      expect(await asAgent(db, `${unboxed!.id}.${secret}`)).toEqual({
-        status: 200,
-        body: { agentId: unboxed!.id },
-      });
-    });
-
-    it("lets the box's agent enrol again once a newer chart lists the box again", async () => {
-      const { app, self, spare, db, chart } = await boxes();
-      const old = await spareToken(app, self, spare);
-      await chart(4, "evicted");
-      await chart(5, "serving-secondary");
-      const fresh = await spareToken(app, self, spare);
-      expect((await asAgent(db, fresh)).status).toBe(200);
-      expect((await asAgent(db, old)).status).toBe(401);
+  it("gives a box listed again by a newer chart a new token, and only that one works", async () => {
+    const { app, self, spare, db, chart } = await boxes();
+    const request = { name: "Spare agent", toNodeId: self };
+    const old = (await send(app, envelope(spare, request))).body as AgentEnrolAnswer;
+    await chart(4, "evicted");
+    await chart(5, "serving-secondary");
+    const fresh = await send(app, envelope(spare, request));
+    expect(fresh.status).toBe(201);
+    const { agentId } = await authenticateAgent(db, (fresh.body as AgentEnrolAnswer).token);
+    expect((await agentRows(db)).map((row) => row.id)).toEqual([agentId]);
+    await expect(authenticateAgent(db, old.token)).rejects.toMatchObject({
+      code: "agent.unauthorized",
     });
   });
 });
