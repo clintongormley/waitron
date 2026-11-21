@@ -1,50 +1,25 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { SaleId } from "@waitron/shared";
-import { seedSale, seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
-import type { SeededVenue } from "../test/fixtures.js";
+import { at, seedVenueWithSeries, seedVoid, ticketSeller } from "../test/fixtures.js";
+import type { TicketSeller } from "../test/fixtures.js";
 import { computeVatCorrections } from "./vat-corrections.js";
 import type { LiquidationPeriod } from "./period.js";
 import type { VatCorrections } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
-let venue: SeededVenue;
-let nextNumber: number;
+let sale: TicketSeller;
 
 beforeEach(async () => {
-  venue = await seedVenueWithSeries(suite.db);
-  nextNumber = 1;
+  sale = ticketSeller(suite.db, await seedVenueWithSeries(suite.db));
 });
 
 const Q2: LiquidationPeriod = { kind: "quarter", quarter: 2 };
 const Q3: LiquidationPeriod = { kind: "quarter", quarter: 3 };
 
-function at(day: string, time = "10:00:00"): string {
-  return new Date(`${day}T${time}Z`).toISOString();
-}
-
 function corrections(period: LiquidationPeriod, year = 2026): Promise<VatCorrections> {
   return withTransaction(suite.db, (tx) => computeVatCorrections(tx, { year, period }));
-}
-
-/** A one-rate ticket: 10% on 11.00, VAT 1.10. */
-const TICKET = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
-
-async function sale(
-  issuedDay: string,
-  opts: Omit<Parameters<typeof seedSale>[2], "invoiceNumber" | "issuedAt" | "total" | "lines"> & {
-    total?: string;
-    lines?: Parameters<typeof seedSale>[2]["lines"];
-  } = {},
-): Promise<SaleId> {
-  return seedSale(suite.db, venue, {
-    ...TICKET,
-    ...opts,
-    invoiceNumber: nextNumber++,
-    issuedAt: at(issuedDay),
-  });
 }
 
 describe("computeVatCorrections", () => {

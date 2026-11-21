@@ -246,6 +246,39 @@ export async function seedSale(
   return saleId;
 }
 
+/** An instant at `time` UTC on `day`: with the default offset 0 its filed date is `day`. */
+export function at(day: string, time = "10:00:00"): string {
+  return new Date(`${day}T${time}Z`).toISOString();
+}
+
+/** A one-rate ticket: 10% on 11.00, VAT 1.10. */
+export const TICKET = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
+
+type SaleOptions = Parameters<typeof seedSale>[2];
+
+export type TicketSeller = (
+  issuedDay: string,
+  opts?: Omit<SaleOptions, "invoiceNumber" | "issuedAt" | "total" | "lines"> & {
+    total?: string;
+    lines?: SaleOptions["lines"];
+  },
+) => Promise<SaleId>;
+
+/**
+ * Seeds a `TICKET`, or the sale `opts` describe, issued at 10:00 UTC on `issuedDay`, numbering the
+ * invoices 1, 2, 3, ... in the order they are seeded.
+ */
+export function ticketSeller(db: Database, venue: SeededVenue): TicketSeller {
+  let nextNumber = 1;
+  return (issuedDay, opts = {}) =>
+    seedSale(db, venue, {
+      ...TICKET,
+      ...opts,
+      invoiceNumber: nextNumber++,
+      issuedAt: at(issuedDay),
+    });
+}
+
 export async function seedTender(
   db: Database,
   ref: { saleId: SaleId },

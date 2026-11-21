@@ -10,13 +10,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { SupportedLocale } from "@waitron/shared";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { mountReportApi } from "./report-api.js";
-
-function row(xml: string, number: number): string[] {
-  const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
-  return [...body.matchAll(/<c [^>]*>([\s\S]*?)<\/c>/g)].map(
-    (cell) => cell[1]!.match(/<(?:t(?: [^>]*)?|v)>([\s\S]*?)<\/(?:t|v)>/)?.[1] ?? "",
-  );
-}
+import { row } from "./testing/xlsx-rows.js";
 
 const TICKET = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
 

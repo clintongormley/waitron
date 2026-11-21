@@ -28,13 +28,7 @@ import {
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
-
-function row(xml: string, number: number): string[] {
-  const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
-  return [...body.matchAll(/<c [^>]*>([\s\S]*?)<\/c>/g)].map(
-    (cell) => cell[1]!.match(/<(?:t(?: [^>]*)?|v)>([\s\S]*?)<\/(?:t|v)>/)?.[1] ?? "",
-  );
-}
+import { row } from "./testing/xlsx-rows.js";
 
 const invoice = {
   id: "sale-1",

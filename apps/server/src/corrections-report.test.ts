@@ -4,6 +4,7 @@ import type { VatCorrections } from "@waitron/reporting";
 import { decimal } from "@waitron/shared";
 import { renderCorrectionsWorkbook } from "./corrections-report.js";
 import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
+import { row } from "./testing/xlsx-rows.js";
 
 function xmlText(text: string): string {
   return text
@@ -12,13 +13,6 @@ function xmlText(text: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll("'", "&apos;")
     .replaceAll('"', "&quot;");
-}
-
-function row(xml: string, number: number): string[] {
-  const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
-  return [...body.matchAll(/<c [^>]*>([\s\S]*?)<\/c>/g)].map(
-    (cell) => cell[1]!.match(/<(?:t(?: [^>]*)?|v)>([\s\S]*?)<\/(?:t|v)>/)?.[1] ?? "",
-  );
 }
 
 async function sheets(

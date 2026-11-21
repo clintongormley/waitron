@@ -2,8 +2,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleId } from "@waitron/shared";
-import { seedSale, seedSubstitution, seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
-import type { SeededVenue } from "../test/fixtures.js";
+import {
+  at,
+  seedSale,
+  seedSubstitution,
+  seedVenueWithSeries,
+  seedVoid,
+  TICKET,
+  ticketSeller,
+} from "../test/fixtures.js";
+import type { SeededVenue, TicketSeller } from "../test/fixtures.js";
 import { vatMovements } from "./vat-movements.js";
 import type { VatMovement } from "./vat-movements.js";
 import type { LiquidationPeriod } from "./period.js";
@@ -11,43 +19,22 @@ import type { LiquidationPeriod } from "./period.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
-let nextNumber: number;
+let sale: TicketSeller;
 
 beforeEach(async () => {
   venue = await seedVenueWithSeries(suite.db);
-  nextNumber = 1;
+  sale = ticketSeller(suite.db, venue);
 });
 
 const Q1: LiquidationPeriod = { kind: "quarter", quarter: 1 };
 const Q2: LiquidationPeriod = { kind: "quarter", quarter: 2 };
 
-function at(day: string, time = "10:00:00"): string {
-  return new Date(`${day}T${time}Z`).toISOString();
-}
-
 function movements(period: LiquidationPeriod, year = 2026): Promise<VatMovement[]> {
   return withTransaction(suite.db, (tx) => vatMovements(tx, { year, period }));
 }
 
-/** A one-rate ticket: 10% on 11.00, VAT 1.10. */
-const TICKET = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
 const PLUS = { rate: "10.00", base: "11.00", tax: "1.10" };
 const MINUS = { rate: "10.00", base: "-11.00", tax: "-1.10" };
-
-async function sale(
-  issuedDay: string,
-  opts: Omit<Parameters<typeof seedSale>[2], "invoiceNumber" | "issuedAt" | "total" | "lines"> & {
-    total?: string;
-    lines?: Parameters<typeof seedSale>[2]["lines"];
-  } = {},
-): Promise<SaleId> {
-  return seedSale(suite.db, venue, {
-    ...TICKET,
-    ...opts,
-    invoiceNumber: nextNumber++,
-    issuedAt: at(issuedDay),
-  });
-}
 
 async function refund(issuedDay: string, target: SaleId): Promise<SaleId> {
   return sale(issuedDay, {
