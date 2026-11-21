@@ -6912,8 +6912,9 @@ describe("till-app: a bill payment on the card reader", () => {
 
   it.each([
     ["requested", "declined", "No payment was taken."],
-    ["requested", "received", ""],
+    ["requested", "received", null],
     ["refused", "declined", null],
+    ["profile-refusal", "declined", null],
   ] as const)(
     "keeps waiting after a %s stop and uses the original %s payment answer",
     async (stopOutcome, finalOutcome, message) => {
@@ -6925,6 +6926,13 @@ describe("till-app: a bill payment on the card reader", () => {
           }),
       );
       const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: stopOutcome });
+      if (stopOutcome === "profile-refusal") {
+        cancelBillReaderPayment.mockRejectedValueOnce({
+          code: "device.forbidden_action",
+          action: "pay",
+          status: 403,
+        });
+      }
       const el = await takeOnReader(takeBillPayment, {
         cancelBillReaderPayment,
         getTill: vi.fn().mockResolvedValue({
@@ -6944,10 +6952,16 @@ describe("till-app: a bill payment on the card reader", () => {
           expect.anything(),
         );
         expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(true);
-        expect(inDialog(el, "[data-pay-stop-status]")!.textContent).toContain(
-          stopOutcome === "requested" ? "Stop requested" : "Could not stop the reader",
-        );
-        expect(inDialog(el, "[data-pay-collecting]") !== null).toBe(stopOutcome === "refused");
+        const status = inDialog(el, "[data-pay-stop-status]")!.textContent;
+        if (stopOutcome === "profile-refusal") {
+          expect(status).toContain(t("card_reader.not_set_up"));
+          expect(inDialog(el, "[data-pay-cancel-reader]")!.disabled).toBe(false);
+        } else {
+          expect(status).toContain(
+            stopOutcome === "requested" ? "Stop requested" : "Could not stop the reader",
+          );
+        }
+        expect(inDialog(el, "[data-pay-collecting]") !== null).toBe(stopOutcome !== "requested");
         expect(inDialog(el, "[data-pay-taken]")).toBeNull();
       } finally {
         settle(

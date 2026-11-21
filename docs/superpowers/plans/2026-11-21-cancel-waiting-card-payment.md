@@ -36,6 +36,7 @@ probes in `docs/backlog/payments.md`.
    announce a request or refusal. A requested stop followed by a
    definite failure shows **No payment was taken**. The original Pay request settles the outcome.
    Start with failing cases in `till-app-bill-payments.test.ts` for no charge, already paid and refusal.
+   Describe the control in the English and Spanish shared Pay guide.
 
 Estimate 210 added lines of production code and 210 of tests.
 
@@ -46,7 +47,8 @@ Estimate 210 added lines of production code and 210 of tests.
    `pay(req, { onSubmission })` just before the POST, including a reused ID. Wire the same
    action and outcome through `till-app.ts` and `widgets/card-waiting.ts` for table Pay, and
    `widgets/tender-pay.ts` via `screens/till-counter-screen.ts` for counter Pay.
-2. Update `apps/server/src/guide/{en,es}/table-service.md` and add a dated pointer to item 9 of
+2. Extend the shared Pay note in `apps/server/src/guide/{en,es}/table-service.md` to cover the
+   direct Counter and table screens. Add a dated pointer to item 9 of
    the [A796 handheld payments design](../specs/2026-10-19-a796-handheld-payments-design.md).
 
 Estimate 90 added lines of production code and 90 of tests, plus the guides. Both pull requests

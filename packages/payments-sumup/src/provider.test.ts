@@ -296,7 +296,7 @@ describe("SumUpCloudProvider.collect", () => {
 
   it("keeps the attempt pending until a requested reader stop ends", async () => {
     const { fake, provider, params, row } = await setup(suite, (f) => f.declineNext());
-    vi.spyOn(fake, "readerStatus").mockResolvedValue({
+    const readerStatus = vi.spyOn(fake, "readerStatus").mockResolvedValue({
       online: true,
       activity: "WAITING_FOR_CARD",
     });
@@ -329,6 +329,37 @@ describe("SumUpCloudProvider.collect", () => {
     await expect(collected).resolves.toMatchObject({ state: "failed" });
     await expect(requestStop?.()).resolves.toBe("unavailable");
     expect(terminate).toHaveBeenCalledTimes(1);
+    expect(readerStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends no stop when the payment finishes during the reader status read", async () => {
+    const { fake, provider, params } = await setup(suite);
+    let answerStatus!: () => void;
+    vi.spyOn(fake, "readerStatus").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerStatus = () => resolve({ online: true, activity: "WAITING_FOR_CARD" });
+        }),
+    );
+    const terminate = vi.spyOn(fake, "terminateCheckout");
+    const find = fake.findTransaction.bind(fake);
+    vi.spyOn(fake, "findTransaction").mockImplementationOnce(async (query) => {
+      const result = await find(query);
+      setTimeout(answerStatus, 0);
+      return result;
+    });
+    let stopped: Promise<unknown> | undefined;
+
+    const result = await provider.collect({
+      ...params,
+      onReaderCheckout: (stop) => {
+        stopped = stop();
+      },
+    });
+
+    expect(result.state).toBe("captured");
+    await expect(stopped).resolves.toBe("unavailable");
+    expect(terminate).not.toHaveBeenCalled();
   });
 
   it.each([

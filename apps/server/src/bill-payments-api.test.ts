@@ -5264,6 +5264,12 @@ describe("a reader payment on a device that changes profile while it is starting
       client,
       pay,
       provider,
+      anotherSession: async () => {
+        const other = await inTx((tx) =>
+          loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+        );
+        return `${SESSION_COOKIE}=${other.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+      },
       cancel: (submissionId: string, as = cookie) =>
         app.request(
           `/api/working-orders/${billId}/payments/${encodeURIComponent(submissionId)}/cancel`,
@@ -5321,7 +5327,7 @@ describe("a reader payment on a device that changes profile while it is starting
   it.each(["failed", "captured"] as const)(
     "binds reader stop to the original payment and keeps the final %s outcome",
     async (final) => {
-      const { billId, client, provider, pay, cancel } = await readerOnStripe();
+      const { billId, client, provider, pay, cancel, anotherSession } = await readerOnStripe();
       if (final === "failed") {
         vi.spyOn(client, "readerOutcome").mockResolvedValueOnce({ status: "failed" });
       }
@@ -5345,9 +5351,11 @@ describe("a reader payment on a device that changes profile while it is starting
       const original = pay("30.00", submissionId);
       try {
         await ready;
-        const wrongSession = await cancel(submissionId, venue.cookie);
-        expect(wrongSession.status).toBe(200);
-        expect(await wrongSession.json()).toEqual({ outcome: "unavailable" });
+        for (const cookie of [venue.cookie, await anotherSession()]) {
+          const wrongSession = await cancel(submissionId, cookie);
+          expect(wrongSession.status).toBe(200);
+          expect(await wrongSession.json()).toEqual({ outcome: "unavailable" });
+        }
         const wrongSubmission = await cancel(randomUUID());
         expect(await wrongSubmission.json()).toEqual({ outcome: "unavailable" });
         expect(stop).not.toHaveBeenCalled();

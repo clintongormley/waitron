@@ -519,6 +519,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) sumUpConnected = false;
   @property({ attribute: false }) readerStop: BillReaderStopStatus | null = null;
+  @property({ attribute: false }) readerStopRefusal: PayRefusal | null = null;
   @property({ attribute: false }) paymentSlip?: PaymentSlipAction;
   /** The bill has no invoice and is set for a simplified one, so a part payment may have its own. */
   @property({ type: Boolean }) ownReceiptOffered = false;
@@ -1237,6 +1238,7 @@ export class TillBillPayDialog extends LitElement {
   #readerStopControl(): TemplateResult | typeof nothing {
     const status = this.readerStop;
     if (status === null) return nothing;
+    const refusal = this.readerStopRefusal;
     return html`<div>
       <wt-button
         data-pay-cancel-reader
@@ -1247,7 +1249,13 @@ export class TillBillPayDialog extends LitElement {
         >${t("bill_pay.cancel_reader")}</wt-button
       >
       <p class="muted" role="status" data-pay-stop-status>
-        ${status === "ready" || status === "sending" ? "" : t(`bill_pay.stop_${status}`)}
+        ${
+          refusal !== null
+            ? refusalText(refusal, { billPayment: true })
+            : status === "ready" || status === "sending"
+              ? ""
+              : t(`bill_pay.stop_${status}`)
+        }
       </p>
     </div>`;
   }

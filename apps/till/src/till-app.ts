@@ -1618,6 +1618,7 @@ interface BillReaderStop {
   submissionId: string;
   signal: AbortSignal;
   status: BillReaderStopStatus;
+  refusal?: PayRefusal;
   answer?: Promise<BillReaderStopOutcome>;
 }
 
@@ -12465,6 +12466,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     const pending = this.#unansweredPayments.get(open.billId);
     const send = this.#paymentsOut.get(open.billId);
+    const stop = send?.dialogId === open.id ? send.readerStop : undefined;
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
         .sumUpConnected=${this.sumUpConnected}
@@ -12511,7 +12513,8 @@ export class TillApp extends LitElement {
           void this.#pickUpSticker(event.detail)}
         @pay-equipment-nfc=${() => this.#askNfc()}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
-        .readerStop=${send?.dialogId === open.id ? (send.readerStop?.status ?? null) : null}
+        .readerStop=${stop?.status ?? null}
+        .readerStopRefusal=${stop?.refusal ?? null}
         @bill-pay-stop=${() => void this.#onBillPayStop()}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -22764,12 +22767,20 @@ export class TillApp extends LitElement {
     if (stop.status === "sending" || stop.status === "requested" || stop.status === "unknown")
       return;
     stop.status = "sending";
+    stop.refusal = undefined;
     this.requestUpdate();
     stop.answer = this.api
       .cancelBillReaderPayment(open.billId, stop.submissionId, { signal: stop.signal })
       .then(
         ({ outcome }) => outcome,
-        () => "unknown" as const,
+        (error: unknown): BillReaderStopOutcome => {
+          const status = (error as { status?: unknown } | null)?.status;
+          if (typeof status === "number" && status >= 400 && status < 500 && status !== 408) {
+            stop.refusal = refusalOf(error, false);
+            return "refused";
+          }
+          return "unknown";
+        },
       );
     stop.status = await stop.answer;
     this.requestUpdate();
