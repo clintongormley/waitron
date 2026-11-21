@@ -663,8 +663,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y, mientras la cuenta siga abierta, se quita de la cuenta.",
   },
   "advance.taken_off_final_invoice": {
-    en: "This correction was opened before the table's receipt{invoiceNumber} took this payment on account off. Choose Discard, then open Correct invoice on this ticket again.",
-    es: "Esta rectificación se abrió antes de que el ticket de la mesa{invoiceNumber} descontara este pago a cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
+    en: "The table's receipt{invoiceNumber} has taken this payment on account off, so this correction cannot carry on. Choose Discard, then open Correct invoice on this ticket again.",
+    es: "El ticket de la mesa{invoiceNumber} ya ha descontado este pago a cuenta, así que esta rectificación no puede continuar. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
   },
   "advance.final_invoice_first": {
     en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",

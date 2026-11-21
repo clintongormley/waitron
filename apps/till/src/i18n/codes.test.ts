@@ -1055,13 +1055,13 @@ it("sends staff to Correct invoice on a payment on account's own ticket, naming 
 it("sends staff back to Correct invoice on the advance after the table's receipt took it off, naming that receipt", () => {
   const final = { invoiceNumber: "A/45" };
   expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
-    "This correction was opened before the table's receipt A/45 took this payment on account off. Choose Discard, then open Correct invoice on this ticket again.",
+    "The table's receipt A/45 has taken this payment on account off, so this correction cannot carry on. Choose Discard, then open Correct invoice on this ticket again.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
-    "Esta rectificación se abrió antes de que el ticket de la mesa A/45 descontara este pago a cuenta. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
+    "El ticket de la mesa A/45 ya ha descontado este pago a cuenta, así que esta rectificación no puede continuar. Elige Descartar y vuelve a abrir Rectificar factura en este ticket.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
-    /^This correction was opened before the table's receipt took /,
+    /^The table's receipt has taken /,
   );
 });
 
