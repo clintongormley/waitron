@@ -8,6 +8,7 @@ import { startManagementSession } from "@waitron/identity";
 import { seedSale, seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { SupportedLocale } from "@waitron/shared";
+import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { mountReportApi } from "./report-api.js";
 import { row } from "./testing/xlsx-rows.js";
@@ -82,12 +83,12 @@ describe("corrections download", () => {
     ["en-GB", "Summary", "Corrections", "Date moved out", "Date moved in", "Reduction", "Addition"],
     [
       "es-ES",
-      "Resumen",
-      "Correcciones",
-      "Fecha trasladada (salida)",
-      "Fecha trasladada (entrada)",
-      "Reducción",
-      "Aumento",
+      CORRECTIONS_REPORT_WORDS.es.summarySheet,
+      CORRECTIONS_REPORT_WORDS.es.rowsSheet,
+      CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_out,
+      CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_in,
+      CORRECTIONS_REPORT_WORDS.es.directions.reduction,
+      CORRECTIONS_REPORT_WORDS.es.directions.addition,
     ],
   ] as const)(
     "serves a manager the August example's corrections for the third quarter (%s)",
@@ -144,7 +145,7 @@ describe("corrections download", () => {
 
   it.each([
     ["en-GB", "Issued after its sale&apos;s period"],
-    ["es-ES", "Emitida después del periodo de su venta"],
+    ["es-ES", CORRECTIONS_REPORT_WORDS.es.kinds.issued_late],
   ] as const)("names a late ticket's row by its kind (%s)", async (locale, late) => {
     const response = await send("year=2026&period=2t", managerCookie, locale);
     expect(response.status).toBe(200);

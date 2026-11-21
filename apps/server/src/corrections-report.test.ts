@@ -83,11 +83,11 @@ describe("corrections workbook", () => {
     ],
     [
       "es",
-      ["Resumen", "Correcciones"],
-      "Emitida después del periodo de su venta",
-      "Anulación",
-      "Aumento",
-      "Reducción",
+      [CORRECTIONS_REPORT_WORDS.es.summarySheet, CORRECTIONS_REPORT_WORDS.es.rowsSheet],
+      CORRECTIONS_REPORT_WORDS.es.kinds.issued_late,
+      CORRECTIONS_REPORT_WORDS.es.kinds.void,
+      CORRECTIONS_REPORT_WORDS.es.directions.addition,
+      CORRECTIONS_REPORT_WORDS.es.directions.reduction,
     ],
   ] as const)(
     "names each row's kind and direction, with formatted invoice numbers (%s)",
@@ -111,7 +111,9 @@ describe("corrections workbook", () => {
       ]);
       expect(row(rows, 1)).toHaveLength(10);
       expect(row(rows, 1)).toEqual(CORRECTIONS_REPORT_WORDS[language].rowColumns.map(xmlText));
-      expect(row(rows, 1)[0]).toBe(language === "en" ? "Made on" : "Fecha en que se hizo");
+      expect(row(rows, 1)[0]).toBe(
+        language === "en" ? "Made on" : CORRECTIONS_REPORT_WORDS.es.rowColumns[0],
+      );
       expect(row(rows, 2)).toEqual([
         "2026-04-01",
         late,
@@ -141,9 +143,9 @@ describe("corrections workbook", () => {
   );
 
   it.each([
-    ["correction", "Correction", "Rectificativa"],
-    ["date_moved_out", "Date moved out", "Fecha trasladada (salida)"],
-    ["date_moved_in", "Date moved in", "Fecha trasladada (entrada)"],
+    ["correction", "Correction", CORRECTIONS_REPORT_WORDS.es.kinds.correction],
+    ["date_moved_out", "Date moved out", CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_out],
+    ["date_moved_in", "Date moved in", CORRECTIONS_REPORT_WORDS.es.kinds.date_moved_in],
   ] as const)("labels a %s row in English and Spanish", async (kind, english, spanish) => {
     const data: VatCorrections = { ...LATE, rows: [{ ...LATE.rows[0]!, kind }] };
     expect(row((await sheets(data, "en")).rows, 2)[1]).toBe(english);
