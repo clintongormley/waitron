@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Context, MiddlewareHandler } from "hono";
+import { matchedRoutes } from "hono/route";
 import { isUuid } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 
@@ -64,11 +65,11 @@ function loggedPath(c: Context, template: string): string {
   return c.req.url.includes("?") ? `${path}?***` : path;
 }
 
-export function requestIdMiddleware(log: Logger, now: () => Date): MiddlewareHandler {
+export function requestIdMiddleware(log: Logger, now: () => Date | number): MiddlewareHandler {
   return async (c, next) => {
     const id = sanitizeRequestId(c.req.header("x-request-id")) ?? randomUUID();
     c.set("requestId", id);
-    const start = now().getTime();
+    const start = Number(now());
     await next();
     c.header("x-request-id", id);
     const routePath = c.req.routePath;
@@ -83,13 +84,25 @@ export function requestIdMiddleware(log: Logger, now: () => Date): MiddlewareHan
       return;
     }
     const errorCode = c.get("refusalCode");
-    const level = errorCode === undefined ? "debug" : c.res.status >= 500 ? "error" : "warn";
+    const level =
+      errorCode === undefined
+        ? "debug"
+        : errorCode === "storage.disk_full" || errorCode === "server.internal"
+          ? "error"
+          : "warn";
+    // A gate can answer before Hono runs the handler that matched the request.
+    const template =
+      errorCode !== undefined && routePath.includes("*")
+        ? (matchedRoutes(c)
+            .filter(({ method }) => method !== "ALL")
+            .at(-1)?.path ?? routePath)
+        : routePath;
     log(level, "http.request", {
       requestId: id,
       method: c.req.method,
-      routePath: loggedPath(c, routePath),
+      routePath: loggedPath(c, template),
       status: c.res.status,
-      durationMs: now().getTime() - start,
+      durationMs: Number(now()) - start,
       errorCode,
     });
   };

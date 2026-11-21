@@ -62,11 +62,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   let confirmation: KeptClockConfirmation | null = null;
 
   const app = new Hono();
-  if (options.log)
-    app.use(
-      "*",
-      requestIdMiddleware(options.log, () => new Date(wall())),
-    );
+  if (options.log) app.use("*", requestIdMiddleware(options.log, monotonic));
   const waitingAnswer = (c: Context) => {
     const err = new AppError("server.waiting_for_clock", { confirmed: confirmation !== null });
     c.set("refusalCode", err.code);

@@ -88,7 +88,7 @@ describe("requestIdMiddleware", () => {
     const { a, lines } = app();
     const saleId = "2ecbbef3-e05d-4c56-9b52-81d596ebc74c";
     const deliveryId = "7a4c35e2-79e0-41c2-b0ac-64cfd6d91ef1";
-    const run = createErrorBoundary({ "invoice_delivery.email_unavailable": 409 }, "sale.failed");
+    const run = createErrorBoundary({ "invoice_delivery.email_unavailable": 503 }, "sale.failed");
     a.post("/api/sales/:id/deliveries/:deliveryId/retry", (c) =>
       run(
         c,
@@ -100,7 +100,7 @@ describe("requestIdMiddleware", () => {
       `/api/sales/${saleId}/deliveries/${deliveryId}/retry?address=customer%40example.test`,
       { method: "POST", headers: { "x-request-id": "email-retry" } },
     );
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: { code: "invoice_delivery.email_unavailable", params: {} },
     });
@@ -112,7 +112,7 @@ describe("requestIdMiddleware", () => {
         requestId: "email-retry",
         method: "POST",
         routePath: `/api/sales/${saleId}/deliveries/${deliveryId}/retry?***`,
-        status: 409,
+        status: 503,
         durationMs: 0,
         errorCode: "invoice_delivery.email_unavailable",
       },
@@ -132,25 +132,25 @@ describe("requestIdMiddleware", () => {
     expect(JSON.parse(lines[0]!).routePath).toBe(template);
   });
 
+  const handover = createHandoverGate();
+  handover.close({ allowed: () => false });
   it.each([
     [403, "node.read_only", readOnlyGate(() => true)],
-    [
-      503,
-      "handover.stepping_down",
-      (() => {
-        const gate = createHandoverGate();
-        gate.close({ allowed: () => false });
-        return gate.middleware;
-      })(),
-    ],
+    [503, "handover.stepping_down", handover.middleware],
   ])("logs the code on a direct refusal with status %s", async (status, code, gate) => {
     const { a, lines } = app();
-    a.use("/gated", gate);
-    a.post("/gated", (c) => c.text("should stay gated"));
-    const response = await a.request("/gated", { method: "POST" });
+    a.use("*", gate);
+    a.post("/api/sales/:id/reprint", (c) => c.text("should stay gated"));
+    const path = "/api/sales/2ecbbef3-e05d-4c56-9b52-81d596ebc74c/reprint";
+    const response = await a.request(path, { method: "POST" });
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error: { code, params: {} } });
-    expect(JSON.parse(lines[0]!)).toMatchObject({ status, errorCode: code });
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      level: "warn",
+      status,
+      errorCode: code,
+      routePath: "/api/sales/:id/reprint",
+    });
   });
 
   it("logs http.request with the route pattern and a masked query", async () => {

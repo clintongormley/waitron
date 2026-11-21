@@ -1945,7 +1945,7 @@ it("boot gives remote dashboard files the main handover stop and request metadat
       ["remote-stopped", "remote-stopped", "local-stopped"].map((requestId) =>
         expect.objectContaining({
           requestId,
-          level: "error",
+          level: "warn",
           status: 503,
           errorCode: "handover.stepping_down",
         }),

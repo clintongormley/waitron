@@ -86,6 +86,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines, withoutRules } from "./testing/decode-ticket.js";
@@ -5266,6 +5267,13 @@ describe("a reader payment on a device that changes profile while it is starting
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const app = new Hono();
+    app.use(
+      "*",
+      requestIdMiddleware(
+        () => {},
+        () => 0,
+      ),
+    );
     mountTillApi(
       app,
       {
@@ -5286,6 +5294,7 @@ describe("a reader payment on a device that changes profile while it is starting
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "x-request-id": "reader-payment",
           cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
         },
         body: JSON.stringify({
@@ -5363,7 +5372,7 @@ describe("a reader payment on a device that changes profile while it is starting
     expect(log).toHaveBeenCalledWith("warn", "payment.collection_failed", {
       orderId: billId,
       outcome: "declined",
-      requestId: undefined,
+      requestId: "reader-payment",
     });
   });
 
