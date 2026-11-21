@@ -41,7 +41,6 @@ import {
   compareDecimal,
   decimal,
   divideDecimal,
-  isZeroDecimal,
   multiplyDecimal,
   subtractDecimal,
   sumDecimals,
@@ -108,24 +107,27 @@ export interface AccountantExport {
 }
 
 /**
- * `amount` shared over a ticket's VAT rates in proportion to each rate's gross, rounded to the
- * cent, the last rate taking the remainder so the shares sum to `amount`. Within a rate the VAT is
- * share × rate / (100 + rate), rounded to the cent, and the base is the share less that VAT. A
- * ticket with no VAT rates, or none with any gross, gives none.
+ * `amount` shared over a ticket's VAT rates whose gross is above zero, in proportion to that gross,
+ * rounded to the cent, the last rate taking the remainder so the shares sum to `amount`. A rate at
+ * or below zero is left out: on a table's ticket it is the part payment it took off, not a sale at
+ * that rate. Within a rate the VAT is share × rate / (100 + rate), rounded to the cent, and the
+ * base is the share less that VAT. A ticket with no rate above zero gives none.
  */
 export function refundVatShares(
   amount: Decimal,
   breakdown: readonly { rate: string; base: string; tax: string }[],
 ): RefundWithoutCorrective["vat"] {
-  const grosses = breakdown.map((vat) => addDecimal(decimal(vat.base), decimal(vat.tax)));
-  const whole = sumDecimals(grosses);
-  if (isZeroDecimal(whole)) return [];
+  const sold = breakdown
+    .map((vat) => ({ vat, gross: addDecimal(decimal(vat.base), decimal(vat.tax)) }))
+    .filter(({ gross }) => compareDecimal(gross, decimal("0.00")) > 0);
+  if (sold.length === 0) return [];
+  const whole = sumDecimals(sold.map(({ gross }) => gross));
   let shared = decimal("0.00");
-  return breakdown.map((vat, index) => {
+  return sold.map(({ vat, gross }, index) => {
     const share =
-      index === breakdown.length - 1
+      index === sold.length - 1
         ? subtractDecimal(amount, shared)
-        : divideDecimal(multiplyDecimal(amount, grosses[index]!), whole, 2);
+        : divideDecimal(multiplyDecimal(amount, gross), whole, 2);
     shared = addDecimal(shared, share);
     const rate = decimal(vat.rate);
     const tax = divideDecimal(multiplyDecimal(share, rate), addDecimal(decimal("100"), rate), 2);
@@ -351,7 +353,7 @@ export async function renderAccountantWorkbook(
     },
     { name: words.purchaseSheet, rows: [words.purchaseColumns, ...purchaseRows] },
     { name: words.outsideSheet, rows: [words.outsideColumns, ...outsideRows] },
-    { name: words.refundSheet, rows: [words.refundColumns, ...refundRows] },
+    { name: words.refundSheet, rows: [[words.refundNote], words.refundColumns, ...refundRows] },
   ]);
 }
 
@@ -519,7 +521,7 @@ export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: 
 
 /**
  * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
- * a Correct invoice. A bill refund is never listed: it is taken before the bill's invoice exists.
+ * a Correct invoice. A bill refund is never listed: what it gives back is owed on the bill again.
  */
 async function listRefundsWithoutCorrective(
   tx: Transaction,

@@ -26,6 +26,9 @@ import {
   seedSubstitution,
   seedPurchaseInvoice,
   seedTender,
+  seedBillPayment,
+  seedBillRefund,
+  seedOpenOrder,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
 import {
@@ -1282,6 +1285,116 @@ describe("refunds without a corrective invoice", () => {
     expect(toScale(sumDecimals(row!.vat.flatMap((vat) => [vat.base, vat.tax])), 2)).toBe("10.01");
   });
 
+  it("shares a refund of a table's ticket only over the rates it sold at, not over the part payment it took off", async () => {
+    const advance = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "30.00",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "10.00",
+      base: "27.27",
+    });
+    const saleId = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-02T14:00:00.000Z",
+      total: "50.00",
+      lines: [
+        { vatRate: "21.00", lineTotal: "66.12" },
+        {
+          vatRate: "10.00",
+          lineTotal: "-27.27",
+          advanceRole: "deduction",
+          deductsSaleId: advance.saleId,
+        },
+      ],
+      vatBreakdown: [
+        { rate: "21.00", base: "66.12", tax: "13.88" },
+        { rate: "10.00", base: "-27.27", tax: "-2.73" },
+      ],
+    });
+    await seedTender(
+      suite.db,
+      { saleId },
+      { method: "cash", amount: "50.00", settledAt: "2026-11-02T14:00:00.000Z" },
+    );
+    const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+    await refund(
+      { saleId, tenderId: tender!.id, method: "cash" as const, venue },
+      "10.00",
+      "2026-11-03T12:00:00.000Z",
+    );
+
+    const [row] = (await list()).refundsWithoutCorrective;
+    expect(row).toMatchObject({ saleId, invoiceNumber: "A/2", takenOffBy: null });
+    expect(row!.vat).toEqual([{ rate: "21.00", base: "8.26", tax: "1.74" }]);
+  });
+
+  it("leaves out a bill refund, even of a payment on a bill whose ticket was already issued", async () => {
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    const payment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: orderId, deviceId: venue.deviceId },
+      { method: "cash", applied: "20.00", state: "received", at: "2026-11-02T13:00:00.000Z" },
+    );
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-02T12:00:00.000Z",
+      total: "22.00",
+      workingOrderId: orderId,
+      lines: [{ vatRate: "10.00", lineTotal: "20.00" }],
+    });
+    await seedBillRefund(
+      suite.db,
+      { billPaymentId: payment, deviceId: venue.deviceId, nodeId: venue.nodeId },
+      { applied: "5.00", state: "completed", at: "2026-11-03T12:00:00.000Z" },
+    );
+    const control = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "11.00",
+      tip: "0.00",
+      at: "2026-11-02T12:00:00.000Z",
+      invoiceNumber: 2,
+      vatRate: "10.00",
+      base: "10.00",
+    });
+    const plain = await refund(control, "1.00", "2026-11-03T12:00:00.000Z");
+
+    expect((await list()).refundsWithoutCorrective.map((row) => row.id)).toEqual([plain]);
+  });
+
+  it("lists a refund in the period it completed in, not the one it was asked for in", async () => {
+    const ticket = await seedRefundableSale(suite.db, venue, {
+      method: "cash",
+      applied: "11.00",
+      tip: "0.00",
+      at: "2026-10-30T12:00:00.000Z",
+      invoiceNumber: 1,
+      vatRate: "10.00",
+      base: "10.00",
+    });
+    const intoNovember = await seedTenderRefund(suite.db, ticket, {
+      applied: "1.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: "2026-10-31T12:00:00.000Z",
+      at: "2026-11-01T12:00:00.000Z",
+    });
+    const intoDecember = await seedTenderRefund(suite.db, ticket, {
+      applied: "2.00",
+      tip: "0.00",
+      state: "completed",
+      createdAt: "2026-11-30T12:00:00.000Z",
+      at: "2026-12-01T12:00:00.000Z",
+    });
+    const ids = async (from: string, to: string) =>
+      (await list(from, to)).refundsWithoutCorrective.map((row) => row.id);
+
+    expect(await ids("2026-10-01", "2026-10-31")).toEqual([]);
+    expect(await ids("2026-11-01", "2026-11-30")).toEqual([intoNovember]);
+    expect(await ids("2026-12-01", "2026-12-31")).toEqual([intoDecember]);
+  });
+
   it.each(["en", "es"] as const)(
     "writes one row per VAT rate under a note that the VAT stays declared (%s)",
     async (language) => {
@@ -1319,16 +1432,18 @@ describe("refunds without a corrective invoice", () => {
         `name="${language === "en" ? "Refunds without a corrective invoice" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
       );
       const xml = strFromU8(files["xl/worksheets/sheet4.xml"]!);
-      expect(row(xml, 1).at(-1)).toBe(
+      expect(row(xml, 1)).toEqual([
         language === "en"
           ? "Note: no corrective invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts"
-          : ACCOUNTANT_EXPORT_WORDS.es.refundColumns.at(-1),
-      );
+          : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
+      ]);
+      expect(row(xml, 2)).toEqual(words.refundColumns);
+      expect(row(xml, 2).at(-1)).toBe(language === "en" ? "VAT (EUR)" : "IVA (EUR)");
       const card = words.paymentMethods.card;
       const shared = ["refund-1", "2026-11-03T12:00:00.000Z"];
       const tail = [card, "Goodwill", "Ana", "Luis", "sale-1", "A/1", "A/2"];
-      expect(row(xml, 2)).toEqual([...shared, "10.01", "0.50", ...tail, "10.00", "4.55", "0.46"]);
-      expect(row(xml, 3)).toEqual([...shared, "", "", ...tail, "21.00", "4.13", "0.87"]);
+      expect(row(xml, 3)).toEqual([...shared, "10.01", "0.50", ...tail, "10.00", "4.55", "0.46"]);
+      expect(row(xml, 4)).toEqual([...shared, "", "", ...tail, "21.00", "4.13", "0.87"]);
     },
   );
 });
