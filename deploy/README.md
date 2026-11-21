@@ -575,6 +575,8 @@ Waitron app service is running. You can turn the timer off with
 A box built from a recipe that includes the timer can use it straight away. If you first upgrade
 from a numbered release whose installer predates the timer, that upgrade brings in the new
 installer. The next checked upgrade to a release that includes the timer brings in both units.
+If you install a release that predates the timer, checks pause until the box runs a release with
+timer support again.
 
 ### Trying a branch before it merges
 

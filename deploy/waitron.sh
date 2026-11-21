@@ -997,7 +997,7 @@ fetch_upgrade_driver() {
     fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
   done
   # A checked install can target a release whose driver cannot run the timer.
-  if grep -qF 'check-upgrade-window)' "$stage/waitron.sh"; then
+  if grep -Eq '^[[:blank:]]+check-upgrade-window[[:blank:]]*\)' "$stage/waitron.sh"; then
     for file in waitron-upgrade.service waitron-upgrade.timer; do
       fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
     done

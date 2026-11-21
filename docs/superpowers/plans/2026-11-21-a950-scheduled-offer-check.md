@@ -47,5 +47,5 @@ load before the new units arrive. In a throwaway container booted with
 systemd, use a test trust key, a stubbed download and a fake installed release tag. Verify the
 installed units with `systemd-analyze verify` and start the service inside and outside the window.
 Repeat with the app stopped and confirm it stays stopped. List any unrun checks in the PR.
-Run the changed files with `pnpm exec vitest run` and sign off the commits. Estimate +100/−5
-production and +95/−0 test lines, plus docs.
+Run the changed files with `pnpm exec vitest run` and sign off the commits. With the review fixes, +96/−9
+production and +147/−6 test lines, plus docs.

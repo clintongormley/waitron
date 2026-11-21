@@ -379,6 +379,7 @@ stub(
 dest="\${@: -1}"
 case "$dest" in
   "\${WT_SANDBOX}"/*)
+    if [ "$1" != "-d" ]; then [ -f "\${@: -2:1}" ] || exit 1; fi
     if [ "$1" = "-d" ]; then mkdir -p "$dest"; else cp "\${@: -2:1}" "$dest"; fi
     mode=""; prev=""; for a in "$@"; do [ "$prev" = "-m" ] && mode="$a"; prev="$a"; done
     [ -n "$mode" ] && chmod "$mode" "$dest" ;;
@@ -1586,7 +1587,8 @@ describe("waitron.sh install of a release", () => {
     installedBox(sb);
     const release = signedRelease(sb);
     const olderDriver = join(sb.root, "older-driver.sh");
-    writeFileSync(olderDriver, "#!/usr/bin/env bash\n");
+    const source = readFileSync(SCRIPT, "utf8");
+    writeFileSync(olderDriver, source.replace(/^    check-upgrade-window\).*\n/m, ""));
     const result = run(sb, ["install", "v1.2.3"], {
       ...release,
       WT_INSTALLED_RELEASE_REF: "v1.2.2",
@@ -4020,8 +4022,8 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
     expect(calls.filter((line) => line === "flock -n 9")).toHaveLength(2);
   });
 
-  const lockCases = [args, ["check-upgrade-window"]];
-  it.each(lockCases)("refuses %j while the lock is held", async (...command) => {
+  const lockCases = [[args], [["check-upgrade-window"]]];
+  it.each(lockCases)("refuses %j while the lock is held", async (command) => {
     const sb = managedBox();
     const checkingWindow = command[0] === "check-upgrade-window";
     if (checkingWindow) {
