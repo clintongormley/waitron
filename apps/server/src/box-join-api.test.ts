@@ -12,11 +12,13 @@ import {
   JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
   commitmentFor,
+  helloMessageFields,
   joinCode,
+  revealAnswerFields,
   signJoinMessage,
   verifyJoinMessage,
 } from "./box-join-code.js";
-import { helloMessageFields, mountBoxJoinApi, revealAnswerFields } from "./box-join-api.js";
+import { mountBoxJoinApi } from "./box-join-api.js";
 import {
   createBoxJoinRequests,
   type BoxJoinRequests,
@@ -251,13 +253,22 @@ describe("the main box's box-to-box join routes", () => {
     expect(requests.listed().map((r) => r.id)).toEqual([firstHello.requestId]);
   });
 
-  it("refuses a reveal whose signature does not check", async () => {
+  it("refuses a message whose signature does not check, and ends its request", async () => {
     const box = newBox("192.168.1.20");
     const { requestId } = await hello(box);
-    const forged = { ...revealBody(box, requestId), newNonce: randomBytes(32).toString("base64") };
-    const response = await post("reveal", forged, box.address);
+    await post("reveal", revealBody(box, requestId), box.address);
+    const pollBody = (seq: number, at: number) => ({
+      requestId,
+      seq,
+      at,
+      signature: signed(box, JOIN_POLL_LABEL, requestId, seq, [Buffer.from(String(at))]),
+    });
+    const forged = { ...pollBody(2, NOW), at: NOW + 1 };
+    const response = await post("poll", forged, box.address);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual(err("mirror.join_invalid"));
+    const later = await post("poll", pollBody(3, NOW), box.address);
+    expect(await later.json()).toEqual({ state: "ended", reason: "invalid" });
     expect(requests.listed()).toEqual([]);
   });
 

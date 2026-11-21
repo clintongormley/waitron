@@ -142,3 +142,36 @@ export function drawDecoys(
   }
   return [decoys[0]!, decoys[1]!];
 }
+
+export const JOIN_PROTOCOL = 1;
+
+export type JoinHelloFields = Pick<
+  JoinCodeInputs,
+  "newNodeId" | "newPublicKey" | "encryptionKey" | "contactUrl" | "storeUrl" | "addresses"
+>;
+
+/** The hello's fields every signature over it covers, in order. */
+function helloFields(hello: JoinHelloFields): Buffer[] {
+  return [
+    Buffer.from(hello.newNodeId),
+    Buffer.from(hello.newPublicKey, "base64"),
+    Buffer.from(hello.encryptionKey, "base64"),
+    Buffer.from(hello.contactUrl),
+    Buffer.from(hello.storeUrl),
+    Buffer.from([...hello.addresses].sort().join("\n")),
+  ];
+}
+
+/** What the new box signs in its hello, with request id `""` and seq 0. */
+export function helloMessageFields(hello: JoinHelloFields, at: number): Buffer[] {
+  return [Buffer.from(String(JOIN_PROTOCOL)), ...helloFields(hello), Buffer.from(String(at))];
+}
+
+/** What the main box signs in its reveal answer, under the reveal's request id and seq. */
+export function revealAnswerFields(
+  hello: JoinHelloFields,
+  newNonce: Buffer,
+  mainNonce: Buffer,
+): Buffer[] {
+  return [...helloFields(hello), newNonce, mainNonce];
+}

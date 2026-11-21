@@ -190,6 +190,23 @@ describe("reveal", () => {
     expect(store.listed()).toEqual([]);
   });
 
+  it("ends a request whose message failed its check, without freeing its reveal place", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    store.endInvalid(id);
+    expect(store.poll({ requestId: id, seq: 2, at: iso(0) })).toEqual({
+      state: "ended",
+      reason: "invalid",
+    });
+    expect(store.listed()).toEqual([]);
+    for (let n = 2; n <= 6; n++) {
+      const next = revealFrom(`10.0.0.${n}`);
+      expect(next.revealed).toHaveProperty("mainNonce");
+      store.cancel({ requestId: next.id, seq: 2 });
+    }
+    expect(revealFrom("10.0.0.7").revealed).toMatchObject({ refused: "full", limit: "recent" });
+  });
+
   it("does not answer a poll before the reveal, and the reveal still succeeds", () => {
     const { store, hello, reveal } = setup();
     hello("10.0.0.1");
@@ -209,6 +226,16 @@ describe("reveal", () => {
     const first = order();
     expect(first).toHaveLength(3);
     for (let n = 0; n < 20; n++) expect(order()).toEqual(first);
+  });
+
+  it("hands Check a copy of the codes, so a caller cannot reorder the stored list", () => {
+    const { store, revealFrom } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    const read = store.check(id);
+    if ("refused" in read) throw new Error("not listed");
+    const first = [...read.choices];
+    read.choices.reverse();
+    expect(store.check(id)).toMatchObject({ choices: first });
   });
 
   it("refuses a code a listed request shows, real or decoy, without the main box's nonce", () => {

@@ -75,7 +75,7 @@ describe("encodeFields", () => {
   });
 
   it("encodes text as UTF-8", () => {
-    expect([...encodeFields(["é"])]).toEqual([0, 0, 0, 2, 0xc3, 0xa9]);
+    expect([...encodeFields(["©"])]).toEqual([0, 0, 0, 2, 0xc2, 0xa9]);
   });
 
   it("tells apart fields that run together the same way", () => {

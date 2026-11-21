@@ -14,7 +14,10 @@ import {
   JOIN_CANCEL_LABEL,
   JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
+  JOIN_PROTOCOL,
   JOIN_REVEAL_LABEL,
+  helloMessageFields,
+  revealAnswerFields,
   signJoinMessage,
   verifyJoinMessage,
 } from "./box-join-code.js";
@@ -34,7 +37,6 @@ import { readNodeIdentityKey } from "./node-identity.js";
 import { peerBodyLimit } from "./peer-route-limits.js";
 import { requestAddress } from "./request-from-box.js";
 
-export const JOIN_PROTOCOL = 1;
 const BODY_LIMIT = 65536;
 const NONCE_BYTES = 32;
 const MAX_ADDRESSES = 32;
@@ -58,32 +60,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.join_not_found": 404,
   "mirror.join_full": 429,
 };
-
-/** The hello's fields every signature over it covers, in order. */
-function helloFields(hello: JoinHello): Buffer[] {
-  return [
-    Buffer.from(hello.newNodeId),
-    Buffer.from(hello.newPublicKey, "base64"),
-    Buffer.from(hello.encryptionKey, "base64"),
-    Buffer.from(hello.contactUrl),
-    Buffer.from(hello.storeUrl),
-    Buffer.from([...hello.addresses].sort().join("\n")),
-  ];
-}
-
-/** What the new box signs in its hello, with request id `""` and seq 0. */
-export function helloMessageFields(hello: JoinHello, at: number): Buffer[] {
-  return [Buffer.from(String(JOIN_PROTOCOL)), ...helloFields(hello), Buffer.from(String(at))];
-}
-
-/** What the main box signs in its reveal answer, under the reveal's request id and seq. */
-export function revealAnswerFields(
-  hello: JoinHello,
-  newNonce: Buffer,
-  mainNonce: Buffer,
-): Buffer[] {
-  return [...helloFields(hello), newNonce, mainNonce];
-}
 
 const invalid = () => new AppError("mirror.join_invalid", {});
 
@@ -202,8 +178,10 @@ export function mountBoxJoinApi(
     if (
       typeof signature !== "string" ||
       !verifyJoinMessage(label, requestId, seq, fields(body), signature, held.hello.newPublicKey)
-    )
+    ) {
+      requests.endInvalid(requestId);
       throw invalid();
+    }
     return { body, requestId, seq, held };
   }
 

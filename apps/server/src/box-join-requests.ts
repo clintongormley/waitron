@@ -321,6 +321,12 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       return { cancelled: true };
     },
 
+    /** A message of this request failed its check. Its reveal still counts against the limit. */
+    endInvalid(requestId: string): void {
+      const r = held(requestId);
+      if (r && r.phase !== "ended") end(r, "invalid", steadyNow());
+    },
+
     /** What the caller needs to check a box-to-box request's address and signature. */
     requestFor(requestId: string): HeldJoinRequest | null {
       const r = held(requestId);
@@ -355,7 +361,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         address: r.address,
         askedAt: wallAt(r.helloAt),
         startedAgain: r.revealed!.startedAgain,
-        choices: r.revealed!.choices,
+        choices: [...r.revealed!.choices],
         at: r.latestAt,
         atReceivedAt: wallAt(r.latestAtReceived),
       };
