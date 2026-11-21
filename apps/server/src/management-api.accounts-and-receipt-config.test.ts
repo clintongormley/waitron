@@ -2547,6 +2547,7 @@ describe("independent department receipt routes", () => {
       { reason: "invalid_language", field: "headerSubtitle" },
     ],
     [{ printAddress: "false" }, { reason: "not_boolean", field: "printAddress" }],
+    [{ phone: "512 345 678" }, { reason: "invalid_phone", field: "phone" }],
     [null, { reason: "not_object" }],
   ])("refuses a department invalid value without writes (%j)", async (receipt, params) => {
     await setupVenue();
@@ -2562,6 +2563,19 @@ describe("independent department receipt routes", () => {
         .from(departments)
         .where(and(eq(departments.id, id), sql`${departments.receiptUpdatedAt} is not null`)),
     ).toEqual([]);
+  });
+
+  it("saves receipt text while retaining an unchanged old phone", async () => {
+    await setupVenue();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const id = await departmentFixture();
+    const phone = "512 345 678";
+    await seedDepartmentReceipt(suite.db, id, { phone: phone + " " });
+    const receipt = { phone, email: "bar@example.com" };
+    expect((await putTrim(app, cookie, departmentReceiptPath(id), { receipt })).status).toBe(204);
+    const saved = await app.request(departmentReceiptPath(id), { headers: { cookie } });
+    expect(await saved.json()).toMatchObject({ receipt: { ...receipt, phone: phone + " " } });
   });
 
   it.each([false, true])(

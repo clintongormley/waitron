@@ -95,15 +95,10 @@ Not observed in a real password manager — the tests replace the browser's meth
   products beyond the rows on screen. Moving Products to server pages needs its own plan.
 - Find a bill retains its existing request state until its own adoption.
 
-## Typed values are only partly checked — a generic phone-format check landed, a country-specific one has not.
+## Some typed fields still need validation
 
-`isValidTelephone` in `@waitron/shared` runs on both the browser forms and the
-  server write paths (`person.telephone_invalid`), and a number is kept exactly as typed. Still open:
-  the country-pack seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) is still not
-  called, so a Spanish mobile that fails the national rule but passes the generic one is still
-  accepted; other typed fields (email aside) are still unchecked; the tax identifier stays fiscal.
-  Confirm with owner: an existing malformed number now blocks an otherwise-unrelated edit, because
-  both forms re-validate the telephone field on every submit.
+Review typed dashboard fields beyond email and telephone for useful checks. Keep tax-identifier
+validation in the fiscal module.
 
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 

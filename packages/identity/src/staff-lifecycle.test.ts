@@ -19,6 +19,7 @@ import {
   webauthnCredentials,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { seedTaxpayer } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
@@ -55,6 +56,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("invited person lifecycle", () => {
   it("stores legal and contact details as Pending with no usable PIN", async () => {
+    await seedTaxpayer(suite.db);
     const { token } = await openManagementSession(suite.db, "admin");
     const { id } = await run(async (tx) =>
       invitePerson(tx, {
@@ -62,7 +64,7 @@ describe("invited person lifecycle", () => {
         displayName: "  Ada  ",
         firstNames: " Ada ",
         lastNames: " Lovelace ",
-        telephone: " +44 20 1234 ",
+        telephone: " +44 7700 900123 ",
         roleIds: [(await ensureBuiltInRoles(tx)).manager],
         email: " ADA@example.com ",
       }),
@@ -83,7 +85,7 @@ describe("invited person lifecycle", () => {
         display_name: "Ada",
         first_names: "Ada",
         last_names: "Lovelace",
-        telephone: "+44 20 1234",
+        telephone: "+44 7700 900123",
         email: "ada@example.com",
         status: "pending",
         pin_hash: null,
@@ -267,7 +269,8 @@ describe("invited person lifecycle", () => {
     });
   });
 
-  it("rejects a malformed telephone on both invite and update, but accepts an absent one", async () => {
+  it.each(["123", "512 345 678"])("rejects telephone %s on invite and update", async (phone) => {
+    await seedTaxpayer(suite.db);
     const { token } = await openManagementSession(suite.db, "admin");
     await expect(
       run(async (tx) =>
@@ -276,7 +279,7 @@ describe("invited person lifecycle", () => {
           displayName: "Bad Phone",
           firstNames: "Bad",
           lastNames: "Phone",
-          telephone: "123",
+          telephone: phone,
           roleIds: [(await ensureBuiltInRoles(tx)).staff],
           email: "bad-phone@example.com",
         }),
@@ -293,20 +296,24 @@ describe("invited person lifecycle", () => {
         email: "good-phone@example.com",
       }),
     );
-    await expect(
-      run((tx) =>
-        updatePersonDetails(tx, {
-          managementSessionId: token,
-          personId: created.id,
-          displayName: "Good Phone",
-          firstNames: "Good",
-          lastNames: "Phone",
-          telephone: "12345",
-          email: "good-phone@example.com",
-          status: "pending",
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "person.telephone_invalid" });
+    const input = {
+      managementSessionId: token,
+      personId: created.id,
+      displayName: "Good Phone",
+      firstNames: "Good",
+      lastNames: "Phone",
+      telephone: phone,
+      email: "good-phone@example.com",
+      status: "pending" as const,
+    };
+    await expect(run((tx) => updatePersonDetails(tx, input))).rejects.toMatchObject({
+      code: "person.telephone_invalid",
+    });
+    await suite.db.run(sql`update persons set telephone = ${phone} where id = ${created.id}`);
+    await run((tx) => updatePersonDetails(tx, { ...input, firstNames: "Renamed" }));
+    expect(
+      await suite.db.get(sql`select first_names, telephone from persons where id = ${created.id}`),
+    ).toEqual({ first_names: "Renamed", telephone: phone });
   });
 
   it("does not let the only active admin demote or deactivate themselves", async () => {

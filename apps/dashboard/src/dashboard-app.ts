@@ -1260,6 +1260,7 @@ export class DashboardApp extends LitElement {
 
   // Returning to sign-in must have a language even when the server is unreachable.
   #venueLocale: string = FALLBACK_LOCALE;
+  #venueCountry?: string;
   #loginLocale?: string;
   #loginLocaleChoice = 0;
   /** Bumped by a signed-in language pick, the twin of `#loginLocaleChoice` for the login screen. A
@@ -1447,6 +1448,7 @@ export class DashboardApp extends LitElement {
       permissions: string[];
       modules: string[];
       venueName: string;
+      venueCountry?: string;
       onboardingIntent?: "demo" | "prepare" | "live";
       simulatedCardPayments?: boolean;
       sessionExpiresInSeconds?: number;
@@ -1491,6 +1493,7 @@ export class DashboardApp extends LitElement {
     this.onboardingIntent = me.onboardingIntent;
     this.simulatedCardPayments = me.simulatedCardPayments;
     this.#venueLocale = me.venueLocale;
+    this.#venueCountry = me.venueCountry;
     this.venueName = me.venueName;
     const remainingSeconds = me.sessionExpiresInSeconds ?? 30 * 60;
     this.sessionIdleTimeoutSeconds = me.sessionIdleTimeoutSeconds ?? 30 * 60;
@@ -1873,6 +1876,7 @@ export class DashboardApp extends LitElement {
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
     this.sessionPersonId = undefined;
+    this.#venueCountry = undefined;
     this.screen = "login";
     this.myPersonId = "";
     this.#sessionPermissions = [];
@@ -1971,6 +1975,7 @@ export class DashboardApp extends LitElement {
     panel === "department-receipt" && this.#sessionPermissions.includes("venue.configure")
       ? html`<dashboard-department-receipt-editor
           .api=${this.api}
+          .venueCountry=${this.#venueCountry}
           .subject=${subject}
         ></dashboard-department-receipt-editor>`
       : null;
@@ -3414,6 +3419,7 @@ export class DashboardApp extends LitElement {
           this.profileOpen
             ? html`<dashboard-profile-screen
                 .api=${this.api}
+                .venueCountry=${this.#venueCountry}
                 .canAdminister=${this.#sessionPermissions.includes("person.admin")}
                 .tillPin=${!this.#confinedToInvoices()}
                 @admin-sign-in=${() => void this.#onLogout()}
@@ -3513,6 +3519,7 @@ export class DashboardApp extends LitElement {
         ></dashboard-access-roles-screen>`;
       case "staff":
         return html`<dashboard-staff-screen
+          .venueCountry=${this.#venueCountry}
           .viewerPermissions=${this.#sessionPermissions}
           .viewerRoleIds=${this.#sessionRoleIds}
           .canChangeEmail=${this.#sessionPermissions.includes("person.email")}

@@ -951,10 +951,11 @@ describe("your profile", () => {
     expect(displayName()).toBe("Grace Byron");
   });
 
-  it("blocks a malformed telephone client-side and marks the field without calling the API", async () => {
+  it.each(["12345", "512 345 678"])("blocks profile telephone %s", async (phone) => {
     const { el, api } = await mount();
+    el.venueCountry = "ES";
     await editDetails(el);
-    input(el, "telephone", "12345"); // only five digits — too short to be valid
+    input(el, "telephone", phone);
     await click(el, "save");
     expect(api.saveProfile).not.toHaveBeenCalled();
     expect(
@@ -1207,6 +1208,21 @@ describe("your profile — validation, refusals and the remaining actions", () =
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-combobox[name=locale]")!
         .value,
     ).toBe("es-ES");
+  });
+
+  it("keeps the old telephone when editing the display name", async () => {
+    const profile = await apiStub().getProfile();
+    const telephone = "512 345 678";
+    const { el, api } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, telephone }),
+    });
+    el.venueCountry = "ES";
+    await editDetails(el);
+    input(el, "displayName", "Ada Lovelace");
+    await click(el, "save");
+    expect(api.saveProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ displayName: "Ada Lovelace", telephone }),
+    );
   });
 
   it("sends a cleared telephone as null", async () => {

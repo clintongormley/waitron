@@ -62,7 +62,7 @@ declare module "@waitron/shared" {
     "person.self_deactivation": Record<string, never>;
     /** Failed `isValidEmail` at a write boundary. */
     "person.email_invalid": Record<string, never>;
-    /** Failed `isValidTelephone` at a write boundary. */
+    /** Telephone refused at a write boundary. */
     "person.telephone_invalid": Record<string, never>;
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */

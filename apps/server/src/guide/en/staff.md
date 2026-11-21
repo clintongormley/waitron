@@ -14,6 +14,8 @@ Search and column sorting cover everyone who matches your filters. Use **Previou
 As a manager, open a person's row menu and choose **Edit** to change their names and telephone.
 Their email is their login address. Changing someone else's address needs an extra permission, which only Admin holds by default.
 
+For a foreign phone number, start with `+` and its country code, for example `+44 7700 900123`.
+
 Choose **Language** and **Save** to set their saved language. If their dashboard follows their
 browser, choose the language explicitly, even if it is already shown. The dashboard picks it up
 when reloaded, signed in again or returned to; the till uses it at their next sign-in. Changing your
@@ -91,6 +93,7 @@ authenticator, enter its current code for each sign-in change; a recovery code c
 You can set a password with **Add** if you normally sign in with a passkey.
 
 You can also change your name, display name, phone and language, and link Google in **Security** where it is available.
+Start a foreign phone number with `+` and its country code.
 
 To confirm a new email address, enter the code sent there. If email is not set up, use the email status’s settings link or **Sign in as an administrator** action; then return to your own account, re-enter the new address in **Your details** and save. If the code does not arrive within a few minutes, re-enter the new address and save: only the newest code works.
 

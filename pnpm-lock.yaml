@@ -1318,6 +1318,9 @@ importers:
       '@simplewebauthn/server':
         specifier: ^14.1.0
         version: 14.1.0
+      '@waitron/country-packs':
+        specifier: workspace:*
+        version: link:../country-packs
       '@waitron/credentials':
         specifier: workspace:*
         version: link:../credentials

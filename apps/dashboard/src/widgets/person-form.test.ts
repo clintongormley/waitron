@@ -264,13 +264,14 @@ describe("person-form", () => {
     expect(displayName(el)).toBe("Alexandra Soler");
   });
 
-  it("rejects a malformed telephone beside the field and blocks Save, then submits a valid one", async () => {
+  it.each(["12345", "512 345 678"])("blocks invite telephone %s", async (phone) => {
     const { el } = await mountForm({ open: true });
+    el.venueCountry = "ES";
     change(el, "first-names", "Ada");
     change(el, "last-names", "Lovelace");
     change(el, "display-name", "Ada");
     change(el, "email", "ada@example.com");
-    change(el, "telephone", "12345"); // 5 digits — below the 6-digit floor
+    change(el, "telephone", phone);
     let created = false;
     el.addEventListener("create-person", () => {
       created = true;
@@ -282,12 +283,12 @@ describe("person-form", () => {
       codeMessage("person.telephone_invalid"),
     );
 
-    change(el, "telephone", "+44 20 7946 0958");
+    change(el, "telephone", "+34 612-345-678");
     const event = await new Promise<CustomEvent>((resolve) => {
       el.addEventListener("create-person", (e) => resolve(e as CustomEvent), { once: true });
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     });
-    expect(event.detail.telephone).toBe("+44 20 7946 0958");
+    expect(event.detail.telephone).toBe("+34 612-345-678");
   });
 
   it("explains every missing required field under it, with one message at the bottom of the form and Save disabled", async () => {

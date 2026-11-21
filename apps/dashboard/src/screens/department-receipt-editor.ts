@@ -1,11 +1,8 @@
+import { isValidVenueTelephone } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  isValidTelephone,
-  untranslatedLanguages,
-  type DepartmentReceiptWrite,
-} from "@waitron/shared";
+import { untranslatedLanguages, type DepartmentReceiptWrite } from "@waitron/shared";
 import { QueryController } from "@waitron/dashboard-kit";
 import {
   baseStyles,
@@ -109,6 +106,7 @@ export class DepartmentReceiptEditor extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DepartmentReceiptClient;
+  @property({ attribute: false }) venueCountry?: string;
   @property({ attribute: false }) subject?: { id: string; name: string };
   /** The host builds a fresh subject on every render; the open department's again changes nothing. */
   protected override shouldUpdate(changed: PropertyValues<this>): boolean {
@@ -544,12 +542,15 @@ export class DepartmentReceiptEditor extends LitElement {
     const receipt = this.#body().receipt;
     for (const field of ["phone", "email"] as const) {
       const value = receipt[field] ?? "";
+      if (field === "phone" && value === (this.#baseline?.receipt.phone?.trim() ?? "")) continue;
       const max = field === "phone" ? MAX_RECEIPT_PHONE_LENGTH : MAX_RECEIPT_EMAIL_LENGTH;
       if (value.length > max)
         problems[field] = t("receipts.trim_too_long").replace("{max}", String(max));
       else if (
         value &&
-        !(field === "phone" ? isValidTelephone(value) : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+        !(field === "phone"
+          ? isValidVenueTelephone(value, this.venueCountry)
+          : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
       )
         problems[field] = t(
           field === "phone" ? "receipts.invalid_phone" : "receipts.invalid_email",

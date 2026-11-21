@@ -1,9 +1,6 @@
 import type { CountryPack } from "@waitron/country";
 
-/**
- * The UK pack exists to preserve the existing no-fiscal-regime provisioning path. Its address,
- * postcode, telephone and tax-identifier rules remain manual until they have product consumers.
- */
+/** The UK pack preserves provisioning without a fiscal regime. */
 export const UNITED_KINGDOM: CountryPack = {
   countryCode: "GB",
   defaultLocale: "en-GB",

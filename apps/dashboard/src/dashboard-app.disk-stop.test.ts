@@ -644,3 +644,19 @@ describe("the full-disk bar's button", () => {
     expect(location.pathname).not.toContain("box-status");
   });
 });
+
+it("passes the signed-in venue country to both staff editors", async () => {
+  history.replaceState(null, "", "/staff");
+  const api = stubApi({
+    getMe: vi.fn().mockResolvedValue({
+      ...me("manager", ["person.view", "venue.view"]),
+      venueCountry: "ES",
+    }),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("dashboard-staff-screen")).not.toBeNull();
+  const staff = el.shadowRoot!.querySelector("dashboard-staff-screen")!;
+  await staff.updateComplete;
+  expect(staff.shadowRoot!.querySelector("dashboard-person-form")!.venueCountry).toBe("ES");
+  expect(staff.shadowRoot!.querySelector("dashboard-person-edit")!.venueCountry).toBe("ES");
+});

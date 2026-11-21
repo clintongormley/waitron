@@ -16,7 +16,8 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
-import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
+import { AppError, assertSupportedLocale } from "@waitron/shared";
+import { checkedPersonTelephone } from "./person-telephone.js";
 import { foldForUniqueness } from "./fold.js";
 import { confirmEmailChangeByCode, queueAccountMail } from "./account-action.js";
 import { passkeyProviderName } from "./passkey-providers.js";
@@ -328,10 +329,7 @@ export async function saveOwnProfile(
   const lastNames = input.lastNames?.trim() ?? person.lastNames;
   if (input.lastNames !== undefined && lastNames === "")
     throw new AppError("profile.invalid", { field: "lastNames" });
-  const telephone =
-    input.telephone === undefined ? person.telephone : input.telephone?.trim() || null;
-  if (input.telephone !== undefined && telephone !== null && !isValidTelephone(telephone))
-    throw new AppError("person.telephone_invalid", {});
+  const telephone = await checkedPersonTelephone(tx, input.telephone, person.telephone);
   const email = normalizeAndValidateEmail(input.email);
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;

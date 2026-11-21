@@ -630,8 +630,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese correo ya está en uso",
   },
   "person.telephone_invalid": {
-    en: "Enter a valid telephone number, or leave it blank.",
-    es: "Introduce un número de teléfono válido o déjalo en blanco.",
+    en: "Enter a valid telephone number or leave it blank. Start foreign numbers with + and the country code.",
+    es: "Introduce un teléfono válido o déjalo en blanco. Empieza los números extranjeros con + y el prefijo del país.",
   },
   "person.display_name_taken": {
     en: "That display name is already in use. Add a surname or nickname.",

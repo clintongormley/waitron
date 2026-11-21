@@ -331,11 +331,19 @@ describe("your profile", () => {
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       telephone: null,
     });
+    const oldPhone = "512 345 678";
     await expect(
       withTransaction(suite.db, (tx) =>
-        saveOwnProfile(tx, { ...base, telephone: "123", keyRing: TOTP_KEY_RING }),
+        saveOwnProfile(tx, { ...base, telephone: oldPhone, keyRing: TOTP_KEY_RING }),
       ),
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
+    await suite.db.run(sql`update persons set telephone = ${oldPhone} where id = ${f.personId}`);
+    await withTransaction(suite.db, (tx) =>
+      saveOwnProfile(tx, { ...base, telephone: oldPhone, keyRing: TOTP_KEY_RING }),
+    );
+    expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
+      telephone: oldPhone,
+    });
   });
 
   it("rejects a display name already used by an active person", async () => {

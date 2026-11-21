@@ -13,6 +13,7 @@ import {
   findFiscalModules,
   getCountryPack,
   getVenueSetupCountryPack,
+  isValidVenueTelephone,
   receiptLabelsFor,
   receiptSampleItemsFor,
   resolveInstalledContentLanguageRules,
@@ -475,4 +476,24 @@ it("supplies pack-owned short variant names to the language picker", () => {
     name: "Valencian",
   });
   expect(languageDisplayName("ca-ES-valencia", "es-ES", false, presentation)).toBe("valenciano");
+});
+
+describe("venue telephone validation", () => {
+  it.each([
+    ["512 345 678", "ES", false],
+    ["+34 512 345 678", "ES", false],
+    ["00 34 512 345 678", "ES", false],
+    ["+00 34 512 345 678", "ES", false],
+    ["600 123 456", "ES", true],
+    ["+34 612-345-678", "ES", true],
+    ["0034 612-345-678", "ES", true],
+    ["+44 7700 900123", "ES", true],
+    ["0044 7700 900123", "ES", true],
+    ["+44 ABC 900123", "ES", false],
+    ["512 345 678", "GB", true],
+    ["512 345 678", "XX", true],
+    ["512 345 678", undefined, true],
+  ])("checks %s for %s: %s", (number, country, valid) => {
+    expect(isValidVenueTelephone(number, country)).toBe(valid);
+  });
 });

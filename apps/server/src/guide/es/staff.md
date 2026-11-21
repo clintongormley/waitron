@@ -15,6 +15,8 @@ La búsqueda y la ordenación por columnas abarcan a todas las personas que coin
 Como encargado, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
 Su correo es su dirección de acceso. Cambiar el de otra persona requiere un permiso adicional, que solo tiene Admin de forma predeterminada.
 
+Si el teléfono es extranjero, empieza con `+` y el prefijo del país, por ejemplo `+44 7700 900123`.
+
 Elige **Idioma** y **Guardar** para fijar su idioma guardado. Si su panel sigue el idioma del
 navegador, elige el idioma expresamente, aunque ya aparezca seleccionado. El panel lo aplica al
 recargar, al volver a iniciar sesión o al regresar a la pestaña; la caja lo usa en el próximo acceso.
@@ -98,6 +100,7 @@ no lo sustituye. Puedes crear una contraseña con **Añadir** si normalmente acc
 passkey.
 
 También puedes cambiar tu nombre, nombre visible, teléfono e idioma, y vincular Google en **Seguridad** si está disponible.
+Si el teléfono es extranjero, empieza con `+` y el prefijo del país.
 
 Para confirmar una nueva dirección, introduce el código que llegue a ella. Si el correo no está configurado, usa el enlace a Correo o **Iniciar sesión como administrador** que ofrece el resultado; después vuelve a tu cuenta, introduce de nuevo la dirección en **Tus datos** y guarda. Si el código no llega en unos minutos, vuelve a introducir la nueva dirección y guarda: solo funciona el código más reciente.
 

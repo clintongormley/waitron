@@ -1030,9 +1030,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   own-account email change; notices and wording for other administrator-made security changes
   (administrator email edits already notify the old address) and break-glass changes; grouping a burst.
 
-- **Typed values are only partly checked — a generic phone-format check landed, a country-specific
-  one has not.**
-  [Detail](backlog/dashboard.md#typed-values-are-only-partly-checked--a-generic-phone-format-check-landed-a-country-specific-one-has-not)
+- **Some typed fields still need validation.**
+  [Detail](backlog/dashboard.md#some-typed-fields-still-need-validation)
 
 - **Other browser check** (bundle of 4, size S). [Detail](backlog/dashboard.md#bundle-other-browser-check)
 

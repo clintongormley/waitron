@@ -40,8 +40,12 @@ it("opens with required description, bare languages and no inherited content or 
   receiptSave(el).click();
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
-it("saves exact independent receipt and policy, keeps hidden translations and stays with Save quiet before any refresh", async () => {
-  const { el, api, events } = await mountReceiptEditor();
+it("keeps the old phone and hidden translations when editing a receipt email", async () => {
+  const phone = "512 345 678";
+  const { el, api, events } = await mountReceiptEditor(
+    receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, phone } }),
+  );
+  el.venueCountry = "ES";
   await editReceipt(el, "email", "bar@example.com");
   expect(receiptSave(el).variant).toBe("primary");
   await clickReceiptSave(el);
@@ -51,6 +55,7 @@ it("saves exact independent receipt and policy, keeps hidden translations and st
       operationDescription: "Dining service",
       headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
       email: "bar@example.com",
+      phone,
     },
     policy: { printTradingName: true },
   });
@@ -88,17 +93,24 @@ it("allows installations without a description field to save their empty receipt
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({ email: "bar@example.com" });
 });
-it("validates the telephone before writing and sends the saved description unchanged", async () => {
+it.each(["not a telephone", "512 345 678"])("blocks receipt phone %s", async (phone) => {
   const { el, api } = await mountReceiptEditor();
-  await editReceipt(el, "phone", "not a telephone");
+  el.venueCountry = "ES";
+  await editReceipt(el, "email", "bar@example.com");
+  await editReceipt(el, "phone", phone);
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   expect(receiptField(el, "phone").error).toBe(t("receipts.invalid_phone"));
-  await editReceipt(el, "phone", "+34 912 345 678");
+  await expect
+    .poll(() => api.previewReceiptDraft.mock.lastCall?.[0]?.receipt)
+    .toMatchObject({ email: "bar@example.com" });
+  expect(api.previewReceiptDraft.mock.lastCall?.[0]?.receipt.phone).toBeUndefined();
+  await editReceipt(el, "phone", "+34 912-345-678");
   await clickReceiptSave(el);
-  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.operationDescription).toBe(
-    "Dining service",
-  );
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toMatchObject({
+    operationDescription: "Dining service",
+    phone: "+34 912-345-678",
+  });
 });
 it("edits receipt policies with the same venue authority as receipt text", async () => {
   const { el, api } = await mountReceiptEditor();

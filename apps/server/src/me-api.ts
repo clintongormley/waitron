@@ -335,22 +335,22 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  const readVenueName = async (tx: Transaction): Promise<string> => {
+  const readVenue = async (tx: Transaction) => {
     const venue = await readTaxpayer(tx);
     if (venue === null) throw new Error("Configured taxpayer does not exist");
-    return venue.legalName;
+    return venue;
   };
 
   // No session is required: this exposes only public identity and languages.
   app.get("/management-api/locales", (c) =>
     run(c, log, async () => {
-      const venueName = await deps.db.withWriteLock(() => readVenueName(deps.db));
+      const venue = await deps.db.withWriteLock(() => readVenue(deps.db));
       c.header("Vary", "Accept-Language");
       return c.json({
         locales: SUPPORTED_LOCALES,
         venueDefault: deps.venueLocale,
         loginDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
-        venueName,
+        venueName: venue.legalName,
         onboardingIntent: deps.onboardingIntent,
       });
     }),
@@ -359,15 +359,16 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, authority, email, locale, venueName, expiresAt } =
-        await deps.db.withWriteLock(async () => {
+      const { personId, authority, email, locale, venue, expiresAt } = await deps.db.withWriteLock(
+        async () => {
           const tx = deps.db;
           const session = await resolveManagementSession(tx, sessionId, { touch: false });
           return {
             ...session,
-            venueName: await readVenueName(tx),
+            venue: await readVenue(tx),
           };
-        });
+        },
+      );
       // This body describes ONE person in ONE browser: it turns on the session cookie AND on
       // Accept-Language, so no cache may keep a copy, and any cache that ignores `no-store` must at
       // least key on the language it varies by.
@@ -385,7 +386,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locale,
         venueLocale: deps.venueLocale,
         sessionDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
-        venueName,
+        venueName: venue.legalName,
+        venueCountry: venue.country,
         onboardingIntent: deps.onboardingIntent,
         simulatedCardPayments: deps.simulatedCardPayments === true,
         permissions: [...authority.permissions],

@@ -25,12 +25,12 @@ import type { Transaction } from "@waitron/db";
 import {
   AppError,
   assertSupportedLocale,
-  isValidTelephone,
   createLabelComparator,
   BUILT_IN_ROLE_NAMES,
   PERSON_STATUS_NAMES,
   NO_ACCESS_ROLE_NAMES,
 } from "@waitron/shared";
+import { checkedPersonTelephone } from "./person-telephone.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
@@ -260,9 +260,7 @@ export async function updatePersonDetails(
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
-  const telephone = input.telephone?.trim() || null;
-  if (telephone !== null && !isValidTelephone(telephone))
-    throw new AppError("person.telephone_invalid", {});
+  const telephone = await checkedPersonTelephone(tx, input.telephone, person.telephone);
   const email = normalizeAndValidateEmail(input.email);
   const locale =
     input.locale === undefined
@@ -468,9 +466,7 @@ export async function invitePerson(
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
-  const telephone = input.telephone?.trim() || null;
-  if (telephone !== null && !isValidTelephone(telephone))
-    throw new AppError("person.telephone_invalid", {});
+  const telephone = await checkedPersonTelephone(tx, input.telephone);
   const email = normalizeAndValidateEmail(input.email);
   await assertDisplayNameAvailable(tx, displayName);
   await assertEmailAvailable(tx, email);
