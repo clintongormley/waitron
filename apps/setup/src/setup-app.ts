@@ -1679,14 +1679,9 @@ export class SetupApp extends LitElement {
         submitted.configurationImport === true
           ? { configurationImport: true, newTaxpayer: submitted.newTaxpayer === true }
           : undefined;
-      const claimArgs = [
-        venue,
-        currentLocale(),
-        intent,
-        intent ? undefined : this.#cloudAdminTab,
-      ] as const;
-      if (this.#firstReplacing) await session.replaceAbandoned(...claimArgs);
-      else if (!session.state && !session.recoveryRequired) await session.claim(...claimArgs);
+      if (this.#firstReplacing) await session.replaceAbandoned(venue, currentLocale(), intent);
+      else if (!session.state && !session.recoveryRequired)
+        await session.claim(venue, currentLocale(), intent, this.#cloudAdminTab);
       else return;
       if (!current()) return;
       this.#acceptFirstIdentity();
@@ -2468,6 +2463,9 @@ export class SetupApp extends LitElement {
         venue,
       }) as DeepPartial<ProvisionBody>;
       delete this.draft.newTaxpayer;
+      this.#cloudAdminTab = undefined;
+      this.#cloudOfferedAfterAdmin = false;
+      sessionStorage.removeItem("waitron-setup-cloud-signed-in");
       this.#rootScope?.changed();
       this.configurationPreview = preview;
       if (owner) {

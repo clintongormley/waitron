@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { verifyPin } from "@waitron/identity";
-import type { CloudSignInBinding, PreparedSetupAdmin } from "./cloud-sign-in.js";
+import { hashPassword, hashPin, verifyPin } from "@waitron/identity";
+import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
@@ -260,96 +260,86 @@ it.each([null, "en-GB", "fr", ["en"]])(
   },
 );
 
-it("claims a development Live setup with the administrator checked before Cloud sign-in", async () => {
-  let saved: PreparedSetupAdmin | undefined;
-  let setupBinding: CloudSignInBinding | undefined;
-  const origin = "https://box.test";
-  const f = await fixture(
-    undefined,
-    {
-      environment: "preproduction",
-      devMode: true,
-      cloudSignIn: {
-        origin,
-        connection: {
-          setupSignInAvailable: async () => true,
-          setupAddressLookup: async () => ({ available: false }),
-          startSignIn: async (binding, authorize, prepare) => {
-            await authorize();
-            saved = prepare?.(undefined);
-            setupBinding = binding;
-            return {};
-          },
-          returnSignIn: async () => {},
-          publishSetupSignIn: async () => {},
-          readSetupAdmin: async (binding) => {
-            expect(binding).toEqual(setupBinding);
-            if (!saved) throw new AppError("cloud.request_unavailable", {});
-            return saved;
-          },
-          clearSetupAdmin: async () => {
-            saved = undefined;
+it.each([false, true])(
+  "claims development Live and clears the checked administrator (replacement credentials: %s)",
+  async (replace) => {
+    let saved: PreparedSetupAdmin | undefined = {
+      displayName: request.admin.displayName,
+      email: request.admin.email,
+      firstNames: null,
+      lastNames: null,
+      passwordHash: hashPassword(PASSWORD),
+      pinHash: hashPin(request.admin.pin),
+    };
+    const origin = "https://box.test";
+    const tab = randomUUID();
+    const session = randomBytes(32).toString("base64url");
+    const f = await fixture(
+      undefined,
+      {
+        environment: "preproduction",
+        devMode: true,
+        cloudSignIn: {
+          origin,
+          connection: {
+            setupSignInAvailable: async () => true,
+            setupAddressLookup: async () => ({ available: false }),
+            startSignIn: async () => ({}),
+            returnSignIn: async () => {},
+            publishSetupSignIn: async () => {},
+            readSetupAdmin: async (binding) => {
+              expect(binding).toEqual({ kind: "setup", tab, session });
+              if (!saved) throw new AppError("cloud.request_unavailable", {});
+              return saved;
+            },
+            clearSetupAdmin: async () => {
+              saved = undefined;
+            },
           },
         },
       },
-    },
-    undefined,
-    undefined,
-    undefined,
-    false,
-  );
-  const socket = new TLSSocket(new Socket());
-  try {
-    const env = { incoming: { socket } };
-    const tab = randomUUID();
-    const tooShort = await f.post(
-      origin + "/setup-api/cloud/sign-in/start",
-      { tab, prepare: true, admin: { ...request.admin, password: "short" } },
-      { origin },
-      env,
+      undefined,
+      undefined,
+      undefined,
+      false,
     );
-    expect(await tooShort.json()).toEqual({
-      error: { code: "setup.request_invalid", params: { field: "admin.password" } },
-    });
-    const start = await f.post(
-      origin + "/setup-api/cloud/sign-in/start",
-      { tab, prepare: true, admin: request.admin },
-      { origin },
-      env,
-    );
-    expect(start.status).toBe(200);
-    const claim = await f.post(
-      origin + "/setup-api/first-setup/claim",
-      { venue: { ...request, admin: { ...request.admin, password: "", pin: "" } } },
-      {
-        origin,
-        cookie: start.headers.get("set-cookie")!.split(";")[0]!,
-        "X-Waitron-Setup-Cloud-Tab": tab,
-      },
-      env,
-    );
-    expect(claim.status).toBe(200);
-    const { state, capability } = await claim.json();
-    expect(state.environment).toBe("preproduction");
-    const frozen = (await f.host.store.read())!.frozen.request.admin;
-    expect(await verifyPin(request.admin.pin, frozen.pinHash)).toBe(true);
-    expect(
-      (
-        await f.post(
-          "/setup-api/first-setup/reconfirm",
-          {
-            password: PASSWORD,
-            purpose: "block-use",
+    const socket = new TLSSocket(new Socket());
+    try {
+      const env = { incoming: { socket } };
+      const password = replace ? "Replacement password" : PASSWORD;
+      const pin = replace ? "7469" : request.admin.pin;
+      const claim = await f.post(
+        origin + "/setup-api/first-setup/claim",
+        {
+          venue: {
+            ...request,
+            admin: { ...request.admin, password: replace ? password : "", pin: replace ? pin : "" },
           },
-          f.headers(state, capability),
-        )
-      ).status,
-    ).toBe(200);
-    expect(saved).toBeUndefined();
-  } finally {
-    socket.destroy();
-  }
-});
+        },
+        {
+          origin,
+          cookie: "__Host-waitron-setup-cloud=" + session,
+          "X-Waitron-Setup-Cloud-Tab": tab,
+        },
+        env,
+      );
+      expect(claim.status).toBe(200);
+      const { state, capability } = await claim.json();
+      expect(state.environment).toBe("preproduction");
+      const frozen = (await f.host.store.read())!.frozen.request.admin;
+      expect(await verifyPin(pin, frozen.pinHash)).toBe(true);
+      const confirmed = await f.post(
+        "/setup-api/first-setup/reconfirm",
+        { password, purpose: "block-use" },
+        f.headers(state, capability),
+      );
+      expect(confirmed.status).toBe(200);
+      expect(saved).toBeUndefined();
+    } finally {
+      socket.destroy();
+    }
+  },
+);
 
 it("claims only the validated wizard identity and conceals all owner state from a stranger", async () => {
   const f = await fixture();

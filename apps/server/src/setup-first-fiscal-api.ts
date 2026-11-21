@@ -440,13 +440,12 @@ export function mountSetupFirstFiscalApi(
           invalid();
       }
       const cloudSignIn =
-        deps.devMode === true &&
-        deps.environment === "preproduction" &&
-        body.configurationImport !== true
+        deps.devMode === true && deps.environment === "preproduction"
           ? deps.cloudSignIn
           : undefined;
       const usesHeldAdmin =
         cloudSignIn !== undefined &&
+        body.configurationImport !== true &&
         c.req.header("X-Waitron-Setup-Cloud-Tab") !== undefined &&
         (admin.password === "" || admin.pin === "");
       const password = usesHeldAdmin && admin.password === "" ? "" : text(admin.password);
@@ -466,24 +465,21 @@ export function mountSetupFirstFiscalApi(
         ) !== undefined
       )
         throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
-      if (heldAdmin) {
-        const result = await host.owner.claimPreparedFirstSetup({ environment, request: venue });
-        await cloudSignIn!.connection.clearSetupAdmin().catch((error: unknown) => {
-          log("warn", "setup.cloud_admin_clear_failed", { errorCode: codeOf(error) });
-        });
-        return c.json(result);
-      }
       const { pinHash: _, passwordHash: __, ...normalized } = venue.admin;
       void _;
       void __;
-      return c.json(
-        await host.owner.claimFirstSetup({
-          environment,
-          request: { ...venue, admin: { ...normalized, password, pin } },
-          configurationImport: body.configurationImport === true,
-          newTaxpayer: body.newTaxpayer === true,
-        }),
-      );
+      const result = heldAdmin
+        ? await host.owner.claimPreparedFirstSetup({ environment, request: venue })
+        : await host.owner.claimFirstSetup({
+            environment,
+            request: { ...venue, admin: { ...normalized, password, pin } },
+            configurationImport: body.configurationImport === true,
+            newTaxpayer: body.newTaxpayer === true,
+          });
+      await cloudSignIn?.connection.clearSetupAdmin().catch((error: unknown) => {
+        log("warn", "setup.cloud_admin_clear_failed", { errorCode: codeOf(error) });
+      });
+      return c.json(result);
     }),
   );
   mountFirstSetupResolutionApi(app, host, log, {

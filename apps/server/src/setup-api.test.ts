@@ -533,6 +533,14 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       expect(await incomplete.json()).toMatchObject({
         error: { code: "setup.request_invalid", params: { field: "admin.email" } },
       });
+      const short = await post("start", {
+        tab,
+        prepare: true,
+        admin: { ...admin, password: "short" },
+      });
+      expect(await short.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "admin.password" } },
+      });
       expect(
         (
           await post("start", {

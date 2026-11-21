@@ -319,7 +319,6 @@ export class FirstSetupSession {
     venue: ProvisionBody["venue"],
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
-    cloudAdminTab?: string,
   ): Promise<void> {
     return this.#run(async (current) => {
       if (this.#state?.consumptionIntent) failure("setup.attempt_uncertain");
@@ -333,7 +332,7 @@ export class FirstSetupSession {
       this.#needsRefresh = false;
       this.#save();
       this.#attemptLock = undefined;
-      await this.#claim(venue, current, locale, intent, cloudAdminTab);
+      await this.#claim(venue, current, locale, intent);
     });
   }
   #forgetOwner(): void {

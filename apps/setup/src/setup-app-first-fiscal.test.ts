@@ -960,31 +960,30 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
   }
 });
 
-it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
+const cloudRehearsal = {
+  developmentMode: true,
+  intercept: (path: string) =>
+    path === "/setup-api/status"
+      ? Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+          cloudSignInAvailable: true,
+        })
+      : undefined,
+};
+function returnFromCloud(outcome: "signed-in" | "cancelled") {
   const tab = crypto.randomUUID();
+  const admin = { ...venue.admin, password: undefined, pin: undefined };
   sessionStorage.setItem("waitron-setup-cloud-tab", tab);
-  sessionStorage.setItem(
-    "waitron-setup-cloud-return",
-    JSON.stringify({
-      mode: "live",
-      admin: { ...venue.admin, password: undefined, pin: undefined },
-    }),
-  );
-  sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
-  const options = {
-    developmentMode: true,
-    intercept: (path: string) =>
-      path === "/setup-api/status"
-        ? Response.json({
-            provisioned: false,
-            environment: "preproduction",
-            developmentMode: true,
-            needs: ["venue"],
-            cloudSignInAvailable: true,
-          })
-        : undefined,
-  };
-  const first = await mount(options);
+  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live", admin }));
+  sessionStorage.setItem("waitron-setup-cloud-result", outcome);
+  return tab;
+}
+it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
+  const tab = returnFromCloud("signed-in");
+  const first = await mount(cloudRehearsal);
   await screen(first.app, "venue");
   const admin = { ...venue.admin, password: "", pin: "" };
   emit(first.app, "setup-patch", { patch: { venue: { ...venue, admin } } });
@@ -995,7 +994,7 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
   expect(claim.body).toMatchObject({ venue: { admin } });
   first.app.remove();
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
-  const { app, requests } = await mount({ ...options, claimed: true, resolution: false });
+  const { app, requests } = await mount({ ...cloudRehearsal, claimed: true, resolution: false });
   const allocation = await screen(app, "first-setup");
   allocation.dispatchEvent(
     new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
@@ -1009,27 +1008,17 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
 });
 
 it("returns a development Live claim with an expired Cloud draft to Admin", async () => {
-  const tab = crypto.randomUUID();
-  sessionStorage.setItem("waitron-setup-cloud-tab", tab);
-  sessionStorage.setItem("waitron-setup-cloud-result", "cancelled");
+  returnFromCloud("cancelled");
   const admin = { ...venue.admin, password: "", pin: "" };
-  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live", admin }));
   const { app, requests } = await mount({
-    developmentMode: true,
+    ...cloudRehearsal,
     intercept: (path, _, headers) => {
-      if (path === "/setup-api/status")
-        return Response.json({
-          provisioned: false,
-          environment: "preproduction",
-          developmentMode: true,
-          needs: ["venue"],
-          cloudSignInAvailable: true,
-        });
       if (path.endsWith("/claim") && headers.has("X-Waitron-Setup-Cloud-Tab"))
         return Response.json(
           { error: { code: "cloud.request_unavailable", params: {} } },
           { status: 409 },
         );
+      return cloudRehearsal.intercept(path);
     },
   });
   const signIn = await screen(app, "cloud-sign-in");
@@ -1181,16 +1170,22 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
     modules: ["core"],
     reconnectModules: [],
   };
-  const { app, api, requests } = await mount();
+  returnFromCloud("signed-in");
+  const { app, api, requests } = await mount(cloudRehearsal);
   api.stageConfiguration = () => Promise.resolve(preview);
-  await screen(app, "mode");
-  emit(app, "setup-patch", { patch: { mode: "live" } });
+  await screen(app, "venue");
+  emit(app, "setup-goto", { screen: "admin" });
+  const original = await screen(app, "admin");
+  await userEvent.click(original.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!);
+  await screen(app, "live-source");
   emit(app, "configuration-requested", {
     request: { artifact: new File(["encrypted"], "prepared.waitron-config"), passphrase: "pass" },
   });
   const choice = await screen(app, "configuration-preview");
   choice.shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!.click();
-  await screen(app, "admin");
+  const importAdmin = await screen(app, "admin");
+  const password = importAdmin.shadowRoot!.querySelector("[data-test=password]")!;
+  expect(password.shadowRoot!.querySelector("input")!.required).toBe(true);
   emit(app, "setup-patch", { patch: { venue: { admin } } });
   emit(app, "setup-goto", { screen: "venue" });
   const venueScreen = await screen(app, "venue");

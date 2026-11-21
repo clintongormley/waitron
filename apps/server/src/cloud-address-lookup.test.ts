@@ -180,7 +180,6 @@ async function addressFixture() {
     () => {
       throw new Error("no administrator preparation on an address read");
     },
-    true,
     () => {},
   );
   return {
