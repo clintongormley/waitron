@@ -98,8 +98,8 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 - [One owner session with a real certificate against AEAT](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
-- Design with the owner: whether to do A798 slice 9c, since a clock that drifts ahead while the box runs dates sales in a way that cannot be repaired (a start's clock is confirmed first since A1420 PR 1a); and the
-  A1323 master key, because A1187 parts 2 and 3 change the same restore steps.
+- Design with the owner: the A1323 master key, because A1187 parts 2 and 3 change the same restore
+  steps.
 
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
