@@ -18,7 +18,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { listAdjustmentReasons } from "@waitron/adjustments";
-import { recordCorrection } from "@waitron/core";
+import { recordCorrection, recordSubstitution } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   computeCategorySales,
@@ -28,12 +28,14 @@ import {
   resolveVenueClock,
 } from "@waitron/reporting";
 import {
+  basisPointsToDecimal,
   centsToDecimal,
   decimal,
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
   sumDecimals,
+  thousandthsToDecimal,
 } from "@waitron/shared";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
@@ -228,6 +230,31 @@ function moved(before: Figures, after: Figures) {
     categories: by(after.categories, before.categories),
     paymentsOnAccount: by(after.paymentsOnAccount, before.paymentsOnAccount),
     topSellers,
+  };
+}
+
+/** When `saleId` was issued. */
+async function issuedAt(saleId: string): Promise<Date> {
+  const [row] = await inTx(venue(), (tx) =>
+    tx.select({ at: sales.issuedAt }).from(sales).where(eq(sales.id, saleId)),
+  );
+  return new Date(row!.at);
+}
+
+/** A clock that reads an hour before `instant`. */
+function anHourBefore(instant: Date): TrustedClock {
+  return {
+    now: () => ({
+      instant: new Date(instant.getTime() - 3_600_000),
+      offsetMinutes: 60,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("anchor() is not used here");
+    },
+    currentAnchor: () => null,
   };
 }
 
@@ -1145,28 +1172,9 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
 
   it("still names only the credited rest's invoice as taking the advance off, on the bill's payment, the advance's ticket and its refusal, though the credit is dated before it", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
-    const issuedAt = async (saleId: string) =>
-      (
-        await inTx(venue(), (tx) =>
-          tx.select({ at: sales.issuedAt }).from(sales).where(eq(sales.id, saleId)),
-        )
-      )[0]!.at;
-    const original = new Date(await issuedAt(rest.saleId));
-    const anHourEarlier: TrustedClock = {
-      now: () => ({
-        instant: new Date(original.getTime() - 3_600_000),
-        offsetMinutes: 60,
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      }),
-      anchor: () => {
-        throw new Error("anchor() is not used here");
-      },
-      currentAnchor: () => null,
-    };
-    const credit = await creditWhole(rest.saleId, anHourEarlier);
-    expect(new Date(await issuedAt(credit)).getTime()).toBeLessThan(original.getTime());
+    const original = await issuedAt(rest.saleId);
+    const credit = await creditWhole(rest.saleId, anHourBefore(original));
+    expect((await issuedAt(credit)).getTime()).toBeLessThan(original.getTime());
     const takenOffBy = {
       saleId: rest.saleId,
       invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
@@ -1323,5 +1331,82 @@ describe("the rest's invoice Discard issues after a card paid the bill off", () 
     expect(venue().device2Id).not.toBe(venue().deviceId);
     expect(venue().adminId).not.toBe(venue().operatorId);
     expect(rest).toEqual({ deviceId: venue().deviceId, operatorId: venue().operatorId });
+  });
+});
+
+describe("a full invoice issued in substitution of the rest's invoice", () => {
+  /** Issues a full invoice in substitution of `saleId`, an hour before it, restating its lines,
+   * the deduction line included. The full invoice's id. */
+  async function substituteEarlier(saleId: string): Promise<string> {
+    const clock = anHourBefore(await issuedAt(saleId));
+    const { saleId: substitution } = await inTx(venue(), async (tx) => {
+      const [sale] = await tx
+        .select({ total: sales.total })
+        .from(sales)
+        .where(eq(sales.id, saleId));
+      return recordSubstitution(tx, venue().backend, {
+        operationDescription: "Sale on premises",
+        origin: venue().cfg.origin,
+        nodeId: venue().cfg.nodeId,
+        seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue().cfg.nodeId, "full")),
+        substitutedSaleIds: [brandSaleId(saleId)],
+        counterparty: { taxId: "B12345674", legalName: "Customer SL", countryCode: "ES" },
+        total: centsToDecimal(sale!.total),
+        lines: (await linesIn(tx, saleId)).map((row) => ({
+          lineNo: row.lineNo,
+          name: row.name,
+          descriptions: row.descriptions,
+          quantity: thousandthsToDecimal(row.quantity),
+          unitPrice: centsToDecimal(row.unitPrice),
+          vatRate: basisPointsToDecimal(row.vatRate),
+          lineTotal: centsToDecimal(row.lineTotal),
+          lineGross: row.lineGross === null ? null : centsToDecimal(row.lineGross),
+          advanceRole: row.advanceRole,
+          deductsSaleId: row.deductsSaleId,
+        })),
+        locale: venue().cfg.locale,
+        invoiceLocales: [venue().cfg.locale],
+        clock,
+      });
+    });
+    return substitution;
+  }
+
+  it("still names the rest's invoice as taking the advance off, on the bill's payment, the advance's ticket, its refusal and the accountant export, though the full invoice is dated before it and repeats the deduction", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    const substitution = await substituteEarlier(rest.saleId);
+    expect((await issuedAt(substitution)).getTime()).toBeLessThan(
+      (await issuedAt(rest.saleId)).getTime(),
+    );
+    expect(
+      (await linesOf(substitution)).filter((line) => line.deductsSaleId === rest.advanceIds[0]),
+    ).toHaveLength(1);
+    const takenOffBy = {
+      saleId: rest.saleId,
+      invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
+    };
+
+    expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
+    expect((await ticketOf(rest.advanceIds[0]!)).takenOffBy).toEqual(takenOffBy);
+    const refused = await preview(rest.advanceIds[0]!, "30.00");
+    expect(refused.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: rest.advanceIds[0],
+        finalSaleId: rest.saleId,
+        invoiceNumber: takenOffBy.invoiceNumber,
+      },
+    });
+    const exported = await inTx(venue(), (tx) =>
+      listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+    );
+    const byId = new Map(exported.invoices.map((invoice) => [invoice.id, invoice]));
+    expect(byId.get(rest.advanceIds[0]!)).toMatchObject({
+      advance: { paidBy: "cash", takenOffBy: takenOffBy.invoiceNumber },
+    });
+    expect(byId.get(rest.saleId)).toMatchObject({
+      takesOff: [(await advanceFacts(rest.advanceIds[0]!)).invoiceNumber],
+    });
+    expect(byId.has(substitution)).toBe(false);
   });
 });
