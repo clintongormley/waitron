@@ -118,11 +118,11 @@ const runCategoryPrint = createErrorBoundary(
 );
 
 /**
- * 1000..9999, the bound `validatePeriod` enforces, so a screened year never reaches its
+ * 1000..9998, the bound `validatePeriod` enforces, so a screened year never reaches its
  * plain-`Error` throw; `/^\d{4}$/` would admit "0999".
  */
 function requireYear(raw: string | undefined): number {
-  if (raw === undefined || !/^[1-9]\d{3}$/.test(raw)) {
+  if (raw === undefined || !/^[1-9]\d{3}$/.test(raw) || raw === "9999") {
     throw new AppError("management.request_invalid", { field: "year" });
   }
   return Number(raw);

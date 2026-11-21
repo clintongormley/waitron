@@ -169,6 +169,7 @@ describe("corrections download", () => {
       ["year=2026&period=13", managerCookie, 400, "management.request_invalid", "period"],
       ["year=2026", managerCookie, 400, "management.request_invalid", "period"],
       ["year=26&period=3T", managerCookie, 400, "management.request_invalid", "year"],
+      ["year=9999&period=4T", managerCookie, 400, "management.request_invalid", "year"],
     ] as const) {
       const response = await send(query, cookie);
       expect(response.status).toBe(status);
