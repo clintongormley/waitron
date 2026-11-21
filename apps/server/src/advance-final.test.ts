@@ -5,6 +5,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
+  devices,
+  drawerEntries,
   parties,
   readVenueClock,
   refunds,
@@ -482,6 +484,56 @@ describe("the rest's invoice takes the advances off", () => {
     expect(
       await inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
     ).toEqual([]);
+  });
+
+  it("example 1, the €90 given back from the rest's invoice, then the €30 advance back in cash by Refund a payment: the drawer records the €30 leaving it", async () => {
+    const bill = await seated("Tasting menu");
+    const advanceId = await advance(bill.billId, "30.00");
+    expect((await cash(bill.billId, "90.00")).status).toBe(200);
+    const rest = await restOf(bill.billId);
+    const giveBack = async (saleId: string, amount: string) => {
+      const [tender] = await inTx(venue, (tx) =>
+        tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId)),
+      );
+      const given = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/transactions/${saleId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          tenderId: tender!.id,
+          appliedAmount: amount,
+          tipAmount: "0.00",
+          reason: "Paid too much",
+          override: { personId: venue.adminId, pin: "1234" },
+        },
+      );
+      expect(given.status, JSON.stringify(given.json)).toBe(200);
+    };
+    await giveBack(rest!.id, "90.00");
+
+    await giveBack(advanceId, "30.00");
+
+    const [refund] = await inTx(venue, (tx) =>
+      tx.select().from(refunds).where(eq(refunds.saleId, advanceId)),
+    );
+    expect(refund).toMatchObject({ method: "cash", state: "completed", appliedAmount: 3000 });
+    const [device] = await inTx(venue, (tx) =>
+      tx.select().from(devices).where(eq(devices.id, venue.deviceId)),
+    );
+    expect(
+      await inTx(venue, (tx) =>
+        tx.select().from(drawerEntries).where(eq(drawerEntries.refundId, refund!.id)),
+      ),
+    ).toMatchObject([
+      {
+        kind: "cash_refund",
+        amount: -3000,
+        printerId: device!.cashDrawerPrinterId,
+        deviceId: venue.deviceId,
+      },
+    ]);
   });
 
   it("a €10 advance and a plain €5, then Print the bill: the ticket takes the advance off, lists the €5 and owes €105", async () => {
