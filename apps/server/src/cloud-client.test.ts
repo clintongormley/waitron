@@ -100,14 +100,13 @@ it("requires a pinned secure Cloud origin except explicit loopback development",
 });
 async function installedSignInFixture(setup = false, provisional = false) {
   const callback = "https://box.waitron.test/cloud/pairing/callback";
-  const expiresAt = new Date(Date.now() + 600_000).toISOString();
   const code = randomBytes(32).toString("base64url");
   const key = generateKeyPairSync("ed25519");
   let attemptState = "awaiting_cloud";
   let challenge = "";
   let registered = false;
   let loseComplete = false;
-  let expired = false;
+  let expiredRequest: unknown;
   let wrongLogin = false;
   const validProfile: Extract<
     import("@waitron/contract").PairingV4Claims,
@@ -125,12 +124,18 @@ async function installedSignInFixture(setup = false, provisional = false) {
   let published = false;
   const f = await fixture(undefined, "test", async (values, _saved, _req, res) => {
     const [, origin, action, requestId, presentedKey, , , args] = values;
-    if (action === "status" && (expired || presentedKey !== publicKey)) {
+    if (
+      action === "status" &&
+      ((requestId === expiredRequest && !registered) || presentedKey !== publicKey)
+    ) {
       res.writeHead(400);
       res.end('{"error":"pairing_unavailable"}');
       return;
     }
-    const answer: Record<string, unknown> = { requestId, expiresAt };
+    const answer: Record<string, unknown> = {
+      requestId,
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    };
     if (action === "start") {
       attemptState = "awaiting_cloud";
       const [redirectUri, state, codeChallenge] = args as string[];
@@ -206,7 +211,7 @@ async function installedSignInFixture(setup = false, provisional = false) {
       wrongLogin = true;
     },
     expire: () => {
-      expired = true;
+      expiredRequest = f.requests.at(-1)?.[3];
     },
     invalidProfile: (name = "Bar\uD800") => {
       profile = ["ES", name, validProfile[2], validProfile[3], validProfile[4]];
@@ -278,6 +283,141 @@ it("lets the dashboard start its own sign-in if the installer left Cloud before 
       "waitron-cloud-pair-v4",
     ]);
   } finally {
+    await f.close();
+  }
+});
+
+it.each([
+  { failure: "expired before save", provisional: false, beforeSave: true },
+  { failure: "expired after save", provisional: false, beforeSave: false },
+  { failure: "signed out", provisional: true, beforeSave: false },
+])("uses a fresh dashboard sign-in after setup $failure", async ({ provisional, beforeSave }) => {
+  const f = await installedSignInFixture(true, provisional);
+  try {
+    const setup = f.client();
+    const setupBinding = { ...f.binding, kind: "setup" as const };
+    const original = new URL((await setup.startSignIn(setupBinding, f.authorize)).authorizationUrl!)
+      .searchParams;
+    await setup.returnSignIn(
+      setupBinding,
+      { requestId: original.get("request_id")!, state: original.get("state")!, code: f.code },
+      f.authorize,
+    );
+    const invalidateCloudSignIn = () => {
+      f.expire();
+      if (!provisional) vi.setSystemTime(Date.now() + 600_001);
+    };
+    if (beforeSave) invalidateCloudSignIn();
+    await setup.publishSetupSignIn(setupBinding, f.nodeId);
+    if (!beforeSave) invalidateCloudSignIn();
+    const dashboard = f.restartAsPublished();
+    if (provisional)
+      await expect(dashboard.refresh()).rejects.toMatchObject({
+        code: "cloud.request_unavailable",
+      });
+
+    const manager = { tab: randomUUID(), session: randomUUID() };
+    const getReturn = async () => {
+      const { authorizationUrl } = await dashboard.startSignIn(manager, f.authorize);
+      const query = new URL(authorizationUrl!).searchParams;
+      return { requestId: query.get("request_id")!, state: query.get("state")! };
+    };
+    const cancelled = await getReturn();
+    await expect(
+      dashboard.returnSignIn(manager, { ...cancelled, error: "access_denied" }, f.authorize),
+    ).rejects.toMatchObject({ code: "cloud.request_unavailable" });
+    const beforeLateReturn = f.requests.length;
+    await expect(
+      dashboard.returnSignIn(manager, { ...cancelled, code: f.code }, f.authorize),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    expect(f.requests).toHaveLength(beforeLateReturn);
+    const resumed = await getReturn();
+    expect(resumed.requestId).not.toBe(cancelled.requestId);
+    expect(resumed.requestId).not.toBe(original.get("request_id"));
+    await expect(
+      dashboard.returnSignIn(
+        { ...manager, session: randomUUID() },
+        { ...resumed, code: f.code },
+        f.authorize,
+      ),
+    ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+    expect(await f.options.readVenueId()).toBeNull();
+    await f.restartAsPublished().returnSignIn(manager, { ...resumed, code: f.code }, f.authorize);
+
+    const originalKey = f.requests[0]![4];
+    const recovery = f.requests.filter((request) => request[3] === resumed.requestId);
+    expect(recovery.map(([version, , action, , key]) => [version, action, key])).toEqual([
+      ["waitron-cloud-pair-v5", "start", originalKey],
+      ["waitron-cloud-pair-v5", "redeem", originalKey],
+      ["waitron-cloud-pair-v5", "complete", originalKey],
+    ]);
+    expect((await dashboard.status()).registration?.installationId).toBe(f.installationId);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+  } finally {
+    vi.useRealTimers();
+    await f.close();
+  }
+});
+
+it("finishes a still-current published setup sign-in when the dashboard connects", async () => {
+  const f = await installedSignInFixture(true, true);
+  try {
+    const setup = f.client();
+    const binding = { ...f.binding, kind: "setup" as const };
+    const { authorizationUrl } = await setup.startSignIn(binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    await setup.returnSignIn(
+      binding,
+      { requestId: query.get("request_id")!, state: query.get("state")!, code: f.code },
+      f.authorize,
+    );
+    await setup.publishSetupSignIn(binding, f.nodeId);
+    const dashboard = f.restartAsPublished();
+
+    const manager = { tab: randomUUID(), session: randomUUID() };
+    await expect(dashboard.startSignIn(manager, f.authorize)).resolves.toEqual({});
+    expect(f.requests.map((request) => request[2])).toEqual([
+      "start",
+      "redeem",
+      "status",
+      "complete",
+    ]);
+    expect(await f.options.readVenueId()).toBe(f.venueId);
+  } finally {
+    await f.close();
+  }
+});
+
+it("reads the filed registration after a lost setup completion reply followed by expiry", async () => {
+  const f = await installedSignInFixture(true, true);
+  try {
+    const setup = f.client();
+    const binding = { ...f.binding, kind: "setup" as const };
+    const { authorizationUrl } = await setup.startSignIn(binding, f.authorize);
+    const query = new URL(authorizationUrl!).searchParams;
+    await setup.returnSignIn(
+      binding,
+      { requestId: query.get("request_id")!, state: query.get("state")!, code: f.code },
+      f.authorize,
+    );
+    await setup.publishSetupSignIn(binding, f.nodeId);
+    const dashboard = f.restartAsPublished();
+    f.loseComplete();
+    await expect(dashboard.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.expire();
+    vi.setSystemTime(Date.now() + 600_001);
+
+    await expect(dashboard.startSignIn(f.binding, f.authorize)).resolves.toEqual({});
+    expect(f.requests.map((request) => request[2])).toEqual([
+      "start",
+      "redeem",
+      "status",
+      "complete",
+      "status",
+    ]);
+    expect((await dashboard.status()).registration?.installationId).toBe(f.installationId);
+  } finally {
+    vi.useRealTimers();
     await f.close();
   }
 });
