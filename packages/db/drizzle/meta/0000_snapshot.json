@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ba60d3f0-f98e-4dcb-8d5f-f59204b7a9e7",
+  "id": "3cb3afa1-57d6-4077-ab8c-91d5e10db2a1",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8712,6 +8712,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "own_receipt": {
+          "name": "own_receipt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
@@ -8826,6 +8834,120 @@
           "value": "(\"bill_payments\".\"attested_by\" is null) = (\"bill_payments\".\"attestation_note\" is null) and (\"bill_payments\".\"attested_by\" is null or (\"bill_payments\".\"state\" <> 'pending' and coalesce(length(trim(\"bill_payments\".\"attestation_note\")), 0) > 0))"
         }
       }
+    },
+    "bill_advances": {
+      "name": "bill_advances",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "advance_sale_id": {
+          "name": "advance_sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bill_payment_id": {
+          "name": "bill_payment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "order_label": {
+          "name": "order_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bill_advances_working_order_idx": {
+          "name": "bill_advances_working_order_idx",
+          "columns": [
+            "working_order_id"
+          ],
+          "isUnique": false
+        },
+        "bill_advances_bill_payment_key": {
+          "name": "bill_advances_bill_payment_key",
+          "columns": [
+            "bill_payment_id"
+          ],
+          "isUnique": true
+        },
+        "bill_advances_advance_sale_key": {
+          "name": "bill_advances_advance_sale_key",
+          "columns": [
+            "advance_sale_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bill_advances_working_order_fk": {
+          "name": "bill_advances_working_order_fk",
+          "tableFrom": "bill_advances",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_advances_advance_sale_fk": {
+          "name": "bill_advances_advance_sale_fk",
+          "tableFrom": "bill_advances",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "advance_sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bill_advances_bill_payment_fk": {
+          "name": "bill_advances_bill_payment_fk",
+          "tableFrom": "bill_advances",
+          "tableTo": "bill_payments",
+          "columnsFrom": [
+            "bill_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "sale_lines": {
       "name": "sale_lines",
@@ -9027,6 +9149,20 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "advance_role": {
+          "name": "advance_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deducts_sale_id": {
+          "name": "deducts_sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -9034,6 +9170,13 @@
           "name": "sale_lines_sale_idx",
           "columns": [
             "sale_id"
+          ],
+          "isUnique": false
+        },
+        "sale_lines_deducts_sale_idx": {
+          "name": "sale_lines_deducts_sale_idx",
+          "columns": [
+            "deducts_sale_id"
           ],
           "isUnique": false
         },
@@ -9085,11 +9228,32 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "sale_lines_deducts_sale_fk": {
+          "name": "sale_lines_deducts_sale_fk",
+          "tableFrom": "sale_lines",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "deducts_sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "sale_lines_advance_role_ck": {
+          "name": "sale_lines_advance_role_ck",
+          "value": "\"sale_lines\".\"advance_role\" in ('payment_on_account', 'deduction')"
+        },
+        "sale_lines_advance_ck": {
+          "name": "sale_lines_advance_ck",
+          "value": "(\"sale_lines\".\"advance_role\" is 'deduction') = (\"sale_lines\".\"deducts_sale_id\" is not null)"
+        },
         "sale_lines_unit_precision_ck": {
           "name": "sale_lines_unit_precision_ck",
           "value": "\"sale_lines\".\"unit_precision\" is null or \"sale_lines\".\"unit_precision\" between 0 and 3"

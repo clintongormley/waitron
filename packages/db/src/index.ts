@@ -208,6 +208,7 @@ export {
   billPayments,
   billPaymentState,
 } from "./schema/bill-payments.js";
+export { billAdvances } from "./schema/bill-advances.js";
 export { CORE_ALERTS } from "./alerts.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

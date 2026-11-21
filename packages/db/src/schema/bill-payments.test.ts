@@ -459,6 +459,19 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(await paymentState(id)).toBe("received");
     });
 
+    it("refuses a change to whether the payer wants their own receipt once received", async () => {
+      const id = await receivedPayment({ ownReceipt: true });
+      const error = await captureError(() => updatePayment(id, `own_receipt = 0`));
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ ownReceipt: billPayments.ownReceipt })
+          .from(billPayments)
+          .where(eq(billPayments.id, id)),
+      );
+      expect(row).toEqual({ ownReceipt: true });
+    });
+
     it("allows an update that changes nothing", async () => {
       const id = await receivedPayment();
       await updatePayment(id, `state = state`);
@@ -573,6 +586,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ["the device", `device_id = '__DEVICE2__'`],
       ["the source", `source = 'demo_seed', device_id = null`],
       ["when it was made", `created_at = '${LATER}'`],
+      ["whether the payer wants their own receipt", `own_receipt = 1`],
     ])("refuses a change to %s, even alongside a legal transition", async (_name, set) => {
       const id = await insertPayment();
       const statement = set.replace("__OTHER__", otherBillId).replace("__DEVICE2__", device2);

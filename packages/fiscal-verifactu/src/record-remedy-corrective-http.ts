@@ -2,7 +2,7 @@ import "./errors.js";
 import type { RecordSaleLine } from "@waitron/core";
 import type { Transaction } from "@waitron/db";
 import type { ModuleRouteContext } from "@waitron/module";
-import { decimal, jobOrigin, seriesId } from "@waitron/shared";
+import { decimal, isUuid, jobOrigin, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice, correctiveRemedy } from "./record-remedy-corrective.js";
 import type { RemedyPolicy } from "./record-remedy.js";
 import { invalid, object, only, requestCaseId, text } from "./record-remedy-request.js";
@@ -30,6 +30,8 @@ function line(value: unknown): RecordSaleLine {
     "lineGross",
     "productId",
     "correctsLineId",
+    "advanceRole",
+    "deductsSaleId",
   ]);
   if (typeof row.lineNo !== "number" || !Number.isSafeInteger(row.lineNo) || row.lineNo < 1)
     invalid();
@@ -51,6 +53,19 @@ function line(value: unknown): RecordSaleLine {
   if ("productId" in row) result.productId = row.productId === null ? null : text(row.productId);
   if ("correctsLineId" in row)
     result.correctsLineId = row.correctsLineId === null ? null : text(row.correctsLineId);
+  if ("advanceRole" in row) {
+    if (
+      row.advanceRole !== null &&
+      row.advanceRole !== "payment_on_account" &&
+      row.advanceRole !== "deduction"
+    )
+      invalid();
+    result.advanceRole = row.advanceRole;
+  }
+  if ("deductsSaleId" in row) {
+    if (row.deductsSaleId !== null && !isUuid(text(row.deductsSaleId))) invalid();
+    result.deductsSaleId = row.deductsSaleId as string | null;
+  }
   return result;
 }
 

@@ -3,6 +3,8 @@ import { beforeEach, expect, it } from "vitest";
 import {
   decimal,
   deviceOrigin,
+  subtractDecimal,
+  sumDecimals,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
@@ -392,8 +394,26 @@ it("builds lines in allocation order from the invoice line's frozen facts, negat
     classification: { reporting: [{ id: "food", name: "Food" }] },
     parentLineNo: null,
     correctsLineId: ids[0],
+    advanceRole: null,
+    deductsSaleId: null,
   });
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
+});
+
+it("keeps an invoice line's advance role, and a deduction line's sale", async () => {
+  const { rows, ids } = await sell();
+  const lines = correctionLinesFor(
+    [
+      { ...rows[0]!, advanceRole: "payment_on_account", deductsSaleId: null },
+      { ...rows[1]!, advanceRole: "deduction", deductsSaleId: "advance-sale" },
+    ],
+    [allocation(ids[0]!, "10.00", "0.55", "0.50"), allocation(ids[1]!, "21.00", "1.21", "1.00")],
+  );
+
+  expect(lines.map(({ advanceRole, deductsSaleId }) => ({ advanceRole, deductsSaleId }))).toEqual([
+    { advanceRole: "payment_on_account", deductsSaleId: null },
+    { advanceRole: "deduction", deductsSaleId: "advance-sale" },
+  ]);
 });
 
 function preview(saleId: SaleId, of = backend as FiscalBackend) {
@@ -585,5 +605,221 @@ it("reads each invoice line with what earlier corrections left of it, refusing a
   expect(await captureError(() => lines())).toMatchObject({
     code: "sale.correction_not_admitted",
     params: { reason: "voided" },
+  });
+});
+
+// The rest's invoice of a bill whose advances it takes off (advances plan, examples 1, 2 and 8).
+type Dish = [rate: string, base: string, gross: string];
+
+/** Sells an advance of `gross` at `rate` (`base`), then the rest: `dishes` less that advance. */
+async function sellRest(
+  dishes: Dish[],
+  advance: Dish,
+  total: string,
+  split = splitOf([...dishes, [advance[0], `-${advance[1]}`, `-${advance[2]}`]]),
+) {
+  const [rate, base, gross] = advance;
+  const paid = await sell(
+    [
+      {
+        lineNo: 1,
+        name: "Payment on account",
+        descriptions: { "es-ES": "Payment on account" },
+        quantity: "1",
+        unitPrice: gross,
+        vatRate: rate,
+        lineTotal: base,
+        lineGross: gross,
+        advanceRole: "payment_on_account",
+      },
+    ],
+    gross,
+  );
+  const rest = await sell(
+    [
+      ...dishes.map(([vatRate, lineTotal, lineGross], index) => ({
+        lineNo: index + 1,
+        name: `Dish ${index + 1}`,
+        descriptions: { "es-ES": `Dish ${index + 1}` },
+        quantity: "1",
+        unitPrice: lineGross,
+        vatRate,
+        lineTotal,
+        lineGross,
+      })),
+      {
+        lineNo: dishes.length + 1,
+        name: "Payment on account",
+        descriptions: { "es-ES": "Payment on account" },
+        quantity: "1",
+        unitPrice: `-${gross}`,
+        vatRate: rate,
+        lineTotal: `-${base}`,
+        lineGross: `-${gross}`,
+        advanceRole: "deduction",
+        deductsSaleId: paid.saleId,
+      },
+    ],
+    total,
+    { vatBreakdown: split },
+  );
+  return { ...rest, dishIds: rest.ids.slice(0, dishes.length), deductionId: rest.ids.at(-1)! };
+}
+
+/** The record's split, rate by rate the sum of the lines' bases and of their VAT. */
+function splitOf(lines: Dish[]) {
+  const rates = [...new Set(lines.map(([rate]) => rate))];
+  return rates.map((rate) => {
+    const atRate = lines.filter(([lineRate]) => lineRate === rate);
+    const base = sumDecimals(atRate.map(([, lineBase]) => decimal(lineBase)));
+    const gross = sumDecimals(atRate.map(([, , lineGross]) => decimal(lineGross)));
+    return { rate: decimal(rate), base, tax: subtractDecimal(gross, base) };
+  });
+}
+
+const BREAD: Dish = ["10.00", "0.95", "1.05"];
+
+const restPreview = (saleId: SaleId, gross: string, lineIds?: string[]) =>
+  withTransaction(suite.db, (tx) =>
+    previewCorrectionAmounts(tx, backend, saleId, nodeId, {
+      gross: decimal(gross),
+      ...(lineIds === undefined ? {} : { lineIds }),
+    }),
+  );
+
+/** Files what the preview of `gross` shows, through the writer's own check of the split. */
+async function fileRestPreview(saleId: SaleId, gross: string, lineIds?: string[]) {
+  const shown = await restPreview(saleId, gross, lineIds);
+  await withTransaction(suite.db, (tx) =>
+    recordCorrection(tx, backend, {
+      ...correctionInput(saleId, `-${gross}`, shown.lines),
+      partialVatBreakdown: shown.vatBreakdown.map(({ rate, base, tax }) => ({
+        rate,
+        base: decimal(`-${base}`),
+        tax: decimal(`-${tax}`),
+      })),
+    }),
+  );
+  return shown;
+}
+
+it("example 1: correcting the rest's invoice never takes from its deduction line, and the preview shows what the writer files", async () => {
+  const rest = await sellRest(
+    [["10.00", "109.09", "120.00"]],
+    ["10.00", "27.27", "30.00"],
+    "90.00",
+  );
+
+  const shown = await fileRestPreview(rest.saleId, "10.00");
+
+  expect(shown.vatBreakdown).toEqual([{ rate: "10.00", base: "9.09", tax: "0.91" }]);
+  expect(shown.lines.map((line) => line.correctsLineId)).toEqual([rest.dishIds[0]]);
+  const [filed] = await suite.db
+    .select({ vatBreakdown: sales.vatBreakdown })
+    .from(sales)
+    .where(eq(sales.correctsSaleId, rest.saleId));
+  expect(filed!.vatBreakdown).toEqual([{ rate: "10.00", base: "-9.09", tax: "-0.91" }]);
+  expect(await read(rest.saleId)).toMatchObject({
+    lines: [{ id: rest.dishIds[0], gross: "120.00", base: "109.09" }],
+    vatBreakdown: [{ rate: "10.00", base: "109.09", tax: "10.91" }],
+  });
+  expect((await restPreview(rest.saleId, "80.00")).vatBreakdown).toEqual([
+    { rate: "10.00", base: "72.73", tax: "7.27" },
+  ]);
+  expect(await captureError(() => restPreview(rest.saleId, "80.01"))).toMatchObject({
+    code: "sale.correction_amount_invalid",
+  });
+});
+
+it("example 8: one €1.05 dish files −0.95/−0.10, and €3.00 files what the meal's figures give, not the rest's", async () => {
+  const rest = await sellRest(Array<Dish>(7).fill(BREAD), ["10.00", "2.73", "3.00"], "4.35");
+
+  const one = await fileRestPreview(rest.saleId, "1.05", [rest.dishIds[0]!]);
+  expect(one.vatBreakdown).toEqual([{ rate: "10.00", base: "0.95", tax: "0.10" }]);
+
+  const other = await sellRest(Array<Dish>(7).fill(BREAD), ["10.00", "2.73", "3.00"], "4.35");
+  const three = await fileRestPreview(other.saleId, "3.00");
+  expect(three.vatBreakdown).toEqual([{ rate: "10.00", base: "2.72", tax: "0.28" }]);
+  expect(three.lines.map((line) => line.correctsLineId)).not.toContain(other.deductionId);
+  expect(await captureError(() => restPreview(other.saleId, "1.36"))).toMatchObject({
+    code: "sale.correction_amount_invalid",
+  });
+});
+
+it("example 8: the writer refuses a split worked out from the rest's own figures", async () => {
+  const rest = await sellRest(Array<Dish>(7).fill(BREAD), ["10.00", "2.73", "3.00"], "4.35");
+  const shown = await restPreview(rest.saleId, "3.00");
+  const lines = shown.lines.map((line, index) =>
+    index === 0
+      ? { ...line, lineTotal: subtractDecimal(decimal(line.lineTotal), decimal("0.01")) }
+      : line,
+  );
+
+  expect(
+    await captureError(() =>
+      withTransaction(suite.db, (tx) =>
+        recordCorrection(tx, backend, {
+          ...correctionInput(rest.saleId, "-3.00", lines),
+          partialVatBreakdown: [
+            { rate: decimal("10.00"), base: decimal("-2.73"), tax: decimal("-0.27") },
+          ],
+        }),
+      ),
+    ),
+  ).toMatchObject({ code: "sale.correction_breakdown_invalid" });
+});
+
+it("example 2: the 10% the advance more than covers has nothing to correct, and €50 at 21% files −41.32/−8.68", async () => {
+  const rest = await sellRest(
+    [
+      ["10.00", "18.18", "20.00"],
+      ["21.00", "66.12", "80.00"],
+    ],
+    ["10.00", "45.45", "50.00"],
+    "50.00",
+  );
+
+  expect(
+    await withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, rest.saleId, nodeId)),
+  ).toEqual([
+    {
+      id: rest.dishIds[0],
+      descriptions: { "es-ES": "Dish 1" },
+      rate: "10.00",
+      gross: "20.00",
+      left: "0.00",
+    },
+    {
+      id: rest.dishIds[1],
+      descriptions: { "es-ES": "Dish 2" },
+      rate: "21.00",
+      gross: "80.00",
+      left: "80.00",
+    },
+  ]);
+  expect(
+    await captureError(() => restPreview(rest.saleId, "1.00", [rest.dishIds[0]!])),
+  ).toMatchObject({
+    code: "sale.correction_amount_invalid",
+  });
+  const shown = await fileRestPreview(rest.saleId, "50.00");
+  expect(shown.vatBreakdown).toEqual([{ rate: "21.00", base: "41.32", tax: "8.68" }]);
+});
+
+it("drops a rate only an advance holds, which must net to nothing, and leaves the meal's other rates whole", async () => {
+  const rest = await sellRest([["21.00", "66.12", "80.00"]], ["10.00", "9.09", "10.00"], "70.00");
+
+  expect(await read(rest.saleId)).toEqual({
+    lines: [{ id: rest.dishIds[0], lineNo: 1, rate: "21.00", gross: "80.00", base: "66.12" }],
+    vatBreakdown: [{ rate: "21.00", base: "66.12", tax: "13.88" }],
+    consumed: [],
+  });
+
+  const moved = await sellRest([["21.00", "66.12", "80.00"]], ["10.00", "9.09", "10.00"], "70.00", [
+    { rate: decimal("10.00"), base: decimal("-9.08"), tax: decimal("-0.92") },
+    { rate: decimal("21.00"), base: decimal("66.12"), tax: decimal("13.88") },
+  ]);
+  expect(await captureError(() => read(moved.saleId))).toMatchObject({
+    code: "sale.correction_history_unusable",
   });
 });

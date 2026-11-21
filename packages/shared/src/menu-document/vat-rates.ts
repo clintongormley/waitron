@@ -5,6 +5,9 @@ import type { Decimal } from "../money.js";
 export const VAT_CLASSES = ["general", "reduced", "super_reduced", "zero"] as const;
 export type VatClass = (typeof VAT_CLASSES)[number];
 
+/** The class every advance is invoiced at, on the day its money is paid (advances plan, D2). */
+export const ADVANCE_VAT_CLASS: VatClass = "reduced";
+
 /**
  * One rate of a class and the local calendar date (`YYYY-MM-DD`, inclusive) it takes effect. `from:
  * null` is the first entry only, and covers every date before the next entry's.

@@ -252,6 +252,8 @@ list (`till-table-order-screen.ts:5478-5540`, `#markListedServed` `:5641-5646`).
 - **A bill holding an advance** (ADVISER-ADVANCES, not on main): that branch already counts an
   advance as money on the bill, so Reopen to split refuses it `bill.payments_received`; whichever
   lands second adds a test. Both change `reversedLines` in `cancel-credit.ts`: expect a rebase conflict.
+  (20 November: ADVISER-ADVANCES piece 1, which lands second, added that test to
+  `apps/server/src/split-after-print.test.ts`.)
 - **A dish asked for after printing** keeps going on **+ New bill** (meal-end plan, line 310); Reopen
   to split could serve it too, but this plan does not offer it for that.
 - **Full invoices naming a customer** wait for ADVISER-ADVANCES piece 3 (their correctives).

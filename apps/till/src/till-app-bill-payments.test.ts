@@ -38,6 +38,7 @@ import {
   showBillFooter,
   type,
   press,
+  answerOwnReceipt,
   resetBillPayDrafts,
   equipmentItem,
   equipmentWith,
@@ -4374,6 +4375,53 @@ describe("till-app: a change refused on a bill that holds money", () => {
     ).toBe("20.00");
   });
 
+  it("sends Refund {excess} on a payment that has its own ticket to Correct invoice on that ticket", async () => {
+    const { el, order } = await openHolding({
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          received: "50.00",
+          outstanding: "70.00",
+          payments: [
+            paymentOf({ hasTicket: true, saleId: "advance-sale", left: "50.00", tipLeft: "0.00" }),
+          ],
+        }),
+      ),
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
+      getTransactionReceipt: vi.fn().mockResolvedValue(invoiceOf("50.00")),
+      getRefundableTenders: vi.fn().mockResolvedValue([
+        {
+          tenderId: "11111111-1111-4111-8111-111111111111",
+          method: "cash",
+          last4: null,
+          appliedRemaining: "50.00",
+          tipRemaining: "0.00",
+          pendingRefundId: null,
+          manual: false,
+        },
+      ]),
+      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      moveDishes: vi.fn().mockRejectedValue({
+        code: "bill.received_exceeds_total",
+        status: 409,
+        workingOrderId: "wo-4",
+        excess: "20.00",
+      }),
+    });
+    emit(order, "move-dishes", { lineIds: ["line-1", "line-2"], toBillId: null });
+    await flush(el);
+
+    banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
+    await flush(el);
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
+    );
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+  });
+
   it("names the excess of a line change that would leave the bill owing less than it received", async () => {
     const { el, order } = await openHolding({
       updateOrderLine: vi
@@ -8013,6 +8061,34 @@ describe("till-app: giving back a bill payment", () => {
     expect(refunds().map(({ request }) => request.reason)).toEqual(["Charged twice"]);
   });
 
+  it("shows the refusal naming the table's receipt, not Correct invoice on the advance, when its payment is refunded after that receipt took it off", async () => {
+    const advancePaid = paymentOf({ hasTicket: true, saleId: "advance-sale" });
+    const refundBillPayment = vi.fn().mockRejectedValue({
+      code: "advance.taken_off_final_invoice",
+      status: 409,
+      saleId: "advance-sale",
+      finalSaleId: "final-sale",
+      invoiceNumber: "A/45",
+    });
+    const el = await askRefund(
+      {
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([{ ...partly, invoiceNumber: "A/45", status: "placed" }]),
+        refundBillPayment,
+        getTransactionReceipt: vi.fn(),
+      },
+      advancePaid,
+    );
+
+    expect(refundBillPayment).toHaveBeenCalledOnce();
+    expect(inRefund(el, "wt-form-actions")!.error).toBe(
+      "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+    );
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
+  });
+
   it("puts a refusal of the reason under the reason", async () => {
     const el = await askRefund(
       {
@@ -9566,4 +9642,119 @@ it("says a table bill's last payment's slip could not print", async () => {
   await flush(el);
   expect(dialog(el)).toBeNull();
   expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
+});
+
+describe("till-app: a part payer's own receipt", () => {
+  function partPaid(bill: Partial<PartyBill> = {}) {
+    return {
+      previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { applied: "30.00", tendered: "30.00" },
+            { received: "30.00", outstanding: "90.00" },
+          ),
+        ),
+      getPartyBills: vi.fn(async () => [billOf(bill)]),
+    };
+  }
+
+  async function toTake(el: TillApp): Promise<void> {
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "30");
+    await type(el, "tendered", "30");
+    await press(el, "[data-pay-continue]");
+  }
+
+  it.each([
+    ["yes", { ownReceipt: true }],
+    ["no", {}],
+  ] as const)("answered %s, sends the payment so", async (answer, extra) => {
+    const { el } = await mountApp(partPaid());
+    await toTake(el);
+
+    await answerOwnReceipt(el, answer);
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent()).toHaveLength(1);
+    if (answer === "yes") expect(sent()[0]).toMatchObject(extra);
+    else expect(sent()[0]).not.toHaveProperty("ownReceipt");
+  });
+
+  it.each([
+    ["has an invoice", { invoiceNumber: "F-0007" }],
+    ["is set for a full invoice", { invoiceType: "F1" as const }],
+  ])("asks nothing on a bill that %s", async (_, bill) => {
+    const { el } = await mountApp(partPaid(bill));
+    await toTake(el);
+
+    expect(inDialog(el, "[data-pay-own-receipt]")).toBeNull();
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[0]).not.toHaveProperty("ownReceipt");
+  });
+});
+
+describe("till-app: Refund on a payment that has its own ticket", () => {
+  const advanceTender = {
+    tenderId: "11111111-1111-4111-8111-111111111111",
+    method: "cash",
+    last4: null,
+    appliedRemaining: "30.00",
+    tipRemaining: "0.00",
+    pendingRefundId: null,
+    manual: false,
+  };
+
+  function withAdvance(bill: Partial<PartyBill> = {}) {
+    return {
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
+      getPartyBills: vi.fn(async () => [billOf(bill)]),
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          received: "30.00",
+          outstanding: "90.00",
+          payments: [paymentOf({ applied: "30.00", hasTicket: true, saleId: "advance-sale" })],
+        }),
+      ),
+      getTransactionReceipt: vi.fn().mockResolvedValue(invoiceOf("30.00")),
+      getRefundableTenders: vi.fn().mockResolvedValue([advanceTender]),
+      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      refundBillPayment: vi.fn(),
+    };
+  }
+
+  it("opens Correct invoice on that ticket, and no bill refund", async () => {
+    const { el } = await mountApp(withAdvance());
+    await openTable(el);
+    await openDialog(el, "rest");
+
+    await press(el, '[data-payment-refund="pay-1"]');
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
+    );
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.readInvoiceCorrectionLines).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")!.saleId).toBe(
+      "advance-sale",
+    );
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(api.refundBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("keeps the bill refund once the table's invoice exists", async () => {
+    const { el } = await mountApp(withAdvance({ invoiceNumber: "F-0007", status: "placed" }));
+    await openTable(el);
+    await openDialog(el, "rest");
+
+    await press(el, '[data-payment-refund="pay-1"]');
+
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).not.toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
+  });
 });

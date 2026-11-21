@@ -1349,6 +1349,7 @@ CREATE TABLE `bill_payments` (
 	`attested_by` text,
 	`attestation_note` text,
 	`slip_wanted` integer DEFAULT false NOT NULL,
+	`own_receipt` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -1367,6 +1368,21 @@ CREATE TABLE `bill_payments` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `bill_payments_submission_key` ON `bill_payments` (`working_order_id`,`submission_id`);--> statement-breakpoint
+CREATE TABLE `bill_advances` (
+	`id` text PRIMARY KEY NOT NULL,
+	`working_order_id` text NOT NULL,
+	`advance_sale_id` text NOT NULL,
+	`bill_payment_id` text NOT NULL,
+	`order_label` text,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`advance_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `bill_advances_working_order_idx` ON `bill_advances` (`working_order_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `bill_advances_bill_payment_key` ON `bill_advances` (`bill_payment_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `bill_advances_advance_sale_key` ON `bill_advances` (`advance_sale_id`);--> statement-breakpoint
 CREATE TABLE `sale_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
@@ -1396,9 +1412,14 @@ CREATE TABLE `sale_lines` (
 	`list_unit_price_gross` integer,
 	`classification` text,
 	`corrects_line_id` text,
+	`advance_role` text,
+	`deducts_sale_id` text,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`parent_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`corrects_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`deducts_sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "sale_lines_advance_role_ck" CHECK("sale_lines"."advance_role" in ('payment_on_account', 'deduction')),
+	CONSTRAINT "sale_lines_advance_ck" CHECK(("sale_lines"."advance_role" is 'deduction') = ("sale_lines"."deducts_sale_id" is not null)),
 	CONSTRAINT "sale_lines_unit_precision_ck" CHECK("sale_lines"."unit_precision" is null or "sale_lines"."unit_precision" between 0 and 3),
 	CONSTRAINT "sale_lines_quantity_ck" CHECK("sale_lines"."quantity" <> 0),
 	CONSTRAINT "sale_lines_price_quantity_ck" CHECK("sale_lines"."price_quantity" > 0),
@@ -1407,6 +1428,7 @@ CREATE TABLE `sale_lines` (
 );
 --> statement-breakpoint
 CREATE INDEX `sale_lines_sale_idx` ON `sale_lines` (`sale_id`);--> statement-breakpoint
+CREATE INDEX `sale_lines_deducts_sale_idx` ON `sale_lines` (`deducts_sale_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sale_lines_line_no_key` ON `sale_lines` (`sale_id`,`line_no`);--> statement-breakpoint
 CREATE TABLE `sale_settlements` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -2938,6 +2960,7 @@ BEGIN
     AND new.device_id IS old.device_id
     AND new.created_at IS old.created_at
     AND new.slip_wanted IS old.slip_wanted
+    AND new.own_receipt IS old.own_receipt
     AND (
       (new.state IS old.state
         AND new.received_at IS old.received_at

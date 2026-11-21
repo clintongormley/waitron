@@ -10,6 +10,7 @@ import {
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
+  billAdvances,
   invoiceCorrections,
   invoiceSeries,
   readLiveSeriesIdTx,
@@ -55,6 +56,9 @@ import { canonicaliseUuid } from "./till-session.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
+import { saleScopeInZones } from "./find-bill-transactions.js";
+import { refuseTakenOffAdvance } from "./advance-taken-off.js";
+import { issueHeldBill } from "./bill-payments.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -99,6 +103,10 @@ export interface InvoiceCorrectionView {
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
 
+/** What {@link closeInvoiceCorrection} needs besides, to issue the bill of an advance it ends. */
+export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
+  Pick<TenderRefundDeps, "db" | "admission" | "log">;
+
 const ZERO = decimal("0.00");
 
 /**
@@ -140,6 +148,7 @@ async function checkInvoiceCorrectable<T>(
     .from(saleSettlements)
     .where(eq(saleSettlements.saleId, saleId));
   if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
+  await refuseTakenOffAdvance(tx, saleId);
   await refuseWhileCorrectionOpen(tx, saleId);
   const refundable = await readRefundableTenders(tx, saleId);
   const pending = refundable.find((row) => row.pendingRefundId !== null);
@@ -303,9 +312,10 @@ function summaryFrom(row: InvoiceCorrectionRow, { refunds, money }: CorrectionLe
   return { view, row, back, pending };
 }
 
-/** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow` and with the number of the invoice it corrects: one read of the corrections, then one
- * read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no correction is open. */
+/** The open corrections whose invoice `inZones` admits ({@link saleScopeInZones}), oldest first,
+ * each without `fileNow` and with the number of the invoice it corrects: one read of the
+ * corrections, then one read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no
+ * correction is open. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
@@ -316,7 +326,12 @@ export async function listOpenInvoiceCorrections(
     .innerJoin(sales, eq(sales.id, invoiceCorrections.originalSaleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(
-      and(eq(invoiceCorrections.state, "open"), inZones?.(sql`${sales.workingOrderId}`) ?? sql`1`),
+      and(
+        eq(invoiceCorrections.state, "open"),
+        inZones === undefined
+          ? sql`1`
+          : saleScopeInZones(sql`${invoiceCorrections.originalSaleId}`, inZones),
+      ),
     )
     .orderBy(asc(invoiceCorrections.createdAt), asc(invoiceCorrections.id));
   const legs = await readCorrectionLegsOf(
@@ -439,7 +454,7 @@ const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
  */
 export async function closeInvoiceCorrection(
   tx: Transaction,
-  deps: InvoiceCorrectionDeps,
+  deps: InvoiceCorrectionEndDeps,
   cfg: DeviceRequestConfig,
   correctionId: string,
   actor: { personId: string },
@@ -465,7 +480,31 @@ export async function closeInvoiceCorrection(
     .returning({ id: invoiceCorrections.id });
   if (ended.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  // Refused when issuing the table's invoice is refused (`clock.unconfirmed`, say); retrying once
+  // that cause clears issues it.
+  await issueAdvanceBill(tx, deps, cfg, correction.originalSaleId, actor.personId);
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/**
+ * When `saleId` is an advance, issues its bill's invoice if the bill is paid off: a payment taken
+ * while the advance's correction was open issued none, and its money has already moved, so the
+ * invoice is issued as that payment's completion would have issued it ({@link issueHeldBill}).
+ * Filing needs no such step: it raises what the bill owes by the money given back.
+ */
+async function issueAdvanceBill(
+  tx: Transaction,
+  deps: InvoiceCorrectionEndDeps,
+  cfg: DeviceRequestConfig,
+  saleId: string,
+  operatorId: string,
+): Promise<void> {
+  const [advance] = await tx
+    .select({ workingOrderId: billAdvances.workingOrderId })
+    .from(billAdvances)
+    .where(eq(billAdvances.advanceSaleId, saleId));
+  if (advance === undefined) return;
+  await issueHeldBill(tx, deps, cfg, advance.workingOrderId, operatorId);
 }
 
 /** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`

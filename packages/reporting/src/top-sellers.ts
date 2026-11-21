@@ -69,6 +69,7 @@ export async function computeTopSellers(
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
+        and sl.advance_role is null
         ${nodeClause}
       union all
       select sl.id, sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.corrects_line_id, -1
@@ -76,6 +77,7 @@ export async function computeTopSellers(
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
       where ${reversedSalesClause(window)}
+        and sl.advance_role is null
         ${nodeClause}
     ),
     -- At the step whose beyond is null, target_id is an original line (one that corrects nothing)

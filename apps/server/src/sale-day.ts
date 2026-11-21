@@ -10,7 +10,7 @@ import type { GrossLines } from "@waitron/menu";
 import { payments } from "@waitron/payments";
 import { civilDateOf } from "@waitron/reporting";
 import { closeOfDayEnd } from "./close-of-day.js";
-import { issueMoment, type IssueMoment } from "./issue-moment.js";
+import { issueMoment, type IssueAdvances, type IssueMoment } from "./issue-moment.js";
 
 /** The card row's columns {@link cardSaleMoment} reads. */
 export interface CardTiming {
@@ -53,6 +53,7 @@ export async function issueOrderMoment(
   orderId: string,
   gross: GrossLines,
   mealEndedAt?: string,
+  advances?: IssueAdvances,
 ): Promise<IssueMoment> {
   const zone = await readIssueZone(tx, scope);
   const issueClock = issueClockIn(zone, issuer.clock);
@@ -63,7 +64,7 @@ export async function issueOrderMoment(
   // The zone's offset at the instant itself: across a change of clocks the issue's offset would
   // name the wrong day.
   const mealDay = ended === undefined ? undefined : civilDateOf(new Date(ended), zone);
-  return issueMoment(issueClock, gross, issuer.backend, mealDay);
+  return issueMoment(issueClock, gross, issuer.backend, mealDay, advances);
 }
 
 function earlier(a: string | undefined, b: string | undefined): string | undefined {

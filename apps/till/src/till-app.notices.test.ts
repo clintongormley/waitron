@@ -1144,6 +1144,8 @@ describe("a payment started while a notice pauses payments", () => {
     }
     pay.shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
     await flushApp(el);
+    pay.shadowRoot!.querySelector<HTMLElement>('input[name="ownReceipt"][value="no"]')!.click();
+    await flushApp(el);
     pay.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
     await flushApp(el);
     expect(takeBillPayment).toHaveBeenCalledOnce();

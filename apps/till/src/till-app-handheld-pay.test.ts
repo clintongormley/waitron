@@ -58,6 +58,7 @@ import {
   inDialog,
   invoiceOf as saleOf,
   line,
+  answerOwnReceipt,
   openDialog,
   openTable,
   press,
@@ -2832,6 +2833,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     await type(el, "people", "3");
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");
+    await answerOwnReceipt(el, "no");
     if (timeouts) {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
       inDialog(el, "[data-pay-confirm]")!.click();
@@ -3463,6 +3465,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       await type(el, "people", "3");
       await press(el, 'input[name="method"][value="card"]');
       await press(el, "[data-pay-continue]");
+      await answerOwnReceipt(el, "no");
       vi.useFakeTimers({
         toFake: ["setInterval", "clearInterval", "Date", "setTimeout", "clearTimeout"],
       });
@@ -6307,6 +6310,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     await press(el, 'input[name="method"][value="cash"]');
     await type(el, "tendered", "40");
     await press(el, "[data-pay-continue]");
+    await answerOwnReceipt(el, "no");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();

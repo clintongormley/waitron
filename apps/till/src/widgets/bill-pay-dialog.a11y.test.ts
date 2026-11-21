@@ -194,6 +194,47 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     }
   }
 
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1280]) {
+      it(`has no violations asking for the payer's own receipt, then answered, in ${locale} at ${width}px`, async () => {
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const { el, host } = await mount({
+            way: "contribution",
+            ownReceiptOffered: true,
+            asked: {
+              choice: { kind: "contribution", amount: "20.00" },
+              pay: { method: "cash", tendered: "20.00" },
+            },
+            preview: {
+              kind: "allocated",
+              choice: null,
+              applied: "20.00",
+              tip: "0.00",
+              change: "0.00",
+              charged: null,
+            },
+          });
+          if (!el.shadowRoot!.querySelector("[data-pay-own-receipt]"))
+            throw new Error("no own-receipt question");
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/own-receipt-${locale}-${theme}-${width}.png`,
+          });
+          await pressed(el, 'input[name="ownReceipt"][value="yes"]');
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/own-receipt-yes-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale("es-ES");
+          await page.viewport(1280, 900);
+        }
+      });
+    }
+  }
+
   it("has no violations choosing items, with the units of a line", async () => {
     const { el, host } = await mount();
     await pressed(el, 'input[name="line"][value="2"]');

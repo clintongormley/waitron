@@ -33,6 +33,8 @@ export interface LineSpec {
   parentLineId?: string;
   correctsLineId?: string;
   quantity?: string;
+  advanceRole?: "payment_on_account" | "deduction";
+  deductsSaleId?: SaleId;
 }
 
 let invoiceNumber = 0;
@@ -68,6 +70,8 @@ export function sellLines(
       id: l.id,
       parentLineId: l.parentLineId,
       correctsLineId: l.correctsLineId,
+      advanceRole: l.advanceRole,
+      deductsSaleId: l.deductsSaleId,
     })),
   });
 }

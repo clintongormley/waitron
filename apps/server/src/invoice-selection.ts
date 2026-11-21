@@ -82,12 +82,45 @@ export function checkedInvoiceRecipient(
   };
 }
 
+/** The order columns {@link selectOrderInvoice} chooses the invoice from, for a select. */
+export const ORDER_INVOICE_CHOICE = {
+  invoiceType: workingOrders.invoiceType,
+  recipientTaxId: workingOrders.recipientTaxId,
+  recipientIdentifierType: workingOrders.recipientIdentifierType,
+  recipientIdentifierCountryCode: workingOrders.recipientIdentifierCountryCode,
+  recipientLegalName: workingOrders.recipientLegalName,
+  recipientAddress: workingOrders.recipientAddress,
+  recipientCountryCode: workingOrders.recipientCountryCode,
+  receiptLocale: workingOrders.receiptLocale,
+};
+
+/** An order's {@link ORDER_INVOICE_CHOICE} columns. */
+export type OrderInvoiceChoice = Pick<
+  typeof workingOrders.$inferSelect,
+  keyof typeof ORDER_INVOICE_CHOICE
+>;
+
+/** The order's {@link OrderInvoiceChoice}; absent for an unknown order. */
+export async function readOrderInvoiceChoice(
+  tx: Transaction,
+  orderId: string,
+): Promise<OrderInvoiceChoice | undefined> {
+  const [order] = await tx
+    .select(ORDER_INVOICE_CHOICE)
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order;
+}
+
+/** `choice` is the order's {@link OrderInvoiceChoice} when the caller has read it in this
+ * transaction, with none of its columns written since. */
 export async function selectOrderInvoice(
   tx: Transaction,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
   cfg: Pick<TradingContext, "nodeId" | "simplifiedInvoiceLimit">,
   orderId: string,
   total: Decimal,
+  choice?: OrderInvoiceChoice,
 ): Promise<{
   invoiceType: "F1" | "F2";
   recipient: InvoiceRecipient | undefined;
@@ -95,19 +128,7 @@ export async function selectOrderInvoice(
   /** The receipt language saved on the order; absent when none is. */
   receiptLocale?: string;
 }> {
-  const [order] = await tx
-    .select({
-      invoiceType: workingOrders.invoiceType,
-      recipientTaxId: workingOrders.recipientTaxId,
-      recipientIdentifierType: workingOrders.recipientIdentifierType,
-      recipientIdentifierCountryCode: workingOrders.recipientIdentifierCountryCode,
-      recipientLegalName: workingOrders.recipientLegalName,
-      recipientAddress: workingOrders.recipientAddress,
-      recipientCountryCode: workingOrders.recipientCountryCode,
-      receiptLocale: workingOrders.receiptLocale,
-    })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
+  const order = choice ?? (await readOrderInvoiceChoice(tx, orderId));
   if (order === undefined) {
     throw new AppError("working_order.not_open", { workingOrderId: orderId });
   }

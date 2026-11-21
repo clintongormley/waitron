@@ -143,7 +143,8 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
 /**
  * A group joins an earlier one
  * when its dish and each extra print the same at the same unit price and VAT rate, counted not
- * measured, with no list price and no comp or discount; counts and amounts add.
+ * measured, with no list price and no comp or discount; counts and amounts add. A line taking an
+ * advance off never joins (two advances of one amount store the same words).
  */
 export function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: boolean): LineGroup[] {
   const merged: LineGroup[] = [];
@@ -224,6 +225,7 @@ export function optionAnswersKey(answers: readonly unknown[] | null | undefined)
 
 function groupable(line: TillSaleLine): boolean {
   return (
+    line.advance === undefined &&
     line.unitName == null &&
     /^[1-9]\d*$/.test(line.quantity) &&
     line.listGross === undefined &&

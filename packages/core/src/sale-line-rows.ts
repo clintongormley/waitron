@@ -50,5 +50,7 @@ export function saleLineRows(
       : { listUnitPriceGross: stringToCents(line.listUnitPriceGross) }),
     classification: line.classification ?? null,
     correctsLineId: corrective ? (line.correctsLineId ?? null) : null,
+    ...(line.advanceRole == null ? {} : { advanceRole: line.advanceRole }),
+    ...(line.deductsSaleId == null ? {} : { deductsSaleId: line.deductsSaleId }),
   }));
 }

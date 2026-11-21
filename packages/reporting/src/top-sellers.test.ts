@@ -772,6 +772,53 @@ describe("computeTopSellers", () => {
     expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00", variants: [] }]);
   });
 
+  it("top sellers count example 1's dishes once and leave out the advance's line and the deduction line", async () => {
+    // Example 1: €120 of food at 10%; Ana's €30 advance ticket A/12 (27.27 + 2.73) at 21:30, and
+    // the rest's ticket at 23:00 taking A/12 off.
+    const onAccount = { name: "Payment on account", descriptions: { es: "Pago a cuenta" } };
+    const advance = await seedSale(suite.db, venue, {
+      invoiceNumber: 12,
+      issuedAt: new Date("2026-08-04T19:30:00Z").toISOString(),
+      total: "30.00",
+      lines: [
+        {
+          ...onAccount,
+          vatRate: "10.00",
+          lineTotal: "27.27",
+          lineGross: "30.00",
+          advanceRole: "payment_on_account",
+        },
+      ],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 13,
+      issuedAt: new Date("2026-08-04T21:00:00Z").toISOString(),
+      total: "90.00",
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "109.09",
+          lineGross: "120.00",
+          name: toastName,
+          descriptions: toastText,
+          quantity: "4.000",
+        },
+        {
+          ...onAccount,
+          vatRate: "10.00",
+          lineTotal: "-27.27",
+          lineGross: "-30.00",
+          advanceRole: "deduction",
+          deductsSaleId: advance,
+        },
+      ],
+    });
+
+    expect(await run()).toEqual([
+      { name: toastName, quantity: "4.000", total: "109.09", variants: [] },
+    ]);
+  });
+
   it("counts a replaced sale once, on its own day, and a full refund of the replacement returns the dish", async () => {
     const coffee = (id: string, sign: "" | "-", correctsLineId?: string) => ({
       id,

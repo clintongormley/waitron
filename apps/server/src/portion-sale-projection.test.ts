@@ -200,7 +200,8 @@ describe("A803 monetary comparison: pricing portions grouped back by their order
   it("A803 monetary comparison: 2 × €0.05 at 10%", () => {
     const { today, candidate, naive } = compare([{ name: "Olive", price: "0.05", count: 2 }]);
     expect(baseOf(today, "10.00")).toBe("0.09");
-    expect(baseOf(naive, "10.00")).toBe("0.10");
+    // The one-cent rule (D11) moves a cent to VAT when 0.10 at 10% would file 0.00 VAT.
+    expect(baseOf(naive, "10.00")).toBe("0.09");
     expect(candidate).toEqual(today);
   });
 

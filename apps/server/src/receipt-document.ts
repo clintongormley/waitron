@@ -219,6 +219,15 @@ export function buildReceiptDocument({
     const [first, ...rest] = covered.map(letter);
     return rest.every((one) => one === first) ? first! : "";
   };
+  // The advance is named as read from it, never from the words stored on the line.
+  const itemName = (line: TillSaleLine): string => {
+    if (line.advance === undefined) return lineName(line.descriptions, namesLocale);
+    const { invoiceNumber, issuedOn } = line.advance;
+    return label.advanceTakenOff
+      .replace("{paymentOnAccount}", () => label.paymentOnAccount)
+      .replace("{number}", () => invoiceNumber)
+      .replace("{date}", () => receiptDayNumeric(issuedOn, locale));
+  };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number, suffix = ""): void => {
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
@@ -352,7 +361,7 @@ export function buildReceiptDocument({
     indent: number,
   ): ReceiptTableRow => ({
     units: quantityText(line, namesLocale, locale),
-    item: lineName(line.descriptions, namesLocale),
+    item: itemName(line),
     ...(indent > 0 ? { itemIndent: indent } : {}),
     price: formatAmount(price, locale),
     amount: formatAmount(amount, locale),
@@ -405,11 +414,9 @@ export function buildReceiptDocument({
     const quantity = `${shown}  `;
     const included = simplified ? "" : ` (${label.vatIncluded})`;
     const amount = decimal(dish.listGross ?? dish.gross);
-    row(
-      `${quantity}${lineName(dish.descriptions, namesLocale)}${included}`,
-      `${itemAmount(amount)}${letter(dish)}`,
-      { after: quantity },
-    );
+    row(`${quantity}${itemName(dish)}${included}`, `${itemAmount(amount)}${letter(dish)}`, {
+      after: quantity,
+    });
     const sold = decimal(count);
     const recorded = dish.listGross === undefined ? dish.unitPriceGross : dish.listUnitPriceGross;
     if (
@@ -458,18 +465,27 @@ export function buildReceiptDocument({
   const printed = simplified
     ? mergeIdenticalGroups(groups, result.vatBreakdown.length <= 1)
     : groups;
+  // An advance is taken off what the bill came to, so it prints after the whole-bill discounts.
+  const advances: (() => void)[] = [];
   printed.forEach((group, at) => {
-    if (filedGroups[nextFiled]?.at === at) {
-      tableGroup(filedGroups[nextFiled++]!);
-    } else {
-      endTable();
-      withVatGroup(group);
-    }
+    const filed = filedGroups[nextFiled]?.at === at ? filedGroups[nextFiled++]! : undefined;
+    const print = (): void => {
+      if (filed !== undefined) {
+        tableGroup(filed);
+      } else {
+        endTable();
+        withVatGroup(group);
+      }
+    };
+    if (group.dish.advance === undefined) print();
+    else advances.push(print);
   });
-  endTable();
-  for (const discount of discounts.atEnd) printedTables.at(-1)?.push(discountRow(discount, 0));
-  if (printedTables.length > 0) text(`    ${label.pricesExcludeVat}`, 4);
+  const lastRows = tableRows.length > 0 ? tableRows : printedTables.at(-1);
+  for (const discount of discounts.atEnd) lastRows?.push(discountRow(discount, 0));
   if (!anyFiled) for (const adjustment of billAdjustments) takenOff(adjustment, 0);
+  for (const print of advances) print();
+  endTable();
+  if (printedTables.length > 0) text(`    ${label.pricesExcludeVat}`, 4);
   rule();
   const vatRows = (): void => {
     for (const v of result.vatBreakdown) {

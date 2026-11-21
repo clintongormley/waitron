@@ -16,6 +16,7 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
+  billAdvances,
   invoiceDeliveries,
   invoiceSeries,
   isReceiptPrinter,
@@ -37,11 +38,12 @@ import { deviceOrigin } from "@waitron/shared";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import type { JobDefinition } from "./job-runner.js";
 import type { Logger } from "./logger.js";
-import { deviceMayPrintReceipts, printerLookup } from "./receipt-print.js";
+import { deviceMayPrintReceipts, enqueueOriginalReceipt, printerLookup } from "./receipt-print.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { queueOwedOriginal } from "./till-sale.js";
-import type { TradingContext } from "./trading-context.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 
 const ownOriginal = alias(printJobs, "owed_own_original");
 const laterOriginal = alias(printJobs, "owed_later_original");
@@ -210,9 +212,20 @@ function hasOriginalJob(q: Transaction, saleId: SQLiteColumn): SQL {
   );
 }
 
+/** Whether the sale is an advance's own ticket, which has no working order of its own. */
+function isAdvance(q: Transaction, saleId: SQLiteColumn): SQL {
+  return exists(
+    q
+      .select({ one: sql`1` })
+      .from(billAdvances)
+      .where(eq(billAdvances.advanceSaleId, saleId)),
+  );
+}
+
 /**
  * This installation's sales made by a device, issued in the last day, that still owe their receipt
- * and have no original job.
+ * and have no original job: a bill's invoice, or an advance's own ticket. `workingOrderId` is null
+ * for an advance.
  */
 export function owedSales(q: Transaction, nodeId: string, now: Date, saleId?: string) {
   return (
@@ -220,7 +233,7 @@ export function owedSales(q: Transaction, nodeId: string, now: Date, saleId?: st
       .select({
         saleId: sql<string>`${sales.id}`,
         deviceId: sql<string>`${sales.deviceId}`,
-        workingOrderId: sql<string>`${sales.workingOrderId}`,
+        workingOrderId: sql<string | null>`${sales.workingOrderId}`,
         issuedAt: sql<string>`${sales.issuedAt}`,
       })
       // A one-sale read goes by its id; the day's read names its index as `givenUpOriginals` does.
@@ -230,7 +243,7 @@ export function owedSales(q: Transaction, nodeId: string, now: Date, saleId?: st
           gte(sales.issuedAt, new Date(now.getTime() - OWED_FOR_MS).toISOString()),
           saleId === undefined ? undefined : eq(sales.id, saleId),
           eq(sales.source, "device"),
-          isNotNull(sales.workingOrderId),
+          or(isNotNull(sales.workingOrderId), isAdvance(q, sales.id)),
           thisInstallation(nodeId),
           not(hasOriginalJob(q, sales.id)),
           stillOwed(q, sales.id),
@@ -247,9 +260,10 @@ async function canPrintReceipts(q: Transaction, deviceId: string): Promise<boole
 }
 
 /**
- * Queues, as the till's close request does, the original of each owed till sale issued at least
- * 10 minutes ago on its device's receipt printer, and says when the next sale will be due. A
- * device that may not print receipts, or has no receipt printer, is left until one changes.
+ * Queues the original of each owed till sale (a bill's invoice as the till's close request does, an
+ * advance's ticket as its payment does) issued at least 10 minutes ago on its device's receipt
+ * printer, and says when the next sale will be due. A device that may not print receipts, or has
+ * no receipt printer, is left until one changes.
  */
 export async function printOwedTickets(
   deps: { db: Database; backend: FiscalBackend; cfg: TradingContext; log: Logger },
@@ -279,13 +293,9 @@ export async function printOwedTickets(
         if (signal?.aborted) return false;
         const [still] = await owedSales(tx, cfg.nodeId, now, saleId);
         if (still === undefined || !(await deviceMayPrintReceipts(tx, deviceId))) return false;
-        return queueOwedOriginal(
-          tx,
-          backend,
-          { ...cfg, origin: deviceOrigin(deviceId) },
-          workingOrderId,
-          null,
-        );
+        const origin = { ...cfg, origin: deviceOrigin(deviceId) };
+        if (workingOrderId === null) return queueOwedAdvance(tx, backend, origin, saleId);
+        return queueOwedOriginal(tx, backend, origin, workingOrderId, null);
       });
       if (made) queued.push(saleId);
     } catch (error) {
@@ -294,6 +304,22 @@ export async function printOwedTickets(
     }
   }
   return { queued, nextDueAt: next === null ? null : new Date(next) };
+}
+
+/** Queues advance `saleId`'s original, built as `issueAdvance` builds it. The caller has read the
+ * sale as owed in this transaction. */
+async function queueOwedAdvance(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: OriginConfig,
+  saleId: string,
+): Promise<boolean> {
+  const ticket = await readTransactionReceipt(backend, tx, cfg, saleId);
+  const made = await enqueueOriginalReceipt(tx, cfg, ticket, saleId, {
+    personId: null,
+    printers: printerLookup(tx, cfg.origin, { whileSwitchedOff: true }),
+  });
+  return typeof made === "object";
 }
 
 const earlier = (a: Date | null, b: Date | null) => (a === null ? b : b === null || a <= b ? a : b);

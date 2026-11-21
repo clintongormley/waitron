@@ -7,11 +7,11 @@ import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js
 import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
-import { selectOrderInvoice } from "./invoice-selection.js";
-import { withReceiptListPrices } from "./receipt-lines.js";
+import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
+  billAdvances,
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
@@ -77,9 +77,8 @@ import type {
   AllocationRequest,
   BillFunds,
 } from "./bill-allocation.js";
-import { issuancePass } from "./issuance-pass.js";
 import { pinnedAt } from "./issue-moment.js";
-import { CARD_TIMING_COLUMNS, cardSaleMoment, issueOrderMoment } from "./sale-day.js";
+import { CARD_TIMING_COLUMNS, cardSaleMoment } from "./sale-day.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -121,6 +120,8 @@ import { fingerprint } from "./parties.js";
 import {
   captureOrderEdit,
   createOpenOrder,
+  filedLines,
+  priceOrderInvoice,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refuseOrderPaymentMarked,
@@ -135,6 +136,14 @@ import type { GrossOrder, TillSaleDeps, UpdateHeldOrderRequest } from "./working
 import type { LateSendConfirmation } from "./late-send.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
+import {
+  advanceWithOpenCorrection,
+  issueAdvance,
+  readBillAdvances,
+  refuseWhileAdvanceCorrectionOpen,
+  type AdvancePaymentMoney,
+  type BillAdvances,
+} from "./bill-advances.js";
 import { assertStillSignedIn } from "./till-session.js";
 import { refuseSetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
@@ -146,7 +155,6 @@ import {
   type SettledSlipPrinter,
 } from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
-import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import type { Logger } from "./logger.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
@@ -207,6 +215,9 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   receiptLanguage?: string;
   /** What the receipt prints if this payment completes the bill; absent stores the default then. */
   guestCount?: number | null;
+  /** The payer wants their own receipt for this amount: a part payment that leaves something owed
+   * then issues its own advance ticket ({@link issueAdvanceIfOwed}). */
+  ownReceipt?: boolean;
 }
 
 /** Money given back from one bill payment before the invoice. */
@@ -225,6 +236,12 @@ export interface BillRefundView {
 
 export interface BillPaymentView extends OutsideCardDetails {
   externalRef?: string;
+  /** It paid an advance, whose own sale is `saleId`; `left` and `tipLeft` are what Correct
+   * invoice on that ticket has not given back. */
+  hasTicket?: true;
+  saleId?: string;
+  left?: Decimal;
+  tipLeft?: Decimal;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -289,38 +306,83 @@ export interface PaymentMoney {
   row: PaymentRow;
   netApplied: Decimal;
   netTip: Decimal;
-  /** How many completed refunds it has. */
+  /** How many completed refunds it has; an advance's correctives count as its refunds. */
   refunds: number;
 }
 
 /** Each payment with what its completed refunds leave of it; `refunds` may hold refunds of other
- * payments, and in other states. */
-function moneyOf(rows: readonly PaymentRow[], refunds: readonly RefundMoney[]): PaymentMoney[] {
+ * payments, and in other states. A payment that paid an advance (`advances`) holds what is left of
+ * the advance, and its tip less the tips given back from its tender, so an advance given back
+ * through Correct invoice stops holding money. */
+function moneyOf(
+  rows: readonly PaymentRow[],
+  refunds: readonly RefundMoney[],
+  advances: ReadonlyMap<string, AdvancePaymentMoney>,
+): PaymentMoney[] {
   return rows.map((row) => {
     const net = netOfRefunds(row, refunds);
+    const advance = advances.get(row.id);
     return {
       row,
-      netApplied: centsToDecimal(net.applied),
-      netTip: centsToDecimal(net.tip),
-      refunds: net.own.length,
+      netApplied: advance?.left ?? centsToDecimal(net.applied),
+      netTip: centsToDecimal(net.tip - (advance?.tipGivenBack ?? 0)),
+      refunds: net.own.length + (advance?.correctives ?? 0),
     };
   });
 }
 
+/** The bills' payments, oldest first, and those of them that paid an advance. */
 async function readPaymentRows(
   tx: Transaction,
   workingOrderIds: readonly string[],
-): Promise<PaymentRow[]> {
-  if (workingOrderIds.length === 0) return [];
-  return (
-    tx
-      .select()
-      .from(billPayments)
-      .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
-      // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
-      // written in.
-      .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`)
-  );
+): Promise<{ rows: PaymentRow[]; advanced: Set<string> }> {
+  if (workingOrderIds.length === 0) return { rows: [], advanced: new Set() };
+  const read = await tx
+    .select({ row: billPayments, advanceId: billAdvances.id })
+    .from(billPayments)
+    .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
+    .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
+    // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
+    // written in.
+    .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`);
+  return {
+    rows: read.map(({ row }) => row),
+    advanced: new Set(read.flatMap(({ row, advanceId }) => (advanceId === null ? [] : [row.id]))),
+  };
+}
+
+/** The bills' {@link BillAdvances}, read only when one of their payments paid an advance: each
+ * advance is linked to the payment that paid it, of its own bill (`issueAdvance`, its one writer),
+ * so a bill none of whose payments paid one has none. */
+async function advancesPaidBy(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+  advanced: ReadonlySet<string>,
+): Promise<BillAdvances> {
+  return advanced.size === 0 ? noAdvances() : readBillAdvances(tx, workingOrderIds);
+}
+
+function noAdvances(): BillAdvances {
+  return { credits: new Map(), payments: new Map() };
+}
+
+/** Each payment of some bills, with what its completed refunds leave of it, and the bills'
+ * advances. */
+interface HeldMoney {
+  held: PaymentMoney[];
+  advances: BillAdvances;
+}
+
+/** {@link HeldMoney} of these bills; `advances` are theirs when the caller has read them. */
+async function readHeld(
+  tx: Transaction,
+  workingOrderIds: readonly string[],
+  advances?: BillAdvances,
+): Promise<HeldMoney> {
+  const { rows, advanced } = await readPaymentRows(tx, workingOrderIds);
+  if (rows.length === 0) return { held: [], advances: advances ?? noAdvances() };
+  const read = advances ?? (await advancesPaidBy(tx, workingOrderIds, advanced));
+  return { held: moneyOf(rows, await completedRefundsOf(tx, rows), read.payments), advances: read };
 }
 
 /** Each payment of the bills, with what its completed refunds leave of it. */
@@ -328,21 +390,21 @@ export async function readPaymentMoney(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<PaymentMoney[]> {
-  const rows = await readPaymentRows(tx, workingOrderIds);
-  return moneyOf(rows, await completedRefundsOf(tx, rows));
+  return (await readHeld(tx, workingOrderIds)).held;
 }
 
-/** {@link readPaymentMoney} for one payment already read. */
+/** {@link readPaymentMoney} for one payment already read, which paid no advance. */
 export async function readOnePaymentMoney(tx: Transaction, row: PaymentRow): Promise<PaymentMoney> {
-  return moneyOf([row], await completedRefundsOf(tx, [row]))[0]!;
+  return moneyOf([row], await completedRefundsOf(tx, [row]), new Map())[0]!;
 }
 
-/** The bill's payments, oldest first, and every refund of them, oldest first. */
+/** The bill's payments, oldest first, every refund of them, oldest first, and those of them that
+ * paid an advance. */
 async function readPaymentsAndRefunds(
   tx: Transaction,
   workingOrderId: string,
-): Promise<{ rows: PaymentRow[]; refunds: RefundRow[] }> {
-  const rows = await readPaymentRows(tx, [workingOrderId]);
+): Promise<{ rows: PaymentRow[]; refunds: RefundRow[]; advanced: Set<string> }> {
+  const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
   const refunds =
     rows.length === 0
       ? []
@@ -358,7 +420,7 @@ async function readPaymentsAndRefunds(
           // Two refunds can share a millisecond; a tie falls back to `rowid`, the order the rows
           // were written in.
           .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
-  return { rows, refunds };
+  return { rows, refunds, advanced };
 }
 
 async function readPaymentLines(
@@ -477,11 +539,15 @@ export async function assertBillInvariant(
   tx: Transaction,
   workingOrderIds: readonly string[],
 ): Promise<void> {
-  const payments = await readPaymentMoney(tx, workingOrderIds);
+  const { held: payments, advances } = await readHeld(tx, workingOrderIds);
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
     if (held.length === 0) continue;
-    const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId), held);
+    const funds = fundsOf(
+      workingOrderId,
+      await billPaymentTotal(tx, workingOrderId, advances),
+      held,
+    );
     const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
     if (compareDecimal(excess, ZERO) > 0) {
       throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
@@ -516,19 +582,29 @@ export async function stillOwedOnIssuedBill(
   workingOrderId: string,
   amountDue: Decimal,
 ): Promise<Decimal> {
-  const money = await readPaymentMoney(tx, [workingOrderId]);
+  // An advance's money is on its own ticket, and the amount due has it taken off already.
+  const { held, advances } = await readHeld(tx, [workingOrderId]);
   return owedOf(
     amountDue,
-    money.filter(({ row }) => row.state === "received").map(({ netApplied }) => netApplied),
+    held
+      .filter(({ row }) => row.state === "received" && !advances.payments.has(row.id))
+      .map(({ netApplied }) => netApplied),
   );
 }
 
-/** Those of these bills that hold money: a pending payment, or received money not given back. */
+/**
+ * Those of these bills that hold money: a pending payment, or received money not given back.
+ * `besidesAdvances` leaves out the payments that paid an advance, whose money is on its own ticket.
+ */
 export async function billsHoldingMoney(
   tx: Transaction,
   workingOrderIds: readonly string[],
+  options: { besidesAdvances?: boolean } = {},
 ): Promise<Set<string>> {
-  const payments = await readPaymentMoney(tx, workingOrderIds);
+  const { held, advances } = await readHeld(tx, workingOrderIds);
+  const payments = held.filter(
+    ({ row }) => options.besidesAdvances !== true || !advances.payments.has(row.id),
+  );
   return new Set(
     workingOrderIds.filter((workingOrderId) =>
       holdsMoney(payments.filter(({ row }) => row.workingOrderId === workingOrderId)),
@@ -615,11 +691,20 @@ function toView(
   refunds: readonly RefundRow[],
   lineNos: ReadonlyMap<string, number>,
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
+  advance: (PaymentMoney & { saleId: string }) | undefined,
 ): BillPaymentView {
   const manual = manualCards.get(payment.id);
   return {
     ...outsideCardDetails(manual ?? {}),
     ...(manual?.externalRef == null ? {} : { externalRef: manual.externalRef }),
+    ...(advance === undefined
+      ? {}
+      : {
+          hasTicket: true as const,
+          saleId: advance.saleId,
+          left: money(advance.netApplied),
+          tipLeft: money(advance.netTip),
+        }),
     id: payment.id,
     submissionId: payment.submissionId,
     kind: payment.kind,
@@ -648,16 +733,20 @@ function toView(
 
 /**
  * Point the provider row of each of these received card bill payments at the sale, a payment
- * given back in full included (design §2.5).
+ * given back in full included (design §2.5). A card that paid an advance (`advancePayments`) stays
+ * linked to its advance.
  */
 async function linkCardBillPayments(
   tx: Transaction,
   received: readonly PaymentRow[],
   saleId: string,
+  advancePayments: ReadonlySet<string>,
 ): Promise<void> {
   const provided = await findPaymentsByBillPayments(
     tx,
-    received.filter((row) => row.method === "card").map((row) => row.id),
+    received
+      .filter((row) => row.method === "card" && !advancePayments.has(row.id))
+      .map((row) => row.id),
   );
   for (const row of received) {
     const card = provided.get(row.id);
@@ -678,11 +767,12 @@ export async function linkBillCardPaymentsToSale(
   workingOrderId: string,
   saleId: string,
 ): Promise<void> {
-  const rows = await readPaymentRows(tx, [workingOrderId]);
+  const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
   await linkCardBillPayments(
     tx,
     rows.filter((row) => row.state === "received"),
     saleId,
+    advanced,
   );
 }
 
@@ -700,30 +790,46 @@ async function manualCardsOf(tx: Transaction, rows: readonly PaymentRow[]) {
   );
 }
 
+/** The bill's {@link BillFigures} `meal`. */
 async function billPaymentTotal(
   tx: Transaction,
   id: string,
-  pricedTotal?: Decimal,
+  advances: BillAdvances,
+  pricedMeal?: Decimal,
 ): Promise<Decimal> {
-  return (await issuedAndTotal(tx, id, pricedTotal)).total;
+  return (await readBillFigures(tx, id, advances, pricedMeal)).meal;
 }
 
-interface IssuedAndTotal {
+/** What a bill's money is measured against. */
+interface BillFigures {
+  /** The sale the bill has already issued, if any. */
   issued: IssuedSale | undefined;
-  total: Decimal;
+  /**
+   * What the bill's payments, those that paid an advance included, add up to once it is paid: its
+   * priced total before its invoice, and after it the invoice's amount due with the advances it
+   * took off added back.
+   */
+  meal: Decimal;
+  /** What the bill's own invoice is settled at: the meal less its advances. */
+  due: Decimal;
+  /** The bill's advances. */
+  advances: BillAdvances;
 }
 
-/** {@link billPaymentTotal}, with the sale the bill has already issued, if any. */
-async function issuedAndTotal(
+/** The bill's {@link BillFigures}; `advances` are the bill's, and `pricedMeal` its priced total
+ * when the caller has priced its current lines in this transaction already. */
+async function readBillFigures(
   tx: Transaction,
   id: string,
-  pricedTotal?: Decimal,
-): Promise<IssuedAndTotal> {
+  advances: BillAdvances,
+  pricedMeal?: Decimal,
+): Promise<BillFigures> {
   const issued = await readOutstandingSaleForOrder(tx, id);
-  return {
-    issued,
-    total: issued?.amountDue ?? pricedTotal ?? (await storedOrderTotal(tx, id)),
-  };
+  const taken = sumDecimals((advances.credits.get(id) ?? []).map((credit) => credit.gross));
+  if (issued !== undefined)
+    return { issued, meal: addDecimal(issued.amountDue, taken), due: issued.amountDue, advances };
+  const meal = pricedMeal ?? (await storedOrderTotal(tx, id));
+  return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
 /**
@@ -742,13 +848,22 @@ export async function readBillBalance(
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId });
   }
-  const { rows, refunds } = await readPaymentsAndRefunds(tx, workingOrderId);
-  const held = moneyOf(rows, refunds);
+  const { rows, refunds, advanced } = await readPaymentsAndRefunds(tx, workingOrderId);
+  const advances = await advancesPaidBy(tx, [workingOrderId], advanced);
+  const held = moneyOf(rows, refunds, advances.payments);
   const lines = await readPaymentLines(tx, held);
   const lineNos = await readLineNos(tx, workingOrderId);
   const manualCards = await manualCardsOf(tx, rows);
-  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, total), held);
+  const funds = fundsOf(
+    workingOrderId,
+    await billPaymentTotal(tx, workingOrderId, advances, total),
+    held,
+  );
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
+  const advanceOf = (payment: PaymentMoney) => {
+    const advance = advances.payments.get(payment.row.id);
+    return advance === undefined ? undefined : { ...payment, saleId: advance.saleId };
+  };
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
   return {
     ...(captureWarning === undefined ? {} : { captureWarning }),
@@ -761,7 +876,9 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos, manualCards)),
+    payments: held.map((payment) =>
+      toView(payment.row, lines, refunds, lineNos, manualCards, advanceOf(payment)),
+    ),
     paidLines: [...paidQuantitiesOf(held, lines)]
       .flatMap(([lineId, quantity]) => {
         const lineNo = lineNos.get(lineId);
@@ -805,15 +922,66 @@ async function latestAcceptance(
     );
 }
 
+/** A payer's own receipt is not built for a bill set for a full invoice (advances plan, piece 1b). */
+async function refuseFullInvoiceAdvance(tx: Transaction, workingOrderId: string): Promise<void> {
+  const [order] = await tx
+    .select({ invoiceType: workingOrders.invoiceType })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order?.invoiceType === "F1")
+    throw new AppError("advance.full_invoice_unsupported", { workingOrderId });
+}
+
+/**
+ * Issue `payment`'s advance when it is one: its payer wants their own receipt, the bill has no
+ * invoice (neither before it nor from it), and the meal less the bill's advances less the received
+ * money of its payments with no advance, this one's included, still leaves something owed. A flagged
+ * payment that pays the bill off is part of the rest's invoice, even while that cannot be issued.
+ * `figures` are the bill's as they stand, when the caller has read them; it calls this only when
+ * no invoice of the bill was issued or settled since. Runs in the payment's transaction, so a
+ * refused advance takes the payment back with it.
+ */
+async function issueAdvanceIfOwed(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  payment: PaymentRow,
+  printers: PrinterLookup,
+  figures: BillFigures | undefined,
+): Promise<void> {
+  if (!payment.ownReceipt || payment.state !== "received" || figures?.issued !== undefined) return;
+  const workingOrderId = payment.workingOrderId;
+  // Read again: `payment` was written after any figures the caller read.
+  const { held, advances } = await readHeld(tx, [workingOrderId], figures?.advances);
+  const bill = figures ?? (await readBillFigures(tx, workingOrderId, advances));
+  if (bill.issued !== undefined || advances.payments.has(payment.id)) return;
+  // Each advance counts by what is left of it, and every other received payment by its money.
+  const { received } = fundsOf(workingOrderId, ZERO, held);
+  const left = subtractDecimal(bill.meal, received);
+  if (compareDecimal(left, ZERO) <= 0) return;
+  await issueAdvance(tx, deps, cfg, payment, printers);
+}
+
 type IssueOptions = {
   moneyMoved?: boolean;
   closeZero?: boolean;
-  total?: Decimal;
-  alreadyRead?: IssuedAndTotal;
+  /** The bill's figures from earlier in this transaction, with no sale or advance issued or
+   * corrected since. */
+  figures?: BillFigures;
+  /** The bill's priced total, when the caller has priced its current lines in this transaction
+   * already and has no `figures`. */
+  pricedMeal?: Decimal;
   printers?: PrinterLookup;
   guestCount?: GuestCountChoice;
   datedByLatestAcceptance?: true;
 };
+
+/** What {@link issueOrSettleWhenFullyPaid} did: the invoice it issued or settled, and the bill's
+ * figures when it knows them. */
+interface IssueOutcome {
+  invoice: TillSaleResult | null;
+  figures?: BillFigures;
+}
 
 /** {@link issueOrSettleWhenFullyPaid}, then an issued sale's waiting original lists the bill's payments. */
 async function issueWhenFullyPaid(
@@ -823,21 +991,16 @@ async function issueWhenFullyPaid(
   workingOrderId: string,
   operatorId: string | undefined,
   options: IssueOptions,
-): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+): Promise<IssueOutcome> {
   const done = await issueOrSettleWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options);
   await refreshWaitingOriginals(deps.backend, tx, cfg, workingOrderId);
   return done;
 }
 
-/**
- * {@link issueIfFullyPaid}, answering also the bill's total when it knows it. `alreadyRead` is the
- * caller's {@link issuedAndTotal} of this bill, from earlier in this transaction with no sale
- * issued or corrected since; without it the sale is read here. `total` is the bill's total when the
- * caller has priced its current lines in this transaction already.
- * `datedByLatestAcceptance` is for a bill completed after its payments were taken: the
- * moment the last of those still holding money was accepted is handed to {@link issueOrderMoment}
- * as the moment the meal ended.
- */
+/** {@link issueIfFullyPaid}, answering also the bill's figures when it knows them. A `null`
+ * invoice means it issued and settled nothing. `datedByLatestAcceptance` is for a bill completed
+ * after its payments were taken: the moment the last of those still holding money was accepted is
+ * handed to {@link issueOrderMoment} as the moment the meal ended. */
 async function issueOrSettleWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
@@ -845,21 +1008,31 @@ async function issueOrSettleWhenFullyPaid(
   workingOrderId: string,
   operatorId: string | undefined,
   options: IssueOptions,
-): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
+): Promise<IssueOutcome> {
   await requireEconomicWrite(tx, cfg, deps.admission);
-  const notYet = { invoice: null, total: options.alreadyRead?.total ?? options.total };
+  const notYet = { invoice: null, figures: options.figures };
   const [order] = await tx
     .select({
       status: workingOrders.status,
       partyId: workingOrders.partyId,
+      ...ORDER_INVOICE_CHOICE,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status !== "open" && order?.status !== "placed") return notYet;
-  const { rows, refunds } = await readPaymentsAndRefunds(tx, workingOrderId);
+  const { rows, refunds, advanced } = await readPaymentsAndRefunds(tx, workingOrderId);
   const received = rows.filter((row) => row.state === "received");
+  // The rest's invoice is settled by the payments that paid no advance; each advance's money is on
+  // its own ticket, and the invoice takes the advance's credit off instead.
+  const advances =
+    options.figures?.advances ?? (await advancesPaidBy(tx, [workingOrderId], advanced));
+  const advancePayments = new Set(advances.payments.keys());
+  const credits = advances.credits.get(workingOrderId) ?? [];
+  // An advance given back in full through Correct invoice pays nothing of the bill.
+  const crediting = credits.some((credit) => compareDecimal(credit.gross, ZERO) > 0);
+  const ownReceived = received.filter((row) => !advancePayments.has(row.id));
   if (
-    (received.length === 0 && options.closeZero !== true) ||
+    (ownReceived.length === 0 && !crediting && options.closeZero !== true) ||
     rows.some((row) => row.state === "pending")
   )
     return notYet;
@@ -868,15 +1041,27 @@ async function issueOrSettleWhenFullyPaid(
   // A captured reservation must finish even if a restored draft is still open.
   if (options.moneyMoved !== true && (await readBillUnsent(tx, workingOrderId)).length > 0)
     return notYet;
-  const held = moneyOf(rows, refunds);
-  const { issued, total } =
-    options.alreadyRead ?? (await issuedAndTotal(tx, workingOrderId, options.total));
-  const zero = compareDecimal(total, ZERO) === 0;
-  if (zero && options.closeZero !== true) return { invoice: null, total };
-  if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
-    return { invoice: null, total };
+  const held = moneyOf(rows, refunds, advances.payments).filter(
+    ({ row }) => !advancePayments.has(row.id),
+  );
+  const figures =
+    options.figures ?? (await readBillFigures(tx, workingOrderId, advances, options.pricedMeal));
+  const { issued, due } = figures;
+  const zero = compareDecimal(due, ZERO) === 0;
+  const advancesPaidAll = zero && issued === undefined && crediting;
+  const unpaid = { invoice: null, figures };
+  if (zero && options.closeZero !== true && !advancesPaidAll) return unpaid;
+  if (compareDecimal(fundsOf(workingOrderId, due, held).received, due) !== 0) return unpaid;
+  if (zero && held.some(receivedHoldsMoney)) return unpaid;
+  // An advance's open correction could still file a credit note the invoice would not take off.
+  // Money already moved cannot be refused: the invoice waits, and closing or discarding that
+  // correction issues it if the bill is still paid off (`issueAdvanceBill` in invoice-corrections.ts).
+  const correcting =
+    credits.length === 0 ? undefined : await advanceWithOpenCorrection(tx, workingOrderId);
+  if (correcting !== undefined) {
+    if (options.moneyMoved === true) return unpaid;
+    throw new AppError("advance.correction_open", { workingOrderId, ...correcting });
   }
-  if (zero && held.some(receivedHoldsMoney)) return { invoice: null, total };
   const holding = held.filter(receivedHoldsMoney);
   const tendersOfBill: SettleSaleTender[] = [...holding]
     .sort((a, b) => a.row.receivedAt!.localeCompare(b.row.receivedAt!))
@@ -889,7 +1074,7 @@ async function issueOrSettleWhenFullyPaid(
       billPaymentId: row.id,
     }));
 
-  const lastReceipt = received
+  const lastReceipt = ownReceived
     .map((row) => row.receivedAt!)
     .reduce<string | undefined>(
       (latest, at) => (latest === undefined || at > latest ? at : latest),
@@ -904,10 +1089,10 @@ async function issueOrSettleWhenFullyPaid(
       settledAt,
       deps.log,
     );
-    await linkCardBillPayments(tx, received, issued.saleId);
+    await linkCardBillPayments(tx, received, issued.saleId, advancePayments);
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (!zero) await enqueueSaleReceipt(tx, cfg, ticket, issued.saleId, options.printers);
-    return { invoice: ticket, total };
+    return { invoice: ticket, figures };
   }
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
@@ -920,16 +1105,19 @@ async function issueOrSettleWhenFullyPaid(
   } catch (error) {
     // Automatic issuance must leave an edit intact while set-menu billing is unavailable.
     if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
-      return { invoice: null, total };
+      return unpaid;
     }
     throw error;
   }
-  const { priced, clock, gross, operationDate } = await issueOrderMoment(
+  const invoice = await priceOrderInvoice(
     tx,
+    deps.clock,
+    deps.backend,
     cfg,
-    deps,
     workingOrderId,
-    await issuancePass(tx, workingOrderId, stored),
+    stored,
+    { receiptLocale: order.receiptLocale, credits },
+    deps.log,
     options.datedByLatestAcceptance === undefined
       ? undefined
       : await latestAcceptance(
@@ -937,11 +1125,16 @@ async function issueOrSettleWhenFullyPaid(
           holding.map(({ row }) => row),
         ),
   );
-  const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
-  const language = await saleLanguageFor(tx, selected.receiptLocale, {
-    log: deps.log,
+  const { priced, meal, clock, gross, language, operationDate } = invoice;
+  // Nothing since the read above writes the order's invoice choice.
+  const selected = await selectOrderInvoice(
+    tx,
+    deps.backend,
+    cfg,
     workingOrderId,
-  });
+    meal.total,
+    order,
+  );
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "order",
     orderId: workingOrderId,
@@ -960,7 +1153,7 @@ async function issueOrSettleWhenFullyPaid(
     workingOrderId: brandWorkingOrderId(workingOrderId),
     ...language,
     total: priced.total,
-    lines: withReceiptListPrices(priced.lines, stored.identities),
+    lines: filedLines(invoice),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operationDate,
@@ -969,7 +1162,7 @@ async function issueOrSettleWhenFullyPaid(
   });
   await linkSaleDishes(tx, saleId, stored.identities);
   await settleSale(tx, { saleId, tenders: tendersOfBill });
-  await linkCardBillPayments(tx, received, saleId);
+  await linkCardBillPayments(tx, received, saleId, advancePayments);
 
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, order.partyId);
   await storePrepayMadeHere(tx, workingOrderId, [...(cfg.madeHereSink ?? [])]);
@@ -996,7 +1189,7 @@ async function issueOrSettleWhenFullyPaid(
   if (fiscal === undefined) {
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     await enqueueSaleReceipt(tx, cfg, ticket, saleId, options.printers);
-    return { invoice: ticket, total };
+    return { invoice: ticket, figures };
   }
   const ticket = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
@@ -1016,7 +1209,7 @@ async function issueOrSettleWhenFullyPaid(
     ...receiptQr(deps.backend, fiscal.verificationUrl),
   };
   await enqueueSaleReceipt(tx, cfg, ticket, saleId, options.printers);
-  return { invoice: ticket, total };
+  return { invoice: ticket, figures };
 }
 
 export async function issueIfFullyPaid(
@@ -1028,6 +1221,39 @@ export async function issueIfFullyPaid(
   options: { moneyMoved?: boolean; closeZero?: boolean; datedByLatestAcceptance?: true } = {},
 ): Promise<TillSaleResult | null> {
   return (await issueWhenFullyPaid(tx, deps, cfg, workingOrderId, operatorId, options)).invoice;
+}
+
+/**
+ * {@link issueIfFullyPaid} for a bill whose money has already moved but whose invoice was held
+ * back, issued as recovery's completion would have issued it for the bill's latest received
+ * payment that paid no advance: under that payment's device and person, dated by the latest
+ * acceptance. Under `cfg` and `operatorId` when every received payment paid an advance.
+ */
+export async function issueHeldBill(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  operatorId: string,
+): Promise<TillSaleResult | null> {
+  const { rows, advanced } = await readPaymentRows(tx, [workingOrderId]);
+  // Rows come in creation order (createdAt, then rowid), so of two received in the same
+  // millisecond the later-created one wins.
+  const completing = rows
+    .filter((row) => row.state === "received" && !advanced.has(row.id))
+    .reduce<PaymentRow | undefined>(
+      (latest, row) =>
+        latest === undefined || row.receivedAt! >= latest.receivedAt! ? row : latest,
+      undefined,
+    );
+  return issueIfFullyPaid(
+    tx,
+    deps,
+    completing === undefined ? cfg : { ...cfg, origin: storedDeviceOrigin(completing) },
+    workingOrderId,
+    completing?.requestedBy ?? operatorId,
+    { moneyMoved: true, datedByLatestAcceptance: true },
+  );
 }
 
 interface ItemsDue {
@@ -1193,7 +1419,7 @@ interface PayableBill {
   dining: Dining;
   revision: number;
   receiptLocale: string | null;
-  held?: PaymentMoney[];
+  held?: HeldMoney;
   invoiced?: true;
 }
 
@@ -1211,7 +1437,7 @@ async function requirePayableBill(tx: Transaction, workingOrderId: string): Prom
   if (order.status === "open") return { ...order, status: "open" };
   if (order.status === "placed") {
     if (!(await hasInvoice(tx, workingOrderId))) return { ...order, status: "placed" };
-    const held = await readPaymentMoney(tx, [workingOrderId]);
+    const held = await readHeld(tx, [workingOrderId]);
     return { ...order, status: "placed", held, invoiced: true };
   }
   throw new AppError("working_order.not_open", { workingOrderId });
@@ -1236,9 +1462,13 @@ export async function previewBillPayment(
       expectedEdit: ask.expectedEdit,
     });
     await assertBillHasNoUnsent(tx, workingOrderId);
-    const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
+    const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
-    const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId), held);
+    const funds = fundsOf(
+      workingOrderId,
+      await billPaymentTotal(tx, workingOrderId, advances),
+      held,
+    );
     return previewAllocation(funds, request, { tipsEnabled: cfg.tipsEnabled });
   });
 }
@@ -1286,6 +1516,8 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     addedTip: scaled(req.addedTip ?? "0"),
     applied: scaled(req.applied),
     tip: scaled(req.tip),
+    // Absent and false are one request; only a payer's own receipt changes the fingerprint.
+    ownReceipt: req.ownReceipt === true ? true : undefined,
   };
 }
 
@@ -1414,7 +1646,7 @@ async function closeZeroBillIn(
     cfg,
     workingOrderId,
     operator.personId,
-    { closeZero: true, total: ZERO, guestCount: req.guestCount },
+    { closeZero: true, pricedMeal: ZERO, guestCount: req.guestCount },
   );
   if (invoice === null) {
     throw new AppError("bill.nothing_outstanding", { workingOrderId });
@@ -1514,7 +1746,7 @@ async function beginBillPayment(
   basket?: CounterPayment,
 ): Promise<
   | { replay: PaymentRow }
-  | { payment: PaymentRow; total: Decimal; issued: IssuedSale | undefined; reading: TrustedReading }
+  | { payment: PaymentRow; figures: BillFigures; reading: TrustedReading }
   | { settled: SettledBill }
 > {
   // Before the replay lookup: a retry the route would now refuse is refused too.
@@ -1584,8 +1816,11 @@ async function beginBillPayment(
   }
   const payable = await requirePayableBill(tx, workingOrderId);
   await requireReadyForPayment(tx, deps.db, workingOrderId, payable, operator, req);
-  const held = payable.held ?? (await readPaymentMoney(tx, [workingOrderId]));
-  const { issued, total } = await issuedAndTotal(tx, workingOrderId);
+  if (req.ownReceipt === true && !payable.invoiced)
+    await refuseFullInvoiceAdvance(tx, workingOrderId);
+  const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));
+  const figures = await readBillFigures(tx, workingOrderId, advances);
+  const total = figures.meal;
   if (basket !== undefined && held.some(({ row }) => HOLDING_STATES.includes(row.state))) {
     if (
       basket.revision !== undefined &&
@@ -1597,7 +1832,7 @@ async function beginBillPayment(
         cfg,
         workingOrderId,
         operator.personId,
-        { total, guestCount: req.guestCount },
+        { figures, guestCount: req.guestCount },
       );
       if (invoice !== null) {
         return { settled: settledBill(await readBillBalance(tx, workingOrderId, total), invoice) };
@@ -1645,12 +1880,14 @@ async function beginBillPayment(
       tip: decimal(basket === undefined ? req.tip : (addedTip ?? ZERO)),
     },
   );
-  // A reserved card may finish on recovery, so save the language once the bill is covered.
-  if (
-    req.receiptLanguage !== undefined &&
+  const coversBill =
     !payable.invoiced &&
-    compareDecimal(sumDecimals([funds.received, funds.reserved, allocation.applied]), total) === 0
-  )
+    compareDecimal(sumDecimals([funds.received, funds.reserved, allocation.applied]), total) === 0;
+  // Refused before any card is charged: the payment would issue the bill's invoice.
+  if (coversBill && advances.credits.has(workingOrderId))
+    await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
+  // A reserved card may finish on recovery, so save the language once the bill is covered.
+  if (req.receiptLanguage !== undefined && coversBill)
     await storeSentReceiptLanguage(tx, workingOrderId, payable, req.receiptLanguage);
 
   await requireEconomicWrite(tx, cfg, deps.admission);
@@ -1669,6 +1906,7 @@ async function beginBillPayment(
       applied: decimalToCents(allocation.applied),
       tip: decimalToCents(allocation.tip),
       tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
+      ownReceipt: req.ownReceipt === true,
       state,
       requestedBy: operator.personId,
       source: cfg.origin.source,
@@ -1687,7 +1925,7 @@ async function beginBillPayment(
   await captureBillPaymentAttendance(tx, payment!, attendance, {
     at: reading.instant.toISOString(),
   });
-  return { payment: payment!, total, issued, reading };
+  return { payment: payment!, figures, reading };
 }
 
 async function captureBillPaymentAttendance(
@@ -1776,18 +2014,17 @@ export async function takeBillPayment(
       } else {
         await enqueueBillPaymentDrawer(tx, cfg, payment.id, operator.personId, printers);
       }
-      const { invoice, total } = await issueWhenFullyPaid(
+      const paidAt = { ...deps, clock: pinnedAt(deps.clock, reading) };
+      const { invoice, figures } = await issueWhenFullyPaid(
         tx,
-        { ...deps, clock: pinnedAt(deps.clock, reading) },
+        paidAt,
         cfg,
         workingOrderId,
         operator.personId,
-        {
-          alreadyRead: { issued: begun.issued, total: begun.total },
-          printers,
-          guestCount: req.guestCount,
-        },
+        { figures: begun.figures, printers, guestCount: req.guestCount },
       );
+      // An invoice issued or settled is answered, so with none `figures` still stand.
+      if (invoice === null) await issueAdvanceIfOwed(tx, paidAt, cfg, payment, printers, figures);
       const slip = await enqueueRequestedPaymentSlip(
         tx,
         cfg,
@@ -1803,7 +2040,7 @@ export async function takeBillPayment(
         },
         printers,
       );
-      return { ...(await resultOf(tx, deps, cfg, payment, invoice, total)), ...slip };
+      return { ...(await resultOf(tx, deps, cfg, payment, invoice, figures?.meal)), ...slip };
     },
     deps.log,
   );
@@ -1938,7 +2175,7 @@ export async function completeBillPayment(
     confirmedNet?: { applied: Decimal; tip: Decimal };
     datedByLatestAcceptance?: true;
   } = {},
-): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
+): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; meal?: Decimal }> {
   const { attestation, guestCount, confirmedNet, datedByLatestAcceptance } = options;
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
@@ -1986,10 +2223,11 @@ export async function completeBillPayment(
       : Math.min(pending!.applied, actual);
   let remainingAfter: number | undefined;
   if (pending!.method === "card") {
+    const { held, advances } = await readHeld(tx, [pending!.workingOrderId]);
     const funds = fundsOf(
       pending!.workingOrderId,
-      await billPaymentTotal(tx, pending!.workingOrderId),
-      await readPaymentMoney(tx, [pending!.workingOrderId]),
+      await billPaymentTotal(tx, pending!.workingOrderId, advances),
+      held,
     );
     remainingAfter = decimalToCents(
       subtractDecimal(
@@ -2010,16 +2248,27 @@ export async function completeBillPayment(
     })
     .where(eq(billPayments.id, billPaymentId))
     .returning();
+  // The invoices are filed under the device that took the payment, whoever completes it.
+  const takenAt = { ...cfg, origin: storedDeviceOrigin(payment!) };
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
-    // The invoice is filed under the device that took the payment, whoever completes it.
-    { ...cfg, origin: storedDeviceOrigin(payment!) },
+    takenAt,
     payment!.workingOrderId,
     payment!.requestedBy,
     { moneyMoved: true, guestCount, datedByLatestAcceptance },
   );
-  return { payment: payment!, ...issued };
+  // An invoice issued or settled is answered, so with none `figures` still stand.
+  if (issued.invoice === null)
+    await issueAdvanceIfOwed(
+      tx,
+      deps,
+      takenAt,
+      payment!,
+      printerLookup(tx, takenAt.origin),
+      issued.figures,
+    );
+  return { payment: payment!, invoice: issued.invoice, meal: issued.figures?.meal };
 }
 
 /** A card bill payment that charged nothing becomes `failed`, releasing its reservation. Its callers
@@ -2215,7 +2464,7 @@ export async function takeReaderBillPayment(
                 });
                 const printed = await print(tx, payment.id);
                 return {
-                  ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.total)),
+                  ...(await resultOf(tx, deps, cfg, done.payment, done.invoice, done.meal)),
                   ...printed,
                 };
               },

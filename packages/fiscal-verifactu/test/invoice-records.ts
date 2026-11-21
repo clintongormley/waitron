@@ -1,6 +1,8 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "@waitron/db";
+import { validate, type ValidationIssue } from "@waitron/verifactu";
 import type { IdentityChangeView, InvoiceIdView } from "../src/filing-overview-types.js";
+import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "../src/registro-row.js";
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import type { registroSif } from "../src/schema/sif.js";
@@ -70,6 +72,44 @@ export async function filedSales(
       saleId === null || kind === null ? [] : [[saleId, { kind, total }]],
     ),
   );
+}
+
+/** A sale's filed invoice record, as AEAT receives it, under English names. */
+export interface FiledInvoice {
+  /** `TipoFactura`: F1, F2, F3, R4 or R5. */
+  kind: string;
+  /** `ImporteTotal`. */
+  total: string;
+  /** `CuotaTotal`. */
+  vatTotal: string;
+  /** `DescripcionOperacion`. */
+  description: string;
+  /** `Desglose`, each line as `[rate, base, tax]`. */
+  breakdown: [string, string, string][];
+  /** The errors AEAT's own checks (`validate`, as of `now`) find in the record. */
+  errors: ValidationIssue[];
+}
+
+/** Every invoice record filed for the sale; a cancellation record throws. */
+export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledInvoice[] {
+  return db
+    .all<RegistroRow>(sql`select * from registros_facturacion where sale_id = ${saleId}`)
+    .map((row) => {
+      const record = fromRegistroRow(decodeRegistroRow(row));
+      if (!("TipoFactura" in record)) throw new Error(`sale ${saleId} has a cancellation record`);
+      return {
+        kind: record.TipoFactura,
+        total: record.ImporteTotal,
+        vatTotal: record.CuotaTotal,
+        description: record.DescripcionOperacion,
+        breakdown: record.Desglose.map((line) => [
+          String(line.TipoImpositivo),
+          String(line.BaseImponibleOimporteNoSujeto),
+          String(line.CuotaRepercutida),
+        ]),
+        errors: validate(record, { now }).filter((issue) => issue.severity === "error"),
+      };
+    });
 }
 
 /** Stores AEAT's refusal, with `code`, as the filing reply to one record. */

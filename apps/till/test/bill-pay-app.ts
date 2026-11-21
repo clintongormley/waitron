@@ -438,8 +438,30 @@ export async function type(el: TillApp, name: string, value: string): Promise<vo
   await flush(el);
 }
 
+/** Presses `selector` in the Pay window. Take payment first answers an unanswered own-receipt
+ * question No, the answer that changes nothing else the payment sends; the question's own cases
+ * answer it themselves. */
 export async function press(el: TillApp, selector: string): Promise<void> {
+  if (selector === "[data-pay-confirm]") await answerOwnReceipt(el, "no", { ifUnanswered: true });
   inDialog(el, selector)!.click();
+  await flush(el);
+}
+
+/** Answers the Pay window's own-receipt question. */
+export async function answerOwnReceipt(
+  el: TillApp,
+  answer: "yes" | "no",
+  options: { ifUnanswered?: boolean } = {},
+): Promise<void> {
+  const radios = [
+    ...(dialog(el)?.shadowRoot?.querySelectorAll<HTMLInputElement>('input[name="ownReceipt"]') ??
+      []),
+  ];
+  if (options.ifUnanswered === true && (radios.length === 0 || radios.some((r) => r.checked)))
+    return;
+  const radio = radios.find((r) => r.value === answer);
+  expect(radio).toBeDefined();
+  radio!.click();
   await flush(el);
 }
 

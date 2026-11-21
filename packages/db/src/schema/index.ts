@@ -38,6 +38,7 @@ export * from "./purchase-invoices.js";
 export * from "./device-profiles.js";
 export * from "./custom-themes.js";
 export * from "./bill-payments.js";
+export * from "./bill-advances.js";
 export * from "./sales.js";
 export * from "./sale-voids.js";
 export * from "./unpaid-departures.js";

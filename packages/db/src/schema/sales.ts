@@ -44,6 +44,8 @@ import { departments } from "./venue-service/service.js";
  */
 export const fiscalState = enumType(["recorded", "not_applicable"]);
 
+export const saleLineAdvanceRole = enumType(["payment_on_account", "deduction"]);
+
 export const tenderMethod = enumType(["cash", "card", "voucher", "deferred", "other"]);
 
 /**
@@ -267,6 +269,10 @@ export const saleLines = table(
     // names none. The key accepts any `sale_lines` row: `recordCorrection` refuses a line not on the
     // corrected invoice, and `saleLineRows` stores null for any other sale.
     correctsLineId: id("corrects_line_id"),
+    // Marks a line about an advance; every `deduction` line, and no other, names that advance's sale
+    // in `deducts_sale_id`.
+    advanceRole: saleLineAdvanceRole("advance_role"),
+    deductsSaleId: id("deducts_sale_id"),
   },
   (t) => [
     foreignKey({
@@ -284,12 +290,23 @@ export const saleLines = table(
       foreignColumns: [t.id],
       name: "sale_lines_corrects_fk",
     }),
+    foreignKey({
+      columns: [t.deductsSaleId],
+      foreignColumns: [sales.id],
+      name: "sale_lines_deducts_sale_fk",
+    }).onDelete("restrict"),
+    check("sale_lines_advance_role_ck", enumCheck(t.advanceRole)),
+    check(
+      "sale_lines_advance_ck",
+      sql`(${t.advanceRole} is 'deduction') = (${t.deductsSaleId} is not null)`,
+    ),
     unique("sale_lines_line_no_key").on(t.saleId, t.lineNo),
     check(
       "sale_lines_unit_precision_ck",
       sql`${t.unitPrecision} is null or ${t.unitPrecision} between 0 and 3`,
     ),
     index("sale_lines_sale_idx").on(t.saleId),
+    index("sale_lines_deducts_sale_idx").on(t.deductsSaleId),
     check("sale_lines_quantity_ck", sql`${t.quantity} <> 0`),
     check("sale_lines_price_quantity_ck", sql`${t.priceQuantity} > 0`),
     // 10000 basis points is 100%.

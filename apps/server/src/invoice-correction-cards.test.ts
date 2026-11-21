@@ -24,6 +24,7 @@ import { recoverTenderRefunds } from "./tender-refund-recovery.js";
 import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
 import { refundSettledTender } from "./tender-refunds.js";
 import { inTx } from "./testing/bill-venue.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
@@ -175,7 +176,15 @@ const fileNow = (correctionId: string, expectedSplit: Awaited<ReturnType<typeof 
     ),
   );
 const close = (correctionId: string) =>
-  inTx(v, (tx) => closeInvoiceCorrection(tx, deps(), v.cfg, correctionId, { personId: v.adminId }));
+  inTx(v, (tx) =>
+    closeInvoiceCorrection(
+      tx,
+      { ...deps(), db: v.db, admission: testTradingAdmission() },
+      v.cfg,
+      correctionId,
+      { personId: v.adminId },
+    ),
+  );
 const salesCount = () => v.db.all<{ n: number }>(sql`select count(*) as n from sales`)[0]!.n;
 
 describe("a correction's connected card legs", () => {

@@ -217,6 +217,9 @@ the **Reason** from the list. A reason that needs a note, such as **Other**, ask
 and the note is recorded as the reason. A payment for particular items is refunded in full, and
 those items can then be paid for again.
 
+While the bill has no invoice, **Refund** beside a payment that has a ticket of its own opens
+**Correct invoice** on that ticket instead.
+
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you
 to do so.
@@ -599,7 +602,8 @@ everyone has finished.
 
 A bill still open when the business day ends gets its receipt then, without printing. Take its
 payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
-open.
+open. A bill with an open correction of a payment that has its own ticket stays open until that
+correction is finished or discarded.
 
 To find a bill issued when the business day ended, choose the day it opened in **Sales & takings**.
 For tax reporting, use **VAT return (modelo 303)**. The dates recorded on invoices can place a
@@ -641,6 +645,10 @@ If the guests then want to pay separately, open **⋮** and choose **Reopen to s
 is credited and its dishes go onto a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
 Once part of the bill is paid it cannot be split this way: the other guests pay the rest with
 **Pay**.
+
+When a guest has already paid part of the bill with
+[a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment
+taken off by its ticket number, date and amount.
 
 Take payment with **Pay** as usual, in one go or in parts.
 
@@ -880,6 +888,10 @@ and its invoice has yet to be issued, choose **Pay in parts** to see the same ch
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.
+
+**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
+for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
+of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation
 shows how much pays off the bill and the **Change to give**. If the venue takes tips, choose

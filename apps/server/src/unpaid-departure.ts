@@ -118,6 +118,7 @@ export async function recordUnpaidDeparture(
       deps.backend,
       cfg,
       req.billId,
+      deps.log,
     );
     const recorded = await issueUnpaidInvoice(
       tx,
@@ -126,7 +127,6 @@ export async function recordUnpaidDeparture(
       invoice,
       operator.personId,
       deps.admission,
-      deps.log,
     );
     saleId = recorded.saleId;
     due = invoice.priced.total;

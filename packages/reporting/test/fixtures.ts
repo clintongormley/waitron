@@ -163,6 +163,10 @@ export async function seedSale(
       classification?: SaleLineClassification;
       /** On a correction's line, the corrected invoice's line it adjusts; absent means none. */
       correctsLineId?: string;
+      /** An advance's own line, or the line taking an advance off; absent means a dish line. */
+      advanceRole?: "payment_on_account" | "deduction";
+      /** On a deduction line, the advance's sale it takes off. */
+      deductsSaleId?: SaleId;
     }>;
     correctsSaleId?: SaleId;
     /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
@@ -235,6 +239,8 @@ export async function seedSale(
       lineGross: line.lineGross === undefined ? null : stringToCents(line.lineGross),
       classification: line.classification ?? null,
       correctsLineId: line.correctsLineId ?? null,
+      advanceRole: line.advanceRole ?? null,
+      deductsSaleId: line.deductsSaleId ?? null,
     })),
   );
   return saleId;

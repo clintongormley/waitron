@@ -33,6 +33,7 @@ import {
   markOrderPlaced,
   ordersWithUnfiredDish,
   priceForIssuance,
+  type PricedInvoice,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -44,6 +45,7 @@ export interface CloseOfDayRule {
 }
 
 const MONEY_MOVING: ReadonlySet<string> = new Set([
+  "advance.correction_open",
   "bill.refund_in_progress",
   "order.payment_in_flight",
 ]);
@@ -51,7 +53,8 @@ const MONEY_MOVING: ReadonlySet<string> = new Set([
 export type CloseOfDayOutcome =
   | { kind: "issued"; saleId: string }
   | { kind: "not_due" }
-  /** A payment or refund is still moving: try again later. */
+  /** A payment, a refund or a correction of one of its advances is still under way: try again
+   * later. */
   | { kind: "money_moving" }
   | { kind: "left_open"; reason: "dish_not_made" | "owes_nothing" };
 
@@ -84,24 +87,26 @@ export async function issueBillAtClose(
   if (bill === undefined) return { kind: "not_due" };
   const reading = deps.clock.now();
   await deps.backend.refuseUntilRecordable(tx, reading);
+  let invoice: PricedInvoice;
   try {
     await refuseBillPaymentInFlight(deps.db, tx, billId, bill.status);
+    // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
+    if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
+      return { kind: "left_open", reason: "dish_not_made" };
+
+    // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
+    invoice = await priceForIssuance(
+      tx,
+      pinnedAt(deps.clock, reading),
+      deps.backend,
+      cfg,
+      billId,
+      deps.log,
+    );
   } catch (error) {
     if (isAppError(error) && MONEY_MOVING.has(error.code)) return { kind: "money_moving" };
     throw error;
   }
-  // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
-  if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
-    return { kind: "left_open", reason: "dish_not_made" };
-
-  // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
-  const invoice = await priceForIssuance(
-    tx,
-    pinnedAt(deps.clock, reading),
-    deps.backend,
-    cfg,
-    billId,
-  );
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
   if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
@@ -115,7 +120,6 @@ export async function issueBillAtClose(
     invoice,
     bill.openedBy,
     deps.admission,
-    deps.log,
   );
   if (bill.status === "open") await markOrderPlaced(tx, deps.clock, cfg, billId, bill.openedBy);
   if (decimalToCents(total) === 0) await settleIssuedOwingNothing(tx, deps, billId, saleId);
@@ -177,9 +181,10 @@ async function isDue(
  * The end of the business day `billId` was opened in, when that day has ended by `issuedAt` and the
  * close counts the bill as due ({@link readDueBill}): the latest moment its meal can have ended,
  * whichever path issues it. Undefined otherwise. A bill holding a dish the kitchen was never asked
- * for is left open by the close, so its meal has not ended; a payment still moving only makes the
- * close try again. A bill paid in full before that day ended, which the close leaves open, is dated
- * by this too rather than by its last payment.
+ * for is left open by the close, so its meal has not ended; a payment still moving, or an open
+ * correction of one of its advances, only makes the close try again. A bill paid in full before
+ * that day ended, which the close leaves open, is dated by this too rather than by its last
+ * payment.
  */
 export async function closeOfDayEnd(
   tx: Transaction,

@@ -18,6 +18,7 @@ import {
   previewInvoiceCorrection,
   readInvoiceCorrection,
   readInvoiceCorrectionLines,
+  type InvoiceCorrectionEndDeps,
   type InvoiceCorrectionRequest,
   type InvoiceCorrectionView,
 } from "./invoice-corrections.js";
@@ -37,6 +38,14 @@ export function mountInvoiceCorrectionApi(
   log: Logger,
   pinThrottle: PinThrottle,
 ): void {
+  const correctionDeps: InvoiceCorrectionEndDeps = {
+    db: deps.db,
+    backend: deps.backend,
+    clock: deps.clock,
+    admission: deps.admission,
+    attendance: deps.attendance,
+    log,
+  };
   const run = createErrorBoundary(
     {
       ...STATUS,
@@ -111,14 +120,10 @@ export function mountInvoiceCorrectionApi(
         },
         async (tx, authorization) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
-          return openInvoiceCorrection(
-            tx,
-            { backend: deps.backend, clock: deps.clock, attendance: deps.attendance },
-            cfg,
-            id,
-            ask,
-            { personId: session.personId, authorization },
-          );
+          return openInvoiceCorrection(tx, correctionDeps, cfg, id, ask, {
+            personId: session.personId,
+            authorization,
+          });
         },
       );
       return c.json(result);
@@ -148,18 +153,11 @@ export function mountInvoiceCorrectionApi(
         },
         async (tx, authorization, checked) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
-          return giveCorrectionCash(
-            tx,
-            { backend: deps.backend, clock: deps.clock, attendance: deps.attendance },
-            cfg,
-            correctionId,
-            ask,
-            {
-              personId: session.personId,
-              authz: { sessionId: session.sessionId, override: withCheck(override, checked) },
-              authorization,
-            },
-          );
+          return giveCorrectionCash(tx, correctionDeps, cfg, correctionId, ask, {
+            personId: session.personId,
+            authz: { sessionId: session.sessionId, override: withCheck(override, checked) },
+            authorization,
+          });
         },
         { permission: "sale.refund", tender: "cash" },
       );
@@ -210,7 +208,6 @@ export function mountInvoiceCorrectionApi(
         return c.json(result);
       }),
     );
-  const correctionDeps = { backend: deps.backend, clock: deps.clock, attendance: deps.attendance };
   endingRoute(
     "file",
     (body) => ({ expectedSplit: expectedSplitOf(body.expectedSplit) }),

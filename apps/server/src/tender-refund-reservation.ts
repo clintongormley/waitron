@@ -2,12 +2,14 @@ import { and, eq, or } from "drizzle-orm";
 import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
 import {
   adjustmentRefunds,
+  billAdvances,
   billPaymentRefunds,
   sales,
   tenderRefunds,
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { refuseAdvanceRefund, refuseTakenOffAdvance } from "./advance-taken-off.js";
 import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
@@ -131,6 +133,20 @@ export async function authorizeStoredTenderRefund(
   await authorize(covered ? refund.authorizedBy : undefined);
 }
 
+/** A payment on account's money is not refunded this way; its tip alone may come back here. */
+async function refuseRefundOfAdvance(
+  tx: Transaction,
+  saleId: string,
+  tenderId: string,
+): Promise<void> {
+  const [advance] = await tx
+    .select({ saleId: billAdvances.advanceSaleId })
+    .from(billAdvances)
+    .where(eq(billAdvances.advanceSaleId, saleId));
+  if (advance !== undefined)
+    await refuseAdvanceRefund(tx, saleId, "tender.refund_of_advance", { tenderId });
+}
+
 export async function reserveTenderRefund(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -194,7 +210,12 @@ export async function reserveTenderRefund(
     if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
+  // A correction's legs meet the refusal opening one would now. No known route issues the table's
+  // invoice while an advance's correction is open (`advance.correction_open`): a guard for one missed.
   if (correctionLink === undefined) await refuseWhileCorrectionOpen(tx, saleId);
+  else await refuseTakenOffAdvance(tx, saleId);
+  if (correctionLink === undefined && appliedAmount > 0)
+    await refuseRefundOfAdvance(tx, saleId, tenderId);
 
   const refundable = (await readRefundableTenders(tx, saleId)).find(
     (row) => row.tenderId === tenderId,

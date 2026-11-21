@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  billAdvances,
   deviceProfiles,
   devices,
   billPaymentLines,
@@ -452,10 +453,12 @@ describe("invoice selection before reserving new bill money", () => {
     cfg: DeviceRequestConfig,
     method: "cash" | "manual" | "reader",
     amount = "1.00",
+    over: Partial<BillPaymentRequest> = {},
   ) {
     const req = cash(amount, {
       method: method === "cash" ? "cash" : "card",
       tendered: method === "cash" ? amount : undefined,
+      ...over,
     });
     if (method === "reader") {
       return takeReaderBillPayment(
@@ -509,14 +512,23 @@ describe("invoice selection before reserving new bill money", () => {
     },
   );
 
-  it.each(["cash", "manual", "reader"] as const)(
-    "accepts a %s reservation for this node's F2 bill at the ceiling",
-    async (method) => {
+  // An advance is never more than what its bill still owes, so the bill's own ceiling bounds its
+  // ticket too.
+  const OWN_RECEIPT = [
+    ...(["cash", "manual", "reader"] as const).map((method) => [method, false] as const),
+    ...(["cash", "manual", "reader"] as const).map((method) => [method, true] as const),
+  ];
+
+  it.each(OWN_RECEIPT)(
+    "accepts a %s reservation (own receipt: %s) for this node's F2 bill at the ceiling",
+    async (method, ownReceipt) => {
       const billId = await tabWith("Beer");
       const result = await pay(
         billId,
         { ...venue.cfg, simplifiedInvoiceLimit: decimal("3.00") },
         method,
+        "1.00",
+        { ownReceipt },
       );
       expect(result.payment).toMatchObject({ state: "received", applied: "1.00" });
       expect(result.invoice).toBeUndefined();
@@ -525,16 +537,22 @@ describe("invoice selection before reserving new bill money", () => {
       expect(saved.billPayments).toHaveLength(1);
       expect(saved.billPayments[0]).toMatchObject({ applied: 100, state: "received" });
       expect(saved.providerPayments).toHaveLength(method === "cash" ? 0 : 1);
+      const advances = await inTx((tx) =>
+        tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, billId)),
+      );
+      expect(advances).toHaveLength(ownReceipt ? 1 : 0);
     },
   );
 
-  it.each(["cash", "manual", "reader"] as const)(
-    "retains the F2 ceiling before a %s reservation",
-    async (method) => {
+  it.each(OWN_RECEIPT)(
+    "retains the F2 ceiling before a %s reservation (own receipt: %s)",
+    async (method, ownReceipt) => {
       const billId = await tabWith("Beer");
       const before = await snapshot(billId);
       const error = await captureError(() =>
-        pay(billId, { ...venue.cfg, simplifiedInvoiceLimit: decimal("2.00") }, method),
+        pay(billId, { ...venue.cfg, simplifiedInvoiceLimit: decimal("2.00") }, method, "1.00", {
+          ownReceipt,
+        }),
       );
       expect(error).toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
       expect(await snapshot(billId)).toEqual(before);

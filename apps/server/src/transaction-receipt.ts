@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
+  billAdvances,
   invoiceSeries,
   readTaxpayer,
   saleLines,
@@ -86,6 +87,8 @@ export async function readTransactionReceipt(
     .orderBy(saleLines.lineNo);
   const byId = new Map(rows.map((row) => [row.id, row.lineNo]));
   const grosses = receiptGrosses(rows, sale.vatBreakdown);
+  // `receiptLines` adds the lines that take an advance off, naming each advance.
+  const dishes = rows.filter((row) => row.advanceRole !== "deduction");
   const orderLines =
     sale.workingOrderId === null
       ? []
@@ -98,7 +101,7 @@ export async function readTransactionReceipt(
     tx,
     sale.workingOrderId,
     {
-      lines: rows.map((row) => ({
+      lines: dishes.map((row) => ({
         lineNo: row.lineNo,
         descriptions: row.descriptions,
         variantDescriptions: row.variantDescriptions,
@@ -112,7 +115,7 @@ export async function readTransactionReceipt(
         parentLineNo: row.parentLineId === null ? null : byId.get(row.parentLineId),
       })),
     },
-    rows.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
+    dishes.map((row) => ({ id: orderIds.get(row.lineNo) ?? row.id, listUnitGross: null })),
     saleId,
   );
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
@@ -121,10 +124,23 @@ export async function readTransactionReceipt(
   const groupId =
     sale.workingOrderId ??
     (scope.workingOrderIds.length === 1 ? scope.workingOrderIds[0] : undefined);
+  // An advance, and a correction of one, keep the heading the advance's line was worded under;
+  // its bill's may move until the bill's own invoice. A correction is never settled, so it is
+  // never corrected itself.
+  const [advance] = await tx
+    .select({ orderLabel: billAdvances.orderLabel })
+    .from(billAdvances)
+    .where(
+      inArray(
+        billAdvances.advanceSaleId,
+        sale.correctsSaleId === null ? [saleId] : [saleId, sale.correctsSaleId],
+      ),
+    );
   return {
     ...(groupId === undefined
       ? { orderLabel: null, orderNumber: 0 }
       : await readReceiptOrder(tx, groupId)),
+    ...(advance === undefined ? {} : { orderLabel: advance.orderLabel }),
     ...(await readReceiptPresentation(tx, saleId, sale.locale, cfg.practiceMode === true)),
     ...issuer,
     ...(issuer.issuer === undefined && taxpayer !== null

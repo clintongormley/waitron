@@ -1030,6 +1030,54 @@ it.each([
   expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
 });
 
+it("sends staff to Correct invoice on a payment on account's own ticket, naming it", () => {
+  const ticket = { invoiceNumber: "A/12" };
+  expect(codeMessage("tender.refund_of_advance", "en", ticket)).toBe(
+    "This ticket A/12 is a payment on account, so its money is not refunded here. While the table's bill is still open, give it back with Correct invoice on this ticket: that gives the money back and takes it off the bill.",
+  );
+  expect(codeMessage("tender.refund_of_advance", "es", ticket)).toBe(
+    "Este ticket A/12 es un pago a cuenta, así que su dinero no se devuelve aquí. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en este ticket: así se devuelve el dinero y se quita de la cuenta.",
+  );
+  expect(codeMessage("bill.refund_of_advance", "en", ticket)).toBe(
+    "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. While the table's bill is still open, give it back with Correct invoice on that ticket: that gives the money back and takes it off the bill.",
+  );
+  expect(codeMessage("bill.refund_of_advance", "es", ticket)).toBe(
+    "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Rectificar factura en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
+  );
+  expect(codeMessage("bill.refund_of_advance", "en")).toMatch(
+    /^This payment was taken on account and has its own ticket, so /,
+  );
+  expect(codeMessage("tender.refund_of_advance", "en")).toMatch(
+    /^This ticket is a payment on account,/,
+  );
+});
+
+it("sends staff to Correct invoice on the table's receipt once it took the advance off, naming it", () => {
+  const final = { invoiceNumber: "A/45" };
+  expect(codeMessage("advance.taken_off_final_invoice", "en", final)).toBe(
+    "This payment on account was already taken off the table's receipt A/45. To give money back, use Correct invoice on that receipt: it takes the amount off the dishes at their own VAT rates.",
+  );
+  expect(codeMessage("advance.taken_off_final_invoice", "es", final)).toBe(
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45. Para devolver dinero, usa Rectificar factura en ese ticket: descuenta el importe de los platos, cada uno con su tipo de IVA.",
+  );
+  expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
+    /^This payment on account was already taken off the table's receipt\. /,
+  );
+});
+
+it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
+  const advance = { invoiceNumber: "A/12" };
+  expect(codeMessage("advance.correction_open", "en", advance)).toBe(
+    "The table's receipt cannot be issued while a correction of the payment on account A/12 is open. In Correct invoice, use Finish now or Discard, then try again.",
+  );
+  expect(codeMessage("advance.correction_open", "es", advance)).toBe(
+    "El ticket de la mesa no se puede emitir mientras siga abierta una rectificación del pago a cuenta A/12. En Rectificar factura, usa Terminar ahora o Descartar y vuelve a intentarlo.",
+  );
+  expect(codeMessage("advance.correction_open", "en")).toMatch(
+    /while a correction of the payment on account is open\. /,
+  );
+});
+
 it("tells staff an open correction carries on from Correct invoice", () => {
   expect(codeMessage("invoice_correction.already_open", "en")).toBe(
     "A correction of this invoice is under way. Open Correct invoice to carry on with it.",
@@ -1212,4 +1260,13 @@ it("words the table refusals Print the bill shows in their own words, in both la
     expect(codeMessage(code, "en")).toBe(en);
     expect(codeMessage(code, "es")).toBe(es);
   }
+});
+
+it("says a bill set for a full invoice gives no part payment a receipt of its own, and what to do", () => {
+  expect(codeMessage("advance.full_invoice_unsupported", "en")).toBe(
+    "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",
+  );
+  expect(codeMessage("advance.full_invoice_unsupported", "es")).toBe(
+    "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
+  );
 });

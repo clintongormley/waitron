@@ -1,9 +1,13 @@
 import {
   addDecimal,
   decimal,
+  compareDecimal,
   divideDecimal,
+  isZeroDecimal,
   multiplyDecimal,
+  percentOf,
   subtractDecimal,
+  negateDecimal,
   sumDecimals,
   toScale,
   MONEY_SCALE,
@@ -83,6 +87,37 @@ export interface LockedLine {
 export function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
   const hundred = decimal("100");
   return divideDecimal(multiplyDecimal(gross, hundred), addDecimal(hundred, rate), MONEY_SCALE);
+}
+
+/**
+ * Mirrors `@waitron/verifactu`'s copy of AEAT's sign check (`S1_CUOTA_REPERCUTIDA_SIGN`) without
+ * the library's exemptions for corrections by differences and R2/R3 correctives (`validate.js:950`),
+ * so it is not for correctives.
+ */
+export function vatSignRefused(base: Decimal, tax: Decimal, rate: Decimal): boolean {
+  if (isZeroDecimal(tax)) return !isZeroDecimal(percentOf(base, rate));
+  if (isZeroDecimal(base)) return true;
+  return compareDecimal(base, ZERO) < 0 !== compareDecimal(tax, ZERO) < 0;
+}
+
+const ZERO = decimal("0");
+const CENT = decimal("0.01");
+
+/** The cent that moves from base to VAT so AEAT accepts the pair, signed like `gross`, or zero. */
+function centToMove(base: Decimal, gross: Decimal, rate: Decimal): Decimal {
+  const tax = subtractDecimal(gross, base);
+  if (!isZeroDecimal(tax) || !vatSignRefused(base, tax, rate)) return ZERO;
+  return compareDecimal(gross, ZERO) < 0 ? negateDecimal(CENT) : CENT;
+}
+
+/**
+ * A gross amount's base and VAT at `rate`, by the difference method with the one-cent rule
+ * (advances plan, D11).
+ */
+export function splitGross(gross: Decimal, rate: Decimal): { base: Decimal; tax: Decimal } {
+  const exact = baseFromGross(gross, rate);
+  const base = subtractDecimal(exact, centToMove(exact, gross, rate));
+  return { base, tax: subtractDecimal(gross, base) };
 }
 
 /** A line priced before any VAT rate is taken: nothing on it depends on the date. */
@@ -178,17 +213,18 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
  */
 export function rateLines(gross: GrossLines, on: string): PricedLines {
   const rates = vatRatesOn(on);
-  const groups = new Map<Decimal, { base: Decimal; gross: Decimal }>();
-  const lines = gross.lines.map(({ vatClass, grossUnitPrice, ...line }) => {
+  const groups = new Map<Decimal, { base: Decimal; gross: Decimal; indexes: number[] }>();
+  const lines = gross.lines.map(({ vatClass, grossUnitPrice, ...line }, index) => {
     const rate = rates[vatClass];
     const base = baseFromGross(line.lineGross, rate);
     const g = groups.get(rate);
-    groups.set(
-      rate,
-      g === undefined
-        ? { base, gross: line.lineGross }
-        : { base: addDecimal(g.base, base), gross: addDecimal(g.gross, line.lineGross) },
-    );
+    if (g === undefined) {
+      groups.set(rate, { base, gross: line.lineGross, indexes: [index] });
+    } else {
+      g.base = addDecimal(g.base, base);
+      g.gross = addDecimal(g.gross, line.lineGross);
+      g.indexes.push(index);
+    }
     return {
       ...line,
       unitPrice: baseFromGross(grossUnitPrice, rate), // net, informational
@@ -196,11 +232,25 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
       lineTotal: base,
     };
   });
-  const vatBreakdown: VatBreakdownLine[] = [...groups.entries()].map(([rate, g]) => ({
-    rate,
-    base: g.base,
-    tax: subtractDecimal(g.gross, g.base), // DIFFERENCE method: tax = gross − base
-  }));
+  const vatBreakdown: VatBreakdownLine[] = [...groups.entries()].map(([rate, g]) => {
+    const cent = centToMove(g.base, g.gross, rate);
+    if (!isZeroDecimal(cent)) {
+      // The cent comes off the line furthest from zero in the cent's direction, the last on a
+      // tie, so no 0.00 line crosses zero.
+      let chosen = g.indexes[0]!;
+      for (const index of g.indexes) {
+        const reach = multiplyDecimal(lines[index]!.lineTotal, cent);
+        if (compareDecimal(reach, multiplyDecimal(lines[chosen]!.lineTotal, cent)) >= 0) {
+          chosen = index;
+        }
+      }
+      const line = lines[chosen]!;
+      lines[chosen] = { ...line, lineTotal: subtractDecimal(line.lineTotal, cent) };
+    }
+    const base = subtractDecimal(g.base, cent);
+    // DIFFERENCE method: tax = gross − base
+    return { rate, base, tax: subtractDecimal(g.gross, base) };
+  });
   return { lines, total: gross.total, vatBreakdown };
 }
 

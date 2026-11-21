@@ -60,6 +60,8 @@ let correction: {
     lineGross?: string | null;
     productId?: string | null;
     correctsLineId?: string | null;
+    advanceRole?: "payment_on_account" | "deduction" | null;
+    deductsSaleId?: string | null;
   }[];
 };
 let body: Record<string, unknown>;
@@ -406,6 +408,22 @@ it("preserves a fractional delta and a second-language line snapshot", async () 
     productId: "coffee-product",
   });
 });
+it.each(["payment_on_account", "deduction", null] as const)(
+  "stores a line's advance role %s and the sale a deduction line takes off",
+  async (advanceRole) => {
+    const [original] = await suite.db.select().from(sales);
+    const deductsSaleId = advanceRole === "deduction" ? original!.id : null;
+    correction.lines[0] = { ...correction.lines[0]!, advanceRole, deductsSaleId };
+    const res = await send();
+    expect(res.status).toBe(200);
+    const result = (await res.json()) as { saleId: string };
+    expect(
+      (await snapshot()).lines
+        .filter((row) => row.saleId === result.saleId)
+        .map((row) => ({ advanceRole: row.advanceRole, deductsSaleId: row.deductsSaleId })),
+    ).toEqual([{ advanceRole, deductsSaleId }]);
+  },
+);
 it("keeps the core total guard for a base past the cent and rolls every attempted write back", async () => {
   correction.total = "-5.00";
   correction.lines[0]!.lineTotal = "-5.001";
@@ -506,6 +524,10 @@ it.each([
   { lineGross: 1 },
   { productId: [] },
   { correctsLineId: 1 },
+  { advanceRole: "deposit" },
+  { advanceRole: 1 },
+  { advanceRole: "deduction", deductsSaleId: 1 },
+  { advanceRole: "deduction", deductsSaleId: "not-a-sale-id" },
   { unsupported: true },
 ])("refuses malformed line fields %j", async (patch) => {
   await refuses({

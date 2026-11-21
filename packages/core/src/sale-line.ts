@@ -60,4 +60,8 @@ export interface RecordSaleLine {
    * different one each, and be it reversed (same product, minus its quantity and line total), and
    * every invoice line must be named; on a partial correction it is optional. */
   correctsLineId?: string | null;
+  /** Marks a line about an advance; every `deduction` line, and no other, names that advance's sale
+   * in `deductsSaleId`. */
+  advanceRole?: "payment_on_account" | "deduction" | null;
+  deductsSaleId?: string | null;
 }

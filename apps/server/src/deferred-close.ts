@@ -129,7 +129,8 @@ export async function closeBillDeferredTx(
     expectedEdit: request.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, billId);
-  if ((await billsHoldingMoney(tx, [billId])).has(billId)) throw ineligible("prior_payment");
+  if ((await billsHoldingMoney(tx, [billId], { besidesAdvances: true })).has(billId))
+    throw ineligible("prior_payment");
   await refusePaymentInFlight(tx, [billId]);
   await refusePlacedPaymentInFlight(deps.db, tx, [billId]);
 
@@ -147,7 +148,7 @@ export async function closeBillDeferredTx(
     total = centsToDecimal(issued.total);
   } else {
     if (order.partyId === null) await refuseUnavailableFullInvoice(tx, billId);
-    invoice = await priceForIssuance(tx, clock, deps.backend, cfg, billId);
+    invoice = await priceForIssuance(tx, clock, deps.backend, cfg, billId, deps.log);
     total = invoice.priced.total;
   }
   const cents = decimalToCents(total);
@@ -157,17 +158,7 @@ export async function closeBillDeferredTx(
   const saleId =
     invoice === undefined
       ? (issued!.id as SaleId)
-      : (
-          await issueUnpaidInvoice(
-            tx,
-            deps.backend,
-            cfg,
-            invoice,
-            actorId,
-            deps.admission,
-            deps.log,
-          )
-        ).saleId;
+      : (await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, actorId, deps.admission)).saleId;
 
   const placedHere = order.status === "open";
   if (placedHere) await markOrderPlaced(tx, clock, cfg, billId, actorId, deps.attendance);

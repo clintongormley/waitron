@@ -9278,6 +9278,7 @@ export class TillApp extends LitElement {
     },
     cancellation?: CancellingItem | (() => boolean),
     fill?: RefundFill,
+    then: "refund" | "correct" = "refund",
   ): Promise<void> {
     const originCurrent =
       cancellation === undefined
@@ -9347,8 +9348,10 @@ export class TillApp extends LitElement {
             this.historicalReceipt === receipt &&
             this.#operatorSession === session &&
             this.api === api
-          )
-            this.#openTenderRefund(fill);
+          ) {
+            if (then === "correct") this.#openInvoiceCorrection();
+            else this.#openTenderRefund(fill);
+          }
         }
       }
     } catch {
@@ -12374,6 +12377,7 @@ export class TillApp extends LitElement {
         .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
+        .ownReceiptOffered=${this.#ownReceiptOffered(open)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
@@ -12412,6 +12416,25 @@ export class TillApp extends LitElement {
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
+   * simplified one: the server builds no advance for a full invoice (`advance.full_invoice_unsupported`). */
+  #ownReceiptOffered(open: BillPaying): boolean {
+    if (open.printed === true) return false;
+    if (open.surface === "table")
+      return (
+        this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.invoiceType === "F2"
+      );
+    return !this.#counterFullInvoice(open.billId);
+  }
+
+  #counterFullInvoice(billId: string): boolean {
+    return (
+      this.invoiceChoice?.orderId === billId ||
+      (this.#counterStoredInvoice?.orderId === billId &&
+        this.#counterStoredInvoice.invoiceType === "F1")
+    );
   }
 
   /** Whether the open bill's Pay window offers Close as deferred payment. */
@@ -12455,12 +12478,7 @@ export class TillApp extends LitElement {
         this.#unansweredWholePayments.has(billId),
       currentOrders: null,
       currentOrdersUnread: false,
-      counter: {
-        fullInvoice:
-          this.invoiceChoice?.orderId === billId ||
-          (this.#counterStoredInvoice?.orderId === billId &&
-            this.#counterStoredInvoice.invoiceType === "F1"),
-      },
+      counter: { fullInvoice: this.#counterFullInvoice(billId) },
     });
   }
 
@@ -22101,7 +22119,7 @@ export class TillApp extends LitElement {
     if (now?.balance == null || now.refusal !== null || this.billRefunding !== null) return;
     const balance = now.balance;
     const offered = balance.payments.filter((payment) => refundOffered(payment, balance.status));
-    if (offered.length === 1) this.#openBillRefunding(now, offered[0]!, excess);
+    if (offered.length === 1) this.#refundPayment(now, offered[0]!, excess);
   }
 
   /** Persist the Counter basket before the payment window allocates its stored dishes. */
@@ -23007,10 +23025,34 @@ export class TillApp extends LitElement {
     // The dialog offers Refund only on a payment of the balance it shows, and is under the refund
     // dialog while that is open.
     const open = this.billPaying!;
-    this.#openBillRefunding(
+    this.#refundPayment(
       open,
-      open.balance!.payments.find((payment) => payment.id === paymentId)!,
+      open.balance!.payments.find((row) => row.id === paymentId)!,
       null,
+    );
+  }
+
+  #refundPayment(open: BillPaying, payment: BillPaymentView, suggested: string | null): void {
+    if (payment.hasTicket === true && payment.saleId !== undefined && open.printed !== true) {
+      const saleId = payment.saleId;
+      this.#requestLeave(() => this.#correctAdvance(open, saleId));
+      return;
+    }
+    this.#openBillRefunding(open, payment, suggested);
+  }
+
+  /** Before the bill has an invoice, Refund on a payment that paid an advance opens Correct
+   * invoice on the advance's own ticket, closing the Pay window. */
+  async #correctAdvance(open: BillPaying, saleId: string): Promise<void> {
+    if (this.#billPayingNow(open.id) === null) return;
+    const origin = this.drill;
+    this.#closeBillPaying();
+    this.#releaseFoundCounterBill(open);
+    await this.#openHistoricalReceipt(
+      { saleId, workingOrderId: null, refundId: null },
+      () => this.drill === origin,
+      undefined,
+      "correct",
     );
   }
 

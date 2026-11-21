@@ -642,10 +642,11 @@ describe("sales — immutability", () => {
       /(product|item|menu|catalog|menu|sku|variant)_id$/i.test(key.from),
     );
     expect(menuForeignKeys).toEqual([]);
-    // Whatever a new column is named, the only keys are the line's own sale, its parent line and
-    // the invoice line it corrects.
+    // Whatever a new column is named, the only keys are the line's own sale, its parent line, the
+    // invoice line it corrects and the advance sale a deduction line names.
     expect(foreignKeys.map((key) => key.from).sort()).toEqual([
       "corrects_line_id",
+      "deducts_sale_id",
       "parent_line_id",
       "sale_id",
     ]);

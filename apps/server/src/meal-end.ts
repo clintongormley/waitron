@@ -121,6 +121,7 @@ export async function endMeal(
         deps.backend,
         cfg,
         req.billId,
+        deps.log,
       );
       const total = invoice.priced.total;
       const owed = await stillOwedOnIssuedBill(tx, req.billId, total);
@@ -133,7 +134,6 @@ export async function endMeal(
         invoice,
         operatorId,
         deps.admission,
-        deps.log,
       );
       if (!paper)
         await assertDeliveryQueued(tx, req.billId, bill.delivery!.medium as "a4" | "email", saleId);

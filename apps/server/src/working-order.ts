@@ -94,7 +94,12 @@ import {
   reserveStagedInvoiceDelivery,
   type InvoiceChoiceDeliveryContext,
 } from "./invoice-choice-delivery.js";
-import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
+import {
+  checkedInvoiceRecipient,
+  readOrderInvoiceChoice,
+  selectOrderInvoice,
+  type OrderInvoiceChoice,
+} from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
 import {
@@ -277,6 +282,13 @@ import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { issuancePass } from "./issuance-pass.js";
 import type { IssueMoment } from "./issue-moment.js";
 import { issueOrderMoment } from "./sale-day.js";
+import {
+  advancesToTakeOff,
+  paidNoAdvance,
+  readBillAdvances,
+  refuseWhileAdvanceCorrectionOpen,
+} from "./bill-advances.js";
+import type { AdvanceCredit } from "./advance-deduction.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   readOrderDinings,
@@ -4730,10 +4742,17 @@ export async function setOrderInvoiceChoice(
     const order = await readChoiceChangeableOrder(db, tx, orderId, request.revision, "invoice");
     await requireOrderBillEditor(tx, orderId, request);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
+      // An advance's money is on its own ticket, so it does not hold the rest to a full invoice.
       const [paid] = await tx
         .select({ id: billPayments.id })
         .from(billPayments)
-        .where(and(eq(billPayments.workingOrderId, orderId), eq(billPayments.state, "received")))
+        .where(
+          and(
+            eq(billPayments.workingOrderId, orderId),
+            eq(billPayments.state, "received"),
+            paidNoAdvance,
+          ),
+        )
         .limit(1);
       if (paid !== undefined) throw new AppError("invoice.choice_locked", {});
     }
@@ -7670,22 +7689,84 @@ export interface PricedInvoice extends IssueMoment {
   id: string;
   /** The working-order line each of `priced.lines` was priced from. */
   identities: OrderLineIdentity[];
+  /** The languages the invoice is filed in (`saleLanguageFor`). */
+  language: { locale: string; invoiceLocales: string[] };
+  /** The order's invoice choice, read as the invoice was priced; absent for an unknown order. */
+  choice: OrderInvoiceChoice | undefined;
 }
 
-/** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment}. Writes
- * nothing. */
+/**
+ * Price order `id`'s invoice from its stored lines `order` at one clock reading, in the languages
+ * its saved `receiptLocale` files it in, with its bill's advances `credits` taken off, dated by
+ * {@link issueOrderMoment} with `mealEndedAt`. Writes nothing but `log`'s lines.
+ */
+export async function priceOrderInvoice(
+  tx: Transaction,
+  clock: TrustedClock,
+  backend: FiscalBackend,
+  cfg: TradingContext,
+  id: string,
+  order: GrossOrder,
+  saved: { receiptLocale: string | null; credits: readonly AdvanceCredit[] | undefined },
+  log?: Logger,
+  mealEndedAt?: string,
+): Promise<Omit<PricedInvoice, "choice">> {
+  const language = await saleLanguageFor(tx, saved.receiptLocale ?? undefined, {
+    log,
+    workingOrderId: id,
+  });
+  return {
+    id,
+    identities: order.identities,
+    language,
+    ...(await issueOrderMoment(
+      tx,
+      cfg,
+      { clock, backend },
+      id,
+      await issuancePass(tx, id, order),
+      mealEndedAt,
+      advancesToTakeOff(saved.credits, language.invoiceLocales),
+    )),
+  };
+}
+
+/** The lines a {@link PricedInvoice} files: its priced lines, then one per advance it takes off. */
+export function filedLines(
+  invoice: Pick<PricedInvoice, "priced" | "identities" | "deductionLines">,
+) {
+  return [
+    ...withReceiptListPrices(invoice.priced.lines, invoice.identities),
+    ...invoice.deductionLines,
+  ];
+}
+
+/** Price an order's invoice for {@link issueUnpaidInvoice}, dated by {@link issueOrderMoment} and
+ * refused while one of its advances has a correction open. Writes nothing but `log`'s lines. */
 export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
   backend: FiscalBackend,
   cfg: TradingContext,
   id: string,
+  log?: Logger,
 ): Promise<PricedInvoice> {
   const order = await priceStoredOrderForIssuance(tx, id);
+  const choice = await readOrderInvoiceChoice(tx, id);
+  const { credits } = await readBillAdvances(tx, [id]);
+  if (credits.has(id)) await refuseWhileAdvanceCorrectionOpen(tx, id);
   return {
-    id,
-    identities: order.identities,
-    ...(await issueOrderMoment(tx, cfg, { clock, backend }, id, await issuancePass(tx, id, order))),
+    ...(await priceOrderInvoice(
+      tx,
+      clock,
+      backend,
+      cfg,
+      id,
+      order,
+      { receiptLocale: choice?.receiptLocale ?? null, credits: credits.get(id) },
+      log,
+    )),
+    choice,
   };
 }
 
@@ -7711,16 +7792,11 @@ export async function issueUnpaidInvoice(
   invoice: PricedInvoice,
   operatorId: string,
   admission: TradingAdmission,
-  log?: Logger,
 ): Promise<IssuedInvoice> {
   await requireEconomicWrite(tx, cfg, admission);
-  const { id, priced, clock, operationDate } = invoice;
+  const { id, priced, meal, clock, operationDate, language } = invoice;
   await backend.refuseNewIssuance(tx, cfg.nodeId);
-  const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
-  const language = await saleLanguageFor(tx, selected.receiptLocale, {
-    log,
-    workingOrderId: id,
-  });
+  const selected = await selectOrderInvoice(tx, backend, cfg, id, meal.total, invoice.choice);
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "order",
     orderId: id,
@@ -7734,7 +7810,7 @@ export async function issueUnpaidInvoice(
     workingOrderId: brandWorkingOrderId(id),
     ...language,
     total: priced.total,
-    lines: withReceiptListPrices(priced.lines, invoice.identities),
+    lines: filedLines(invoice),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operationDate,

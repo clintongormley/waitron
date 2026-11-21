@@ -2,7 +2,8 @@ import { assertStillSignedIn } from "./till-session.js";
 import { clockUnusableAt } from "./clock-unusable.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
-import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { billAdvances, billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
+import { refuseAdvanceRefund } from "./advance-taken-off.js";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { IssuanceRefusedError } from "@waitron/fiscal";
@@ -675,13 +676,17 @@ export async function refundBillPayment(
           { sessionId: operator.sessionId, permission: "sale.refund", override },
           operator.attempts,
         );
-        const [payment] = await tx
-          .select()
+        const [found] = await tx
+          .select({ payment: billPayments, advanceSaleId: billAdvances.advanceSaleId })
           .from(billPayments)
+          .leftJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
           .where(
             and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)),
           );
-        if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+        if (found === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+        const { payment, advanceSaleId } = found;
+        if (advanceSaleId !== null)
+          await refuseAdvanceRefund(tx, advanceSaleId, "bill.refund_of_advance", { paymentId });
         const provided =
           payment.method === "card" ? await findPaymentByBillPayment(tx, paymentId) : undefined;
         const print = refundFingerprint(

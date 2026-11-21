@@ -12,15 +12,17 @@ import {
 } from "@waitron/shared";
 import type { VatBreakdownLine } from "@waitron/fiscal";
 import { correctionBaseAtRate } from "./correction-allocation.js";
+import { deductionsTaken, type TakenCents } from "./deductions-taken.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
 /** What the writer read about the invoice being corrected, at the scales its rows store. */
 export interface PartialCorrectionHistory {
   invoiceBreakdown: readonly { rate: string; base: string; tax: string }[];
+  /** In line order. */
   invoiceLines: ReadonlyMap<
     string,
-    { vatRate: number; quantity: number; lineGross: number | null }
+    { vatRate: number; quantity: number; lineTotal: number; lineGross: number | null }
   >;
   earlierBreakdowns: readonly (readonly { rate: string; base: string; tax: string }[])[];
   earlierLines: readonly {
@@ -125,8 +127,11 @@ export function checkPartialCorrectionHistory(
   breakdown: readonly VatBreakdownLine[],
   history: PartialCorrectionHistory,
 ): void {
+  const meal = mealOf(history);
   // Per invoice line, the gross earlier corrections took; null when one stored none.
-  const taken = new Map<string, number | null>();
+  const taken = new Map<string, number | null>(
+    meal.taken.map((piece) => [piece.saleLineId, piece.gross]),
+  );
   const unlinkedRates = new Set<number>();
   for (const row of history.earlierLines) {
     if (row.correctsLineId === null) {
@@ -152,7 +157,17 @@ export function checkPartialCorrectionHistory(
   for (const group of history.invoiceBreakdown.map(storedGroup)) {
     invoice.set(group.rate, [...(invoice.get(group.rate) ?? []), group]);
   }
+  for (const [rate, off] of meal.offAtRate) {
+    const atRate = invoice.get(rate);
+    if (atRate?.length !== 1) unusable();
+    const group = atRate[0]!;
+    invoice.set(rate, [{ rate, base: group.base - off.base, tax: group.tax - off.tax }]);
+  }
   const prior = new Map<number, { base: number; gross: number }>();
+  for (const piece of meal.taken) {
+    const sum = prior.get(piece.rate) ?? { base: 0, gross: 0 };
+    prior.set(piece.rate, { base: sum.base + piece.base, gross: sum.gross + piece.gross });
+  }
   for (const group of history.earlierBreakdowns.flat().map(storedGroup)) {
     const sum = prior.get(group.rate) ?? { base: 0, gross: 0 };
     prior.set(group.rate, {
@@ -179,6 +194,51 @@ export function checkPartialCorrectionHistory(
     )
       refuse();
   }
+}
+
+/**
+ * The invoice read as its meal, as `readHistory` reads it for the calculator: what a line stored
+ * below zero takes off at its rate is added back to the invoice's split, and what it takes from
+ * the meal counts as taken already (`deductionsTaken`).
+ */
+function mealOf(history: PartialCorrectionHistory): {
+  offAtRate: Map<number, { base: number; tax: number }>;
+  taken: TakenCents[];
+} {
+  const lines = [...history.invoiceLines];
+  // Below zero means a deduction line: prices, quantities and discounts cannot go below zero
+  // (`packages/db/src/schema/menus.ts:173`, `packages/menu/src/pricing.ts:263`, `:348`,
+  // `packages/adjustments/src/spread.ts:243`).
+  const deductions = lines.filter(([, line]) => line.lineGross !== null && line.lineGross < 0);
+  const offAtRate = new Map<number, { base: number; tax: number }>();
+  if (deductions.length === 0) return { offAtRate, taken: [] };
+  for (const [, line] of deductions) {
+    const sum = offAtRate.get(line.vatRate) ?? { base: 0, tax: 0 };
+    offAtRate.set(line.vatRate, {
+      base: sum.base + line.lineTotal,
+      tax: sum.tax + line.lineGross! - line.lineTotal,
+    });
+  }
+  const meal = lines.filter(([, line]) => line.lineGross === null || line.lineGross >= 0);
+  if (meal.some(([, line]) => line.lineGross === null && offAtRate.has(line.vatRate))) unusable();
+  return {
+    offAtRate,
+    taken: deductionsTaken(
+      meal
+        .filter(([, line]) => line.lineGross !== null)
+        .map(([id, line]) => ({
+          id,
+          rate: line.vatRate,
+          base: line.lineTotal,
+          gross: line.lineGross!,
+        })),
+      deductions.map(([, line]) => ({
+        rate: line.vatRate,
+        base: line.lineTotal,
+        gross: line.lineGross!,
+      })),
+    ),
+  };
 }
 
 function storedGroup(group: { rate: string; base: string; tax: string }): Group {

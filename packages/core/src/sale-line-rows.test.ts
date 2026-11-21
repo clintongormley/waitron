@@ -279,4 +279,31 @@ describe("saleLineRows", () => {
     expect(corrective!.correctsLineId).toBe("original-line-1");
     expect(ordinary!.correctsLineId).toBeNull();
   });
+
+  it("writes a line's advance role and the sale it deducts", () => {
+    const base = {
+      name: "Advance",
+      descriptions: { "es-ES": "Anticipo" },
+      quantity: "1",
+      unitPrice: "45.45",
+      vatRate: "10.00",
+    };
+    const [advance, deduction, dish] = saleLineRows("rest-1", [
+      { ...base, lineNo: 1, lineTotal: "45.45", advanceRole: "payment_on_account" },
+      {
+        ...base,
+        lineNo: 2,
+        quantity: "-1",
+        lineTotal: "-45.45",
+        advanceRole: "deduction",
+        deductsSaleId: "advance-sale-1",
+      },
+      { ...base, lineNo: 3, name: "Steak", lineTotal: "45.45" },
+    ]);
+    expect(advance).toMatchObject({ advanceRole: "payment_on_account" });
+    expect(advance).not.toHaveProperty("deductsSaleId");
+    expect(deduction).toMatchObject({ advanceRole: "deduction", deductsSaleId: "advance-sale-1" });
+    expect(dish).not.toHaveProperty("advanceRole");
+    expect(dish).not.toHaveProperty("deductsSaleId");
+  });
 });

@@ -55,39 +55,71 @@ marks a line sent (Q21).
 AEAT's FAQ calls a system without that link «susceptible de sanción»,
 and the pre-bill carries no tax QR code. Whether a precuenta counts is asked as [S2](../compliance/asesor-questions.md#the-shortened-list-2026-10-09).
 
-## A447. Money paid before a meal's ticket is an advance
+## A447. A part payment whose payer wants a receipt is an advance
 
 Asked as [S3](../compliance/asesor-questions.md#the-shortened-list-2026-10-09) (LIVA 75.Dos, RD
 1619/2012 art. 2.1). The owner's answers of 18 November 2026 (owner, 2026-11-18, question 1 of the
-[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details:
+[19 November sheet](../compliance/2026-11-19-adviser-meeting.md)) and 19 November (decision D1 and
+the 20:30 answers, quoted in the
+[advances plan](../superpowers/plans/2026-11-19-adviser-advances.md#where-the-rules-come-from));
+the adviser is still to confirm the details:
 
 - **When the meal ends, and so when its ticket is issued:** "Whichever comes first: printing the
   bill; taking the last payment; close of trading day", or staff marking the table as having left
   without paying (owner, 2026-11-18). The trading day is the venue's own day,
   set to end at an hour when it is closed, such as 05:00. A ticket issued before it is paid shows
   the amount still owed.
-- **Money paid before then is an advance, even when it names no dishes** ("€30 towards the
-  bill", a group's €1,000 towards its tab, a company paying for its dinner on the 14th): "an
-  invoice should be issued and VAT should be payed. It would be reasonable to charge 10% for
-  hospitality services/food." The final ticket deducts it as it deducts a deposit (adviser answer
-  1.8, [Part C](../compliance/2026-11-15-adviser-answers.md#part-c-to-remember-when-these-are-built)):
-  it shows the meal's total, the advance's amount before VAT and its VAT, and what is left, and its
-  record carries only what is left.
+- **Which payments are advances:** "a payment made before the meal begins should be an advance, a
+  part payment after the meal has begun but before it has ended: if it needs a receipt, it is an
+  advance, if it doesn't then it is just part payment" (owner, 2026-11-19, D1), and "We can take
+  multiple payments towards the final bill. Each one doesn't need a receipt (unless they want one)"
+  (owner, 2026-11-19 20:30). So a part payment during the meal is an advance only when its payer
+  wants their own receipt.
 
-To build: an advance's ticket when money is paid towards a bill whose ticket is not yet issued,
-and its deduction on the final ticket and record. Today a payment that leaves a bill part-paid
-issues no invoice (`apps/server/src/bill-payments-api.test.ts:771`, "leaves €70.00 outstanding on
-a €120.00 bill … and issues no invoice"). Printing the bill issues the ticket before payment; a payment after that
-is not an advance (question 2). An advance taken at the till is issued by Waitron when the payment is
-taken, as one line «Pago a cuenta — consumo en mesa 7» ("payment on account for the meal at
-table 7") at the venue's eat-in rate (owner, 2026-11-18). Waitron also issues an advance paid before the
-day, such as a company's €1,000 for its staff dinner: staff record the transfer against the
+Built: on a part payment that leaves something owed on a bill with no invoice yet, set for a
+ticket, the till asks "Does this payer want their own receipt for this amount?"
+(`#ownReceiptAsked` in `apps/till/src/widgets/bill-pay-dialog.ts`). **Yes** issues the payer a ticket of one line,
+«Pago a cuenta — consumo en mesa 7», at Waitron's shipped reduced rate, 10% today
+(`issueAdvance` in `apps/server/src/bill-advances.ts`, `ADVANCE_VAT_CLASS` in
+`packages/shared/src/menu-document/vat-rates.ts:9`). The bill's own invoice, however it is issued,
+takes each advance off (`apps/server/src/advance-deduction.ts`). Its printed ticket lists the
+dishes, then «Pago a cuenta n.º A/12, 19/11/2026 −30,00» for each advance, then the total less the
+advances, with no base or VAT printed under the advance line (`apps/server/src/receipt-advances.test.ts`,
+"no base or VAT, and no price each, is printed under an advance line"), though the ticket's VAT
+table takes the advance off its rate's row: with dishes of €20 at 10% and €80 at 21% and a €50
+advance, that row reads `10% −27,27 −2,73` (the same file, "example 2: … the VAT table's 10% row
+is negative"); whether that is enough is
+asked in question 12 of the 19 November sheet (the advances plan's Q4). Its record takes off the advance's own filed base and VAT
+(`apps/server/src/advance-deduction.test.ts`, "example 8 subtracts the advance's own base and
+VAT"). **No** keeps a plain part payment, which issues no invoice
+(`apps/server/src/bill-payments-api.test.ts`, "leaves €70.00 outstanding on a €120.00 bill,
+changes no line's price, and issues no invoice"). Printing the bill issues the ticket before
+payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
+advance off, the till refuses to give the advance back on its own and names Correct invoice on the
+table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
+this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
+invoice can give back at most what it carries, so money beyond it, such as any of an advance that
+equals the meal, has no way back through the till. So that a correction opened before the table's
+invoice cannot file a credit note after it, the table's invoice is held back while a correction of
+one of its advances is open: the payment that pays the bill off (refused before any card reader is
+asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
+it paid are refused with `advance.correction_open`; a reader payment started before the correction
+was opened keeps its money and issues no invoice; when the correction is closed or discarded, the
+table's invoice is issued if the bill is then paid off, under the device and person of the bill's
+latest received payment that is not an advance, dated as recovery would date it (tested with
+Discard, `apps/server/src/advance-corrections.test.ts` and
+`advance-corrections.later-sale-date.test.ts`), and ending it is refused when
+issuing that invoice is refused, as while the box waits for its time (`clock.unconfirmed`, tested);
+the close of the business day answers the bill as it answers a payment still moving (`money_moving`)
+and issues nothing.
+
+To build: an advance as a full invoice (the advances plan's piece 1b), and an advance paid before the
+day, such as a company's €1,000 for its staff dinner, where staff record the transfer against the
 booking, or the booking takes the payment, and Waitron issues the company a full invoice for the
-advance and deducts it on the night. Where the company can pay afterwards instead, the dinner can
+advance and deducts it on the night (piece 4). Where the company can pay afterwards instead, the dinner can
 be closed as a deferred payment (`POST /api/working-orders/:id/close-deferred`,
 `apps/server/src/deferred-close-api.ts`), which issues the invoice on the night, so no advance
-arises (owner, 2026-11-18). A walkout's
-ticket is for the full amount, with everything still owed.
+arises (owner, 2026-11-18). A walkout's ticket is for the full amount, with everything still owed.
 
 ## Adviser confirmation: supplier invoice numbers by issue year
 

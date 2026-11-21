@@ -8,6 +8,7 @@ import { completedRefundsOf, netOfRefunds, owedOf } from "./bill-payment-money.j
 import { cardOf, type StoredCard } from "./card-details.js";
 import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { readIssuedSales } from "./sale-due.js";
+import { paidNoAdvance } from "./bill-advances.js";
 
 /**
  * One payment of a bill paid in parts, as the ticket lists it. `change` is what
@@ -133,7 +134,8 @@ export async function readBillTenderLines(
 }
 
 /** The bill's received payments, oldest first, net of completed refunds (one given back whole is
- * left off), and what each received payment has kept of its applied money. */
+ * left off), and what each received payment has kept of its applied money. A payment that paid an
+ * advance is left out: its money is on its own ticket, and the amount due has it taken off. */
 async function readUnsettledBill(
   tx: Transaction,
   workingOrderId: string,
@@ -143,7 +145,13 @@ async function readUnsettledBill(
     .from(billPayments)
     .leftJoin(payments, MANUAL_CARD_JOIN)
     .leftJoin(capturedCards, CAPTURED_CARD_JOIN)
-    .where(and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")))
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        eq(billPayments.state, "received"),
+        paidNoAdvance,
+      ),
+    )
     .orderBy(billPayments.receivedAt, sql`${billPayments}.rowid`);
   const refunds = await completedRefundsOf(
     tx,
