@@ -298,23 +298,19 @@ const checkV5 = (envelope: ReturnType<typeof signed>) =>
   verifyPairingV5Proof(envelope.payload, envelope.signature, v4.origin, "complete", now);
 
 it("encodes the exact v5 pairing tuple", () => {
-  expect(pairingV5Payload).toBeTypeOf("function");
   expect(pairingV5Payload(complete)).toEqual(Buffer.from(JSON.stringify(v5Vector)));
 });
 
 it("recovers the claims from an independently signed v5 proof", () => {
-  expect(verifyPairingV5Proof).toBeTypeOf("function");
   expect(checkV5(signed(v5Vector))).toEqual(complete);
 });
 
 it("refuses valid proofs made for the other pairing version", () => {
   expect(() => checkV4(signed(v5Vector))).toThrow(PairingError);
-  expect(verifyPairingV5Proof).toBeTypeOf("function");
   expect(() => checkV5(signed(v4Vector("complete", profile)))).toThrow(PairingError);
 });
 
 it("refuses a v5 marker substituted into a signed v4 proof", () => {
-  expect(verifyPairingV5Proof).toBeTypeOf("function");
   expect(() =>
     checkV5({
       payload: Buffer.from(JSON.stringify(v5Vector)).toString("base64url"),
