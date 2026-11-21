@@ -65,6 +65,29 @@ export function billInvoiceDelivery(choice: StagedInvoiceDelivery): BillInvoiceD
   return choice;
 }
 
+/** The customer a bill's stored choice names; null unless every required column holds a value. */
+export function storedBillRecipient(row: {
+  taxId: string | null;
+  identifierType: string | null;
+  identifierCountryCode: string | null;
+  legalName: string | null;
+  address: string | null;
+  countryCode: string | null;
+}): PartyBill["recipient"] {
+  return row.taxId !== null &&
+    row.legalName !== null &&
+    row.address !== null &&
+    row.countryCode !== null
+    ? {
+        taxId: row.taxId,
+        ...storedRecipientIdentifier(row.identifierType, row.identifierCountryCode),
+        legalName: row.legalName,
+        address: row.address,
+        countryCode: row.countryCode,
+      }
+    : null;
+}
+
 /** One bill of a party, as the table screen lists it. */
 export interface PartyBill {
   workingOrderId: string;
@@ -614,19 +637,7 @@ export async function readPartyBills(
       ...(choice.invoiceDelivery === null
         ? {}
         : { invoiceDelivery: billInvoiceDelivery(choice.invoiceDelivery) }),
-      recipient:
-        choice.taxId !== null &&
-        choice.legalName !== null &&
-        choice.address !== null &&
-        choice.countryCode !== null
-          ? {
-              taxId: choice.taxId,
-              ...storedRecipientIdentifier(choice.identifierType, choice.identifierCountryCode),
-              legalName: choice.legalName,
-              address: choice.address,
-              countryCode: choice.countryCode,
-            }
-          : null,
+      recipient: storedBillRecipient(choice),
       partyId: bill.partyId,
       label: bill.label,
       billNumber: bill.billNumber,

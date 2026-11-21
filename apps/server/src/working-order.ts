@@ -176,6 +176,10 @@ import {
   partyFamily,
   partyOfOrder,
   canonicalJson,
+  billInvoiceDelivery,
+  storedBillRecipient,
+  type BillInvoiceDelivery,
+  type PartyBill,
 } from "./parties.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -5339,6 +5343,10 @@ export interface HeldOrder {
   receiptLanguage?: string;
   /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
   invoiceType: "F1" | "F2";
+  /** The customer a full invoice names; absent on a simplified invoice or one without a customer. */
+  recipient?: NonNullable<PartyBill["recipient"]>;
+  /** How the invoice is to be delivered; absent while no delivery has been chosen. */
+  invoiceDelivery?: BillInvoiceDelivery;
   /** The order's own way of selling, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
@@ -5501,6 +5509,13 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         revision: workingOrders.revision,
         receiptLocale: workingOrders.receiptLocale,
         invoiceType: workingOrders.invoiceType,
+        invoiceDelivery: workingOrders.invoiceDelivery,
+        taxId: workingOrders.recipientTaxId,
+        identifierType: workingOrders.recipientIdentifierType,
+        identifierCountryCode: workingOrders.recipientIdentifierCountryCode,
+        legalName: workingOrders.recipientLegalName,
+        address: workingOrders.recipientAddress,
+        countryCode: workingOrders.recipientCountryCode,
         partyId: workingOrders.partyId,
         hasSetMenus: exists(
           tx
@@ -5681,6 +5696,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       invoiceType: order.invoiceType,
+      ...(order.invoiceType === "F1"
+        ? optional("recipient", storedBillRecipient(order) ?? undefined)
+        : {}),
+      ...(order.invoiceDelivery === null
+        ? {}
+        : { invoiceDelivery: billInvoiceDelivery(order.invoiceDelivery) }),
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id])).get(id)! : {}),
       lines,
