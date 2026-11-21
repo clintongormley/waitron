@@ -81,6 +81,38 @@ describe("setup-reset-screen", () => {
     );
   });
 
+  it.each([
+    [
+      "en-GB",
+      "To take it off that list, open the primary's Servers page and, in this server's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this server again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+      "Servers page",
+    ],
+    [
+      "es-ES",
+      "Para quitarlo de esa lista, abre la página Servidores del principal y, en el menú de la fila de este servidor, elige Retirar y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+      "página Servidores",
+    ],
+  ] as const)(
+    "links to the primary's Servers page when its address is known (%s)",
+    async (locale, words, label) => {
+      setLocale(locale);
+      const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
+        serversUrl: "https://waitron.local/servers",
+      });
+      const link = q(el, "[data-test=servers-link]") as HTMLAnchorElement;
+      expect(link.href).toBe("https://waitron.local/servers");
+      expect(link.target).toBe("_blank");
+      expect(link.textContent!.trim()).toBe(label);
+      const text = q(el, "[data-test=remove-from-list]")!.textContent!.replace(/\s+/g, " ").trim();
+      expect(text).toBe(words);
+    },
+  );
+
+  it("has no Servers link when the primary's address is not known", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    expect(q(el, "[data-test=servers-link]")).toBeNull();
+  });
+
   it("emits reset-requested with the trimmed email and the password as typed", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);

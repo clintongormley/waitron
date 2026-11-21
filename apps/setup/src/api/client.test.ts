@@ -83,6 +83,37 @@ describe("SetupApi", () => {
     });
   });
 
+  it.each([
+    [
+      { nodeId: "n1", term: 2, standing: "serving-secondary", acceptingSales: false },
+      "serving-secondary",
+    ],
+    [{ acceptingSales: false }, null],
+    [{ nodeId: "n1", term: null, standing: null, acceptingSales: false }, null],
+  ])(
+    "nodeStanding GETs this box's /api/node unstored and returns its standing: %j",
+    async (body, standing) => {
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(body));
+      const api = new SetupApi("", fetchImpl);
+      expect(await api.nodeStanding()).toBe(standing);
+      expect(fetchImpl).toHaveBeenCalledWith("/api/node", {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+      });
+    },
+  );
+
+  it("nodeStanding rejects on a non-2xx answer", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: "server.internal", params: {} } }, false, 503),
+      );
+    const api = new SetupApi("", fetchImpl);
+    await expect(api.nodeStanding()).rejects.toMatchObject({ status: 503 });
+  });
+
   it("getStatus GETs /setup-api/status with credentials and returns the parsed status", async () => {
     const status = { provisioned: false, environment: "preproduction", needs: ["venue"] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(status));

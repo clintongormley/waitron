@@ -178,6 +178,36 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each(["en-GB", "es-ES"] as const)(
+    "has no violations on the joining page, joining and then joined, with its task list (%s)",
+    async (locale) => {
+      setLocale(locale);
+      let joined = false;
+      const { host, el } = await mountWidget<SetupDoneScreen>(
+        "setup-done-screen",
+        {
+          api: {
+            ...apiWith(() => new Promise(() => {})),
+            nodeStanding: () => Promise.resolve(joined ? "serving-secondary" : null),
+          } as unknown as SetupApi,
+          startDelayMs: 0,
+          pollIntervalMs: 5,
+          mirrorJoin: true,
+          breakGlassSecret: "bg-9f3a",
+          serversUrl: "https://waitron.local/servers",
+        },
+        theme,
+      );
+      expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("false");
+      await expectNoA11yViolations(host);
+      joined = true;
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("true"),
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("has no violations on the rebuilt copy", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

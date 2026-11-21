@@ -41,8 +41,9 @@ public certificate fingerprint** with the one the new box shows. Choose **It mat
 Enter the account's email and password. You can use the eye button to check what you typed.
 Choose **Connect**. If the account uses an authenticator, the page asks for its current code.
 Enter it and choose **Connect** again. The
-new box takes its first copy over the venue's network and restarts by itself as the spare. The new
-box's page stays on **This server is joining** and does not change.
+new box takes its first copy over the venue's network and restarts by itself as the spare. Keep its
+page open: it changes to **This server has joined** by itself, and lists what is left to do — save
+the server key, and print the [switch labels](servers.md#switch-label) from the linked Servers page.
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
 Keep both boxes switched on. If the copy is more than a minute behind or **Freshness unknown** stays on screen,

@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
@@ -81,6 +81,47 @@ export class SetupDoneScreen extends LitElement {
       wt-card ul {
         margin: 0;
       }
+      .tasks {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .tasks li {
+        display: flex;
+        gap: var(--wt-space-3);
+        align-items: flex-start;
+      }
+      .tasks p {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+      }
+      .task-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .mark {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        inline-size: var(--wt-space-5);
+        block-size: var(--wt-space-5);
+        border: 2px solid var(--wt-color-text-muted);
+        border-radius: 50%;
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .in_progress .mark {
+        border-color: var(--wt-color-primary);
+      }
+      .done .mark {
+        border-color: var(--wt-color-success);
+        background: var(--wt-color-success);
+        color: var(--wt-color-on-success);
+      }
+      .visually-hidden {
+        ${visuallyHiddenStyles}
+      }
       .clock dl {
         margin: 0 0 var(--wt-space-3);
       }
@@ -155,6 +196,9 @@ export class SetupDoneScreen extends LitElement {
   @property() restored?: "bucket" | "archive" | "cloud";
 
   /** A pause before the first poll so the box has begun its restart. */
+  /** The main box's Servers page, from the address typed to join; unset when it is not a URL. */
+  @property({ attribute: false }) serversUrl?: string;
+
   @property({ type: Number }) startDelayMs = 800;
 
   @property({ type: Number }) pollIntervalMs = 1500;
@@ -165,6 +209,10 @@ export class SetupDoneScreen extends LitElement {
   @state() private ready = false;
 
   @state() private breakGlassSaveFailed = false;
+
+  @state() private breakGlassSaved = false;
+
+  @state() private joined = false;
 
   @state() private startFailed = false;
 
@@ -224,8 +272,8 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override firstUpdated(): void {
-    if (this.mirrorJoin) return;
-    this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
+    const tick = this.mirrorJoin ? () => this.#joinTick() : () => this.#tick();
+    this.#timer = setTimeout(() => void tick(), this.startDelayMs);
   }
 
   override disconnectedCallback(): void {
@@ -234,6 +282,21 @@ export class SetupDoneScreen extends LitElement {
     this.nodeRecoveryKey = undefined;
     this.#releaseRecoveryPack();
     if (this.#timer !== undefined) clearTimeout(this.#timer);
+  }
+
+  /**
+   * Only a box that finished joining answers `/api/node` with its standing; until then the probe is
+   * unmounted, the box is restarting, or it answers without one. None of those is shown.
+   */
+  async #joinTick(): Promise<void> {
+    if (!this.isConnected || this.joined) return;
+    try {
+      this.joined = (await this.api.nodeStanding()) === "serving-secondary";
+    } catch {
+      // Not joined yet.
+    }
+    if (!this.isConnected || this.joined) return;
+    this.#timer = setTimeout(() => void this.#joinTick(), this.pollIntervalMs);
   }
 
   async #tick(): Promise<void> {
@@ -498,6 +561,7 @@ export class SetupDoneScreen extends LitElement {
       document.body.append(anchor);
       anchor.click();
       this.breakGlassSaveFailed = false;
+      this.breakGlassSaved = true;
     } catch {
       this.breakGlassSaveFailed = true;
     } finally {
@@ -635,12 +699,65 @@ export class SetupDoneScreen extends LitElement {
 
   #renderJoining(): TemplateResult {
     return html`
-      <h1>${t("done.joining.heading")}</h1>
-      <p data-test="joining-body">${t("done.joining.body")}</p>
-      <p data-test="joining-next">${t("done.joining.next")}</p>
-      <p data-test="joining-switch-label">${t("done.joining.switch_label")}</p>
+      <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
+      <p class="intro" data-test="joining-status" role="status">
+        ${t(this.joined ? "done.joined.status" : "done.joining.status")}
+      </p>
+      <ul class="tasks" data-test="joining-tasks">
+        ${this.#task(
+          "task-join",
+          this.joined ? "done" : "in_progress",
+          t("done.task.join"),
+          this.joined
+            ? nothing
+            : html`<p data-test="task-join-detail">${t("done.task.join_detail")}</p>`,
+        )}
+        ${
+          this.breakGlassSecret === undefined
+            ? nothing
+            : this.#task(
+                "task-key",
+                this.breakGlassSaved ? "done" : "to_do",
+                t("done.task.key"),
+                nothing,
+              )
+        }
+        ${this.#task(
+          "task-label",
+          "to_do",
+          t("done.task.label"),
+          html`<p data-test="task-label-detail">
+            ${
+              this.serversUrl === undefined
+                ? t("done.task.label_plain")
+                : html`${t("done.task.label_before")}
+                    <a href=${this.serversUrl} target="_blank" rel="noopener"
+                      >${t("done.task.label_link")}</a
+                    >
+                    ${t("done.task.label_after")}`
+            }
+          </p>`,
+        )}
+      </ul>
       ${this.#breakGlass()}
     `;
+  }
+
+  #task(
+    id: string,
+    state: "done" | "in_progress" | "to_do",
+    label: string,
+    detail: TemplateResult | typeof nothing,
+  ): TemplateResult {
+    const done = state === "done";
+    return html`<li data-test=${id} data-done=${done ? "true" : "false"} class=${state}>
+      <span class="mark" aria-hidden="true">${done ? "✓" : ""}</span>
+      <div>
+        <span class="task-label">${label}</span>
+        <span class="visually-hidden">(${t(`done.task.${state}`)})</span>
+        ${detail}
+      </div>
+    </li>`;
   }
 }
 

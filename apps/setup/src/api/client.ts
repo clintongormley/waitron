@@ -385,6 +385,19 @@ export class SetupApi {
     return (await response.json()) as { mainUrl: string | null };
   }
 
+  /** This box's standing in the chart it holds, from its role probe; `null` when the answer names none. */
+  async nodeStanding(): Promise<string | null> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/api/node", {
+      method: "GET",
+      credentials: "omit",
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    const body = (await response.json()) as { standing?: unknown };
+    return typeof body.standing === "string" ? body.standing : null;
+  }
+
   /** Resolves once the main server answers at all: a `no-cors` answer is opaque, and still an answer. */
   async probeMain(mainUrl: string, signal: AbortSignal): Promise<void> {
     const fetchImpl = this.#fetchImpl;

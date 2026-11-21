@@ -34,8 +34,8 @@ const RESTART_EN = "The server is restarting to finish setup. Once it is back, o
 const READY_EN = "The server is ready. Open it here:";
 const JOINING_BODY_EN =
   "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.";
-const JOINING_BODY_ES =
-  "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.";
+const JOINING_STATUS_EN = "Joining. This page updates by itself.";
+const JOINING_STATUS_ES = "Uniéndose. Esta página se actualiza sola.";
 
 /** Waits past the first poll a trading server would make (`startDelayMs: 0`) and redraws. */
 async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
@@ -1109,58 +1109,71 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
     const text = el.shadowRoot!.textContent!;
     expect(text).not.toContain(RESTART_EN);
-    expect(text.replace(/\s+/g, " ")).toContain(JOINING_BODY_EN);
+    expect(text.replace(/\s+/g, " ")).toContain(JOINING_STATUS_EN);
   });
 
   it.each([
-    ["en-GB", "This server is joining", JOINING_BODY_EN],
-    ["es-ES", "Este servidor se está uniendo", JOINING_BODY_ES],
+    [
+      "en-GB",
+      "This server is joining",
+      JOINING_STATUS_EN,
+      "Taking its first copy from the primary, which keeps selling.",
+    ],
+    [
+      "es-ES",
+      "Este servidor se está uniendo",
+      JOINING_STATUS_ES,
+      "Recibiendo su primera copia del principal, que sigue vendiendo.",
+    ],
   ] as const)(
     "says the joining server is taking its first copy (%s)",
-    async (locale, heading, body) => {
+    async (locale, heading, words, detail) => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
       expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
-      expect(q(el, "[data-test=joining-body]")!.textContent!.trim()).toBe(body);
+      expect(q(el, "[data-test=joining-status]")!.textContent!.trim()).toBe(words);
+      expect(q(el, "[data-test=task-join-detail]")!.textContent!.trim()).toBe(detail);
     },
   );
 
   it.each([
     [
       "en-GB",
-      "Once this server has joined, print a switch label for each server and stick it on that server. If the primary fails, scanning the standby's label with a till or phone on the restaurant's network opens the page that switches the restaurant over to it. To print the labels, open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+      "In the primary's dashboard, open System, then Servers, and choose Print switch label in each server's row menu. Stick each label on its server.",
     ],
     [
       "es-ES",
-      "Cuando este servidor se haya unido, imprime una etiqueta de cambio para cada servidor y pégala en ese servidor. Si el principal falla, al escanear la etiqueta del servidor en espera con una caja o un móvil conectado a la red del restaurante se abre la página que pasa el restaurante a ese servidor. Para imprimirlas, abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+      "En el panel del principal, abre Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
     ],
   ] as const)(
     "tells the joining server's person to print switch labels (%s)",
     async (locale, words) => {
       setLocale(locale);
       const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
-      expect(q(el, "[data-test=joining-switch-label]")!.textContent!.trim()).toBe(words);
+      expect(q(el, "[data-test=task-label-detail]")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        words,
+      );
     },
   );
 
-  it.each([
-    [
-      "en-GB",
-      "This page will not change. To see when this server has joined, open the primary's dashboard, then System, then Servers, and look for Last copy received in this server's row.",
-    ],
-    [
-      "es-ES",
-      "Esta página no cambiará. Para ver cuándo se ha unido este servidor, abre el panel del servidor principal, luego Sistema y luego Servidores, y busca Última copia recibida en la fila de este servidor.",
-    ],
-  ] as const)(
-    "says the joining page will not change and where to see the join, before the switch labels (%s)",
-    async (locale, words) => {
+  it.each(["en-GB", "es-ES"] as const)(
+    "lists joining, saving the key and printing the labels as tasks, in that order (%s)",
+    async (locale) => {
       setLocale(locale);
-      const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
-      const next = q(el, "[data-test=joining-next]")!;
-      expect(next.textContent!.trim()).toBe(words);
-      expect(next.previousElementSibling).toBe(q(el, "[data-test=joining-body]"));
-      expect(next.nextElementSibling).toBe(q(el, "[data-test=joining-switch-label]"));
+      const el = await mountDone(() => new Promise(() => {}), {
+        mirrorJoin: true,
+        breakGlassSecret: "bg-9f3a",
+      });
+      const tasks = [...el.shadowRoot!.querySelectorAll("[data-test=joining-tasks] > li")];
+      expect(tasks.map((task) => task.getAttribute("data-test"))).toEqual([
+        "task-join",
+        "task-key",
+        "task-label",
+      ]);
+      expect(q(el, "[data-test=joining-status]")!.nextElementSibling).toBe(
+        q(el, "[data-test=joining-tasks]"),
+      );
+      expect(el.shadowRoot!.textContent!).not.toMatch(/will not change|no cambiará/);
     },
   );
 
@@ -1969,5 +1982,187 @@ describe("setup-done-screen after a start that failed", () => {
     await vi.waitFor(() =>
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(FAILED_EN),
     );
+  });
+});
+
+describe("the joining page", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const JOINED_PROBE = {
+    nodeId: "a8000000-0000-4000-8000-000000000003",
+    term: 2,
+    standing: "serving-secondary",
+    acceptingSales: false,
+    environment: "preproduction",
+  };
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  /** A real client over a fetch that gives each answer in turn, then repeats the last. */
+  function joiningApi(answers: (() => Promise<Response>)[]) {
+    let calls = 0;
+    const fetchImpl = vi.fn((url: RequestInfo | URL) => {
+      expect(url).toBe("/api/node");
+      const answer = answers[Math.min(calls, answers.length - 1)]!;
+      calls += 1;
+      return answer();
+    });
+    return { api: new SetupApi("", fetchImpl), fetchImpl };
+  }
+
+  async function mountJoining(
+    answers: (() => Promise<Response>)[],
+    extra: Partial<SetupDoneScreen> = {},
+  ) {
+    const { api, fetchImpl } = joiningApi(answers);
+    const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api,
+      startDelayMs: 0,
+      pollIntervalMs: 3,
+      mirrorJoin: true,
+      breakGlassSecret: "key-on-paper",
+      ...extra,
+    });
+    return { el, fetchImpl };
+  }
+
+  const status = (el: SetupDoneScreen) => q(el, "[data-test=joining-status]")!;
+  const done = (el: SetupDoneScreen, task: string) =>
+    q(el, `[data-test=task-${task}]`)!.getAttribute("data-done");
+
+  it("says it is joining, then changes by itself to joined and ticks the first task", async () => {
+    const { el, fetchImpl } = await mountJoining([
+      () => Promise.reject(new TypeError("Failed to fetch")),
+      () => Promise.resolve(json({ error: { code: "server.not_found", params: {} } }, 404)),
+      () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 503)),
+      () => Promise.resolve(json(JOINED_PROBE)),
+    ]);
+    expect(q(el, "h1")!.textContent!.trim()).toBe("This server is joining");
+    expect(status(el).getAttribute("role")).toBe("status");
+    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    expect(done(el, "join")).toBe("false");
+    await vi.waitFor(() =>
+      expect(status(el).textContent!.trim()).toBe("Joined. This server is now the standby."),
+    );
+    expect(q(el, "h1")!.textContent!.trim()).toBe("This server has joined");
+    expect(done(el, "join")).toBe("true");
+    expect(q(el, "[data-test=task-join]")!.textContent!.replace(/\s+/g, " ")).toContain("Done");
+    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    const calls = fetchImpl.mock.calls.length;
+    expect(calls).toBe(4);
+    await afterATimerTurn(el);
+    expect(fetchImpl.mock.calls.length).toBe(calls);
+  });
+
+  it("keeps polling quietly while the box restarts, showing no error", async () => {
+    const { el, fetchImpl } = await mountJoining([
+      () => Promise.reject(new TypeError("Failed to fetch")),
+      () => Promise.resolve(json({ error: { code: "server.not_found", params: {} } }, 404)),
+      () => Promise.resolve(json({ error: { code: "server.internal", params: {} } }, 500)),
+      () => Promise.resolve(new Response("<!doctype html>", { status: 200 })),
+    ]);
+    await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(5));
+    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    expect(done(el, "join")).toBe("false");
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it.each([
+    ["a box whose trading admission is not ready", { acceptingSales: false }],
+    ["a box holding no chart", { ...JOINED_PROBE, term: null, standing: null }],
+    ["a box the chart lists as evicted", { ...JOINED_PROBE, standing: "evicted" }],
+  ])("does not count the answer of %s as joined", async (_, body) => {
+    const { el, fetchImpl } = await mountJoining([() => Promise.resolve(json(body))]);
+    await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(3));
+    expect(status(el).textContent!.trim()).toBe("Joining. This page updates by itself.");
+    expect(done(el, "join")).toBe("false");
+  });
+
+  it("stops polling when the screen leaves the page", async () => {
+    const { el, fetchImpl } = await mountJoining([
+      () => Promise.resolve(json({ acceptingSales: false })),
+    ]);
+    await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(1));
+    el.remove();
+    const calls = fetchImpl.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(calls + 1);
+    const settled = fetchImpl.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(fetchImpl.mock.calls.length).toBe(settled);
+  });
+
+  it("ticks Save the server key once the file is saved, and not when saving fails", async () => {
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const realURL = URL.createObjectURL.bind(URL);
+    vi.spyOn(URL, "createObjectURL")
+      .mockImplementationOnce(() => {
+        throw new Error("Download refused");
+      })
+      .mockImplementation(realURL);
+    const { el } = await mountJoining([() => new Promise(() => {})]);
+    expect(q(el, "[data-test=task-key]")!.textContent!.replace(/\s+/g, " ")).toContain(
+      "Save the server key",
+    );
+    expect(done(el, "key")).toBe("false");
+    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+    await el.updateComplete;
+    expect(q(el, "[data-test=break-glass-save-error]")).not.toBeNull();
+    expect(done(el, "key")).toBe("false");
+    await userEvent.click(q(el, "[data-test=break-glass-save]")!);
+    await el.updateComplete;
+    expect(done(el, "key")).toBe("true");
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("key-on-paper");
+  });
+
+  it("links the switch-label task to the primary's Servers page in a new tab, and never ticks it", async () => {
+    const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
+      serversUrl: "https://waitron.local/servers",
+    });
+    await vi.waitFor(() => expect(done(el, "join")).toBe("true"));
+    const link = q(el, "[data-test=task-label] a") as HTMLAnchorElement;
+    expect(link.href).toBe("https://waitron.local/servers");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener");
+    expect(link.textContent!.trim()).toBe("Servers page");
+    expect(q(el, "[data-test=task-label]")!.textContent!.replace(/\s+/g, " ")).toContain(
+      "Open the primary's Servers page and choose Print switch label in each server's row menu. Stick each label on its server.",
+    );
+    expect(done(el, "label")).toBe("false");
+  });
+
+  it("says where the Servers page is, with no link, when the primary's address is not known", async () => {
+    const { el } = await mountJoining([() => new Promise(() => {})]);
+    expect(q(el, "[data-test=task-label] a")).toBeNull();
+    expect(q(el, "[data-test=task-label]")!.textContent!.replace(/\s+/g, " ")).toContain(
+      "In the primary's dashboard, open System, then Servers, and choose Print switch label in each server's row menu. Stick each label on its server.",
+    );
+  });
+
+  it("drops the long paragraphs and never says the page will not change", async () => {
+    const { el } = await mountJoining([() => new Promise(() => {})]);
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).not.toContain("This page will not change");
+    expect(text).not.toContain(JOINING_BODY_EN);
+    expect(q(el, "[data-test=joining-next]")).toBeNull();
+    expect(q(el, "[data-test=joining-switch-label]")).toBeNull();
+  });
+
+  it("shows the joining and joined page in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountJoining([() => Promise.resolve(json(JOINED_PROBE))], {
+      serversUrl: "https://waitron.local/servers",
+      startDelayMs: 100000,
+    });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
+    expect(status(el).textContent!.trim()).toBe("Uniéndose. Esta página se actualiza sola.");
+    expect(q(el, "[data-test=task-label] a")!.textContent!.trim()).toBe("página Servidores");
+    expect(q(el, "[data-test=task-key]")!.textContent!).toContain("Guardar la clave del servidor");
   });
 });

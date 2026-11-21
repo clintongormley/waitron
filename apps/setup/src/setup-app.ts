@@ -58,6 +58,7 @@ import type {
 } from "./api/client.js";
 import { PREVIEW_NULLABLE_VENUE_FIELDS } from "./api/client.js";
 import { dispatchSetupGoto } from "./events.js";
+import { serversPageOf } from "./servers-page.js";
 import type {
   BucketRestoreRequestDetail,
   CloudRestoreActionDetail,
@@ -982,6 +983,9 @@ export class SetupApp extends LitElement {
    * that is a value to display and this is a statement about which path ran.
    */
   @state() private mirrorJoin = false;
+
+  /** The main box's Servers page, from the address typed in this tab to join or to reset. */
+  @state() private primaryServersUrl?: string;
 
   /** `undefined` while a request is in flight, which the provisioning screen shows as such. */
   @state() private provisionMessage?: Message;
@@ -1917,6 +1921,7 @@ export class SetupApp extends LitElement {
       if (!this.isConnected) return;
       this.breakGlassSecret = outcome.breakGlassSecret;
       this.breakGlassKeyName = outcome.breakGlassKeyName;
+      this.primaryServersUrl = serversPageOf(event.detail.body.primaryUrl.trim());
       this.mirrorJoin = true;
       this.screen = "done";
     } catch (error) {
@@ -2321,7 +2326,7 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.adopt_incomplete":
-        this.#offerReset();
+        this.#offerReset(body);
         return;
     }
     // The server matches a resend by its exact body, and a one-time code changes it, so an adopt
@@ -2330,7 +2335,7 @@ export class SetupApp extends LitElement {
     const stoppedPartway = error.status !== undefined && (await this.#savedAdoptStoppedPartway());
     if (!this.isConnected) return;
     if (stoppedPartway) {
-      this.#offerReset();
+      this.#offerReset(body);
     } else if (code === "setup.operation_conflict") {
       this.provisionMessage = say("shell.operation_conflict");
       this.provisionCanRetry = false;
@@ -2373,9 +2378,11 @@ export class SetupApp extends LitElement {
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
     this.provisionCanReset = false;
+    this.primaryServersUrl = undefined;
   }
 
-  #offerReset(): void {
+  #offerReset(body: AdoptBody): void {
+    this.primaryServersUrl = serversPageOf(body.primaryUrl.trim());
     this.provisionMessage = say("shell.adopt.incomplete");
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
@@ -2888,6 +2895,7 @@ export class SetupApp extends LitElement {
           .invalidField=${this.resetInvalidField}
           .errorMessage=${this.resetError?.()}
           .refusal=${this.resetError}
+          .serversUrl=${this.primaryServersUrl}
           .outcome=${this.resetOutcome && { kind: this.resetOutcome.kind, message: this.resetOutcome.message() }}
         ></setup-reset-screen>`;
       case "done":
@@ -2898,6 +2906,7 @@ export class SetupApp extends LitElement {
           .breakGlassKeyName=${this.breakGlassKeyName}
           .breakGlassKeyInBackups=${this.breakGlassKeyInBackups}
           .mirrorJoin=${this.mirrorJoin}
+          .serversUrl=${this.primaryServersUrl}
           .onboardingIntent=${this.draft.mode}
           .restored=${this.restored}
           .recoveryPackPdf=${this.recoveryPackPdf}

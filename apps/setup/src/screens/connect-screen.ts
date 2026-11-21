@@ -17,6 +17,7 @@ import { SetupApi, type AdoptBody, type PrimaryCertificate } from "../api/client
 import { passwordVisibility, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { serversPageOf } from "../servers-page.js";
 
 export type ConnectField = "primaryUrl" | "email" | "password" | "totp";
 type ConnectForm = Record<ConnectField, string>;
@@ -46,19 +47,6 @@ function originOf(typed: string): string {
   } catch {
     return typed;
   }
-}
-
-/** The dashboard's Servers screen on the main box, or nothing for an address that is not a URL. */
-function serversPageOf(typed: string): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(typed);
-  } catch {
-    return undefined;
-  }
-  return url.protocol === "http:" || url.protocol === "https:"
-    ? `${url.origin}/servers`
-    : undefined;
 }
 
 interface FieldText {
