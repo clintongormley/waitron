@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to
 > implement this plan task by task, and only after the owner has answered the decisions below.
 
-**Status:** PR 1 (Tasks 0–4) built on `feat/advance-manual-route`; PR 2 (Tasks 5–9) not
-started. The owner chose decisions 1 (i) and 6 (i) at 16:36 on the earlier wording
+**Status:** PR 1 (Tasks 0–4) landed as #3983; PR 2 (Tasks 5–9) built on
+`feat/advance-manual-refund`. The owner chose decisions 1 (i) and 6 (i) at 16:36 on the earlier wording
 (`~/waitron-campaign-l/questions.md`, "WATCHER 2026-11-21 16:36"). The watcher, not the owner,
 accepted the corrected decision 1 below and chose decision 2 (ii) at 16:54 ("WATCHER 2026-11-21
 16:54").
