@@ -43,10 +43,11 @@ interface TokenRow {
 
 /**
  * Checks `token` against the row `readRow` finds and returns that row, or `null` when there is no
- * row or the token does not match. When a sighting is due and the read is not passive, the row is
- * read again under the venue's write lock before `recordSighting` runs, so a new token or a removal
- * committed in between refuses, and any other change is what is returned. A full disk refuses only
- * the sighting: the same re-check runs without a write.
+ * row, the token does not match, or `admit` turns the matched row away. `admit` runs before any
+ * sighting is written, so a refused call writes none. When a sighting is due and the read is not
+ * passive, the row is read again under the venue's write lock before `recordSighting` runs, so a
+ * new token or a removal committed in between refuses, and any other change is what is returned. A
+ * full disk refuses only the sighting: the same re-check runs without a write.
  */
 export async function signInWithToken<Row extends TokenRow>(
   db: Database,
@@ -55,11 +56,13 @@ export async function signInWithToken<Row extends TokenRow>(
     readRow: (on: Database | Transaction) => Promise<Row | undefined>;
     recordSighting: (tx: Transaction, seenAt: string) => Promise<void>;
     passive?: boolean;
+    admit?: (row: Row) => Promise<boolean>;
   },
 ): Promise<Row | null> {
-  const { token, readRow, recordSighting } = options;
+  const { token, readRow, recordSighting, admit } = options;
   const row = await readRow(db);
   if (row === undefined || !deviceTokenMatches(token, row.tokenHash)) return null;
+  if (admit !== undefined && !(await admit(row))) return null;
 
   const seenAt = nowIso();
   if (options.passive === true || !sightingDue(row.lastSeenAt, seenAt)) return row;

@@ -4,14 +4,16 @@ import { AppError, steadyNow } from "@waitron/shared";
 
 /**
  * A per-process, in-memory fixed-window counter, one per mounted enrol surface with no per-caller
- * key, checked at the TOP of the handler BEFORE the body is parsed and BEFORE any DB work, so a
- * rejected attempt touches no DB and creates no row. Every consumer throws the SAME
- * `device.join_rate_limited`.
+ * key. Most surfaces check it at the TOP of the handler, BEFORE the body is parsed and BEFORE any
+ * DB work, so a rejected attempt touches no DB; the box-to-box agent route checks it once the
+ * signature verifies, so unsigned traffic cannot use up a box's attempts. Either way a rejected
+ * attempt creates no row. Every consumer throws the SAME `device.join_rate_limited`.
  *
  * It is not the primary guard: the print-agent knock, and outside devMode the device knock, are
- * admitted only while an admin holds the venue's pairing window open, and self-enrolment is
- * loopback-only. It is defence-in-depth against a flood. Per-process rather than a DB
- * attempt-counter, because a DB counter would ADD write load to the unauthenticated path.
+ * admitted only while an admin holds the venue's pairing window open; self-enrolment is
+ * loopback-only; and a box asking for its agent's token must sign the request. It is
+ * defence-in-depth against a flood. Per-process rather than a DB attempt-counter, because a DB
+ * counter would ADD write load to the unauthenticated paths.
  */
 
 export const ENROL_RATE_WINDOW_MS = 60_000;

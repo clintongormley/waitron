@@ -34,7 +34,8 @@ declare module "@waitron/shared" {
     "print_job.moved": Record<string, never>;
     /** No print agent carries this id. `id` is the id looked up. */
     "agent.not_found": { id: string };
-    /** The bearer token did not verify, or the agent is revoked. */
+    /** The bearer token did not verify, the agent is revoked, or the held chart has removed the box
+     * the agent runs on (`apps/server/src/print-agent-session.ts`). */
     "agent.unauthorized": Record<string, never>;
     /** An ongoing dashboard alert: agent `{agent}` has not checked in for several minutes. Not thrown;
      * raised by the printing alert source. */

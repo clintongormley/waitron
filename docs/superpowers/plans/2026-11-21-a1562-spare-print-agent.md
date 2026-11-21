@@ -1,6 +1,17 @@
 # A1562 — the spare box's print agent prints through the main box
 
-Status: plan, for the owner's review. Lane A, 2026-11-21. Nothing is built until the owner says yes.
+Status: approved by the owner on 2026-11-21 and built in branch `feat/a1562-spare-print-agent`. Lane A, 2026-11-21.
+
+As built (2026-11-21), where the code differs from the tasks below: the `.local` lookup is its own
+file (`apps/print-agent/src/local-name-lookup.ts`), listening on port 5353 in the multicast group
+because the box's server answers to the group; it asks again at 250 ms and 1 s, hands every address
+in the answer to the connection, and passes the name to the normal lookup when no answer comes
+within 1.5 s; the main box counts a request against its rate limit only once the signature checks,
+and refuses a request signed by itself; every print agent's sign-in (`requireAgent`,
+`apps/server/src/print-agent-session.ts`) refuses an agent whose box the held chart has removed,
+before it is marked as seen; and an agent stopped after its token was refused asks its own box for
+a new one again, at most every 30 seconds, as does a refused agent whose box, at its loopback
+address, answers as the spare.
 
 ## What the owner asked for
 

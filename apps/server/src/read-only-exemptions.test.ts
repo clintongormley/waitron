@@ -84,6 +84,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/handover/emergency/declare", ["mirror"]],
       ["POST", "/api/node/handover/emergency/preview", ["mirror"]],
       ["POST", "/api/node/backup-settings", ["mirror"]],
+      ["POST", "/api/node/enrol-self", ["mirror"]],
       ["POST", "/api/node/handover/emergency/backup", ["mirror"]],
       ["POST", "/api/node/handover/emergency/followed", ["mirror"]],
       ["POST", "/api/node/handover/emergency/passkey-challenge", ["mirror"]],
@@ -479,6 +480,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         peerStatus: await post(base, "/api/node/peer-status"),
         membership: await handEmptyChart(base),
         offer: await post(base, "/api/node/handover/offer"),
+        enrolSelf: await post(base, "/api/node/enrol-self"),
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         restart: await post(base, "/api/box/restart"),
@@ -494,6 +496,8 @@ describe("each listed route is reached on a real read-only start, and nothing el
         peerStatus: { status: 400, code: "handover.request_invalid" },
         membership: { status: 200, body: { accepted: false } },
         offer: { status: 400, code: "handover.request_invalid" },
+        // Reached: the body names no agent.
+        enrolSelf: { status: 400, code: "management.request_invalid" },
         retire: GATED,
         restart: GATED,
         unlisted: GATED,
@@ -668,6 +672,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
           `/api/node/handover/${MIRROR_OPERATION_ID}/preparation`,
         ),
         handoverActivate: await post(base, `/api/node/handover/${MIRROR_OPERATION_ID}/activate`),
+        enrolSelf: await post(base, "/api/node/enrol-self"),
         unlisted: await post(base, "/management-api/menus"),
         startHandover: await post(base, "/management-api/handover"),
       }).toEqual({
@@ -680,6 +685,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         offer: GATED,
         handoverPreparation: GATED,
         handoverActivate: GATED,
+        enrolSelf: GATED,
         unlisted: GATED,
         startHandover: GATED,
       });

@@ -14,7 +14,8 @@ export type HandoverKind =
   | "return-clash-acceptance"
   | "health"
   | "backup-settings"
-  | "switch-proof";
+  | "switch-proof"
+  | "agent-enrol";
 
 export type HandoverPurpose = `waitron.handover.${HandoverKind}.v1`;
 

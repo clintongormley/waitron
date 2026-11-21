@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import forge from "node-forge";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LookupFunction } from "node:net";
 import { createServerTrustingFetch } from "./server-ca.js";
 
 /** A 2048-bit RSA key pair from Node's native generator; forge's own takes seconds on a busy runner. */
@@ -22,8 +23,12 @@ function rsaKeys(): { publicKey: forge.pki.rsa.PublicKey; privateKey: forge.pki.
   };
 }
 
-/** A CA + a leaf for `commonName`/`127.0.0.1`, returned as PEMs and a usable key. */
-function mintCa(leafCn: string): { caPem: string; serverKeyPem: string; serverCertPem: string } {
+/** A CA + a leaf for `localhost`/`127.0.0.1` (and `dnsName` when given), returned as PEMs and a
+ * usable key. */
+function mintCa(
+  leafCn: string,
+  dnsName?: string,
+): { caPem: string; serverKeyPem: string; serverCertPem: string } {
   const caKeys = rsaKeys();
   const ca = forge.pki.createCertificate();
   ca.publicKey = caKeys.publicKey;
@@ -53,6 +58,7 @@ function mintCa(leafCn: string): { caPem: string; serverKeyPem: string; serverCe
       name: "subjectAltName",
       altNames: [
         { type: 2, value: "localhost" },
+        ...(dnsName === undefined ? [] : [{ type: 2, value: dnsName }]),
         { type: 7, ip: "127.0.0.1" },
       ],
     },
@@ -148,6 +154,41 @@ describe("createServerTrustingFetch", () => {
     expect(res.status).toBe(200);
     expect(responder.calls).toEqual(["http://localhost/ca.crt"]);
     expect(await readFile(join(stateDir, "server-ca.crt"), "utf8")).toBe(material.caPem);
+  });
+
+  it("reaches a .local name through its lookup and still checks the certificate against that name", async () => {
+    const lookup = vi.fn<LookupFunction>((_host, options, callback) => {
+      if (options.all === true) callback(null, [{ address: "127.0.0.1", family: 4 }]);
+      else callback(null, "127.0.0.1", 4);
+    });
+    const named = mintCa("box-1.waitron.local", "box-1.waitron.local");
+    const { server, origin } = await startHttps(named);
+    servers.push(server);
+    const boxOrigin = origin.replace("localhost", "box-1.waitron.local");
+    const trusting = await createServerTrustingFetch({
+      serverUrl: boxOrigin,
+      stateDir,
+      caEndpointFetch: caResponder(named.caPem).fetch,
+      lookup,
+    });
+    const res = await trusting(`${boxOrigin}/x`);
+    expect(res.status).toBe(200);
+    expect(lookup.mock.calls[0]?.[0]).toBe("box-1.waitron.local");
+
+    // The same address with a certificate for another name: valid for 127.0.0.1, wrong for the name.
+    const other = mintCa("other.waitron.local", "other.waitron.local");
+    const otherServer = await startHttps(other);
+    servers.push(otherServer.server);
+    const otherOrigin = otherServer.origin.replace("localhost", "box-1.waitron.local");
+    const otherTrusting = await createServerTrustingFetch({
+      serverUrl: otherOrigin,
+      stateDir: await makeStateDir(),
+      caEndpointFetch: caResponder(other.caPem).fetch,
+      lookup,
+    });
+    await expect(otherTrusting(`${otherOrigin}/x`)).rejects.toMatchObject({
+      cause: { code: "ERR_TLS_CERT_ALTNAME_INVALID" },
+    });
   });
 
   it("rejects a server whose CA was not fetched (verification stays on, not accept-all)", async () => {

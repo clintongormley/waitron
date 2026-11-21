@@ -205,6 +205,38 @@ describe("signInWithToken", () => {
     }
   });
 
+  it("refuses a matching token whose row `admit` turns away, before any sighting is written", async () => {
+    const deviceId = await seed();
+    const recordSighting = vi.fn(stamp(deviceId));
+    const admit = vi.fn(async () => false);
+
+    const row = await signInWithToken(suite.db, {
+      token: TOKEN,
+      readRow: readDevice(deviceId),
+      recordSighting,
+      admit,
+    });
+
+    expect(row).toBeNull();
+    expect(admit).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenHash: hashDeviceToken(TOKEN) }),
+    );
+    expect(recordSighting).not.toHaveBeenCalled();
+    expect(await lastSeen(deviceId)).toBeNull();
+  });
+
+  it("asks `admit` only once the token matches, and signs in a row it accepts", async () => {
+    const deviceId = await seed();
+    const admit = vi.fn(async () => true);
+    const options = { readRow: readDevice(deviceId), recordSighting: stamp(deviceId), admit };
+
+    expect(await signInWithToken(suite.db, { ...options, token: TOKEN + "x" })).toBeNull();
+    expect(admit).not.toHaveBeenCalled();
+    expect(await signInWithToken(suite.db, { ...options, token: TOKEN })).not.toBeNull();
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(await lastSeen(deviceId)).not.toBeNull();
+  });
+
   it("writes a sighting at most once a minute", async () => {
     const deviceId = await seed();
     const recordSighting = vi.fn(stamp(deviceId));

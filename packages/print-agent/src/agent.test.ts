@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgent,
+  SELF_ENROL_RETRY_INTERVAL_MS,
   PAGE_RENEW_INTERVAL_MS,
   PAGE_RENEW_SETTLE_MS,
   PAGE_REPORT_GIVE_UP_MS,
@@ -85,6 +86,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     // Default = refused: the happy path is the manual knock, so only a box that opts in self-enrols.
     // A device (till/mirror) has nothing that self-enrols it, so the loop falls through to join.
     enrolSelf: vi.fn(async () => failR({ kind: "refused" })),
+    mainServer: vi.fn(async () => okR<string | null>(null)),
     joinStatus: vi.fn(async () => okR<JoinStatus>("approved")),
     pullJobs: vi.fn(async () =>
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryExpiresInMs: null }),
@@ -446,6 +448,46 @@ describe("createAgent — phases", () => {
       expect(host.statuses.at(-1)?.phase).toBe("spare_box");
       await expect(agent.cancelNetworkReset()).resolves.toBe(true);
       expect((await agent.setupSnapshot()).resetAt).toBeUndefined();
+    });
+
+    const MAIN = "https://main.local";
+    const followsMain = (over: Partial<AgentClient> = {}) =>
+      client({
+        probeNode: vi.fn(async (url: string) => okR(url === MAIN ? primary : spare)),
+        mainServer: vi.fn(async () => okR(MAIN)),
+        ...over,
+      });
+
+    it("with no token, asks its own box to vouch for it at once, then every 30 s while refused, and never knocks at the main box", async () => {
+      let now = 0;
+      const host = fakeHost({ config: ON_BOX, now: () => now });
+      const c = followsMain();
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+      for (let round = 0; round < 14; round += 1) {
+        now += 2_000;
+        await agent.runOnce();
+      }
+      expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after the refusal: still waiting
+      now += 2_000;
+      await agent.runOnce();
+      expect(c.join).not.toHaveBeenCalled();
+      expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
+      expect(c.enrolSelf).toHaveBeenLastCalledWith(LOCAL, "kitchen-pi");
+      expect(c.pullJobs).not.toHaveBeenCalled();
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "spare_box", lastError: undefined });
+      expect(await host.token()).toBeNull();
+    });
+
+    it("with a token, pulls from the main box its own box names", async () => {
+      const host = fakeHost({ config: ON_BOX, token: "a1.s" });
+      const c = followsMain();
+      await createAgent({ host, client: c }).runOnce();
+      expect(c.mainServer).toHaveBeenCalledWith(LOCAL);
+      expect(c.join).not.toHaveBeenCalled();
+      expect(c.pullJobs).toHaveBeenCalledWith(MAIN, "a1.s", expect.anything());
+      expect(host.statuses.at(-1)).toMatchObject({ phase: "running", current: MAIN });
     });
   });
 
@@ -1085,6 +1127,209 @@ describe("createAgent — on-node self-enrol", () => {
     expect(c.enrolSelf).toHaveBeenCalledTimes(1); // second tick had a token, so it did not self-enrol
     expect(c.joinStatus).not.toHaveBeenCalled(); // `approved` was set, so no status poll
     expect(c.pullJobs).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes pulling after its saved token is refused, once its own box enrols it again", async () => {
+    const loopback = "https://127.0.0.1";
+    const main = "https://main.test";
+    const host = fakeHost({ config: { serverUrl: loopback, name: "spare agent" } });
+    let admitted = true;
+    let serial = 0;
+    const c = client({
+      probeNode: vi.fn(async (url: string) =>
+        okR<NodeProbe>(
+          url === loopback
+            ? { ...primary, nodeId: "spare", acceptingSales: false, standing: "serving-secondary" }
+            : primary,
+        ),
+      ),
+      mainServer: vi.fn(async () => okR(main)),
+      enrolSelf: vi.fn(async () =>
+        admitted ? okR({ token: `agent.secret-${++serial}` }) : failR({ kind: "refused" }),
+      ),
+      pullJobs: vi.fn(async () =>
+        admitted
+          ? okR<PullReply>({
+              nodeId: "n1",
+              servers: [{ url: main, nodeId: "n1" }],
+              jobs: [],
+              discoveryExpiresInMs: null,
+            })
+          : failR({ kind: "unauthorized" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(c.pullJobs).toHaveBeenCalledWith(main, "agent.secret-1", expect.anything());
+    admitted = false;
+    await agent.runOnce();
+    expect(await host.token()).toBeNull();
+    expect(agent.status.phase).toBe("unauthorized");
+    admitted = true;
+    await agent.runOnce();
+    await agent.runOnce();
+    expect({
+      phase: agent.status.phase,
+      enrolments: serial,
+      pulls: vi.mocked(c.pullJobs).mock.calls.length,
+    }).toEqual({ phase: "running", enrolments: 2, pulls: 3 });
+    expect(c.pullJobs).toHaveBeenLastCalledWith(main, "agent.secret-2", expect.anything());
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it("on the spare, asks its own box at once again after new settings, even while a refusal's wait runs", async () => {
+    const loopback = "https://127.0.0.1";
+    let now = 0;
+    const host = fakeHost({ config: { serverUrl: loopback, name: "kitchen-pi" }, now: () => now });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>({ ...primary, acceptingSales: false, standing: "serving-secondary" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+    expect(await agent.configure({ serverUrl: loopback, name: "kitchen-pi" })).toBe(true);
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2);
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it("a spare promoted while a refusal's wait runs never knocks, and self-enrols when the wait ends", async () => {
+    const loopback = "https://127.0.0.1";
+    let now = 0;
+    let promoted = false;
+    const host = fakeHost({ config: { serverUrl: loopback, name: "kitchen-pi" }, now: () => now });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        okR<NodeProbe>(
+          promoted ? primary : { ...primary, acceptingSales: false, standing: "serving-secondary" },
+        ),
+      ),
+      join: vi.fn(async () => okR({ token: "a1.pending", verificationNumber: "07" })),
+      enrolSelf: vi.fn(async () =>
+        promoted ? okR({ token: "id.self" }) : failR({ kind: "refused" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    promoted = true;
+    for (let round = 0; round < 16; round += 1) {
+      now += 2_000;
+      await agent.runOnce();
+    }
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2);
+    expect(await host.token()).toBe("id.self");
+  });
+
+  it.each([
+    ["https://127.0.0.1", "open"],
+    ["https://127.0.0.1", "closed"],
+    [A, "open"],
+    [A, "closed"],
+  ] as const)(
+    "on the main box at %s, never knocks after its server refuses during a waiting start, and self-enrols once it is up (pairing %s)",
+    async (serverUrl, pairing) => {
+      // The waiting start mounts no enrol-self route, and the client reports its 404 as a refusal.
+      let now = 0;
+      let up = false;
+      const host = fakeHost({ config: { serverUrl, name: "kitchen-pi" }, now: () => now });
+      const c = client({
+        probeNode: vi.fn(async () =>
+          okR<NodeProbe>(
+            up ? primary : { ...primary, acceptingSales: false, standing: "serving-primary" },
+          ),
+        ),
+        join: vi.fn(async () =>
+          pairing === "open"
+            ? okR({ token: "a1.pending", verificationNumber: "07" })
+            : failR({ kind: "pairing_closed" }),
+        ),
+        enrolSelf: vi.fn(async () => (up ? okR({ token: "id.self" }) : failR({ kind: "refused" }))),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      up = true;
+      now += 2_000;
+      await agent.runOnce();
+      expect(await host.token()).toBe("id.self"); // on the round its server first answers
+      for (let round = 0; round < 15; round += 1) {
+        now += 2_000;
+        await agent.runOnce();
+      }
+      expect({
+        token: await host.token(),
+        phase: agent.status.phase,
+        enrolSelfCalls: vi.mocked(c.enrolSelf).mock.calls.length,
+        joinCalls: vi.mocked(c.join).mock.calls.length,
+      }).toEqual({ token: "id.self", phase: "running", enrolSelfCalls: 2, joinCalls: 0 });
+    },
+  );
+
+  it("on the main box, asks again on the next round when its own server did not answer at all", async () => {
+    // The agent can start before its box's server: nothing answers the first round, and the next
+    // round must self-enrol rather than knock at a server that has just come up.
+    let up = false;
+    const host = fakeHost({ config: CONFIG, now: () => 0 });
+    const c = client({
+      probeNode: vi.fn(async () =>
+        up ? okR(primary) : failR({ kind: "unreachable", detail: "ECONNREFUSED" }),
+      ),
+      enrolSelf: vi.fn(async () =>
+        up ? okR({ token: "id.secret" }) : failR({ kind: "unreachable", detail: "ECONNREFUSED" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    up = true;
+    await agent.runOnce();
+    expect(await host.token()).toBe("id.secret");
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["its own box refuses", failR({ kind: "refused" })],
+    ["nothing answers on loopback", failR({ kind: "unreachable", detail: "ECONNREFUSED" })],
+  ])("a halted agent stays unauthorized and never knocks when %s", async (_case, answer) => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const c = client({
+      pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })),
+      enrolSelf: vi.fn(async () => answer),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let round = 0; round < 4; round++) await agent.runOnce();
+    expect(agent.status.phase).toBe("unauthorized");
+    expect(await host.token()).toBeNull();
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.pullJobs).toHaveBeenCalledTimes(1);
+  });
+
+  it(`a halted agent asks its own box at once, then at most every ${SELF_ENROL_RETRY_INTERVAL_MS / 1000} s`, async () => {
+    expect(SELF_ENROL_RETRY_INTERVAL_MS).toBe(30_000);
+    let now = 0;
+    const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+    const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce(); // the token is refused: halted
+    expect(c.enrolSelf).toHaveBeenCalledTimes(0);
+    now += 2_000;
+    await agent.runOnce(); // the first round after the halt asks
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+    for (let round = 0; round < 14; round++) {
+      now += 2_000;
+      await agent.runOnce();
+    }
+    expect(now).toBe(30_000);
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after that ask: still waiting
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
+    expect(agent.status.phase).toBe("unauthorized");
   });
 });
 

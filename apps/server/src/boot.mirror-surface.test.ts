@@ -313,6 +313,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
   "/api/node/handover/emergency/declare": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/preview": { status: 403, code: "node.operation_page_required" },
   "/api/node/backup-settings": { status: 400, code: "spare.settings_invalid" },
+  "/api/node/enrol-self": { status: 403, code: "node.enrol_not_local" },
   "/api/node/handover/emergency/backup": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/followed": { status: 403, code: "node.operation_page_required" },
   "/api/node/handover/emergency/passkey-challenge": {
@@ -658,6 +659,21 @@ describe("a spare's network surface", () => {
     },
     60_000,
   );
+
+  it("a spare's enrol-self asks boot's from-this-box check", async () => {
+    const fromBox = { current: false };
+    const { server, app, stateDir } = await boot("mirror", { fromBox });
+    try {
+      const enrol = () => answerOf(app, "POST", "/api/node/enrol-self");
+      expect(await enrol()).toEqual({ status: 403, code: "node.enrol_not_local" });
+      fromBox.current = true;
+      // Past the check, the empty body is what refuses.
+      expect(await enrol()).toEqual({ status: 400, code: "management.request_invalid" });
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("a main box's connection repair is served from another address, as before", async () => {
     const { server, app, stateDir } = await boot("primary", { fromBox: { current: false } });

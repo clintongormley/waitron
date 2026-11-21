@@ -1134,8 +1134,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // Self-enrol does not reactivate a revoked row, so without this a mistaken revoke of the box's own
-  // agent would stop its printing for good.
+  // Self-enrol does not reactivate a revoked row, so without this a mistaken revoke of a box's own
+  // agent, the spare's included, would stop its printing for good.
   app.post("/management-api/print-agents/:id/allow", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

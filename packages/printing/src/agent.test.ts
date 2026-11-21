@@ -105,8 +105,13 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 describe("authenticateAgent", () => {
   /** Mint an approved `print_agents` row directly (enrolment is join-and-accept, in apps/server) and
    * return its bearer token — the `${agentId}.${secret}` shape `authenticateAgent` parses. */
-  async function enrolled(): Promise<{ agentId: string; token: string }> {
+  async function enrolled(nodeId?: string): Promise<{ agentId: string; token: string }> {
     await setup();
+    return minted(nodeId);
+  }
+
+  /** `enrolled` without seeding the venue, for a second agent in one test. */
+  async function minted(nodeId?: string): Promise<{ agentId: string; token: string }> {
     const secret = randomBytes(32).toString("base64url");
     const [row] = await suite.db
       .insert(printAgents)
@@ -114,6 +119,7 @@ describe("authenticateAgent", () => {
         name: "Auth agent",
         tokenHash: hashDeviceToken(secret),
         active: true,
+        ...(nodeId === undefined ? {} : { nodeId }),
       })
       .returning({ id: printAgents.id });
     const id = row!.id;
@@ -163,6 +169,34 @@ describe("authenticateAgent", () => {
     const written = await lastSeenAt(agentId);
     expect(written).not.toBe(stale);
     expect(Date.parse(written!)).toBeGreaterThan(Date.parse(stale));
+  });
+
+  it("refuses an agent whose box `admits` turns away, and stamps no sighting", async () => {
+    const nodeId = randomUUID();
+    const { agentId, token } = await enrolled(nodeId);
+    const admits = vi.fn(async () => false);
+    expect(await codeOf(() => authenticateAgent(suite.db, token, { admits }))).toBe(
+      "agent.unauthorized",
+    );
+    expect(admits).toHaveBeenCalledWith(nodeId);
+    expect(await lastSeenAt(agentId)).toBeNull();
+  });
+
+  it("signs in an agent whose box `admits` accepts, and never asks about an agent on no box", async () => {
+    const nodeId = randomUUID();
+    const boxed = await enrolled(nodeId);
+    const unboxed = await minted();
+    const admits = vi.fn(async () => true);
+    expect(await authenticateAgent(suite.db, boxed.token, { admits })).toEqual({
+      agentId: boxed.agentId,
+    });
+    expect(admits).toHaveBeenCalledWith(nodeId);
+    admits.mockClear();
+    admits.mockImplementation(async () => false);
+    expect(await authenticateAgent(suite.db, unboxed.token, { admits })).toEqual({
+      agentId: unboxed.agentId,
+    });
+    expect(admits).not.toHaveBeenCalled();
   });
 
   it("a wrong token (tampered secret) → agent.unauthorized", async () => {

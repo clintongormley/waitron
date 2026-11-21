@@ -107,7 +107,7 @@ En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente.
 
 Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente marcado como **En este servidor**. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
 
-Un agente marcado **En otro servidor** pertenece a otro servidor del local, como el de reserva. Si ese servidor sigue en uso, conserva el agente: vuelve a imprimir cuando ese servidor pase a ser el principal.
+Un agente marcado **En otro servidor** pertenece a otro servidor del local, como el de reserva. Imprime a través del servidor principal, así que consérvalo mientras ese servidor siga en uso.
 
 Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createClient,
   DEFAULT_TIMEOUT_MS,
+  ENROL_SELF_TIMEOUT_MS,
   isBluetoothAddress,
   isBluetoothPin,
   PAGE_DOCUMENT_TIMEOUT_MS,
@@ -230,6 +231,43 @@ describe("createClient — join", () => {
   });
 });
 
+describe("createClient — mainServer", () => {
+  it("GETs /api/node/main on the given origin and returns the main box's address", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(200, { mainUrl: "https://box.local" }));
+    const client = createClient({ fetch: fetchImpl });
+    expect(await client.mainServer("https://127.0.0.1")).toEqual({
+      ok: true,
+      value: "https://box.local",
+    });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe("https://127.0.0.1/api/node/main");
+    expect(init.method).toBe("GET");
+  });
+
+  it("returns null when the spare does not know the main box", async () => {
+    const client = createClient({ fetch: stub(200, { mainUrl: null }) });
+    expect(await client.mainServer("https://127.0.0.1")).toEqual({ ok: true, value: null });
+  });
+
+  it("folds a body without a string or null mainUrl into bad_reply", async () => {
+    for (const body of [{}, { mainUrl: 7 }]) {
+      const client = createClient({ fetch: stub(200, body) });
+      expect(await client.mainServer("https://127.0.0.1")).toMatchObject({
+        ok: false,
+        failure: { kind: "bad_reply" },
+      });
+    }
+  });
+
+  it("folds a 404 from a box that is not a spare into bad_reply", async () => {
+    const client = createClient({ fetch: stub(404, { code: "not_found" }) });
+    expect(await client.mainServer("https://127.0.0.1")).toMatchObject({
+      ok: false,
+      failure: { kind: "bad_reply" },
+    });
+  });
+});
+
 describe("createClient — enrolSelf", () => {
   it("enrolSelf returns the token on 201", async () => {
     const client = createClient({ fetch: stub(201, { token: "id.secret" }) });
@@ -288,6 +326,33 @@ describe("createClient — enrolSelf", () => {
       ok: false,
       failure: { kind: "unreachable", detail: "aborted" },
     });
+  });
+
+  it("enrolSelf waits ENROL_SELF_TIMEOUT_MS, 10 seconds, before giving up", async () => {
+    vi.useFakeTimers();
+    try {
+      let aborted = false;
+      const client = createClient({
+        fetch: vi.fn(
+          (_url: RequestInfo | URL, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => {
+                aborted = true;
+                reject(new Error("aborted"));
+              });
+            }),
+        ),
+      });
+      const enrolled = client.enrolSelf("https://127.0.0.1", "box");
+      await vi.advanceTimersByTimeAsync(ENROL_SELF_TIMEOUT_MS - 1);
+      expect(aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(aborted).toBe(true);
+      expect(await enrolled).toMatchObject({ ok: false, failure: { kind: "unreachable" } });
+      expect(ENROL_SELF_TIMEOUT_MS).toBe(10_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("enrolSelf folds a network error into a Failure", async () => {

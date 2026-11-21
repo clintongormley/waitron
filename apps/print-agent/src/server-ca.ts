@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import type { LookupFunction } from "node:net";
 import { join } from "node:path";
 import { rootCertificates } from "node:tls";
 import { Agent } from "undici";
+import { createLocalNameLookup } from "./local-name-lookup.js";
 
 /** The TLS verification failures a reimaged box (new self-signed CA) produces, as undici surfaces them
  * on `error.cause.code`. */
@@ -27,6 +29,7 @@ export interface ServerTrustOptions {
   now?: () => number;
   caFetchTimeoutMs?: number;
   log?: (msg: string, fields?: Record<string, unknown>) => void;
+  lookup?: LookupFunction;
 }
 
 function isVerifyError(error: unknown): boolean {
@@ -53,6 +56,7 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
   const now = opts.now ?? ((): number => performance.now());
   const caFetchTimeoutMs = opts.caFetchTimeoutMs ?? DEFAULT_CA_FETCH_TIMEOUT_MS;
   const log = opts.log ?? ((): void => {});
+  const lookup = opts.lookup ?? createLocalNameLookup();
   const caPath = join(opts.stateDir, CA_FILE);
   const caUrl = opts.serverUrl === undefined ? undefined : caUrlFor(opts.serverUrl);
 
@@ -67,7 +71,8 @@ export async function createServerTrustingFetch(opts: ServerTrustOptions): Promi
     dispatcher =
       caPem === undefined
         ? undefined
-        : new Agent({ connect: { ca: [...rootCertificates, caPem] } });
+        : // The lookup only finds the address; TLS still checks the certificate against the name.
+          new Agent({ connect: { ca: [...rootCertificates, caPem], lookup } });
   };
 
   // Persisted CA first, so a restart trusts before the landing listener is even reachable.

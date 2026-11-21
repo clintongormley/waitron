@@ -171,6 +171,132 @@ describe("Router", () => {
     expect((await router.probe()).configuredIsSpare).toBeFalsy();
   });
 
+  describe("when its own box answers as the spare", () => {
+    const MAIN = "https://main.local";
+    const spare: Partial<NodeProbe> = { acceptingSales: false, standing: "serving-secondary" };
+
+    it("asks its own box for the main box, adds it after the boxes it knew and follows it in the same round", async () => {
+      const mainServer = vi.fn(async (): Promise<Result<string | null>> => ({
+        ok: true,
+        value: `${MAIN}/`,
+      }));
+      const router = new Router({
+        configuredUrl: LOCAL,
+        environment: "preproduction",
+        initialServers: [{ url: B, nodeId: "b" }],
+        probe: probeFrom({ [LOCAL]: spare, [B]: "down", [MAIN]: { acceptingSales: true } }),
+        mainServer,
+      });
+      expect(await router.probe()).toEqual({
+        moved: true,
+        anyAccepting: true,
+        configuredIsSpare: true,
+      });
+      expect(mainServer).toHaveBeenCalledWith(LOCAL);
+      expect(router.current).toBe(MAIN);
+      expect(router.servers().map(({ url }) => url)).toEqual([LOCAL, B, MAIN]);
+      expect(router.servers()[1]?.nodeId).toBe("b");
+
+      expect(await router.probe()).toEqual({
+        moved: false,
+        anyAccepting: true,
+        configuredIsSpare: true,
+      });
+      expect(router.servers().map(({ url }) => url)).toEqual([LOCAL, B, MAIN]);
+    });
+
+    it("asks for the main box only in a round where no box it knows accepts", async () => {
+      const table: Record<string, Partial<NodeProbe> | "down"> = {
+        [LOCAL]: spare,
+        [MAIN]: { acceptingSales: true },
+      };
+      const mainServer = vi.fn(async (): Promise<Result<string | null>> => ({
+        ok: true,
+        value: MAIN,
+      }));
+      const router = new Router({
+        configuredUrl: LOCAL,
+        environment: "preproduction",
+        probe: probeFrom(table),
+        mainServer,
+      });
+      for (let round = 0; round < 4; round++) await router.probe();
+      expect(mainServer).toHaveBeenCalledTimes(1);
+      expect(router.current).toBe(MAIN);
+
+      table[MAIN] = "down";
+      expect(await router.probe()).toEqual({
+        moved: false,
+        anyAccepting: false,
+        configuredIsSpare: true,
+      });
+      expect(mainServer).toHaveBeenCalledTimes(2);
+    });
+
+    it("never follows a main box it was told of that answers another environment", async () => {
+      const router = new Router({
+        configuredUrl: LOCAL,
+        environment: "preproduction",
+        probe: probeFrom({
+          [LOCAL]: spare,
+          [MAIN]: { acceptingSales: true, environment: "production" },
+        }),
+        mainServer: vi.fn(async (): Promise<Result<string | null>> => ({ ok: true, value: MAIN })),
+      });
+      expect(await router.probe()).toEqual({
+        moved: false,
+        anyAccepting: false,
+        configuredIsSpare: true,
+      });
+      expect(router.current).toBe(LOCAL);
+      expect(router.servers().find((s) => s.url === MAIN)?.state).toBe("standby");
+    });
+
+    it("goes back to its own box once that box answers as the main one", async () => {
+      const table: Record<string, Partial<NodeProbe> | "down"> = {
+        [LOCAL]: spare,
+        [MAIN]: { acceptingSales: true, term: 1 },
+      };
+      const mainServer = vi.fn(async (): Promise<Result<string | null>> => ({
+        ok: true,
+        value: MAIN,
+      }));
+      const router = new Router({
+        configuredUrl: LOCAL,
+        environment: "preproduction",
+        probe: probeFrom(table),
+        mainServer,
+      });
+      await router.probe();
+      expect(router.current).toBe(MAIN);
+
+      table[LOCAL] = { acceptingSales: true, term: 2, standing: "serving-primary" };
+      table[MAIN] = { acceptingSales: false, standing: "serving-secondary" };
+      expect(await router.probe()).toEqual({ moved: true, anyAccepting: true });
+      expect(router.current).toBe(LOCAL);
+      expect(mainServer).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["does not know the main box", { ok: true, value: null }],
+      ["names something that is not an http address", { ok: true, value: "mailto:x@y" }],
+      ["cannot be asked", { ok: false, failure: { kind: "unreachable", detail: "x" } }],
+    ] as const)("keeps today's spare round when its own box %s", async (_label, answer) => {
+      const router = new Router({
+        configuredUrl: LOCAL,
+        environment: "preproduction",
+        probe: probeFrom({ [LOCAL]: spare }),
+        mainServer: vi.fn(async (): Promise<Result<string | null>> => answer),
+      });
+      expect(await router.probe()).toEqual({
+        moved: false,
+        anyAccepting: false,
+        configuredIsSpare: true,
+      });
+      expect(router.servers().map(({ url }) => url)).toEqual([LOCAL]);
+    });
+  });
+
   it("merge never drops the configured url, dedupes by origin and drops non-http urls", () => {
     const router = new Router({ configuredUrl: A, probe: probeFrom({}) });
     router.merge([

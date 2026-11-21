@@ -688,7 +688,8 @@ export async function endReturningRequest(
 }
 
 /**
- * Enrol THIS node's own print agent. Idempotent per node: a node that has lost its token re-asks,
+ * Enrol the print agent running on box `nodeId`: this box's own over loopback, or a box its chart
+ * lists through `print-agent-enrol-api.ts`. Idempotent per box: a box that has lost its token re-asks,
  * and this refreshes the existing row's token, so the agent id is stable and its printer bindings
  * survive. A REVOKED row is refused with `device.join_revoked`, never reactivated, so a deliberate
  * revoke sticks. The token has the accept shape `${agentId}.${secret}`.

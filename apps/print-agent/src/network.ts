@@ -101,6 +101,43 @@ interface SrvRecord {
   target: string;
 }
 
+/** A one-question mDNS query for `name`'s A record. */
+export function buildAddressQuery(name: string): Buffer {
+  const header = Buffer.alloc(12);
+  header.writeUInt16BE(1, 4);
+  const parts: Buffer[] = [header];
+  for (const label of name.replace(/\.$/, "").split(".")) {
+    const b = Buffer.from(label, "ascii");
+    parts.push(Buffer.from([b.length]), b);
+  }
+  parts.push(Buffer.from([0, 0, TYPE_A, 0, 1]));
+  return Buffer.concat(parts);
+}
+
+/** Every IPv4 address `packet` gives for `name`, in any section and in the packet's order; none
+ * when the packet is broken anywhere. */
+export function parseAddressAnswers(packet: Buffer, name: string): string[] {
+  try {
+    if (packet.length < 12) return [];
+    const r: Reader = { buf: packet, offset: 12 };
+    const questions = packet.readUInt16BE(4);
+    for (let i = 0; i < questions; i++) readQuestion(r);
+    const total = packet.readUInt16BE(6) + packet.readUInt16BE(8) + packet.readUInt16BE(10);
+    const wanted = key(name);
+    const addresses: string[] = [];
+    for (let i = 0; i < total; i++) {
+      const rec = readRecord(r);
+      if (rec.type === TYPE_A && rec.rdata.length === 4 && key(rec.name) === wanted) {
+        const address = rec.rdata.join(".");
+        if (!addresses.includes(address)) addresses.push(address);
+      }
+    }
+    return addresses;
+  } catch {
+    return [];
+  }
+}
+
 export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
   try {
     if (packet.length < 12) return [];

@@ -264,6 +264,7 @@ import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountPrintAgentEnrolApi } from "./print-agent-enrol-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
@@ -3013,14 +3014,30 @@ async function bootServer(
     },
     log,
   );
-  // Deliberately outside the `!fencedOrMirror` block: on such a node the refusal (from the read-only
-  // gate, or `isPrimary` for a node the gate does not cover) sends the agent to the manual path.
+  // Deliberately outside the `!fencedOrMirror` block: a spare asks its main box for its agent's
+  // token, and any other such node refuses.
+  const enrolAuthority =
+    isMirror && !fenced ? await readVenueAuthority(config.stateDir) : undefined;
   mountNodeEnrolApi(
     app,
     {
       db,
       nodeId: tradingContext.nodeId,
       isPrimary: isSingletonPrimary && !fencedOrMirror,
+      requestProvenFromBox: seams.requestProvenFromBox,
+      ...(isMirror && !fenced
+        ? {
+            spare: {
+              node: store.node,
+              ring,
+              exchange: {
+                timeoutMs: 5_000,
+                authorityOf: () => enrolAuthority,
+                lookup: seams.boxLookup,
+              },
+            },
+          }
+        : {}),
     },
     log,
   );
@@ -3051,6 +3068,11 @@ async function bootServer(
     log,
   );
   mountHandoverStatusApi(app, peerDeps, log);
+  mountPrintAgentEnrolApi(
+    app,
+    { ...peerDeps, isPrimary: isSingletonPrimary && !fencedOrMirror },
+    log,
+  );
   const handoverDestinationDuty = await startHandoverDestinationDuty({
     ...peerDeps,
     stateDir: config.stateDir,

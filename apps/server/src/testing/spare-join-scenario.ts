@@ -21,6 +21,7 @@ import {
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { authenticateAgent } from "@waitron/printing";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
 import { nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
@@ -121,6 +122,8 @@ export const MIRROR_WAIT_MS = 60_000;
 const SETTINGS_WAIT_MS = 10_000;
 const SETTINGS_CHECK_MS = 1_000;
 const SETTINGS_RETRY_MS = 2_000;
+// S's request to M for its print agent's token stops after 5 seconds.
+const ENROL_MS = 10_000;
 export const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
   9 * BOOT_MS +
@@ -130,6 +133,7 @@ export const SPARE_JOIN_SCENARIO_MS =
   LINK_WAIT_MS +
   COPY_WAIT_MS +
   MIRROR_WAIT_MS +
+  ENROL_MS +
   UNTIMED_MS;
 
 export const SPARE_JOIN_PHASES = [
@@ -143,6 +147,7 @@ export const SPARE_JOIN_PHASES = [
   "start-check",
   "loopback-only",
   "backup-settings",
+  "spare-print-agent",
 ] as const;
 export type SpareJoinPhase = (typeof SPARE_JOIN_PHASES)[number];
 export type SpareJoinEvent = StageEvent<SpareJoinPhase>;
@@ -917,6 +922,33 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const keyLines = log.filter((line) => keys.some((key) => line.includes(key)));
     expect(keyLines).toEqual([]);
     expect(keys).toHaveLength(4);
+
+    clock.begin("spare-print-agent");
+    // The test's request reaches S from loopback, as S's own print agent's does.
+    const enrolled = await fetch(`${urlS}/api/node/enrol-self`, {
+      ...viaM,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "spare agent" }),
+    });
+    const enrolBody = (await enrolled.json()) as { token?: unknown };
+    expect(enrolled.status, JSON.stringify(enrolBody)).toBe(201);
+    expect(enrolBody.token).toEqual(expect.any(String));
+    const token = enrolBody.token as string;
+    const agentM = await readOutside(dirsM.venue, (store) => authenticateAgent(store.venue, token));
+    expect(
+      firstRowIn(dirsM.venue, "select node_id from print_agents where id = ?", agentM.agentId)
+        ?.node_id,
+    ).toBe(nodeIdS);
+    const pulled = await fetch(`${urlM}/print-api/agent/jobs`, {
+      ...viaM,
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({}),
+    });
+    const pullBody = (await pulled.json()) as { nodeId?: unknown; jobs?: unknown };
+    expect(pulled.status, JSON.stringify(pullBody)).toBe(200);
+    expect(pullBody).toMatchObject({ nodeId: m.nodeId, jobs: [] });
     clock.end("ok");
   } catch (error) {
     clock.end("failed");
