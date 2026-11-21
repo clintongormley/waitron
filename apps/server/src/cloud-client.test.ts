@@ -288,9 +288,10 @@ it("lets the dashboard start its own sign-in if the installer left Cloud before 
 });
 
 it.each([
-  { failure: "expired", provisional: false },
-  { failure: "signed out", provisional: true },
-])("uses a fresh dashboard sign-in after setup $failure", async ({ failure, provisional }) => {
+  { failure: "expired before save", provisional: false, beforeSave: true },
+  { failure: "expired after save", provisional: false, beforeSave: false },
+  { failure: "signed out", provisional: true, beforeSave: false },
+])("uses a fresh dashboard sign-in after setup $failure", async ({ provisional, beforeSave }) => {
   const f = await installedSignInFixture(true, provisional);
   try {
     const setup = f.client();
@@ -302,11 +303,15 @@ it.each([
       { requestId: original.get("request_id")!, state: original.get("state")!, code: f.code },
       f.authorize,
     );
-    f.expire();
-    if (failure === "expired") vi.setSystemTime(Date.now() + 600_001);
+    const invalidateCloudSignIn = () => {
+      f.expire();
+      if (!provisional) vi.setSystemTime(Date.now() + 600_001);
+    };
+    if (beforeSave) invalidateCloudSignIn();
     await setup.publishSetupSignIn(setupBinding, f.nodeId);
+    if (!beforeSave) invalidateCloudSignIn();
     const dashboard = f.restartAsPublished();
-    if (failure === "signed out")
+    if (provisional)
       await expect(dashboard.refresh()).rejects.toMatchObject({
         code: "cloud.request_unavailable",
       });
@@ -369,7 +374,8 @@ it("finishes a still-current published setup sign-in when the dashboard connects
     await setup.publishSetupSignIn(binding, f.nodeId);
     const dashboard = f.restartAsPublished();
 
-    await expect(dashboard.startSignIn(f.binding, f.authorize)).resolves.toEqual({});
+    const manager = { tab: randomUUID(), session: randomUUID() };
+    await expect(dashboard.startSignIn(manager, f.authorize)).resolves.toEqual({});
     expect(f.requests.map((request) => request[2])).toEqual([
       "start",
       "redeem",
