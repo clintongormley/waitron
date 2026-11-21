@@ -351,9 +351,9 @@ const FAILURE_REASON_TEXT: Readonly<Record<BluetoothFailureReason, StringKey>> =
 
 const BLUETOOTH_UNAVAILABLE_TEXT: Readonly<Record<BluetoothUnavailableReason, StringKey>> = {
   no_controller: "printers.bluetooth_unavailable.no_controller",
-  bluez_not_answering: "printers.bluetooth_unavailable.service",
-  failed: "printers.bluetooth_unavailable.service",
-  dbus_unreachable: "printers.bluetooth_unavailable.not_allowed",
+  bluez_not_answering: "printers.bluetooth_unavailable.not_enabled",
+  failed: "printers.bluetooth_unavailable.not_enabled",
+  dbus_unreachable: "printers.bluetooth_unavailable.not_enabled",
 };
 
 const FAILURE_GENERAL_TEXT: Record<BluetoothCommandStatus["kind"], StringKey> = {
@@ -5309,7 +5309,7 @@ export class PrintersScreen extends LitElement {
                 agent: name,
                 // A code added to the agent after this dashboard was built still reads as a sentence.
                 reason: t(
-                  BLUETOOTH_UNAVAILABLE_TEXT[state] ?? "printers.bluetooth_unavailable.service",
+                  BLUETOOTH_UNAVAILABLE_TEXT[state] ?? "printers.bluetooth_unavailable.not_enabled",
                 ),
               })}
             </p>`

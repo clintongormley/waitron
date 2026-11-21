@@ -1123,11 +1123,9 @@ export const en = {
   "printers.preview_incomplete": "Some content could not be previewed.",
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
-  "printers.bluetooth_unavailable": "Bluetooth printers can't be found through {agent}: {reason}",
-  "printers.bluetooth_unavailable.no_controller":
-    "its computer shows no Bluetooth adapter. Check that it has one.",
-  "printers.bluetooth_unavailable.service": "its computer's Bluetooth service isn't working.",
-  "printers.bluetooth_unavailable.not_allowed": "its computer isn't letting Waitron use Bluetooth.",
+  "printers.bluetooth_unavailable": "{agent}: {reason}",
+  "printers.bluetooth_unavailable.no_controller": "No Bluetooth adapter found.",
+  "printers.bluetooth_unavailable.not_enabled": "Bluetooth not enabled.",
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
@@ -5692,12 +5690,9 @@ export const es: Record<StringKey, string> = {
   "printers.preview_incomplete": "No se ha podido mostrar parte del contenido.",
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
   "printers.discovery_hint": "Buscando impresoras de red, USB y Bluetooth.",
-  "printers.bluetooth_unavailable":
-    "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}",
-  "printers.bluetooth_unavailable.no_controller":
-    "su equipo no muestra ningún adaptador Bluetooth. Comprueba que tenga uno.",
-  "printers.bluetooth_unavailable.service": "el servicio Bluetooth de su equipo no funciona.",
-  "printers.bluetooth_unavailable.not_allowed": "su equipo no permite que Waitron use Bluetooth.",
+  "printers.bluetooth_unavailable": "{agent}: {reason}",
+  "printers.bluetooth_unavailable.no_controller": "No se ha encontrado ningún adaptador Bluetooth.",
+  "printers.bluetooth_unavailable.not_enabled": "Bluetooth no activado.",
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",

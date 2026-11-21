@@ -7971,9 +7971,9 @@ describe("printers-screen Bluetooth pairing", () => {
   describe("says why an agent cannot look for Bluetooth printers", () => {
     const reasonKey = {
       no_controller: "printers.bluetooth_unavailable.no_controller",
-      bluez_not_answering: "printers.bluetooth_unavailable.service",
-      failed: "printers.bluetooth_unavailable.service",
-      dbus_unreachable: "printers.bluetooth_unavailable.not_allowed",
+      bluez_not_answering: "printers.bluetooth_unavailable.not_enabled",
+      failed: "printers.bluetooth_unavailable.not_enabled",
+      dbus_unreachable: "printers.bluetooth_unavailable.not_enabled",
     } as const satisfies Record<string, StringKey>;
     const mountWithAgents = (rows: PrintAgentRow[]) =>
       mountPairing(discovered, { listAgents: vi.fn().mockResolvedValue(rows) });
@@ -8000,7 +8000,7 @@ describe("printers-screen Bluetooth pairing", () => {
       });
     }
 
-    it("gives a reason this dashboard does not know the service wording", async () => {
+    it("gives a reason this dashboard does not know the not-enabled wording", async () => {
       const { el } = await mountWithAgents([
         { ...agents[0]!, bluetooth: "adapter_on_fire" as PrintAgentRow["bluetooth"] },
       ]);
@@ -8010,7 +8010,7 @@ describe("printers-screen Bluetooth pairing", () => {
           "bluetooth-unavailable-a1",
           fill("printers.bluetooth_unavailable", {
             agent: "Kitchen agent",
-            reason: t("printers.bluetooth_unavailable.service"),
+            reason: t("printers.bluetooth_unavailable.not_enabled"),
           }),
         ],
       ]);
@@ -8045,7 +8045,7 @@ describe("printers-screen Bluetooth pairing", () => {
           "bluetooth-unavailable-a1",
           fill("printers.bluetooth_unavailable", {
             agent: "Kitchen agent",
-            reason: t("printers.bluetooth_unavailable.not_allowed"),
+            reason: t("printers.bluetooth_unavailable.not_enabled"),
           }),
         ],
         [
@@ -8058,31 +8058,17 @@ describe("printers-screen Bluetooth pairing", () => {
       ]);
     });
 
-    it("uses the brief's words in both languages", () => {
-      expect(en["printers.bluetooth_unavailable"]).toBe(
-        "Bluetooth printers can't be found through {agent}: {reason}",
-      );
-      expect(es["printers.bluetooth_unavailable"]).toBe(
-        "No se pueden encontrar impresoras Bluetooth a través de {agent}: {reason}",
-      );
+    it("uses the owner's words in both languages", () => {
+      expect(en["printers.bluetooth_unavailable"]).toBe("{agent}: {reason}");
+      expect(es["printers.bluetooth_unavailable"]).toBe("{agent}: {reason}");
       expect(en["printers.bluetooth_unavailable.no_controller"]).toBe(
-        "its computer shows no Bluetooth adapter. Check that it has one.",
+        "No Bluetooth adapter found.",
       );
       expect(es["printers.bluetooth_unavailable.no_controller"]).toBe(
-        "su equipo no muestra ningún adaptador Bluetooth. Comprueba que tenga uno.",
+        "No se ha encontrado ningún adaptador Bluetooth.",
       );
-      expect(en["printers.bluetooth_unavailable.service"]).toBe(
-        "its computer's Bluetooth service isn't working.",
-      );
-      expect(es["printers.bluetooth_unavailable.service"]).toBe(
-        "el servicio Bluetooth de su equipo no funciona.",
-      );
-      expect(en["printers.bluetooth_unavailable.not_allowed"]).toBe(
-        "its computer isn't letting Waitron use Bluetooth.",
-      );
-      expect(es["printers.bluetooth_unavailable.not_allowed"]).toBe(
-        "su equipo no permite que Waitron use Bluetooth.",
-      );
+      expect(en["printers.bluetooth_unavailable.not_enabled"]).toBe("Bluetooth not enabled.");
+      expect(es["printers.bluetooth_unavailable.not_enabled"]).toBe("Bluetooth no activado.");
     });
   });
 
