@@ -213,9 +213,7 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupGoto(this, "venue");
   }
 
-  #back(): void {
-    dispatchSetupGoto(this, "mode");
-  }
+  @property({ attribute: false }) backScreen: "live-source" | "mode" = "mode";
 
   #field(key: AdminField, invalid: boolean, type = "text"): TemplateResult {
     const text = FIELD_TEXT[key];
@@ -285,7 +283,11 @@ export class SetupAdminScreen extends LitElement {
       ${field("displayName")} ${field("email", "email")}
       <div class="pair">${field("password", "password")} ${field("pin", "password")}</div>
       <wt-form-actions .error=${errors.size > 0 ? t("admin.fix_fields") : (this.refusal ?? "")}>
-        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+        <wt-button
+          variant="ghost"
+          slot="cancel"
+          data-test="back"
+          @click=${() => dispatchSetupGoto(this, this.backScreen)}
           >${t("admin.back")}</wt-button
         >
         <wt-button

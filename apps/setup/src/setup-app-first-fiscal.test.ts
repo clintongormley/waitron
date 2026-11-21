@@ -707,7 +707,9 @@ it("abandons an unconsumed attempt explicitly and collects fresh details before 
     nodeId: "8319e8c4-f671-45bf-bdd2-df3d99118c28",
     administratorId: "c3ef72ed-f19b-4f85-8eef-413843ed8475",
   };
+  returnFromCloud("signed-in");
   const { app, requests } = await mount({
+    ...cloudRehearsal,
     intercept(path) {
       if (path.endsWith("/abandon")) {
         abandoned = true;
@@ -719,10 +721,11 @@ it("abandons an unconsumed attempt explicitly and collects fresh details before 
           capability: "B".repeat(43),
           ownerGeneration: 1,
         });
+      return cloudRehearsal.intercept(path);
     },
   });
-  await liveVenue(app);
-  await screen(app, "cert");
+  await completeCloudVenue(app);
+  await screen(app, "first-setup");
   emit(app, "setup-goto", { screen: "venue" });
   const owner = await screen(app, "first-owner");
   expect(
@@ -731,12 +734,16 @@ it("abandons an unconsumed attempt explicitly and collects fresh details before 
   owner.querySelector<HTMLElement>("[data-test=abandon-attempt]")!.click();
   await expect.poll(() => owner.querySelector("[data-test=replace-attempt]")).not.toBeNull();
   owner.querySelector<HTMLElement>("[data-test=replace-attempt]")!.click();
-  await screen(app, "admin");
+  const admin = await screen(app, "admin");
+  expect(
+    admin.shadowRoot!.querySelector("[data-test=password]")!.shadowRoot!.querySelector("input")!
+      .required,
+  ).toBe(true);
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });
   await screen(app, "venue");
   emit(app, "setup-advance");
-  await screen(app, "cert");
+  await screen(app, "first-setup");
   expect(requests.filter((request) => request.path.endsWith("/claim"))).toHaveLength(2);
   expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.attemptId).toBe(
     replacement.attemptId,
@@ -960,31 +967,45 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
   }
 });
 
-it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
+const cloudRehearsal = {
+  developmentMode: true,
+  intercept: (path: string) =>
+    path === "/setup-api/status"
+      ? Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          developmentMode: true,
+          needs: ["venue"],
+          cloudSignInAvailable: true,
+        })
+      : undefined,
+};
+function returnFromCloud(outcome: "signed-in" | "cancelled") {
   const tab = crypto.randomUUID();
+  const admin = { ...venue.admin, password: undefined, pin: undefined };
   sessionStorage.setItem("waitron-setup-cloud-tab", tab);
-  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live" }));
-  sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
-  const options = {
-    developmentMode: true,
-    intercept: (path: string) =>
-      path === "/setup-api/status"
-        ? Response.json({
-            provisioned: false,
-            environment: "preproduction",
-            developmentMode: true,
-            needs: ["venue"],
-            cloudSignInAvailable: true,
-          })
-        : undefined,
-  };
-  const first = await mount(options);
-  await screen(first.app, "admin");
-  await liveVenueAfterAdmin(first.app);
+  sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live", admin }));
+  sessionStorage.setItem("waitron-setup-cloud-result", outcome);
+  return tab;
+}
+async function completeCloudVenue(app: SetupApp) {
+  await screen(app, "venue");
+  const admin = { ...venue.admin, password: "", pin: "" };
+  emit(app, "setup-patch", { patch: { venue: { ...venue, admin } } });
+  emit(app, "setup-advance");
+}
+it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
+  const tab = returnFromCloud("signed-in");
+  const first = await mount(cloudRehearsal);
+  const admin = { ...venue.admin, password: "", pin: "" };
+  await completeCloudVenue(first.app);
   await screen(first.app, "first-setup");
+  const claim = first.requests.find((r) => r.path.endsWith("/claim"))!;
+  expect(claim.headers.get("X-Waitron-Setup-Cloud-Tab")).toBe(tab);
+  expect(claim.body).toMatchObject({ venue: { admin } });
   first.app.remove();
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
-  const { app, requests } = await mount({ ...options, claimed: true, resolution: false });
+  const { app, requests } = await mount({ ...cloudRehearsal, claimed: true, resolution: false });
   const allocation = await screen(app, "first-setup");
   allocation.dispatchEvent(
     new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
@@ -997,12 +1018,30 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
   ).toBe(tab);
 });
 
-async function liveVenueAfterAdmin(app: SetupApp) {
+it("returns a development Live claim with an expired Cloud draft to Admin", async () => {
+  returnFromCloud("cancelled");
+  const { app, requests } = await mount({
+    ...cloudRehearsal,
+    intercept: (path, _, headers) => {
+      if (path.endsWith("/claim") && headers.has("X-Waitron-Setup-Cloud-Tab"))
+        return Response.json(
+          { error: { code: "cloud.request_unavailable", params: {} } },
+          { status: 409 },
+        );
+      return cloudRehearsal.intercept(path);
+    },
+  });
+  const signIn = await screen(app, "cloud-sign-in");
+  await userEvent.click(signIn.shadowRoot!.querySelector<HTMLElement>("[data-test=skip]")!);
+  await completeCloudVenue(app);
+  await screen(app, "admin");
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });
   await screen(app, "venue");
   emit(app, "setup-advance");
-}
+  await screen(app, "first-setup");
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(2);
+});
 
 it.each([
   ["prepare", false, true],
@@ -1035,16 +1074,20 @@ it.each([
       await click(choice, "[data-test=understand]");
       await click(choice, "[data-test=confirm-live]");
       await click(await screen(app, "live-source"), "[data-test=empty]");
-    } else {
+    }
+    const admin = await screen(app, "admin");
+    if (mode === "live" && developmentMode) {
+      await click(admin, "[data-test=back]");
+      await click(await screen(app, "live-source"), "[data-test=empty]");
       await screen(app, "admin");
-      emit(app, "setup-patch", { patch: { venue } });
-      emit(app, "setup-goto", { screen: "venue" });
     }
     if (offered) {
+      emit(app, "setup-patch", { patch: { venue } });
+      emit(app, "setup-goto", { screen: "venue" });
       const signIn = await screen(app, "cloud-sign-in");
       await click(signIn, "[data-test=skip]");
     }
-    await screen(app, mode === "prepare" ? "venue" : "admin");
+    await screen(app, offered ? "venue" : "admin");
     expect(requests.some((request) => request.path.includes("/cloud/sign-in/"))).toBe(false);
     if (mode === "prepare") {
       emit(app, "setup-advance");
@@ -1133,16 +1176,22 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
     modules: ["core"],
     reconnectModules: [],
   };
-  const { app, api, requests } = await mount();
+  returnFromCloud("signed-in");
+  const { app, api, requests } = await mount(cloudRehearsal);
   api.stageConfiguration = () => Promise.resolve(preview);
-  await screen(app, "mode");
-  emit(app, "setup-patch", { patch: { mode: "live" } });
+  await screen(app, "venue");
+  emit(app, "setup-goto", { screen: "admin" });
+  const original = await screen(app, "admin");
+  await userEvent.click(original.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!);
+  await screen(app, "live-source");
   emit(app, "configuration-requested", {
     request: { artifact: new File(["encrypted"], "prepared.waitron-config"), passphrase: "pass" },
   });
   const choice = await screen(app, "configuration-preview");
   choice.shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!.click();
-  await screen(app, "admin");
+  const importAdmin = await screen(app, "admin");
+  const password = importAdmin.shadowRoot!.querySelector("[data-test=password]")!;
+  expect(password.shadowRoot!.querySelector("input")!.required).toBe(true);
   emit(app, "setup-patch", { patch: { venue: { admin } } });
   emit(app, "setup-goto", { screen: "venue" });
   const venueScreen = await screen(app, "venue");

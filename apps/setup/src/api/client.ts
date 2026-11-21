@@ -533,11 +533,12 @@ export class SetupApi {
 
   startCloudSignIn(
     tab: string,
-    prepareAdmin?: Partial<AdminDraft>,
+    admin: Partial<AdminDraft>,
   ): Promise<{ authorizationUrl?: string }> {
     return this.#request("/setup-api/cloud/sign-in/start", "POST", {
       tab,
-      ...(prepareAdmin && { prepare: true, admin: prepareAdmin }),
+      prepare: true,
+      admin,
     });
   }
 
@@ -796,12 +797,16 @@ export class SetupApi {
     venue: ProvisionBody["venue"],
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
+    cloudAdminTab?: string,
   ): Promise<FirstSetupOwnership> {
     return this.#request(
       "/setup-api/first-setup/claim",
       "POST",
       { venue, ...intent },
-      locale === undefined ? {} : { "accept-language": locale },
+      {
+        ...(locale === undefined ? {} : { "accept-language": locale }),
+        ...(cloudAdminTab === undefined ? {} : { "X-Waitron-Setup-Cloud-Tab": cloudAdminTab }),
+      },
     );
   }
 

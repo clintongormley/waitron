@@ -1320,8 +1320,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   then file the saved venue after restart. Prepare on configured test boxes also offers
   [staff email through Cloud](superpowers/plans/2026-11-21-setup-cloud-staff-email.md) and lets
   you [leave the venue mail server blank](superpowers/plans/2026-11-21-setup-cloud-email-no-server.md).
-  In Prepare, the administrator form comes before Cloud sign-in. Development Live still needs
-  the new order. The hosted test release and live Google qualification remain open. The address
+  The administrator form comes before Cloud sign-in in Prepare and when starting empty in
+  development Live. The hosted test release and live Google qualification remain open. The address
   picker requires one Spanish business with no tax number or venues. Adding a venue to an
   existing Cloud business still needs manual address entry and wider Cloud support.
   Cloud installs the private package with its workflow token. Remaining: the sign-in

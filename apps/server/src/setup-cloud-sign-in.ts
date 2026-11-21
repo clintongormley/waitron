@@ -56,7 +56,6 @@ export function mountSetupCloudSignIn(
   deps: SetupCloudSignIn,
   authorize: () => Promise<void>,
   prepareAdmin: (input: unknown, saved?: PreparedSetupAdmin) => PreparedSetupAdmin,
-  developmentLive: boolean,
   log: Logger,
 ): void {
   const run = createErrorBoundary(
@@ -129,11 +128,9 @@ export function mountSetupCloudSignIn(
           );
           return c.body(null, 204);
         }
-        const prepare = input.prepare === true;
         if (
-          prepare
-            ? Object.keys(input).some((key) => !["tab", "prepare", "admin"].includes(key))
-            : !developmentLive || Object.keys(input).length !== 1
+          input.prepare !== true ||
+          Object.keys(input).some((key) => !["tab", "prepare", "admin"].includes(key))
         )
           throw new AppError("cloud.request_invalid", {});
         const token = session ?? randomBytes(32).toString("base64url");
@@ -148,15 +145,11 @@ export function mountSetupCloudSignIn(
           await deps.connection.startSignIn(
             { kind: "setup", tab: input.tab, session: token },
             authorize,
-            ...(prepare
-              ? ([
-                  (saved: PreparedSetupAdmin | undefined) => {
-                    if (input.admin !== undefined) return prepareAdmin(input.admin, saved);
-                    if (!saved) throw new AppError("cloud.request_unavailable", {});
-                    return saved;
-                  },
-                ] as const)
-              : []),
+            (saved) => {
+              if (input.admin !== undefined) return prepareAdmin(input.admin, saved);
+              if (!saved) throw new AppError("cloud.request_unavailable", {});
+              return saved;
+            },
           ),
         );
       }),

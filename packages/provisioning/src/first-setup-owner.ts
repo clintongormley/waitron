@@ -173,6 +173,41 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       refuse();
     return state;
   };
+  async function claimPreparedFirstSetup(
+    payload: Omit<FirstSetupClaimPayload, "request"> & { request: VenueRequest },
+  ) {
+    const request = {
+      ...structuredClone(payload.request),
+      country: payload.request.country.trim().toUpperCase(),
+      taxId: payload.request.taxId.trim().toUpperCase(),
+      legalName: payload.request.legalName.trim(),
+      admin: {
+        ...payload.request.admin,
+        displayName: payload.request.admin.displayName.trim(),
+        email: normalizeAndValidateEmail(payload.request.admin.email),
+      },
+    };
+    const ids = { attemptId: randomUUID(), nodeId: randomUUID(), administratorId: randomUUID() };
+    const capability = token();
+    const state = await coordinator.run(async (hold) => {
+      await assertNoOtherSetupInProgress(options.stateDir);
+      await options.assertClaimAllowed?.(hold);
+      const frozen = await options.freeze(request, payload.environment, ids, payload);
+      if (
+        frozen.attemptId !== ids.attemptId ||
+        frozen.nodeId !== ids.nodeId ||
+        frozen.administratorId !== ids.administratorId ||
+        frozen.environment !== payload.environment
+      )
+        throw new AppError("setup.attempt_invalid", {});
+      return store.claim(frozen, request.admin.passwordHash, hash(capability), hold);
+    });
+    return {
+      state: publicFirstSetupState(state),
+      capability,
+      ownerGeneration: state.ownerGeneration,
+    };
+  }
   return {
     authorize,
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
@@ -200,39 +235,16 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       assertPasswordLength(password);
       assertPinLength(pin);
       const request: VenueRequest = {
-        ...structuredClone(payload.request),
-        country: payload.request.country.trim().toUpperCase(),
-        taxId: payload.request.taxId.trim().toUpperCase(),
-        legalName: payload.request.legalName.trim(),
+        ...payload.request,
         admin: {
           ...admin,
-          displayName: admin.displayName.trim(),
-          email: normalizeAndValidateEmail(admin.email),
           pinHash: await hashPinAsync(pin),
           passwordHash: await hashPasswordAsync(password),
         },
       };
-      const ids = { attemptId: randomUUID(), nodeId: randomUUID(), administratorId: randomUUID() };
-      const capability = token();
-      const state = await coordinator.run(async (hold) => {
-        await assertNoOtherSetupInProgress(options.stateDir);
-        await options.assertClaimAllowed?.(hold);
-        const frozen = await options.freeze(request, payload.environment, ids, payload);
-        if (
-          frozen.attemptId !== ids.attemptId ||
-          frozen.nodeId !== ids.nodeId ||
-          frozen.administratorId !== ids.administratorId ||
-          frozen.environment !== payload.environment
-        )
-          throw new AppError("setup.attempt_invalid", {});
-        return store.claim(frozen, request.admin.passwordHash, hash(capability), hold);
-      });
-      return {
-        state: publicFirstSetupState(state),
-        capability,
-        ownerGeneration: state.ownerGeneration,
-      };
+      return claimPreparedFirstSetup({ ...payload, request });
     },
+    claimPreparedFirstSetup,
     reconfirm(owner: FirstSetupOwnerAttempt, password: string, purpose: ReconfirmationPurpose) {
       return inTurn(throttle, "reconfirm", async () => {
         if (!["block-use", "activation", "node-key-reissue"].includes(purpose)) refuse();

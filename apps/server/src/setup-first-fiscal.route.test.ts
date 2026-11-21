@@ -2,7 +2,11 @@ import * as filesystem from "node:fs/promises";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { hashPassword, hashPin, verifyPin } from "@waitron/identity";
+import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
@@ -64,7 +68,7 @@ afterEach(async () => {
 });
 async function fixture(
   sendEmailTest?: SetupDeps["sendEmailTest"],
-  extra: Partial<SetupDeps> = {},
+  { claimOnMount = true, ...extra }: Partial<SetupDeps> & { claimOnMount?: boolean } = {},
   grantClock?: () => number,
   staffLanguage?: unknown,
   setBoxClock?: Parameters<typeof createFirstSetupModuleHost>[0]["setBoxClock"],
@@ -110,9 +114,11 @@ async function fixture(
       },
       env,
     );
-  const claimed = await post("/setup-api/first-setup/claim", {
-    venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
-  });
+  const claimed = claimOnMount
+    ? await post("/setup-api/first-setup/claim", {
+        venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
+      })
+    : new Response(null, { status: 204 });
   const claim = claimed.status === 200 ? await claimed.json() : {};
   const headers = (state = claim.state, capability = claim.capability) => ({
     "X-Waitron-Setup-Owner": capability,
@@ -250,6 +256,79 @@ it.each([null, "en-GB", "fr", ["en"]])(
       error: { code: "setup.request_invalid", params: { field: "staffLanguage" } },
     });
     expect(await f.host.store.read()).toBeNull();
+  },
+);
+
+it.each([false, true])(
+  "claims development Live and clears the checked administrator (replacement credentials: %s)",
+  async (replace) => {
+    let saved: PreparedSetupAdmin | undefined = {
+      displayName: request.admin.displayName,
+      email: request.admin.email,
+      firstNames: null,
+      lastNames: null,
+      passwordHash: hashPassword(PASSWORD),
+      pinHash: hashPin(request.admin.pin),
+    };
+    const origin = "https://box.test";
+    const tab = randomUUID();
+    const session = randomBytes(32).toString("base64url");
+    const f = await fixture(undefined, {
+      claimOnMount: false,
+      environment: "preproduction",
+      devMode: true,
+      cloudSignIn: {
+        origin,
+        connection: {
+          setupSignInAvailable: async () => true,
+          setupAddressLookup: async () => ({ available: false }),
+          startSignIn: async () => ({}),
+          returnSignIn: async () => {},
+          publishSetupSignIn: async () => {},
+          readSetupAdmin: async (binding) => {
+            expect(binding).toEqual({ kind: "setup", tab, session });
+            return saved!;
+          },
+          clearSetupAdmin: async () => {
+            saved = undefined;
+          },
+        },
+      },
+    });
+    const socket = new TLSSocket(new Socket());
+    try {
+      const password = replace ? "Replacement password" : PASSWORD;
+      const pin = replace ? "7469" : request.admin.pin;
+      const claim = await f.post(
+        origin + "/setup-api/first-setup/claim",
+        {
+          venue: {
+            ...request,
+            admin: { ...request.admin, password: replace ? password : "", pin: replace ? pin : "" },
+          },
+        },
+        {
+          origin,
+          cookie: "__Host-waitron-setup-cloud=" + session,
+          "X-Waitron-Setup-Cloud-Tab": tab,
+        },
+        { incoming: { socket } },
+      );
+      expect(claim.status).toBe(200);
+      const { state, capability } = await claim.json();
+      expect(state.environment).toBe("preproduction");
+      const frozen = (await f.host.store.read())!.frozen.request.admin;
+      expect(await verifyPin(pin, frozen.pinHash)).toBe(true);
+      const confirmed = await f.post(
+        "/setup-api/first-setup/reconfirm",
+        { password, purpose: "block-use" },
+        f.headers(state, capability),
+      );
+      expect(confirmed.status).toBe(200);
+      expect(saved).toBeUndefined();
+    } finally {
+      socket.destroy();
+    }
   },
 );
 
