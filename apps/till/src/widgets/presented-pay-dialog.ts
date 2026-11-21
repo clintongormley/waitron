@@ -50,13 +50,12 @@ type Field = "tendered" | "externalRef" | "guests";
 
 /** `presented-pay`'s detail; `guestCount` is absent unless the venue asks for it, null for none. */
 export type PresentedPayDetail =
-  | { method: "card"; readerId?: string; guestCount?: number | null; printCardSlip?: boolean }
-  | { method: "cash"; tendered: string; guestCount?: number | null; printCardSlip?: boolean }
+  | { method: "card"; readerId?: string; guestCount?: number | null }
+  | { method: "cash"; tendered: string; guestCount?: number | null }
   | ({
       method: "manual";
       externalRef?: string;
       guestCount?: number | null;
-      printCardSlip?: boolean;
     } & OutsideCardDetails);
 
 /** What the waiter has typed: the cash handed over and the operation number. */

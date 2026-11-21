@@ -28,7 +28,6 @@ export interface FindBillPayDetail {
   workingOrderId: string;
   tender: Tender;
   invoiced: boolean;
-  printCardSlip?: boolean;
 }
 
 type CollectionDraft = {

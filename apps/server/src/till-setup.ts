@@ -2,13 +2,13 @@ import { venueCredentials } from "@waitron/credentials";
 import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared";
-import { readTaxpayer, roles, type Transaction } from "@waitron/db";
+import { readSettings, readTaxpayer, roles, type Transaction } from "@waitron/db";
 import { authorityForRoles, holds, BUILT_IN_ROLE_KEYS } from "@waitron/identity";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
-import { cardReaders, resolveDeviceReaderId } from "@waitron/payments";
+import { cardReaders, PAYMENTS_SETTINGS, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
-import { VENUE_SERVICE } from "./modules.js";
+import { MODULES_SETTINGS, VENUE_SERVICE } from "./modules.js";
 import { listCourses } from "./kitchen.js";
 import type { TillApiDeps } from "./till-api.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
@@ -19,7 +19,12 @@ type TillCardProvider = TillReaderProvider | "simulator" | "none";
 
 type TillSetupDeps = Pick<
   TillApiDeps,
-  "cfg" | "venueLocale" | "workforceEnabled" | "onboardingIntent" | "cardProvider"
+  | "cfg"
+  | "venueLocale"
+  | "workforceEnabled"
+  | "onboardingIntent"
+  | "cardProvider"
+  | "paymentsEnabled"
 >;
 
 /** What the start read takes from the database; `completeTillSetup` turns it into the body. */
@@ -112,6 +117,11 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     .select({ purpose: venueCredentials.purpose })
     .from(venueCredentials)
     .where(eq(venueCredentials.purpose, "payments.sumup"));
+  const sumUpConnected =
+    sumUpCredential !== undefined &&
+    deps.paymentsEnabled !== false &&
+    (await readSettings(tx, MODULES_SETTINGS)).doc.modules.payments !== false &&
+    (await readSettings(tx, PAYMENTS_SETTINGS)).doc.providers.sumup !== false;
   return {
     locale: deps.venueLocale,
     clockingAvailable: deps.workforceEnabled === true,
@@ -129,7 +139,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
     // A venue can have several active readers on one provider, so the till needs the row id.
     defaultReaderId: simulator ? undefined : defaultReaderId,
     activeReaders: simulator ? [] : activeReaders,
-    sumUpConnected: sumUpCredential !== undefined,
+    sumUpConnected,
     tipsEnabled: deps.cfg.tipsEnabled,
     formFactor: device?.formFactor ?? "till",
     capabilities,

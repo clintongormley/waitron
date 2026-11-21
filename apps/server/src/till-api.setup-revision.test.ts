@@ -3,9 +3,16 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { customThemes, deviceProfiles, roles, withTransaction } from "@waitron/db";
+import {
+  customThemes,
+  deviceProfiles,
+  readSettings,
+  roles,
+  saveSettings,
+  withTransaction,
+} from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
-import { cardReaders, setProfileReaderList } from "@waitron/payments";
+import { cardReaders, PAYMENTS_SETTINGS, setProfileReaderList } from "@waitron/payments";
 import { Hono } from "hono";
 import { readCurrentImage, renderRendition, saveImage, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -195,6 +202,20 @@ it("refreshes whether the venue is connected to SumUp without a reader", async (
   expect(connected.body).toMatchObject({ sumUpConnected: true, activeReaders: [] });
   expect(connected.body.setupRevision).not.toBe(before.body.setupRevision);
   expect(await menuStateRevision(till)).toBe(connected.body.setupRevision);
+  const setSumUp = (sumup: boolean) =>
+    withTransaction(suite.db, async (tx) => {
+      const { revision } = await readSettings(tx, PAYMENTS_SETTINGS);
+      await saveSettings(tx, PAYMENTS_SETTINGS, {
+        expectedRevision: revision,
+        doc: { providers: { sumup } },
+        personId: null,
+      });
+    });
+  await setSumUp(false);
+  const disabled = await sendAsTill(till, "GET", "/api/till");
+  expect(disabled.body).toMatchObject({ sumUpConnected: false, activeReaders: [] });
+  expect(await menuStateRevision(till)).toBe(disabled.body.setupRevision);
+  await setSumUp(true);
   await withTransaction(suite.db, (tx) =>
     deleteCredential(tx, { personId: null, purpose: "payments.sumup" }),
   );

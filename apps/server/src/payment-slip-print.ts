@@ -217,6 +217,7 @@ export async function enqueueRequestedPaymentSlip(
   workingOrderId: string,
   requested: boolean | undefined,
   payment: {
+    id?: string;
     method: "cash" | "card";
     charged: number;
     tip: number;
@@ -236,7 +237,14 @@ export async function enqueueRequestedPaymentSlip(
       if (printer === undefined) return false;
       const card = { scheme: null, last4: null, entryMode: null, authCode: null };
       const locale = await orderSlipLocale(tx, workingOrderId);
-      await enqueueSlips(tx, printer, workingOrderId, [{ ...payment, ...card }], locale);
+      await enqueueSlips(
+        tx,
+        printer,
+        workingOrderId,
+        [{ ...payment, ...card }],
+        locale,
+        payment.id,
+      );
       return true;
     },
   );

@@ -29,7 +29,7 @@ import type {
   LateSend,
   SplitSelection,
   SplitSources,
-  SlipTender,
+  Tender,
 } from "./api/client.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
@@ -1582,7 +1582,7 @@ interface WholePayment {
   invoiced: boolean;
   outstanding: string;
   bill: BillLookupRow | null;
-  tender: SlipTender;
+  tender: Tender;
   guestCount?: number | null;
   expectedEdit: BillEditExpected | null;
 }
@@ -7928,7 +7928,6 @@ export class TillApp extends LitElement {
               : { simulationOutcome: detail.simulationOutcome }),
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
-            ...(detail.printCardSlip === undefined ? {} : { printCardSlip: detail.printCardSlip }),
             ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
@@ -10031,11 +10030,7 @@ export class TillApp extends LitElement {
 
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
-    const { workingOrderId, invoiced, printCardSlip, ...detail } = (
-      event as CustomEvent<FindBillPayDetail>
-    ).detail;
-    const tender: SlipTender =
-      printCardSlip === undefined ? detail.tender : { ...detail.tender, printCardSlip };
+    const { workingOrderId, invoiced, tender } = (event as CustomEvent<FindBillPayDetail>).detail;
     const held = this.#holdRefusal(workingOrderId);
     if (held !== null) {
       this.findBillError = held;
@@ -12385,7 +12380,7 @@ export class TillApp extends LitElement {
 
   #offerShortCaptureSlip(open: BillPaying | null, slipPaymentId: string | undefined): void {
     const now = open === null ? null : this.#billPayingNow(open.id);
-    if (now !== null && slipPaymentId !== undefined)
+    if (now !== null && slipPaymentId !== undefined && this.#slipPrinterAvailable())
       this.billPaying = { ...now, taken: { change: null, settled: true, slipPaymentId } };
   }
 
@@ -21956,27 +21951,19 @@ export class TillApp extends LitElement {
     const detail = (event as CustomEvent<PresentedPayDetail>).detail;
     this.presentedPaying = { ...open, refusal: null };
     if (detail.method === "card") {
-      await this.#payPresentedOnReader(
-        open.id,
-        bill,
-        detail.readerId,
-        detail.guestCount,
-        detail.printCardSlip,
-      );
+      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guestCount);
       return;
     }
     const guestCount = detail.guestCount === undefined ? {} : { guestCount: detail.guestCount };
-    const slip = detail.printCardSlip === undefined ? {} : { printCardSlip: detail.printCardSlip };
     const tender: ConfirmPaymentDetail =
       detail.method === "cash"
-        ? { method: "cash", amount: detail.tendered, ...guestCount, ...slip }
+        ? { method: "cash", amount: detail.tendered, ...guestCount }
         : {
             method: "card",
             amount: bill.outstanding,
             ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
             ...outsideCardValues(detail),
             ...guestCount,
-            ...slip,
           };
     const paid = await this.#payWholeTab(tender, (error, earlierUnanswered) => {
       if (this.#presentedNow(open.id) === null) return false;
@@ -22024,7 +22011,6 @@ export class TillApp extends LitElement {
     bill: PartyBill,
     readerId: string | undefined,
     guestCount: number | null | undefined,
-    printCardSlip?: boolean,
   ): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
@@ -22057,7 +22043,6 @@ export class TillApp extends LitElement {
               lines: [],
               dining: this.#tableBillDining(billId),
               ...(readerId === undefined ? {} : { readerId }),
-              ...(printCardSlip === undefined ? {} : { printCardSlip }),
               ...(guestCount === undefined ? {} : { guestCount }),
             })
             .then(

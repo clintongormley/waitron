@@ -198,11 +198,12 @@ o **Cancelar** para salir sin imprimir.
 Si quien paga quiere justificante, elige **Imprimir justificante de pago** después de cobrar en
 efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, imprímelo desde
 la confirmación antes de cobrar el siguiente. Tras el último pago, usa **Documento para el cliente**.
-El botón aparece cuando tu dispositivo tiene impresora de justificantes. El justificante muestra el
+El botón aparece cuando tu dispositivo tiene impresora de justificantes. Si el lector imprime su
+propio justificante, el lector se encarga de ese pago. El justificante muestra el
 pago y cómo se hizo. Con **Otro datáfono**, incluye el datáfono y el número de operación que indicaste.
 
-Si la caja muestra **Pago recibido, pero no se pudo imprimir el justificante de pago.**, puedes
-volver a intentarlo con el mismo botón. Para sustituir un justificante que ya se imprimió, usa
+Si falla tu solicitud de impresión, puedes pulsar **Imprimir justificante de pago** de nuevo.
+Para sustituir un justificante que ya se imprimió, usa
 **Reimprimir** en la [Cola de impresión](printers.md#print-queue).
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el

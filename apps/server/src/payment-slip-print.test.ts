@@ -955,6 +955,19 @@ describe("a payment after the ticket was issued", () => {
       expect(beforeTicket).toHaveLength(1);
       expectPaymentSlip(beforeTicket[0]!, "5,00", "A/");
       expect(methodLine(beforeTicket[0]!, line)).toBe(true);
+      const [payment] = await venue.db
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, open));
+      const repeated = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${open}/payment-slip`,
+        { paymentId: payment!.id },
+      );
+      expect(repeated.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(1);
       expect((await billPayment(open, pay("5.00"))).status).toBe(200);
       expect(await slipsSince(before)).toHaveLength(1);
 
@@ -1039,6 +1052,35 @@ describe("a payment after the ticket was issued", () => {
     });
     expect(await slipsSince(before)).toHaveLength(0);
   });
+
+  it.each([true, false])(
+    "does not queue a second reader slip when the reader makes its own (%s) or a slip was already requested",
+    async (ownSlip) => {
+      await withTransaction(venue.db, (tx) =>
+        tx.update(cardReaders).set({ printsOwnSlipAutomatically: ownSlip }),
+      );
+      const id = await tabWith(venue, "Red wine bottle");
+      const before = await jobCount();
+      const paid = await billPayment(id, { ...readerContribution, printCardSlip: !ownSlip });
+      expect(paid.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(ownSlip ? 0 : 1);
+      const [payment] = await venue.db
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, id));
+      const print = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payment-slip`,
+        {
+          paymentId: payment!.id,
+        },
+      );
+      expect(print.status).toBe(200);
+      expect(await slipsSince(before)).toHaveLength(ownSlip ? 0 : 1);
+    },
+  );
 
   it("retries a slip after an enqueue refusal on a paid bill", async () => {
     const bill = await billPrintedByPrintTheBill();

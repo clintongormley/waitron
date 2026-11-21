@@ -263,7 +263,6 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ type: Boolean }) sumUpConnected = false;
 
-  @property({ type: Boolean }) slipPrinterAvailable = false;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   @property({ attribute: false }) receiptLanguages: string[] = [];

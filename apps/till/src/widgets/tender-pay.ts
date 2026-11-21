@@ -69,7 +69,7 @@ export type ConfirmPaymentDetail = (
       externalRef?: string;
     } & OutsideCardDetails)
 ) &
-  ReceiptGuestsDetail & { printCardSlip?: boolean };
+  ReceiptGuestsDetail;
 
 /** `guestCount` is absent unless the screen asks for it; null prints no guests line. */
 export interface ReceiptGuestsDetail {
@@ -87,7 +87,6 @@ export interface ParkOrderDetail {
 }
 
 export interface CollectCardDetail extends ReceiptGuestsDetail {
-  printCardSlip?: boolean;
   tip?: string;
   simulationOutcome?: "captured" | "declined" | "attempting";
   /** Absent when the operator never picked one — the server then falls back to the paying

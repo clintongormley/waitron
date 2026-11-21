@@ -5116,7 +5116,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
-  it("forwards a counter whole-card slip choice and warns without charging again", async () => {
+  it("warns when a counter whole-card slip fails without charging again", async () => {
     const el = await retrieved({
       listWorkingOrders: vi
         .fn()
@@ -5130,10 +5130,9 @@ describe("till-app: a partly paid order at the counter", () => {
         slipPrintFailed: true,
       }),
     });
-    emit(counter(el), "collect-card", { printCardSlip: true });
+    emit(counter(el), "collect-card", {});
     await flush(el);
     expect(api.pay).toHaveBeenCalledOnce();
-    expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
     expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
   });
 
@@ -5151,7 +5150,7 @@ describe("till-app: a partly paid order at the counter", () => {
         .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
         .mockResolvedValue([held()]),
     });
-    emit(counter(el), "collect-card", { printCardSlip: true });
+    emit(counter(el), "collect-card", {});
     await flush(el);
     expect(dialog(el)).not.toBeNull();
     await expectSlipFailureInPayWindow(el);
@@ -5167,7 +5166,7 @@ describe("till-app: a partly paid order at the counter", () => {
       card: { entry: "reader" },
     });
     await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
-    emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+    emit(dialog(el)!, "bill-pay-confirm", {});
     await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
     await flush(el);
   }
@@ -6260,7 +6259,11 @@ describe("till-app: a bill payment on the card reader", () => {
     outcome,
   });
 
-  async function takeOnReader(takeBillPayment: unknown, overrides: Record<string, unknown> = {}) {
+  async function takeOnReader(
+    takeBillPayment: unknown,
+    overrides: Record<string, unknown> = {},
+    chooseReader = true,
+  ) {
     const { el } = await mountApp({
       ...withReader,
       previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
@@ -6271,7 +6274,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await press(el, 'input[name="method"][value="card"]');
-    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    if (chooseReader) await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     return el;
@@ -7032,12 +7035,29 @@ describe("till-app: a bill payment on the card reader", () => {
       readsAtTake.push(getTabLines.mock.calls.length);
       return onReader("timeout", "pending", { reserved: "40.00", outstanding: "80.00" });
     });
-    const el = await takeOnReader(takeBillPayment, { getTabLines });
+    const printer = equipmentItem("slips", "Slips");
+    const terminal = equipmentItem(readers[1]!.id, readers[1]!.name, {
+      provider: "stripe_terminal",
+    });
+    const el = await takeOnReader(
+      takeBillPayment,
+      {
+        getTabLines,
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [
+            roleOf("card_terminal", terminal, [terminal]),
+            roleOf("payment_slip", printer, [printer]),
+          ],
+        }),
+      },
+      false,
+    );
 
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
       t("bill_pay.card_pending").replace("{amount}", money("40.00")),
     );
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "80.00", "40.00"));
+    expect(inDialog(el, "[data-print-payment-slip]")).toBeNull();
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     expect(getTabLines.mock.calls.length).toBeGreaterThan(readsAtTake[0]!);
   });
@@ -9521,7 +9541,7 @@ it("a handheld opens the remaining bill payment after a short presented-bill cap
   expect(api.takeBillPayment).not.toHaveBeenCalled();
 });
 
-it("forwards a reader slip request and reports print failure without retrying the payment", async () => {
+it("reports a reader slip failure without retrying the payment", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
@@ -9547,9 +9567,8 @@ it("forwards a reader slip request and reports print failure without retrying th
     card: { entry: "reader" },
   });
   await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
-  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  emit(dialog(el)!, "bill-pay-confirm", {});
   await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
-  expect(sent()[0]).toHaveProperty("printCardSlip", true);
   await flush(el);
   expect(dialog(el)).not.toBeNull();
   await expectSlipFailureInPayWindow(el);
@@ -9580,7 +9599,7 @@ it("leaves a part payment's slip failure on the page when the Pay window was clo
     card: { entry: "reader" },
   });
   await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
-  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  emit(dialog(el)!, "bill-pay-confirm", {});
   await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
   emit(dialog(el)!, "bill-pay-close");
   await flush(el);
@@ -9601,7 +9620,7 @@ it("leaves a part payment's slip failure on the page when the Pay window was clo
   expect(deepestAt(box.left + box.width / 2, box.top + box.height / 2)).toBe(alert);
 });
 
-it("sends a table part payment's cash slip request and says when it failed", async () => {
+it("reports a table part payment's slip failure", async () => {
   const { el } = await mountApp({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
@@ -9626,21 +9645,20 @@ it("sends a table part payment's cash slip request and says when it failed", asy
     pay: { method: "cash", tendered: "30.00" },
   });
   await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
-  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  emit(dialog(el)!, "bill-pay-confirm", {});
   await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
-  expect(sent()[0]).toMatchObject({ method: "cash", printCardSlip: true });
+  expect(sent()[0]).toMatchObject({ method: "cash" });
   await flush(el);
   await expectSlipFailureInPayWindow(el);
 });
 
-it("sends a table's whole-bill cash slip request and says when it failed", async () => {
+it("reports a slip failure after cash pays a whole table bill", async () => {
   const { el } = await mountApp({
     recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), slipPrintFailed: true }),
   });
   const order = await openTable(el);
-  emit(order, "pay-tab", { method: "cash", amount: "120.00", printCardSlip: true });
+  emit(order, "pay-tab", { method: "cash", amount: "120.00" });
   await flush(el);
-  expect(vi.mocked(api.recordSale).mock.calls[0]![1]).toHaveProperty("printCardSlip", true);
   expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(SLIP_FAILED);
 });
 
@@ -9671,7 +9689,7 @@ it("says a table bill's last payment's slip could not print", async () => {
     card: { entry: "reader" },
   });
   await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
-  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  emit(dialog(el)!, "bill-pay-confirm", {});
   await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
   await flush(el);
   expect(dialog(el)).toBeNull();

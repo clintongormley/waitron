@@ -183,11 +183,12 @@ Use **Refresh printers** when none are listed, or **Cancel** to leave without pr
 If the payer wants a slip, choose **Print payment slip** after you take their payment by cash,
 **Other card machine** or card reader. For a part payment, print it from the confirmation before
 taking the next payment. After the final payment, use **Customer document**. The button appears
-when your device has a payment slip printer. A slip shows the payment and how it was made. For
+when your device has a payment slip printer. A reader set to print its own slip handles that payment.
+A slip shows the payment and how it was made. For
 **Other card machine**, it includes the machine and operation number you entered.
 
-If the till says **Payment received, but the payment slip could not print.**, you can retry the
-slip from the same button. To replace a slip that already printed, use **Reprint** in
+If your print request fails, you can press **Print payment slip** again. To replace a slip that
+already printed, use **Reprint** in
 [Print Queue](printers.md#print-queue).
 
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that

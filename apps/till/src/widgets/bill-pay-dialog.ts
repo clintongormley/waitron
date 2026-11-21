@@ -111,14 +111,13 @@ export interface PayRequest {
 /** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
 export type BillPayConfirmDetail = ReceiptGuestsDetail & {
   readerId?: string;
-  printCardSlip?: boolean;
   ownReceipt?: true;
 };
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
  * reader, the amount it holds on the bill; on a handheld, for a card charged on a reader, the
- * reader it was sent to and what it charged. `settled` marks a card shown in progress that has
- * since been received, which the run of shares has already counted. */
+ * reader it was sent to and what it charged. `settled` marks a card the payment form's balance
+ * already includes. */
 export interface PayTaken {
   change: string | null;
   slipPaymentId?: string;
