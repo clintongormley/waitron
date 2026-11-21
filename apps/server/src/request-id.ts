@@ -84,25 +84,18 @@ export function requestIdMiddleware(log: Logger, now: () => Date | number): Midd
       return;
     }
     const errorCode = c.get("refusalCode");
-    const level =
-      errorCode === undefined
-        ? "debug"
-        : errorCode === "storage.disk_full" || errorCode === "server.internal"
-          ? "error"
-          : "warn";
     // A gate can answer before Hono runs the handler that matched the request.
     const template =
       errorCode !== undefined && routePath.includes("*")
-        ? (matchedRoutes(c)
-            .filter(({ method }) => method !== "ALL")
-            .at(-1)?.path ?? routePath)
+        ? (matchedRoutes(c).find(({ method, path }) => method !== "ALL" && !path.includes("*"))
+            ?.path ?? routePath)
         : routePath;
-    log(level, "http.request", {
+    log(errorCode === undefined ? "debug" : "warn", "http.request", {
       requestId: id,
       method: c.req.method,
       routePath: loggedPath(c, template),
       status: c.res.status,
-      durationMs: Number(now()) - start,
+      durationMs: Math.round(Number(now()) - start),
       errorCode,
     });
   };

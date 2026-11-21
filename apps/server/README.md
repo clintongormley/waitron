@@ -867,7 +867,7 @@ The ones worth grepping for:
   sweep, does not stop the pass, and does not flip `/health`.
 - **`http.request`** carries the method, matched route, status, duration and request ID. On selected
   order, sale and delivery routes it includes UUIDs. A query appears as `?***`. Requests with a
-  recorded refusal code include it at warn or error. Other request lines are debug.
+  recorded refusal code include it at warn. Other request lines are debug.
 - **`payment.collection_failed`** (`warn`) records the order ID, request ID and fixed payment outcome
   when a till's card collection answers with a decline, failure, timeout or network unavailability.
 - **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the

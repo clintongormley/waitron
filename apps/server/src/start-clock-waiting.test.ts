@@ -484,7 +484,7 @@ describe("the restore's waiting app: with the key", () => {
       log,
       setBoxClock: (request) => {
         w.clock.wall += request.offsetMs;
-        w.clock.monotonic += 7;
+        w.clock.monotonic += 7.25;
         return Promise.resolve({ status: "set" });
       },
     });

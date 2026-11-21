@@ -135,21 +135,22 @@ describe("requestIdMiddleware", () => {
   const handover = createHandoverGate();
   handover.close({ allowed: () => false });
   it.each([
-    [403, "node.read_only", readOnlyGate(() => true)],
-    [503, "handover.stepping_down", handover.middleware],
-  ])("logs the code on a direct refusal with status %s", async (status, code, gate) => {
+    [403, "node.read_only", "POST", readOnlyGate(() => true)],
+    [503, "handover.stepping_down", "GET", handover.middleware],
+  ])("logs the code on a direct refusal with status %s", async (status, code, method, gate) => {
     const { a, lines } = app();
     a.use("*", gate);
-    a.post("/api/sales/:id/reprint", (c) => c.text("should stay gated"));
-    const path = "/api/sales/2ecbbef3-e05d-4c56-9b52-81d596ebc74c/reprint";
-    const response = await a.request(path, { method: "POST" });
+    a.on(method, "/api/sales/:id", (c) => c.text("should stay gated"));
+    a.get("*", (c) => c.text("HTML fallback"));
+    const path = "/api/sales/2ecbbef3-e05d-4c56-9b52-81d596ebc74c";
+    const response = await a.request(path, { method });
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error: { code, params: {} } });
     expect(JSON.parse(lines[0]!)).toMatchObject({
       level: "warn",
       status,
       errorCode: code,
-      routePath: "/api/sales/:id/reprint",
+      routePath: "/api/sales/:id",
     });
   });
 
