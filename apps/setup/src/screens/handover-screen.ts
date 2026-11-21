@@ -25,7 +25,7 @@ import {
   type FollowedCopyTake,
 } from "../api/client.js";
 import { makeSetupId } from "../random-id.js";
-import { currentLocale, format, t } from "../i18n/t.js";
+import { passwordVisibility, currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { fileInputCopy } from "../file-input-copy.js";
@@ -998,6 +998,7 @@ export class SetupHandoverScreen extends LitElement {
         spellcheck="false"
         label=${t(key)}
         type=${name === "password" ? "password" : name === "email" ? "email" : "text"}
+        .passwordVisibility=${name === "password" ? passwordVisibility() : undefined}
         autocomplete=${name === "code" ? "one-time-code" : name === "email" ? "username" : "current-password"}
         .value=${this[name]}
         ?required=${name !== "code"}

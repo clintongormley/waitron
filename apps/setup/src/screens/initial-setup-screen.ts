@@ -1,3 +1,4 @@
+import { passwordVisibility } from "../i18n/t.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
@@ -250,6 +251,7 @@ export class InitialSetupScreen extends LitElement {
                 data-test="owner-password"
                 name="setup-administrator-password"
                 type="password"
+                .passwordVisibility=${passwordVisibility(this.locale === "es" ? "es-ES" : "en-GB")}
                 autocomplete="current-password"
                 label=${t.password}
                 required

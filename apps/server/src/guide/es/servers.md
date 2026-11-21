@@ -40,9 +40,10 @@ muestra después de **Use this box's own address**. Elige **Unirse o recuperar**
 Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige **Continuar**; su dirección IP, como `https://192.168.1.10`, se rechaza. En un dispositivo que ya
 tenga la sesión iniciada en el panel del servidor principal, abre **Sistema → Servidores** y compara
 **Huella del certificado público de este servidor** con la que muestra el servidor nuevo. Elige
-**Coincide** solo si son iguales. Después introduce el correo y la contraseña de la cuenta y elige
-**Conectar**. Si la cuenta usa un autenticador, la página te pide entonces su código actual:
-escríbelo y elige **Conectar** otra vez. El servidor nuevo recibe su primera copia por la red del
+**Coincide** solo si son iguales. Introduce el correo y la contraseña de la cuenta. Puedes usar
+el botón con el icono de ojo para comprobar lo que has escrito. Elige **Conectar**. Si la cuenta
+usa un autenticador, la página te pide su código actual. Escríbelo y elige **Conectar** otra vez.
+El servidor nuevo recibe su primera copia por la red del
 local y se reinicia solo como servidor de reserva. La página del servidor nuevo se queda en
 **Este servidor se está uniendo** y no cambia.
 

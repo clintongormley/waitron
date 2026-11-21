@@ -14,7 +14,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
 import { SetupApi, type AdoptBody, type PrimaryCertificate } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { passwordVisibility, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
@@ -390,6 +390,7 @@ export class SetupConnectScreen extends LitElement {
       error=${error === undefined ? "" : t(error)}
       data-test=${key}
       type=${type}
+      .passwordVisibility=${key === "password" ? passwordVisibility() : undefined}
       ?invalid=${invalid}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}

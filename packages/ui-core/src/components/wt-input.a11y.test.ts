@@ -1,6 +1,9 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
+import "./wt-button.js";
+import type { WtInput } from "./wt-input.js";
 import "./wt-input.js";
 
 afterEach(cleanup);
@@ -25,6 +28,26 @@ function contrastRatio(a: string, b: string): number {
 describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) => {
   test("labelled input", async () => {
     await mountThemed('<wt-input label="Weight (kg)" value="1.25"></wt-input>', theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("password with a visibility button in both states", async () => {
+    const field = (await mountThemed(
+      '<wt-input label="Password" name="password" type="password" value="example"></wt-input>',
+      theme,
+    )) as WtInput;
+    field.passwordVisibility = {
+      show: "Show password",
+      hide: "Hide password",
+      shown: "Password shown",
+      hidden: "Password hidden",
+    };
+    await field.updateComplete;
+    const show = page.getByRole("button", { name: "Show password", exact: true });
+    expect(show.query()).not.toBeNull();
+    await expectNoA11yViolations(host);
+    await show.click();
+    expect(page.getByRole("button", { name: "Hide password", exact: true }).query()).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

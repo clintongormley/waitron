@@ -1,7 +1,9 @@
 import { LitElement } from "lit";
 import { commands, page, userEvent } from "vitest/browser";
-import { expect, test, afterEach } from "vitest";
+import { expect, test, afterEach, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import "./wt-button.js";
+import type { WtInput } from "./wt-input.js";
 import "./wt-input.js";
 
 afterEach(cleanup);
@@ -292,6 +294,155 @@ test("reflects the initial value into the native input", async () => {
   const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;
   expect(input.value).toBe("1.25");
 });
+
+async function mountPassword(endAction = "") {
+  const field = (await mount(
+    `<wt-input label="Password" name="password" autocomplete="current-password" type="password" value="correct horse">${endAction}</wt-input>`,
+  )) as WtInput;
+  field.passwordVisibility = {
+    show: "Show password",
+    hide: "Hide password",
+    shown: "Password shown",
+    hidden: "Password hidden",
+  };
+  await field.updateComplete;
+  return { field, input: parts(field).input };
+}
+
+test("reveals and masks the same password by pointer and keyboard without editing or submitting", async () => {
+  const { field, input } = await mountPassword();
+  const form = document.createElement("form");
+  host.append(form);
+  form.append(field);
+  const changed = vi.fn();
+  const submitted = vi.fn((event: Event) => event.preventDefault());
+  form.addEventListener("wt-change", changed);
+  form.addEventListener("submit", submitted);
+  expect(input.type).toBe("password");
+  input.focus();
+  input.setSelectionRange(2, 5, "backward");
+  const selection = () => [input.selectionStart, input.selectionEnd, input.selectionDirection];
+
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  await vi.waitFor(() => expect(input.type).toBe("text"));
+  expect(parts(field).input).toBe(input);
+  expect([input.value, input.name, input.getAttribute("autocomplete")]).toEqual([
+    "correct horse",
+    "password",
+    "current-password",
+  ]);
+  expect(selection()).toEqual([2, 5, "backward"]);
+  expect(page.getByRole("status").element().textContent).toBe("Password shown");
+  const buttonRoot = field.shadowRoot!.querySelector("wt-button")!.shadowRoot!;
+  const button = buttonRoot.querySelector("button")!;
+  button.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(input.type).toBe("password"));
+  expect(selection()).toEqual([2, 5, "backward"]);
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+  expect(buttonRoot.activeElement).toBe(button);
+  expect(input.value).toBe("correct horse");
+  expect(changed).not.toHaveBeenCalled();
+  expect(submitted).not.toHaveBeenCalled();
+});
+
+test("masks a password when its form replaces or clears it", async () => {
+  const { field, input } = await mountPassword();
+  for (const value of ["a replacement", ""]) {
+    await page.getByRole("button", { name: "Show password", exact: true }).click();
+    expect(input.type).toBe("text");
+    field.value = value;
+    await field.updateComplete;
+    expect(input.type).toBe("password");
+    expect(input.value).toBe(value);
+    expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+  }
+});
+
+test("keeps edits visible until the person empties the field", async () => {
+  const { input } = await mountPassword();
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  await userEvent.keyboard("!");
+  expect(input.type).toBe("text");
+  expect(input.value).toContain("!");
+  input.select();
+  await userEvent.keyboard("{Backspace}");
+  expect(input.value).toBe("");
+  expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+});
+
+test("masks a password while its form disables the field", async () => {
+  const { field, input } = await mountPassword();
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  field.disabled = true;
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+  await expect
+    .element(page.getByRole("button", { name: "Show password", exact: true }))
+    .toBeDisabled();
+});
+
+test("stays masked when the visibility option is removed and restored", async () => {
+  const { field, input } = await mountPassword();
+  const text = field.passwordVisibility;
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  expect(input.type).toBe("text");
+  field.passwordVisibility = undefined;
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+  field.passwordVisibility = text;
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+});
+
+test("leaves the end slot empty when the opted-in field is a text or decimal input", async () => {
+  const { field, input } = await mountPassword();
+  field.type = "text";
+  await field.updateComplete;
+  expect(page.getByRole("button").query()).toBeNull();
+  field.type = "password";
+  field.decimalLocale = "en-GB";
+  await field.updateComplete;
+  expect(input.type).toBe("text");
+  expect(page.getByRole("button").query()).toBeNull();
+});
+
+test("gives the caller's end action precedence and masks the password when it returns", async () => {
+  const { field, input } = await mountPassword('<button slot="end">Other action</button>');
+  const other = page.getByRole("button", { name: "Other action" });
+  const show = page.getByRole("button", { name: "Show password", exact: true });
+  const action = other.element();
+  expect(show.query()).toBeNull();
+  action.remove();
+  await show.click();
+  field.append(action);
+  await expect.element(other).toBeVisible();
+  expect(input.type).toBe("password");
+  expect(page.getByRole("status").element().textContent).toBe("Password hidden");
+});
+
+test.each(["light", "dark"])(
+  "paints the password eye with the %s theme's text colour",
+  async (theme) => {
+    const { field, input } = await mountPassword();
+    host.setAttribute("data-theme", theme);
+    host.style.setProperty("--wt-color-text", "rgb(24, 25, 26)");
+    const show = page.getByRole("button", { name: "Show password", exact: true });
+    const eye = field.shadowRoot!.querySelector("svg path")!;
+    expect(getComputedStyle(eye).stroke).toBe("rgb(24, 25, 26)");
+    const button = show.element();
+    expect(
+      input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight),
+    ).toBeLessThanOrEqual(button.getBoundingClientRect().left);
+    expect(field.shadowRoot!.querySelector("svg path:last-child")).toBeNull();
+    await show.click();
+    const slash = field.shadowRoot!.querySelector("svg path:last-child")!;
+    expect(getComputedStyle(slash).stroke).toBe("rgb(24, 25, 26)");
+  },
+);
 
 test("select() selects the whole value of the native input", async () => {
   const el = (await mount(

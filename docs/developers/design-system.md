@@ -3548,10 +3548,12 @@ machine take `autocomplete="off"` instead, so one customer's details are not off
 generated name such as `wt-input-2` describes the widget, not the value, and gives automation
 nothing useful to work with.
 
-Put an icon-only password visibility button in the input's `end` slot. Toggle the native input type
-between `password` and `text`, retain the entered value, and give the button a localized accessible
-label that describes its current action: “Show password” or “Hide password”. The slot reserves room
-inside the field only while it contains an action.
+To let someone check what they typed, set `.passwordVisibility` on a `wt-input` with
+`type="password"`. Supply localized action labels such as “Show password” and “Hide password”
+and status messages for both states. The button sits at the end of the field and keeps the
+entered value and selection when it switches the native input type. Name each action distinctly
+when a form has more than one password field. Some existing forms supply their own button in the
+`end` slot. An action in that slot takes precedence over the shared password button.
 
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
