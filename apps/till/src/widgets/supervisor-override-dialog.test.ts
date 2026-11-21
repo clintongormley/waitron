@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { userEvent } from "vitest/browser";
+import { cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -263,3 +264,47 @@ it.each([
     setLocale("en");
   },
 );
+
+describe("typing the supervisor's PIN with a keyboard", () => {
+  async function pinFor() {
+    const { el } = await mount();
+    await pick(el, "sup-1");
+    await root(el).querySelector("till-numeric-pad")!.updateComplete;
+    const confirmed = vi.fn();
+    const cancelled = vi.fn();
+    el.addEventListener("override-confirm", (e) =>
+      confirmed((e as CustomEvent<OverrideConfirmDetail>).detail),
+    );
+    el.addEventListener("override-cancel", cancelled);
+    return { el, confirmed, cancelled };
+  }
+
+  it("types the PIN and Enter authorizes with it", async () => {
+    const { el, confirmed } = await pinFor();
+    await userEvent.keyboard("0451");
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(confirmed).toHaveBeenCalledExactlyOnceWith({ personId: "sup-1", pin: "0451" });
+  });
+
+  it("Enter with no PIN authorizes nothing", async () => {
+    const { el, confirmed } = await pinFor();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(confirmed).not.toHaveBeenCalled();
+  });
+
+  it("Escape still closes the window, as Cancel does", async () => {
+    const { el, cancelled } = await pinFor();
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(cancelled).toHaveBeenCalledTimes(1));
+    expect(root(el).querySelector("wt-dialog")!.open).toBe(false);
+  });
+
+  it("draws no text field while the PIN pad shows", async () => {
+    const { el } = await pinFor();
+    expect(pad(el)).not.toBeNull();
+    expect(textFieldsIn(root(el))).toEqual([]);
+  });
+});

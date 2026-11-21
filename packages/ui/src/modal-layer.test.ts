@@ -1,5 +1,12 @@
-import { afterEach, expect, test, vi } from "vitest";
-import { modalClosed, modalOpened, onModalChange, underModal } from "./modal-layer.js";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import {
+  modalClosed,
+  modalOpen,
+  modalOpened,
+  onModalChange,
+  surfaceOutside,
+  underModal,
+} from "./modal-layer.js";
 
 const opened: Element[] = [];
 const stops: (() => void)[] = [];
@@ -162,4 +169,112 @@ test("an element inside a component's own drawing, inside the open window, is no
   const modal = open(box(), 1);
   const root = box(modal).attachShadow({ mode: "open" });
   expect(underModal(box(root))).toBe(false);
+});
+
+test("a window is open only between its opening and its closing", () => {
+  expect(modalOpen()).toBe(false);
+  const modal = open(box(), 1);
+  expect(modalOpen()).toBe(true);
+  modalClosed(modal);
+  expect(modalOpen()).toBe(false);
+});
+
+function openPopover(parent: Node = document.body): HTMLElement {
+  const popover = box(parent);
+  popover.popover = "manual";
+  popover.showPopover();
+  return popover;
+}
+
+test("nothing is in front while no popup or window is open", () => {
+  box().popover = "manual";
+  document.body.appendChild(document.createElement("dialog"));
+  expect(surfaceOutside(box())).toBe(false);
+});
+
+test("an open popup elsewhere is in front", () => {
+  openPopover();
+  expect(surfaceOutside(box())).toBe(true);
+});
+
+test("an open popup holding the element is not in front of it", () => {
+  const popover = openPopover();
+  const root = box(popover).attachShadow({ mode: "open" });
+  expect(surfaceOutside(box(root))).toBe(false);
+});
+
+test("an open modal dialog inside a component's drawing, not holding the element, is in front", () => {
+  const root = box().attachShadow({ mode: "open" });
+  const dialog = document.createElement("dialog");
+  root.appendChild(dialog);
+  dialog.showModal();
+  try {
+    expect(surfaceOutside(box())).toBe(true);
+  } finally {
+    dialog.close();
+  }
+});
+
+test("an open modal dialog drawn around the element's slot, as a wt-dialog draws it, is not in front", () => {
+  const host = box();
+  const root = host.attachShadow({ mode: "open" });
+  const dialog = document.createElement("dialog");
+  dialog.appendChild(document.createElement("slot"));
+  root.appendChild(dialog);
+  const slotted = box(host);
+  dialog.showModal();
+  try {
+    expect(surfaceOutside(slotted)).toBe(false);
+  } finally {
+    dialog.close();
+  }
+});
+
+test("a dialog shown without being modal is not in front", () => {
+  const dialog = document.createElement("dialog");
+  document.body.appendChild(dialog);
+  dialog.show();
+  expect(surfaceOutside(box())).toBe(false);
+});
+
+/** A component drawing its own modal `<dialog>` around a slot, as a wt-dialog does, opened as a
+ * tracked window. */
+function trackedWindow(order: number): { host: HTMLElement; dialog: HTMLDialogElement } {
+  const host = box();
+  const dialog = document.createElement("dialog");
+  dialog.appendChild(document.createElement("slot"));
+  host.attachShadow({ mode: "open" }).appendChild(dialog);
+  dialog.showModal();
+  onTestFinished(() => dialog.close());
+  open(host, order);
+  return { host, dialog };
+}
+
+test("an earlier tracked window's dialog is not in front of what is inside the later one", () => {
+  trackedWindow(1);
+  const { host } = trackedWindow(2);
+  expect(surfaceOutside(box(host))).toBe(false);
+});
+
+test("an open popup outside the later tracked window is still in front of what is inside it", () => {
+  trackedWindow(1);
+  const { host } = trackedWindow(2);
+  openPopover();
+  expect(surfaceOutside(box(host))).toBe(true);
+});
+
+test("an open popup drawn inside an earlier tracked window's component still counts, though the later window covers it", () => {
+  const earlier = trackedWindow(1);
+  openPopover(earlier.host.shadowRoot!);
+  const { host } = trackedWindow(2);
+  expect(surfaceOutside(box(host))).toBe(true);
+});
+
+test("a modal dialog no tracked window draws is in front, even with tracked windows open", () => {
+  const { host } = trackedWindow(1);
+  const dialog = document.createElement("dialog");
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  onTestFinished(() => dialog.close());
+  expect(surfaceOutside(box(host))).toBe(true);
 });

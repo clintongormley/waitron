@@ -65,7 +65,9 @@ comes next, adds another typed name.
   with Enter; the scale-label piece of work handles that. This design must not make it harder:
   route keys through one place in the till rather than a separate listener per screen, so a later
   scanner check has one place to sit.
-- Changing the dashboard, which is a desktop app with ordinary form fields.
+- Changing the dashboard, which is a desktop app with ordinary form fields. (2026-11-22: Task 5's
+  fix moves a dashboard `wt-dialog`'s height limit from the browser's own to the window less two
+  `--wt-space-5` margins; see the plan's Task 5.)
 
 ## Constraints
 

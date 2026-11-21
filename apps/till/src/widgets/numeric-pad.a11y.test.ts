@@ -10,4 +10,13 @@ describe.each(["light", "dark"] as const)("till-numeric-pad a11y (%s theme)", (t
     const { host } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "0.3" }, theme);
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations in pin mode with a partly entered PIN", async () => {
+    const { host } = await mountWidget<TillNumericPad>(
+      "till-numeric-pad",
+      { value: "01", mode: "pin" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

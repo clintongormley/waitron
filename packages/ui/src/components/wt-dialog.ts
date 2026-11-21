@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
-import { modalClosed, modalOpened } from "../modal-layer.js";
+import { modalClosed, modalOpened, openSurfaces } from "../modal-layer.js";
 import { composedParent, isTabbable, tabbables } from "../tabbable.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
@@ -26,13 +26,6 @@ function composedContains(ancestor: Node, node: Node | null): boolean {
   return false;
 }
 
-/** Open popovers and modal dialogs in `root` and in every open shadow root inside it. */
-function* openSurfaces(root: Document | ShadowRoot): Generator<HTMLElement> {
-  yield* root.querySelectorAll<HTMLElement>(":popover-open, dialog:modal");
-  for (const each of root.querySelectorAll("*"))
-    if (each.shadowRoot) yield* openSurfaces(each.shadowRoot);
-}
-
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -53,9 +46,21 @@ export class WtDialog extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         max-width: var(--wt-dialog-max-width);
+        /* Declared on each dialog rather than inherited, so a dialog nested in another reads its
+           own. While a keyboard covers the page, the margin shrinks to leave the room to content. */
+        --wt-dialog-margin: max(
+          var(--wt-space-2),
+          var(--wt-space-5) - var(--wt-keyboard-inset) - var(--wt-keyboard-top)
+        );
+        --wt-dialog-band: calc(100dvh - var(--wt-keyboard-top) - var(--wt-keyboard-inset));
+        /* The auto margins centre the window inside the visible part of the page. */
+        margin: auto;
+        inset-block: calc(var(--wt-keyboard-top) + var(--wt-dialog-margin))
+          calc(var(--wt-keyboard-inset) + var(--wt-dialog-margin));
+        max-height: calc(var(--wt-dialog-band) - 2 * var(--wt-dialog-margin));
       }
 
-      /* The native modal dialog's own height limit bounds this column, so a long body scrolls
+      /* The dialog's max-height bounds this column, so a long body scrolls
          inside it and the footer stays in view. */
       dialog[open] {
         display: flex;

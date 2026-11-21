@@ -95,6 +95,11 @@ only if a device shows it is needed.
 
 ### Task 2: What a key means, and what is in front
 
+> **As built (2026-11-21, finish-branch review):** a held key's repeats are dropped in `routeKey`
+> (`apps/till/src/state/pad-keys.ts`) after the same ownership checks, not by `padInputFor`;
+> `surfaceOutside` leaves out the dialogs of windows `modal-layer.ts` tracks, whose order
+> `underModal` decides; `inInertTree` lives in `packages/ui/src/tabbable.ts`.
+
 **Files:**
 - Modify: `packages/ui/src/modal-layer.ts`; move `composedContains`, `composedParent` (as used by
   it) and `openSurfaces` there from `packages/ui/src/components/wt-dialog.ts:17-34`, which then
@@ -282,6 +287,18 @@ quiet-tap explanation).
 ---
 
 ### Task 5: The till fits above a device's built-in keyboard
+
+> **As built (2026-11-22, landscape fix):** the Pixel tablet failed in landscape, so Step 3 was
+> built: `apps/till/src/state/keyboard-inset.ts` sets `--wt-keyboard-inset` and
+> `--wt-keyboard-top`; `wt-dialog` and `wt-modal` fit between them, with top and bottom margins
+> that shrink to `--wt-space-2` (a `full` modal's side margin when smaller). `apps/till/src/main.ts`
+> starts the watcher, which also scrolls the field being typed in back into view after the visible
+> area changes height. Tests are in `packages/ui/src/components/wt-dialog.keyboard-inset.test.ts`,
+> `apps/till/src/state/keyboard-inset.test.ts`, `apps/till/src/main.keyboard-inset.test.ts` and
+> `apps/till/src/widgets/modifier-picker.keyboard-inset.test.ts`. The unit tests' readings are
+> estimated from the owner's screenshots, as no remote-inspection reading was taken. This task did
+> not change `index.html`'s body height or `till-app.ts`. The re-check on the tablet is in
+> `docs/backlog.md`.
 
 The reviewer found the full fix (measure the keyboard, shrink the page and every window) touches
 `wt-dialog` and `wt-modal` (`packages/ui/src/components/wt-modal.ts:19-20, 41-42` sets its own

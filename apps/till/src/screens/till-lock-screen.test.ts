@@ -1,6 +1,6 @@
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   chooseTheme,
   currentVenueLogo,
@@ -17,9 +17,11 @@ import { codeMessage } from "../i18n/codes.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
+  blurAll,
   expectChooserFaces,
   cleanupWidgets,
   mountWidget,
+  textFieldsIn,
   tokenColour,
 } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
@@ -1276,5 +1278,93 @@ describe("the venue logo and Powered by on the sign-in", () => {
     expect(box.left).toBeGreaterThanOrEqual(0);
     expect(box.right).toBeLessThanOrEqual(window.innerWidth);
     expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+  });
+});
+
+describe("typing on the sign-in PIN pad with a keyboard", () => {
+  async function pinFor(api: TillApi): Promise<TillLockScreen> {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
+    await flush(el);
+    click(el, 'wt-button.operator-button[data-person="p1"]');
+    await el.updateComplete;
+    await blurAll();
+    return el;
+  }
+
+  const dots = (el: TillLockScreen) => query(el, ".pin-display")!.textContent;
+
+  it("types the PIN and Enter logs in with it, leading zero kept", async () => {
+    const login = vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: null });
+    const el = await pinFor(stubApi({ login }));
+    await userEvent.keyboard("0123");
+    await el.updateComplete;
+    expect(dots(el)).toBe("●●●●");
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(login).toHaveBeenCalledExactlyOnceWith("p1", "0123");
+  });
+
+  it("Enter with no PIN logs nobody in", async () => {
+    const api = stubApi();
+    const el = await pinFor(api);
+    await userEvent.keyboard("{Enter}");
+    await flush(el);
+    expect(api.login).not.toHaveBeenCalled();
+  });
+
+  it("Escape goes back to the list of people", async () => {
+    const el = await pinFor(stubApi());
+    await userEvent.keyboard("12{Escape}");
+    await el.updateComplete;
+    expect(query(el, "till-numeric-pad")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
+  });
+
+  it("Delete empties the PIN", async () => {
+    const el = await pinFor(stubApi());
+    await userEvent.keyboard("123");
+    await el.updateComplete;
+    expect(dots(el)).toBe("●●●");
+    await userEvent.keyboard("{Delete}");
+    await el.updateComplete;
+    expect(dots(el)).toBe("");
+  });
+
+  it("Enter twice quickly sends one login", async () => {
+    let answer!: (value: unknown) => void;
+    const login = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const el = await pinFor(stubApi({ login }));
+    await userEvent.keyboard("1234{Enter}");
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    answer({ personId: "p1", permissions: [], locale: null });
+    await flush(el);
+    expect(login).toHaveBeenCalledExactlyOnceWith("p1", "1234");
+  });
+
+  it("while sign-in is throttled, typing changes nothing", async () => {
+    const login = vi.fn().mockRejectedValue({ code: "pin.throttled", retryAfterSeconds: 30 });
+    const el = await pinFor(stubApi({ login }));
+    await userEvent.keyboard("1234");
+    await el.updateComplete;
+    click(el, ".submit");
+    await flush(el);
+    expect(query(el, ".pad-wrap[inert]")).not.toBeNull();
+    await blurAll();
+    await userEvent.keyboard("5{Delete}{Enter}");
+    await flush(el);
+    expect(dots(el)).toBe("●●●●");
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws no text field while the PIN pad shows", async () => {
+    const el = await pinFor(stubApi());
+    expect(query(el, "till-numeric-pad")).not.toBeNull();
+    expect(textFieldsIn(el.shadowRoot!)).toEqual([]);
   });
 });

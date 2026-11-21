@@ -22,6 +22,7 @@ import type { ContentLanguages } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT, watchBuild } from "@waitron/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  blurAll,
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
@@ -1485,6 +1486,35 @@ describe("till-app session activity", () => {
     expect(sa.noteInteraction).toHaveBeenCalledTimes(1);
     inner.dispatchEvent(new Event("keydown", { bubbles: true, composed: true }));
     expect(sa.noteInteraction).toHaveBeenCalledTimes(2);
+  });
+
+  it("a digit typed into the PIN pad with nothing focused restarts the idle countdown", async () => {
+    const sa = fakeSessionActivity();
+    const { el } = await mountApp(
+      { listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]) },
+      { sessionActivity: sa as never },
+    );
+    await flush(el);
+    lock(el)!
+      .shadowRoot!.querySelector<HTMLElement>('wt-button.operator-button[data-person="p1"]')!
+      .click();
+    await flush(el);
+    await blurAll();
+    sa.noteInteraction.mockClear();
+    await userEvent.keyboard("5");
+    await lock(el)!.updateComplete;
+    expect(lock(el)!.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
+    expect(sa.noteInteraction).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops hearing key presses once the app leaves the page", async () => {
+    const sa = fakeSessionActivity();
+    const { el } = await mountApp({}, { sessionActivity: sa as never });
+    await flush(el);
+    el.remove();
+    sa.noteInteraction.mockClear();
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "5", bubbles: true }));
+    expect(sa.noteInteraction).not.toHaveBeenCalled();
   });
 
   it("asks for the screen wake lock again when the tab's visibility changes", async () => {

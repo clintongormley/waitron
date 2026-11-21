@@ -8,6 +8,7 @@ import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
+import { pressIfEnabled } from "../state/pad-keys.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { StaffMember } from "../api/client.js";
 
@@ -230,6 +231,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
         mode="pin"
         .value=${this.pin}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @pad-enter=${() => pressIfEnabled(this.renderRoot.querySelector<HTMLElement>(".authorize"))}
       ></till-numeric-pad>
       <wt-form-actions slot="footer" .error=${showError ? overrideErrorText(this.error!) : ""}>
         <wt-button slot="cancel" class="back" variant="secondary" @click=${() => this.#back()}>

@@ -9,12 +9,14 @@ function inTabOrder(element: HTMLElement): boolean {
   return element.tabIndex >= 0 || element.isContentEditable;
 }
 
-function renderedParent(node: Node): Node | null {
+/** The parent `node` is drawn in: its slot when it is slotted, its host when it is a shadow root. */
+export function renderedParent(node: Node): Node | null {
   return node instanceof Element && node.assignedSlot ? node.assignedSlot : composedParent(node);
 }
 
-function insideInert(element: Element): boolean {
-  for (let at: Node | null = element; at; at = renderedParent(at))
+/** Whether `node`, or anything it is drawn inside, is inert. */
+export function inInertTree(node: Node): boolean {
+  for (let at: Node | null = node; at; at = renderedParent(at))
     if (at instanceof HTMLElement && at.inert) return true;
   return false;
 }
@@ -27,7 +29,7 @@ export function isTabbable(node: Node): node is HTMLElement {
     inTabOrder(node) &&
     !node.matches(":disabled") &&
     node.checkVisibility({ visibilityProperty: true }) &&
-    !insideInert(node)
+    !inInertTree(node)
   );
 }
 

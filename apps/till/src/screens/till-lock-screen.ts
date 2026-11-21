@@ -13,6 +13,7 @@ import "@waitron/ui/src/components/wt-venue-logo.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { pressIfEnabled } from "../state/pad-keys.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
@@ -536,6 +537,10 @@ export class TillLockScreen extends LitElement {
     `;
   }
 
+  #button(selector: string): HTMLElement | null {
+    return this.renderRoot.querySelector<HTMLElement>(selector);
+  }
+
   #renderPin(person: StaffMember) {
     const throttled = this.throttleRemaining > 0;
     return html`
@@ -560,6 +565,8 @@ export class TillLockScreen extends LitElement {
           mode="pin"
           .value=${this.pin}
           @wt-change=${(event: Event) => this.#onPadChange(event)}
+          @pad-enter=${() => pressIfEnabled(this.#button(".submit"))}
+          @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
         ></till-numeric-pad>
       </div>
       <div class="actions">

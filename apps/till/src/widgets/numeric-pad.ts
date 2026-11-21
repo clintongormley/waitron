@@ -3,6 +3,12 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, dispatchWtChange, decimalMark } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import {
+  bringPadToFront,
+  registerPad,
+  type PadInput,
+  type PadKeyTarget,
+} from "../state/pad-keys.js";
 
 /**
  * A PARTIAL number the parent normalises before it reaches `decimal()`: never a leading zero
@@ -30,6 +36,7 @@ export function nextPadValue(value: string, key: string): string {
  */
 export function nextPinValue(value: string, key: string): string {
   if (key === "backspace") return value.slice(0, -1);
+  if (key === "clear") return "";
   if (key === ".") return value;
   return value + key;
 }
@@ -44,9 +51,11 @@ interface PadKey {
 /**
  * Deliberately PRESENTATIONAL: it knows nothing of money, weight or PINs. Each key press emits
  * `wt-change` with the string that key produces; the parent holds the value and passes it back down.
+ * Enter and Escape on a keyboard reach this pad as `pad-enter` and `pad-escape` when `routeKey`
+ * (`state/pad-keys.ts`) gives them to it, for the parent to answer.
  */
 @customElement("till-numeric-pad")
-export class TillNumericPad extends LitElement {
+export class TillNumericPad extends LitElement implements PadKeyTarget {
   static override styles = [
     baseStyles,
     css`
@@ -85,9 +94,35 @@ export class TillNumericPad extends LitElement {
 
   @property() mode: "decimal" | "pin" = "decimal";
 
+  #unregister?: () => void;
+
   constructor() {
     super();
     new LocaleChangeController(this);
+    this.addEventListener("pointerdown", () => bringPadToFront(this));
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#unregister = registerPad(this);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#unregister?.();
+    this.#unregister = undefined;
+  }
+
+  /** A key the keyboard router hands this pad, the one in front. */
+  receiveKey(input: PadInput, event: KeyboardEvent): void {
+    if (input.kind === "key") this.#press(input.key, event);
+    else
+      this.dispatchEvent(
+        new CustomEvent(input.kind === "enter" ? "pad-enter" : "pad-escape", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
   }
 
   #keys(): PadKey[] {
@@ -102,7 +137,7 @@ export class TillNumericPad extends LitElement {
         { key: "7", glyph: "7" },
         { key: "8", glyph: "8" },
         { key: "9", glyph: "9" },
-        { key: "", glyph: "" },
+        { key: "clear", glyph: t("pad.clear") },
         { key: "0", glyph: "0" },
         { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
       ];
@@ -130,8 +165,6 @@ export class TillNumericPad extends LitElement {
   }
 
   #renderKey({ key, glyph, label }: PadKey) {
-    // The pin layout's spacer: it keeps `0` centred where the calculator layout has `.`.
-    if (key === "") return html`<div class="key" aria-hidden="true"></div>`;
     const content = label
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`
       : glyph;

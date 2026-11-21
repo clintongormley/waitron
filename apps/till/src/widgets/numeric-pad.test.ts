@@ -85,6 +85,10 @@ describe("nextPinValue", () => {
   it("ignores a decimal point (the pad hides that key in pin mode)", () => {
     expect(nextPinValue("12", ".")).toBe("12");
   });
+
+  it("clears the whole value", () => {
+    expect(nextPinValue("0123", "clear")).toBe("");
+  });
 });
 
 describe("till-numeric-pad", () => {
@@ -100,7 +104,20 @@ describe("till-numeric-pad", () => {
       value: "",
       mode: "pin",
     });
-    expect(keyOrder(el)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "backspace"]);
+    expect(keyOrder(el)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "clear",
+      "0",
+      "backspace",
+    ]);
   });
 
   it("renders keys in calculator order (7-8-9 on top) in decimal mode", async () => {
@@ -183,6 +200,36 @@ describe("till-numeric-pad", () => {
     el.addEventListener("wt-change", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-key="backspace"]')!.click();
     expect(spy).toHaveBeenCalledWith({ value: "000" });
+  });
+
+  it("pressing Clear in pin mode emits an empty value", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "0123",
+      mode: "pin",
+    });
+    const spy = vi.fn();
+    el.addEventListener("wt-change", (e) => spy((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-key="clear"]')!.click();
+    expect(spy).toHaveBeenCalledWith({ value: "" });
+  });
+
+  it("decimal mode has no Clear key", async () => {
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", { value: "" });
+    expect(el.shadowRoot!.querySelector('[data-key="clear"]')).toBeNull();
+  });
+
+  it("Clear is named in Spanish", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("es");
+    const { el } = await mountWidget<TillNumericPad>("till-numeric-pad", {
+      value: "",
+      mode: "pin",
+    });
+    expect(el.shadowRoot!.querySelector('[data-key="clear"]')!.textContent).toContain(
+      "Borrar todo",
+    );
+    setLocale("en");
   });
 });
 

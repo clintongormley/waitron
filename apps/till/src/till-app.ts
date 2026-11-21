@@ -3107,9 +3107,10 @@ export class TillApp extends LitElement {
     this.#subscribeRouter();
     this.#syncBasketDraft();
     this.#syncPartylessDraft();
-    // pointerdown/keydown are composed, so they reach this host from inside the screens' shadow roots.
+    // pointerdown is composed, so it reaches this host from inside the screens' shadow roots; a key
+    // pressed with nothing focused lands on the page's body, outside this host.
     this.addEventListener("pointerdown", this.#onInteraction);
-    this.addEventListener("keydown", this.#onInteraction);
+    document.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
     window.addEventListener("focus", this.#onDraftFocus);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
@@ -3171,7 +3172,7 @@ export class TillApp extends LitElement {
     clearTimeout(this.#switchedTimer);
     this.#detach();
     this.removeEventListener("pointerdown", this.#onInteraction);
-    this.removeEventListener("keydown", this.#onInteraction);
+    document.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
     window.removeEventListener("focus", this.#onDraftFocus);
     clearTimeout(this.#billDraftTimer);

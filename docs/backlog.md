@@ -649,13 +649,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A1563. Typing on the till with a keyboard (owner, 2026-11-21; queued for building).** A
-  laptop or USB keyboard types into the PIN, supervisor PIN, cash and weight pads; the PIN pad gets
-  a Clear key; the till fits above an Android device's own keyboard. Design
-  `docs/superpowers/specs/2026-11-21-till-keyboard-input-design.md`, plan
-  `docs/superpowers/plans/2026-11-21-till-keyboard-input.md`. Task 1 (Clear key) is on branch
-  `till-keyboard-input`; Tasks 2–5 remain. Task 5's check needs the owner's Android phone and
-  tablet; Safari is untested (no Apple device). Comes before the Counter's custom item.
+- **Check the till above a tablet's own keyboard again (left open by A1563, typing on the till
+  with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
+  tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a
+  window's buttons sat under it. Windows now fit in the part of the page left visible (#3986);
+  that was checked only by setting the keyboard's measurements by hand in a desktop browser, which
+  draws no keyboard. The owner opens a line note, the bill name window and
+  Find a bill's search on the tablet in landscape. Safari is untested: there is no Apple device.
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
@@ -679,7 +679,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Take over offered where it is needed** (bundle of 2, size M). Holds A1349, A1289. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
 
 
-- **Table screen panels that do not fit** (bundle of 3, size S). Holds A1359, A1265, A1290. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
+- **Table screen panels that do not fit** (bundle of 4, size S). Holds A1359, A1265, A1290, A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
 
@@ -729,8 +729,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
   a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
   Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
-  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). After
-  A1563, whose number pad it uses. The VAT rates work (piece A) revisits the places the plan's
+  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). The VAT rates work (piece A) revisits the places the plan's
   Global Constraints list.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 

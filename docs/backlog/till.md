@@ -1394,7 +1394,8 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
 
 ## Bundle: Table screen panels that do not fit
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. The first three are unchanged from the index they came from (backlog review,
+2026-11-06); A1565 joined on 2026-11-22 (#3986's review).
 
 - **A1359. At 1280 by 800, Split a table's panel opens low (seen in A803 slice 4c's LOOK).** Its
   heading sits at 579 of 800 px with about three rows showing, because the side panel sits below the
@@ -1408,6 +1409,10 @@ the remaining till unit and tab edges joined on 2026-11-12. A470, A1106 and A110
   New bill" touches Back (seen in A803 slice 4a's LOOK).** Both are the shared action panel's layout
   (`aside.action-panel` in `apps/till/src/screens/till-table-order-screen.ts`).
   [Detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)
+- **A1565. The till's order panel squeezed on a landscape tablet.** At about 640 CSS pixels tall
+  (the Pixel tablet in landscape, no keyboard), the order panel's buttons leave the list of lines
+  a sliver one line high, on the Counter and on a table's order. Seen by the owner on 21 November,
+  and in desktop emulation at 1280 by 640. Not investigated.
 
 ## Bundle: One answer to "where is this order"
 

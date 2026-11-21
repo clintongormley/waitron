@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { blurAll, cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
 import { TillTenderPay, type CardOutcome } from "./tender-pay.js";
 import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
 import { userEvent } from "vitest/browser";
@@ -2854,4 +2854,80 @@ it.each(["cash", "new order"])("does not carry a card tip after %s", async (chan
   el.addEventListener("confirm-payment", (event) => sent((event as CustomEvent).detail));
   click(el, ".confirm");
   expect(sent).toHaveBeenCalledWith({ method: "card", amount: "1.50", externalProvider: "other" });
+});
+
+describe("typing cash and weights with a keyboard", () => {
+  async function paying() {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const confirmed = vi.fn();
+    el.addEventListener("confirm-payment", (e) => confirmed((e as CustomEvent).detail));
+    click(el, ".pay");
+    await el.updateComplete;
+    await blurAll();
+    return { el, confirmed };
+  }
+
+  async function weighing() {
+    const store = new WorkingOrderStore();
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    store.emit("product-selected", ham);
+    await el.updateComplete;
+    await blurAll();
+    return { el, store };
+  }
+
+  it("in Spanish, 20,5 shows as 20,5 and Enter pays only once the total is covered", async () => {
+    setLocale("es-ES");
+    onTestFinished(() => setLocale("en"));
+    const { el, confirmed } = await paying();
+    await userEvent.keyboard("2");
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(confirmed).not.toHaveBeenCalled();
+    await userEvent.keyboard("0,5");
+    await el.updateComplete;
+    expect(query(el, ".tendered")!.textContent!.trim()).toBe("20,5");
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(confirmed).toHaveBeenCalledExactlyOnceWith({ method: "cash", amount: "20.5" });
+  });
+
+  it("Enter with a weight adds that much of the product", async () => {
+    const { el, store } = await weighing();
+    await userEvent.keyboard("0.25");
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(store.lines).toEqual([{ product: ham, quantity: "0.25" }]);
+  });
+
+  it("Enter with a zero weight adds nothing", async () => {
+    const { el, store } = await weighing();
+    await userEvent.keyboard("0");
+    await el.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(store.lines).toEqual([]);
+    expect(query(el, ".add")).not.toBeNull();
+  });
+
+  it("Escape on the weight returns to the payment buttons, adding nothing", async () => {
+    const { el, store } = await weighing();
+    await userEvent.keyboard("0.3{Escape}");
+    await el.updateComplete;
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(store.lines).toEqual([]);
+  });
+
+  it("draws no text field while the cash or weight pad shows", async () => {
+    const cash = await paying();
+    expect(query(cash.el, "till-numeric-pad")).not.toBeNull();
+    expect(textFieldsIn(cash.el.shadowRoot!)).toEqual([]);
+    const weight = await weighing();
+    expect(query(weight.el, "till-numeric-pad")).not.toBeNull();
+    expect(textFieldsIn(weight.el.shadowRoot!)).toEqual([]);
+  });
 });
