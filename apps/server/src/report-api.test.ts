@@ -269,7 +269,7 @@ describe("mountReportApi — request screens + auth", () => {
     // A leading-zero year below 1000 is refused at the screen, before `validatePeriod`'s plain
     // Error.
     ["out-of-range year (leading zeros)", "?year=0999&period=08&declarationType=I", "year"],
-    // The day after its last would be a five-digit year, which sorts before its own December.
+    // The day after its last is written `+010000-01`, which sorts before its own December.
     ["out-of-range year (9999)", "?year=9999&period=4T&declarationType=I", "year"],
     ["bad period", "?year=2026&period=13&declarationType=I", "period"],
     [

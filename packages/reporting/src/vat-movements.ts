@@ -94,7 +94,7 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
   // keeps a supply day only when it is earlier than the issue day, so no ordinary invoice stamped
   // before the period belongs to it). `starts` adds the non-replacement correctives below each
   // seed, at any depth: a clock put back can stamp a corrective or void of the period's invoice
-  // long before it, so they are reached from the invoice, never by their own stamps. A corrective
+  // long before it, so those are reached from the invoice rather than by their stamps. A corrective
   // of a replacement is reached from the replacement.
   //
   // `chain` walks each start up through the correctives it corrects to the invoice whose day they

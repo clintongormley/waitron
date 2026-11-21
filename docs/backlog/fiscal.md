@@ -1085,7 +1085,9 @@ the box adds by itself, and how the record reaches the tax office.
 
 ## Decisions and deliberate limits
 
-### A VAT period counts what belongs to it and was recorded by its last day
+**The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
+
+### A VAT period counts what belongs to it and was recorded by its last day (owner, 2026-11-16 and 2026-11-19)
 
 The VAT return (modelo 303) for a month or quarter counts the sales VAT that belongs to that period
 and was recorded by its last day; a correction, void, date replacement or late ticket recorded
@@ -1093,16 +1095,16 @@ later leaves it as it was and is listed on the corrections workbook of the perio
 recorded, against the earlier period it belongs to. The owner's words: "a filed report never
 changes", "we use a corrections report instead of just adding the transaction to the current
 period" (D12, 2026-11-16, [adviser answers](../compliance/2026-11-15-adviser-answers.md)), and a
-period counts as filed on "The day it ends (Recommended)" (D1, 2026-11-19, relayed by the watcher in
-lane L `questions.md`). How each kind of record moves VAT (the movement table) and D5–D11 and D13 are
-the watcher's choices, not the owner's
-([plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). Deliberate limits:
+period counts as filed on "The day it ends (Recommended)" (the corrections report's D1, 2026-11-19,
+relayed by the watcher, lane L `questions.md`, "WATCHER 2026-11-19 17:05"). Which way a
+correction's line points, reading a void's date in its sale's offset, and putting a corrective of an
+exchange invoice on that invoice's own date are the watcher's choices (the plan's D5, D7 and D8;
+[plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md) → Design). Deliberate limits:
 a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
-after a handover count on their own stamps, since nothing records when they arrived; correctives and
-voids are read from every year. The purchases side is not covered: a supplier invoice's date can
-still be edited.
-
-**The recovery pack's paper-block check compares no venue id (owner, 2026-11-09).** The box's recovery key is what counts; the venue name printed on the sheet is for the person to check by eye, though the signed block still carries `recipientVenueId`. The owner's words: "There is only one venue so there is no point comparing the ID. We have the name on the sheet that the user can check, but the important bit for us is the recovery key."
+after a handover count on their own stamps, since nothing records when they arrived; every
+replacement and the invoice it replaces, and every invoice issued after the period, are read
+whatever their date. The purchases side is not covered: a supplier invoice dated in an ended period
+can still be added, changed or deleted, and that period's return changes with it.
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 

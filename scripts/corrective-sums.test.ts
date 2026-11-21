@@ -89,7 +89,7 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     fragment: "join sales c indexed by sales_corrects_idx on c.corrects_sale_id = x.id",
     lines: 1,
     reason:
-      "walks down from a sale to each corrective below it, to read its own movement; it sums nothing",
+      "walks down from a sale to each non-replacement corrective, each read as its own movement; replacements have their own branches, so `correctivesOf`'s rule is applied here by hand",
   },
   {
     file: "packages/reporting/src/vat-movements.ts",

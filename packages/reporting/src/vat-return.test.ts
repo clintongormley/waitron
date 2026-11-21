@@ -4,12 +4,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
 import type { Decimal, SaleId } from "@waitron/shared";
 import {
+  at,
   seedNodeAndSeries,
   seedPurchaseInvoice,
   seedSale,
   seedSubstitution,
   seedVenueWithSeries,
   seedVoid,
+  TICKET,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatReturn } from "./vat-return.js";
@@ -595,10 +597,6 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
   const Q2: LiquidationPeriod = { kind: "quarter", quarter: 2 };
   const TEN = [{ rate: "10.00", base: "10.00", tax: "1.00" }];
 
-  function at(day: string): string {
-    return new Date(`${day}T10:00:00Z`).toISOString();
-  }
-
   async function sale(
     issuedDay: string,
     opts: Partial<Omit<Parameters<typeof seedSale>[2], "invoiceNumber" | "issuedAt">> = {},
@@ -651,13 +649,11 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
     expect(await quarters()).toEqual([[], []]);
   });
 
-  describe("a ticket replaced with an earlier quarter's day, then voided", () => {
-    const ticket = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
-
+  describe("a TICKET replaced with an earlier quarter's day, then voided", () => {
     async function replaced(): Promise<{ original: SaleId; replacement: SaleId }> {
-      const original = await sale("2026-04-01", ticket);
+      const original = await sale("2026-04-01", TICKET);
       const replacement = await sale("2026-04-10", {
-        ...ticket,
+        ...TICKET,
         correctsSaleId: original,
         replacesOriginal: true,
         supplyDay: "2026-03-31",

@@ -31,7 +31,7 @@ export function parsePeriodToken(token: string): LiquidationPeriod | undefined {
  * A bad year/period is a caller precondition — a plain Error, thrown before any query. The year is
  * bounded to four digits because a typo year (226, 20226) would match no rows and return a
  * plausible but EMPTY period, the quiet, worse direction for a fiscal filing. 9999 is refused too:
- * the day after its last (`periodDays`'s `next`) has a five-digit year, which sorts as text before
+ * the day after its last (`periodDays`'s `next`) is written `+010000-01`, which sorts as text before
  * its own December, so its December, fourth quarter and year would be as empty.
  */
 export function validatePeriod(year: number, period: LiquidationPeriod): void {

@@ -5,15 +5,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { startManagementSession } from "@waitron/identity";
-import { seedSale, seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
+import { seedSale, seedVenueWithSeries, TICKET } from "@waitron/reporting/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { SupportedLocale } from "@waitron/shared";
 import { CORRECTIONS_REPORT_WORDS } from "./i18n/corrections-report.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { mountReportApi } from "./report-api.js";
 import { row } from "./testing/xlsx-rows.js";
-
-const TICKET = { total: "12.10", lines: [{ vatRate: "10.00", lineTotal: "11.00" }] };
 
 describe("corrections download", () => {
   let nodeId = "";

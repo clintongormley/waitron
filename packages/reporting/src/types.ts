@@ -170,7 +170,7 @@ export interface VatCorrections {
 export interface VatRateLine {
   /** Percentage literal as stored, e.g. "21.00". */
   rate: Decimal;
-  /** Net taxable base at this rate (corrections other than a replacement netted). */
+  /** Net taxable base at this rate. */
   base: Decimal;
   /** Net tax at this rate (the fiscal cuota). */
   tax: Decimal;
