@@ -104,9 +104,8 @@ hora de fin puede ser después de medianoche. Por ahora, el temporizador nocturn
 actualizaciones disponibles.
 
 Para pausar la instalación y conservar el horario, desactiva **Permitir la instalación automática**
-y elige **Guardar**. Para detener la instalación automática y quitar el horario, borra ambas
-horas y guarda. Elige **Cancelar** para
-conservar los ajustes guardados.
+y elige **Guardar**. Para omitir la instalación de actualizaciones ofrecidas, borra ambas horas y
+guarda. Elige **Cancelar** para conservar los ajustes guardados.
 
 ## Consultar la red {#network}
 

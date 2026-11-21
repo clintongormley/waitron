@@ -4466,15 +4466,15 @@ export const en = {
   "box_status.upgrade_settings.loading": "Reading upgrade settings…",
   "box_status.upgrade_settings.automatic": "Allow automatic installation",
   "box_status.upgrade_settings.hours_help":
-    "Use the venue’s local time in HH:MM. Leaving both times empty stops automatic installation.",
+    "Use the venue’s local time in HH:MM. The box skips offered installs when both times are empty.",
   "box_status.upgrade_settings.start_required": "Enter a start time.",
   "box_status.upgrade_settings.end_required": "Enter an end time.",
   "box_status.upgrade_settings.invalid_time": "Enter a time in HH:MM.",
   "box_status.upgrade_settings.short_window": "Allow at least 60 minutes.",
   "box_status.upgrade_settings.read_failed":
-    "The box could not read upgrade settings. Close and reopen this dialog. If the problem continues, see the console recovery steps in the deployment guide.",
+    "The box could not read upgrade settings. Close and reopen this dialog. If the problem continues, check the upgrade settings at the box console.",
   "box_status.upgrade_settings.save_unavailable":
-    "The box could not save upgrade settings. Try again in a moment. If the problem continues, see the console recovery steps in the deployment guide.",
+    "The box could not confirm the save. Try again, or close and reopen this dialog to check the saved settings.",
   "box_status.upgrade_settings.save_stale":
     "Someone saved different upgrade settings. Close and reopen this dialog to see them.",
   "box_status.upgrade_settings.save_busy":
@@ -9187,15 +9187,15 @@ export const es: Record<StringKey, string> = {
   "box_status.upgrade_settings.loading": "Leyendo los ajustes de actualización…",
   "box_status.upgrade_settings.automatic": "Permitir la instalación automática",
   "box_status.upgrade_settings.hours_help":
-    "Usa la hora local del establecimiento en formato HH:MM. Si dejas ambas horas en blanco, se detiene la instalación automática.",
+    "Usa la hora local del establecimiento en formato HH:MM. El servidor omite la instalación de actualizaciones ofrecidas si dejas ambas horas en blanco.",
   "box_status.upgrade_settings.start_required": "Introduce una hora de inicio.",
   "box_status.upgrade_settings.end_required": "Introduce una hora de fin.",
   "box_status.upgrade_settings.invalid_time": "Introduce una hora en formato HH:MM.",
   "box_status.upgrade_settings.short_window": "Deja al menos 60 minutos.",
   "box_status.upgrade_settings.read_failed":
-    "El servidor no pudo leer los ajustes de actualización. Cierra y vuelve a abrir este diálogo. Si el problema persiste, consulta los pasos de recuperación desde la consola en la guía de instalación.",
+    "El servidor no pudo leer los ajustes de actualización. Cierra y vuelve a abrir este diálogo. Si el problema persiste, revisa los ajustes de actualización desde la consola del servidor.",
   "box_status.upgrade_settings.save_unavailable":
-    "El servidor no pudo guardar los ajustes de actualización. Inténtalo de nuevo en un momento. Si el problema persiste, consulta los pasos de recuperación desde la consola en la guía de instalación.",
+    "El servidor no pudo confirmar que se guardaran los ajustes. Inténtalo de nuevo o cierra y vuelve a abrir este diálogo para comprobar los ajustes guardados.",
   "box_status.upgrade_settings.save_stale":
     "Alguien guardó otros ajustes de actualización. Cierra y vuelve a abrir este diálogo para verlos.",
   "box_status.upgrade_settings.save_busy":

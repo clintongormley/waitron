@@ -93,8 +93,8 @@ local time, with at least 60 minutes between them. You can end after midnight. F
 overnight timer only checks for offers.
 
 To pause installation and keep your hours, turn off **Allow automatic installation** and choose
-**Save**. To stop automatic installation and remove the window, clear both times and save. Choose **Cancel** to leave your saved
-settings as they were.
+**Save**. To skip installation of offered upgrades, clear both times and save. Choose **Cancel**
+to leave your saved settings as they were.
 
 ## Check the network {#network}
 

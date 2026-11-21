@@ -581,20 +581,27 @@ hours. In **System → Box status → Automatic upgrades**, set the hours in the
 The default is 03:00–05:00. Pausing installation keeps the saved hours and offer checks. Clearing
 both hours stops offered installs and returns offer checks to 03:00–05:00.
 
-#### Recover the overnight upgrade settings
-
-If the saved settings are unreadable, stop the timer with `sudo systemctl stop waitron-upgrade.timer`.
-The file is `/opt/waitron.upgrade-settings.json` on a default installation. If you kept an intact
-copy, restore it there. Otherwise move the unreadable file aside.
-The box uses the defaults in the absence of that file. Reopen **Automatic upgrades**, set your
-intended hours or pause, and save before restarting the timer with
-`sudo systemctl start waitron-upgrade.timer`.
-
 A box built from a recipe that includes the timer can use it straight away. If you first upgrade
 from a numbered release whose installer predates the timer, that upgrade brings in the new
 installer. The next checked upgrade to a release that includes the timer brings in both units.
 If you install a release that predates the timer, checks pause until the box runs a release with
 timer support again.
+
+#### Recover the overnight upgrade settings
+
+Check the saved settings from the box console:
+
+```bash
+sudo bash /opt/waitron-host/waitron.sh check-upgrade-window
+```
+
+If the command says `the saved upgrade settings are unreadable`, stop the timer with
+`sudo systemctl stop waitron-upgrade.timer`.
+The file is `/opt/waitron.upgrade-settings.json` on a default installation. If you kept an intact
+copy, restore it there. Otherwise move the unreadable file aside.
+The box uses the defaults in the absence of that file. Reopen **Automatic upgrades**, set your
+intended hours or pause, and save before restarting the timer with
+`sudo systemctl start waitron-upgrade.timer`.
 
 #### Rehearsing an offered install
 
