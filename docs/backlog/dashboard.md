@@ -3,22 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
-## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
-
-- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
-  (1) tables inside a dialog or picker offer no chooser, by choice; (2) the servers list
-  (`apps/dashboard/src/screens/servers-screen.ts`) offers no chooser, its one column beside the
-  buttons holding several facts together — **DECIDED (owner, 2026-09-29): leave it**, unsplit and
-  with no chooser;
-  (5) the read-only tables a few screens draw as plain HTML tables rather than `wt-data-table`s have
-  no chooser: planned against actual (`apps/dashboard/src/screens/planned-actual-screen.ts`), the
-  four report tables on the sales screen
-  (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), the overdue table on the overview
-  (`apps/dashboard/src/screens/dashboard-overview-screen.ts`) and the top-sellers table both of
-  those screens show (`apps/dashboard/src/widgets/top-sellers-table.ts`); (7) the
-  Departments and zones list (`packages/venue-service/src/dashboard/departments-list.ts`) offers no
-  chooser — **DECIDED (owner, 2026-10-15, A718): no chooser**.
-
 ## Every login failure is one answer (C95, #930, owner decision 2026-09-30)
 
 - **Every login failure is one answer (C95, #930, owner decision 2026-09-30)** — the rule is in
@@ -206,6 +190,17 @@ Retiring the summary once its last consumer moves away remains open.
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+### Where you can choose columns (C45, #834)
+
+The watcher kept the fixed columns in the plain report tables on 21 November 2026. C45 covered
+`wt-data-table` lists. The plain tables include Planned against actual, the report tables on
+Sales & takings, the overdue table on Overview and the top sellers on both Overview and
+Sales & takings.
+
+Tables inside a dialog or picker omit the chooser by design. The owner kept the single
+information column in Servers without a chooser (29 September 2026). The owner also kept
+Departments and zones without a chooser (15 October 2026, A718).
 
 ### Print Queue keeps its current read
 

@@ -51,13 +51,8 @@ whether one rule should govern every menu price, and if so which — and check e
 form against it before changing the server, since a server stricter than its own form is the
 failure #485 met.
 
-## A product has one colour everywhere (W92, #1250): left open
+## Sold-out tile appearance (A292, #1310): owner review
 
-Left open:
-
-- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-  during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
-  its final head.
 - A292's look is the owner's to judge (#1310's "Looks for the owner to judge"; screenshots in lane
   C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter than a
   sold-out one, and in the light theme a pale stripe shows mostly through the dark line beside it.
@@ -102,11 +97,6 @@ and 390×844 show 3/5 whole Products data rows plus the root. Structure shows 1/
 after moving the page heading away; selection shows 1/4 plus the root after that move. Native touch
 cases record the row and content-column offsets separately. The cap, held headings and isolation
 contract are in [design-system.md](../developers/design-system.md)._
-
-## Products: Filters and Select at the start of the table's toolbar (W83, #1193): left open
-
-The 768px side-panel threshold is tied by hand to token sizes
-(768 − 7×44 − 12 = 448, just above the table's 440px narrow-tree width).
 
 ## Products at phone width: a long name runs under the pinned Actions column (W85b, W85c, W85e): left open
 
@@ -471,20 +461,14 @@ the real box** (_What to work on next_), after the owner is back on 2 November (
   a decimal unit does is the owner's call.
   [Detail](menu.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
 
-## Bundle: wt-data-table: heading wrap, long names, odds and ends
+## Bundle: Product names on phones and sold-out tiles
 
-4 entries, size M.
+2 entries, size M, needs the owner.
 
-- **Other loose ends left by W92 (#1250).**
-  [Detail](menu.md#a-product-has-one-colour-everywhere-w92-1250-left-open)
 - **Products at phone width: what W85e left for the owner**
   [Detail](menu.md#products-at-phone-width-a-long-name-runs-under-the-pinned-actions-column-w85b-w85c-w85e-left-open)
-- **Products' full-screen Filters threshold is tied to token sizes.**
-  [Detail](menu.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
-- **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
-  [Detail](dashboard.md#every-wt-data-table-list-lets-each-person-choose-its-columns-c45-834--left-open)
-
-
+- **Sold-out tile appearance (A292, #1310).**
+  [Detail](menu.md#sold-out-tile-appearance-a292-1310-owner-review)
 
 ## Bundle: Translate all followups
 
@@ -547,6 +531,15 @@ retain the earlier scope and the six follow-ups.
 
 ## Decisions and deliberate limits
 
+### Filters keeps a fixed breakpoint
+
+For W83 (#1193), the watcher kept the 768 px table-width breakpoint on 21 November 2026.
+The side panel and its gap use the shared sizing tokens, while the breakpoint stays fixed.
+The [Chromium case](../../packages/ui/src/components/wt-data-table.test.ts#L8260) checks that
+Filters opens full screen at 767 px and that the rows beside it retain their wide layout at
+768 px. The row assertion catches a sizing change that makes the rows switch to their narrow
+layout at 768 px. Smaller changes can still leave enough room for the wide layout.
+
 - **Sales by category is its own report, never part of the daily close** (owner, 2026-09-25,
   [menus design](../superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
   §10.6). The daily close stays frozen and hash-chained; the category analysis is a separate report
@@ -565,7 +558,8 @@ retain the earlier scope and the six follow-ups.
   At 390 px its right-edge x coordinate was 195 px in English and 250 px in Spanish. The watcher
   cleared leaving its positioning alone. The real dashboard's Filters transition was measured
   at 1099 px (full screen) and 1100 px (side panel), both languages; a 1024 px window's collapsed
-  sidebar also left room for the side panel. These measurements do not settle the token coupling.
+  sidebar also left room for the side panel. See [Filters keeps a fixed breakpoint](#filters-keeps-a-fixed-breakpoint)
+  for the sizing decision.
 
 - **Folded customer names** (owner, 2026-10-04, W77/#1197): show every language's name, with inherited ones in italic. The Product editor's Descriptors section has a Name row saying “None specified” for a blank language by A211's decision; left as it is (asked of the owner, 2026-10-04).
 

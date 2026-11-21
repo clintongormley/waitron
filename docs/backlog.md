@@ -490,7 +490,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Fixed A4 presets offer browser Print / Save as PDF. The box delivers the published copy to Cloud and reports confirmation; mobile-data qualification remains. No ordering.
   [Detail](backlog/menu.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 4, size M). [Detail](backlog/menu.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **Product names on phones and sold-out tiles** (bundle of 2, size M, needs the owner). [Detail](backlog/menu.md#bundle-product-names-on-phones-and-sold-out-tiles)
 
 - **Smaller things #379 surfaced and did not take.** The price input and modifier rules.
   [Detail](backlog/menu.md#smaller-things-379-surfaced-and-did-not-take)

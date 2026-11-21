@@ -2020,6 +2020,8 @@ closing. A press outside does not close it: its Close button, Escape inside it, 
 button do, and the first two return focus to the button. In a capped table it fills the rows'
 height with `overflow-y: auto`, so it and its button stay put while the rows scroll. Narrower than
 768px, it opens as a full-screen popover, with Tab kept inside.
+The breakpoint is fixed. The default panel width and gap leave enough room for the tree's wide
+layout at 768px. [Filters sizing decision and test](../backlog/menu.md#filters-keeps-a-fixed-breakpoint).
 A width change across 768px while it is open moves it to the other form, still open and with its
 choices. It stays open when a choice in it hides every row (beside the no-matches message from
 768px wide), so the choice can be changed back, and focus stays on the filter used, as it does when a choice brings rows back.
