@@ -598,6 +598,11 @@ Slice 3.
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
+- **What A1558 left open (21 November 2026).** Approving a joining box on the main box instead of
+  typing its password into the new box, and a one-button reset of a replaced box in the Servers row
+  menu, both wait for the owner's answer
+  ([plan](../superpowers/plans/2026-11-21-a1558-second-box-pages.md)). Chrome and Safari accepting the warning for a box's IP address during a join
+  is not yet tried on real boxes.
 
 ## Bundle: Everything needing a third box or a Cloud peer
 
@@ -659,6 +664,10 @@ Slice 3.
 ## Decisions and deliberate limits
 
 **`cloud/replacement.json` and `cloud/recovery.json` stay until a reset (owner, 2026-11-09).** They are not deleted when the replacement flow ends: every start resumes a completed replacement, and a later stop is recorded in it. The owner's answer: "option A — move the files only; both stay until a reset, as today." Since 2026-11-20 (CLOUD-RECONNECT-AFTER-REMOVAL, lane C's choice, not the owner's): **Connect again** moves a completed `cloud/replacement.json` to a second name in the same folder (`replacement.json.set-aside-<time>`), so the next start does not bring back the forgotten Cloud venue; its contents still stay until a reset.
+
+**A spare's server key is shown ungrouped, unlike fresh setup's (A1558 PR 8, lane B's choice,
+2026-11-21).** The conflict switch and the promote route check the key exactly as typed
+(`apps/server/src/operation-authentication.ts`); only restore reads the grouped form.
 
 ### Integrity waits and waiting reasons
 

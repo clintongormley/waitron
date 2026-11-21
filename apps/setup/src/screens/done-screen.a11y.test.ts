@@ -178,6 +178,58 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it.each(["en-GB", "es-ES"] as const)(
+    "has no violations on the joining page while copying, after losing the box, and joined with both tasks confirmed (%s)",
+    async (locale) => {
+      setLocale(locale);
+      let answer: "copying" | "lost" | "joined" = "copying";
+      const { host, el } = await mountWidget<SetupDoneScreen>(
+        "setup-done-screen",
+        {
+          api: {
+            ...apiWith(() => new Promise(() => {})),
+            nodeStanding: () => {
+              if (answer === "joined") return Promise.resolve("serving-secondary");
+              if (answer === "lost") return Promise.reject(new TypeError("Failed to fetch"));
+              return Promise.reject({ code: "server.not_found", status: 404 });
+            },
+            joinCopyStage: () => Promise.resolve("restoring"),
+          } as unknown as SetupApi,
+          startDelayMs: 0,
+          pollIntervalMs: 5,
+          lostAfterMs: 30,
+          lostPollIntervalMs: 5,
+          mirrorJoin: true,
+          breakGlassSecret: "bg-9f3a",
+          serversUrl: "https://waitron.local/servers",
+        },
+        theme,
+      );
+      const status = () => q(el, "[data-test=joining-status]")!;
+      await vi.waitFor(() => expect(status().textContent).toMatch(/Copying|Copiando/));
+      expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("false");
+      await expectNoA11yViolations(host);
+      answer = "lost";
+      await vi.waitFor(() => expect(status().querySelector("a")).not.toBeNull());
+      await expectNoA11yViolations(host);
+      answer = "joined";
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=task-join]")!.getAttribute("data-done")).toBe("true"),
+      );
+      for (const task of ["key", "label"]) {
+        const sw = q(el, `[data-test=task-${task}-confirm]`) as HTMLElement & {
+          updateComplete: Promise<unknown>;
+        };
+        sw.shadowRoot!.querySelector("input")!.click();
+        await sw.updateComplete;
+      }
+      await el.updateComplete;
+      expect(q(el, "[data-test=task-key]")!.getAttribute("data-done")).toBe("true");
+      expect(q(el, "[data-test=task-label]")!.getAttribute("data-done")).toBe("true");
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("has no violations on the rebuilt copy", async () => {
     const { host } = await mountWidget<SetupDoneScreen>(
       "setup-done-screen",

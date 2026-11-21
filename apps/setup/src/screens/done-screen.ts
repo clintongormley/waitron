@@ -4,9 +4,10 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
-import type { SetupApi } from "../api/client.js";
+import type { JoinCopyStage, SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 
@@ -46,6 +47,15 @@ function isRecoveryAnswer(answer: unknown): boolean {
   return typeof failures === "number" && typeof level === "string";
 }
 
+/**
+ * A rejection that carries an HTTP status, or a body that would not parse, means something answered
+ * at this address.
+ */
+function boxAnswered(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true;
+  return typeof error === "object" && error !== null && "status" in error;
+}
+
 function isServerError(error: unknown): boolean {
   if (typeof error !== "object" || error === null || !("status" in error)) return false;
   return typeof error.status === "number" && error.status >= 500;
@@ -80,6 +90,53 @@ export class SetupDoneScreen extends LitElement {
       }
       wt-card ul {
         margin: 0;
+      }
+      .tasks {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .tasks li {
+        display: flex;
+        gap: var(--wt-space-3);
+        align-items: flex-start;
+      }
+      .tasks p {
+        margin: var(--wt-space-1) 0 0;
+        color: var(--wt-color-text-muted);
+      }
+      .task-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .task-state {
+        margin-inline-start: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .tasks wt-switch {
+        display: block;
+        margin-block-start: var(--wt-space-1);
+      }
+      .mark {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        inline-size: var(--wt-space-5);
+        block-size: var(--wt-space-5);
+        border: 2px solid var(--wt-color-text-muted);
+        border-radius: var(--wt-radius-full);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .in_progress .mark {
+        border-color: var(--wt-color-primary);
+      }
+      .done .mark {
+        border-color: var(--wt-color-success);
+        background: var(--wt-color-success);
+        color: var(--wt-color-on-success);
       }
       .clock dl {
         margin: 0 0 var(--wt-space-3);
@@ -154,10 +211,21 @@ export class SetupDoneScreen extends LitElement {
    * addresses, so devices may need pointing at this server. */
   @property() restored?: "bucket" | "archive" | "cloud";
 
+  /** The main box's Servers page, from the address typed to join; unset when it is not a URL. */
+  @property({ attribute: false }) serversUrl?: string;
+
   /** A pause before the first poll so the box has begun its restart. */
   @property({ type: Number }) startDelayMs = 800;
 
   @property({ type: Number }) pollIntervalMs = 1500;
+
+  /** How long the joining page waits for one answer before counting it as none. */
+  @property({ type: Number }) requestTimeoutMs = 5000;
+
+  /** How long the joining page goes without an answer before saying it has lost the box. */
+  @property({ type: Number }) lostAfterMs = 60_000;
+
+  @property({ type: Number }) lostPollIntervalMs = 5000;
 
   /** In memory only, to confirm the restore's start's time; dropped once ready or off the page. */
   @property({ attribute: false }) nodeRecoveryKey?: string;
@@ -165,6 +233,21 @@ export class SetupDoneScreen extends LitElement {
   @state() private ready = false;
 
   @state() private breakGlassSaveFailed = false;
+
+  @state() private keyConfirmed = false;
+
+  @state() private labelsConfirmed = false;
+
+  @state() private joined = false;
+
+  @state() private lost = false;
+
+  @state() private copyStage?: JoinCopyStage;
+
+  /** The join request answered just before this screen shows, so its start counts as an answer. */
+  #lastAnswerMs = Date.now();
+
+  #joinRequest?: AbortController;
 
   @state() private startFailed = false;
 
@@ -224,8 +307,8 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override firstUpdated(): void {
-    if (this.mirrorJoin) return;
-    this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
+    const tick = this.mirrorJoin ? () => this.#joinTick() : () => this.#tick();
+    this.#timer = setTimeout(() => void tick(), this.startDelayMs);
   }
 
   override disconnectedCallback(): void {
@@ -234,6 +317,61 @@ export class SetupDoneScreen extends LitElement {
     this.nodeRecoveryKey = undefined;
     this.#releaseRecoveryPack();
     if (this.#timer !== undefined) clearTimeout(this.#timer);
+    this.#joinRequest?.abort();
+  }
+
+  async #joinTick(): Promise<void> {
+    if (!this.isConnected || this.joined) return;
+    const answer = await this.#askJoin();
+    if (!this.isConnected) return;
+    if (answer === "none") {
+      if (Date.now() - this.#lastAnswerMs >= this.lostAfterMs) this.lost = true;
+    } else {
+      this.#lastAnswerMs = Date.now();
+      this.lost = false;
+      this.joined = answer === "joined";
+      if (answer !== "stage_unread")
+        this.copyStage = answer === "joined" || answer === "answered" ? undefined : answer;
+      if (this.joined) return;
+    }
+    this.#timer = setTimeout(
+      () => void this.#joinTick(),
+      this.lost ? this.lostPollIntervalMs : this.pollIntervalMs,
+    );
+  }
+
+  /**
+   * Asks the role probe, then, when the box refuses it (a box still joining has none:
+   * boot.mirror-surface.test.ts:545), the status a box still joining answers. Each request is
+   * abandoned after `requestTimeoutMs`, so one that never settles cannot stop the polling. The
+   * refusal is itself an answer, so a status read that fails is `stage_unread`, not `none`.
+   */
+  async #askJoin(): Promise<"joined" | "answered" | "stage_unread" | "none" | JoinCopyStage> {
+    const controller = new AbortController();
+    this.#joinRequest = controller;
+    let limit: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      limit = setTimeout(() => {
+        controller.abort();
+        reject(new DOMException("No answer", "TimeoutError"));
+      }, this.requestTimeoutMs);
+    });
+    try {
+      const standing = await Promise.race([this.api.nodeStanding(controller.signal), deadline]);
+      return standing === "serving-secondary" ? "joined" : "answered";
+    } catch (error) {
+      if (!boxAnswered(error)) return "none";
+      try {
+        return (
+          (await Promise.race([this.api.joinCopyStage(controller.signal), deadline])) ?? "answered"
+        );
+      } catch {
+        return "stage_unread";
+      }
+    } finally {
+      clearTimeout(limit);
+      controller.abort();
+    }
   }
 
   async #tick(): Promise<void> {
@@ -635,12 +773,109 @@ export class SetupDoneScreen extends LitElement {
 
   #renderJoining(): TemplateResult {
     return html`
-      <h1>${t("done.joining.heading")}</h1>
-      <p data-test="joining-body">${t("done.joining.body")}</p>
-      <p data-test="joining-next">${t("done.joining.next")}</p>
-      <p data-test="joining-switch-label">${t("done.joining.switch_label")}</p>
+      <h1>${t(this.joined ? "done.joined.heading" : "done.joining.heading")}</h1>
+      <p class="intro" data-test="joining-status" role="status">${this.#joiningStatus()}</p>
+      <ul class="tasks" data-test="joining-tasks">
+        ${this.#task(
+          "join",
+          this.joined ? "done" : "in_progress",
+          t("done.task.join"),
+          this.joined
+            ? nothing
+            : html`<p data-test="task-join-detail">${t("done.task.join_detail")}</p>`,
+        )}
+        ${
+          this.breakGlassSecret === undefined
+            ? nothing
+            : this.#task(
+                "key",
+                this.keyConfirmed ? "done" : "to_do",
+                t("done.task.key"),
+                this.#confirmation("key", t("done.task.key_confirm"), this.keyConfirmed, (on) => {
+                  this.keyConfirmed = on;
+                }),
+              )
+        }
+        ${this.#task(
+          "label",
+          this.labelsConfirmed ? "done" : "to_do",
+          t("done.task.label"),
+          html`<p data-test="task-label-detail">
+              ${t("done.task.label_before")}
+              ${this.#serversLink("done.task.label_link", "servers-link")}
+              ${t("done.task.label_after")}
+            </p>
+            ${this.#confirmation(
+              "label",
+              t("done.task.label_confirm"),
+              this.labelsConfirmed,
+              (on) => {
+                this.labelsConfirmed = on;
+              },
+            )}`,
+        )}
+      </ul>
       ${this.#breakGlass()}
     `;
+  }
+
+  #joiningStatus(): TemplateResult | string {
+    if (this.joined) return t("done.joined.status");
+    if (this.lost) {
+      return html`${t("done.joining.lost_before")}
+      ${this.#serversLink("done.joining.lost_link", "lost-servers-link")}
+      ${t("done.joining.lost_after")}`;
+    }
+    return t(
+      this.copyStage === undefined ? "done.joining.status" : `done.joining.copy_${this.copyStage}`,
+    );
+  }
+
+  /** The link words alone when the main box's address is not known. */
+  #serversLink(
+    words: "done.task.label_link" | "done.joining.lost_link",
+    test: string,
+  ): TemplateResult | string {
+    if (this.serversUrl === undefined) return t(words);
+    return html`<a
+      data-test=${test}
+      href=${this.serversUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      >${t(words)}</a
+    >`;
+  }
+
+  #confirmation(
+    id: string,
+    label: string,
+    checked: boolean,
+    change: (checked: boolean) => void,
+  ): TemplateResult {
+    return html`<wt-switch
+      data-test=${`task-${id}-confirm`}
+      name=${`task-${id}-confirmed`}
+      label=${label}
+      .checked=${checked}
+      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => change(event.detail.checked)}
+    ></wt-switch>`;
+  }
+
+  #task(
+    id: string,
+    state: "done" | "in_progress" | "to_do",
+    label: string,
+    detail: TemplateResult | typeof nothing,
+  ): TemplateResult {
+    const done = state === "done";
+    return html`<li data-test=${`task-${id}`} data-done=${done ? "true" : "false"} class=${state}>
+      <span class="mark" aria-hidden="true">${done ? "✓" : ""}</span>
+      <div>
+        <span class="task-label">${label}</span>
+        <span class="task-state" data-test=${`task-${id}-state`}>${t(`done.task.${state}`)}</span>
+        ${detail}
+      </div>
+    </li>`;
   }
 }
 

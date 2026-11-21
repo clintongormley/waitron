@@ -1959,6 +1959,26 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
+  it.each([
+    ["https://waitron.local", "https://waitron.local/servers"],
+    ["https://waitron.local:8443/setup", "https://waitron.local:8443/servers"],
+  ])(
+    "hands the done screen the Servers page of the typed address %s",
+    async (primaryUrl, servers) => {
+      const el = await mountSetupApp(stubApi());
+      adoptRequest(el, { ...adoptBody, primaryUrl });
+      await flush(el);
+      const done = (await screenHost(el, "done")) as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      await done.updateComplete;
+      const link = done.shadowRoot!.querySelector<HTMLAnchorElement>(
+        "[data-test=task-label] [data-test=servers-link]",
+      );
+      expect(link?.href).toBe(servers);
+    },
+  );
+
   // Weaker than its name: it checks the secret and its warning render, not that the secret is never
   // shown a second time.
   it("surfaces the break-glass secret ONCE on the done screen after a successful adopt", async () => {
@@ -3316,6 +3336,16 @@ describe("resetting a join that stopped partway", () => {
 
   const incomplete = () =>
     vi.fn().mockRejectedValue({ code: "setup.adopt_incomplete", params: {}, status: 409 });
+
+  it("links the reset screen to the Servers page of the address typed in this tab", async () => {
+    const el = await mountSetupApp(stubApi({ adopt: incomplete() }));
+    adoptRequest(el, { ...adoptBody, primaryUrl: "https://waitron.local:8443" });
+    await flush(el);
+    const screen = await openReset(el);
+    await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const link = screen.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=servers-link]");
+    expect(link?.href).toBe("https://waitron.local:8443/servers");
+  });
 
   it.each([
     ["the refusal names it", incomplete(), undefined],

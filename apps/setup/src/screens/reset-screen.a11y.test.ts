@@ -17,6 +17,16 @@ describe.each(["light", "dark"] as const)("setup-reset-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with the link to the primary's Servers page", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>(
+      "setup-reset-screen",
+      { serversUrl: "https://waitron.local/servers" },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=servers-link]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the message above the reset button and invalid fields shown", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {}, theme);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();

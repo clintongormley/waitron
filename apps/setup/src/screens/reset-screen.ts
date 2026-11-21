@@ -11,7 +11,13 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
+import {
+  actionsStyles,
+  errorStyles,
+  fieldStyles,
+  helpLinkStyles,
+  statusStyles,
+} from "../form-styles.js";
 import { dispatchResetRequested, dispatchSetupGoto } from "../events.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
@@ -43,6 +49,7 @@ export class SetupResetScreen extends LitElement {
     fieldStyles,
     errorStyles,
     statusStyles,
+    helpLinkStyles,
     actionsStyles,
     css`
       :host {
@@ -67,6 +74,9 @@ export class SetupResetScreen extends LitElement {
 
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
   @property({ attribute: false }) outcome?: ResetScreenOutcome;
+
+  /** The main box's Servers page, from the address typed in this tab; unset when not known. */
+  @property({ attribute: false }) serversUrl?: string;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
@@ -248,6 +258,21 @@ export class SetupResetScreen extends LitElement {
     return html`
       <h1>${t("reset.heading")}</h1>
       <p>${t("reset.explanation")}</p>
+      <p data-test="remove-from-list">
+        ${
+          this.serversUrl === undefined
+            ? t("reset.remove_plain")
+            : html`${t("reset.remove_before")}
+                <a
+                  data-test="servers-link"
+                  href=${this.serversUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >${t("reset.servers_link")}</a
+                >
+                ${t("reset.remove_after")}`
+        }
+      </p>
       <p>${t("reset.prompt")}</p>
       ${this.#field(t("reset.email_label"), "email", missing)}
       ${this.#field(t("reset.password_label"), "password", missing)}

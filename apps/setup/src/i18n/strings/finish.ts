@@ -21,7 +21,13 @@ export const finishEn = {
   "reset.heading": "Reset this server",
   "reset.heading_resetting": "Resetting this server",
   "reset.explanation":
-    "This removes what the half-finished join left on this server and restarts it at a fresh setup. Nothing on the primary server is changed, so the primary may still list this server. To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+    "This removes what the half-finished join left on this server and restarts it at a fresh setup. Nothing on the primary server is changed, so the primary may still list this server.",
+  "reset.remove_plain":
+    "To take it off that list, open the primary's dashboard, then System, then Servers, open this server's row menu and choose Remove, then open the row menu again and choose Clear from list. If its row already says Removed, only Clear from list is needed. Do this before you join this server again: otherwise the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
+  "reset.remove_before": "To take it off that list, open the primary's",
+  "reset.servers_link": "Servers page",
+  "reset.remove_after":
+    "and, in this server's row menu, choose Remove, then Clear from list (only Clear from list if the row already says Removed). Do this before you join this server again, or the new join adds a second row that is hard to tell apart from this one, or is refused if the list is full.",
   "reset.prompt": "Enter the admin email and password you used to connect this server.",
   "reset.email_label": "Admin email",
   "reset.password_label": "Admin password",
@@ -101,12 +107,30 @@ export const finishEn = {
   "done.break_glass.take_over":
     "You will need it if this server ever has to take over from the primary.",
   "done.joining.heading": "This server is joining",
-  "done.joining.body":
-    "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.",
-  "done.joining.next":
-    "This page will not change. To see when this server has joined, open the primary's dashboard, then System, then Servers, and look for Last copy received in this server's row.",
-  "done.joining.switch_label":
-    "Once this server has joined, print a switch label for each server and stick it on that server. If the primary fails, scanning the standby's label with a till or phone on the restaurant's network opens the page that switches the restaurant over to it. To print the labels, open the primary's dashboard, then System, then Servers, and choose Print switch label in each server's row menu.",
+  "done.joined.heading": "This server has joined",
+  "done.joining.status": "Joining. This can take a few minutes.",
+  "done.joining.copy_waiting":
+    "Joining. Waiting for the primary to send its copy of the restaurant's data.",
+  "done.joining.copy_restoring": "Joining. Copying the restaurant's data from the primary.",
+  "done.joining.copy_ready": "Joining. The copy is complete and this server is restarting.",
+  "done.joining.lost_before":
+    "This page can no longer reach this server. This usually happens after it restarts to join: it then uses the restaurant's own security certificate, which this browser has not accepted. To check, open the primary's",
+  "done.joining.lost_link": "Servers page",
+  "done.joining.lost_after": "and look at this server's row.",
+  "done.joined.status": "Joined. This server is now the standby.",
+  "done.task.done": "Done",
+  "done.task.in_progress": "In progress",
+  "done.task.to_do": "To do",
+  "done.task.join": "Join the restaurant",
+  "done.task.join_detail": "Taking its first copy from the primary, which keeps selling.",
+  "done.task.key": "Save the server key",
+  "done.task.key_confirm": "I have saved the key",
+  "done.task.label": "Print the switch labels",
+  "done.task.label_before": "Once this server has joined, open the primary's",
+  "done.task.label_link": "Servers page",
+  "done.task.label_after":
+    "and choose Print switch label in each server's row menu. Stick each label on its server.",
+  "done.task.label_confirm": "I have stuck on the labels",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -130,7 +154,13 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.heading": "Restablecer este servidor",
   "reset.heading_resetting": "Restableciendo este servidor",
   "reset.explanation":
-    "Esto elimina lo que la unión a medias dejó en este servidor y lo reinicia con una configuración desde cero. No se cambia nada en el servidor principal, así que puede que el principal siga mostrando este servidor en su lista. Para quitarlo de esa lista, abre el panel del servidor principal, luego Sistema y luego Servidores; abre el menú de la fila de este servidor y elige Retirar, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+    "Esto elimina lo que la unión a medias dejó en este servidor y lo reinicia con una configuración desde cero. No se cambia nada en el servidor principal, así que puede que el principal siga mostrando este servidor en su lista.",
+  "reset.remove_plain":
+    "Para quitarlo de esa lista, abre el panel del servidor principal, luego Sistema y luego Servidores; abre el menú de la fila de este servidor y elige Retirar, y después vuelve a abrir el menú de la fila y elige Quitar de la lista. Si su fila ya dice Retirado, solo hace falta Quitar de la lista. Hazlo antes de volver a unir este servidor: si no, la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
+  "reset.remove_before": "Para quitarlo de esa lista, abre la",
+  "reset.servers_link": "página Servidores",
+  "reset.remove_after":
+    "del principal y, en el menú de la fila de este servidor, elige Retirar y después Quitar de la lista (solo Quitar de la lista si la fila ya dice Retirado). Hazlo antes de volver a unir este servidor, o la nueva unión añade una segunda fila difícil de distinguir de esta, o se rechaza si la lista está llena.",
   "reset.prompt":
     "Introduce el correo y la contraseña del administrador que usaste para conectar este servidor.",
   "reset.email_label": "Correo del administrador",
@@ -214,10 +244,30 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "done.break_glass.take_over":
     "La necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",
-  "done.joining.body":
-    "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",
-  "done.joining.next":
-    "Esta página no cambiará. Para ver cuándo se ha unido este servidor, abre el panel del servidor principal, luego Sistema y luego Servidores, y busca Última copia recibida en la fila de este servidor.",
-  "done.joining.switch_label":
-    "Cuando este servidor se haya unido, imprime una etiqueta de cambio para cada servidor y pégala en ese servidor. Si el principal falla, al escanear la etiqueta del servidor en espera con una caja o un móvil conectado a la red del restaurante se abre la página que pasa el restaurante a ese servidor. Para imprimirlas, abre el panel del servidor principal, luego Sistema y luego Servidores, y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor.",
+  "done.joined.heading": "Este servidor se ha unido",
+  "done.joining.status": "Uniéndose. Puede tardar unos minutos.",
+  "done.joining.copy_waiting":
+    "Uniéndose. Esperando a que el principal envíe su copia de los datos del restaurante.",
+  "done.joining.copy_restoring":
+    "Uniéndose. Copiando los datos del restaurante desde el principal.",
+  "done.joining.copy_ready":
+    "Uniéndose. La copia está completa y este servidor se está reiniciando.",
+  "done.joining.lost_before":
+    "Esta página ya no puede comunicarse con este servidor. Suele pasar después de que se reinicie para unirse: entonces usa el certificado de seguridad propio del restaurante, que este navegador no ha aceptado. Para comprobarlo, abre la",
+  "done.joining.lost_link": "página Servidores",
+  "done.joining.lost_after": "del principal y mira la fila de este servidor.",
+  "done.joined.status": "Unido. Este servidor es ahora el servidor en espera.",
+  "done.task.done": "Hecho",
+  "done.task.in_progress": "En curso",
+  "done.task.to_do": "Pendiente",
+  "done.task.join": "Unirse al restaurante",
+  "done.task.join_detail": "Recibiendo su primera copia del principal, que sigue vendiendo.",
+  "done.task.key": "Guardar la clave del servidor",
+  "done.task.key_confirm": "He guardado la clave",
+  "done.task.label": "Imprimir las etiquetas de cambio",
+  "done.task.label_before": "Cuando este servidor se haya unido, abre la",
+  "done.task.label_link": "página Servidores",
+  "done.task.label_after":
+    "del principal y elige Imprimir etiqueta de cambio en el menú de la fila de cada servidor. Pega cada etiqueta en su servidor.",
+  "done.task.label_confirm": "He pegado las etiquetas",
 };
