@@ -887,6 +887,47 @@ describe("Correct invoice on the rest's invoice for more than its payments hold"
       },
     });
   });
+
+  it("names only the advances Refund a payment could still give money back from", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00", "20.00"], "70.00");
+    const giveBackWhole = async (saleId: string, amount: string) => {
+      const [tender] = await inTx(venue(), (tx) =>
+        tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId)),
+      );
+      const given = await send(
+        venue().app,
+        venue().cookie,
+        "POST",
+        `/api/transactions/${saleId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          tenderId: tender!.id,
+          appliedAmount: amount,
+          tipAmount: "0.00",
+          reason: "Paid too much",
+          override: supervisor(),
+        },
+      );
+      expect(given.status, JSON.stringify(given.json)).toBe(200);
+    };
+    const short = async () => {
+      const refused = await preview(rest.saleId, "0.01");
+      expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+      return refused.json;
+    };
+    const shortOf = (advanceInvoiceNumbers: string[]) => ({
+      code: "invoice_correction.money_short",
+      params: { saleId: rest.saleId, moneyLeft: "0.00", gross: "0.01", advanceInvoiceNumbers },
+    });
+
+    await giveBackWhole(rest.saleId, "70.00");
+    await giveBackWhole(rest.advanceIds[0]!, "30.00");
+    expect(await short()).toEqual(
+      shortOf([(await advanceFacts(rest.advanceIds[1]!)).invoiceNumber]),
+    );
+    await giveBackWhole(rest.advanceIds[1]!, "20.00");
+    expect(await short()).toEqual(shortOf([]));
+  });
 });
 
 describe("what is left of an advance, on the bill's payments", () => {

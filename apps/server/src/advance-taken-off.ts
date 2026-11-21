@@ -77,10 +77,12 @@ export async function advancesTakenOff(
 }
 
 /**
- * The invoice numbers of the advances the invoice `finalSaleId` took off ({@link advancesTakenOff}),
- * in its lines' order; none for a corrective or substitution, which only copy the deduction lines.
+ * The invoice numbers of the advances the invoice `finalSaleId` took off ({@link advancesTakenOff})
+ * whose payments still hold money a plain refund could give back, as Refund a payment's cap reads
+ * it ({@link readRefundableTenders}), in its lines' order; none for a corrective or substitution,
+ * which only copy the deduction lines.
  */
-export async function advanceNumbersTakenOffBy(
+export async function refundableAdvanceNumbersTakenOffBy(
   tx: Transaction,
   finalSaleId: string,
 ): Promise<string[]> {
@@ -91,9 +93,17 @@ export async function advanceNumbersTakenOffBy(
     .orderBy(saleLines.lineNo);
   const advanceIds = [...new Set(lines.map((line) => line.advanceId!))];
   const takenOff = await advancesTakenOff(tx, advanceIds);
-  const ownIds = advanceIds.filter((id) => takenOff.get(id)?.saleId === finalSaleId);
-  const numbers = await readInvoiceNumbers(tx, ownIds);
-  return ownIds.map((id) => numbers.get(id)!);
+  const refundableIds: string[] = [];
+  for (const id of advanceIds) {
+    if (takenOff.get(id)?.saleId !== finalSaleId) continue;
+    const left = sumDecimals([
+      ZERO,
+      ...(await readRefundableTenders(tx, id)).map((row) => decimal(row.appliedRemaining)),
+    ]);
+    if (compareDecimal(left, ZERO) > 0) refundableIds.push(id);
+  }
+  const numbers = await readInvoiceNumbers(tx, refundableIds);
+  return refundableIds.map((id) => numbers.get(id)!);
 }
 
 /**

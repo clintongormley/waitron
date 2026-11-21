@@ -1156,6 +1156,28 @@ it("points a correction short of money to Refund a payment on the payments on ac
     );
 });
 
+it.each([
+  [
+    "en",
+    "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+  ],
+  [
+    "es",
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
+  ],
+])(
+  "leaves Refund a payment out of a correction short of money when no payment on account has money left (%s)",
+  (locale, plain) => {
+    for (const params of [
+      undefined,
+      { advanceInvoiceNumbers: [] },
+      { moneyLeft: "0.00", advanceInvoiceNumbers: [] },
+      { moneyLeft: "12.00", advanceInvoiceNumbers: [] },
+    ])
+      expect(codeMessage("invoice_correction.money_short", locale, params)).toBe(plain);
+  },
+);
+
 it("tells staff the table's receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
