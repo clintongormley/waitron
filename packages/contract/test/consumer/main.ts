@@ -3,10 +3,12 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import {
   pairingPayload,
   pairingV4Payload,
+  pairingV5Payload,
   pairingVenueName,
   PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
   verifyPairingV4Proof,
+  verifyPairingV5Proof,
   encodeMachine,
   verifyMachine,
   createLeaseIssuer,
@@ -79,6 +81,21 @@ assert.deepEqual(
   verifyPairingV4Proof(
     bytesV4.toString("base64url"),
     sign(null, bytesV4, keys.privateKey).toString("base64url"),
+    origin,
+    status,
+    now,
+  ),
+  pairV4,
+);
+const bytesV5 = pairingV5Payload(pairV4);
+assert.equal(
+  bytesV5.toString(),
+  JSON.stringify(["waitron-cloud-pair-v5", origin, status, id(1), publicKey, "test", now, []]),
+);
+assert.deepEqual(
+  verifyPairingV5Proof(
+    bytesV5.toString("base64url"),
+    sign(null, bytesV5, keys.privateKey).toString("base64url"),
     origin,
     status,
     now,

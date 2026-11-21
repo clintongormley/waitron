@@ -1,7 +1,7 @@
 # Shared Cloud signing formats
 
 Use `@waitron/contract` inside Waitron when you need the bytes that a box and Cloud
-sign and verify. The package exports the `waitron-cloud-pair-v3`, `waitron-cloud-pair-v4`,
+sign and verify. The package exports the `waitron-cloud-pair-v3`, `waitron-cloud-pair-v4`, `waitron-cloud-pair-v5`,
 `waitron-cloud-machine-v1` and `waitron-cloud-access-v1` formats for Node.js.
 It has no runtime dependencies on other Waitron packages.
 
@@ -24,6 +24,11 @@ and 8,192-character encoded payload limit.
 field rules on its own.
 The receiving app checks the configured callback and box key, accepts the
 one-use code and decides whether the account may register the venue.
+
+For setup-time Cloud sign-in, use `pairingV5Payload` and `verifyPairingV5Proof`.
+Give them the same action tuples and claim fields as v4. The v5 encoder writes
+`waitron-cloud-pair-v5` as the first field of the signed array. Each verifier
+accepts only the marker for its own version.
 
 For an installed box, use `encodeMachine` and `verifyMachine`. `readMachineClaims` parses an envelope
 without verifying its signature; authenticate its claims with the stored installation key through `verifyMachine`

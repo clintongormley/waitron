@@ -3,9 +3,11 @@ import {
   isPairingV4Profile,
   pairingPayload,
   pairingV4Payload,
+  pairingV5Payload,
   pairingVenueName,
   verifyPairingProof,
   verifyPairingV4Proof,
+  verifyPairingV5Proof,
   PairingError,
   PAIRING_VENUE_NAME_MAX,
   type PairingClaims,
@@ -280,6 +282,41 @@ it("binds a v4 proof to its payload, destination and action", () => {
   expect(() => checkV4({ ...changed, signature: envelope.signature })).toThrow(PairingError);
   expect(() => checkV4(envelope, "complete", "https://other.example.test")).toThrow(PairingError);
   expect(() => checkV4(envelope, "status")).toThrow(PairingError);
+});
+
+const v5Vector = [
+  "waitron-cloud-pair-v5",
+  v4.origin,
+  "complete",
+  v4.requestId,
+  v4.publicKey,
+  "test",
+  now,
+  profile,
+];
+const checkV5 = (envelope: ReturnType<typeof signed>) =>
+  verifyPairingV5Proof(envelope.payload, envelope.signature, v4.origin, "complete", now);
+
+it("encodes the exact v5 pairing tuple", () => {
+  expect(pairingV5Payload(complete)).toEqual(Buffer.from(JSON.stringify(v5Vector)));
+});
+
+it("recovers the claims from an independently signed v5 proof", () => {
+  expect(checkV5(signed(v5Vector))).toEqual(complete);
+});
+
+it("refuses valid proofs made for the other pairing version", () => {
+  expect(() => checkV4(signed(v5Vector))).toThrow(PairingError);
+  expect(() => checkV5(signed(v4Vector("complete", profile)))).toThrow(PairingError);
+});
+
+it("refuses a v5 marker substituted into a signed v4 proof", () => {
+  expect(() =>
+    checkV5({
+      payload: Buffer.from(JSON.stringify(v5Vector)).toString("base64url"),
+      signature: signed(v4Vector("complete", profile)).signature,
+    }),
+  ).toThrow(expect.objectContaining({ code: "invalid_proof" }));
 });
 
 it("refuses a signed action outside the v4 contract", () => {
