@@ -76,7 +76,7 @@ it.each(cases)(
     await dialogHost.updateComplete;
     const dialog = dialogHost.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => dialog.open).toBe(true);
-    const input = dialog.querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+    const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
     const actions = dialog.querySelector<WtFormActions>("wt-form-actions")!;
     if (state === "foreign") {
       const lookup = dialog.querySelector<WtAddressLookup>("wt-address-lookup")!;
@@ -96,7 +96,7 @@ it.each(cases)(
     } else if (state !== "open") {
       input.dispatchEvent(
         new CustomEvent("wt-change", {
-          detail: { value: "Carrer de Mallorca 1, 08010 Barcelona" },
+          detail: { value: "Carrer de Mallorca 1" },
           bubbles: true,
           composed: true,
         }),

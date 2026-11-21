@@ -5,6 +5,7 @@ import type {
   AddressLookupResult,
   WtAddressLookup,
   WtButton,
+  WtCombobox,
   WtDialog,
   WtFormActions,
   WtInput,
@@ -18,7 +19,27 @@ import "./venue-details-panel.js";
 type Panel = HTMLElementTagNameMap["dashboard-venue-details-panel"];
 
 const OLD = "Calle Fiscal 8, 28013 Madrid";
-const NEW = "Carrer de Mallorca 1, 08010 Barcelona";
+/** The line the parts of NEW_PARTS join into; the postcode fills the province. */
+const NEW = "Carrer de Mallorca 1, 08010 Barcelona, Barcelona";
+const NEW_PARTS = {
+  registeredStreet: "Carrer de Mallorca 1",
+  registeredPostalCode: "08010",
+  registeredCity: "Barcelona",
+} as const;
+
+type Part =
+  | "registeredStreet"
+  | "registeredLine2"
+  | "registeredPostalCode"
+  | "registeredCity"
+  | "registeredProvince";
+const PARTS: readonly Part[] = [
+  "registeredStreet",
+  "registeredLine2",
+  "registeredPostalCode",
+  "registeredCity",
+  "registeredProvince",
+];
 
 const moved = (taxpayerDomicile: string | null): VenueDetailsModel => ({
   ...venueDetailsFixture(),
@@ -65,8 +86,10 @@ const dialog = (panel: Panel) =>
   dialogHost(panel).shadowRoot!.querySelector<WtDialog>(
     "wt-dialog[data-test=taxpayer-domicile-dialog]",
   )!;
-const input = (panel: Panel) =>
-  dialog(panel).querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+const part = (panel: Panel, name: Part) =>
+  dialog(panel).querySelector<WtInput | WtCombobox>(`:is(wt-input,wt-combobox)[name=${name}]`)!;
+const values = (panel: Panel) => PARTS.map((name) => part(panel, name).value);
+const errors = (panel: Panel) => PARTS.map((name) => part(panel, name).error);
 const save = (panel: Panel) =>
   dialog(panel).querySelector<WtButton>("wt-button[data-test=save-taxpayer-domicile]")!;
 const actions = (panel: Panel) => dialog(panel).querySelector<WtFormActions>("wt-form-actions")!;
@@ -77,11 +100,13 @@ async function open(panel: Panel): Promise<void> {
   await expect.poll(() => dialog(panel)?.open).toBe(true);
 }
 
-async function type(panel: Panel, value: string): Promise<void> {
-  input(panel).dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-  );
-  await dialogHost(panel).updateComplete;
+async function type(panel: Panel, parts: Partial<Record<Part, string>>): Promise<void> {
+  for (const [name, value] of Object.entries(parts)) {
+    part(panel, name as Part).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await dialogHost(panel).updateComplete;
+  }
 }
 
 async function press(panel: Panel): Promise<void> {
@@ -115,30 +140,53 @@ it("offers Change registered address in the Business card's header only when the
   expect(button(readOnly)).toBeNull();
 });
 
-it("opens prefilled, with the hint and the note, and keeps Save quiet until the address changes and again when changed back", async () => {
+it("opens prefilled in parts, with the province from the postcode and the note, and keeps Save quiet until the address changes and again when changed back", async () => {
   const panel = await mount(stubApi());
   await open(panel);
-  const field = input(panel);
-  expect(field.value).toBe(OLD);
-  expect(field.required).toBe(true);
-  expect(field.hint).toBe(t("venue_details.taxpayer_domicile_hint"));
+  expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
+  expect(PARTS.map((name) => part(panel, name).required)).toEqual([true, false, true, true, false]);
+  expect(PARTS.map((name) => part(panel, name).label)).toEqual(
+    (
+      [
+        "venue_details.addressLine1",
+        "venue_details.addressLine2",
+        "venue_details.postalCode",
+        "venue_details.city",
+        "venue_details.registered_province",
+      ] as const
+    ).map((key) => t(key)),
+  );
   expect(dialog(panel).textContent).toContain(t("venue_details.taxpayer_domicile_note"));
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   expect(save(panel).variant).toBe("primary");
   expect(save(panel).disabled).toBe(false);
-  await type(panel, OLD);
+  await type(panel, {
+    registeredStreet: "Calle Fiscal 8",
+    registeredPostalCode: "28013",
+    registeredCity: "Madrid",
+  });
+  expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
+});
+
+it("a postcode typed fills the province it lies in", async () => {
+  const panel = await mount(stubApi());
+  await open(panel);
+  await type(panel, { registeredPostalCode: "08010" });
+  expect(part(panel, "registeredProvince").value).toBe("Barcelona");
+  await type(panel, { registeredPostalCode: "0801" });
+  expect(part(panel, "registeredProvince").value).toBe("Barcelona");
 });
 
 it("opens empty when no address was saved, and sends an empty expected address", async () => {
   const api = stubApi(null);
   const panel = await mount(api);
   await open(panel);
-  expect(input(panel).value).toBe("");
-  await type(panel, NEW);
+  expect(values(panel)).toEqual(["", "", "", "", ""]);
+  await type(panel, NEW_PARTS);
   await press(panel);
   expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
     taxpayerDomicile: NEW,
@@ -155,28 +203,89 @@ it("does not send an unchanged address even when Save is clicked", async () => {
   expect(dialog(panel).open).toBe(true);
 });
 
-it("an emptied address is marked under the field and at the bottom, and blocks Save until filled", async () => {
+it("emptied required parts are marked under each and at the bottom, and block Save until filled", async () => {
   const api = stubApi();
   const panel = await mount(api);
   await open(panel);
-  await type(panel, "  ");
+  await type(panel, { registeredStreet: "  ", registeredPostalCode: "", registeredCity: " " });
   await press(panel);
   expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
-  expect(input(panel).error).toBe(t("venue_details.required"));
+  const required = t("venue_details.required");
+  expect(errors(panel)).toEqual([required, "", required, required, ""]);
   expect(actions(panel).error).toBe(t("form.fix_fields"));
   expect(save(panel).disabled).toBe(true);
-  await type(panel, NEW);
-  expect(input(panel).error).toBe("");
+  await expect
+    .poll(() => dialog(panel).querySelector(":focus")?.getAttribute("name"))
+    .toBe("registeredStreet");
+  await type(panel, NEW_PARTS);
+  expect(errors(panel)).toEqual(["", "", "", "", ""]);
   expect(actions(panel).error).toBe("");
   expect(save(panel).disabled).toBe(false);
+});
+
+it("a postcode the country does not have, or a province the postcode is not in, is marked and not sent", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi();
+    const panel = await mount(api);
+    await open(panel);
+    await type(panel, { registeredPostalCode: "2801" });
+    await press(panel);
+    expect(errors(panel)).toEqual(["", "", t("venue_details.registered_postal_code"), "", ""]);
+    await type(panel, { registeredPostalCode: "28013", registeredProvince: "Barcelona" });
+    await press(panel);
+    expect(errors(panel)).toEqual([
+      "",
+      "",
+      "",
+      "",
+      t("venue_details.registered_province_mismatch"),
+    ]);
+    expect(actions(panel).error).toBe(t("form.fix_fields"));
+    expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
+    cleanupWidgets();
+  }
+});
+
+it("a city with a comma, which the server would read back otherwise, marks City once the other parts pass", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi();
+    const panel = await mount(api);
+    await open(panel);
+    await type(panel, { registeredCity: "Madrid, Centro", registeredPostalCode: "2801" });
+    await press(panel);
+    expect(errors(panel)).toEqual(["", "", t("venue_details.registered_postal_code"), "", ""]);
+    await type(panel, { registeredPostalCode: "28013" });
+    await press(panel);
+    expect(errors(panel)).toEqual(["", "", "", t("venue_details.registered_city_comma"), ""]);
+    expect(actions(panel).error).toBe(t("form.fix_fields"));
+    expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
+    cleanupWidgets();
+  }
+});
+
+it("a saved line without a postcode, like the box's 2º 1ª, opens in Street with the rest empty, and Save marks postcode and city", async () => {
+  const api = stubApi("2º 1ª");
+  const panel = await mount(api);
+  await open(panel);
+  expect(values(panel)).toEqual(["2º 1ª", "", "", "", ""]);
+  expect(errors(panel)).toEqual(["", "", "", "", ""]);
+  expect(save(panel).disabled).toBe(true);
+  await type(panel, { registeredLine2: "Puerta 3" });
+  await press(panel);
+  const required = t("venue_details.required");
+  expect(errors(panel)).toEqual(["", "", required, required, ""]);
+  expect(api.changeTaxpayerDomicile).not.toHaveBeenCalled();
 });
 
 for (const [reason, key] of [
   ["required", "venue_details.required"],
   ["unchanged", "venue_details.taxpayer_domicile_unchanged"],
   ["shape", "venue_details.invalid"],
+  ["incomplete", "venue_details.taxpayer_domicile_incomplete"],
 ] as const) {
-  it(`a ${reason} refusal shows under the field with the bottom message, and leaves Save enabled`, async () => {
+  it(`a ${reason} refusal shows under Street with the bottom message, and leaves Save enabled`, async () => {
     for (const locale of ["en-GB", "es-ES"]) {
       setLocale(locale);
       const api = stubApi();
@@ -186,23 +295,55 @@ for (const [reason, key] of [
       });
       const panel = await mount(api);
       await open(panel);
-      await type(panel, NEW);
+      await type(panel, NEW_PARTS);
       await press(panel);
       expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
         taxpayerDomicile: NEW,
         expected: OLD,
       });
-      expect(input(panel).error).toBe(t(key));
+      expect(errors(panel)).toEqual([t(key), "", "", "", ""]);
       expect(actions(panel).error).toBe(t("form.fix_fields"));
       expect(save(panel).disabled).toBe(false);
       expect(dialog(panel).open).toBe(true);
-      await type(panel, `${NEW} 2`);
-      expect(input(panel).error).toBe("");
+      await type(panel, { registeredStreet: "Carrer de Mallorca 2" });
+      expect(errors(panel)).toEqual(["", "", "", "", ""]);
       expect(actions(panel).error).toBe("");
       cleanupWidgets();
     }
   });
 }
+
+it("a postal_code refusal shows under Postal code with the bottom message, and leaves Save enabled", async () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    setLocale(locale);
+    const api = stubApi();
+    api.changeTaxpayerDomicile.mockRejectedValue({
+      code: "venue.detail_invalid",
+      params: { field: "taxpayerDomicile", reason: "postal_code" },
+    });
+    const panel = await mount(api);
+    await open(panel);
+    await type(panel, NEW_PARTS);
+    await press(panel);
+    expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
+      taxpayerDomicile: NEW,
+      expected: OLD,
+    });
+    expect(errors(panel)).toEqual([
+      "",
+      "",
+      t("venue_details.taxpayer_domicile_postal_code"),
+      "",
+      "",
+    ]);
+    expect(actions(panel).error).toBe(t("form.fix_fields"));
+    expect(save(panel).disabled).toBe(false);
+    await type(panel, { registeredPostalCode: "08011" });
+    expect(errors(panel)).toEqual(["", "", "", "", ""]);
+    expect(actions(panel).error).toBe("");
+    cleanupWidgets();
+  }
+});
 
 it("an address changed in another session is the bottom message, and Save stays enabled", async () => {
   const api = stubApi();
@@ -212,10 +353,10 @@ it("an address changed in another session is the bottom message, and Save stays 
   });
   const panel = await mount(api);
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   expect(actions(panel).error).toBe(t("venue_details.taxpayer_domicile_changed"));
-  expect(input(panel).error).toBe("");
+  expect(errors(panel)).toEqual(["", "", "", "", ""]);
   expect(save(panel).disabled).toBe(false);
   expect(dialog(panel).open).toBe(true);
 });
@@ -228,7 +369,7 @@ it("a successful change closes the dialog, shows the new address and tells the p
   document.body.addEventListener("venue-identity-changed", listen);
   onTestFinished(() => document.body.removeEventListener("venue-identity-changed", listen));
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   const closed = dialogClosed(dialog(panel));
   await press(panel);
   await closed;
@@ -255,7 +396,7 @@ it("a refusal that arrives after the dialog was dismissed is reported through th
     key === "venue_details.taxpayer_domicile_not_saved" ? address : legal;
   await panel.updateComplete;
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   dialogHost(panel).dismiss();
   refuse({ code: "venue.detail_changed", params: { field: "taxpayerDomicile" } });
@@ -268,13 +409,13 @@ it("a saved address with surrounding spaces or another Unicode spelling keeps Sa
   const api = stubApi(stored);
   const panel = await mount(api);
   await open(panel);
-  expect(input(panel).value).toBe(stored);
+  expect(values(panel)).toEqual(["Pla\u00e7a Major 1", "", "08002", "Barcelona", "Barcelona"]);
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, "Plac\u0327a Major 1, 08002 Barcelona");
+  await type(panel, { registeredStreet: "Plac\u0327a Major 1" });
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   expect(save(panel).variant).toBe("primary");
   await press(panel);
   expect(api.changeTaxpayerDomicile).toHaveBeenCalledWith({
@@ -299,7 +440,7 @@ it("an address answer that arrives after a later legal-name answer keeps the new
   api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
 
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   dialogHost(panel).dismiss();
 
@@ -343,21 +484,21 @@ it("after an address changed in another session, the typed address stays, and re
   const panel = await mount(api);
   api.getVenueDetails.mockResolvedValue(moved(STORED));
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   expect(actions(panel).error).toBe(t("venue_details.taxpayer_domicile_changed"));
-  expect(input(panel).value).toBe(NEW);
+  expect(values(panel)).toEqual(["Carrer de Mallorca 1", "", "08010", "Barcelona", "Barcelona"]);
   await expect
     .poll(() =>
       panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim(),
     )
     .toBe(STORED);
   await dialogHost(panel).updateComplete;
-  expect(input(panel).value).toBe(NEW);
+  expect(values(panel)).toEqual(["Carrer de Mallorca 1", "", "08010", "Barcelona", "Barcelona"]);
   dialogHost(panel).dismiss();
   await dialogHost(panel).updateComplete;
   await open(panel);
-  expect(input(panel).value).toBe(STORED);
+  expect(values(panel)).toEqual(["Calle del Sol 2", "", "28013", "Madrid", "Madrid"]);
 });
 
 it("a venue-details save sent before an address answer arrived, answering the old address later, keeps the new address", async () => {
@@ -379,7 +520,7 @@ it("a venue-details save sent before an address answer arrived, answering the ol
   panel.shadowRoot!.querySelector<WtButton>("[data-test=save]")!.click();
   await expect.poll(() => api.patchVenueDetails.mock.calls.length).toBe(1);
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   const shown = (name: string) =>
     panel.shadowRoot!.querySelector(`[data-test=saved-${name}]`)!.textContent!.trim();
@@ -400,7 +541,7 @@ it("a business-day answer that arrives after an address answer, carrying the old
   const panel = await mount(api);
   api.getVenueDetails.mockRejectedValue({ code: "connection.failed" });
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   const shown = () =>
     panel.shadowRoot!.querySelector("[data-test=saved-taxpayerDomicile]")!.textContent!.trim();
@@ -430,7 +571,7 @@ it("an address changed in another session, refused after the dialog was dismisse
   const panel = await mount(api);
   api.getVenueDetails.mockResolvedValue(moved(STORED));
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   dialogHost(panel).dismiss();
   refuse({ code: "venue.detail_changed", params: { field: "taxpayerDomicile" } });
@@ -483,10 +624,10 @@ it("puts the address search above the registered address, in the business's coun
   expect(lookup.hidden).toBe(false);
   expect(lookup.countryCode).toBe("ES");
   expect(lookup.label).toBe("Find the address");
-  const order = [...dialog(panel).querySelectorAll("wt-address-lookup, wt-input")].map(
-    (node) => node.localName,
+  const order = [...dialog(panel).querySelectorAll("wt-address-lookup, wt-input, wt-combobox")].map(
+    (node) => node.getAttribute("name"),
   );
-  expect(order).toEqual(["wt-address-lookup", "wt-input"]);
+  expect(order).toEqual(["domicile-search", ...PARTS]);
 });
 
 it("fills the registered address from a chosen address as one line, and Save sends it", async () => {
@@ -495,7 +636,7 @@ it("fills the registered address from a chosen address as one line, and Save sen
   await open(panel);
   expect(save(panel).disabled).toBe(true);
   await choose(panel, MADRID);
-  expect(input(panel).value).toBe("Calle Mayor 1, 3º B, 28013 Madrid, Madrid");
+  expect(values(panel)).toEqual(["Calle Mayor 1, 3º B", "", "28013", "Madrid", "Madrid"]);
   expect(save(panel).disabled).toBe(false);
   expect(save(panel).variant).toBe("primary");
   await press(panel);
@@ -509,7 +650,7 @@ it("fills nothing from an address in another country, and says why on the search
   const panel = await mountSearching(stubApi());
   await open(panel);
   await choose(panel, { ...MADRID, countryCode: "PT", postalCode: "1100-148" });
-  expect(input(panel).value).toBe(OLD);
+  expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
   expect(search(panel)!.message).toBe(
     "That address is not in Spain. Choose another or type it below.",
   );
@@ -521,7 +662,7 @@ it("stops a search still on its way when the person types the address", async ()
   const panel = await mountSearching(stubApi());
   await open(panel);
   const cancel = vi.spyOn(search(panel)!, "cancelSearch");
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   expect(cancel).toHaveBeenCalled();
 });
 
@@ -545,9 +686,9 @@ it("an address chosen while a save is on its way does not replace the address be
   api.changeTaxpayerDomicile.mockImplementationOnce(() => new Promise<never>(() => {}));
   const panel = await mountSearching(api);
   await open(panel);
-  await type(panel, NEW);
+  await type(panel, NEW_PARTS);
   await press(panel);
   expect(search(panel)!.disabled).toBe(true);
   await choose(panel, MADRID);
-  expect(input(panel).value).toBe(NEW);
+  expect(values(panel)).toEqual(["Carrer de Mallorca 1", "", "08010", "Barcelona", "Barcelona"]);
 });

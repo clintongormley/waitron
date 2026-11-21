@@ -55,7 +55,7 @@ async function fixture(addressProvider?: AddressLookupProvider) {
   await host.updateComplete;
   const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
-  const input = dialog.querySelector<WtInput>("wt-input[name=taxpayerDomicile]")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
   await input.updateComplete;
   return { app, host, dialog, input, changeTaxpayerDomicile };
 }
@@ -95,7 +95,7 @@ it("a typed address asks before Escape, and Keep keeps it", async () => {
   await choose(app, "keep");
   await expect.poll(async () => (await question(app)).open).toBe(false);
   expect(dialog.open).toBe(true);
-  expect(input.value).toBe("Calle Fiscal 8, 28013 Madrid 2");
+  expect(input.value).toBe("Calle Fiscal 8 2");
   expect(changeTaxpayerDomicile).not.toHaveBeenCalled();
 });
 
@@ -160,6 +160,6 @@ it("a page discard restores the stored address and clears the other-country line
   });
   await choose(app, "discard");
   expect(await request).toBe("proceeded");
-  await expect.poll(() => input.value).toBe("Calle Fiscal 8, 28013 Madrid");
+  await expect.poll(() => input.value).toBe("Calle Fiscal 8");
   expect(search.message).toBe("");
 });
