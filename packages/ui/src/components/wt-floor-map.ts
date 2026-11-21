@@ -338,8 +338,12 @@ export class WtFloorMap extends LitElement {
           --map-focus-offset: calc(var(--wt-space-1) * 2.5);
         }
 
-        [part="table"]:focus-visible,
-        [part="table"][data-drop-target][data-merge]:focus-visible {
+        [part="table"]:focus-visible {
+          outline: var(--map-focus);
+          outline-offset: var(--map-selection-offset);
+        }
+
+        [part="table"][data-drop-target]:focus-visible {
           outline: var(--map-focus);
           outline-offset: var(--map-focus-offset);
         }

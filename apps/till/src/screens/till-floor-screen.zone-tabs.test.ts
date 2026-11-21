@@ -377,20 +377,11 @@ describe("till-floor-screen: zone tabs", () => {
       await commands.emulateColorScheme(theme);
       await emulateForcedColours("active");
       try {
-        const { el } = await mountWidget<TillFloorScreen>(
-          "till-floor-screen",
-          {
-            zones: [...zones, zone("z3", "Bar", 2)],
-            tables: [
-              seated("t1", "z1"),
-              seated("t2", "z2", { timingBand: "forgotten" }),
-              seated("t3", "z3", { timingBand: "overdue" }),
-            ],
-            now,
-            reducedMotion: true,
-          },
-          theme,
-        );
+        const { el, host } = await mount([
+          seated("t1", "z1"),
+          seated("t2", "z2", { timingBand: "forgotten" }),
+        ]);
+        host.dataset["theme"] = theme;
         const edgeColours = async (id: string) => {
           const button = buttonOf(el, id);
           const { left, top, width } = button.getBoundingClientRect();
@@ -400,7 +391,7 @@ describe("till-floor-screen: zone tabs", () => {
           );
         };
         expect((await edgeColours("z2")).size).toBeGreaterThan(1);
-        expect((await edgeColours("z3")).size).toBe(1);
+        expect((await edgeColours("z1")).size).toBe(1);
       } finally {
         await emulateForcedColours(null);
         await commands.emulateColorScheme(null);

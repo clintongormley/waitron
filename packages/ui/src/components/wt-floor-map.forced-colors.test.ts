@@ -73,11 +73,17 @@ describe.each(["light", "dark"] as const)("forced colours in %s", (theme) => {
     expect(bands).toEqual([true, false, true, false, true, false, true, true]);
   });
 
-  it("keeps the forgotten mark on a small table with no caption and reduced motion", async () => {
-    const el = await map(theme, [table("A", 0, { pulse: "forgotten" }, 1), table("B", 26)], true);
+  it("keeps the forgotten mark and focus on a small table at the edge of a wide plan", async () => {
+    const el = await map(theme, [table("A", 0, { pulse: "forgotten" }, 3), table("B", 92)], true);
     const small = button(el, "A");
     expect(small.querySelector('[part="name"], [part="caption"]')).toBeNull();
     expect(await paintedBands(el, small, [-2, 0])).toEqual([true, true]);
+    await userEvent.keyboard("{Tab}");
+    expect(small.matches(":focus-visible")).toBe(true);
+    const { left, top, height } = small.getBoundingClientRect();
+    const at = await elementPixels(el);
+    const y = top + height / 2;
+    expect(at(left - 7, y)).not.toEqual(at(left - 5, y));
   });
 
   it("keeps the clearing edge and the forgotten line on the same table", async () => {
