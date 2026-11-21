@@ -533,6 +533,12 @@ Cloud keeps its last delivered copy. Turning sharing off also waits for delivery
 is removed. You can stop sharing in the Cloud portal while the box is offline; enable it there to
 resume delivery. If Cloud refuses a publication, check the menu and its content languages; the box
 retries. After disconnecting the box, remove any delivered copy in the Cloud portal.
+
+If the preview says you need a Cloud plan, choose **Open Cloud Billing**. If you land on
+the account page after signing in, choose **Billing** if it appears. Select your venue if asked
+and start a free trial if offered. If Billing is unavailable, choose **Open the shared menu on this box**
+in the preview to use the local link.
+
 A guest link over mobile data is still being prepared.
 
 ## Print a published menu {#guest-paper}

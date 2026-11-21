@@ -24,7 +24,11 @@ async function fixture(
         ...(typeof sent.body === "string" ? { text: sent.body } : {}),
       });
       await wait(req, res);
-      if (!res.writableEnded) res.end(JSON.stringify(reply));
+      if (!res.writableEnded) {
+        const answer = { ...reply };
+        if (values[2] !== "guest-menu-status") delete answer.planRequired;
+        res.end(JSON.stringify(answer));
+      }
     },
   });
   onTestFinished(() => f.close());
@@ -193,13 +197,30 @@ it("reconciles changed publications on later passes and withdraws missing public
     f.calls.filter((v) => (v as { action: string }).action === "guest-menu-publish"),
   ).toHaveLength(1);
   pages = { defaultLanguage: "en", pages: { en: "<h1>Lunch</h1><p>Milk</p>" } };
+  f.reply.planRequired = true;
+  const callsBeforePlanRequired = f.calls.length;
   await delivery.reconcile(signal);
+  expect
+    .soft(f.calls.slice(callsBeforePlanRequired))
+    .toMatchObject([{ action: "guest-menu-status" }]);
+  expect(await delivery.status()).toEqual({
+    state: "plan_required",
+    receivedAt: "2026-11-14T05:00:00.000Z",
+    billingUrl: `${f.options.origin}/account/billing`,
+  });
+  delete f.reply.planRequired;
+  await delivery.reconcile(signal);
+  expect(await delivery.status()).toEqual({
+    state: "current",
+    receivedAt: "2026-11-14T05:00:00.000Z",
+  });
   expect(
     f.calls.filter((v) => (v as { action: string }).action === "guest-menu-publish"),
   ).toHaveLength(2);
   expect((f.calls.at(-1) as { text: string }).text).toBe(
     '{"defaultLanguage":"en","pages":{"en":"<h1>Lunch</h1><p>Milk</p>"}}',
   );
+  f.reply.planRequired = "true";
   pages = { defaultLanguage: "fr", pages: { fr: "<h1>Dinner</h1>" } };
   expect((await delivery.status()).state).toBe("pending");
   await delivery.reconcile(signal);
@@ -208,9 +229,10 @@ it("reconciles changed publications on later passes and withdraws missing public
   );
   expect((await delivery.status()).state).toBe("current");
   pages = null;
+  f.reply.planRequired = true;
   expect((await delivery.status()).state).toBe("pending");
   await delivery.reconcile(signal);
-  expect((await delivery.status()).state).toBe("off");
+  expect(await delivery.status()).toEqual({ state: "off", receivedAt: null });
   expect((f.calls.at(-1) as { action: string }).action).toBe("guest-menu-withdraw");
   Object.assign(f.reply, { state: "blocked", publication: null });
   pages = { defaultLanguage: "en", pages: { en: "<h1>Lunch</h1>" } };

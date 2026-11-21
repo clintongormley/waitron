@@ -303,6 +303,7 @@ it("refreshes Cloud confirmation passively while preserving the open paper draft
   const { mountWidget, cleanupWidgets } = await import("./test-helpers.js");
   const { t } = await import("../i18n/t.js");
   let state = "pending";
+  const billingUrl = "https://cloud.example.test/account/billing";
   const api = new DashboardApi("", async (input, init) => {
     if (String(input).endsWith("/management-api/guest-menu")) {
       expect(new Headers(init?.headers).get("x-waitron-live")).toBe("1");
@@ -311,7 +312,11 @@ it("refreshes Cloud confirmation passively while preserving the open paper draft
           enabled: true,
           available: true,
           revision: 1,
-          delivery: { state, receivedAt: state === "current" ? "2026-11-14T05:00:00.000Z" : null },
+          delivery: {
+            state,
+            receivedAt: state === "current" ? "2026-11-14T05:00:00.000Z" : null,
+            ...(state === "plan_required" ? { billingUrl } : {}),
+          },
         }),
       );
     }
@@ -344,6 +349,30 @@ it("refreshes Cloud confirmation passively while preserving the open paper draft
       .toBe(t("menus.guest_cloud_pending"));
     const reopenedPaper = el.shadowRoot!.querySelector("dashboard-guest-menu-paper")!;
     expect(reopenedPaper).not.toBe(paper);
+    state = "plan_required";
+    await vi.advanceTimersByTimeAsync(60000);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#cloud-delivery")?.textContent)
+      .toBe(
+        "Your Cloud guest menu is hidden until your venue has an active trial or paid plan. Start the venue’s free trial in Waitron Cloud Billing.",
+      );
+    const billing = el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${billingUrl}"]`)!;
+    expect(billing.textContent).toBe("Open Cloud Billing");
+    expect(billing.target).toBe("_blank");
+    expect(billing.rel).toBe("noopener noreferrer");
+    const sharingAction =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("#sharing-action")!;
+    expect(sharingAction.disabled).toBe(false);
+    expect(sharingAction.textContent?.trim()).toBe(t("menus.guest_turn_off"));
+    expect(el.shadowRoot!.querySelector("dashboard-guest-menu-paper")).toBe(reopenedPaper);
+
+    state = "refused";
+    await vi.advanceTimersByTimeAsync(60000);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("#cloud-delivery")?.textContent)
+      .toBe(t("menus.guest_cloud_refused"));
+    expect(el.shadowRoot!.querySelector('a[href^="https://"]')).toBeNull();
+
     state = "current";
     await vi.advanceTimersByTimeAsync(60000);
     await expect

@@ -409,8 +409,9 @@ separately priced sizes/extras and declarations. Local opt-in sharing exposes on
 
 Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
 public mobile-data qualification of Cloud’s hosted copy. The box delivers publications and
-reports delivery confirmation under lane G’s A670-CLOUD contract. Public
-readiness remains unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
+reports delivery confirmation under lane G’s A670-CLOUD contract. When Cloud requires an active
+trial or paid plan, the preview explains why the hosted copy is hidden and links to Cloud Billing.
+Public readiness remains unverified; ordering is separate. Choosing a guest menu independently of the default menu is a later feature.
 
 The owner’s 13 November 22:31 answers, relayed by the watcher in Lane D `questions.md`, choose
 forwarding to the box with a hosted published read-only copy when unreachable, fixed presets
