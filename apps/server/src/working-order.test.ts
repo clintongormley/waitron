@@ -5308,7 +5308,13 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(lines).toEqual(before.lines.map((row) => ({ ...row, note })));
   }
 
-  it("takes a dish's note while a card is at the reader, keeping the payment's mark", async () => {
+  function expectPaymentPending(id: string) {
+    expect(db.all(sql`select state from bill_payments where working_order_id = ${id}`)).toEqual([
+      { state: "pending" },
+    ]);
+  }
+
+  it("takes a dish's note and keeps its reader payment pending", async () => {
     const { cfg, id, before } = await payingHeldOrder();
 
     await withTransaction(db, (tx) =>
@@ -5316,6 +5322,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     );
 
     await onlyNoteChanged(id, before, "No salt");
+    expectPaymentPending(id);
   });
 
   it("takes a dish's note while a card refund waits on its bill", async () => {
@@ -5344,7 +5351,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     ).toEqual([{ state: "pending" }]);
   });
 
-  it("renames the bill while a card is at the reader, keeping the payment's mark", async () => {
+  it("renames the bill and keeps its reader payment pending", async () => {
     const { cfg, coffeeId, id, before } = await payingHeldOrder();
 
     await setWorkingOrderLabel(db, id, { label: "Window", revision: before.order!.revision });
@@ -5369,6 +5376,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual(before.lines);
+    expectPaymentPending(id);
   });
 
   it("still refuses a quantity change, with or without a note, writing nothing", async () => {

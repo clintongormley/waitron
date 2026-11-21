@@ -297,9 +297,7 @@ function fakePool(client: FakeStripe): CardProviderPool {
   };
 }
 
-/** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. Threads the
- * real composition list so the pay path resolves a reader's provider `credentialPurpose` from its
- * seat, exactly as boot does. */
+/** The composition list lets reader payments resolve the provider's credential purpose. */
 function apiDepsWithPool(cfg: TradingContext, pool: CardProviderPool): TillApiDeps {
   return {
     admission: testTradingAdmission(),

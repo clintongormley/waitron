@@ -549,7 +549,7 @@ describe("paying only on a reader this device holds, with no other device's paym
     ]);
   });
 
-  it("/api/pay on a reader this device does not hold is reader.not_held and charges nothing", async () => {
+  it("a counter card payment on a reader this device does not hold is reader.not_held and charges nothing", async () => {
     const calls = venue.card.collectCalls.length;
 
     const named = await pay(venue.cookie, r2);
@@ -568,7 +568,7 @@ describe("paying only on a reader this device holds, with no other device's paym
     expect(venue.card.collectCalls.length).toBe(calls);
   });
 
-  it("/api/pay on a reader with another device's payment in progress is reader.payment_in_progress", async () => {
+  it("a counter card payment on a reader with another device's payment in progress is reader.payment_in_progress", async () => {
     await stalledPayment(venue.cookie2);
     // A stuck payment of B's stays on R2 while A comes to hold it.
     await suite.db.update(cardReaders).set({ heldByDeviceId: a }).where(eq(cardReaders.id, r2));
@@ -1440,7 +1440,7 @@ describe("a deleted reader", () => {
     });
   });
 
-  it("/api/pay naming the deleted reader is 404 reader.not_found, charging nothing and writing no payment", async () => {
+  it("a counter card payment naming the deleted reader is 404 reader.not_found, charging nothing and writing no payment", async () => {
     await deleteReader(r1);
     const calls = venue.card.collectCalls.length;
 
