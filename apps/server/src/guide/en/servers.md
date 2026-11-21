@@ -288,14 +288,13 @@ administrator's details in Prepare or a development Live rehearsal. Sign in or c
 then return to setup in the original tab. Waitron files the venue after you save it and the box
 restarts. Check **System → Cloud services** for the connection.
 
-Choose **Skip** if you want to connect later from **Cloud services**. If you import a configuration,
-connect there after setup. Enter the address and mail server during setup. The address pilot needs
-a Cloud account with exactly one Spanish business, no tax number and no venues. If you already
-have a venue in Cloud, enter the new venue's address manually.
+To finish setup manually, choose **Skip** and enter the address and mail server. For a configuration
+import, connect after setup from **Cloud services**. The planned address pilot will require a Cloud
+account with one Spanish business, no tax number and no venues. Adding a venue to an existing
+Cloud business will still use manual address entry.
 
-If your Cloud sign-in expires or you sign out before saving, you can still save the venue. For a
-test box whose setup registration didn't finish, ask the pilot operator to prepare a replacement
-key before trying again.
+If you started Cloud sign-in and the registration did not finish, you can still save the venue.
+Ask the pilot operator to prepare a replacement key if Cloud services refuses a new sign-in.
 
 ## Turn remote staff access on or off {#remote-access}
 

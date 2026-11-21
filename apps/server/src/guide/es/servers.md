@@ -322,15 +322,15 @@ sesión o crea una cuenta y vuelve a la configuración en la pestaña original. 
 local después de que lo guardes y se reinicie el servidor. Comprueba la conexión en
 **Sistema → Servicios Cloud**.
 
-Elige **Omitir** si prefieres conectarte más tarde desde **Servicios Cloud**. Si importas una
-configuración, conéctate allí al terminar. Introduce la dirección y el servidor de correo durante
-la configuración. La prueba de búsqueda de direcciones requiere una cuenta de Cloud con una sola
-empresa española, sin NIF ni locales. Si ya tienes un local en Cloud, introduce la dirección del
-nuevo local manualmente.
+Para terminar la configuración manualmente, elige **Omitir** e introduce la dirección y el servidor
+de correo. Si importas una configuración, conéctate al terminar desde **Servicios Cloud**. La
+prueba de búsqueda de direcciones requerirá una cuenta de Cloud con una sola empresa española,
+sin NIF ni locales. Si añades un local a una empresa que ya usa Cloud, introduce la dirección
+manualmente.
 
-Si caduca tu sesión de Cloud o la cierras antes de guardar, aún puedes guardar el local. Si el
-registro del servidor de pruebas quedó pendiente, pide al responsable de la prueba que prepare
-una clave nueva antes de volver a intentarlo.
+Si iniciaste sesión en Cloud y el registro quedó pendiente, aún puedes guardar el local. Si
+Servicios Cloud rechaza un nuevo inicio de sesión, pide al responsable de la prueba que prepare
+una clave nueva.
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 

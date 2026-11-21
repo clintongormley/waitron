@@ -7,7 +7,7 @@ export const startEn = {
   "cloud_sign_in.sign_in": "Sign in to Waitron Cloud",
   "cloud_sign_in.skip": "Skip",
   "cloud_sign_in.error":
-    "Cloud sign-in didn’t finish. Try again or skip and connect later from Cloud services.",
+    "Cloud sign-in didn’t finish. Try again or choose Skip to finish setup manually.",
 
   "emergency.heading": "Start the venue in the cloud",
   "emergency.authenticator":
@@ -196,7 +196,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "cloud_sign_in.sign_in": "Iniciar sesión en Waitron Cloud",
   "cloud_sign_in.skip": "Omitir",
   "cloud_sign_in.error":
-    "No se ha completado el inicio de sesión en Cloud. Inténtalo de nuevo u omite este paso y conéctate más tarde desde Servicios de Cloud.",
+    "No se ha completado el inicio de sesión en Cloud. Inténtalo de nuevo o elige Omitir para terminar la configuración manualmente.",
 
   "emergency.heading": "Iniciar el local en la nube",
   "emergency.authenticator":

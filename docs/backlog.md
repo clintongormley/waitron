@@ -1303,7 +1303,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   The v4 signing format is published in `@waitron-io/contract@0.2.37`. The contract also provides
   a separate v5 encoder and verifier for early setup sign-in. The installed test-box
   [sign-in integration](superpowers/plans/2026-11-20-setup-cloud-sign-in.md) passed a joint test
-  with Cloud. Configured test boxes also offer sign-in in fresh Prepare and development Live,
+  on 20 November using Waitron [#3893](https://github.com/clintongormley/waitron/pull/3893)
+  and Cloud [#1343](https://github.com/waitron-io/waitron-cloud/pull/1343).
+  Configured test boxes also offer sign-in in fresh Prepare and development Live,
   then file the saved venue after restart. [Early setup still needs](superpowers/plans/2026-11-21-setup-cloud-sign-in-early.md)
   the address picker, recovery from an expired or signed-out setup session, and the staff email
   consent. The address pilot needs exactly one Spanish business with no tax number or venues.

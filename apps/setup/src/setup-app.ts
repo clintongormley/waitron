@@ -820,7 +820,10 @@ export class SetupApp extends LitElement {
   #localeChosen = false;
 
   #cloudSignInAvailable = false;
-  #cloudSignInTab?: string;
+  get #cloudSignInTab(): string | undefined {
+    if (this.#cloudSignInAvailable)
+      return sessionStorage.getItem("waitron-setup-cloud-signed-in") ?? undefined;
+  }
   @state() private cloudSignInError = false;
 
   #resumeCloudSignIn(): boolean {
@@ -847,7 +850,8 @@ export class SetupApp extends LitElement {
     this.draft = { mode };
     this.connectionAnswered = true;
     if (outcome === "signed-in") {
-      this.#cloudSignInTab = sessionStorage.getItem("waitron-setup-cloud-tab") ?? undefined;
+      const tab = sessionStorage.getItem("waitron-setup-cloud-tab");
+      if (tab) sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
       this.screen = "admin";
     } else {
       this.cloudSignInError = outcome !== "cancelled";
@@ -862,7 +866,7 @@ export class SetupApp extends LitElement {
     const { authorizationUrl } = await this.api.startCloudSignIn(tab);
     if (!isCurrent()) return;
     if (authorizationUrl === undefined) {
-      this.#cloudSignInTab = tab;
+      sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
       this.#goto("admin");
       return;
     }
@@ -1365,7 +1369,6 @@ export class SetupApp extends LitElement {
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
-    if (destination === "mode") this.#cloudSignInTab = undefined;
     if (
       destination === "admin" &&
       this.#cloudSignInAvailable &&
@@ -1376,6 +1379,8 @@ export class SetupApp extends LitElement {
       this.cloudSignInError = false;
       destination = "cloud-sign-in";
     }
+    if (this.#cloudSignInAvailable && (destination === "mode" || destination === "cloud-sign-in"))
+      sessionStorage.removeItem("waitron-setup-cloud-signed-in");
     this.screen = destination;
   }
 
@@ -1828,6 +1833,7 @@ export class SetupApp extends LitElement {
     try {
       const request = assembleBody(submitted);
       const locale = currentLocale();
+      const cloudSignInTab = this.#cloudSignInTab;
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
             {
@@ -1836,14 +1842,14 @@ export class SetupApp extends LitElement {
               email: submitted.email as ProvisionBody["email"],
             },
             locale,
-            this.#cloudSignInTab,
+            cloudSignInTab,
           )
-        : request.mode === "prepare" || this.#cloudSignInTab
+        : request.mode === "prepare" || cloudSignInTab
           ? this.api.provision(
               request,
               this.#localeChosen ? locale : undefined,
               request.mode === "prepare" ? locale : undefined,
-              this.#cloudSignInTab,
+              cloudSignInTab,
             )
           : this.#localeChosen
             ? this.api.provision(request, locale)

@@ -634,9 +634,28 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
-  it("keeps the Prepare save successful when recording Cloud publication fails", async () => {
+  it.each([
+    {
+      name: "Prepare even when the Cloud marker fails",
+      body: prepareBody(),
+      devMode: false,
+      fileWithCloud: true,
+    },
+    {
+      name: "production Live without a Cloud marker",
+      body: { ...liveBody(), aeatCert: CERT },
+      devMode: false,
+      fileWithCloud: false,
+    },
+    {
+      name: "an imported configuration without a Cloud marker",
+      body: { ...liveBody(), configurationImport: true },
+      devMode: true,
+      fileWithCloud: false,
+    },
+  ])("saves $name", async ({ body, devMode, fileWithCloud }) => {
     const app = new Hono();
-    const { deps, calls } = makeDeps();
+    const { deps, calls } = makeDeps({ devMode });
     const tab = randomUUID();
     const session = randomBytes(32).toString("base64url");
     const publishSetupSignIn = vi.fn(async () => {
@@ -659,16 +678,18 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       },
       noopLog,
     );
-    const result = await postProvision(app, prepareBody(), {
+    const result = await postProvision(app, body, {
       origin: "https://box.test",
       cookie: "__Host-waitron-setup-cloud=" + session,
       "x-waitron-setup-cloud-tab": tab,
     });
     expect(result.status).toBe(200);
-    expect(publishSetupSignIn).toHaveBeenCalledExactlyOnceWith(
-      { kind: "setup", tab, session },
-      NODE_ID,
-    );
+    if (fileWithCloud)
+      expect(publishSetupSignIn).toHaveBeenCalledExactlyOnceWith(
+        { kind: "setup", tab, session },
+        NODE_ID,
+      );
+    else expect(publishSetupSignIn).not.toHaveBeenCalled();
     await tick();
   });
 
