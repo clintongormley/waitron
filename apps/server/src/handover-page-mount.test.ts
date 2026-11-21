@@ -45,7 +45,11 @@ async function build(mirror = false, servesDashboard = false) {
     "destination",
   );
   const app = new Hono();
-  if (mirror) app.use("*", spareReadGate({ main: () => undefined }));
+  if (mirror)
+    app.use(
+      "*",
+      spareReadGate({ main: () => undefined, mainUrl: async () => null, log: () => {} }),
+    );
   mountHandoverPage(
     app,
     { root: root!, node: suite.node, nodeId: NODE, servesDashboard },

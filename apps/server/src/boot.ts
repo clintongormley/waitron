@@ -248,7 +248,7 @@ import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-f
 import { mountDiskStopApi } from "./disk-stop-api.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
-import { mountMainServerApi, mountNodeApi } from "./node-api.js";
+import { mainServerUrl, mountMainServerApi, mountNodeApi } from "./node-api.js";
 import { restrictedPageRoute } from "./restricted-page.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -2508,7 +2508,11 @@ async function bootServer(
     buildMetadata,
   ];
   if (isMirror) {
-    const gate = spareReadGate({ main: () => mainSilence?.state() });
+    const gate = spareReadGate({
+      main: () => mainSilence?.state(),
+      mainUrl: async () => mainServerUrl(await readNodeMembership(db)),
+      log,
+    });
     app.use("*", gate);
     staffPageGates.push(gate);
   }

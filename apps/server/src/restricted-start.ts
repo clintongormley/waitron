@@ -39,8 +39,8 @@ export const MONEY_AND_DRAWER_WRITES = [
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
  * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
  * It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code; any other route it does
- * not serve stays a 404 (handover-refusal-words plan, step 5: "no new unknown-route case or blanket
- * middleware").
+ * not serve stays a 404, except the till's and the dashboard's GET pages, which show the restricted
+ * page (`restricted-page.ts`).
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);

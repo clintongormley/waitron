@@ -439,9 +439,7 @@ describe("a spare's network surface", () => {
       ]);
       expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
       for (const path of ["/", "/devices", "/staff"])
-        expect(await (await app.request(path)).text()).toContain(
-          "Restaurant screens are closed here",
-        );
+        expect(await (await app.request(path)).text()).toContain("This is the venue’s spare box");
       expect(await (await app.request("/api/node")).json()).toMatchObject({
         acceptingSales: false,
       });

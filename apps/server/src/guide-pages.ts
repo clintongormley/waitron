@@ -6,6 +6,8 @@ import { renderGuide } from "./guide-markdown.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./html-page.js";
+import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
+import type { SupportedLocale } from "@waitron/shared";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 
@@ -78,14 +80,19 @@ main { padding-inline: var(--wt-space-4); }
 }`;
 
 /** The guides' page look, shared with the `/legal/*` pages. */
-export function renderBoxPage(lang: GuideLanguage, title: string, body: string): string {
+export function renderBoxPage(
+  lang: GuideLanguage,
+  title: string,
+  body: string,
+  extraStyle = "",
+): string {
   return `<!doctype html>
 <html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} · Waitron</title>
-<style>${STYLE}</style>
+<style>${STYLE}${extraStyle}</style>
 <script>${THEME_SCRIPT}</script>
 </head>
 <body>
@@ -96,8 +103,27 @@ ${body}
 </html>`;
 }
 
-export function boxPageAnswer(c: Context, html: string, status: 200 | 404 | 500): Response {
-  return c.html(html, status, { "Cache-Control": "no-cache", "Content-Security-Policy": CSP });
+const LOGO_PAGE_STYLE = `
+.logo svg { display: block; }
+p, li { overflow-wrap: anywhere; }`;
+
+/** `renderBoxPage` under the Waitron logo, for a page read in a sign-in locale. */
+export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: string): string {
+  return renderBoxPage(
+    locale.startsWith("es") ? "es" : "en",
+    title,
+    `<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>\n${body}`,
+    LOGO_PAGE_STYLE,
+  );
+}
+
+export function boxPageAnswer(
+  c: Context,
+  html: string,
+  status: 200 | 404 | 500,
+  cache: "no-cache" | "no-store" = "no-cache",
+): Response {
+  return c.html(html, status, { "Cache-Control": cache, "Content-Security-Policy": CSP });
 }
 
 function notFound(c: Context, lang: GuideLanguage): Response {

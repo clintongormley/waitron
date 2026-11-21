@@ -65,6 +65,12 @@ export function mountNodeApi(app: Hono, deps: NodeApiDeps, log: Logger): void {
   );
 }
 
+/** The serving primary's address in `held`, or `null` when the chart names none. */
+export function mainServerUrl(held: SignedMembershipDocument | null): string | null {
+  const mainId = held === null ? undefined : servingPrimaryNodeId(held);
+  return held?.body.nodes.find((n) => n.nodeId === mainId)?.contactUrl || null;
+}
+
 /**
  * `GET /api/node/main` — mounted on a spare only: the address its switch page tries before offering
  * the switch, so a main server the spare cannot reach but the person's device can is not switched
@@ -79,10 +85,7 @@ export function mountMainServerApi(
   app.get("/api/node/main", (c) =>
     run(c, log, async () => {
       c.header("cache-control", "no-store");
-      const held = await deps.readMembership();
-      const mainId = held === null ? undefined : servingPrimaryNodeId(held);
-      const main = held?.body.nodes.find((n) => n.nodeId === mainId);
-      return c.json({ mainUrl: main?.contactUrl || null });
+      return c.json({ mainUrl: mainServerUrl(await deps.readMembership()) });
     }),
   );
 }
