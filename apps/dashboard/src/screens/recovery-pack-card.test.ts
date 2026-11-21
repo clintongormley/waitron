@@ -33,23 +33,15 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
 }
 
 it.each([
-  ["en-GB", "Backups guide", "/help/en/backups#recovery-pack"],
-  ["es-ES", "Guía de copias de seguridad", "/help/es/backups#recovery-pack"],
-] as const)(
-  "links the manager's Recovery pack card to the guide in %s",
-  async (locale, label, href) => {
-    setLocale(locale);
-    const el = await mount(stubApi());
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[href^='/help/']")!;
-    expect(link).not.toBeNull();
-    await expect.element(link).toBeVisible();
-    expect(link.textContent?.trim()).toBe(label);
-    expect(link.getAttribute("href")).toBe(href);
-    el.canManage = false;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("a")).toBeNull();
-  },
-);
+  ["en-GB", "Backup encryption key", "Server key"],
+  ["es-ES", "Clave de cifrado de copias", "Clave del servidor"],
+] as const)("names the two keys separately on the pack in %s", async (locale, backup, server) => {
+  setLocale(locale);
+  const el = await mount(stubApi(STATES["up to date"]));
+  const root = el.shadowRoot!;
+  expect(root.querySelector("[data-test=row-backup-key] dt")?.textContent).toBe(backup);
+  expect(root.querySelector("[data-test=row-server-key] dt")?.textContent).toBe(server);
+});
 
 const PARTS: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
   { part: "bucket", state: "included" },

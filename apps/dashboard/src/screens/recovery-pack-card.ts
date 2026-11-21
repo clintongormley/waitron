@@ -1,4 +1,3 @@
-import { guideHref } from "../help-guide.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -105,9 +104,6 @@ export class RecoveryPackCard extends LitElement {
       }
       .line p + p {
         margin-block-start: var(--wt-space-2);
-      }
-      .guide {
-        color: var(--wt-color-primary-text);
       }
       .error {
         color: var(--wt-color-danger);
@@ -303,7 +299,6 @@ export class RecoveryPackCard extends LitElement {
     if (!this.canManage) return nothing;
     return html`<section aria-labelledby="recovery-pack-title">
       <h2 id="recovery-pack-title">${t("recovery_pack.title")}</h2>
-      <p><a class="guide" href=${guideHref("backups.recovery-pack")}>${t("backup.guide")}</a></p>
       <p>${t("recovery_pack.intro")}</p>
       ${
         this.failed

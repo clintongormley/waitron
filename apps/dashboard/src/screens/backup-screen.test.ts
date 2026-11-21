@@ -48,15 +48,14 @@ it.each([
   "offers the Backups guide (%s, %s, %s, manager %s)",
   async (locale, label, href, canManage) => {
     setLocale(locale);
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    await mountWidget<BackupScreen>("dashboard-backup-screen", {
       api: stubApi({}, OFF),
       canManage,
     });
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("a[href^='/help/']")!;
-    expect(link).not.toBeNull();
-    await expect.element(link).toBeVisible();
-    expect(link.textContent?.trim()).toBe(label);
-    expect(link.getAttribute("href")).toBe(href);
+    const links = page.getByRole("link", { name: label, exact: true });
+    await expect.poll(() => links.all().length).toBe(1);
+    await expect.element(links).toBeVisible();
+    await expect.element(links).toHaveAttribute("href", href);
   },
 );
 

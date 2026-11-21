@@ -1,6 +1,6 @@
 # Recover from backup
 
-Keep the previous recovery pack when you change the recovery key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
+Keep the previous recovery pack when you change the backup encryption key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
 
 Scheduled backups and the bucket copy each use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
 
@@ -48,7 +48,7 @@ If the setup’s own record is damaged, the page may offer a warned **Start agai
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs the recovery key (for a backup file) or the recovery kit
+bucket**, as on a new box; restoring needs the backup encryption key (for a backup file) or the recovery kit
 (for your bucket), and that backup's server key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
@@ -78,7 +78,7 @@ a repair. **Stop** ends this attempt; you can close the tab or check again. If r
 failing, stop here. This page cannot repair every saved certificate layout or replace a separately
 installed certificate. For a separately installed certificate, check the server’s HTTPS address
 and stop if it shows a warning. If your device blocks certificate installation, use a venue
-device that allows it. Enter passwords, recovery keys and server keys only after HTTPS opens without warnings.
+device that allows it. Enter passwords, backup encryption keys and server keys only after HTTPS opens without warnings.
 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
@@ -94,7 +94,7 @@ Once it has joined, it can take over: see [Hand over to a spare box](servers.md#
 [Start here when the main box has failed](servers.md#emergency). A new server cannot join a primary
 that is already gone: to recover then, choose a restore option.
 
-For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Recovery key**,
+For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Backup encryption key**,
 and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in
 **Recovery pack or kit file**, or paste the kit in **Recovery kit**, and choose the **Environment**
 the old box ran in. If the pack was made before the box had a bucket copy, is not a Waitron recovery
@@ -115,8 +115,7 @@ date, node and server key. Check those details before continuing. Keep productio
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-The recovery key, the bucket kit and the Cloud approval give access to a copy. You still need that
-copy's named server key to authenticate recovery.
+Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the selected copy's **Server key** to authorise recovery. Keep the earlier pack too if it holds that key.
 
 On a test server restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -152,16 +151,16 @@ lists the times the box could not use its saved backup settings since it last st
 and at most five, each with what went wrong: for example, the key number the settings were locked
 with and the key numbers this box holds. It then describes the saved record as it is now: when it
 was last written and, if it reads, the folders and buckets it names and whether each folder exists.
-It says whether the box holds a usable recovery key. It shows a bucket's access key ID but never its secret,
-and the recovery key only by its fingerprint. The panel reads and changes nothing: **Read again**
+It says whether the box holds a usable backup encryption key. It shows a bucket's access key ID but never its secret,
+and the backup encryption key only by its fingerprint. The panel reads and changes nothing: **Read again**
 reads the facts again and does not turn backups on, and **Stop** closes the panel. It repairs
 nothing either; to replace the saved settings, choose the destinations again and apply them. Keep
-your recovery keys and existing backup files.
+your backup encryption keys and existing backup files.
 
 If the bucket copy says its settings could not be used safely, choose **Change bucket** in
 **Backups**. Correct the fields it marks. **Test** checks the bucket without saving settings;
 **Save and turn on** also checks that a test file can be read with its matching key and that reads with a wrong key or no key are refused before applying the settings. If Save refuses the bucket, follow the message to enable those keys or choose another provider. Save can allow customer-supplied encryption keys in your bucket’s settings. That change remains if a later check fails. **Cancel** leaves the saved settings as they were. This form
-cannot diagnose a failure in the box's own configuration. Keep your recovery keys and existing
+cannot diagnose a failure in the box's own configuration. Keep your backup encryption keys and existing
 copies if the refusal persists.
 
 If the box says the bucket copy is not running, open **Backups** and press **Start the copy again**,

@@ -1,6 +1,6 @@
 # Recuperar desde una copia
 
-Conserva el paquete de recuperación anterior cuando cambies la clave de recuperación. Hasta que la nueva copia en el bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
+Conserva el paquete de recuperación anterior cuando cambies la clave de cifrado de copias. Hasta que la nueva copia en el bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
 
 Las copias programadas y la copia en el bucket usan cada una la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
@@ -52,7 +52,7 @@ Si el propio registro de configuración está dañado, la página puede ofrecer 
 Cuando se ha borrado la configuración, el servidor se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
-restaurar necesita la clave de recuperación (para un archivo de copia) o el kit de recuperación
+restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el kit de recuperación
 (para tu bucket), y la clave del servidor de esa copia. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
 configurar este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
@@ -85,7 +85,7 @@ Si la reparación sigue fallando, detente aquí. Esta página no puede reparar t
 de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
 por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
 dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
-contraseñas, claves de recuperación y claves del servidor solo cuando HTTPS se abra sin avisos.
+contraseñas, claves de cifrado de copias y claves del servidor solo cuando HTTPS se abra sin avisos.
 
 Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
@@ -103,7 +103,7 @@ Un servidor nuevo no puede unirse a un principal que ya no está: en ese caso, e
 restauración.
 
 Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
-abre en **Clave de recuperación** y elige su **Entorno de la copia**. Para tu bucket, elige tu
+abre en **Clave de cifrado de copias** y elige su **Entorno de la copia**. Para tu bucket, elige tu
 paquete de recuperación o archivo del kit en **Paquete de recuperación o archivo del kit**, o pega
 el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba el servidor anterior. Si
 el paquete se hizo antes de que el servidor tuviera copia en el bucket, no es un paquete de
@@ -125,8 +125,7 @@ Mantén separados producción y preproducción. Si el manifiesto está dañado o
 copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
 de volver a intentarlo.
 
-La clave de recuperación, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
-necesitas la clave del servidor de esa copia para identificarte.
+Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la **Clave del servidor** de la copia elegida para autorizar la restauración. Conserva también el paquete anterior si contiene esa clave.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -166,11 +165,11 @@ copias guardados desde que se inició, de la más reciente a la más antigua y c
 una con lo que falló: por ejemplo, el número de clave con que se cerraron los ajustes y los números
 de clave que tiene este servidor. Después describe el registro guardado tal como está ahora: cuándo se
 escribió por última vez y, si se puede leer, las carpetas y los buckets que indica y si existe cada
-carpeta. Indica si el servidor tiene una clave de recuperación válida. Muestra el ID de la clave de acceso
-de un bucket, pero nunca su secreto, y la clave de recuperación solo por su huella. El panel solo
+carpeta. Indica si el servidor tiene una clave de cifrado de copias válida. Muestra el ID de la clave de acceso
+de un bucket, pero nunca su secreto, y la clave de cifrado de copias solo por su huella. El panel solo
 lee y no cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las copias, y **Parar**
 cierra el panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los
-destinos y aplícalos. Conserva las claves de recuperación y los archivos de copia existentes.
+destinos y aplícalos. Conserva las claves de cifrado de copias y los archivos de copia existentes.
 
 Si la campana o **Estado del servidor** indica que no se están limpiando las copias antiguas del
 bucket o del servidor en espera, se conservan esas copias. Waitron lo intenta cada día mientras la
@@ -183,7 +182,7 @@ Si la copia en el bucket indica que no se han podido usar sus ajustes de forma s
 **Cambiar de bucket** en **Copias de seguridad**. Corrige los campos señalados. **Probar** comprueba
 el bucket sin guardar ajustes; **Guardar y activar** también comprueba que un archivo de prueba se pueda leer con su clave y que se rechace su lectura con una clave incorrecta o sin clave antes de aplicar los ajustes. Si rechaza el bucket, sigue el mensaje para permitir esas claves o elige otro proveedor. Guardar puede permitir claves de cifrado proporcionadas por el cliente en los ajustes del bucket. Ese cambio se mantiene si una comprobación posterior falla. **Cancelar** deja los ajustes
 guardados como estaban. Este formulario no puede diagnosticar un fallo de configuración del propio
-servidor. Conserva las claves de recuperación y las copias existentes si el rechazo persiste.
+servidor. Conserva las claves de cifrado de copias y las copias existentes si el rechazo persiste.
 
 Si el servidor indica que la copia en el bucket no está en marcha, abre **Copias de seguridad** y pulsa
 **Volver a iniciar la copia**, que la inicia con los ajustes que ya tiene. Si se vuelve a detener,

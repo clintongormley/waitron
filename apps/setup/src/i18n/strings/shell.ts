@@ -120,7 +120,7 @@ export const shellEn = {
   "shell.adopt.spare_already_joined":
     "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. Nothing was changed on either server. To use this server instead, open Servers on the primary server, choose Remove on the old standby's row and confirm it is switched off and that nobody is restoring the restaurant from a backup or switching it to another server, then enter a new authenticator code if you use one, and press Connect again. Or choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant.",
   "shell.adopt.recovery_key_missing":
-    "The primary server has no recovery key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
+    "The primary server has no backup encryption key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.clocks_apart":
     "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.incomplete":
@@ -167,7 +167,7 @@ export const shellEn = {
   "shell.bucket.kit_old_version":
     "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
   "shell.bucket.unopenable":
-    "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+    "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
   "shell.bucket.other_version":
     "The copy in the bucket was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
   "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
@@ -203,7 +203,7 @@ export const shellEn = {
   "shell.cloud.other_version":
     "The snapshot was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.",
   "shell.cloud.unopenable":
-    "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.",
+    "This snapshot could not be opened. It is damaged, or the backup encryption key Waitron Cloud holds for it does not open it.",
   "shell.cloud.environment_mismatch":
     "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
   "shell.cloud.unavailable":
@@ -362,7 +362,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.spare_already_joined":
     "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para usar este servidor en su lugar, abre Servidores en el servidor principal, elige Retirar en la fila del servidor en espera anterior y confirma que está apagado y que nadie está recuperando el restaurante desde una copia de seguridad ni pasándolo a otro servidor; después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. O elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo.",
   "shell.adopt.recovery_key_missing":
-    "El servidor principal aún no tiene clave de recuperación. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+    "El servidor principal aún no tiene clave de cifrado de copias. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.clocks_apart":
     "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.incomplete":
@@ -410,7 +410,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.kit_old_version":
     "Este código de recuperación del bucket se hizo antes de esta versión de Waitron y no se puede usar. Elige un paquete de recuperación más reciente o restaura una copia de seguridad de archivo.",
   "shell.bucket.unopenable":
-    "No se ha podido abrir la copia más reciente del bucket. Está dañada, o la clave de recuperación de este kit no la abre. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit. Si no, elige Volver y después Restaurar desde una copia de seguridad para restaurar desde un archivo de copia de seguridad.",
+    "No se ha podido abrir la copia más reciente del bucket. Está dañada, o la clave de cifrado de copias de este kit no la abre. Si se cambió la clave de cifrado de copias, usa el último paquete de recuperación o el último kit. Si no, elige Volver y después Restaurar desde una copia de seguridad para restaurar desde un archivo de copia de seguridad.",
   "shell.bucket.other_version":
     "La copia del bucket se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
   "shell.bucket.pointer_missing":
@@ -447,7 +447,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.cloud.other_version":
     "La instantánea se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarla. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otra copia.",
   "shell.cloud.unopenable":
-    "No se ha podido abrir esta instantánea. Está dañada, o la clave de recuperación que Waitron Cloud guarda para ella no la abre.",
+    "No se ha podido abrir esta instantánea. Está dañada, o la clave de cifrado de copias que Waitron Cloud guarda para ella no la abre.",
   "shell.cloud.environment_mismatch":
     "Esta instantánea no es de un local de preparación o de demostración, y la recuperación desde Cloud solo restaura esos.",
   "shell.cloud.unavailable":

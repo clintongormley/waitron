@@ -110,7 +110,7 @@ describe("the bucket part", () => {
     });
     expect(page.rows).toEqual([
       { label: "Bucket", value: "eu-west-1 · venue-bucket", mono: true },
-      { label: "Recovery key", value: "changed on 20 September 2026" },
+      { label: "Backup encryption key", value: "changed on 20 September 2026" },
     ]);
     expect(page.notes).toEqual(PART_WORDS.en.bucket.steps);
     expect(JSON.stringify(built.record)).not.toContain(KEY);
@@ -137,6 +137,7 @@ describe("the bucket part", () => {
       mono: true,
     });
     expect(built.part.page!.title).toBe("Copia en el bucket");
+    expect(built.part.page!.rows[1]?.label).toBe("Clave de cifrado de copias");
   });
 
   it("is absent when the box has no bucket copy", async () => {
@@ -210,7 +211,7 @@ describe("the archives part", () => {
     expect(built.file).toEqual({ backupKey: spaced });
     expect(built.record.destination).toBe("folder");
     expect(built.part.page!.secret).toEqual({
-      label: "Recovery key",
+      label: "Backup encryption key",
       text: spaced,
       qr: true,
       exactSpaces: true,

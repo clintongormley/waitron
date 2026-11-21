@@ -2229,11 +2229,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server has no recovery key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
+        "The primary server has no backup encryption key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
       ],
       [
         "es-ES",
-        "El servidor principal aún no tiene clave de recuperación. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+        "El servidor principal aún no tiene clave de cifrado de copias. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
       ],
     ] as const)(
       "shows the no-key refusal and leaves Connect working (%s)",
@@ -5134,17 +5134,17 @@ describe("restore from my bucket", () => {
     [
       "recovery.passphrase_invalid",
       undefined,
-      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.artifact_invalid",
       { reason: "magic" },
-      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.archive_invalid",
       { reason: "magic" },
-      "The latest copy in the bucket could not be opened. It is damaged, or the recovery key in this kit does not open it. If the recovery key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
       "backup.stream_restore_failed",
@@ -5542,7 +5542,7 @@ describe("restoring a backup file whose old server may still be running", () => 
   );
 
   it.each([
-    ["recovery.passphrase_invalid", {}, "recoveryKey", "Check the recovery key."],
+    ["recovery.passphrase_invalid", {}, "recoveryKey", "Check the backup encryption key."],
     [
       "restore.environment_mismatch",
       { backup: "preproduction", target: "production" },
@@ -5550,7 +5550,12 @@ describe("restoring a backup file whose old server may still be running", () => 
       "The backup comes from the other environment. Choose the environment it came from.",
     ],
     ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
-    ["setup.request_invalid", { field: "recoveryKey" }, "recoveryKey", "Check the recovery key."],
+    [
+      "setup.request_invalid",
+      { field: "recoveryKey" },
+      "recoveryKey",
+      "Check the backup encryption key.",
+    ],
     [
       "setup.request_invalid",
       { field: "environment" },
@@ -6062,7 +6067,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
   const cloudOtherVersion =
     "The snapshot was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another copy.";
   const cloudUnopenable =
-    "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
+    "This snapshot could not be opened. It is damaged, or the backup encryption key Waitron Cloud holds for it does not open it.";
   it.each([
     ["restore.schema_too_new", 409, cloudOtherVersion],
     ["recovery.passphrase_invalid", 422, cloudUnopenable],

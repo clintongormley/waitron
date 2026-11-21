@@ -207,10 +207,10 @@ describe("SetupRestoreBucketScreen", () => {
     expect(restore.disabled).toBe(false);
   });
 
-  it("says the kit is as sensitive as the recovery key", async () => {
+  it("says the kit is as sensitive as the backup encryption key", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
     expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
-      "as sensitive as the recovery key",
+      "as sensitive as the backup encryption key",
     );
     // Browsers may send spell-checked text to an outside service.
     expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.spellcheck).toBe(false);
@@ -916,7 +916,7 @@ describe("SetupRestoreBucketScreen in Spanish", () => {
     });
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde mi bucket");
     expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
-      "tan delicado como la clave de recuperación",
+      "tan delicado como la clave de cifrado de copias",
     );
     expect(q(el, "[data-test=venue]")!.textContent).toContain("(NIF 89890001K), local Local.");
     q(el, "[data-test=restore]")!.click();

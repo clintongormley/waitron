@@ -14,11 +14,13 @@ To reuse your setup for a new venue, enter and confirm an export passphrase of a
 
 ## Scheduled backups {#archives}
 
-You can keep copies in a folder on the box or in an S3-compatible bucket. For a bucket, enter its connection details.
+For a **folder on this box**, enter a full path. The example `/var/lib/waitron/backups` is the box's own backup folder. If its disk fails, a copy there goes with it. Use a mounted drive the box can access or add an off-box destination.
 
-Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the recovery key as described below, then choose **Turn on backups**.
+For an **S3-compatible bucket**, enter the bucket name, region, access key ID and secret access key from your storage provider. Add a custom endpoint or folder prefix if your provider or setup needs one. You can choose the bucket on its own or keep the folder and bucket together.
 
-If you can choose **Waitron Cloud**, select **Every day** so Cloud can receive backups on your venue's schedule. Waitron Cloud decides when its old copies expire.
+Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the backup encryption key as described below, then choose **Turn on backups**.
+
+If you can choose **Waitron Cloud**, it uses the box’s Cloud connection. Select **Every day** so Cloud can receive backups on your venue's schedule. Waitron Cloud decides when its old copies expire.
 
 Once backups are on, use **Change destination or schedule** and **Save changes** to adjust them. Check the last backup shown for each destination and act on any failure shown there.
 
@@ -26,9 +28,11 @@ If Cloud becomes unavailable, open **Change destination or schedule** and choose
 
 ## Keep your keys {#keys}
 
-Use **Copy** or **Download key file** to keep the recovery key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.
+The **Backup encryption key** opens encrypted copies. The **Server key** authorises a restore or takeover. Keep the pack that holds the server key, even if your latest pack holds the backup encryption key.
 
-When you change the recovery key, use **Show the current key** to save the old key too. Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
+Use **Copy** or **Download key file** to keep the backup encryption key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.
+
+When you change the backup encryption key, use **Show the current key** to save the old key too. Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
 
 ## Continuous copy to your bucket {#bucket-copy}
 

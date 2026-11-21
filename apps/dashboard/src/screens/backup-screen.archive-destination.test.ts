@@ -520,6 +520,36 @@ describe("choosing where backups go", () => {
     expect(q(el, "[data-test=destination]")).toBeNull();
   });
 
+  it("offers the on-box folder as an example without filling or saving it", async () => {
+    const { el, api } = await openConfigure();
+    const folder = q(el, "[data-test=destination]") as Field;
+    await folder.updateComplete;
+    const input = folder.shadowRoot!.querySelector("input")!;
+    expect(input.placeholder).toBe("/var/lib/waitron/backups");
+    expect(input.value).toBe("");
+    expect(await buttonState(el, "apply")).toEqual(["secondary", true]);
+    expect(api.applyBackup).not.toHaveBeenCalled();
+  });
+
+  it("explains the on-box folder and the separate S3 and Cloud choices", async () => {
+    const previousLocale = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mount({ ...OFF_WITH_KEY, cloudBackups: "available" });
+      await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
+      expect(el.shadowRoot!.textContent).toContain(
+        "A copy on this disk is lost if the disk fails.",
+      );
+      expect(el.shadowRoot!.textContent).toContain("Uses this box’s Waitron Cloud connection.");
+      await choose(el, "custom-s3");
+      expect(el.shadowRoot!.textContent).toContain(
+        "Enter the bucket name, region, access key ID and secret access key from your S3 provider.",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("Apply opens quiet, wakes on a choice change, and quiets when changed back; a forced press while unchanged sends nothing", async () => {
     const { el, api } = await openConfigure();
     expect(await buttonState(el, "apply")).toEqual(["secondary", true]);
