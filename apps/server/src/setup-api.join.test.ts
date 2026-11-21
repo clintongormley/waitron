@@ -184,11 +184,9 @@ describe("the setup page's join routes", () => {
   it("leaves the previous handle current when a start fails", async () => {
     const handle = await started();
     fake.set({ state: "ended", reason: "dismissed" });
-    fake.attempt.start.mockRejectedValueOnce(new AppError("mirror.join_waiting", {}));
-    expect(await refusal(await start(handle))).toEqual({
-      status: 409,
-      code: "mirror.join_waiting",
-    });
+    fake.attempt.start.mockRejectedValueOnce(new AppError("mirror.bundle_fetch_failed", {}));
+    const failed = await refusal(await start(handle));
+    expect(failed).toEqual({ status: 502, code: "mirror.bundle_fetch_failed" });
     expect(await read(handle)).toEqual({ state: "ended", reason: "dismissed" });
     expect((await cancel(handle)).status).toBe(204);
     expect(fake.attempt.cancel).toHaveBeenCalledOnce();
@@ -207,6 +205,25 @@ describe("the setup page's join routes", () => {
     expect(await read(handle)).toEqual({ state: "none" });
     finish();
     expect((await cancelling).status).toBe(204);
+  });
+
+  it("keeps the holder a start set while the same page's earlier cancel was still under way", async () => {
+    const first = await started();
+    let finish = () => {};
+    fake.attempt.cancel.mockImplementationOnce(async () => {
+      fake.set(null);
+      await new Promise<void>((resolve) => (finish = resolve));
+    });
+    const cancelling = cancel(first);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.attempt.cancel).toHaveBeenCalledOnce();
+    const response = await start(first);
+    expect(response.status).toBe(200);
+    const { handle: second } = (await response.json()) as { handle: string };
+    finish();
+    expect((await cancelling).status).toBe(204);
+    expect(await read(second)).toMatchObject({ state: "waiting", code: "100002" });
+    expect(await refusal(await cancel())).toEqual({ status: 409, code: "mirror.join_in_use" });
   });
 
   it("cancels with the current handle while its tab is live", async () => {

@@ -1339,8 +1339,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runJoin(c, log, async () => {
       refuseJoinElsewhere(c);
       refuseJoinInUse(c);
+      const ending = joinHolder;
       await joinAttempt.cancel();
-      joinHolder = null;
+      if (joinHolder === ending) joinHolder = null;
       return c.body(null, 204);
     });
   });
