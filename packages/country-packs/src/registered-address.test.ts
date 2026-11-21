@@ -107,7 +107,7 @@ describe("registeredAddressParts", () => {
     });
   });
 
-  it("takes a province name only after a valid postcode", () => {
+  it("puts a line that ends in a province name but holds no postcode whole into the street", () => {
     expect(registeredAddressParts("Calle Mayor 1, Centro, Madrid", spain)).toEqual({
       street: "Calle Mayor 1, Centro, Madrid",
       line2: "",

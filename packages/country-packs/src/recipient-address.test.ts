@@ -312,7 +312,7 @@ describe("recipientAddressFields", () => {
   });
 });
 
-describe("recipientAddressFields with a Spanish province holding a comma", () => {
+describe("recipientAddressFields reading a Spanish province name", () => {
   it.each([
     [
       "Carrer Major 1, 07001 Palma, Balears, Illes",
@@ -341,13 +341,28 @@ describe("recipientAddressFields with a Spanish province holding a comma", () =>
     expect(split).toEqual({ streetAddress, postalCode, locality, province });
     expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
   });
-});
 
-it("splits an address of a country it does not know as before", () => {
-  expect(addresses.recipientAddressFields("1 Broadway, New York, NY", "XX")).toEqual({
-    streetAddress: "1 Broadway",
-    postalCode: "",
-    locality: "New York",
-    province: "NY",
+  it.each([
+    ["28013 Madrid, Madrid", "Madrid"],
+    ["15001 A Coruña, Coruña, A", "Coruña, A"],
+  ])("reads %j, with no street, as its province", (address, province) => {
+    const split = addresses.recipientAddressFields(address, "ES");
+    const [postalCode, ...locality] = address.slice(0, -(province.length + 2)).split(" ");
+    expect(split).toEqual({
+      streetAddress: "",
+      postalCode,
+      locality: locality.join(" "),
+      province,
+    });
+    expect(addresses.composeRecipientAddress({ ...split, countryCode: "ES" })).toBe(address);
+  });
+
+  it("splits an address of a country it does not know as before", () => {
+    expect(addresses.recipientAddressFields("1 Broadway, New York, NY", "XX")).toEqual({
+      streetAddress: "1 Broadway",
+      postalCode: "",
+      locality: "New York",
+      province: "NY",
+    });
   });
 });

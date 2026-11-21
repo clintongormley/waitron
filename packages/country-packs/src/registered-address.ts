@@ -26,14 +26,20 @@ function isPostalCode(pack: CountryPack, value: string): boolean {
   return pack.postalCode?.validate(value).valid === true;
 }
 
+/** A comma part split at its first space, when both sides are non-blank. */
+export function firstWordAndRest(part: string): { first: string; rest: string } | undefined {
+  const words = /^(\S+) (\S.*)$/su.exec(part);
+  return words === null ? undefined : { first: words[1]!, rest: words[2]! };
+}
+
 /** "postcode city" when its first word passes the pack's postcode check. */
 function postalPlace(
   pack: CountryPack,
   part: string,
 ): { postalCode: string; city: string } | undefined {
-  const words = /^(\S+) (\S.*)$/su.exec(part);
-  return words !== null && isPostalCode(pack, words[1]!)
-    ? { postalCode: words[1]!, city: words[2]! }
+  const words = firstWordAndRest(part);
+  return words !== undefined && isPostalCode(pack, words.first)
+    ? { postalCode: words.first, city: words.rest }
     : undefined;
 }
 

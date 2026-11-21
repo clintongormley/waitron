@@ -1,6 +1,6 @@
 import { getCountryPack } from "./registry.js";
 import { normalizeRecipientCountryCode } from "./recipient-countries.js";
-import { trailingProvince } from "./registered-address.js";
+import { firstWordAndRest, joinRegisteredAddress, trailingProvince } from "./registered-address.js";
 
 export interface RecipientAddressDraft {
   countryCode: string;
@@ -33,8 +33,13 @@ export function recipientAddressErrors(
 }
 
 export function composeRecipientAddress(draft: RecipientAddressDraft): string {
-  const place = [draft.postalCode.trim(), draft.locality.trim()].filter(Boolean).join(" ");
-  return [draft.streetAddress.trim(), place, draft.province.trim()].filter(Boolean).join(", ");
+  return joinRegisteredAddress({
+    street: draft.streetAddress,
+    line2: "",
+    postalCode: draft.postalCode,
+    city: draft.locality,
+    province: draft.province,
+  });
 }
 
 /** Fields that `composeRecipientAddress` turns back into `address`, trimmed; they need not be the
@@ -44,19 +49,19 @@ export function recipientAddressFields(
   countryCode: string,
 ): Omit<RecipientAddressDraft, "countryCode"> {
   const whole = { streetAddress: address, postalCode: "", locality: "", province: "" };
-  const pack = getCountryPack(normalizeRecipientCountryCode(countryCode) ?? "");
+  const code = normalizeRecipientCountryCode(countryCode);
+  const pack = code === undefined ? undefined : getCountryPack(code);
   const named = pack === undefined ? undefined : trailingProvince(address.trim(), pack);
   const parts = (named?.rest ?? address).split(", ");
-  if (parts.length < 2) return whole;
+  if (named === undefined && parts.length < 2) return whole;
   const province = named?.province ?? (parts.length >= 3 ? parts.pop()! : "");
   const place = parts.pop()!;
-  const words = /^(\S+) (\S.*)$/su.exec(place);
-  const split =
-    words !== null && (normalizeRecipientCountryCode(countryCode) === "ES" || /\d/.test(words[1]!));
+  const words = firstWordAndRest(place);
+  const split = words !== undefined && (code === "ES" || /\d/.test(words.first));
   const fields = {
     streetAddress: parts.join(", "),
-    postalCode: split ? words[1]! : "",
-    locality: split ? words[2]! : place,
+    postalCode: split ? words.first : "",
+    locality: split ? words.rest : place,
     province,
   };
   return composeRecipientAddress({ ...fields, countryCode }) === address.trim() ? fields : whole;
