@@ -3,7 +3,7 @@
 // listed; the person compares the code on both screens before anything is sent.
 import "./errors.js";
 import { createPublicKey } from "node:crypto";
-import { isIP } from "node:net";
+import { isIP, SocketAddress } from "node:net";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isUuid } from "@waitron/shared";
@@ -89,7 +89,11 @@ function isTime(value: unknown): value is number {
   return typeof value === "number" && !Number.isNaN(new Date(value).getTime());
 }
 
-function parseHello(body: Record<string, unknown>): { hello: JoinHello; at: number } {
+function parseHello(body: Record<string, unknown>): {
+  hello: JoinHello;
+  at: number;
+  signature: string;
+} {
   const { newNodeId, newPublicKey, encryptionKey, contactUrl, storeUrl, addresses, at } = body;
   if (
     typeof newNodeId !== "string" ||
@@ -103,10 +107,12 @@ function parseHello(body: Record<string, unknown>): { hello: JoinHello; at: numb
     addresses.length === 0 ||
     addresses.length > MAX_ADDRESSES ||
     !addresses.every((a) => typeof a === "string" && isIP(a) !== 0) ||
-    !isTime(at)
+    !isTime(at) ||
+    typeof body.signature !== "string"
   )
     throw new AppError("mirror.standby_invalid", {});
   return {
+    signature: body.signature,
     hello: {
       newNodeId,
       newPublicKey,
@@ -119,10 +125,22 @@ function parseHello(body: Record<string, unknown>): { hello: JoinHello; at: numb
   };
 }
 
-function refuseUnlistedAddress(c: Context, addresses: readonly string[]): void {
-  const from = requestAddress(c);
-  if (from === undefined || !addresses.includes(from))
+/** One spelling per address: no `%scope`, no IPv4-mapped prefix, IPv6 lower-case and compressed. */
+function canonicalAddress(address: string): string {
+  const bare = address.replace(/%.*$/, "");
+  const compressed =
+    isIP(bare) === 6 ? new SocketAddress({ address: bare, family: "ipv6" }).address : bare;
+  const mapped = /^::ffff:(.*)$/i.exec(compressed)?.[1];
+  return mapped !== undefined && isIP(mapped) === 4 ? mapped : compressed;
+}
+
+/** The request's source address, in canonical spelling, when the hello lists it. */
+function listedSource(c: Context, addresses: readonly string[]): string {
+  const raw = requestAddress(c);
+  const from = raw === undefined ? undefined : canonicalAddress(raw);
+  if (from === undefined || !addresses.some((a) => canonicalAddress(a) === from))
     throw new AppError("mirror.join_address_mismatch", {});
+  return from;
 }
 
 function full(refusal: JoinFull): AppError {
@@ -148,13 +166,13 @@ export function mountBoxJoinApi(
   const requests = deps.requests ?? createBoxJoinRequests();
   const now = () => (deps.now ?? (() => new Date()))().getTime();
 
-  const mainIdentity = async () => {
-    const privateKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
-    return {
-      nodeId: deps.designated.nodeId,
-      publicKey: nodeSigningPublicKey(privateKey),
-      privateKey,
-    };
+  const privateKey = () => readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
+  let publicKey: Promise<string> | undefined;
+  const mainPublicKey = () => {
+    publicKey ??= privateKey().then(nodeSigningPublicKey);
+    // A failed read is tried again on the next hello.
+    publicKey.catch(() => (publicKey = undefined));
+    return publicKey;
   };
 
   /** The held request a signed message names, checked for its source address and signature. */
@@ -170,15 +188,14 @@ export function mountBoxJoinApi(
   }> {
     const body = await readJsonBody<Record<string, unknown>>(c);
     const { requestId, signature } = body;
-    if (typeof requestId !== "string" || !isUuid(requestId)) throw invalid();
+    if (typeof requestId !== "string" || !isUuid(requestId) || typeof signature !== "string")
+      throw invalid();
+    const seq = seqOf(body.seq);
+    const signed = fields(body);
     const held = requests.requestFor(requestId);
     if (held === null) throw new AppError("mirror.join_not_found", {});
-    refuseUnlistedAddress(c, held.hello.addresses);
-    const seq = seqOf(body.seq);
-    if (
-      typeof signature !== "string" ||
-      !verifyJoinMessage(label, requestId, seq, fields(body), signature, held.hello.newPublicKey)
-    ) {
+    listedSource(c, held.hello.addresses);
+    if (!verifyJoinMessage(label, requestId, seq, signed, signature, held.hello.newPublicKey)) {
       requests.endInvalid(requestId);
       throw invalid();
     }
@@ -191,20 +208,22 @@ export function mountBoxJoinApi(
   app.post("/api/node/join/hello", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const { hello, at } = parseHello(body);
-      if (body.protocol !== JOIN_PROTOCOL || typeof body.signature !== "string") throw invalid();
+      if (body.protocol !== JOIN_PROTOCOL) throw invalid();
+      const { hello, at, signature } = parseHello(body);
+      const address = listedSource(c, hello.addresses);
       if (
         !verifyJoinMessage(
           JOIN_HELLO_LABEL,
           "",
           0,
           helloMessageFields(hello, at),
-          body.signature,
+          signature,
           hello.newPublicKey,
         )
       )
         throw invalid();
-      refuseUnlistedAddress(c, hello.addresses);
+      const limited = requests.admitHello(address);
+      if (limited !== null) throw full(limited);
       const mainAt = now();
       if (Math.abs(mainAt - at) >= MAX_CLOCK_GAP_MS)
         throw new AppError("mirror.clocks_apart", {
@@ -218,14 +237,13 @@ export function mountBoxJoinApi(
       )
         throw new AppError("mirror.standby_name_taken", {});
 
-      const main = await mainIdentity();
-      const answer = requests.hello({
-        address: requestAddress(c)!,
+      const main = { nodeId: deps.designated.nodeId, publicKey: await mainPublicKey() };
+      const answer = requests.openHello({
+        address,
         hello,
-        main: { nodeId: main.nodeId, publicKey: main.publicKey },
+        main,
         at: new Date(at).toISOString(),
       });
-      if ("refused" in answer) throw full(answer);
       return c.json({
         requestId: answer.requestId,
         mainNodeId: main.nodeId,
@@ -243,7 +261,8 @@ export function mountBoxJoinApi(
         newNonce = nonceOf(body.newNonce);
         return [newNonce];
       });
-      const { privateKey } = await mainIdentity();
+      // The store signs only a first reveal, so a repeat needs no key unsealed.
+      const key = held.revealed ? undefined : await privateKey();
       const answer = requests.reveal({
         requestId,
         newNonce,
@@ -254,7 +273,7 @@ export function mountBoxJoinApi(
             requestId,
             seq,
             revealAnswerFields(held.hello, newNonce, mainNonce),
-            privateKey,
+            key!,
           ),
       });
       if ("refused" in answer) {

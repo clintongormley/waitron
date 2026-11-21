@@ -26,6 +26,7 @@ import {
 } from "./box-join-requests.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
+import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -144,7 +145,39 @@ describe("the main box's box-to-box join routes", () => {
     const response = await post("hello", helloBody(box), "192.168.1.66");
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual(err("mirror.join_address_mismatch"));
-    expect(requests.requestFor("anything")).toBeNull();
+    // Not stored: one unrevealed hello per address would refuse the next one.
+    expect((await post("hello", helloBody(box), box.address)).status).toBe(200);
+  });
+
+  it.each([
+    ["a scope", "FE80:0:0::1%eth0", "fe80::1"],
+    ["an IPv4-mapped prefix", "::ffff:192.168.1.20", "::ffff:192.168.1.20"],
+    ["upper case and leading zeros", "2001:DB8::0001", "2001:db8::1"],
+  ])("matches a listed address written with %s", async (_name, listed, source) => {
+    const box = newBox("192.168.1.20");
+    box.hello = { ...box.hello, addresses: [listed] };
+    const response = await post("hello", helloBody(box), source);
+    expect(response.status).toBe(200);
+  });
+
+  it("counts refused hellos against the address limit, before reading the venue", async () => {
+    const other = generateStandbyIdentity();
+    const named = newBox("192.168.1.20", {
+      ...other,
+      nodeId: `${mainNodeId.slice(0, 4)}${other.nodeId.slice(4)}`,
+    });
+    const statuses = [];
+    for (let n = 0; n < 6; n++) {
+      const response = await post("hello", helloBody(named), named.address);
+      statuses.push([
+        response.status,
+        ((await response.json()) as { error: { code: string } }).error.code,
+      ]);
+    }
+    expect(statuses).toEqual([
+      ...Array.from({ length: 5 }, () => [409, "mirror.standby_name_taken"]),
+      [429, "mirror.join_full"],
+    ]);
   });
 
   it("refuses a later request from an address the hello does not list", async () => {
@@ -285,7 +318,7 @@ describe("the main box's box-to-box join routes", () => {
       const refusal = { refused: "full" as const, limit, retryAt };
       mount({
         ...real,
-        ...(at === "hello" ? { hello: () => refusal } : { reveal: () => refusal }),
+        ...(at === "hello" ? { admitHello: () => refusal } : { reveal: () => refusal }),
       });
       const box = newBox("192.168.1.20");
       const response =
@@ -326,17 +359,28 @@ describe("the main box's box-to-box join routes", () => {
     expect(requests.check(requestId)).toEqual({ refused: "not_found" });
   });
 
-  it("refuses a malformed hello, an unknown protocol, clocks apart and a taken box name", async () => {
+  it("refuses a malformed hello, an unknown protocol, a bad signature, clocks apart and a taken box name", async () => {
     const box = newBox("192.168.1.20");
     const other = generateStandbyIdentity();
     const named = newBox("192.168.1.20", {
       ...other,
       nodeId: `${mainNodeId.slice(0, 4)}${other.nodeId.slice(4)}`,
     });
+    const listed = generateStandbyIdentity();
+    const charted = newBox("192.168.1.20");
+    await holdChartNamingMainBox(
+      suite.db,
+      { nodeId: mainNodeId, contactUrl: "https://waitron.local" },
+      {
+        nodeId: `${charted.identity.nodeId.slice(0, 4)}${listed.nodeId.slice(4)}`,
+        contactUrl: "https://192.168.1.40:8443",
+      },
+    );
     const behind = NOW - 11 * 60_000;
     const cases: [string, Record<string, unknown>, number, unknown][] = [
       ["malformed", helloBody(box, { addresses: [] }), 400, err("mirror.standby_invalid")],
-      ["protocol", helloBody(box, { protocol: 2 }), 400, err("mirror.join_invalid")],
+      ["protocol", helloBody(box, { protocol: 2, addresses: [] }), 400, err("mirror.join_invalid")],
+      ["signature", { ...helloBody(box), at: NOW + 1 }, 400, err("mirror.join_invalid")],
       [
         "clock",
         helloBody(box, {}, behind),
@@ -346,7 +390,8 @@ describe("the main box's box-to-box join routes", () => {
           standbyAt: new Date(behind).toISOString(),
         }),
       ],
-      ["name", helloBody(named), 409, err("mirror.standby_name_taken")],
+      ["main box's name", helloBody(named), 409, err("mirror.standby_name_taken")],
+      ["a listed box's name", helloBody(charted), 409, err("mirror.standby_name_taken")],
     ];
     const results = [];
     for (const [name, body] of cases) {

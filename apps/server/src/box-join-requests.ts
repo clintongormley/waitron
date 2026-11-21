@@ -59,6 +59,8 @@ export interface HeldJoinRequest {
   address: string;
   hello: JoinHello;
   main: MainIdentity;
+  /** Whether a reveal was accepted, so a repeat needs no new signature. */
+  revealed: boolean;
 }
 
 type Phase = "unrevealed" | "waiting" | "building" | "approved" | "ended";
@@ -74,7 +76,7 @@ interface Revealed {
   startedAgain: boolean;
 }
 
-interface JoinRequest extends HeldJoinRequest {
+interface JoinRequest extends Omit<HeldJoinRequest, "revealed"> {
   id: string;
   mainNonce: Buffer;
   helloAt: number;
@@ -179,48 +181,69 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     return true;
   }
 
+  /**
+   * Counts a hello from `address` against the hello limits, or refuses it. The route calls this
+   * before its own refusals that read the venue, so a refused hello is slowed by the same limits.
+   */
+  function admitHello(address: string): JoinFull | null {
+    const now = steadyNow();
+    sweep(now);
+    for (const r of requests.values()) {
+      if (r.address === address && r.phase === "unrevealed") {
+        return full("address", r.helloAt + HELLO_REVEAL_MS);
+      }
+    }
+    const fresh = { end: now + HELLO_WINDOW_MS, count: 0 };
+    const byAddress = helloWindows.get(address) ?? fresh;
+    if (byAddress.count >= HELLOS_PER_ADDRESS) return full("address", byAddress.end);
+    if (now >= totalWindow.end) totalWindow = { ...fresh };
+    if (totalWindow.count >= HELLOS_IN_TOTAL) return full("network", totalWindow.end);
+    byAddress.count += 1;
+    helloWindows.set(address, byAddress);
+    totalWindow.count += 1;
+    return null;
+  }
+
+  /** Holds a hello {@link admitHello} has admitted. */
+  function openHello(input: {
+    address: string;
+    hello: JoinHello;
+    main: MainIdentity;
+    at: string;
+  }): { requestId: string; commitment: Buffer; expiresAt: string } {
+    const now = steadyNow();
+    const id = newId();
+    const mainNonce = newMainNonce(id);
+    requests.set(id, {
+      id,
+      address: input.address,
+      hello: input.hello,
+      main: input.main,
+      mainNonce,
+      helloAt: now,
+      lastSeq: 0,
+      latestAt: input.at,
+      latestAtReceived: now,
+      phase: "unrevealed",
+    });
+    return {
+      requestId: id,
+      commitment: commitmentFor(id, mainNonce),
+      expiresAt: wallAt(now + JOIN_REQUEST_TTL_MS),
+    };
+  }
+
   return {
+    admitHello,
+    openHello,
+
     hello(input: {
       address: string;
       hello: JoinHello;
       main: MainIdentity;
       at: string;
     }): { requestId: string; commitment: Buffer; expiresAt: string } | JoinFull {
-      const now = steadyNow();
-      sweep(now);
-      for (const r of requests.values()) {
-        if (r.address === input.address && r.phase === "unrevealed") {
-          return full("address", r.helloAt + HELLO_REVEAL_MS);
-        }
-      }
-      const fresh = { end: now + HELLO_WINDOW_MS, count: 0 };
-      const byAddress = helloWindows.get(input.address) ?? fresh;
-      if (byAddress.count >= HELLOS_PER_ADDRESS) return full("address", byAddress.end);
-      if (now >= totalWindow.end) totalWindow = { ...fresh };
-      if (totalWindow.count >= HELLOS_IN_TOTAL) return full("network", totalWindow.end);
-      byAddress.count += 1;
-      helloWindows.set(input.address, byAddress);
-      totalWindow.count += 1;
-
-      const id = newId();
-      const mainNonce = newMainNonce(id);
-      requests.set(id, {
-        id,
-        address: input.address,
-        hello: input.hello,
-        main: input.main,
-        mainNonce,
-        helloAt: now,
-        lastSeq: 0,
-        latestAt: input.at,
-        latestAtReceived: now,
-        phase: "unrevealed",
-      });
-      return {
-        requestId: id,
-        commitment: commitmentFor(id, mainNonce),
-        expiresAt: wallAt(now + JOIN_REQUEST_TTL_MS),
-      };
+      return admitHello(input.address) ?? openHello(input);
     },
 
     /** The caller has checked the reveal's signature. `signAnswer` is called once per request. */
@@ -330,7 +353,9 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     /** What the caller needs to check a box-to-box request's address and signature. */
     requestFor(requestId: string): HeldJoinRequest | null {
       const r = held(requestId);
-      return r ? { address: r.address, hello: r.hello, main: r.main } : null;
+      return r
+        ? { address: r.address, hello: r.hello, main: r.main, revealed: r.revealed !== undefined }
+        : null;
     },
 
     listed(): ListedJoinRequest[] {
