@@ -28,6 +28,7 @@ import {
   type OriginalReceiptPrint,
   type RoleEquipment,
   type TillSaleResult,
+  type TransactionReceipt,
 } from "../api/client.js";
 
 export interface TicketIssuer {
@@ -325,6 +326,11 @@ export class TillTicketView extends LitElement {
         margin: 0 auto var(--wt-space-3);
       }
 
+      .taken-off-by {
+        max-width: var(--wt-till-ticket-column-width);
+        margin: 0 auto var(--wt-space-3);
+      }
+
       .original-delivery {
         max-width: var(--wt-modal-compact-width);
         box-sizing: border-box;
@@ -364,7 +370,7 @@ export class TillTicketView extends LitElement {
   ];
 
   /** Set before the element connects. */
-  @property({ attribute: false }) result!: TillSaleResult;
+  @property({ attribute: false }) result!: TransactionReceipt;
   /** The receipt language for a result that names none. NEVER the operator-UI `currentLocale()`. */
   @property() invoiceLocale = "es-ES";
   /** Used by the settlement document dialog. */
@@ -1035,6 +1041,13 @@ export class TillTicketView extends LitElement {
           : nothing
       }
       ${this.#renderDocumentPrinter()}
+      ${
+        r.takenOffBy === undefined
+          ? nothing
+          : html`<p class="taken-off-by" data-taken-off-by>
+              ${t("ticket_view.taken_off_by").replace("{number}", () => r.takenOffBy!.invoiceNumber)}
+            </p>`
+      }
       <div class="receipt-actions">
         ${
           this.historical && this.refundable

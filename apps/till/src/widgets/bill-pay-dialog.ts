@@ -1403,6 +1403,28 @@ export class TillBillPayDialog extends LitElement {
       : message;
   }
 
+  /** A part payment's own ticket: number, issue day and each VAT rate's base and tax. */
+  #advanceTicket(payment: BillPaymentView): string {
+    const [year, month, day] = (payment.issuedOn ?? "").split("-").map(Number);
+    const date =
+      payment.issuedOn === undefined
+        ? []
+        : [
+            new Intl.DateTimeFormat(currentLocale(), {
+              day: "2-digit",
+              month: "2-digit",
+              timeZone: "UTC",
+            }).format(Date.UTC(year!, month! - 1, day!)),
+          ];
+    const vat = (payment.vatBreakdown ?? []).map((part) =>
+      t("bill_pay.payment_vat")
+        .replace("{rate}", () => formatDecimalInput(String(Number(part.rate)), currentLocale()))
+        .replace("{base}", () => this.#money(part.base))
+        .replace("{tax}", () => this.#money(part.tax)),
+    );
+    return [payment.invoiceNumber!, ...date, ...vat].join(" · ");
+  }
+
   /** The bill's payments, oldest first, each with a Refund while it has money to give back. */
   #payments(): TemplateResult | typeof nothing {
     const balance = this.balance;
@@ -1436,6 +1458,14 @@ export class TillBillPayDialog extends LitElement {
             .replace("{method}", () => method)}
           · ${t(PAYMENT_STATES[payment.state])}
         </span>
+        ${payment.invoiceNumber === undefined ? nothing : html`<p data-payment-ticket>${this.#advanceTicket(payment)}</p>`}
+        ${
+          payment.takenOffBy === undefined
+            ? nothing
+            : html`<p data-payment-taken-off>
+                ${t("bill_pay.taken_off_on").replace("{number}", () => payment.takenOffBy!.invoiceNumber)}
+              </p>`
+        }
         <p>
           ${t("bill_pay.applied")} ${this.#money(payment.left ?? payment.applied)} ·
           ${t("bill_pay.tip")} ${this.#money(payment.tipLeft ?? payment.tip)}

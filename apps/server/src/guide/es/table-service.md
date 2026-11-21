@@ -950,6 +950,7 @@ cambia antes de confirmar, comprueba los importes actualizados antes de volver a
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
 va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
 propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
+Abierto en **Buscar cuenta**, su ticket indica qué ticket de la mesa lo descontó.
 
 **Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La
 confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver**. Si el local

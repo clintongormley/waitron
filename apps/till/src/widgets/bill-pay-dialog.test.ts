@@ -3657,6 +3657,63 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     );
   });
 
+  const takenOffRow = balanceOf({
+    received: "30.00",
+    outstanding: "90.00",
+    payments: [
+      {
+        ...pendingCard,
+        state: "received",
+        receivedAt: pendingCard.createdAt,
+        applied: "30.00",
+        tip: "0.00",
+        hasTicket: true,
+        saleId: "advance-sale",
+        invoiceNumber: "A/12",
+        issuedOn: "2026-11-19",
+        vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+        takenOffBy: { saleId: "table-sale", invoiceNumber: "A/45" },
+        left: "30.00",
+        tipLeft: "0.00",
+      },
+    ],
+  });
+
+  it("names its ticket, date and VAT, and the table's ticket that took it off", async () => {
+    const el = await mount({ balance: takenOffRow });
+
+    const date = new Intl.DateTimeFormat(currentLocale(), {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "UTC",
+    }).format(Date.UTC(2026, 10, 19));
+    expect(text(root(el).querySelector("[data-payment-ticket]"))).toBe(
+      `A/12 · ${date} · 10%: ${money("27.27")} + ${money("2.73")}`,
+    );
+    expect(text(root(el).querySelector("[data-payment-taken-off]"))).toBe(
+      t("bill_pay.taken_off_on").replace("{number}", "A/45"),
+    );
+  });
+
+  it("words the row in Spanish", async () => {
+    setLocale("es");
+    try {
+      const el = await mount({ balance: takenOffRow });
+      expect(text(root(el).querySelector("[data-payment-ticket]"))).toBe(
+        `A/12 · 19/11 · 10 %: ${money("27.27")} + ${money("2.73")}`.replace(/\s+/g, " "),
+      );
+      expect(text(root(el).querySelector("[data-payment-taken-off]"))).toBe("Descontado en A/45");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("names no ticket on a payment that has none", async () => {
+    const el = await mount({ balance: advanceRow("30.00") });
+    expect(root(el).querySelector("[data-payment-ticket]")).toBeNull();
+    expect(root(el).querySelector("[data-payment-taken-off]")).toBeNull();
+  });
+
   it("shows, and offers to refund, what a part correction left", async () => {
     const el = await mount({ balance: advanceRow("20.00") });
 

@@ -520,6 +520,39 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  describe("a part payment's ticket the table's ticket took off", () => {
+    const takenOffBy = { saleId: "table-sale", invoiceNumber: "A/45" };
+
+    it("names the table's ticket above the actions, outside the printed ticket", async () => {
+      const { el } = await mount({
+        takenOffBy,
+        receiptPreview: [{ kind: "text", text: "TOTAL", indent: 0 }],
+      } as Partial<TillSaleResult>);
+      const note = el.shadowRoot!.querySelector("[data-taken-off-by]");
+      expect(note?.textContent?.trim()).toBe(
+        uiText("ticket_view.taken_off_by").replace("{number}", "A/45"),
+      );
+      expect(
+        note!.compareDocumentPosition(el.shadowRoot!.querySelector(".receipt-actions")!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(el.shadowRoot!.querySelector("article")!.textContent).not.toContain("A/45");
+    });
+
+    it("words it in Spanish", async () => {
+      setLocale("es-ES");
+      const { el } = await mount({ takenOffBy } as Partial<TillSaleResult>);
+      expect(el.shadowRoot!.querySelector("[data-taken-off-by]")?.textContent?.trim()).toBe(
+        "Descontado en el recibo A/45",
+      );
+    });
+
+    it("says nothing on a ticket nothing took off", async () => {
+      const { el } = await mount();
+      expect(el.shadowRoot!.querySelector("[data-taken-off-by]")).toBeNull();
+    });
+  });
+
   describe("a bill paid in parts before its invoice", () => {
     it("pairs each outside-card detail with its payment and operation number", async () => {
       const { el } = await mount({

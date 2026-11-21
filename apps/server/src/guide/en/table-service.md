@@ -885,6 +885,7 @@ bill changes before you confirm, check the revised figures before confirming aga
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
 for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
 of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
+Opened in **Find a bill**, its receipt names the table's receipt that took it off.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation
 shows how much pays off the bill and the **Change to give**. If the venue takes tips, choose
