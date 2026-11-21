@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
@@ -16,7 +19,7 @@ import {
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
-import type { LogEvent, LogReader } from "./log-file.js";
+import { createLogReader, type LogEvent, type LogReader } from "./log-file.js";
 import { ALL_MODULES } from "./modules.js";
 import { createVerbosityController } from "./verbosity.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
@@ -142,6 +145,7 @@ function mountApp(reader: LogReader) {
       db: suite.db,
       reader,
       verbosity,
+      now: () => new Date("2026-08-31T12:00:00.000Z"),
     },
     noopLog,
   );
@@ -253,35 +257,98 @@ describe("mountDiagnosticsApi — system.manage gate + verbosity", () => {
     expect(res.status).toBe(403);
   });
 
-  it("returns recent lines for a manager, clamping the limit", async () => {
-    const v = await setupVenue();
-    const stub = stubReader();
-    const { app } = mountApp(stub.reader);
+  it("limits the results within a bounded scan", async () => {
+    const { managerCookie } = await setupVenue();
+    const dir = mkdtempSync(join(tmpdir(), "diagnostics-route-"));
+    try {
+      writeFileSync(
+        join(dir, "waitron.log"),
+        Array.from({ length: 1001 }, (_, index) => JSON.stringify({ ...EVENTS[1], index })).join(
+          "\n",
+        ),
+      );
+      const { app } = mountApp(createLogReader({ dir, maxFiles: 0 }));
+      for (const [query, count] of [
+        ["limit=2", 2],
+        ["", 200],
+        ["limit=99999", 1000],
+        ["limit=0", 1],
+        ["limit=abc", 200],
+        ["limit=", 200],
+      ] as const) {
+        const response = await get(
+          app,
+          `/management-api/diagnostics/recent?${query}`,
+          managerCookie,
+        );
+        expect(response.status).toBe(200);
+        const { lines } = (await response.json()) as { lines: LogEvent[] };
+        expect(lines).toHaveLength(count);
+        expect(lines[0]?.index).toBe(1001 - count);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
-    const res = await get(app, "/management-api/diagnostics/recent?limit=2", v.managerCookie);
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { lines: LogEvent[] }).lines).toHaveLength(2);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 2 });
+  it("filters the bounded file tail before limiting matches and masks older details", async () => {
+    const { managerCookie } = await setupVenue();
+    const dir = mkdtempSync(join(tmpdir(), "diagnostics-route-"));
+    try {
+      const entries: LogEvent[] = [
+        {
+          at: "2026-08-31T11:55:00.000Z",
+          level: "warn",
+          event: "mail.retry",
+          requestId: "r1",
+          params: {
+            email: "person@example.test",
+            target: "https://user:legacy-secret@example.test",
+          },
+        },
+        { at: "2026-08-31T11:56:00.000Z", level: "debug", event: "loop.sleeping" },
+        { at: "2026-08-31T11:57:00.000Z", level: "info", event: "mail.ready" },
+        { at: "2026-08-31T11:54:59.000Z", level: "info", event: "outside.window" },
+      ];
+      writeFileSync(
+        join(dir, "waitron.log"),
+        entries.map((entry) => JSON.stringify(entry)).join("\n"),
+      );
+      const { app } = mountApp(createLogReader({ dir, maxFiles: 0 }));
+      const read = async (query: string) => {
+        const res = await get(app, `/management-api/diagnostics/recent?${query}`, managerCookie);
+        expect(res.status).toBe(200);
+        return (await res.json()) as {
+          lines: LogEvent[];
+          timeZone: string;
+          oldestScannedAt: string;
+        };
+      };
 
-    // Default (no query) → 200.
-    await get(app, "/management-api/diagnostics/recent", v.managerCookie);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 200 });
-
-    // Above the ceiling → clamped to 1000.
-    await get(app, "/management-api/diagnostics/recent?limit=99999", v.managerCookie);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 1000 });
-
-    // Below the floor → clamped to 1.
-    await get(app, "/management-api/diagnostics/recent?limit=0", v.managerCookie);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 1 });
-
-    // Non-numeric → falls back to the default.
-    await get(app, "/management-api/diagnostics/recent?limit=abc", v.managerCookie);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 200 });
-
-    // Empty `?limit=` is "no value given" → the default, not `Number("")` = 0 clamped to 1.
-    await get(app, "/management-api/diagnostics/recent?limit=", v.managerCookie);
-    expect(stub.lastRecentOpts()).toEqual({ limit: 200 });
+      expect(await read("limit=1")).toEqual({
+        timeZone: "Europe/Madrid",
+        oldestScannedAt: "2026-08-31T11:54:59.000Z",
+        lines: [
+          {
+            ...entries[0],
+            params: { email: "p***n@e***e.test", target: "https://user:***@example.test" },
+          },
+        ],
+      });
+      expect((await read("level=all")).lines.map(({ event }) => event)).toEqual([
+        "mail.retry",
+        "loop.sleeping",
+        "mail.ready",
+      ]);
+      expect((await read("level=info")).lines.map(({ event }) => event)).toEqual([
+        "mail.retry",
+        "mail.ready",
+        "outside.window",
+      ]);
+      expect((await read("level=error")).lines).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("reports the default verbosity (no active override) as info with a null revert time", async () => {

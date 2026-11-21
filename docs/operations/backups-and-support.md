@@ -30,9 +30,10 @@ without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/r
 
 ## Capture detailed logs while reproducing a problem
 
-Open **Diagnostics** using an account with `system.manage`. Choose **Turn on detailed
-logging**, reproduce the problem, and note its time. The dashboard raises logging for 15
-minutes and shows its expiry.
+Open **Diagnostics** with an account that can manage the system. The list starts with warnings
+and errors and shows times in the venue’s time zone. Search by event, detail or request ID.
+To reproduce a problem, choose **Turn on detailed logging**, then **All levels (last 5 minutes)**.
+Detailed logging lasts 15 minutes. The expiry appears above the list.
 
 **Pause** freezes refresh; **Resume** starts it again. **Clear** removes only the displayed
 lines. It does not delete saved logs, so the next refresh can display them again.

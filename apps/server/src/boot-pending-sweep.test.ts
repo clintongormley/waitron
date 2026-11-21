@@ -269,7 +269,7 @@ describe("withPendingSweep", () => {
       provider: "providerA",
       error: "Error: A boom",
     });
-    expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
+    expect(log).toHaveBeenCalledWith("debug", "resolve_pending.complete", {
       provider: "providerB",
       captured: 0,
       failed: 0,
@@ -278,7 +278,7 @@ describe("withPendingSweep", () => {
     });
   });
 
-  it("logs nextDueAt as null when a sweep reports nothing pending", async () => {
+  it("logs an empty sweep and its null nextDueAt at debug", async () => {
     const result: ForwardResult = {
       nextDueAt: null,
       forwarded: 0,
@@ -292,7 +292,7 @@ describe("withPendingSweep", () => {
       () => OWNERS,
       log,
     )(new Date());
-    expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
+    expect(log).toHaveBeenCalledWith("debug", "resolve_pending.complete", {
       provider: "stripe",
       captured: 0,
       failed: 0,

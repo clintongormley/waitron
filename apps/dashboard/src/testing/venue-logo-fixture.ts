@@ -62,7 +62,7 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
       topSellers: [],
     }),
     getOverdueOrders: async () => ({ orders: [] }),
-    getRecentLogs: async () => ({ lines: [] }),
+    getRecentLogs: async () => ({ lines: [], timeZone: "Europe/Madrid", oldestScannedAt: null }),
     getVerbosity: async () => ({ level: "info", revertsAt: null }),
   };
   return api as unknown as ShellApi;

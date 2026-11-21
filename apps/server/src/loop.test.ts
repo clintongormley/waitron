@@ -64,6 +64,9 @@ describe("runLoop", () => {
     await runLoop(h.deps);
     expect(h.passes).toHaveLength(3);
     expect(h.slept).toEqual([MAX, MAX, MAX]);
+    expect(h.lines.filter((line) => line.endsWith("loop.sleeping"))).toEqual(
+      Array(3).fill("debug loop.sleeping"),
+    );
   });
 
   it("returns without passing when the signal is already aborted", async () => {

@@ -837,7 +837,7 @@ The ones worth grepping for:
   is deliberately NOT health-tracked (`withPendingSweep`, `src/boot.ts`), so this line is the SOLE
   operator signal of a stuck card sweep — grep it. A card-settlement backstop, not a fiscal-legal or
   process-liveness signal; it does not flip `/health`.
-- **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
+- **`resolve_pending.complete`** (`info` if a payment was resolved or an incident raised, otherwise `debug`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
   summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
   `payment.pending_outcome_unactionable` or `payment.capture_mismatch` incidents raised for a human.
 - **`payment_attempt.released`** (`info`) — `{ released }`. After a pass, the loop cleared the "a
@@ -870,7 +870,7 @@ The ones worth grepping for:
 - **Attendance, mail and certificate-reminder job failures** log `job.failed` with `job`,
   `errorCode` and `consecutiveFailures`. Use the `job` field to distinguish `attendance.end_of_day`,
   `mail.send` and `fiscal.certificate_reminders` from other runner jobs.
-- **`loop.sleeping`** (`info`) carries `sleepMs` for the card recovery loop.
+- **`loop.sleeping`** (`debug`) carries `sleepMs` for the card recovery loop.
 - **`pass.threw`** (`error`) carries the structured `errorCode` when a card recovery pass
   throws. The loop retries on its minimum interval.
 - **`sleep.threw`** (`error`) carries the `errorCode` of a rejected card-loop timer. The

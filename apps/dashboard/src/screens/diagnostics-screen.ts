@@ -2,13 +2,16 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import { t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-input.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DiagnosticsLine, Verbosity } from "../api/client.js";
+import type { DashboardApi, DiagnosticsLevel, DiagnosticsLog, Verbosity } from "../api/client.js";
 
 const POLL_MS = 1500;
 /** The node auto-reverts after this window, so a raise always expires. */
 const WINDOW_MINUTES = 15;
+const LEVELS = ["error", "warn", "info", "all"] as const;
 
 @customElement("dashboard-diagnostics-screen")
 export class DiagnosticsScreen extends LitElement {
@@ -34,16 +37,22 @@ export class DiagnosticsScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      /* The log tail: a monospace column of fixed-order rows, scrolling within its own box so a long
-         tail never grows the page. */
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        margin-bottom: var(--wt-space-2);
+      }
+      .filters wt-input {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
       .log {
         list-style: none;
         margin: 0;
         padding: var(--wt-space-2);
-        display: grid;
-        gap: 2px;
         max-height: 60vh;
-        overflow-y: auto;
+        overflow: auto;
         background: var(--wt-color-surface);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -51,13 +60,19 @@ export class DiagnosticsScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       .log li {
-        white-space: pre-wrap;
-        word-break: break-word;
+        padding-block: var(--wt-space-1);
+        overflow-wrap: anywhere;
       }
-      .log code {
-        font-family: inherit;
+      .log li + li {
+        border-top: 1px solid var(--wt-color-border);
       }
-      /* Unknown levels fall through to the inherited text colour. */
+      .log time,
+      .log .level {
+        white-space: nowrap;
+      }
+      .event {
+        font-weight: var(--wt-font-weight-bold);
+      }
       .lvl-error,
       .lvl-fatal {
         color: var(--wt-color-danger);
@@ -84,7 +99,9 @@ export class DiagnosticsScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
-  @state() private lines: DiagnosticsLine[] = [];
+  @state() private recent?: DiagnosticsLog;
+  @state() private level: DiagnosticsLevel = "warn";
+  @state() private search = "";
   @state() private verbosity?: Verbosity;
   // While true the interval still fires but skips the refresh.
   @state() private paused = false;
@@ -115,16 +132,22 @@ export class DiagnosticsScreen extends LitElement {
   async #refresh(passive = false): Promise<void> {
     if (this.#inFlight) return;
     this.#inFlight = true;
+    const level = this.level;
     try {
       const api = passive ? (this.api.background ?? this.api) : this.api;
-      const [recent, verbosity] = await Promise.all([api.getRecentLogs(200), api.getVerbosity()]);
-      this.lines = recent.lines;
+      const [recent, verbosity] = await Promise.all([
+        api.getRecentLogs(200, level),
+        api.getVerbosity(),
+      ]);
+      if (level !== this.level) return;
+      this.recent = recent;
       this.verbosity = verbosity;
       if (this.#readErrorShown) this.#showError(null);
     } catch (error) {
-      this.#showReadError(error);
+      if (level === this.level) this.#showReadError(error);
     } finally {
       this.#inFlight = false;
+      if (this.isConnected && level !== this.level) void this.#refresh();
     }
   }
 
@@ -150,11 +173,68 @@ export class DiagnosticsScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
-  /** `t()` does NO substitution, so the `{time}` placeholder is filled here. */
-  #revertWindow(revertsAt: string): string {
-    const at = new Date(revertsAt);
-    const clock = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-    return t("diagnostics.verbosity.window").replace("{time}", clock);
+  #timeFormatter(seconds = false): Intl.DateTimeFormat {
+    return new Intl.DateTimeFormat(currentLocale(), {
+      timeZone: this.recent?.timeZone ?? "UTC",
+      hourCycle: "h23",
+      hour: "2-digit",
+      minute: "2-digit",
+      ...(seconds ? { second: "2-digit" } : {}),
+    });
+  }
+
+  #renderLog(): TemplateResult {
+    const time = this.#timeFormatter(true);
+    const date = new Intl.DateTimeFormat(currentLocale(), {
+      timeZone: this.recent?.timeZone ?? "UTC",
+      dateStyle: "short",
+    });
+    const today = date.format(new Date());
+    const formatAt = (at: string) => {
+      const timestamp = new Date(at);
+      const day = date.format(timestamp);
+      const clock = time.format(timestamp);
+      return day === today ? clock : `${day} ${clock}`;
+    };
+    const query = this.search.trim().toLowerCase();
+    const rows =
+      this.recent?.lines.flatMap(({ at, level, event, requestId, ...fields }) => {
+        const localTime = formatAt(at);
+        const request = requestId ? `${t("diagnostics.request_id")} ${requestId}` : "";
+        const details = Object.entries(fields)
+          .map(
+            ([key, value]) => `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`,
+          )
+          .join(" · ");
+        if (![localTime, level, event, request, details].join(" ").toLowerCase().includes(query))
+          return [];
+        return html`<li class="lvl-${level}">
+          <time datetime=${at}>${localTime}</time> <span class="level">${level}</span>
+          <span class="event">${event}</span>${
+            request ? html` · ${request}` : nothing
+          }${details ? html` · ${details}` : nothing}
+        </li>`;
+      }) ?? [];
+    const oldest = this.recent?.oldestScannedAt;
+    const noMatches = query !== "" || Boolean(oldest);
+    return html`
+      ${
+        rows.length
+          ? html`<ol class="log" role="list" data-test="log">
+              ${rows}
+            </ol>`
+          : html`<p class="empty" data-test=${noMatches ? "no-matches" : "empty"}>
+              ${t(noMatches ? "diagnostics.no_matches" : "diagnostics.empty")}
+            </p>`
+      }
+      ${
+        oldest
+          ? html`<p class="verbosity">
+              ${fill("diagnostics.searched_since", { time: formatAt(oldest) })}
+            </p>`
+          : nothing
+      }
+    `;
   }
 
   #renderVerbosity(): TemplateResult | typeof nothing {
@@ -164,7 +244,7 @@ export class DiagnosticsScreen extends LitElement {
         this.verbosity.revertsAt
           ? html` ·
               <span data-test="verbosity-window"
-                >${this.#revertWindow(this.verbosity.revertsAt)}</span
+                >${fill("diagnostics.verbosity.window", { time: this.#timeFormatter().format(new Date(this.verbosity.revertsAt)) })}</span
               >`
           : nothing
       }
@@ -185,24 +265,41 @@ export class DiagnosticsScreen extends LitElement {
         >
           ${t(this.paused ? "diagnostics.action.resume" : "diagnostics.action.pause")}
         </wt-button>
-        <wt-button variant="ghost" data-test="clear" @click=${() => (this.lines = [])}>
+        <wt-button
+          variant="ghost"
+          data-test="clear"
+          @click=${() => (this.recent = this.recent && { ...this.recent, lines: [], oldestScannedAt: null })}
+        >
           ${t("diagnostics.action.clear")}
         </wt-button>
         ${this.#renderVerbosity()}
       </div>
 
-      ${
-        this.lines.length === 0
-          ? html`<p class="empty" data-test="empty">${t("diagnostics.empty")}</p>`
-          : html`<ol class="log" data-test="log">
-              ${this.lines.map(
-                (line) =>
-                  html`<li class="lvl-${line.level}">
-                    <code>${line.at} ${line.level} ${line.event}</code>
-                  </li>`,
-              )}
-            </ol>`
-      }
+      <div class="filters">
+        <wt-combobox
+          preserve-order
+          search="never"
+          name="log-level"
+          label=${t("diagnostics.filter.level")}
+          .options=${LEVELS.map((value) => ({ value, label: t(`diagnostics.filter.${value}`) }))}
+          .value=${this.level}
+          @wt-change=${(event: CustomEvent<{ value: DiagnosticsLevel }>) => {
+            this.level = event.detail.value;
+            if (this.recent) this.recent = { ...this.recent, lines: [], oldestScannedAt: null };
+            void this.#refresh();
+          }}
+        ></wt-combobox>
+        <wt-input
+          name="log-search"
+          type="search"
+          autocomplete="off"
+          label=${t("diagnostics.filter.search")}
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => (this.search = event.detail.value)}
+        ></wt-input>
+      </div>
+
+      ${this.#renderLog()}
       ${
         this.errorKey
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`

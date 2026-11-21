@@ -1539,8 +1539,8 @@ start's report masks the same names in an `AppError`'s params (`paramsLine`,
 `{"email":"m***r@e***e.test",…,"event":"person.email_taken"}`, while the answer to the request still
 carries the address to the person who typed it. The mask runs before the logger splits a line
 between the container's output and the file, so `docker compose logs` shows the same masked values.
-So does the dashboard's Diagnostics log view, because it reads the same files (`createLogReader`,
-`apps/server/src/boot.ts`).
+The dashboard’s Diagnostics log view reads the same files and applies the personal-field and URL
+password masks again before returning rows from older files (`apps/server/src/diagnostics-api.ts`).
 
 The receipt: before the change, the probe in the
 [S10 plan](../superpowers/plans/2026-10-26-a980-s10-log-personal-data.md) found that each refusal it drove

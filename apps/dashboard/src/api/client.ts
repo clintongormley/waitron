@@ -1771,6 +1771,14 @@ export type DiagnosticsLine = {
   requestId?: string;
 } & Record<string, unknown>;
 
+export type DiagnosticsLevel = "error" | "warn" | "info" | "all";
+
+export interface DiagnosticsLog {
+  lines: DiagnosticsLine[];
+  timeZone: string;
+  oldestScannedAt: string | null;
+}
+
 export type Verbosity = { level: "debug" | "info"; revertsAt: string | null };
 
 // ── Backup admin (recovery-key wizard) types ─────────────────────────────────────────────────────
@@ -5084,11 +5092,10 @@ export class DashboardApi {
     );
   }
 
-  getRecentLogs(limit = 200): Promise<{ lines: DiagnosticsLine[] }> {
-    return this.#request<{ lines: DiagnosticsLine[] }>(
-      `/management-api/diagnostics/recent?limit=${limit}`,
-      "GET",
-    );
+  getRecentLogs(limit = 200, level?: DiagnosticsLevel): Promise<DiagnosticsLog> {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (level !== undefined) query.set("level", level);
+    return this.#request<DiagnosticsLog>(`/management-api/diagnostics/recent?${query}`, "GET");
   }
 
   getVerbosity(): Promise<Verbosity> {

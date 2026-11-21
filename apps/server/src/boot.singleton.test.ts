@@ -1,3 +1,4 @@
+import { enableDebugForNextBoot } from "./testing/boot-debug.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { writeArchiveSettings } from "./archive-settings.js";
@@ -251,6 +252,7 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
   it("a sell-only local secondary (primary, secondary) runs no scheduled backup, though it is not a mirror", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
+      enableDebugForNextBoot();
       const started = await startServer(
         {
           ...dutyEnv(port),
@@ -280,6 +282,7 @@ describe("singleton-duty boot (box.singleton_role gating)", () => {
   it("the singleton primary (primary, primary) of the same identity runs its singleton duties (control: the secondary's absence is real)", async () => {
     const port = await freePort();
     const [server, lines] = await withCapturedStdout(async (captured) => {
+      enableDebugForNextBoot();
       const started = await startServer(
         {
           ...dutyEnv(port),
