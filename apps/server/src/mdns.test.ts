@@ -1,3 +1,5 @@
+import { createSocket } from "node:dgram";
+import multicastDns from "multicast-dns";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { MDNS_TTL_SECONDS, type MdnsQuerySocket } from "./box-lookup.js";
 import {
@@ -6,11 +8,17 @@ import {
   startMdnsResponder,
   watchVenueNameInSetup,
   type MdnsAnswer,
+  type MdnsPeer,
+  type MdnsQuestion,
   type MdnsSocket,
 } from "./mdns.js";
 
+type FakeQuery = { id?: number; flags?: number; questions: MdnsQuestion[] };
+type From = MdnsPeer;
+const FROM_GROUP_PORT: From = { address: "192.168.10.60", port: 5353 };
+
 function fakeSocket() {
-  let queryHandler: ((q: { questions: { name: string; type: string }[] }) => void) | undefined;
+  let queryHandler: ((q: FakeQuery, from: From) => void) | undefined;
   let errorHandler: ((err: Error) => void) | undefined;
   const respond = vi.fn();
   const destroy = vi.fn((cb?: () => void) => cb?.());
@@ -20,7 +28,7 @@ function fakeSocket() {
   const socket: MdnsSocket = {
     on: ((event: string, h: (...args: never[]) => void): void => {
       if (event === "error") errorHandler = h as (err: Error) => void;
-      else queryHandler = h as (q: { questions: { name: string; type: string }[] }) => void;
+      else queryHandler = h as (q: FakeQuery, from: From) => void;
     }) as MdnsSocket["on"],
     respond,
     destroy,
@@ -29,7 +37,7 @@ function fakeSocket() {
     socket,
     respond,
     destroy,
-    query: (q: { questions: { name: string; type: string }[] }) => queryHandler?.(q),
+    query: (q: FakeQuery, from: From = FROM_GROUP_PORT) => queryHandler?.(q, from),
     // Mirrors Node's EventEmitter: an `'error'` with no listener THROWS.
     emitError: (err: Error) => {
       if (errorHandler === undefined) throw err;
@@ -103,6 +111,66 @@ describe("mdns", () => {
     expect(f.respond).toHaveBeenCalledWith({
       answers: [{ name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" }],
     });
+  });
+
+  it.each([
+    { asked: "IN", answered: true },
+    { asked: "ANY", answered: true },
+    { asked: "UNKNOWN_32769", answered: true },
+    { asked: "UNKNOWN_33023", answered: true },
+    { asked: "CH", answered: false },
+    { asked: "HS", answered: false },
+  ])("answers its name asked in class $asked: $answered", ({ asked, answered }) => {
+    const f = fakeSocket();
+    startMdnsResponder({
+      names: () => ["waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    f.query(
+      { id: 7, questions: [{ name: "waitron.local", type: "A", class: asked }] },
+      { address: "192.168.10.50", port: 49152 },
+    );
+    expect(f.respond).toHaveBeenCalledTimes(answered ? 2 : 0);
+  });
+
+  it("answers its name asked in any mix of capitals, under its own spelling", () => {
+    const f = fakeSocket();
+    const at = { addresses: ["192.168.1.5"] };
+    const r = startMdnsResponder({
+      names: () => ["box-3333.waitron.local", "waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => at.addresses,
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    r.announce("waitron.local");
+    at.addresses = ["192.168.1.6"];
+    f.respond.mockClear();
+    f.query({ questions: [{ name: "Waitron.LOCAL", type: "A", class: "IN" }] });
+    expect(f.respond.mock.calls).toEqual([
+      [
+        {
+          answers: [
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.6" },
+          ],
+        },
+      ],
+    ]);
+    f.respond.mockClear();
+    r.withdraw("waitron.local");
+    expect(f.respond.mock.calls.map(([response]) => response)).toEqual([
+      {
+        answers: [
+          { name: "waitron.local", type: "A", ttl: 0, data: "192.168.1.5" },
+          { name: "waitron.local", type: "A", ttl: 0, data: "192.168.1.6" },
+        ],
+      },
+    ]);
   });
 
   it("answers each of its names", () => {
@@ -216,6 +284,215 @@ describe("mdns", () => {
     expect(logged).toContainEqual({
       event: "mdns.responding",
       fields: { hostnames: ["box-0a1b.waitron.local"] },
+    });
+  });
+
+  describe("a one-shot query, asked from the phone's own port", () => {
+    const start = (f: ReturnType<typeof fakeSocket>) =>
+      startMdnsResponder({
+        names: () => ["waitron.local"],
+        devMode: false,
+        httpHost: "0.0.0.0",
+        getAddresses: () => ["192.168.1.5"],
+        log: () => {},
+        makeSocket: () => f.socket,
+      });
+
+    it("is answered to the asking address and port, with its id, question and recursion-desired bit, and a 10-second lifetime", () => {
+      const f = fakeSocket();
+      start(f);
+      f.query(
+        {
+          id: 4242,
+          // Recursion desired, and checking disabled, which a reply does not repeat.
+          flags: 0x0110,
+          questions: [{ name: "waitron.local", type: "A", class: "IN" }],
+        },
+        { address: "192.168.10.50", port: 49152 },
+      );
+      expect(f.respond.mock.calls).toEqual([
+        [
+          {
+            answers: [
+              { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+            ],
+          },
+        ],
+        [
+          {
+            id: 4242,
+            flags: 0x0100,
+            questions: [{ name: "waitron.local", type: "A", class: "IN" }],
+            answers: [{ name: "waitron.local", type: "A", ttl: 10, data: "192.168.1.5" }],
+          },
+          { address: "192.168.10.50", port: 49152 },
+        ],
+      ]);
+    });
+
+    it("repeats every question asked, as asked, and answers with the box's own spelling", () => {
+      const f = fakeSocket();
+      start(f);
+      const questions = [
+        { name: "Waitron.LOCAL", type: "A", class: "IN" },
+        { name: "waitron.local", type: "A", class: "CH" },
+        { name: "other.local", type: "A", class: "IN" },
+      ];
+      f.query({ id: 7, flags: 0, questions }, { address: "192.168.10.50", port: 49152 });
+      const answers = [{ name: "waitron.local", type: "A", ttl: 10, data: "192.168.1.5" }];
+      expect(f.respond.mock.calls[1]).toEqual([
+        { id: 7, flags: 0, questions, answers },
+        { address: "192.168.10.50", port: 49152 },
+      ]);
+    });
+
+    it("is not sent to a query from port 0, which has no port to answer at", () => {
+      const f = fakeSocket();
+      start(f);
+      f.query(
+        { id: 4242, questions: [{ name: "waitron.local", type: "A" }] },
+        { address: "192.168.10.50", port: 0 },
+      );
+      expect(f.respond.mock.calls).toEqual([
+        [
+          {
+            answers: [
+              { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+            ],
+          },
+        ],
+      ]);
+    });
+
+    it("repeats a question asking for a direct answer with its plain class", () => {
+      const f = fakeSocket();
+      start(f);
+      f.query(
+        { id: 7, questions: [{ name: "waitron.local", type: "A", class: "UNKNOWN_32769" }] },
+        { address: "192.168.10.50", port: 49152 },
+      );
+      expect(f.respond.mock.calls[1]?.[0]).toMatchObject({
+        questions: [{ name: "waitron.local", type: "A", class: "IN" }],
+      });
+    });
+
+    it("is not sent for a query asked from the mDNS port, which hears the group's answer", () => {
+      const f = fakeSocket();
+      start(f);
+      f.query({ id: 0, questions: [{ name: "waitron.local", type: "A" }] }, FROM_GROUP_PORT);
+      f.query(
+        { id: 0, questions: [{ name: "waitron.local", type: "A", class: "UNKNOWN_32769" }] },
+        FROM_GROUP_PORT,
+      );
+      const group = [
+        {
+          answers: [
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+          ],
+        },
+      ];
+      expect(f.respond.mock.calls).toEqual([group, group]);
+    });
+
+    it("reaches the asker through the real multicast-dns socket", async () => {
+      const responderSocket = createSocket("udp4");
+      await new Promise<void>((resolve) => responderSocket.bind(0, "127.0.0.1", resolve));
+      const { port } = responderSocket.address();
+      // Bound on loopback and pointed at itself, so the group reply stays on this machine.
+      const responder = startMdnsResponder({
+        names: () => ["waitron.local"],
+        devMode: false,
+        httpHost: "0.0.0.0",
+        getAddresses: () => ["192.168.1.5"],
+        log: () => {},
+        makeSocket: () =>
+          multicastDns({
+            socket: responderSocket,
+            port,
+            ip: "127.0.0.1",
+            bind: false,
+            multicast: false,
+          }) as MdnsSocket,
+      });
+      try {
+        const askerSocket = createSocket("udp4");
+        const asker = multicastDns({
+          socket: askerSocket,
+          port: 0,
+          ip: "127.0.0.1",
+          bind: false,
+          multicast: false,
+        });
+        try {
+          await new Promise<void>((resolve) => askerSocket.bind(0, "127.0.0.1", resolve));
+          type Reply = { id?: number; flags?: number; questions?: unknown; answers?: unknown };
+          const ask = (send: () => void) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const reply = new Promise<Reply>((resolve, reject) => {
+              asker.once("response", (packet) => resolve(packet));
+              timer = setTimeout(() => reject(new Error("no reply within 2 seconds")), 2_000);
+            }).finally(() => clearTimeout(timer));
+            send();
+            return reply.then(({ id, flags, questions, answers }) => ({
+              id,
+              flags,
+              questions,
+              answers,
+            }));
+          };
+          const answers = [
+            {
+              name: "waitron.local",
+              type: "A",
+              class: "IN",
+              flush: false,
+              ttl: 10,
+              data: "192.168.1.5",
+            },
+          ];
+
+          const recursionDesired = await ask(() =>
+            asker.query(
+              { id: 4242, flags: 0x0100, questions: [{ name: "Waitron.LOCAL", type: "A" }] },
+              { address: "127.0.0.1", port },
+            ),
+          );
+          expect(recursionDesired).toEqual({
+            id: 4242,
+            flags: 0x0500,
+            questions: [{ name: "Waitron.LOCAL", type: "A", class: "IN" }],
+            answers,
+          });
+
+          // multicast-dns cannot send a question's unicast-response bit, so this one is built by hand.
+          const unicastResponse = Buffer.concat([
+            Buffer.from([0x00, 0x07, 0x00, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]),
+            Buffer.from("\x07waitron\x05local\x00", "latin1"),
+            Buffer.from([0x00, 0x01, 0x80, 0x01]),
+          ]);
+          const direct = await ask(() => askerSocket.send(unicastResponse, port, "127.0.0.1"));
+          expect(direct).toEqual({
+            id: 7,
+            flags: 0x0400,
+            questions: [{ name: "waitron.local", type: "A", class: "IN" }],
+            answers,
+          });
+        } finally {
+          await new Promise<void>((resolve) => asker.destroy(() => resolve()));
+        }
+      } finally {
+        await responder.stop();
+      }
+    });
+
+    it("gets no reply at all for a name the box does not answer", () => {
+      const f = fakeSocket();
+      start(f);
+      f.query(
+        { id: 4242, questions: [{ name: "other.local", type: "A" }] },
+        { address: "192.168.10.50", port: 49152 },
+      );
+      expect(f.respond).not.toHaveBeenCalled();
     });
   });
 
