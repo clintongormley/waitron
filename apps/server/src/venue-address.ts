@@ -55,16 +55,12 @@ export async function readReceiptAddress(
   return receiptAddressLines(receipt, await readVenue(tx));
 }
 
-/** `readReceiptAddress`'s lines and the venue's `venueAddressLine`, from one read. */
-export async function readReceiptVenueAddress(
+/** `readVenueAddress`'s lines and the venue's `venueAddressLine`, from one read. */
+export async function readVenueAddressAndLine(
   tx: Transaction,
-  receipt: Pick<ReceiptConfig, "printAddress">,
 ): Promise<{ venueAddress: string[]; venueAddressLine: string }> {
   const address = await readVenue(tx);
-  return {
-    venueAddress: receiptAddressLines(receipt, address),
-    venueAddressLine: venueAddressLine(address),
-  };
+  return { venueAddress: addressLines(address), venueAddressLine: venueAddressLine(address) };
 }
 
 export async function readVenueAddress(tx: Transaction): Promise<string[]> {

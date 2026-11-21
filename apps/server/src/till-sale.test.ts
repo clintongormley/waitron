@@ -3035,10 +3035,12 @@ describe("per-answer receipt presentation", () => {
       expect(replay.receiptSettings).toEqual({
         printAddress: false,
       });
+      expect(replay.venueAddressLine).toBe("Current street, 28013 Madrid, Madrid");
       expect({
         ...replay,
         receiptTrim: first.receiptTrim,
         venueAddress: first.venueAddress,
+        venueAddressLine: first.venueAddressLine,
         receiptSettings: first.receiptSettings,
       }).toEqual(first);
       expect(
@@ -3064,6 +3066,7 @@ describe("receipt presentation sources", () => {
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      venueAddressLine: "Calle Mayor 1, 28013 Madrid, Madrid",
       receiptSettings: { printAddress: false },
     });
     const sale = await withTransaction(suite.db, (tx) =>
@@ -3112,6 +3115,7 @@ describe("receipt presentation sources", () => {
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      venueAddressLine: "Calle Mayor 1, 28013 Madrid, Madrid",
       receiptSettings: { printAddress: false },
     });
   });
@@ -3192,7 +3196,7 @@ describe("receipt presentation address failure", () => {
       })
       .where(eq(departments.id, department!.id));
     const address = vi
-      .spyOn(venueAddressReads, "readVenueAddress")
+      .spyOn(venueAddressReads, "readVenueAddressAndLine")
       .mockRejectedValue(new Error("current address read refused"));
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

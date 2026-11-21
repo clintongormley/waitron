@@ -42,7 +42,7 @@ import {
   type InvoiceDelivery,
 } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readReceiptVenueAddress } from "./venue-address.js";
+import { readVenueAddressAndLine } from "./venue-address.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -258,13 +258,12 @@ export async function readPrintedVenue(
   const { venue, logo } = await resolvePrintedLogo(tx, department, printer.paperWidth, diagnostic);
   const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(authored, venue, invoiceLocale, current);
-  const address = await readReceiptVenueAddress(tx, {
-    printAddress: authored?.printAddress === true,
-  });
+  const { venueAddress, venueAddressLine } = await readVenueAddressAndLine(tx);
   return {
     issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
-    ...address,
+    venueAddress: authored?.printAddress === true ? venueAddress : [],
+    venueAddressLine,
     logo,
   };
 }

@@ -8,7 +8,7 @@ import * as venueAddress from "./venue-address.js";
 import {
   addressLines,
   readReceiptAddress,
-  readReceiptVenueAddress,
+  readVenueAddressAndLine,
   venueAddressLine,
 } from "./venue-address.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -129,7 +129,7 @@ describe("readReceiptAddress", () => {
     expect(await read({})).toEqual([]);
   });
 
-  it("reads the receipt's address lines and the venue's whole line in one go", async () => {
+  it("reads the venue's address lines and its whole line in one go", async () => {
     await setupVenue(suite.db);
     await seedVenueSettings(suite.db, {
       addressLine1: "Carrer de Mallorca 123",
@@ -137,14 +137,8 @@ describe("readReceiptAddress", () => {
       city: "Barcelona",
       province: "Barcelona",
     });
-    const read = (printAddress: boolean) =>
-      withTransaction(suite.db, (tx) => readReceiptVenueAddress(tx, { printAddress }));
-    expect(await read(true)).toEqual({
+    expect(await withTransaction(suite.db, (tx) => readVenueAddressAndLine(tx))).toEqual({
       venueAddress: ["Carrer de Mallorca 123", "08010 Barcelona"],
-      venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
-    });
-    expect(await read(false)).toEqual({
-      venueAddress: [],
       venueAddressLine: "Carrer de Mallorca 123, 08010 Barcelona, Barcelona",
     });
   });

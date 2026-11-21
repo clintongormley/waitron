@@ -3702,10 +3702,12 @@ describe("department receipt presentation on thermal jobs", () => {
     expect(replay.receiptTrim).toEqual({ headerSubtitle: "Current subtitle" });
     expect(replay.venueAddress).toEqual(["Current street", "28013 Madrid"]);
     expect(replay.receiptSettings).toEqual({ printAddress: false });
+    expect(replay.venueAddressLine).toBe("Current street, 28013 Madrid, Madrid");
     expect({
       ...replay,
       receiptTrim: first.receiptTrim,
       venueAddress: first.venueAddress,
+      venueAddressLine: first.venueAddressLine,
       receiptSettings: first.receiptSettings,
     }).toEqual(first);
     expect(await fiscalRecordCount(cfg)).toBe(1);

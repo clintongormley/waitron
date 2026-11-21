@@ -1,4 +1,4 @@
-import { seedPhotoMetadata } from "@waitron/db/testing/seed.js";
+import { seedPhotoMetadata, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -20,6 +20,7 @@ import {
 import { departments } from "@waitron/venue-service";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { readReceiptPresentation } from "./receipt-presentation.js";
+import * as venueAddressReads from "./venue-address.js";
 import { uploadImage, saveImage, readPresentations } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import * as media from "@waitron/media";
@@ -183,6 +184,36 @@ describe("department-only on-screen receipt", () => {
       expect(presentation.venueAddress).toEqual(["Current street", "Madrid"]);
     },
   );
+
+  it("reads the venue's address as one line, joined as a registered address is, beside its lines", async () => {
+    const f = await fixture();
+    await seedVenueSettings(suite.db, { postalCode: "28013", province: "Madrid" });
+    const presentation = await f.read();
+    expect(presentation.venueAddress).toEqual(["Current street", "28013 Madrid"]);
+    expect(presentation.venueAddressLine).toBe("Current street, 28013 Madrid, Madrid");
+  });
+
+  it("gives an empty line and no lines when the venue cannot be read, and reports that read", async () => {
+    const f = await fixture();
+    const read = vi
+      .spyOn(venueAddressReads, "readVenueAddressAndLine")
+      .mockRejectedValue(new Error("venue read refused"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const presentation = await f.read();
+      expect(presentation.venueAddress).toEqual([]);
+      expect(presentation.venueAddressLine).toBe("");
+      expect(warning.mock.calls).toEqual([
+        [
+          "receipt.optional_read_failed",
+          { operation: "readVenueAddress", code: "receipt.read_failed" },
+        ],
+      ]);
+    } finally {
+      read.mockRestore();
+      warning.mockRestore();
+    }
+  });
 
   it("reads a deleted department's stored language and clears optional values on a later answer", async () => {
     const f = await fixture();
