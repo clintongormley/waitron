@@ -52,15 +52,16 @@ it("opens key-only recovery without a session or disclosing conflicts before key
   applyTokens(screen.parentElement!);
   const title = screen.shadowRoot!.querySelector("h1");
   expect(title).not.toBeNull();
-  const xlProbe = document.createElement("span");
-  xlProbe.style.fontSize = "var(--wt-font-size-xl)";
-  screen.shadowRoot!.append(xlProbe);
-  const xl = getComputedStyle(xlProbe).fontSize;
-  xlProbe.remove();
-  expect(getComputedStyle(title!).fontSize).toBe(xl);
-  expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
-    "Recover from an invoice identity conflict",
-  );
+  const size = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.fontSize = `var(${token})`;
+    screen.shadowRoot!.append(probe);
+    const value = getComputedStyle(probe).fontSize;
+    probe.remove();
+    return value;
+  };
+  expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
+  expect(title!.textContent).toBe("Recover from an invoice identity conflict");
   const input = screen.shadowRoot!.querySelector("wt-input[name=recoveryKey]")!;
   await (input as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
   const native = input.shadowRoot!.querySelector("input")!;

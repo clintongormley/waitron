@@ -197,13 +197,16 @@ describe("the staff roles page", () => {
     await mount(fakeRequest(() => [runner, waiter, cook]));
     const title = el.shadowRoot!.querySelector("h1");
     expect(title).not.toBeNull();
-    const xlProbe = document.createElement("span");
-    xlProbe.style.fontSize = "var(--wt-font-size-xl)";
-    el.shadowRoot!.append(xlProbe);
-    const xl = getComputedStyle(xlProbe).fontSize;
-    xlProbe.remove();
-    expect(getComputedStyle(title!).fontSize).toBe(xl);
-    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Staff roles");
+    const size = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.fontSize = `var(${token})`;
+      el.shadowRoot!.append(probe);
+      const value = getComputedStyle(probe).fontSize;
+      probe.remove();
+      return value;
+    };
+    expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
+    expect(title!.textContent).toBe("Staff roles");
     expect(rowKeys()).toEqual(["role-w", "role-c", "role-r"]);
     expect(
       (table()!.columns as readonly DataTableColumn<StaffRole>[]).map((column) => column.key),

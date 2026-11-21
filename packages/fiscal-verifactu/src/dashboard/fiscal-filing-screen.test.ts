@@ -147,12 +147,15 @@ describe("vf-fiscal-filing-screen", () => {
     applyTokens(screen.parentElement!);
     const title = screen.shadowRoot!.querySelector("h1");
     expect(title).not.toBeNull();
-    const xlProbe = document.createElement("span");
-    xlProbe.style.fontSize = "var(--wt-font-size-xl)";
-    screen.shadowRoot!.append(xlProbe);
-    const xl = getComputedStyle(xlProbe).fontSize;
-    xlProbe.remove();
-    expect(getComputedStyle(title!).fontSize).toBe(xl);
+    const size = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.fontSize = `var(${token})`;
+      screen.shadowRoot!.append(probe);
+      const value = getComputedStyle(probe).fontSize;
+      probe.remove();
+      return value;
+    };
+    expect(getComputedStyle(title!).fontSize).toBe(size("--wt-font-size-xl"));
   });
 
   it("leaves out the held-with-no-case line at 0, and says when nothing is sent", async () => {
