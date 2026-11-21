@@ -744,6 +744,49 @@ describe("what is left of an advance, on the bill's payments", () => {
   });
 });
 
+/** The bill's payments as the Pay window reads them. */
+async function billPaymentsOf(billId: string): Promise<Record<string, unknown>[]> {
+  const read = await send(
+    venue().app,
+    venue().cookie,
+    "GET",
+    `/api/working-orders/${billId}/payments`,
+  );
+  expect(read.status, JSON.stringify(read.json)).toBe(200);
+  return (read.json as { payments: Record<string, unknown>[] }).payments;
+}
+
+describe("the link between an advance and the rest's invoice that took it off", () => {
+  it("the bill's payment names the advance's ticket, its day and VAT, and the rest's invoice once it is issued", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    const facts = await advanceFacts(advanceId);
+    const ticket = {
+      saleId: advanceId,
+      invoiceNumber: facts.invoiceNumber,
+      issuedOn: facts.issuedOn,
+      vatBreakdown: [{ rate: "10.00", base: "27.27", tax: "2.73" }],
+    };
+    const before = (await billPaymentsOf(billId))[0]!;
+    expect(before).toMatchObject(ticket);
+    expect(before).not.toHaveProperty("takenOffBy");
+
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+
+    const [paidAdvance, rest] = await billPaymentsOf(billId);
+    expect(paidAdvance).toMatchObject({
+      ...ticket,
+      takenOffBy: {
+        saleId: finalSaleId,
+        invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+      },
+    });
+    for (const key of ["invoiceNumber", "issuedOn", "vatBreakdown", "takenOffBy"])
+      expect(rest).not.toHaveProperty(key);
+  });
+});
+
 describe("a settled bill's received, once Correct invoice gave money back", () => {
   async function balanceOf(billId: string) {
     const read = await send(
@@ -1021,6 +1064,17 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
         invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
       },
     });
+  });
+
+  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment", async () => {
+    const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
+    await creditWhole(rest.saleId);
+    const takenOffBy = {
+      saleId: rest.saleId,
+      invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
+    };
+
+    expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
   });
 
   it("example 8: files −3.92/−0.43, reversing the seven dishes and the deduction line", async () => {

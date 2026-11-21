@@ -1202,6 +1202,12 @@ export interface BillPaymentView extends OutsideCardDetails {
    * Correct invoice on that ticket has not given back. */
   hasTicket?: true;
   saleId?: string;
+  /** The advance's ticket: its number, local issue day (`YYYY-MM-DD`) and VAT breakdown. */
+  invoiceNumber?: string;
+  issuedOn?: string;
+  vatBreakdown?: { rate: string; base: string; tax: string }[];
+  /** The bill's invoice that took the advance off, once issued; never a corrective of it. */
+  takenOffBy?: { saleId: string; invoiceNumber: string };
   left?: string;
   tipLeft?: string;
   id: string;

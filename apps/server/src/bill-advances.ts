@@ -226,6 +226,10 @@ export const paidNoAdvance = sql`not exists (select 1 from ${billAdvances} where
 export interface AdvancePaymentMoney {
   /** The advance's own sale. */
   saleId: string;
+  /** Its own ticket's number, local issue day and VAT breakdown, as printed on it. */
+  invoiceNumber: string;
+  issuedOn: string;
+  vatBreakdown: { rate: string; base: string; tax: string }[];
   /** What is left of its advance: the advance's total plus its correctives. */
   left: Decimal;
   /** How many correctives its advance has. */
@@ -257,6 +261,7 @@ export async function readBillAdvances(
       code: invoiceSeries.code,
       number: sales.invoiceNumber,
       issuedAt: sales.issuedAt,
+      issuedOffsetMinutes: sales.issuedOffsetMinutes,
       total: sales.total,
       vatBreakdown: sales.vatBreakdown,
     })
@@ -318,10 +323,11 @@ export async function readBillAdvances(
       (sum, row) => addDecimal(sum, rawCentsToDecimal(row.total)),
       centsToDecimal(advance.total),
     );
+    const invoiceNumber = formatInvoiceNumber(advance.code, advance.number);
     const list = credits.get(advance.workingOrderId) ?? [];
     list.push({
       saleId: advance.saleId,
-      invoiceNumber: formatInvoiceNumber(advance.code, advance.number),
+      invoiceNumber,
       issuedAt: advance.issuedAt,
       groups: [...groups.values()],
       gross,
@@ -329,6 +335,9 @@ export async function readBillAdvances(
     credits.set(advance.workingOrderId, list);
     payments.set(advance.billPaymentId, {
       saleId: advance.saleId,
+      invoiceNumber,
+      issuedOn: localCalendarDate(new Date(advance.issuedAt), advance.issuedOffsetMinutes),
+      vatBreakdown: advance.vatBreakdown,
       left: gross,
       correctives: own.length,
       tipGivenBack:
