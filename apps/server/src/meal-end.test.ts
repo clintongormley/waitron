@@ -489,7 +489,7 @@ describe("Print the bill", () => {
 
   async function unsentTarta(billId: string, partyId: string, ownerId: string) {
     await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, partyId, ownerId, {
+      saveDraft(tx, partyId, ownerId, {
         billId,
         draftId: null,
         revision: 0,

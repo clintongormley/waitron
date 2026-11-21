@@ -3790,7 +3790,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           await checkZones(tx, session, [{ partyId }]);
           const result = await saveDraft(
             tx,
-            cfg,
             partyId,
             personId,
             {
@@ -3861,7 +3860,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
@@ -3870,7 +3868,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, session, [{ partyId }]);
         return takeOverDraft(
           tx,
-          cfg,
           partyId,
           draftId,
           personId,
@@ -4241,7 +4238,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   app.patch("/api/working-orders/:id/lines/:lineNo/course", (c) =>
     runBodyCourse(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const body = await readJsonBody<{
@@ -4256,7 +4252,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await checkZones(tx, session, [{ orderId: id }]);
         await setLineCourse(
           tx,
-          cfg,
           id,
           lineNo,
           courseId,

@@ -302,7 +302,7 @@ describe("splitting a saved outbox to a new bill", () => {
     expect(stale.json).toMatchObject({ code: "draft.out_of_date" });
     expect(await frozen()).toEqual(before);
     const acquired = await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+      saveDraft(tx, p.partyId, venue.adminId, {
         billId: p.billId,
         draftId: null,
         revision: 0,
@@ -459,7 +459,7 @@ describe("splitting a saved outbox to a new bill", () => {
         existingService: true,
         copyServiceContextFrom: p.billId,
       });
-      return saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+      return saveDraft(tx, p.partyId, venue.adminId, {
         billId: otherBill,
         draftId: null,
         revision: 0,
@@ -581,7 +581,7 @@ describe("splitting a saved outbox to a new bill", () => {
     expect(result.status).toBe(200);
     const answer = result.json as unknown as { source: BillDraftSnapshot };
     const remaining = await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+      saveDraft(tx, p.partyId, venue.operatorId, {
         billId: p.billId,
         draftId: answer.source.draft!.id,
         revision: answer.source.draft!.revision,
@@ -597,7 +597,7 @@ describe("splitting a saved outbox to a new bill", () => {
       }),
     );
     const takeover = await inTx(venue, (tx) =>
-      takeOverDraft(tx, venue.cfg, p.partyId, p.snapshot.draft!.id, venue.adminId, {
+      takeOverDraft(tx, p.partyId, p.snapshot.draft!.id, venue.adminId, {
         submissionId: randomUUID(),
         revision: remaining.edit.draftRevision!,
         expectedEdit: remaining.edit,

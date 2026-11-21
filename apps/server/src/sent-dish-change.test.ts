@@ -77,7 +77,7 @@ async function kitchenItemOf(billId: string, lineNo: number) {
 async function saveNewOrder(bill: Bill, operatorId: string) {
   const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, bill.billId));
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, bill.partyId, operatorId, {
+    saveDraft(tx, bill.partyId, operatorId, {
       billId: bill.billId,
       expectedEdit,
       draftId: expectedEdit.draftId,

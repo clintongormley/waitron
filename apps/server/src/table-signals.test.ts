@@ -370,7 +370,7 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([takeOrderSignal]);
 
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, quiet.partyId, lucy, {
+      saveDraft(tx, quiet.partyId, lucy, {
         billId: quiet.tabId,
         draftId: null,
         revision: 0,
@@ -378,7 +378,7 @@ describe("the floor's attention signals", () => {
       }),
     );
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, drafting.partyId, lucy, {
+      saveDraft(tx, drafting.partyId, lucy, {
         billId: drafting.tabId,
         draftId: null,
         revision: 0,
@@ -1029,7 +1029,7 @@ describe("the floor's attention signals", () => {
       await holdGroup(v, partyId, "Burger");
       await askForBill(v, partyId);
       await inTx(v, (tx) =>
-        saveDraft(tx, v.cfg, partyId, lucy, {
+        saveDraft(tx, partyId, lucy, {
           billId: tabId,
           draftId: null,
           revision: 0,

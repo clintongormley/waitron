@@ -61,7 +61,7 @@ async function sibling(p: Fixture) {
 async function save(p: Fixture, operatorId = venue.operatorId) {
   const expectedEdit = await edit(p.id);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId!, operatorId, {
+    saveDraft(tx, p.partyId!, operatorId, {
       billId: p.id,
       expectedEdit,
       draftId: expectedEdit.draftId,

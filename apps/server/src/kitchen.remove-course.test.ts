@@ -137,7 +137,7 @@ describe("removing a course", () => {
     const id = await course(v);
     const { partyId, tabId } = await seat(v, await v.table("Draft"));
     const draft = await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, partyId, OPERATOR, {
+      saveDraft(tx, partyId, OPERATOR, {
         billId: tabId,
         draftId: null,
         revision: 0,

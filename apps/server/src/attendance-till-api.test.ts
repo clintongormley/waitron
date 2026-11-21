@@ -91,7 +91,7 @@ describe("till attendance recorder admission", () => {
     async (path) => {
       const { partyId, tabId } = await seat(v, await v.table("Closing attendance"));
       const draft = await withTransaction(suite.db, (tx) =>
-        saveDraft(tx, v.cfg, partyId, OPERATOR, {
+        saveDraft(tx, partyId, OPERATOR, {
           billId: tabId,
           draftId: null,
           revision: 0,

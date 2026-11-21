@@ -66,7 +66,7 @@ async function otherBill(partyId: string) {
 }
 async function save(partyId: string, billId: string, operatorId = venue.operatorId) {
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, partyId, operatorId, {
+    saveDraft(tx, partyId, operatorId, {
       billId,
       draftId: null,
       revision: 0,
@@ -422,7 +422,7 @@ describe("A803 split: editors", () => {
     );
 
     await inTx(venue, (tx) =>
-      takeOverDraft(tx, venue.cfg, partyId, looseEdit.draftId!, op, {
+      takeOverDraft(tx, partyId, looseEdit.draftId!, op, {
         revision: looseEdit.draftRevision!,
         expectedEdit: looseEdit,
         submissionId: randomUUID(),
@@ -663,14 +663,14 @@ describe("bill merges require both editors and release the consumed bill", () =>
       );
 
       await refused(
-        () => inTx(venue, (tx) => saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, original)),
+        () => inTx(venue, (tx) => saveDraft(tx, p.partyId, venue.operatorId, original)),
         "management.request_invalid",
         { field: "billId" },
       );
       await refused(
         () =>
           inTx(venue, (tx) =>
-            saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+            saveDraft(tx, p.partyId, venue.operatorId, {
               ...original,
               billId: p.tabId,
               expectedEdit: { ...right.edit, billId: p.tabId },
@@ -683,7 +683,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
         await refused(
           () =>
             inTx(venue, (tx) =>
-              saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+              saveDraft(tx, p.partyId, venue.operatorId, {
                 ...original,
                 billId: p.tabId,
                 draftId: left.draft!.id,
@@ -720,7 +720,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
       expect(await allRows()).toEqual(beforeHttp);
 
       const saved = await inTx(venue, (tx) =>
-        saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
+        saveDraft(tx, p.partyId, venue.operatorId, {
           billId: p.tabId,
           draftId: edit.draftId,
           revision: edit.draftRevision!,
@@ -745,7 +745,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
         editorVersion: 2,
       });
       await refused(
-        () => inTx(venue, (tx) => saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, original)),
+        () => inTx(venue, (tx) => saveDraft(tx, p.partyId, venue.operatorId, original)),
         "management.request_invalid",
         { field: "billId" },
       );

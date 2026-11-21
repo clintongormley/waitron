@@ -127,7 +127,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     const saved = await inTx(venue, async (tx) => {
       const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId));
       const expectedEdit = await readBillEditState(tx, tabId);
-      return saveDraft(tx, venue.cfg, bill!.partyId!, venue.adminId, {
+      return saveDraft(tx, bill!.partyId!, venue.adminId, {
         billId: tabId,
         draftId: null,
         revision: 0,

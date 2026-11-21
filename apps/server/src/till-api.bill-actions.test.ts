@@ -506,7 +506,7 @@ describe("A803 rename: PUT /api/bills/:id/name", () => {
   /** An unsent Paella on the bill, saved by the admin unless another person is named. */
   async function adminUnsentDish(partyId: string, billId: string, personId = venue.adminId) {
     return inTx(venue, (tx) =>
-      saveDraftForTest(tx, venue.cfg, partyId, personId, {
+      saveDraftForTest(tx, partyId, personId, {
         billId,
         draftId: null,
         revision: 0,

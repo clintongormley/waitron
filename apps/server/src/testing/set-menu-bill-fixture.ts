@@ -90,7 +90,7 @@ export function saveSetMenuDraft(
   ...lines: unknown[]
 ) {
   return inTx(venue, (tx) =>
-    saveDraftForTest(tx, venue.cfg, partyId, venue.operator.personId, {
+    saveDraftForTest(tx, partyId, venue.operator.personId, {
       billId: tabId,
       draftId: null,
       revision: 0,

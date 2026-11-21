@@ -6608,7 +6608,7 @@ describe("waiter line release / hold-and-fire", () => {
     });
     const missing = randomUUID();
     await expect(
-      withTransaction(db, (tx) => setLineCourse(tx, cfg, orderId, 2, missing)),
+      withTransaction(db, (tx) => setLineCourse(tx, orderId, 2, missing)),
     ).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
@@ -6637,7 +6637,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       expect(byLine(before, main).firedAt).toBeNull(); // held — a later course
       expect(byLine(before, main).courseId).toBe(mainCourse.id); // its snapshot sits on Mains
 
-      await setLineCourse(tx, cfg, tabId, 2, post.id);
+      await setLineCourse(tx, tabId, 2, post.id);
 
       // The open-tab line AND its held ticket item snapshot both moved to Desserts…
       const [lineRow] = await tx
@@ -6666,7 +6666,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
 
       // A null target clears the course (skipping the requireLiveCourse screen).
-      await setLineCourse(tx, cfg, tabId, 2, null);
+      await setLineCourse(tx, tabId, 2, null);
 
       const [lineRow] = await tx
         .select({ courseId: workingOrderLines.courseId })
@@ -6692,7 +6692,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
 
       // Mains is a valid LIVE course, so requireLiveCourse passes — the FIRED guard is what refuses.
-      await expect(setLineCourse(tx, cfg, tabId, 1, mainCourse.id)).rejects.toMatchObject({
+      await expect(setLineCourse(tx, tabId, 1, mainCourse.id)).rejects.toMatchObject({
         code: "ticket.already_fired",
         params: { workingOrderId: tabId },
       });
@@ -6717,12 +6717,12 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
 
       // An id naming no course of this venue — screened by requireLiveCourse BEFORE the line is resolved.
       const missing = randomUUID();
-      await expect(setLineCourse(tx, cfg, tabId, 1, missing)).rejects.toMatchObject({
+      await expect(setLineCourse(tx, tabId, 1, missing)).rejects.toMatchObject({
         code: "course.not_found",
         params: { courseId: missing },
       });
       // A DEACTIVATED course is not a valid new target either (liveness, not mere existence).
-      await expect(setLineCourse(tx, cfg, tabId, 1, retired.id)).rejects.toMatchObject({
+      await expect(setLineCourse(tx, tabId, 1, retired.id)).rejects.toMatchObject({
         code: "course.not_found",
         params: { courseId: retired.id },
       });
@@ -6741,7 +6741,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       // A live target course, so we get PAST requireLiveCourse to the line-resolution miss.
-      await expect(setLineCourse(tx, cfg, tabId, 999, starterCourse.id)).rejects.toMatchObject({
+      await expect(setLineCourse(tx, tabId, 999, starterCourse.id)).rejects.toMatchObject({
         code: "tab.line_not_found",
         params: { tabId, lineNo: 999 },
       });
@@ -6764,7 +6764,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       const billPaymentId = await seedPendingCardPayment(tx, tabId);
 
-      await setLineCourse(tx, cfg, tabId, 2, post.id);
+      await setLineCourse(tx, tabId, 2, post.id);
 
       const after = await courseItemsFor(tx, tabId);
       expect(byLine(after, main).courseId).toBe(post.id);

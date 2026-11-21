@@ -53,7 +53,6 @@ function save(draft?: Draft, recorder: AttendanceRecorder | undefined = recordAt
   return run((tx) =>
     saveDraft(
       tx,
-      v.cfg,
       partyId,
       OPERATOR,
       {
@@ -82,11 +81,11 @@ describe("accepted draft attendance capture", () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T12:00:00Z"));
     const taken = await run((tx) =>
-      takeOverDraft(tx, v.cfg, partyId, first.id, other, first.revision, recordAttendanceFact),
+      takeOverDraft(tx, partyId, first.id, other, first.revision, recordAttendanceFact),
     );
     vi.setSystemTime(new Date("2026-01-05T16:00:00Z"));
     await run((tx) =>
-      takeOverDraft(tx, v.cfg, partyId, first.id, other, taken.revision, recordAttendanceFact),
+      takeOverDraft(tx, partyId, first.id, other, taken.revision, recordAttendanceFact),
     );
     expect((await operations()).map((row) => [row.personId, row.lastAt])).toEqual([
       [OPERATOR, "2026-01-05T09:00:00.000Z"],

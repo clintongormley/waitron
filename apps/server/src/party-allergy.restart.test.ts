@@ -122,7 +122,7 @@ describe("A669 consideration through a server process restart", () => {
           ),
         );
       const draft = await inTx(v, (tx) =>
-        saveDraftForTest(tx, v.cfg, party.partyId, OPERATOR, {
+        saveDraftForTest(tx, party.partyId, OPERATOR, {
           billId: party.tabId,
           draftId: null,
           revision: 0,
@@ -302,7 +302,7 @@ describe("A669 submit HTTP assignments", () => {
           path === "direct"
             ? null
             : await inTx(v, (tx) =>
-                saveDraftForTest(tx, v.cfg, party.partyId, OPERATOR, {
+                saveDraftForTest(tx, party.partyId, OPERATOR, {
                   billId: party.tabId,
                   draftId: null,
                   revision: 0,
@@ -391,7 +391,7 @@ describe("A669 submit HTTP assignments", () => {
           answer: "allergies",
           guests: [{ who: "Assigned guest", allergens: { milk: {} }, note: "Assigned guest note" }],
         });
-        const current = await inTx(v, (tx) => readPartyAllergyView(tx, v.cfg, party.partyId));
+        const current = await inTx(v, (tx) => readPartyAllergyView(tx, party.partyId));
         expect(current.dishes).toHaveLength(1);
         const line = current.dishes[0]!.line;
         expect(line.kind).toBe("working");

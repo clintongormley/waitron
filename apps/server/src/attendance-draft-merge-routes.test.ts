@@ -71,7 +71,7 @@ async function prepare() {
   const target = await seatedWith(v);
   for (const party of [source, target]) {
     await run((tx) =>
-      saveDraft(tx, v.cfg, party.partyId, v.operatorId, {
+      saveDraft(tx, party.partyId, v.operatorId, {
         billId: party.tabId,
         draftId: null,
         revision: 0,

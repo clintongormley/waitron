@@ -968,7 +968,7 @@ describe("A773 pass release: paper", () => {
 
     const before = await jobs();
     await inTx(v, async (tx) => {
-      const view = await readPartyAllergyView(tx, v.cfg, p.partyId);
+      const view = await readPartyAllergyView(tx, p.partyId);
       const changes = await applyPartyAllergyPatch(
         tx,
         p.partyId,

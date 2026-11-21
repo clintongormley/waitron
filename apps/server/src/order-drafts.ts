@@ -287,7 +287,6 @@ export async function readDrafts(tx: Transaction, partyId: string): Promise<Draf
 
 export async function saveDraft(
   tx: Transaction,
-  _cfg: TradingContext,
   partyId: string,
   operatorId: string,
   input: SaveDraftInput,
@@ -467,7 +466,6 @@ export async function saveDraft(
 
 export async function takeOverDraft(
   tx: Transaction,
-  _cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,

@@ -51,7 +51,6 @@ function save(
     const firstOpen = await firstOpenBillOf(tx, party);
     return saveDraft(
       tx,
-      v.cfg,
       party,
       owner,
       {
@@ -120,7 +119,7 @@ describe("natural draft-event attendance snapshots", () => {
       const before = await state();
       vi.setSystemTime(new Date("2026-01-05T13:00:00.987Z"));
       await run((tx) =>
-        takeOverDraft(tx, v.cfg, partyId, draft.id, other, draft.revision, recordAttendanceFact),
+        takeOverDraft(tx, partyId, draft.id, other, draft.revision, recordAttendanceFact),
       );
       const events = (await state()).events.filter(
         (e) => !before.events.some((old) => old.id === e.id),
@@ -178,10 +177,10 @@ describe("natural draft-event attendance snapshots", () => {
     const target = await seat(v, await v.table("Target"));
     const into = await save(OPERATOR, target.partyId);
     await run((tx) =>
-      takeOverDraft(tx, v.cfg, partyId, from.id, other, from.revision, recordAttendanceFact),
+      takeOverDraft(tx, partyId, from.id, other, from.revision, recordAttendanceFact),
     );
     await run((tx) =>
-      takeOverDraft(tx, v.cfg, target.partyId, into.id, other, into.revision, recordAttendanceFact),
+      takeOverDraft(tx, target.partyId, into.id, other, into.revision, recordAttendanceFact),
     );
     const before = await state();
     await run(async (tx) =>

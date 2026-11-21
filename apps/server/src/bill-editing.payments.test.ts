@@ -52,7 +52,7 @@ const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock }
 async function owner(p: { partyId: string; tabId: string }, personId = venue.adminId) {
   const expectedEdit = await edit(p.tabId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, personId, {
+    saveDraft(tx, p.partyId, personId, {
       billId: p.tabId,
       expectedEdit,
       draftId: null,

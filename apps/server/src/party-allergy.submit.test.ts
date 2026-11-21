@@ -66,7 +66,7 @@ function fresh(overrides: Partial<FreshDraftLineInput> = {}): FreshDraftLineInpu
 }
 async function draft(p: Party, count = 1) {
   return inTx(v, (tx) =>
-    saveDraftForTest(tx, v.cfg, p.partyId, OPERATOR, {
+    saveDraftForTest(tx, p.partyId, OPERATOR, {
       billId: p.tabId,
       draftId: null,
       revision: 0,
@@ -242,7 +242,7 @@ describe("A669 atomic submit", () => {
     expect(saved.ticks.find((t) => t.guestId === saved.guests[1]!.id)!.workingLineId).toBe(
       rows[1]!.id,
     );
-    const view = await inTx(v, (tx) => readPartyAllergyView(tx, v.cfg, p.partyId));
+    const view = await inTx(v, (tx) => readPartyAllergyView(tx, p.partyId));
     expect(
       view.dishes.filter((d) => d.line.kind === "working").map((d) => d.offeredBefore),
     ).toEqual([true, true]);
@@ -520,7 +520,7 @@ describe("A669 atomic submit", () => {
     ).toEqual([{ holdPrintedAt: null }]);
     const current = await snapshot(p);
     expect(current.ticks).toEqual([]);
-    const view = await inTx(v, (tx) => readPartyAllergyView(tx, v.cfg, p.partyId));
+    const view = await inTx(v, (tx) => readPartyAllergyView(tx, p.partyId));
     expect(view.dishes.map((d) => d.offeredBefore)).toEqual([true]);
     const join = {
       ...(await directCommand(p, "hold", {
@@ -535,7 +535,7 @@ describe("A669 atomic submit", () => {
     expect(after.guests).toEqual(current.guests);
     expect(after.ticks).toHaveLength(1);
     expect(
-      (await inTx(v, (tx) => readPartyAllergyView(tx, v.cfg, p.partyId))).dishes.map(
+      (await inTx(v, (tx) => readPartyAllergyView(tx, p.partyId))).dishes.map(
         (d) => d.offeredBefore,
       ),
     ).toEqual([true, true]);

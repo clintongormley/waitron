@@ -124,7 +124,7 @@ it("keeps an unavailable stale draft dish when saving a new ordinary dish", asyn
     await publishWorkingMenu(tx, daily.fullMenuId);
   });
   const saved = await inTx(venue, (tx) =>
-    saveDraftForTest(tx, venue.cfg, bill.partyId, venue.operator.personId, {
+    saveDraftForTest(tx, bill.partyId, venue.operator.personId, {
       billId: bill.tabId,
       draftId: draft.id,
       revision: draft.revision,
@@ -137,7 +137,7 @@ it("keeps an unavailable stale draft dish when saving a new ordinary dish", asyn
   ]);
   await expect(
     inTx(venue, (tx) =>
-      saveDraftForTest(tx, venue.cfg, bill.partyId, venue.operator.personId, {
+      saveDraftForTest(tx, bill.partyId, venue.operator.personId, {
         billId: bill.tabId,
         draftId: saved.id,
         revision: saved.revision,

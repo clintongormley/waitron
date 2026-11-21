@@ -112,7 +112,7 @@ describe("A803 bill numbers: created", () => {
   it("putting unsent dishes on a new bill takes the next number", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N3"));
     const draft = await inTx(v, (tx) =>
-      saveDraftForTest(tx, v.cfg, partyId, OPERATOR, {
+      saveDraftForTest(tx, partyId, OPERATOR, {
         billId: tabId,
         draftId: null,
         revision: 0,
@@ -679,7 +679,7 @@ describe("A803 bill numbers: tables", () => {
 /** Saves the dishes as `OPERATOR`'s unsent order on the bill. */
 async function saveUnsent(partyId: string, billId: string, ...names: string[]): Promise<void> {
   await inTx(v, (tx) =>
-    saveDraftForTest(tx, v.cfg, partyId, OPERATOR, {
+    saveDraftForTest(tx, partyId, OPERATOR, {
       billId,
       draftId: null,
       revision: 0,

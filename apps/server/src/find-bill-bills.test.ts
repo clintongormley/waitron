@@ -217,7 +217,7 @@ describe("Find Bills SQL paging", () => {
   it("keeps an open draft outside Find a bill while the current order count includes it", async () => {
     const seated = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, seated.partyId, venue.operatorId, {
+      saveDraft(tx, seated.partyId, venue.operatorId, {
         billId: seated.tabId,
         draftId: null,
         revision: 0,

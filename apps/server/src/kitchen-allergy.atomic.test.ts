@@ -62,7 +62,7 @@ function byTicket<T extends { ticketItemId: string }>(rows: T[]) {
 }
 async function editWithin(tx: Transaction, f: KitchenFixture, note: string) {
   const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, f.party.partyId);
-  const view = await readPartyAllergyView(tx, f.v.cfg, f.party.partyId);
+  const view = await readPartyAllergyView(tx, f.party.partyId);
   const changes = await applyPartyAllergyPatch(
     tx,
     f.party.partyId,

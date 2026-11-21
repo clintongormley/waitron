@@ -296,7 +296,7 @@ describe("A669 capture", () => {
       afterGroupId: null,
     };
     const d = await inTx(v, (tx) =>
-      saveDraftForTest(tx, v.cfg, p.partyId, OPERATOR, {
+      saveDraftForTest(tx, p.partyId, OPERATOR, {
         billId: p.tabId,
         draftId: null,
         revision: 0,

@@ -1134,7 +1134,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     const save = (lines: unknown[]) =>
       inTx(v, async (tx) => {
         const edit = await readBillEditState(tx, a.billId);
-        return saveDraft(tx, v.cfg, a.partyId, OPERATOR, {
+        return saveDraft(tx, a.partyId, OPERATOR, {
           expectedEdit: edit,
           billId: a.billId,
           draftId: edit.draftId,

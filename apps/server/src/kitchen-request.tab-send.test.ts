@@ -141,8 +141,8 @@ describe("A773 waiter request: tab send", () => {
       const requestedCopies = await allergyCopies(tx, requested!.id);
       await clearPartyAllergyForTest(tx, venue.party.partyId);
       const before = await jobCounts(tx, venue);
-      const asked = async (target: Parameters<typeof readAllergySendView>[3]) =>
-        (await readAllergySendView(tx, venue.cfg, venue.party.partyId, target)).dishes.map(
+      const asked = async (target: Parameters<typeof readAllergySendView>[2]) =>
+        (await readAllergySendView(tx, venue.party.partyId, target)).dishes.map(
           (dish) => dish.line,
         );
 

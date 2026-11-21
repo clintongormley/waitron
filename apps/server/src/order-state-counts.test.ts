@@ -742,7 +742,7 @@ function saveBillDraft(
   draft: { id: string; revision: number } | null = null,
 ) {
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, partyId, venue.operatorId, {
+    saveDraft(tx, partyId, venue.operatorId, {
       billId,
       draftId: draft?.id ?? null,
       revision: draft?.revision ?? 0,

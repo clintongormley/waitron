@@ -1396,7 +1396,7 @@ describe("A803 split: the route", () => {
     it("another person's unsent dishes on the source: 409 draft.taken_over with the conflicts", async () => {
       const { anna, second } = await annaWith("Tarta", "Caña");
       await withTransaction(venue.db, (tx) =>
-        saveDraftForTest(tx, venue.cfg, anna.partyId, venue.adminId, {
+        saveDraftForTest(tx, anna.partyId, venue.adminId, {
           billId: anna.tabId,
           draftId: null,
           revision: 0,
@@ -2016,7 +2016,7 @@ describe("A803 split: the panel's read", () => {
     it("a press that knows no edit state, on a whole bill another person's unsent dish holds: refused draft.out_of_date, and told who holds it", async () => {
       const { anna, second, octopusBill } = await twoBillsOnTwoTables();
       await withTransaction(venue.db, (tx) =>
-        saveDraftForTest(tx, venue.cfg, anna.partyId, venue.adminId, {
+        saveDraftForTest(tx, anna.partyId, venue.adminId, {
           billId: octopusBill,
           draftId: null,
           revision: 0,

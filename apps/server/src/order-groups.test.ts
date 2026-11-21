@@ -3167,7 +3167,7 @@ describe("waiter group and recalled-line release", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => inTx((tx) => setLineCourse(tx, v.cfg, s.tabId, steak!.lineNo, missing)),
+      () => inTx((tx) => setLineCourse(tx, s.tabId, steak!.lineNo, missing)),
       { code: "course.not_found", params: { courseId: missing } },
     );
   });

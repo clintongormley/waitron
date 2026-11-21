@@ -122,8 +122,8 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               throw new AppError("party.not_found", { partyId: requestedId });
             await checkZones(tx, { device }, [{ partyId }]);
             const cfg = requestCfg(deps.cfg, session);
-            if (method === "get") return readPartyAllergyView(tx, cfg, partyId);
-            if (method === "post") return readAllergySendView(tx, cfg, partyId, sendTarget(body));
+            if (method === "get") return readPartyAllergyView(tx, partyId);
+            if (method === "post") return readAllergySendView(tx, partyId, sendTarget(body));
             const parsed = command(body);
             return runServiceCommand(
               tx,
@@ -137,7 +137,7 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               },
               async () => {
                 await checkAndBumpParty(tx, partyId, parsed.expectedPartyRevision, "open");
-                const view = await readPartyAllergyView(tx, cfg, partyId);
+                const view = await readPartyAllergyView(tx, partyId);
                 if (parsed.allergy !== undefined) {
                   const changes = await applyPartyAllergyPatch(
                     tx,
@@ -148,7 +148,7 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
                   );
                   await enqueueKitchenAllergyChanges(tx, cfg, changes);
                 }
-                return readPartyAllergyView(tx, cfg, partyId);
+                return readPartyAllergyView(tx, partyId);
               },
             );
           }),

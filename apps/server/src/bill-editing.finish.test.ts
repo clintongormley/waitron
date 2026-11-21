@@ -41,7 +41,7 @@ const edit = (billId: string) => inTx(venue, (tx) => readBillEditState(tx, billI
 async function own(p: Fixture, personId = venue.adminId) {
   const expectedEdit = await edit(p.billId);
   return inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, personId, {
+    saveDraft(tx, p.partyId, personId, {
       billId: p.billId,
       expectedEdit,
       draftId: null,

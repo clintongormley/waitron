@@ -11,13 +11,11 @@ import {
   type SaveDraftInput,
 } from "../order-drafts.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
-import type { TradingContext } from "../trading-context.js";
 import { firstOpenBillOf } from "./party-bill-of.js";
 
 // Content fixtures consume a draft; command-contract cases call the public writers directly.
 export async function saveDraftForTest(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   operatorId: string,
   input: Omit<SaveDraftInput, "expectedEdit">,
@@ -27,7 +25,6 @@ export async function saveDraftForTest(
   const edit = isUuid(billId) ? await readBillEditState(tx, billId) : null;
   const result = await saveDraft(
     tx,
-    cfg,
     partyId,
     operatorId,
     {
@@ -46,7 +43,6 @@ export async function saveDraftForTest(
 
 export async function takeOverDraftForTest(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,
@@ -61,7 +57,6 @@ export async function takeOverDraftForTest(
   const edit = await readBillEditState(tx, billId);
   const result = await takeOverDraft(
     tx,
-    cfg,
     partyId,
     draftId,
     operatorId,

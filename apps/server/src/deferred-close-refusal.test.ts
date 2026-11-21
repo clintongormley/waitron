@@ -252,7 +252,7 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
       [ownUnsent, t.venue.operatorId],
     ] as const)
       await inTx(t.venue, async (tx) =>
-        saveDraft(tx, t.venue.cfg, party.partyId, personId, {
+        saveDraft(tx, party.partyId, personId, {
           billId: party.tabId,
           expectedEdit: await readBillEditState(tx, party.tabId),
           draftId: null,

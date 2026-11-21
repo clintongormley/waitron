@@ -177,7 +177,6 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
 
 export async function readPartyAllergyView(
   tx: Transaction,
-  _cfg: TradingContext,
   partyId: string,
 ): Promise<PartyAllergyRead> {
   return (await readAllergyState(tx, partyId)).view;
@@ -225,7 +224,6 @@ export async function readArrivingAllergyDishes(
 
 export async function readAllergySendView(
   tx: Transaction,
-  _cfg: TradingContext,
   partyId: string,
   target: AllergySendTarget,
 ): Promise<PartyAllergyRead> {
@@ -505,7 +503,7 @@ export async function prepareAllergyRelease(
   allergy: AllergyCommand["allergy"],
   personId: string | null,
 ): Promise<void> {
-  const view = await readAllergySendView(tx, cfg, partyId, target);
+  const view = await readAllergySendView(tx, partyId, target);
   if (allergy !== undefined) {
     if (personId === null) invalid("allergy");
     const changes = await applyPartyAllergyPatch(

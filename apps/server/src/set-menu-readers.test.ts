@@ -47,7 +47,7 @@ it.each(["party", "arrival"] as const)(
     const { venue } = fixture;
     const dishes = await inTx(venue, (tx) =>
       read === "party"
-        ? readPartyAllergyView(tx, venue.cfg, partyId).then((view) => view.dishes)
+        ? readPartyAllergyView(tx, partyId).then((view) => view.dishes)
         : readArrivingAllergyDishes(tx, billId),
     );
     expect(dishes.map(({ line, allergens }) => ({ line, allergens }))).toEqual([

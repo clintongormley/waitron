@@ -832,7 +832,7 @@ describe("whether a party's service can finish, read without writing", () => {
   async function draft(p: { partyId: string; billId: string }, personId: string) {
     const [expectedEdit] = await edits(p.partyId);
     return inTx(venue, (tx) =>
-      saveDraft(tx, venue.cfg, p.partyId, personId, {
+      saveDraft(tx, p.partyId, personId, {
         billId: p.billId,
         expectedEdit: expectedEdit!,
         draftId: null,
