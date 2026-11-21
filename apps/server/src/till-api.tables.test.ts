@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
@@ -714,9 +715,7 @@ describe("table + tab routes", () => {
 
   it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {
     const { tabId, partyId, revision } = await firedTab();
-    suite.db.run(
-      sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${tabId}`,
-    );
+    await seedPendingCardPayment(suite.db, tabId);
     const refusals = [
       await sendRound(partyId, [{ menuItemId, quantity: "1" }]),
       await request(`/api/working-orders/${tabId}/lines/1`, {

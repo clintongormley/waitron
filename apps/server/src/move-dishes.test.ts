@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -687,9 +688,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a card payment of the whole bill under way on the source is order.payment_in_flight", async () => {
     const p = await party([dish("Caña", "2")]);
     const [beerLine] = await dishIds(p.bill1);
-    v.db.run(
-      sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${p.bill1}`,
-    );
+    await seedPendingCardPayment(v.db, p.bill1);
     await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill1,
     });
@@ -698,9 +697,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   it("A803 move dishes refuses: a card payment of the whole bill under way on the destination is order.payment_in_flight naming it", async () => {
     const p = await party([dish("Caña", "2")]);
     const [beerLine] = await dishIds(p.bill1);
-    v.db.run(
-      sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${p.bill2}`,
-    );
+    await seedPendingCardPayment(v.db, p.bill2);
     await refused(() => move(p.partyId, p.bill1, p.bill2, [beerLine!]), "order.payment_in_flight", {
       workingOrderId: p.bill2,
     });

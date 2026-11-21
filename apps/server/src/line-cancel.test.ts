@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { cashPayment } from "./testing/bill-venue.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -820,12 +821,7 @@ describe("Cancel item service command", () => {
 
   it("refuses removing unstarted food while its bill is being paid", async () => {
     const order = await fixture("hold");
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: "2026-10-19T12:00:00.000Z" })
-        .where(eq(workingOrders.id, order.billId)),
-    );
+    await inTx(venue, (tx) => seedPendingCardPayment(tx, order.billId));
     const ask = await askFor(order, "remove_charge");
     const before = await snapshot(order);
     await expect(cancel(order, ask)).rejects.toMatchObject({

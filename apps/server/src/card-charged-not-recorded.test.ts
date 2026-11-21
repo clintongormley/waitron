@@ -6,15 +6,13 @@ import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
-import { insertCapturedPayment } from "@waitron/payments";
 import type { CollectParams, PaymentProvider } from "@waitron/payments";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { createDiskFullState, watchForDiskFull } from "./disk-full-state.js";
 import {
@@ -100,22 +98,38 @@ function capturingLog() {
   };
 }
 
-function walkUpPay(id: string, log?: Logger, lineCount = 1) {
-  return send(venue.appWith(log === undefined ? {} : { log }), venue.cookie, "POST", "/api/pay", {
+function walkUpOn(app: BillVenue["app"], id: string, lineCount = 1) {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    id,
-    lines: lines(lineCount),
-    zoneId: counter.zoneId,
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    basket: { lines: lines(lineCount), zoneId: counter.zoneId },
   });
 }
 
-function payAgain(id: string, log?: Logger) {
-  return send(venue.appWith(log === undefined ? {} : { log }), venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: [],
-    zoneId: counter.zoneId,
-  });
+function walkUpPay(id: string, log?: Logger, lineCount = 1) {
+  return walkUpOn(venue.appWith(log === undefined ? {} : { log }), id, lineCount);
+}
+
+function payStored(id: string, log?: Logger) {
+  return send(
+    venue.appWith(log === undefined ? {} : { log }),
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${id}/payments`,
+    {
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      applied: "10.00",
+      tip: "0.00",
+    },
+  );
 }
 
 function count(table: string, column: string, id: string): number {
@@ -159,18 +173,9 @@ async function placedIssuedOrder(): Promise<string> {
   return id;
 }
 
-function strandCapturedPayment(id: string) {
-  return withTransaction(venue.db, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: id,
-      provider: "fake",
-      paymentRef: `fake-${randomUUID()}`,
-      amount: decimal("10.00"),
-      settledAt: new Date(),
-    }),
-  );
+async function strandCapturedPayment(id: string) {
+  venue.card.crashNextCollect("captured");
+  expect((await payStored(id)).status).toBe(500);
 }
 
 /**
@@ -198,7 +203,7 @@ const chargedNotRecorded = (workingOrderId: string) => ({
   params: { workingOrderId, reason: "disk_full" },
 });
 
-describe("POST /api/pay when the sale fails for a full disk after the card was charged", () => {
+describe("reader bill payments when the sale fails for a full disk after the card was charged", () => {
   it.each([diskFull(), Object.assign(new Error("no room to record"), { code: "ENOSPC" })])(
     "says a card was charged when its sale then fails for a full disk (%s)",
     async (error) => {
@@ -219,10 +224,10 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
       ]);
 
       spy.mockRestore();
-      const again = await payAgain(id);
+      const again = await walkUpPay(id);
 
       expect(again.status).toBe(200);
-      expect(again.json.outcome).toBe("captured");
+      expect(again.json.outcome).toBe("received");
       expect(collects()).toBe(before + 1);
       expect(count("sales", "working_order_id", id)).toBe(1);
       expect(fiscalRecordCount(venue, id)).toBe(1);
@@ -235,7 +240,7 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     settleFault.armed = true;
     const before = collects();
 
-    const answer = await payAgain(id, log);
+    const answer = await payStored(id, log);
 
     expect(answer.status).toBe(507);
     expect(answer.json).toEqual(chargedNotRecorded(id));
@@ -252,7 +257,7 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     settleFault.armed = true;
     const before = collects();
 
-    const answer = await payAgain(id);
+    const answer = await payStored(id);
 
     expect(answer.status).toBe(507);
     expect(answer.json).toEqual(chargedNotRecorded(id));
@@ -267,7 +272,7 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(diskFull());
     const before = collects();
 
-    const answer = await payAgain(id);
+    const answer = await payStored(id);
 
     expect(answer.status).toBe(507);
     expect(answer.json).toEqual(chargedNotRecorded(id));
@@ -617,7 +622,7 @@ function providerRows(workingOrderId: string) {
 describe.each(REAL_PROVIDERS)(
   "$name: a full disk while saving a charge the processor made",
   ({ make, charged }) => {
-    /** The till's two card routes, through the real provider and a store-watching stop. */
+    /** Counter and existing bills through the real provider and a store-watching stop. */
     function tillWith(real: RealProvider) {
       // The venue's reader is the test provider's, which has no vendor reference to pass on.
       const routed: PaymentProvider = Object.assign(
@@ -641,20 +646,7 @@ describe.each(REAL_PROVIDERS)(
         disk,
         unwatch,
         chargedLines,
-        walkUp: (id: string) =>
-          send(app, venue.cookie, "POST", "/api/pay", {
-            dining: "eat_in",
-            id,
-            lines: lines(),
-            zoneId: counter.zoneId,
-          }),
-        payAgain: (id: string) =>
-          send(app, venue.cookie, "POST", "/api/pay", {
-            dining: "eat_in",
-            id,
-            lines: [],
-            zoneId: counter.zoneId,
-          }),
+        walkUp: (id: string) => walkUpOn(app, id),
         payBill: (billId: string) =>
           send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
             submissionId: randomUUID(),
@@ -668,7 +660,7 @@ describe.each(REAL_PROVIDERS)(
       };
     }
 
-    it("says the card was charged on POST /api/pay, and files it later without charging again", async () => {
+    it("says a counter card was charged, and Pay again files it without another charge", async () => {
       const real = make();
       const till = tillWith(real);
       const id = randomUUID();
@@ -693,10 +685,10 @@ describe.each(REAL_PROVIDERS)(
       ]);
 
       await real.provider.resolvePending(new Date(), await ownsEveryPayment(venue.db));
-      const again = await till.payAgain(id);
+      const again = await till.walkUp(id);
 
       expect(again.status).toBe(200);
-      expect(again.json.outcome).toBe("captured");
+      expect(again.json.outcome).toBe("received");
       expect(await real.charges()).toEqual([charged]);
       expect(fiscalRecordCount(venue, id)).toBe(1);
     });

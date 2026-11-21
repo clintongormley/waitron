@@ -678,7 +678,7 @@ describe("a Counter bill presented with no ticket, moved to the table", () => {
     const { during, started } = await whileHeld(
       () => venue.card.holdNextCollect(),
       () => venue.card.collectCalls.length,
-      () => send(venue.app, venue.cookie, "POST", "/api/pay", { dining: "eat_in", id, lines: [] }),
+      () => contribution(id, "18.00", "card", { kind: "share", shareOf: 1, amount: undefined }),
       () =>
         refused(
           end(party, { billId: id }),

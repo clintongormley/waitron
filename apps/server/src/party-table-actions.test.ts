@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson, seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -3298,14 +3299,11 @@ describe("A803 split", () => {
     });
 
     describe("a pending payment", () => {
-      const pending = (billId: string) =>
-        v.db.run(
-          sql`update working_orders set payment_attempt_at = '2026-11-01T10:00:00.000Z' where id = ${billId}`,
-        );
+      const pending = (billId: string) => seedPendingCardPayment(v.db, billId);
 
       it("on a loose source refuses order.payment_in_flight", async () => {
         const { anna, m5, b1 } = await tableFor("A803 Payment loose", "Burger", "Water");
-        pending(b1);
+        await pending(b1);
         const water = await lineOn(b1, "Water");
 
         const error = await refusedWithNoRowChanged(() =>
@@ -3320,7 +3318,7 @@ describe("A803 split", () => {
 
       it("on a whole bill it goes", async () => {
         const { anna, m5, b2 } = await threeBills("A803 Payment whole");
-        pending(b2);
+        await pending(b2);
 
         const result = await splitSelected(anna.partyId, m5, whole(b2));
 

@@ -1,4 +1,6 @@
 import {
+  billShare,
+  takeReaderBillPayment,
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,
@@ -41,20 +43,17 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 
 import { insertCapturedPayment } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import type { PaymentProvider, PaymentResult } from "@waitron/payments";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { decimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  printSaleReceipt,
-  reprintSale,
-} from "./testing/whole-payment-fixture.js";
-import type { IntegratedPayDeps } from "./till-sale.js";
+import { printSaleReceipt, reprintSale } from "./till-sale.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   createOpenOrder,
   parkOrder,
@@ -319,6 +318,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
           origin: params.origin,
           nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
+          billPaymentId: params.billPaymentId,
           provider: "stripe",
           paymentRef,
           amount: params.amount,
@@ -342,8 +342,14 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
   };
 }
 
-function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
-  return { admission: testTradingAdmission(), ...deps(), provider, readerRef: "reader_1" };
+function payBeerOnReader(v: Venue, id: string, provider: PaymentProvider) {
+  return takeReaderBillPayment(
+    { ...deps(), admission: testTradingAdmission(), provider },
+    v.cfg,
+    id,
+    billShare("card", "2.50", { entry: "reader", submissionId: id }),
+    v.operator,
+  );
 }
 
 async function payBeer(v: Venue, id: string) {
@@ -476,23 +482,23 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const id = await park(v, one(v, v.products.beer));
     await setVat(v.products.beer, "general");
 
-    const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => setVat(v.products.beer, "super_reduced"))),
-      v.cfg,
-      { id, lines: [] },
+    const out = await payBeerOnReader(
+      v,
+      id,
+      stubProvider(() => setVat(v.products.beer, "super_reduced")),
     );
 
-    expect(out.outcome).toBe("captured");
+    expect(out.outcome).toBe("received");
     const sale = await filed(id);
     expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
-    const ticket = out.outcome === "captured" ? out.ticket : undefined;
+    const ticket = out.invoice;
     expect(ticket?.vatBreakdown).toEqual(sale.vatBreakdown);
     expect(ticket?.lines.map((line) => line.gross)).toEqual(["2.50"]);
-    const replay = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => Promise.reject(new Error("a replay must not charge")))),
-      v.cfg,
-      { id, lines: [] },
+    const replay = await payBeerOnReader(
+      v,
+      id,
+      stubProvider(() => Promise.reject(new Error("a replay must not charge"))),
     );
     expect(replay).toEqual(out);
     expect((await stored(id)).map((line) => line.vatClass)).toEqual(["reduced"]);
@@ -505,26 +511,23 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       await createOpenOrder(tx, v.cfg, id, one(v, v.products.beer), null, {
         zoneId: v.counter.zoneId,
       });
-      await insertCapturedPayment(tx, {
-        origin: v.cfg.origin,
-        nodeId: v.cfg.nodeId,
-        workingOrderId: id,
-        provider: "stripe",
-        paymentRef: `pi-${randomUUID()}`,
-        amount: decimal("3.00"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      });
     });
+    const provider = new FakePaymentProvider(suite.db);
+    const filing = { ...deps(), admission: testTradingAdmission() };
+    const cfg = { ...v.cfg, tipsEnabled: true };
+    provider.crashNextCollect("captured");
+    await expect(
+      takeReaderBillPayment(
+        { ...filing, provider },
+        cfg,
+        id,
+        billShare("card", "2.50", { entry: "reader", addedTip: "0.50", tip: "0.50" }),
+        v.operator,
+      ),
+    ).rejects.toThrow("fake provider: the process stopped after writing a captured row");
     await setVat(v.products.beer, "general");
 
-    const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => Promise.reject(new Error("recovery must not charge")))),
-      v.cfg,
-      { id, lines: [] },
-    );
-
-    expect(out.outcome).toBe("captured");
+    expect(await settlePendingBillPayments({ ...filing, cfg })).toMatchObject({ received: 1 });
     const sale = await filed(id);
     expect(sale).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(sale.lines.map((line) => line.vatRate)).toEqual([1000]);
@@ -598,13 +601,13 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     await placeOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
     await setVat(v.products.beer, "general");
 
-    const out = await payWorkingOrderIntegrated(
-      cardDeps(stubProvider(() => Promise.resolve())),
-      v.cfg,
-      { id, lines: [] },
+    const out = await payBeerOnReader(
+      v,
+      id,
+      stubProvider(() => Promise.resolve()),
     );
 
-    expect(out.outcome).toBe("captured");
+    expect(out.outcome).toBe("received");
     expect(await filed(id)).toMatchObject({ total: 250, vatBreakdown: BEER_AT_10_PERCENT });
     expect(await rates(id)).toEqual([1000]);
   });

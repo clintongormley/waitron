@@ -138,8 +138,8 @@ describe("issuance owners retain a fingerprint refusal incident", () => {
           ...(kind.includes("card") ? { entry: "manual" } : { tendered: "100.00" }),
         };
       } else {
-        path = "/api/pay";
-        body = { id, lines: [], dining: "eat_in" };
+        path = `/api/working-orders/${id}/payments`;
+        body = billShare("card", (product.unitPrice / 100).toFixed(2), { entry: "reader" });
       }
     }
     let before = snapshot();

@@ -1,13 +1,8 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import {
-  orderDraftLines,
-  orderGroups,
-  parties,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { orderDraftLines, orderGroups, parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyPatch } from "@waitron/module";
@@ -475,11 +470,7 @@ describe("A669 atomic submit", () => {
           d === null
             ? await directCommand(p, "fire", allergy)
             : await draftCommand(p, d, "fire", allergy);
-        if (cause === "payment")
-          await v.db
-            .update(workingOrders)
-            .set({ paymentAttemptAt: "2026-10-19T12:00:00.000Z" })
-            .where(eq(workingOrders.id, p.tabId));
+        if (cause === "payment") await seedPendingCardPayment(v.db, p.tabId);
         if (cause === "editor") ask.expectedEdit.editorVersion++;
         if (cause === "pricing") {
           if (d !== null)

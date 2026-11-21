@@ -1,4 +1,15 @@
-import { payFreshCounterInCash, paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import {
+  takeReaderBillPayment,
+  type ReaderBillPaymentDeps,
+  type CounterPaymentBasket,
+} from "./bill-payments.js";
+import {
+  billShare,
+  payFreshCounterInCash,
+  paySavedBillInCash,
+} from "./testing/bill-payment-fixture.js";
+import { readBillEditState } from "./bill-editing.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { openTillSession } from "./testing/session-device.js";
 import { departments } from "@waitron/db";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
@@ -14,8 +25,7 @@ import { createDepartment, configureZone } from "@waitron/venue-service";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { decimal } from "@waitron/shared";
-import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
+import { SimulatorPaymentProvider } from "@waitron/payments";
 import { loginWithPin } from "@waitron/identity";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { payWorkingOrderIntegratedOrchestration as payIntegrated } from "./testing/whole-payment-fixture.js";
@@ -77,6 +87,26 @@ async function paymentOperator() {
     sessionId: await openTillSession(venue.db, { deviceId: venue.cfg.origin.deviceId, personId }),
   };
 }
+async function payOnReader(
+  id: string,
+  deps: ReaderBillPaymentDeps,
+  cfg = venue.cfg,
+  basket?: CounterPaymentBasket,
+) {
+  return takeReaderBillPayment(
+    deps,
+    cfg,
+    id,
+    {
+      ...billShare("card", basket === undefined ? "3.00" : "0.00"),
+      submissionId: id,
+      expectedEdit: basket === undefined ? await readBillEditState(venue.db, id) : null,
+      entry: "reader",
+    },
+    await paymentOperator(),
+    basket,
+  );
+}
 const request = (id = randomUUID()) => ({
   id,
   zoneId: venue.zoneId,
@@ -104,22 +134,14 @@ const payBill = (id: string, method: "cash" | "card", entry?: "reader") =>
 it("integrated capture files the department description and replay keeps its filed facts", async () => {
   const provider = new SimulatorPaymentProvider(venue.db);
   const input = request();
-  const first = await payIntegrated(
-    { admission: testTradingAdmission(), ...deps(), provider },
-    venue.cfg,
-    input,
-  );
-  expect(first.outcome).toBe("captured");
+  const filing = { admission: testTradingAdmission(), ...deps(), provider };
+  const pay = () => payOnReader(input.id, filing, venue.cfg, input);
+  const first = await pay();
+  expect(first.outcome).toBe("received");
   expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
   const before = facts();
   await authored("New dining menu");
-  expect(
-    await payIntegrated(
-      { admission: testTradingAdmission(), ...deps(), provider },
-      venue.cfg,
-      input,
-    ),
-  ).toEqual(first);
+  expect(await pay()).toEqual(first);
   expect(facts()).toEqual(before);
   expect(records(input.id)).toEqual([{ description: "Dining meals" }]);
 });
@@ -191,17 +213,12 @@ it("a zone moved before capture selects the same current department for descript
     await configureZone(tx, { zoneId: venue.zoneId, departmentId: department.id });
     return department.id;
   });
-  const result = await payIntegrated(
-    {
-      admission: testTradingAdmission(),
-      ...deps(),
-      provider: new SimulatorPaymentProvider(venue.db),
-    },
-    venue.cfg,
-    { id, lines: [], simulationOutcome: "captured" },
-  );
-  expect(result.outcome).toBe("captured");
-  if (result.outcome !== "captured") throw new Error("Expected a captured sale");
+  const result = await payOnReader(id, {
+    admission: testTradingAdmission(),
+    ...deps(),
+    provider: venue.card,
+  });
+  expect(result.outcome).toBe("received");
   expect(
     venue.db.all<{ departmentId: string }>(
       sql`select receipt_department_id as departmentId from sales where working_order_id = ${id}`,
@@ -212,41 +229,21 @@ it("a zone moved before capture selects the same current department for descript
 
 it("recovery files the current department description without charging the card again", async () => {
   const id = await open();
-  await withTransaction(venue.db, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: id,
-      provider: "simulator",
-      paymentRef: randomUUID(),
-      amount: decimal("3.00"),
-      settledAt: new Date(),
-      externalRef: randomUUID(),
-    }),
+  const beforeCharge = venue.card.collectCalls.length;
+  venue.card.crashNextCollect("captured");
+  const filing = { admission: testTradingAdmission(), ...deps(), provider: venue.card };
+  await expect(payOnReader(id, filing)).rejects.toThrow(
+    "fake provider: the process stopped after writing a captured row",
   );
-  const provider = new SimulatorPaymentProvider(venue.db);
-  const collect = vi.spyOn(provider, "collect");
   await authored("Recovered dining meals");
-  expect(
-    (
-      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
-        id,
-        lines: [],
-      })
-    ).outcome,
-  ).toBe("captured");
+  expect(await settlePendingBillPayments({ ...filing, cfg: venue.cfg })).toMatchObject({
+    received: 1,
+  });
   expect(records(id)).toEqual([{ description: "Recovered dining meals" }]);
-  expect(collect).not.toHaveBeenCalled();
   const before = facts();
   await authored();
-  expect(
-    (
-      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
-        id,
-        lines: [],
-      })
-    ).outcome,
-  ).toBe("captured");
+  expect((await payOnReader(id, filing)).outcome).toBe("received");
+  expect(venue.card.collectCalls).toHaveLength(beforeCharge + 1);
   expect(facts()).toEqual(before);
 });
 
@@ -349,9 +346,8 @@ it("a description cleared during capture leaves payment recovery pending, then r
   });
   const input = request();
   const before = facts();
-  await expect(
-    payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, input),
-  ).rejects.toMatchObject({
+  const filing = { admission: testTradingAdmission(), ...deps(), provider };
+  await expect(payOnReader(input.id, filing, venue.cfg, input)).rejects.toMatchObject({
     code: "department.operation_description_required",
   });
   const after = facts();
@@ -366,14 +362,9 @@ it("a description cleared during capture leaves payment recovery pending, then r
     sale_id: null,
   });
   await authored("Recovered new menu");
-  expect(
-    (
-      await payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
-        id: input.id,
-        lines: [],
-      })
-    ).outcome,
-  ).toBe("captured");
+  expect(await settlePendingBillPayments({ ...filing, cfg: venue.cfg })).toMatchObject({
+    received: 1,
+  });
   expect(records(input.id)).toEqual([{ description: "Recovered new menu" }]);
   expect(charged).toHaveBeenCalledTimes(1);
 });
@@ -444,7 +435,8 @@ it.each(["cash", "integrated"] as const)(
         "3.00",
       );
     } else {
-      await payIntegrated(
+      await payOnReader(
+        input.id,
         {
           admission: testTradingAdmission(),
           ...deps(),
@@ -505,11 +497,7 @@ it.each(["cash", "integrated"] as const)(
             id,
             "3.00",
           )
-        : payIntegrated({ admission: testTradingAdmission(), ...deps(), backend, provider }, cfg, {
-            id,
-            lines: [],
-            simulationOutcome: "captured",
-          });
+        : payOnReader(id, { admission: testTradingAdmission(), ...deps(), backend, provider }, cfg);
     await expect(pay).rejects.toMatchObject({
       code: "order.service_context_missing",
       params: { workingOrderId: id },
@@ -529,11 +517,13 @@ it.each([undefined, "", "   "])(
     const provider = new SimulatorPaymentProvider(venue.db);
     const collect = vi.spyOn(provider, "collect");
     const before = facts();
+    const input = request();
     await expect(
-      payIntegrated(
+      payOnReader(
+        input.id,
         { admission: testTradingAdmission(), ...deps(), provider },
         venue.cfg,
-        request(),
+        input,
       ),
     ).rejects.toMatchObject({ code: "department.operation_description_required" });
     expect(collect).not.toHaveBeenCalled();
@@ -574,30 +564,22 @@ it("missing description refuses unpaid issuance without allocating an invoice", 
 
 it("missing description leaves an unfiled capture recoverable without touching the reader", async () => {
   const id = await open();
-  await withTransaction(venue.db, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      workingOrderId: id,
-      provider: "simulator",
-      paymentRef: randomUUID(),
-      amount: decimal("3.00"),
-      settledAt: new Date(),
-      externalRef: randomUUID(),
-    }),
+  const beforeCharge = venue.card.collectCalls.length;
+  venue.card.crashNextCollect("captured");
+  const filing = { admission: testTradingAdmission(), ...deps(), provider: venue.card };
+  await expect(payOnReader(id, filing)).rejects.toThrow(
+    "fake provider: the process stopped after writing a captured row",
   );
   await authored();
-  const provider = new SimulatorPaymentProvider(venue.db);
-  const collect = vi.spyOn(provider, "collect");
   const before = facts();
-  await expect(
-    payIntegrated({ admission: testTradingAdmission(), ...deps(), provider }, venue.cfg, {
-      id,
-      lines: [],
-    }),
-  ).rejects.toMatchObject({ code: "department.operation_description_required" });
+  const pass = await settlePendingBillPayments({ ...filing, cfg: venue.cfg });
+  expect(pass).toMatchObject({
+    received: 0,
+    pending: 1,
+    errors: [{ error: "AppError: department.operation_description_required" }],
+  });
   expect(facts()).toEqual(before);
-  expect(collect).not.toHaveBeenCalled();
+  expect(venue.card.collectCalls).toHaveLength(beforeCharge + 1);
 });
 
 it.each(["cash", "card"] as const)(

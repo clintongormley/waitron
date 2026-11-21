@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { setMadeHere } from "./testing/made-here-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -519,14 +520,15 @@ describe("permanent station deletion", () => {
   /** Leaves card money on the order unresolved; the check reads that it still is. */
   const unresolvedCard = {
     "a card is at the reader": async (v: PartyVenue, orderId: string) => {
-      await inTx(v, (tx) =>
-        tx.update(workingOrders).set({ paymentAttemptAt: at }).where(eq(workingOrders.id, orderId)),
-      );
+      const paymentId = await seedPendingCardPayment(v.db, orderId);
       return async () => {
-        const [order] = await inTx(v, (tx) =>
-          tx.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
+        const [payment] = await inTx(v, (tx) =>
+          tx
+            .select({ state: billPayments.state })
+            .from(billPayments)
+            .where(eq(billPayments.id, paymentId)),
         );
-        expect(order!.paymentAttemptAt).toBe(at);
+        expect(payment).toEqual({ state: "pending" });
       };
     },
     "a card refund waits": async (v: PartyVenue, orderId: string) => {

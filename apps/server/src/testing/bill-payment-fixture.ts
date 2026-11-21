@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { withTransaction, type Database } from "@waitron/db";
+import {
+  billPayments,
+  persons,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import {
@@ -193,4 +200,24 @@ export async function paySavedBillInCash(
   );
   if (result.invoice == null) throw new Error(`pay: bill ${id} has no invoice`);
   return result.invoice;
+}
+
+export async function seedPendingCardPayment(db: Database | Transaction, billId: string) {
+  const [person] = await db.select({ id: persons.id }).from(persons).orderBy(persons.id).limit(1);
+  const payer = person ?? (await seedPersons(db, { displayName: "Card payment tester" }))[0]!;
+  const [payment] = await db
+    .insert(billPayments)
+    .values({
+      workingOrderId: billId,
+      submissionId: randomUUID(),
+      fingerprint: "pending card fixture",
+      kind: "contribution",
+      method: "card",
+      applied: 1,
+      state: "pending",
+      requestedBy: payer.id,
+      source: "operator_script",
+    })
+    .returning({ id: billPayments.id });
+  return payment!.id;
 }

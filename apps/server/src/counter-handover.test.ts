@@ -33,6 +33,7 @@ import {
 } from "./testing/bill-venue.js";
 import {
   closeZeroBill,
+  getBillBalance,
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,
@@ -41,7 +42,6 @@ import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { openTillSession } from "./testing/session-device.js";
-import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 
@@ -342,31 +342,34 @@ async function closeCreditedBill(id: string) {
   return invoice;
 }
 
-/** Pays a placed order on the card reader through the till's integrated card collect. */
-async function collectByCard(id: string): Promise<void> {
-  const out = await payWorkingOrderIntegrated(
-    { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-    venue.cfg,
-    { id, lines: [] },
-    venue.operatorId,
-  );
-  expect(out.outcome).toBe("captured");
+function collectByCardRequest(id: string, outstanding: string) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    applied: outstanding,
+    tip: "0.00",
+  });
 }
 
-/**
- * Pays a placed order on the card reader whose capture is recorded but whose reply is lost, then
- * presses Pay again, which files the captured payment without charging the card twice.
- */
+async function collectByCard(id: string): Promise<void> {
+  const { outstanding } = await getBillBalance(deps(), id);
+  const out = await collectByCardRequest(id, outstanding);
+  expect(out.status, JSON.stringify(out.json)).toBe(200);
+  expect(out.json.outcome).toBe("received");
+}
+
 async function collectByCardAfterLostReply(id: string): Promise<void> {
+  const { outstanding } = await getBillBalance(deps(), id);
+  const before = venue.card.collectCalls.length;
   venue.card.crashNextCollect("captured");
-  await expect(
-    payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-      venue.cfg,
-      { id, lines: [] },
-    ),
-  ).rejects.toThrow(/process stopped/);
-  await collectByCard(id);
+  expect((await collectByCardRequest(id, outstanding)).status).toBe(500);
+  const recovered = await collectByCardRequest(id, outstanding);
+  expect(recovered.status, JSON.stringify(recovered.json)).toBe(200);
+  expect(recovered.json.outcome).toBe("received");
+  expect(venue.card.collectCalls).toHaveLength(before + 1);
 }
 
 /** Records a credit note for the bill's whole issued invoice, so it owes nothing. */
@@ -549,17 +552,20 @@ describe("paying a counter order sent without payment, before it is handed over"
 describe("paying a pay-first counter order", () => {
   it("a pay-first order paid by card before it was sent records no handover, and stays waiting and on its station queue", async () => {
     const id = randomUUID();
-    const out = await payWorkingOrderIntegrated(
-      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-      venue.cfg,
-      {
-        id,
+    const out = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      dining: "eat_in",
+      basket: {
         zoneId: zones.prepay,
         lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
       },
-      venue.operatorId,
-    );
-    expect(out.outcome).toBe("captured");
+    });
+    expect(out.status, JSON.stringify(out.json)).toBe(200);
+    expect(out.json.outcome).toBe("received");
 
     expect((await orderRow(id)).collectedAt).toBeNull();
     expect(await waitingRow(id)).toMatchObject({ status: "settled", canHandOver: true });

@@ -41,7 +41,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
+import { paySavedBillInCash, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   fireGroup,
@@ -863,15 +863,11 @@ describe("the bill's revision and a card payment (menus plan D10, D22; owner 202
     expect(await revisionOf(s.partyId)).toBe(party + 3);
   });
 
-  it("takes a served mark, its undo and a group's served mark while a card payment runs on the bill, leaving the payment's mark", async () => {
+  it("takes a served mark, its undo and a group's served mark while a card payment runs on the bill, leaving the payment pending", async () => {
     const v = await setupVenue();
     const s = await croquettes(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
-    const mark = new Date().toISOString();
-    await suite.db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: mark })
-      .where(eq(workingOrders.id, s.tabId));
+    const paymentId = await seedPendingCardPayment(suite.db, s.tabId);
 
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
     expect(await lineById(s.partyId, s.croq.id)).toMatchObject({ servedQuantity: 2000 });
@@ -883,11 +879,11 @@ describe("the bill's revision and a card payment (menus plan D10, D22; owner 202
       servedAt: expect.any(String),
     });
 
-    const [bill] = await suite.db
-      .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, s.tabId));
-    expect(bill).toEqual({ paymentAttemptAt: mark });
+    const [payment] = await suite.db
+      .select({ state: billPayments.state })
+      .from(billPayments)
+      .where(eq(billPayments.id, paymentId));
+    expect(payment).toEqual({ state: "pending" });
   });
 });
 

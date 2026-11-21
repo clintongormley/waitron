@@ -1,6 +1,7 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { billSetMenuCopies, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { billSetMenuCopies, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal } from "@waitron/shared";
@@ -177,12 +178,7 @@ it("keeps a previous part payment when an empty set menu is added and cancelled"
 it("refuses a count change while payment is in flight", async () => {
   const { venue } = fixture;
   const { tabId } = await emptyBill();
-  await inTx(venue, (tx) =>
-    tx
-      .update(workingOrders)
-      .set({ paymentAttemptAt: new Date().toISOString() })
-      .where(eq(workingOrders.id, tabId)),
-  );
+  await inTx(venue, (tx) => seedPendingCardPayment(tx, tabId));
   await expect(setCount(tabId, 1)).rejects.toMatchObject({ code: "order.payment_in_flight" });
   expect(await rowsOf(tabId)).toEqual([]);
 });

@@ -26,9 +26,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
 import { cancelRefundShare, decimal, workingOrderId } from "@waitron/shared";
-import { withTransaction } from "@waitron/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -47,7 +45,7 @@ import { receiptLines } from "./receipt-adjustments.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { addPortionRound, portionBill } from "./testing/portion-bill.js";
-import { payWorkingOrderIntegratedOrchestration, type IntegratedPayDeps } from "./till-sale.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { createTable } from "./testing/live-table.js";
 import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -239,49 +237,16 @@ function portionIdsOf(portions: readonly PortionRef[], cohortOf: PortionRef): st
     .sort();
 }
 
-/** A card reader that captures what it is asked for; `charge: false` refuses to charge at all. */
-function cardDeps(charge: boolean): IntegratedPayDeps {
-  const fail = () => Promise.reject(new Error("cardDeps: not used"));
-  const provider: PaymentProvider = {
-    provider: "stripe",
-    capabilities: { partialRefund: true },
-    async collect(params) {
-      if (!charge) throw new Error("cardDeps: this payment must not charge");
-      const paymentRef = `pi-${randomUUID()}`;
-      const settledAt = new Date();
-      await withTransaction(venue.db, (tx) =>
-        insertCapturedPayment(tx, {
-          origin: params.origin,
-          nodeId: params.nodeId,
-          workingOrderId: params.workingOrderId,
-          provider: "stripe",
-          paymentRef,
-          amount: params.amount,
-          settledAt,
-          externalRef: paymentRef,
-        }),
-      );
-      return {
-        provider: "stripe",
-        paymentRef,
-        state: "captured",
-        amount: params.amount,
-        settledAt,
-      };
-    },
-    resolvePending: fail,
-    void: fail,
-    refund: fail,
-    partialRefund: fail,
-  };
-  return {
-    admission: testTradingAdmission(),
-    db: venue.db,
-    backend: venue.backend,
-    clock: venue.clock,
-    provider,
-    readerRef: "r1",
-  };
+function payOnReader(billId: string) {
+  return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+    submissionId: randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    applied: "0.10",
+    tip: "0.00",
+  });
 }
 
 /** The filed rows of a bill of two sweets as portions, each linked to both. */
@@ -399,48 +364,22 @@ describe("A803 portions: filing a bill of portions", () => {
   it("A803 portions: a card captured for the whole bill links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("2"));
 
-    const out = await payWorkingOrderIntegratedOrchestration(
-      cardDeps(true),
-      venue.cfg,
-      {
-        id: billId,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        lines: [],
-      },
-      venue.operatorId,
-    );
+    const out = await payOnReader(billId);
 
-    expect(out.outcome).toBe("captured");
+    expect(out.status).toBe(200);
+    expect(out.json.outcome).toBe("received");
     expect(await filedRows(billId)).toEqual(twoSweetsFiled(portions));
   });
 
   it("A803 portions: a card capture filed by recovery links its rows to their portions", async () => {
     const { billId, portions } = await seed(sweets("2"));
-    await inTx(venue, (tx) =>
-      insertCapturedPayment(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: billId,
-        provider: "stripe",
-        paymentRef: `pi-${randomUUID()}`,
-        amount: decimal("0.10"),
-        settledAt: new Date(),
-        externalRef: `pi_lost_${randomUUID()}`,
-      }),
-    );
+    const before = venue.card.collectCalls.length;
+    venue.card.crashNextCollect("captured");
+    expect((await payOnReader(billId)).status).toBe(500);
 
-    const out = await payWorkingOrderIntegratedOrchestration(
-      cardDeps(false),
-      venue.cfg,
-      {
-        id: billId,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        lines: [],
-      },
-      venue.operatorId,
-    );
-
-    expect(out.outcome).toBe("captured");
+    const pass = await settlePendingBillPayments({ ...venue, admission: testTradingAdmission() });
+    expect(pass).toMatchObject({ received: 1, pending: 0, errors: [] });
+    expect(venue.card.collectCalls).toHaveLength(before + 1);
     expect(await filedRows(billId)).toEqual(twoSweetsFiled(portions));
   });
 

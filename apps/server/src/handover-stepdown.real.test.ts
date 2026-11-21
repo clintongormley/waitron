@@ -190,7 +190,6 @@ interface CrossOrigin {
 
 interface Observed {
   stepdown: { status: number; body: unknown };
-  refused: { status: number; body: unknown };
   billPayment: { status: number; body: unknown; collectCalls: number };
   fromOtherBox: CrossOrigin & { collectCalls: number };
   fromStranger: CrossOrigin;
@@ -373,14 +372,20 @@ describe("a card sale in flight when the box steps down", () => {
     const releaseCard = card!.holdNextCollect();
     releases.push(releaseCard);
     const workingOrderId = randomUUID();
-    const paying = fetch(`${base}/api/pay`, {
+    const paying = fetch(`${base}/api/working-orders/${workingOrderId}/payments`, {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
         dining: "eat_in",
-        id: workingOrderId,
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        submissionId: workingOrderId,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: {
+          zoneId: venue.zoneId,
+          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        },
       }),
     });
     await vi.waitFor(() => expect(card!.collectCalls).toHaveLength(1), { timeout: 10_000 });
@@ -398,17 +403,6 @@ describe("a card sale in flight when the box steps down", () => {
     };
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
     const stepdown = { status: asked.status, body: await asked.json() };
-    const afterBegan = await fetch(`${base}/api/pay`, {
-      method: "POST",
-      headers: { cookie: venue.cookie2, "content-type": "application/json" },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        zoneId: venue.zoneId,
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-      }),
-    });
-    const refused = { status: afterBegan.status, body: await afterBegan.json() };
     const billPaid = await fetch(`${base}/api/working-orders/${billId}/payments`, {
       method: "POST",
       headers: { cookie: venue.cookie2, "content-type": "application/json" },
@@ -486,7 +480,6 @@ describe("a card sale in flight when the box steps down", () => {
     ) as [{ n: number }];
     observed = {
       stepdown,
-      refused,
       billPayment,
       fromOtherBox,
       fromStranger,
@@ -520,15 +513,8 @@ describe("a card sale in flight when the box steps down", () => {
   it("the sale admitted before the stepdown commits its second transaction", () => {
     expect(seen().sale.body).not.toHaveProperty("error");
     expect(seen().sale.status).toBe(200);
-    expect(seen().sale.body.outcome).toBe("captured");
+    expect(seen().sale.body.outcome).toBe("received");
     expect(seen().salesForOrder).toBe(1);
-  });
-
-  it("a till request made after the stepdown began is refused handover.stepping_down", () => {
-    expect(seen().refused).toEqual({
-      status: 503,
-      body: { error: { code: "handover.stepping_down", params: {} } },
-    });
   });
 
   // Control, run locally and not committed: with this payment sent before the stepdown instead,

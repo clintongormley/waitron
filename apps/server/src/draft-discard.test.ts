@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -214,13 +215,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       });
       expect(saved.status).toBe(200);
       const draft = (saved.json as unknown as BillDraftSnapshot).draft!;
-      if (refusal === "paying")
-        await inTx(venue, (tx) =>
-          tx
-            .update(workingOrders)
-            .set({ paymentAttemptAt: "2026-10-17T05:00:00.000Z" })
-            .where(eq(workingOrders.id, p.billId)),
-        );
+      if (refusal === "paying") await inTx(venue, (tx) => seedPendingCardPayment(tx, p.billId));
       const before = await frozen();
       const answer = await discard(
         { ...p, draft },
@@ -528,19 +523,19 @@ describe("Discard resolves the whole owned draft atomically", () => {
     "refuses a %s bill before discarding fresh work",
     async (status) => {
       const p = await setup();
-      await inTx(venue, (tx) =>
-        tx
+      await inTx(venue, async (tx) => {
+        if (status === "paying") {
+          await seedPendingCardPayment(tx, p.billId);
+          return;
+        }
+        await tx
           .update(workingOrders)
-          .set(
-            status === "paying"
-              ? { paymentAttemptAt: "2026-10-17T05:00:00.000Z" }
-              : {
-                  status,
-                  ...(status === "settled" ? { settledAt: "2026-10-17T05:00:00.000Z" } : {}),
-                },
-          )
-          .where(eq(workingOrders.id, p.billId)),
-      );
+          .set({
+            status,
+            ...(status === "settled" ? { settledAt: "2026-10-17T05:00:00.000Z" } : {}),
+          })
+          .where(eq(workingOrders.id, p.billId));
+      });
       const before = await frozen();
       const answer = await discard(p, await request(p));
       expect(answer.json).toMatchObject({

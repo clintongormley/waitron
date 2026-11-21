@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 
@@ -5206,10 +5207,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     await withTransaction(db, (tx) => createStation(tx, { name: "Kitchen", isDefault: true }));
     const id = randomUUID();
     await parkProducts(venue.cfg, { id, lines: [{ productId: venue.coffeeId, quantity: "1" }] });
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
-      .where(eq(workingOrders.id, id));
+    await seedPendingCardPayment(db, id);
     const [before] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     const lines = await db
       .select()
@@ -5310,7 +5308,13 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(lines).toEqual(before.lines.map((row) => ({ ...row, note })));
   }
 
-  it("takes a dish's note while a card is at the reader, keeping the payment's mark", async () => {
+  function expectPaymentPending(id: string) {
+    expect(db.all(sql`select state from bill_payments where working_order_id = ${id}`)).toEqual([
+      { state: "pending" },
+    ]);
+  }
+
+  it("takes a dish's note and keeps its reader payment pending", async () => {
     const { cfg, id, before } = await payingHeldOrder();
 
     await withTransaction(db, (tx) =>
@@ -5318,6 +5322,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     );
 
     await onlyNoteChanged(id, before, "No salt");
+    expectPaymentPending(id);
   });
 
   it("takes a dish's note while a card refund waits on its bill", async () => {
@@ -5346,7 +5351,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     ).toEqual([{ state: "pending" }]);
   });
 
-  it("renames the bill while a card is at the reader, keeping the payment's mark", async () => {
+  it("renames the bill and keeps its reader payment pending", async () => {
     const { cfg, coffeeId, id, before } = await payingHeldOrder();
 
     await setWorkingOrderLabel(db, id, { label: "Window", revision: before.order!.revision });
@@ -5371,6 +5376,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual(before.lines);
+    expectPaymentPending(id);
   });
 
   it("still refuses a quantity change, with or without a note, writing nothing", async () => {
@@ -5411,10 +5417,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
       lines: [{ productId: venue.coffeeId, quantity: "1", options: answer(0) }],
     });
     if (money === "a card at the reader") {
-      await db
-        .update(workingOrders)
-        .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
-        .where(eq(workingOrders.id, id));
+      await seedPendingCardPayment(db, id);
     } else {
       await pendingRefund(venue.cfg, id);
     }
@@ -6759,19 +6762,16 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
-      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
-      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+      const billPaymentId = await seedPendingCardPayment(tx, tabId);
 
       await setLineCourse(tx, cfg, tabId, 2, post.id);
 
       const after = await courseItemsFor(tx, tabId);
       expect(byLine(after, main).courseId).toBe(post.id);
       expect(byLine(after, main).firedAt).toBeNull();
-      const [order] = await tx
-        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, tabId));
-      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
+      expect(tx.all(sql`select state from bill_payments where id = ${billPaymentId}`)).toEqual([
+        { state: "pending" },
+      ]);
     });
   });
 });
@@ -6993,18 +6993,15 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
-      const paymentAttemptAt = "2026-11-12T10:00:00.000Z";
-      await tx.update(workingOrders).set({ paymentAttemptAt }).where(eq(workingOrders.id, tabId));
+      const billPaymentId = await seedPendingCardPayment(tx, tabId);
       expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).toBeNull();
 
       await sendLines(tx, cfg, tabId, [2]);
 
       expect((await itemsByLineNo(tx, tabId)).get(2)!.firedAt).not.toBeNull();
-      const [order] = await tx
-        .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, tabId));
-      expect(order!.paymentAttemptAt).toBe(paymentAttemptAt);
+      expect(tx.all(sql`select state from bill_payments where id = ${billPaymentId}`)).toEqual([
+        { state: "pending" },
+      ]);
     });
   });
 });

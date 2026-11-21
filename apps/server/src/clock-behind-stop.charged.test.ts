@@ -6,6 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { assignMenuToVenue, createMenu, createCategory, createProduct } from "@waitron/menu";
 import type { TrustedClock } from "@waitron/fiscal";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   inTx,
@@ -107,21 +108,34 @@ function dish() {
 }
 
 function cardSale(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", {
+  return send(app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     dining: "eat_in",
-    id,
-    lines: dish(),
-    zoneId: counter.zoneId,
+    submissionId: id,
+    kind: "share",
+    shareOf: 1,
+    method: "card",
+    entry: "reader",
+    basket: { zoneId: counter.zoneId, lines: dish() },
   });
 }
 
-function payStored(app: BillVenue["app"], id: string) {
-  return send(app, venue.cookie, "POST", "/api/pay", {
-    dining: "eat_in",
-    id,
-    lines: [],
-    zoneId: counter.zoneId,
-  });
+async function payIssued(app: BillVenue["app"], id: string) {
+  const path = `/api/working-orders/${id}/payments`;
+  return send(
+    app,
+    venue.cookie,
+    "POST",
+    path,
+    await observedPaymentBody(venue.db, path, {
+      submissionId: id,
+      kind: "share",
+      shareOf: 1,
+      applied: "10.00",
+      tip: "0.00",
+      method: "card",
+      entry: "reader",
+    }),
+  );
 }
 
 function payBill(app: BillVenue["app"], billId: string, amount: string) {
@@ -223,13 +237,13 @@ it("a card charged as the stop begins on an already-invoiced order is recorded, 
   const before = collects();
   const reader = movableClock(now);
 
-  const { answer, release } = await heldAtReader(() => payStored(venue.appAt(reader.clock), id));
+  const { answer, release } = await heldAtReader(() => payIssued(venue.appAt(reader.clock), id));
   reader.moveTo(behind);
   release();
   const paid = await answer;
 
   expect(paid.status).toBe(200);
-  expect(paid.json.outcome).toBe("captured");
+  expect(paid.json.outcome).toBe("received");
   expect(collects()).toBe(before + 1);
   const [times] = tenderTimes(id);
   expect(times!.tender).toBe(times!.provider);
@@ -288,7 +302,7 @@ it.each(["counter", "bill"] as const)(
     expect(fiscalRecordCount(venue, id)).toBe(0);
     expect(allRecords()).toBe(records);
     if (surface === "counter") {
-      const stillStopped = await payStored(venue.appAt(reader.clock), id);
+      const stillStopped = await cardSale(venue.appAt(reader.clock), id);
       expect(stillStopped.status).toBe(507);
       expect(stillStopped.json).toEqual({
         code: "sale.charged_not_recorded",
@@ -297,11 +311,22 @@ it.each(["counter", "bill"] as const)(
       expect(capturedUnlinked(id)).toBe(1);
       expect(collects()).toBe(before + 1);
       expect(allRecords()).toBe(records);
-      const paid = await payStored(venue.appAt(clockAt(now + 2 * MINUTE)), id);
+      const paid = await cardSale(venue.appAt(clockAt(now + 2 * MINUTE)), id);
       expect(paid.status).toBe(200);
-      expect(paid.json.outcome).toBe("captured");
+      expect(paid.json.outcome).toBe("received");
     } else {
-      const wholeOrderRetry = await payStored(venue.appAt(reader.clock), id);
+      const wholeOrderRetry = await send(
+        venue.appAt(reader.clock),
+        venue.cookie,
+        "POST",
+        "/api/pay",
+        {
+          dining: "eat_in",
+          id,
+          lines: [],
+          zoneId: counter.zoneId,
+        },
+      );
       expect(wholeOrderRetry.status).toBe(409);
       expect(wholeOrderRetry.json.code).toBe("clock.unusable");
       await settlePendingBillPayments({

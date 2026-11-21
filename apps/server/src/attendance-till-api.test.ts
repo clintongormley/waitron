@@ -218,20 +218,27 @@ describe("till attendance recorder admission", () => {
     expect(opened.status).toBe(200);
     const sessionCookie = opened.headers.get("set-cookie")!.split(";")[0]!;
     vi.setSystemTime(new Date("2026-10-14T13:00:00.987Z"));
-    const paid = await api.request("/api/pay", {
+    const id = newId();
+    const paid = await api.request(`/api/working-orders/${id}/payments`, {
       method: "POST",
       headers: { cookie: `${cookie}; ${sessionCookie}`, "content-type": "application/json" },
       body: JSON.stringify({
         dining: "eat_in",
-        id: newId(),
-        zoneId: v.counter.zoneId,
-        lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        submissionId: id,
+        kind: "share",
+        shareOf: 1,
+        method: "card",
+        entry: "reader",
+        basket: {
+          zoneId: v.counter.zoneId,
+          lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1" }],
+        },
         personId: "untrusted person",
         at: "2026-10-15T20:00:00Z",
       }),
     });
     expect(paid.status).toBe(200);
-    expect(await paid.json()).toMatchObject({ outcome: "captured", ticket: { total: "12.00" } });
+    expect(await paid.json()).toMatchObject({ outcome: "received", invoice: { total: "12.00" } });
     expect(
       (await suite.db.select().from(staffActivity)).map((row) => [row.personId, row.lastAt]),
     ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z"]]);

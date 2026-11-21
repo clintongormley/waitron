@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1017,10 +1018,7 @@ describe("draft bill ownership", () => {
     const v = await setupVenue();
     const { partyId, tabId } = await seated(v);
     const draft = await onBill(v, partyId, tabId);
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: "2026-10-17T00:00:00.000Z" })
-      .where(eq(workingOrders.id, tabId));
+    await seedPendingCardPayment(db, tabId);
     const error = { code: "order.payment_in_flight", params: { workingOrderId: tabId } };
     await refusedWritingNothing(() => onBill(v, partyId, tabId, SAM), error);
     await refusedWritingNothing(() => onBill(v, partyId, tabId, ALEX, draft), error);

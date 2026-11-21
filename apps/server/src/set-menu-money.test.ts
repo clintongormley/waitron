@@ -5,13 +5,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { createPinThrottle } from "@waitron/identity";
-import { insertCapturedPayment } from "@waitron/payments";
+import { insertCapturedPayment, payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import { closeBillDeferredTx } from "./deferred-close.js";
 import { recordUnpaidDeparture } from "./unpaid-departure.js";
-import { completeBillPayment, issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payments.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
 import { priceStoredOrderForIssuance, readOrderRevision } from "./working-order.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
@@ -29,7 +30,6 @@ import {
 } from "./testing/party-venue.js";
 import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 
@@ -171,33 +171,6 @@ it("refuses collecting an already placed order", async () => {
   ).rejects.toMatchObject({ code: "set_menu.payment_not_ready" });
 });
 
-it("records a capture the reader already made without asking it to collect again", async () => {
-  const id = await bill();
-  const provider = new FakePaymentProvider(venue.db);
-  await inTx(venue, (tx) =>
-    insertCapturedPayment(tx, {
-      origin: venue.cfg.origin,
-      nodeId: venue.cfg.nodeId,
-      provider: "fake",
-      workingOrderId: id,
-      paymentRef: crypto.randomUUID(),
-      amount: decimal("26.00"),
-      settledAt: venue.clock.now().instant,
-    }),
-  );
-  const outcome = await payWorkingOrderIntegratedOrchestration(
-    { ...deps(), provider },
-    venue.cfg,
-    { id, expectedEdit: null, lines: [] },
-    venue.operator.personId,
-  );
-  expect(outcome).toMatchObject({ outcome: "captured", ticket: { total: "26.00" } });
-  expect(provider.collectCalls).toHaveLength(0);
-  expect(
-    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
-  ).toHaveLength(1);
-});
-
 it("refuses recording an unpaid departure on a new set-menu bill", async () => {
   const id = await bill();
   const { partyId } = await billRow(venue, id);
@@ -331,7 +304,7 @@ it("keeps the cancellation when the remaining set-menu bill matches cash already
   ).toEqual([]);
 });
 
-it("records a captured bill payment that covers the whole set-menu bill", async () => {
+it("recovers a captured card payment that covers the whole set-menu bill without another charge", async () => {
   const id = await bill();
   const receivedAt = venue.clock.now().instant;
   const paymentId = await inTx(venue, async (tx) => {
@@ -362,14 +335,20 @@ it("records a captured bill payment that covers the whole set-menu bill", async 
     });
     return paymentId;
   });
-  const result = await inTx(venue, (tx) =>
-    completeBillPayment(tx, deps(), venue.cfg, paymentId, receivedAt),
-  );
-  expect(result).toMatchObject({
-    payment: { id: paymentId, state: "received" },
-    invoice: { total: "26.00" },
-  });
+  const result = await settlePendingBillPayments({ ...deps(), cfg: venue.cfg });
+  expect(result).toMatchObject({ received: 1, pending: 0, errors: [] });
+  expect(await paymentsOf(venue, id)).toMatchObject([
+    { id: paymentId, state: "received", applied: 2600 },
+  ]);
+  const billed = await venue.db
+    .select({ id: sales.id, total: sales.total })
+    .from(sales)
+    .where(eq(sales.workingOrderId, id));
+  expect(billed).toEqual([{ id: expect.any(String), total: 2600 }]);
   expect(
-    await venue.db.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
-  ).toHaveLength(1);
+    await venue.db
+      .select({ state: payments.state, saleId: payments.saleId })
+      .from(payments)
+      .where(eq(payments.workingOrderId, id)),
+  ).toEqual([{ state: "captured", saleId: billed[0]!.id }]);
 });

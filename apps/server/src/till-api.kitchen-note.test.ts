@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -421,10 +422,7 @@ describe("whole-order kitchen note routes", () => {
     "saves a %s note while a card is at the reader, keeping the payment's mark",
     async (_scope, party) => {
       const paying = party ? billId : orderId;
-      await suite.db
-        .update(workingOrders)
-        .set({ paymentAttemptAt: "2026-09-26T10:00:00.000Z" })
-        .where(eq(workingOrders.id, paying));
+      await seedPendingCardPayment(suite.db, paying);
       const before = await suite.db.select().from(workingOrders);
 
       const saved = await request("PUT", path(party), command(party));
