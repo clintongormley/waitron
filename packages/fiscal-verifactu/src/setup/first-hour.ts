@@ -26,6 +26,7 @@ import {
   focusNewScreen,
   regionName,
 } from "./check-venue.js";
+import { fiscalSetupStrings, seriesPurposes } from "./strings.js";
 
 interface Draft {
   reviewed: boolean;
@@ -51,7 +52,10 @@ interface Selected {
   status: "selected";
   identity: string;
   input: {
-    allocation: { installationIdentity: string; series: { code: string; purpose: string }[] };
+    allocation: {
+      installationIdentity: string;
+      series: { code: string; purpose: (typeof seriesPurposes)[number] }[];
+    };
   };
 }
 const empty = (): Draft => ({ reviewed: false, recoveryRevision: 0 });
@@ -64,8 +68,7 @@ const strings = {
       "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
     confirmWhyProceedServer:
       "The server could not check its time over the internet. Check that the server's time below is right before you press Proceed.",
-    seriesLine:
-      "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
+    seriesLine: "Waitron will start this box's invoice series.",
     secondClockDo:
       "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
@@ -88,8 +91,7 @@ const strings = {
       "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas antes de pulsar Continuar.",
     confirmWhyProceedServer:
       "El servidor no ha podido comprobar su hora por internet. Comprueba que la hora del servidor que aparece abajo es correcta antes de pulsar Continuar.",
-    seriesLine:
-      "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
+    seriesLine: "Waitron creará las series de facturas de este servidor.",
     secondClockDo:
       "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
     secondClockEnds:
@@ -320,7 +322,11 @@ export class FirstSetupHour extends LitElement {
           result.input.allocation.installationIdentity !== result.identity ||
           !Array.isArray(result.input.allocation.series) ||
           !result.input.allocation.series.every(
-            (series) => record(series) && typeof series.code === "string" && series.code !== "",
+            (series) =>
+              record(series) &&
+              typeof series.code === "string" &&
+              series.code !== "" &&
+              seriesPurposes.some((purpose) => purpose === series.purpose),
           )
         )
           throw new Error("invalid selection");
@@ -538,7 +544,9 @@ export class FirstSetupHour extends LitElement {
       return html`<section data-test="selected-hour" role="status">
           <h2 tabindex="-1">${t.chosen}</h2>
           <ul>
-            ${result.input.allocation.series.map((s) => html`<li>${s.code}</li>`)}
+            ${result.input.allocation.series.map(
+              (s) => html`<li>${s.code} — ${fiscalSetupStrings[this.locale][s.purpose]}</li>`,
+            )}
           </ul>
         </section>
         <section aria-label=${t.next}>
