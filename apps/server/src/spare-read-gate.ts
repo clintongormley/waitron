@@ -10,7 +10,8 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { SAFE_METHODS } from "./read-only-gate.js";
 import { SPARE_WORDS } from "./i18n/spare.js";
 import { BOX_HOSTNAME } from "./box-name.js";
-import { escapeHtml } from "./html-page.js";
+import { escapeHtml, httpsLinkLine } from "./html-page.js";
+import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import type { MainSilenceState } from "./main-silence-watch.js";
 import "./errors.js";
 
@@ -18,9 +19,9 @@ export function renderSparePage(
   locale: SupportedLocale,
   main: MainSilenceState | undefined,
   nowMs: number,
+  mainUrl: string | null,
 ): string {
   const words = SPARE_WORDS[locale];
-  const title = escapeHtml(words.title);
   let mainLine = "";
   if (main?.silent === true)
     mainLine = `<p>${escapeHtml(
@@ -30,12 +31,14 @@ export function renderSparePage(
     )} <a href="/handover/emergency">${escapeHtml(words.openSwitch)}</a></p>`;
   else if (main !== undefined && !main.reached)
     mainLine = `<p>${escapeHtml(words.mainUnreached)}</p>`;
-  return `<!doctype html>
-<html lang="${locale}"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title>
-<style>:root { color-scheme: light dark; } p { overflow-wrap: anywhere; }</style>
-</head><body><main><h1>${title}</h1>${mainLine}<p>${escapeHtml(words.status)}</p><p>${escapeHtml(words.body)}</p></main></body></html>`;
+  return renderLogoBoxPage(
+    locale,
+    words.title,
+    `<h1>${escapeHtml(words.title)}</h1>
+${mainLine}
+<p>${escapeHtml(words.body)}</p>
+${httpsLinkLine(mainUrl, words.openMain)}`,
+  );
 }
 
 /**
@@ -58,6 +61,8 @@ export function renderMainBackPage(locale: SupportedLocale): string {
 export function spareReadGate(deps: {
   /** Undefined when no watch runs: a mirror whose chart names no other main box. */
   main: () => MainSilenceState | undefined;
+  /** The main box's address from this box's chart; a failed read only drops the link. */
+  mainUrl: () => Promise<string | null>;
   now?: () => number;
 }): MiddlewareHandler {
   const now = deps.now ?? Date.now;
@@ -82,7 +87,12 @@ export function spareReadGate(deps: {
     ) {
       const main = deps.main();
       if (new URL(c.req.url).hostname !== BOX_HOSTNAME)
-        return c.html(renderSparePage(locale, main, now()));
+        return boxPageAnswer(
+          c,
+          renderSparePage(locale, main, now(), await deps.mainUrl().catch(() => null)),
+          200,
+          "no-store",
+        );
       if (main?.silent === true) {
         const back =
           path === "/till" || path.startsWith("/till/")
@@ -96,7 +106,7 @@ export function spareReadGate(deps: {
     const words = SPARE_WORDS[locale];
     return c.json(
       {
-        error: { code: error.code, params: error.params, message: `${words.title}. ${words.body}` },
+        error: { code: error.code, params: error.params, message: words.refusal },
       },
       403,
     );

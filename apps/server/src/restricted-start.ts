@@ -40,7 +40,8 @@ export const MONEY_AND_DRAWER_WRITES = [
  * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
  * It answers the writes in `MONEY_AND_DRAWER_WRITES` with the handover code; any other route it does
  * not serve stays a 404 (handover-refusal-words plan, step 5: "no new unknown-route case or blanket
- * middleware").
+ * middleware"), except the till's and the dashboard's pages, which show the restricted page (A1558
+ * plan, PR 4, overrules step 5 for those GET pages only).
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);

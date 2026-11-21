@@ -448,7 +448,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
         expect(page.status).toBe(200);
         expect(page.headers.get("set-cookie")).toBeNull();
         expect(page.headers.get("cache-control")).toBe("no-store");
-        expect(await page.text()).toContain("Restaurant screens are closed here");
+        expect(await page.text()).toContain("This is the venue’s spare box");
       }
       const declaration = await fetch(`${base}/legal/declaration`);
       expect(declaration.status).toBe(404);

@@ -576,7 +576,7 @@ export async function waitForMirrorStart(
       const page = await fetch(`${spareUrl}/`, via);
       const text = await page.text();
       lastFetchError = undefined;
-      return text.includes("Restaurant screens are closed here") ? true : undefined;
+      return text.includes("This is the venue’s spare box") ? true : undefined;
     } catch (error) {
       // The spare is between starts, or answers under an authority the venue's does not verify.
       lastFetchError = error;

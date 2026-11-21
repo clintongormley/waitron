@@ -1,4 +1,5 @@
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { escapeHtml } from "./html-page.js";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { spareReadGate } from "./spare-read-gate.js";
@@ -7,13 +8,17 @@ import { SPARE_WORDS } from "./i18n/spare.js";
 import type { MainSilenceState } from "./main-silence-watch.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
+import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
 const NOW = 1_800_000_000_000;
 const ANSWERING: MainSilenceState = { silentSinceMs: null, reached: true, silent: false };
 const SILENT: MainSilenceState = { silentSinceMs: NOW, reached: true, silent: true };
 
 /** `null`: no watch runs. */
-function fixture(main: MainSilenceState | null = ANSWERING) {
+function fixture(
+  main: MainSilenceState | null = ANSWERING,
+  mainUrl: () => Promise<string | null> = () => Promise.resolve(null),
+) {
   const mode = { mirror: true };
   const app = new Hono();
   app.use(
@@ -27,6 +32,7 @@ function fixture(main: MainSilenceState | null = ANSWERING) {
     "*",
     spareReadGate({
       main: () => main ?? undefined,
+      mainUrl,
       now: () => NOW,
     }),
   );
@@ -61,7 +67,7 @@ it.each(["GET", "HEAD", "OPTIONS"])(
           error: {
             code: "node.spare",
             params: {},
-            message: `${SPARE_WORDS["en-GB"].title}. ${SPARE_WORDS["en-GB"].body}`,
+            message: SPARE_WORDS["en-GB"].refusal,
           },
         });
     }
@@ -125,16 +131,18 @@ it.each(["en-GB", "es-ES"] as const)(
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(response.headers.get("content-type")).toContain("text/html");
       const body = await response.text();
-      expect(body).toContain(`<html lang="${locale}">`);
+      expect(body).toContain(`<html lang="${locale.slice(0, 2)}">`);
       expect(body).toContain(SPARE_WORDS[locale].title);
-      expect(body).toContain(SPARE_WORDS[locale].status);
+      expect(body).toContain(SPARE_WORDS[locale].body);
       expect(body).not.toContain(SPARE_WORDS[locale].mainBack);
-      expect(body).not.toContain("<script");
+      // The shell's inline theme script only; no application code.
+      expect(body.match(/<script/g)).toHaveLength(1);
+      expect(body).not.toMatch(/<script[^>]*src=/);
     }
     const response = await app.request("/management-api/menus", {
       headers: { "accept-language": locale },
     });
-    expect((await response.json()).error.message).toContain(SPARE_WORDS[locale].body);
+    expect((await response.json()).error.message).toBe(SPARE_WORDS[locale].refusal);
   },
 );
 
@@ -279,4 +287,69 @@ it("the closed page's words pass through the page's escaping", async () => {
   } finally {
     Object.assign(words, original);
   }
+});
+
+const MAIN_URL = "https://box-aaaa.waitron.local";
+
+it.each(["en-GB", "es-ES"] as const)(
+  "the spare's page has the guides' look and the Waitron logo: %s",
+  async (locale) => {
+    const response = await fixture().request(`${OWN}/servers`, {
+      headers: { "accept-language": locale },
+    });
+    expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const body = await response.text();
+    expect(body).toContain(`<title>${escapeHtml(SPARE_WORDS[locale].title)} · Waitron</title>`);
+    expect(body).toContain("font-family: var(--wt-font-family)");
+    expect(body).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
+    expect(body).toContain(`<h1>${escapeHtml(SPARE_WORDS[locale].title)}</h1>`);
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "the spare's page links to the main box at its https address: %s",
+  async (locale) => {
+    const body = await (
+      await fixture(ANSWERING, () => Promise.resolve(MAIN_URL)).request(`${OWN}/`, {
+        headers: { "accept-language": locale },
+      })
+    ).text();
+    expect(body).toContain(`<a href="${MAIN_URL}">${escapeHtml(SPARE_WORDS[locale].openMain)}</a>`);
+  },
+);
+
+it("escapes the main box's address", async () => {
+  const url = `https://box.example/"><b>x</b>`;
+  const body = await (
+    await fixture(ANSWERING, () => Promise.resolve(url)).request(`${OWN}/`)
+  ).text();
+  expect(body).toContain(`href="${escapeHtml(url)}"`);
+  expect(body).not.toContain("<b>x</b>");
+});
+
+it.each([
+  ["a plain-http address", () => Promise.resolve("http://box-aaaa.waitron.local")],
+  ["an empty address", () => Promise.resolve("")],
+  ["no address", () => Promise.resolve(null)],
+  ["a script address", () => Promise.resolve("javascript:alert(1)")],
+  ["a chart that cannot be read", () => Promise.reject(new Error("unreadable"))],
+] as const)("the spare's page offers no main-box link for %s", async (_, mainUrl) => {
+  const response = await fixture(ANSWERING, mainUrl).request(`${OWN}/`);
+  expect(response.status).toBe(200);
+  const body = await response.text();
+  expect(body).toContain(SPARE_WORDS["en-GB"].title);
+  expect(body).not.toContain(SPARE_WORDS["en-GB"].openMain);
+  expect(body).not.toContain("<a ");
+});
+
+it("puts a silent main box's switch line before the main-box link", async () => {
+  const body = await (
+    await fixture({ silentSinceMs: NOW - 65_000, reached: true, silent: true }, () =>
+      Promise.resolve(MAIN_URL),
+    ).request(`${OWN}/`)
+  ).text();
+  const silent = body.indexOf('<a href="/handover/emergency">');
+  const link = body.indexOf(`<a href="${MAIN_URL}">`);
+  expect(silent).toBeGreaterThan(0);
+  expect(link).toBeGreaterThan(silent);
 });

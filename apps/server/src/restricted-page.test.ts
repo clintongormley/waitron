@@ -21,7 +21,8 @@ import {
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { ReturnState } from "./return-records.js";
 import { restrictedPageRoute } from "./restricted-page.js";
-import { RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
+import { RESTRICTED_PAGE_WORDS, RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
+import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -68,6 +69,8 @@ function request(
   language: string,
   venue: Database = suite.db,
   returnState?: ReturnState,
+  path = "/",
+  method = "GET",
 ): Promise<Response> {
   const app = new Hono();
   restrictedPageRoute({
@@ -77,7 +80,7 @@ function request(
     returnState: () => returnState ?? "waiting",
     log: (level, event, fields) => logged.push({ level, event, fields }),
   })(app);
-  return Promise.resolve(app.request("/", { headers: { "Accept-Language": language } }));
+  return Promise.resolve(app.request(path, { method, headers: { "Accept-Language": language } }));
 }
 
 async function page(language: string): Promise<{ status: number; html: string }> {
@@ -102,7 +105,7 @@ describe("the restricted box's own page", () => {
 
     const english = await page("en-GB,en;q=0.9");
     expect(english.status).toBe(200);
-    expect(english.html).toContain('<html lang="en-GB">');
+    expect(english.html).toContain('<html lang="en">');
     inOrder(english.html, [
       "<h1>This box no longer runs the venue</h1>",
       "It takes no sales and sends nothing to the tax agency. The box taking over the venue is <strong>Bar counter box</strong>.",
@@ -113,7 +116,7 @@ describe("the restricted box's own page", () => {
 
     const spanish = await page("es-ES,es;q=0.9");
     expect(spanish.status).toBe(200);
-    expect(spanish.html).toContain('<html lang="es-ES">');
+    expect(spanish.html).toContain('<html lang="es">');
     inOrder(spanish.html, [
       "<h1>El local ya no funciona con este equipo</h1>",
       "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es <strong>Bar counter box</strong>.",
@@ -155,7 +158,7 @@ describe("the restricted box's own page", () => {
   it("escapes the successor's name", async () => {
     await handOver(await seedSuccessor(`<script>alert("x")</script> & 'Co'`));
     const { html } = await page("en-GB");
-    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<script>alert");
     expect(html).toContain(
       "The box taking over the venue is <strong>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Co&#39;</strong>.",
     );
@@ -234,8 +237,8 @@ describe("the restricted box's own page", () => {
   });
 
   it.each([
-    ["en-GB", "en-GB", "This page could not be shown."],
-    ["es-ES", "es-ES", "No se ha podido mostrar esta página."],
+    ["en-GB", "en", "This page could not be shown."],
+    ["es-ES", "es", "No se ha podido mostrar esta página."],
   ])(
     "answers a failure to read with a page in the reader's language (%s), and logs it",
     async (language, lang, heading) => {
@@ -413,3 +416,84 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(html).not.toContain("Main <box>");
   },
 );
+
+async function chartNaming(successor: string, contactUrl: string): Promise<void> {
+  await writeNodeMembership(suite.db, {
+    body: {
+      term: 3,
+      nodes: [
+        // This box's own stale chart can still call it the main box; the link never follows that.
+        { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+        { nodeId: successor, contactUrl, standing: "serving-secondary" },
+      ],
+    },
+    signerNodeId: NODE,
+    signature: "not-verified-by-this-read",
+    endorsements: [],
+  });
+}
+
+describe("the restricted page at the till's and the dashboard's addresses", () => {
+  it.each(["/till", "/till/", "/till/tabs/counter", "/servers", "/staff/people"])(
+    "serves the page at %s, linking to the successor's https address",
+    async (path) => {
+      const successor = await seedSuccessor("Counter box");
+      await handOver(successor);
+      await chartNaming(successor, "https://new-box.example");
+      for (const language of ["en-GB", "es-ES"] as const) {
+        const response = await request(language, suite.db, undefined, path);
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        const html = await response.text();
+        expect(html).toContain(`<h1>${escapeHtml(RESTRICTED_PAGE_WORDS[language].title)}</h1>`);
+        expect(html).toContain(
+          `<a href="https://new-box.example">${escapeHtml(RESTRICTED_PAGE_WORDS[language].openSuccessor)}</a>`,
+        );
+        expect(html).not.toContain('href="https://old-box.example"');
+      }
+      expect((await request("en-GB", suite.db, undefined, path, "HEAD")).status).toBe(200);
+    },
+  );
+
+  it.each(["/api/something-unknown", "/management-api/alerts", "/favicon.ico", "/help/x"])(
+    "leaves %s a 404",
+    async (path) => {
+      await handOver(await seedSuccessor("Counter box"));
+      expect((await request("en-GB", suite.db, undefined, path)).status).toBe(404);
+    },
+  );
+
+  it.each([
+    ["the chart does not list the successor", null],
+    ["the successor's address is plain http", "http://new-box.example"],
+    ["the successor's address is empty", ""],
+  ] as const)("offers no successor link when %s", async (_, contactUrl) => {
+    const successor = await seedSuccessor("Counter box");
+    await handOver(successor);
+    if (contactUrl !== null) await chartNaming(successor, contactUrl);
+    else await chartNaming("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "https://elsewhere.example");
+    const html = await (await request("en-GB", suite.db, undefined, "/till")).text();
+    expect(html).toContain("<strong>Counter box</strong>");
+    expect(html).not.toContain(RESTRICTED_PAGE_WORDS["en-GB"].openSuccessor);
+  });
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "has the guides' look and the Waitron logo: %s",
+    async (language) => {
+      await handOver(await seedSuccessor("Counter box"));
+      const response = await request(language);
+      expect(response.headers.get("content-security-policy")).toContain("default-src 'none'");
+      const html = await response.text();
+      expect(html).toContain("font-family: var(--wt-font-family)");
+      expect(html).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
+    },
+  );
+
+  it("draws the failure page with the logo too", async () => {
+    const response = await request("en-GB", suite.db, undefined, "/till");
+    expect(response.status).toBe(500);
+    const html = await response.text();
+    expect(html).toContain(`<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>`);
+    expect(html).toContain("font-family: var(--wt-font-family)");
+  });
+});

@@ -1,7 +1,13 @@
 import type { ReturnState } from "./return-records.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { nodes, readVenue, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  nodes,
+  readNodeMembership,
+  readVenue,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import { initialState } from "@waitron/handover";
 import {
   nodeHandoverEvents,
@@ -9,11 +15,12 @@ import {
   readHandoverRestriction,
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
-import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron/shared";
 import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml } from "./html-page.js";
+import { escapeHtml, httpsLinkLine } from "./html-page.js";
+import { boxPageAnswer, renderLogoBoxPage } from "./guide-pages.js";
 import {
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RETURN_WORDS,
@@ -39,6 +46,7 @@ interface Step {
 interface RestrictedView {
   returnState: ReturnState;
   successor: string;
+  successorUrl?: string;
   steps: Step[];
   timeZone: string;
   handoverPage?: string;
@@ -94,7 +102,12 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
       .orderBy(asc(sql`rowid`));
     steps.push(...events);
   }
+  // The successor's own entry, never the chart's serving primary: this box's chart can still name itself.
+  const successorUrl = (await readNodeMembership(deps.venue))?.body.nodes.find(
+    (entry) => entry.nodeId === restriction.successorNodeId,
+  )?.contactUrl;
   return {
+    successorUrl,
     successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
     steps,
     timeZone: await readTimeZone(deps.venue),
@@ -123,57 +136,40 @@ ${view.steps
   .join("\n")}
 </ul>
 `;
-  return `<!doctype html>
-<html lang="${locale}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(text.title)}</title>
-<style>:root { color-scheme: light dark; } p, li { overflow-wrap: anywhere; }</style>
-</head>
-<body>
-<h1>${escapeHtml(text.title)}</h1>
+  return renderLogoBoxPage(
+    locale,
+    text.title,
+    `<h1>${escapeHtml(text.title)}</h1>
 <p>${escapeHtml(text.body[0])}<strong>${escapeHtml(view.successor)}</strong>${escapeHtml(text.body[1])}</p>
+${httpsLinkLine(view.successorUrl, text.openSuccessor)}
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${steps}
-<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale][view.returnState])}</p>
-</body>
-</html>
-`;
+<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale][view.returnState])}</p>`,
+  );
 }
 
 function renderFailure(locale: SupportedLocale): string {
   const heading = RESTRICTED_PAGE_WORDS[locale].failed;
-  return `<!doctype html>
-<html lang="${locale}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(heading)}</title>
-<style>:root { color-scheme: light dark; }</style>
-</head>
-<body>
-<h1>${escapeHtml(heading)}</h1>
-</body>
-</html>
-`;
+  return renderLogoBoxPage(locale, heading, `<h1>${escapeHtml(heading)}</h1>`);
 }
 
-/** The page a person opening a stepped-down box sees. */
+/** The page a person opening a stepped-down box sees, at its own, the till's and the dashboard's pages. */
 export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => void {
   return (app) => {
-    app.get("/", async (c) => {
+    app.get("*", async (c, next) => {
+      const path = c.req.path;
+      if (path !== "/till" && !path.startsWith("/till/") && !isDashboardPath(path)) return next();
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
       try {
-        return c.html(renderPage(await readView(deps), locale));
+        return boxPageAnswer(c, renderPage(await readView(deps), locale), 200, "no-store");
       } catch (error) {
         deps.log("error", "restricted_page.failed", {
           errorCode: codeOf(error),
           requestId: c.get("requestId"),
         });
-        return c.html(renderFailure(locale), 500);
+        return boxPageAnswer(c, renderFailure(locale), 500, "no-store");
       }
     });
   };

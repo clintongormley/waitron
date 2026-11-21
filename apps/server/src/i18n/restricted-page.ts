@@ -11,6 +11,7 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
       /** The body's words before and after the successor's name. */
       body: readonly [string, string];
       progress: string;
+      openSuccessor: string;
       /** The heading of the page answered when this one cannot be read. */
       failed: string;
     }
@@ -23,6 +24,7 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
       ".",
     ],
     progress: "Progress",
+    openSuccessor: "Open the box that runs the venue",
     failed: "This page could not be shown.",
   },
   "es-ES": {
@@ -32,6 +34,7 @@ export const RESTRICTED_PAGE_WORDS: Readonly<
       ".",
     ],
     progress: "Progreso",
+    openSuccessor: "Abrir el equipo que lleva el local",
     failed: "No se ha podido mostrar esta página.",
   },
 };

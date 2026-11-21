@@ -599,7 +599,10 @@ it("applies the supplied main page gates in order before serving staff pages", a
   try {
     await writeFile(join(root, "index.html"), "dashboard");
     const handover = createHandoverGate();
-    const gates = [handover.middleware, spareReadGate({ main: () => undefined })];
+    const gates = [
+      handover.middleware,
+      spareReadGate({ main: () => undefined, mainUrl: async () => null }),
+    ];
     const mirror = createStaffApp(new Hono(), async () => "https://staff.example.test", {
       root,
       gates,
@@ -607,7 +610,9 @@ it("applies the supplied main page gates in order before serving staff pages", a
     const response = await mirror.request("https://staff.example.test/account", {
       headers: { Accept: "text/html" },
     });
-    expect(await response.text()).toContain("This server started as the spare");
+    expect(await response.text()).toContain(
+      "It keeps a copy and takes over if the main box fails.",
+    );
     handover.close({ allowed: () => false });
     const stopped = await mirror.request("https://staff.example.test/account", {
       headers: { Accept: "text/html" },

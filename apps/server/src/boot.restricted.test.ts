@@ -330,17 +330,20 @@ describe("a box holding a handover restriction starts restricted", () => {
     }
   }, 60_000);
 
-  it("serves its own page, naming the successor, at the address a person opens", async () => {
+  it("serves its own page, naming the successor, at its own, a till and a dashboard address", async () => {
     const { port } = start();
-    const response = await fetch(`http://127.0.0.1:${port}/`, {
-      headers: { "Accept-Language": "en-GB" },
-    });
-    expect(response.status).toBe(200);
-    const html = await response.text();
-    expect(html).toContain("<h1>This box no longer runs the venue</h1>");
-    expect(html).toContain(
-      "The box taking over the venue is <strong>00000000-0000-4000-8000-0000000000aa</strong>.",
-    );
+    for (const path of ["/", "/till/tabs/counter", "/servers"]) {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+        headers: { "Accept-Language": "en-GB" },
+      });
+      expect({ path, status: response.status }).toEqual({ path, status: 200 });
+      const html = await response.text();
+      expect(html).toContain("<h1>This box no longer runs the venue</h1>");
+      expect(html).toContain(
+        "The box taking over the venue is <strong>00000000-0000-4000-8000-0000000000aa</strong>.",
+      );
+    }
+    expect((await fetch(`http://127.0.0.1:${port}/api/something-unknown`)).status).toBe(404);
   }, 60_000);
 });
 

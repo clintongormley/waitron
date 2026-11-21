@@ -9,6 +9,13 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** A paragraph linking `text` to `url`, or nothing unless `url` is an `https://` address. */
+export function httpsLinkLine(url: string | null | undefined, text: string): string {
+  return url?.startsWith("https://") === true
+    ? `<p><a href="${escapeHtml(url)}">${escapeHtml(text)}</a></p>`
+    : "";
+}
+
 /** A whole page: `title` as its heading, then `body`, which is HTML the caller has escaped. */
 export function renderDocument(
   locale: SupportedLocale,

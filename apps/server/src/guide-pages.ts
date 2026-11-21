@@ -6,6 +6,8 @@ import { renderGuide } from "./guide-markdown.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./html-page.js";
+import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
+import type { SupportedLocale } from "@waitron/shared";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 
@@ -96,8 +98,22 @@ ${body}
 </html>`;
 }
 
-export function boxPageAnswer(c: Context, html: string, status: 200 | 404 | 500): Response {
-  return c.html(html, status, { "Cache-Control": "no-cache", "Content-Security-Policy": CSP });
+/** `renderBoxPage` under the Waitron logo, for a page read in a sign-in locale. */
+export function renderLogoBoxPage(locale: SupportedLocale, title: string, body: string): string {
+  return renderBoxPage(
+    locale.startsWith("es") ? "es" : "en",
+    title,
+    `<div class="logo">${TRUST_PAGE_LOGO_SVG}</div>\n${body}`,
+  );
+}
+
+export function boxPageAnswer(
+  c: Context,
+  html: string,
+  status: 200 | 404 | 500,
+  cache: "no-cache" | "no-store" = "no-cache",
+): Response {
+  return c.html(html, status, { "Cache-Control": cache, "Content-Security-Policy": CSP });
 }
 
 function notFound(c: Context, lang: GuideLanguage): Response {

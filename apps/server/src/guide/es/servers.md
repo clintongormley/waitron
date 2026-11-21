@@ -4,9 +4,9 @@ Abre la dirección del servidor para entrar al panel de gestión, o añade `/til
 
 ## Cuando abres el servidor de reserva {#spare}
 
-Si ves **Este es el servidor de reserva**, abre la dirección del servidor principal para usar las
-pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
-ofrece acceso al panel de gestión.
+Si ves **Este es el servidor de reserva del local**, usa **Abrir el servidor principal** para llegar
+a las pantallas y los datos del local. El servidor de reserva no acepta ventas ni ofrece acceso al
+panel de gestión.
 
 La página de reserva también te dice cómo ve el servidor de reserva al principal. Si el principal ha
 dejado de responder, indica desde hace cuánto y enlaza a la [página de cambio](servers.md#emergency). Si dice
@@ -188,9 +188,10 @@ En la caja, deja la pantalla abierta; seguirá al servidor principal cuando ese 
 
 ## Cuando el local ya no funciona con un servidor {#handed-over}
 
-Si abres la dirección de un servidor en un navegador y ves una página titulada **El local ya no
-funciona con este equipo**, ese servidor se ha retirado. No hace ventas ni envía nada a Hacienda. La
-página indica, en negrita, el servidor que pasa a llevar el local.
+Si abres la dirección de un servidor, o su caja o su panel de gestión, y ves una página titulada
+**El local ya no funciona con este equipo**, ese servidor se ha retirado. No hace ventas ni envía
+nada a Hacienda. La página indica, en negrita, el servidor que pasa a llevar el local; usa **Abrir
+el equipo que lleva el local** para ir a él.
 
 Debajo, la página enumera cada paso del traspaso que este servidor ha registrado, en el orden en que
 los registró, con la fecha y la hora de cada uno en la zona horaria del local.

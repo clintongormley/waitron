@@ -5,7 +5,9 @@ export const SPARE_WORDS: Record<
   {
     title: string;
     body: string;
-    status: string;
+    openMain: string;
+    /** The message of an API caller's `node.spare` refusal. */
+    refusal: string;
     mainBack: string;
     mainSilent: string;
     openSwitch: string;
@@ -13,9 +15,10 @@ export const SPARE_WORDS: Record<
   }
 > = {
   "en-GB": {
-    title: "Restaurant screens are closed here",
-    body: "Open the main server's address for restaurant screens and data.",
-    status: "This server started as the spare and is not taking sales.",
+    title: "This is the venue’s spare box",
+    body: "It keeps a copy and takes over if the main box fails.",
+    openMain: "Open the main box",
+    refusal: "This is the venue’s spare box. Use the main box.",
     mainBack: "The main server is answering again. This page reloads in a few seconds.",
     mainSilent: "The main server has not answered for {duration}.",
     openSwitch: "Open the switch page",
@@ -23,9 +26,10 @@ export const SPARE_WORDS: Record<
       "This spare cannot reach the main server, so it could not take over if the main server failed. Check the network cable of each server.",
   },
   "es-ES": {
-    title: "Las pantallas del local están cerradas aquí",
-    body: "Abre la dirección del servidor principal para acceder a las pantallas y los datos del local.",
-    status: "Este servidor se ha iniciado como reserva y no acepta ventas.",
+    title: "Este es el servidor de reserva del local",
+    body: "Guarda una copia y sustituye al principal si falla.",
+    openMain: "Abrir el servidor principal",
+    refusal: "Este es el servidor de reserva del local. Usa el servidor principal.",
     mainBack: "El servidor principal vuelve a responder. Esta página se recarga en unos segundos.",
     mainSilent: "El servidor principal no responde desde hace {duration}.",
     openSwitch: "Abrir la página de cambio",
