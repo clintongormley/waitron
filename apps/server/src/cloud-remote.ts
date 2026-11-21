@@ -120,7 +120,11 @@ export function createStaffApp(
   const dashboard = new Hono();
   if (pages !== undefined) {
     for (const gate of pages.gates ?? []) dashboard.use("*", gate);
-    mountSpa(dashboard, { root: pages.root, basePath: "", navigationPath: isDashboardPath }, log);
+    mountSpa(
+      dashboard,
+      { root: pages.root, basePath: "", navigationPath: isDashboardPath, frameSelfOnly: true },
+      log,
+    );
   }
   staff.use("*", async (c, next) => {
     try {

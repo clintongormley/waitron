@@ -593,6 +593,23 @@ it("serves dashboard pages and assets directly, never arbitrary main-app root ha
   }
 });
 
+it("lets only the staff address itself frame the dashboard pages it serves", async () => {
+  const root = await mkdtemp(join(tmpdir(), "waitron-staff-frame-"));
+  try {
+    await writeFile(join(root, "index.html"), "<html>dashboard bundle</html>");
+    const staff = createStaffApp(new Hono(), async () => "https://staff.example.test", { root });
+    for (const path of ["/", "/settings/servers"]) {
+      const response = await staff.request(`https://staff.example.test${path}`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'self'");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("applies the supplied main page gates in order before serving staff pages", async () => {
   const { spareReadGate } = await import("./spare-read-gate.js");
   const { createHandoverGate } = await import("./handover-gate.js");
