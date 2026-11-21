@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { billPayments, captureError, withTransaction } from "@waitron/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { billPayments, captureError, drawerEntries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { computeDailyClose, recordDailyClose } from "@waitron/reporting";
@@ -185,7 +186,8 @@ describe("the cash-up counts money on the day and device it moves (bill payments
       "Tarta",
     );
 
-    expect((await cashContribution("2026-03-10", venue.cookie, billId, "50.00")).status).toBe(200);
+    const cash = await cashContribution("2026-03-10", venue.cookie, billId, "50.00");
+    expect(cash.status).toBe(200);
     const day1 = await dailyClose("2026-03-10");
     expect(day1.cash).toEqual({
       byOrigin: [
@@ -214,6 +216,21 @@ describe("the cash-up counts money on the day and device it moves (bill payments
       ["cash", deviceB],
     ]);
 
+    expect(
+      await venue.db
+        .select({
+          billPaymentId: drawerEntries.billPaymentId,
+          deviceId: drawerEntries.deviceId,
+          kind: drawerEntries.kind,
+          amount: drawerEntries.amount,
+        })
+        .from(drawerEntries)
+        .where(inArray(drawerEntries.billPaymentId, [paymentIdOf(cash), paymentIdOf(last)]))
+        .orderBy(drawerEntries.sequence),
+    ).toEqual([
+      { billPaymentId: paymentIdOf(cash), deviceId: deviceA, kind: "cash_payment", amount: 5000 },
+      { billPaymentId: paymentIdOf(last), deviceId: deviceB, kind: "card_payment", amount: 7000 },
+    ]);
     expect((await dailyClose("2026-03-10")).cash).toEqual(day1.cash);
     const day2 = await dailyClose("2026-03-11");
     expect(day2.cash).toEqual({
@@ -256,9 +273,15 @@ describe("the cash-up counts money on the day and device it moves (bill payments
     const paymentId = paymentIdOf(
       await cashContribution("2026-03-12", venue.cookie, billId, "50.00"),
     );
-    expect((await cashRefund("2026-03-13", venue.cookie2, billId, paymentId, "20.00")).status).toBe(
-      200,
-    );
+    const returned = await cashRefund("2026-03-13", venue.cookie2, billId, paymentId, "20.00");
+    expect(returned.status).toBe(200);
+    const refundId = (returned.json.refund as { id: string }).id;
+    expect(
+      await venue.db
+        .select()
+        .from(drawerEntries)
+        .where(and(eq(drawerEntries.refundId, refundId), eq(drawerEntries.deviceId, deviceB))),
+    ).toMatchObject([{ kind: "cash_refund", amount: -2000 }]);
 
     expect((await dailyClose("2026-03-12")).cash.byOrigin).toEqual([
       {

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "da995eec-b6aa-4f65-952a-1af8f8f50523",
+  "id": "7a3cb40c-a858-47f0-8f4f-0421e7e20a5e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7029,6 +7029,235 @@
         "ticket_item_moves_actor_ck": {
           "name": "ticket_item_moves_actor_ck",
           "value": "\"ticket_item_moves\".\"moved_by_device_id\" is not null or \"ticket_item_moves\".\"moved_by_person_id\" is not null"
+        }
+      }
+    },
+    "drawer_entries": {
+      "name": "drawer_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "printer_id": {
+          "name": "printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bill_payment_id": {
+          "name": "bill_payment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refund_id": {
+          "name": "refund_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_count_id": {
+          "name": "first_count_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "facts": {
+          "name": "facts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "drawer_entries_printer_sequence_key": {
+          "name": "drawer_entries_printer_sequence_key",
+          "columns": [
+            "printer_id",
+            "sequence"
+          ],
+          "isUnique": true
+        },
+        "drawer_entries_bill_payment_key": {
+          "name": "drawer_entries_bill_payment_key",
+          "columns": [
+            "bill_payment_id"
+          ],
+          "isUnique": true
+        },
+        "drawer_entries_refund_key": {
+          "name": "drawer_entries_refund_key",
+          "columns": [
+            "refund_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "drawer_entries_printer_id_printers_id_fk": {
+          "name": "drawer_entries_printer_id_printers_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "printers",
+          "columnsFrom": [
+            "printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_node_id_nodes_id_fk": {
+          "name": "drawer_entries_node_id_nodes_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_person_id_persons_id_fk": {
+          "name": "drawer_entries_person_id_persons_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_device_id_devices_id_fk": {
+          "name": "drawer_entries_device_id_devices_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_bill_payment_id_bill_payments_id_fk": {
+          "name": "drawer_entries_bill_payment_id_bill_payments_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "bill_payments",
+          "columnsFrom": [
+            "bill_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_refund_id_refunds_id_fk": {
+          "name": "drawer_entries_refund_id_refunds_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "refunds",
+          "columnsFrom": [
+            "refund_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "drawer_entries_first_count_id_drawer_entries_id_fk": {
+          "name": "drawer_entries_first_count_id_drawer_entries_id_fk",
+          "tableFrom": "drawer_entries",
+          "tableTo": "drawer_entries",
+          "columnsFrom": [
+            "first_count_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "drawer_entries_kind_ck": {
+          "name": "drawer_entries_kind_ck",
+          "value": "\"drawer_entries\".\"kind\" in ('cash_payment', 'card_payment', 'cash_refund', 'cash_in', 'cash_out', 'count', 'recount', 'finish')"
+        },
+        "drawer_entries_target_ck": {
+          "name": "drawer_entries_target_ck",
+          "value": "\n      (\"drawer_entries\".\"bill_payment_id\" is not null) = (\"drawer_entries\".\"kind\" in ('cash_payment', 'card_payment'))\n      and (\"drawer_entries\".\"refund_id\" is not null) = (\"drawer_entries\".\"kind\" = 'cash_refund')\n      and (\"drawer_entries\".\"first_count_id\" is not null) = (\"drawer_entries\".\"kind\" in ('recount', 'finish'))\n    "
+        },
+        "drawer_entries_amount_ck": {
+          "name": "drawer_entries_amount_ck",
+          "value": "\n      typeof(\"drawer_entries\".\"amount\") = 'integer'\n      and (\"drawer_entries\".\"kind\" not in ('cash_payment', 'card_payment', 'cash_in') or \"drawer_entries\".\"amount\" > 0)\n      and (\"drawer_entries\".\"kind\" not in ('cash_refund', 'cash_out') or \"drawer_entries\".\"amount\" < 0)\n    "
         }
       }
     },

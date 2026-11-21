@@ -5,6 +5,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import {
   adjustmentReasons,
   billPayments,
+  drawerEntries,
   drawerOpens,
   invoiceCorrectionRefunds,
   invoiceCorrections,
@@ -1104,6 +1105,21 @@ describe("a correction's cash", () => {
       { tenderRefundId: given.refunds[0]!.id },
     ]);
     expect(counts().drawers).toBe(was.drawers + 1);
+    expect(
+      await venue.db
+        .select()
+        .from(drawerEntries)
+        .where(
+          inArray(
+            drawerEntries.refundId,
+            given.refunds.map((refund) => refund.id),
+          ),
+        )
+        .orderBy(drawerEntries.sequence),
+    ).toMatchObject([
+      { refundId: given.refunds[0]!.id, kind: "cash_refund", amount: -2000 },
+      { refundId: given.refunds[1]!.id, kind: "cash_refund", amount: -500 },
+    ]);
     const stamps = await venue.db
       .select({
         id: refundRows.id,

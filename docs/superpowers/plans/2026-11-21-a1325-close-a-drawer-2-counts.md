@@ -10,8 +10,8 @@ expected cash and movement sequence in one transaction. Only its committed respo
 difference. Reopening from another assigned till resumes the pending count. Return the hidden
 form's start sequence and save whether cash moved between opening the count and saving it, so
 printed and on-screen history can explain the possible discrepancy. Allow one recount when
-there is a difference and keep both counts and their authors. The recount covers the whole drawer at
-its own sequence.
+there is a difference and keep both counts and their authors. Check that the recount links to the
+first count for that close and drawer. The recount covers the whole drawer at its own sequence.
 
 **Trading during a count.** Expected and counted cash are captured at the same
 saved count. Before confirmation, the server shows the counted cash plus net cash posted since that
@@ -22,7 +22,8 @@ included. Movements ordered after this transaction go in the next close, even wi
 timestamp. Sales continue throughout.
 
 Fail first in db `drawer-closes.test.ts`. Test a second till resuming the same count, first response
-loss, one recount, a save racing with a sale, replay and immutable finish. Pin a concrete amount:
+loss, one recount, a recount against the wrong drawer or a non-count entry, a save racing with a
+sale, replay and immutable finish. Pin a concrete amount:
 starting with 100 counted against 90 expected, a later +30 payment and −5 refund leave 125 available.
 Leaving 20 saves a 105 withdrawal, a +10 difference and a next opening balance of 20. The server
 `drawer-close-api.test.ts` owns hidden expected cash before count, field refusals, guessed ids and

@@ -45,6 +45,7 @@ const EXPECTED = [
   "declaraciones_responsables",
   "deferred_closures",
   "document_page_reprints",
+  "drawer_entries",
   "filing_case_events",
   "filing_cases",
   "fiscal_allocations",

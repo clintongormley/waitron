@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   devices,
   deviceProfiles,
+  drawerEntries,
   drawerOpens,
   invoiceCorrectionRefunds,
   invoiceCorrections,
@@ -154,8 +155,19 @@ it("reads refundable money for admitted staff, completes cash once and preserves
       },
     ],
   });
-  const req = ask(tender!.id),
+  const req = ask(tender!.id);
+  const selects = vi.spyOn(store.db, "select");
+  let paid: Awaited<ReturnType<typeof create>>;
+  try {
     paid = await create(saleId.toUpperCase(), req);
+    expect(
+      selects.mock.calls.filter(
+        ([fields]) => fields !== undefined && "hasCashDrawer" in fields && "capabilities" in fields,
+      ),
+    ).toHaveLength(1);
+  } finally {
+    selects.mockRestore();
+  }
   expect(paid).toMatchObject({
     status: 200,
     json: {
@@ -176,6 +188,9 @@ it("reads refundable money for admitted staff, completes cash once and preserves
   expect(await status(id.toUpperCase())).toEqual(paid);
   expect(await create(saleId, req)).toEqual(paid);
   expect(await retry(id)).toEqual(paid);
+  expect(
+    await store.db.select().from(drawerEntries).where(eq(drawerEntries.refundId, id)),
+  ).toMatchObject([{ kind: "cash_refund", amount: -200, deviceId: venue.deviceId }]);
   expect(await effects()).toEqual(after);
   expect(await originalFacts()).toEqual(before);
   expect(await list(saleId)).toMatchObject({ status: 200, json: [{ appliedRemaining: "10.10" }] });

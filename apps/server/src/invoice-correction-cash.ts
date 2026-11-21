@@ -138,8 +138,8 @@ export async function giveCorrectionCash(
       reserved,
       refunds.length === 0
         ? {
-            openDrawer: (done) =>
-              enqueueRefundDrawer(tx, cfg, done.id, actor.personId, actor.authorization),
+            openDrawer: (done, printers) =>
+              enqueueRefundDrawer(tx, cfg, done.id, actor.personId, actor.authorization, printers),
           }
         : {},
     );
