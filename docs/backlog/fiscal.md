@@ -105,8 +105,10 @@ one of its advances is open: the payment that pays the bill off (refused before 
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
 it paid are refused with `advance.correction_open`; a reader payment started before the correction
 was opened keeps its money and issues no invoice; when the correction is closed or discarded, the
-table's invoice is issued if the bill is then paid off, under the device and printers of whoever
-ended it (tested with Discard, which takes the whole advance off), and ending it is refused when
+table's invoice is issued if the bill is then paid off, under the device and person of the bill's
+latest received payment that is not an advance, dated as recovery would date it (tested with
+Discard, `apps/server/src/advance-corrections.test.ts` and
+`advance-corrections.later-sale-date.test.ts`), and ending it is refused when
 issuing that invoice is refused, as while the box waits for its time (`clock.unconfirmed`, tested);
 the close of the business day answers the bill as it answers a payment still moving (`money_moving`)
 and issues nothing.
