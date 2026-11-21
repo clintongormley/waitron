@@ -231,6 +231,7 @@ import { createHealthState, healthApp, type HealthState } from "./health.js";
 import { abandonMailClaims, mailSendJob } from "./mail-sender.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
+import { isUnset } from "./env-value.js";
 import { roleMembershipMail } from "./role-membership-mail.js";
 import { accountActionMail } from "./account-mail.js";
 import { reconcilePassFor, reconcilerAsDuty, reconciliationMoneyGates } from "./reconcile-duty.js";
@@ -1887,7 +1888,7 @@ async function bootServer(
                 }),
               advertisedOrigin: config.managementOrigin,
               spareStorePort: config.spareStorePort,
-              environment: config.environment,
+              environment: isUnset(env.WAITRON_ENV) ? null : config.environment,
               persistTrading,
               persistModuleConfig: async (c) => {
                 await writeModuleConfig(db, c, null);

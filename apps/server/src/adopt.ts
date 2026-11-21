@@ -127,7 +127,8 @@ export interface AdoptDeps {
   advertisedOrigin: string;
   /** This box's store port; its name and this port are sent as the spare's store address (D15). */
   spareStorePort: number;
-  environment: DeploymentEnvironment;
+  /** This box's WAITRON_ENV, or `null` when it is not set: the box then takes the main box's. */
+  environment: DeploymentEnvironment | null;
   /** Persists `trading.env` so the next boot enters the trading branch. */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
   /** So the mirror's next boot sees the primary's enabled module set. */
@@ -180,7 +181,7 @@ export async function adoptFromPrimary(
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
 
   // One database serves one environment (CLAUDE.md §5).
-  if (bundle.environment !== deps.environment) {
+  if (deps.environment !== null && bundle.environment !== deps.environment) {
     throw new AppError("mirror.environment_mismatch", {
       expected: deps.environment,
       actual: bundle.environment,

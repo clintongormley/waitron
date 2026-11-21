@@ -165,7 +165,7 @@ function deps(
       s: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string },
       confirmedCaPem?: string,
     ) => Promise<MirrorBundle>;
-    environment?: "production" | "preproduction";
+    environment?: "production" | "preproduction" | null;
     persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
     advertisedOrigin?: string;
     baseEnv?: NodeJS.ProcessEnv;
@@ -178,7 +178,7 @@ function deps(
     environmentKeys: keyRingVariables(extra.baseEnv ?? {}),
     advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
     spareStorePort: 7443,
-    environment: extra.environment ?? ("preproduction" as const),
+    environment: extra.environment === undefined ? ("preproduction" as const) : extra.environment,
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
@@ -683,6 +683,23 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
     expect(tradingPersisted).toBe(false);
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
+  });
+
+  it("takes the main box's environment when this box's was never set, and writes it to trading.env", async () => {
+    const persistedTrading: PersistTradingArgs[] = [];
+    await adoptFromPrimary(
+      deps({
+        environment: null,
+        persistTrading: async (a) => {
+          persistedTrading.push(a);
+        },
+        fetchBundle: async () => makeBundle({ environment: "production" }),
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(persistedTrading.map((a) => a.environment)).toEqual(["production"]);
+    expect(await readDeploymentEnvironment(suite.db)).toBe("production");
   });
 
   it("refuses a foreign taxpayer without stamping the local deployment", async () => {

@@ -14,6 +14,7 @@ import {
   openVenueDatabase,
   stampDeployment,
   withTransaction,
+  type DeploymentEnvironment,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -90,8 +91,11 @@ export async function provisionStreamBox(options: {
   modulesJson: unknown;
   venue: { request: VenueRequest; modules: readonly WaitronModule[] };
   apply?: typeof applyMinuteVenue;
+  /** Stamped in the database and written to `trading.env`; preproduction when left out. */
+  environment?: DeploymentEnvironment;
 }): Promise<StreamBox> {
   const { dirs } = options;
+  const environment = options.environment ?? "preproduction";
   const { modules } = options.venue;
   await ensureBoxSecrets({
     stateDir: dirs.state,
@@ -104,7 +108,7 @@ export async function provisionStreamBox(options: {
   const seeding = await openVenueDatabase(dirs.venue);
   let box: StreamBox;
   try {
-    await stampDeployment(seeding.venue, "preproduction");
+    await stampDeployment(seeding.venue, environment);
     const venue = await (options.apply ?? applyAllocatedTestVenue)(
       planVenue(options.venue.request, modules),
       { db: seeding.venue, modules },
@@ -143,7 +147,7 @@ export async function provisionStreamBox(options: {
     join(dirs.state, "trading.env"),
     formatEnvFile({
       WAITRON_NODE_ID: box.nodeId,
-      WAITRON_ENV: "preproduction",
+      WAITRON_ENV: environment,
     }),
   );
   if (options.streaming !== undefined) await switchOnStreaming(dirs, options.streaming);
