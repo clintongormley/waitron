@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath, URL } from "node:url";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { signUpgradeOffer } from "../release-list.mjs";
-import { runUpgradeCli } from "./cli.mjs";
+import { runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
 
 async function fixture() {
   const root = await fs.mkdtemp(join(tmpdir(), "upgrade-cli-"));
@@ -190,8 +190,8 @@ async function offerFixture() {
       },
       privateKey.export({ type: "pkcs8", format: "pem" }),
     );
-  const check = (download, version = "1.2.3-rc.1") =>
-    runUpgradeCli([offerVerb, box, version, link], {
+  const check = (download, version = "1.2.3-rc.1", trustDirectory = link) =>
+    runUpgradeCli([offerVerb, box, version, trustDirectory], {
       run: async (command, args, input, options) => {
         if (command === "docker" && args.includes("config"))
           return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
@@ -240,6 +240,7 @@ it.each([
   ["missing box ID", "box-id-unavailable", (f) => fs.rm(join(f.state, "trading.env"))],
   ["missing key", "trust-unavailable", (f) => fs.rm(join(f.trust, "spare.pem"))],
   ["bad replay state", "offer-state-unreadable", (f) => fs.writeFile(f.record, '{"serial":5}')],
+  ["truncated replay state", "offer-state-unreadable", (f) => fs.writeFile(f.record, '{"serial":')],
   ["failed persistence", "offer-state-unwritable", (f) => fs.mkdir(`${f.record}.tmp`)],
 ])("defers for %s", async (_name, reason, arrange) => {
   const f = await offerFixture();
@@ -279,4 +280,34 @@ it.each([22, 63])("defers when curl exits %i and leaves no replay state", async 
     { encoding: "buffer", maxBuffer: 16384 },
   );
   await expect(fs.access(f.record)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("refuses the legacy trust directory even when it contains matching keys", async () => {
+  const f = await offerFixture();
+  expect(await f.check(() => f.offer(1, "1.2.3"), "1.2.3-rc.1", f.trust)).toEqual(
+    deferred("trust-unavailable"),
+  );
+});
+
+it("writes one JSON line or an error and returns the command's exit code", async () => {
+  const { box, directory } = await fixture();
+  const stdout = { write: vi.fn() };
+  const stderr = { write: vi.fn() };
+  const output = { stdout, stderr };
+  expect(await runUpgradeCliMain(["status", box], output)).toBe(0);
+  expect(stdout.write).toHaveBeenCalledExactlyOnceWith("null\n");
+  expect(stderr.write).not.toHaveBeenCalled();
+
+  await fs.mkdir(directory, { recursive: true });
+  stdout.write.mockClear();
+  expect(await runUpgradeCliMain([offerVerb, box], output)).toBe(1);
+  expect(stdout.write).toHaveBeenCalledExactlyOnceWith(
+    '{"status":"deferred","reason":"upgrade-pending"}\n',
+  );
+  expect(stderr.write).not.toHaveBeenCalled();
+
+  stdout.write.mockClear();
+  expect(await runUpgradeCliMain(["discard", box], output)).toBe(1);
+  expect(stdout.write).not.toHaveBeenCalled();
+  expect(stderr.write).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Expected apply"));
 });

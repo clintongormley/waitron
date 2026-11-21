@@ -945,28 +945,19 @@ upgrade_cli() {
 
 defer_upgrade_offer() {
   printf '{"status":"deferred","reason":"%s"}\n' "$1"
-  return 1
+  exit 1
 }
 
 cmd_check_upgrade_offer() (
   local current result status=0
-  exec 9>"${WAITRON_DIR}.upgrade.lock" && flock -n 9 || {
-    defer_upgrade_offer upgrade-busy
-    return 1
-  }
-  if upgrade_pending; then
-    defer_upgrade_offer upgrade-pending
-    return 1
-  fi
-  current="$(installed_app_ref)" && is_release_tag "$current" || {
-    defer_upgrade_offer installed-version-unavailable
-    return 1
-  }
+  exec 9>"${WAITRON_DIR}.upgrade.lock" && command -v flock >/dev/null \
+    || defer_upgrade_offer upgrade-lock-unavailable
+  flock -n 9 || defer_upgrade_offer upgrade-busy
+  if upgrade_pending; then defer_upgrade_offer upgrade-pending; fi
+  current="$(installed_app_ref)" && is_release_tag "$current" \
+    || defer_upgrade_offer installed-version-unavailable
   result="$(upgrade_cli check-upgrade-offer "${current#v}" "$RELEASE_TRUST")" || status=$?
-  if [ -z "$result" ]; then
-    defer_upgrade_offer offer-check-unavailable
-    return 1
-  fi
+  [ -n "$result" ] || defer_upgrade_offer offer-check-unavailable
   printf '%s\n' "$result"
   return "$status"
 )

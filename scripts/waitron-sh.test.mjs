@@ -4201,6 +4201,15 @@ describe("waitron.sh check-upgrade-offer", () => {
     },
   );
 
+  it("defers as lock unavailable when the lock file cannot be opened", () => {
+    const sb = sandbox();
+    mkdirSync(`${sb.boxDir}.upgrade.lock`);
+    const result = run(sb, cmd, { WT_INSTALLED_RELEASE_REF: "v1.2.3" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('{"status":"deferred","reason":"upgrade-lock-unavailable"}\n');
+    expect(existsSync(sb.log)).toBe(false);
+  });
+
   it.each([
     ["upgrade-busy", true, false, "v1.2.3"],
     ["upgrade-pending", false, true, "v1.2.3"],

@@ -76,6 +76,7 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
 
   let selector, keys;
   try {
+    if (!(await fs.lstat(trustDirectory)).isSymbolicLink()) return deferred("trust-unavailable");
     const trust = await fs.realpath(trustDirectory);
     selector = require(join(trust, "release-list.mjs"));
     keys = await Promise.all(
@@ -194,13 +195,16 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
   });
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+export async function runUpgradeCliMain(args, { stdout, stderr } = process) {
   try {
-    const result = await runUpgradeCli(process.argv.slice(2));
-    process.stdout.write(JSON.stringify(result) + "\n");
-    if (process.argv[2] === offerVerb && result.status === "deferred") process.exitCode = 1;
+    const result = await runUpgradeCli(args);
+    stdout.write(JSON.stringify(result) + "\n");
+    return args[0] === offerVerb && result.status === "deferred" ? 1 : 0;
   } catch (error) {
-    process.stderr.write(String(error instanceof Error ? error.message : error) + "\n");
-    process.exitCode = 1;
+    stderr.write(String(error instanceof Error ? error.message : error) + "\n");
+    return 1;
   }
 }
+
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url))
+  process.exitCode = await runUpgradeCliMain(process.argv.slice(2));
