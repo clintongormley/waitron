@@ -605,12 +605,10 @@ Slice 3.
   [Detail](replication-cloud.md#task-1a--unverified-concurrency-claims)
 - **SQLite slice 2 Task 9a.** First-start coverage, restore fencing, trust and deferred promotion.
   [Detail](replication-cloud.md#loose-ends-left-by-sqlite-slice-2-task-9a)
-- **What A1558 left open (21 November 2026).** Approving a joining box on the main box by comparing
-  a code on both screens ([PR 9 plan](../superpowers/plans/2026-11-21-a1558-pr9-join-by-code.md)), and
-  resetting a replaced main box into a spare from its Servers row
-  ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)), are planned and
-  cleared; lane B builds them. Chrome and Safari accepting the warning for a box's IP address during a
-  join is not yet tried on real boxes.
+- **What A1558 left open (22 November 2026).** Resetting a replaced main box into a spare from its
+  Servers row ([PR 10 plan](../superpowers/plans/2026-11-21-a1558-pr10-replaced-box-spare.md)) is
+  planned and cleared; lane B builds it. Chrome and Safari accepting the warning for a box's IP
+  address during a join is not yet tried on real boxes.
 
 ## Bundle: Everything needing a third box or a Cloud peer
 
