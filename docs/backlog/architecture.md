@@ -1089,8 +1089,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 **Adjustment splits stay on the adjustment record (A1308 pa5).** A partial pizza comp with a free
 extra split off a row without creating a matching `adjustment_lines` row. Receipts still need that
-split. Configuration exports carry adjustment reasons only, so configuration import never remaps
-these row IDs. [Measurement 6](../superpowers/plans/2026-11-08-a1308-pa5-adjustments.md#task-1-measurement-6--does-every-splits-new-row-have-an-adjustment_lines-row-early)
+split. A whole comp records the price reduction for each extra it makes cheaper. A free extra
+has no reduction, so a whole comp has no adjustment line for it. Configuration exports carry
+adjustment reasons only, so configuration import never remaps these row IDs. [Measurement 6](../superpowers/plans/2026-11-08-a1308-pa5-adjustments.md#task-1-measurement-6--does-every-splits-new-row-have-an-adjustment_lines-row-early)
 
 **Orders history keeps its own tables for good (owner, 2026-11-19).** Receipt-copy requests and invoice PDF downloads stay in their own append-only history tables, with their protections and the dashboard's live subscriptions, rather than moving into the activity log: "On 19 November the owner chose to keep Orders history for good."
 

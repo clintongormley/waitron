@@ -542,7 +542,15 @@ describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
     await adjust(billId, { ...target, action: "comp", quantity: "1" });
 
     const [row] = await recordedOn(billId);
-    expect(row!.splits).toContainEqual({ from: freeExtra!.id, to: expect.any(String) });
+    const split = row!.splits.find(({ from }) => from === freeExtra!.id);
+    expect(split?.to).toEqual(expect.any(String));
+    const lowered = await inTx(venue, (tx) =>
+      tx
+        .select({ lineId: adjustmentLines.lineId })
+        .from(adjustmentLines)
+        .where(eq(adjustmentLines.adjustmentId, row!.id)),
+    );
+    expect(lowered.map(({ lineId }) => lineId)).not.toContain(split!.to);
   });
 
   it("records a comp of the extras row on its own", async () => {

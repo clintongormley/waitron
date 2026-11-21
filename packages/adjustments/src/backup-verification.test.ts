@@ -197,6 +197,15 @@ describe("adjustment backup evidence", () => {
       await corrupt(db, "update adjustments set working_order_id='missing'");
     expect((await run()).status).toBe("invalid");
   });
+  it.each(["original", "restored"] as const)(
+    "refuses a missing requester in the %s copy",
+    async (copy) => {
+      expect(await run()).toEqual(passed);
+      const db = copy === "original" ? original.db : restored.db;
+      await corrupt(db, "delete from persons where id='requester'");
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("checks source references separately from migrated references", async () => {
     expect(await run()).toEqual(passed);
     expect((await run({ wrap: hideTable("working_orders") })).status).toBe("invalid");
