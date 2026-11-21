@@ -409,3 +409,5 @@ export function createBoxJoinAttempt(deps: BoxJoinAttemptDeps) {
         : { identity: current.identity, bundle: current.bundle, storeUrl: current.hello.storeUrl },
   };
 }
+
+export type BoxJoinAttempt = ReturnType<typeof createBoxJoinAttempt>;

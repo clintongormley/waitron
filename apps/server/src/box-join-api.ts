@@ -64,7 +64,7 @@ export interface BoxJoinApiDeps {
   now?: () => Date;
 }
 
-const STATUS: Record<string, ContentfulStatusCode> = {
+export const JOIN_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_invalid": 400,
   "mirror.join_invalid": 400,
   "mirror.join_address_mismatch": 409,
@@ -176,7 +176,7 @@ export function mountBoxJoinApi(
   deps: BoxJoinApiDeps,
   log: Logger = () => {},
 ): BoxJoinRequests {
-  const run = createErrorBoundary(STATUS, "mirror.join_failed");
+  const run = createErrorBoundary(JOIN_STATUS, "mirror.join_failed");
   const requests = deps.requests ?? createBoxJoinRequests();
   const now = () => (deps.now ?? (() => new Date()))().getTime();
 

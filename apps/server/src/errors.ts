@@ -1590,6 +1590,11 @@ declare module "@waitron/shared" {
     "mirror.join_stopped_after_listing": Record<string, never>;
     /** This box already has a join attempt, or is starting one; it must be cancelled first. */
     "mirror.join_waiting": Record<string, never>;
+    /**
+     * A join cancel or start without the current join's handle, while the page holding that handle
+     * read the join's state in the last 15 seconds.
+     */
+    "mirror.join_in_use": Record<string, never>;
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;

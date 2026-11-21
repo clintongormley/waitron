@@ -391,6 +391,7 @@ import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountBuiltApps } from "./spa-api.js";
 import { mountSetup, MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { createBoxJoinAttempt } from "./box-join-attempt.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
@@ -1639,6 +1640,11 @@ async function bootServer(
       cloudRecovery,
       bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
     });
+    const joinAttempt = createBoxJoinAttempt({
+      advertisedOrigin: config.managementOrigin,
+      spareStorePort: config.spareStorePort,
+      now,
+    });
     mountSetup(
       app,
       {
@@ -1655,6 +1661,7 @@ async function bootServer(
         cloudRecovery,
         cloudSignIn,
         requestFromBox: seams.requestFromBox,
+        joinAttempt,
         readPrimaryCertificate: (primaryUrl) =>
           fetchPrimaryCertificate(primaryUrl, { lookup: seams.boxLookup }),
         prepareRecovery: recoveryPreparation,

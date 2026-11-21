@@ -16,7 +16,7 @@ import {
 import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { ArchiveUpload, ReceiveArchive } from "./setup-archive-upload.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -60,7 +60,10 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
-import { assertSafePrimaryUrl } from "./primary-url.js";
+import { assertSafePrimaryUrl, isLoopbackHost } from "./primary-url.js";
+import type { BoxJoinAttempt } from "./box-join-attempt.js";
+import { JOIN_STATUS } from "./box-join-api.js";
+import { requestAddress } from "./request-from-box.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
 import {
@@ -165,6 +168,8 @@ export interface SetupDeps {
     req: AdoptRequest,
     hooks: AdoptHooks,
   ) => Promise<{ breakGlassSecret: string; breakGlassKeyName?: string }>;
+  /** This process's one join attempt, shared by the join routes and adopt. */
+  joinAttempt?: BoxJoinAttempt;
   /** Reads the main box's authority certificate; `fetchPrimaryCertificate` when absent. */
   readPrimaryCertificate?: (primaryUrl: string) => ReturnType<typeof fetchPrimaryCertificate>;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
@@ -379,6 +384,26 @@ const PRIMARY_CERTIFICATE_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
 };
+
+const runJoin = createErrorBoundary(
+  {
+    ...JOIN_STATUS,
+    ...JOIN_REFUSAL_STATUS,
+    "setup.request_invalid": 400,
+    "setup.connection_insecure": 403,
+    "setup.owner_required": 403,
+    "mirror.primary_url_invalid": 400,
+    "mirror.bundle_fetch_failed": 502,
+    "setup.already_provisioning": 409,
+    "setup.adopt_incomplete": 409,
+    "mirror.join_waiting": 409,
+    "mirror.join_in_use": 409,
+  },
+  "mirror.join_failed",
+);
+
+/** How long after its last state read the page holding a join's handle still counts as open. */
+const JOIN_TAB_LIVE_MS = 15_000;
 
 const runPrimaryCertificate = createErrorBoundary(
   PRIMARY_CERTIFICATE_STATUS,
@@ -814,9 +839,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         )
       )
         return directError(c, log, "setup.already_provisioning", 409);
-      // The certificate read writes nothing, so a main box that never answers it holds no other
-      // setup request back.
-      if (c.req.path === "/setup-api/primary-certificate")
+      // These write nothing, so a main box that never answers them holds no other setup request
+      // back.
+      if (["/setup-api/primary-certificate", "/setup-api/join/start"].includes(c.req.path))
         return boundary(c, log, async () => {
           await firstSetup.assertOtherAllowed();
           await next();
@@ -1241,6 +1266,79 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       return c.json(await (deps.readPrimaryCertificate ?? fetchPrimaryCertificate)(primaryUrl));
     }),
   );
+
+  // The handle keeps the code, and adopt's server key, on the page that started the join. Only its
+  // hash is kept.
+  let joinHolder: { handleHash: Buffer; readAt: number } | null = null;
+  const handleHash = (handle: string) => createHash("sha256").update(handle).digest();
+  const holderOf = (c: Context) => {
+    const handle = c.req.header("x-waitron-join-handle");
+    return joinHolder !== null &&
+      handle !== undefined &&
+      timingSafeEqual(handleHash(handle), joinHolder.handleHash)
+      ? joinHolder
+      : null;
+  };
+  const refuseJoinElsewhere = (c: Context) => {
+    if (!isSecure(c) && !isLoopbackHost(requestAddress(c) ?? "")) {
+      throw new AppError("setup.connection_insecure", {});
+    }
+    if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
+  };
+  /** A start or cancel without the handle waits until the holding page has stopped reading. */
+  const refuseJoinInUse = (c: Context) => {
+    if (
+      holderOf(c) === null &&
+      joinHolder !== null &&
+      performance.now() - joinHolder.readAt < JOIN_TAB_LIVE_MS
+    )
+      throw new AppError("mirror.join_in_use", {});
+  };
+
+  app.get("/setup-api/join", (c) =>
+    runJoin(c, log, async () => {
+      refuseJoinElsewhere(c);
+      const state = deps.joinAttempt?.current() ?? null;
+      const holder = holderOf(c);
+      if (holder !== null) {
+        holder.readAt = performance.now();
+        return c.json(state);
+      }
+      if (!isUnset(c.req.header("x-waitron-join-handle"))) return c.json({ state: "replaced" });
+      return c.json({ state: state === null ? "none" : "elsewhere" });
+    }),
+  );
+
+  app.post("/setup-api/join/start", async (c) => {
+    const joinAttempt = deps.joinAttempt;
+    if (joinAttempt === undefined) return directError(c, log, "setup.not_ready", 503);
+    return runJoin(c, log, async () => {
+      refuseJoinElsewhere(c);
+      const operation = await deps.operations?.read();
+      if (operation?.kind === "adopt" && operation.phase !== "started")
+        throw new AppError("setup.adopt_incomplete", {});
+      if (operation != null) throw new AppError("setup.already_provisioning", {});
+      const body = await readJsonBody<{ primaryUrl?: unknown }>(c);
+      const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+      refuseJoinInUse(c);
+      const shown = await joinAttempt.start(primaryUrl);
+      const handle = randomBytes(32).toString("base64url");
+      joinHolder = { handleHash: handleHash(handle), readAt: performance.now() };
+      return c.json({ ...shown, handle });
+    });
+  });
+
+  app.post("/setup-api/join/cancel", async (c) => {
+    const joinAttempt = deps.joinAttempt;
+    if (joinAttempt === undefined) return directError(c, log, "setup.not_ready", 503);
+    return runJoin(c, log, async () => {
+      refuseJoinElsewhere(c);
+      refuseJoinInUse(c);
+      await joinAttempt.cancel();
+      joinHolder = null;
+      return c.body(null, 204);
+    });
+  });
 
   app.post("/setup-api/adopt", async (c) => {
     const adopt = deps.adopt;
