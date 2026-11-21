@@ -126,7 +126,6 @@
   "src/schema/set-menu-copies.ts": 43.4,
   "src/schema/settings.ts": 33.1,
   "src/schema/taxpayer.ts": 15.4,
-  "src/schema/tender-refunds.ts": 124.3,
   "src/schema/ticket-item-moves.ts": 63.8,
   "src/schema/ticket-items.ts": 64.7,
   "src/schema/unpaid-departures.ts": 80,
