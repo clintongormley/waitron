@@ -96,6 +96,16 @@ Si no se han podido leer los avisos, la página sigue mostrando todas las filas 
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la
 página avisa de que puede no mostrar todos los problemas.
 
+## Configura el horario nocturno de actualización {#automatic-upgrades}
+
+En **Sistema → Estado del servidor**, elige **Actualizaciones automáticas**. Introduce las horas
+de inicio y fin en la hora local del establecimiento, con al menos 60 minutos de margen. La hora
+de fin puede ser después de medianoche.
+
+Para pausar la instalación y conservar el horario, desactiva **Permitir la instalación automática**
+y elige **Guardar**. Para quitar el horario, borra ambas horas y guarda. Elige **Cancelar** para
+conservar los ajustes guardados.
+
 ## Consultar la red {#network}
 
 Cuando tu servidor puede informar de su red, **Red** muestra la conexión por cable y su dirección,

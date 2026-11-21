@@ -2145,6 +2145,18 @@ function spareFollowView(value: unknown): SpareFollowView | null {
   return value as SpareFollowView;
 }
 
+/** Settings exchanged with the box host by the server's Box status routes. */
+export interface BoxUpgradeSettingsEdit {
+  revision: number;
+  automatic: boolean;
+  start: string | null;
+  end: string | null;
+}
+
+export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
+  version: 1;
+}
+
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {
   at: string;
@@ -5303,6 +5315,14 @@ export class DashboardApi {
 
   forgetBoxNetwork(input: { ssidHex: string }): Promise<Record<string, never>> {
     return this.#request("/api/box/network/forget", "POST", input);
+  }
+
+  getBoxUpgradeSettings(): Promise<BoxUpgradeSettings> {
+    return this.#request("/api/box/upgrade-settings", "GET");
+  }
+
+  saveBoxUpgradeSettings(edit: BoxUpgradeSettingsEdit): Promise<BoxUpgradeSettings> {
+    return this.#request("/api/box/upgrade-settings", "POST", edit);
   }
 
   async getBoxHealth(): Promise<BoxHealth> {

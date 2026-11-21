@@ -4460,6 +4460,27 @@ export const en = {
   "box_status.part.clock": "Clock",
   "box_status.part.disk": "Disk space",
   "box_status.part.upgrade": "Last offered upgrade",
+  "box_status.upgrade_settings.title": "Automatic upgrades",
+  "box_status.upgrade_settings.start": "Start time",
+  "box_status.upgrade_settings.end": "End time",
+  "box_status.upgrade_settings.loading": "Reading upgrade settings…",
+  "box_status.upgrade_settings.automatic": "Allow automatic installation",
+  "box_status.upgrade_settings.hours_help":
+    "Use the venue’s local time in HH:MM. Clear both times to remove the installation window.",
+  "box_status.upgrade_settings.start_required": "Enter a start time.",
+  "box_status.upgrade_settings.end_required": "Enter an end time.",
+  "box_status.upgrade_settings.invalid_time": "Enter a time in HH:MM.",
+  "box_status.upgrade_settings.short_window": "Allow at least 60 minutes.",
+  "box_status.upgrade_settings.read_failed":
+    "The box could not read upgrade settings. Close and reopen this dialog to try again.",
+  "box_status.upgrade_settings.save_unavailable":
+    "The box could not save upgrade settings. Try again in a moment.",
+  "box_status.upgrade_settings.save_stale":
+    "Someone saved different upgrade settings. Close and reopen this dialog to see them.",
+  "box_status.upgrade_settings.save_busy":
+    "Another save is in progress. Wait a moment and try again.",
+  "box_status.upgrade_settings.read_only":
+    "Open Box status on the main box to change upgrade settings.",
   "box_status.upgrade.upgraded": "Upgraded from {fromVersion} to {toVersion}",
   "box_status.upgrade.rolled_back":
     "Reopened version {fromVersion}. The offer was for {toVersion}.",
@@ -9160,6 +9181,27 @@ export const es: Record<StringKey, string> = {
   "box_status.part.clock": "Reloj",
   "box_status.part.disk": "Espacio en disco",
   "box_status.part.upgrade": "Última actualización ofrecida",
+  "box_status.upgrade_settings.title": "Actualizaciones automáticas",
+  "box_status.upgrade_settings.start": "Hora de inicio",
+  "box_status.upgrade_settings.end": "Hora de fin",
+  "box_status.upgrade_settings.loading": "Leyendo los ajustes de actualización…",
+  "box_status.upgrade_settings.automatic": "Permitir la instalación automática",
+  "box_status.upgrade_settings.hours_help":
+    "Usa la hora local del establecimiento en formato HH:MM. Borra ambas horas para quitar el horario de instalación.",
+  "box_status.upgrade_settings.start_required": "Introduce una hora de inicio.",
+  "box_status.upgrade_settings.end_required": "Introduce una hora de fin.",
+  "box_status.upgrade_settings.invalid_time": "Introduce una hora en formato HH:MM.",
+  "box_status.upgrade_settings.short_window": "Deja al menos 60 minutos.",
+  "box_status.upgrade_settings.read_failed":
+    "El servidor no pudo leer los ajustes de actualización. Cierra y vuelve a abrir este diálogo para reintentar.",
+  "box_status.upgrade_settings.save_unavailable":
+    "El servidor no pudo guardar los ajustes de actualización. Inténtalo de nuevo en un momento.",
+  "box_status.upgrade_settings.save_stale":
+    "Alguien guardó otros ajustes de actualización. Cierra y vuelve a abrir este diálogo para verlos.",
+  "box_status.upgrade_settings.save_busy":
+    "Ya hay un guardado en curso. Espera un momento y vuelve a intentarlo.",
+  "box_status.upgrade_settings.read_only":
+    "Abre Estado del servidor en el equipo principal para cambiar los ajustes de actualización.",
   "box_status.upgrade.upgraded": "Se actualizó de la versión {fromVersion} a la {toVersion}",
   "box_status.upgrade.rolled_back":
     "Volvió a la versión {fromVersion}. La versión ofrecida era la {toVersion}.",

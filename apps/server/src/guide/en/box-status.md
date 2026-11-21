@@ -86,6 +86,15 @@ If the alerts could not be read, the page still shows every row and says that a 
 fine when it is not. If some checks could not be made, the page says it may not show every
 problem.
 
+## Set the overnight upgrade hours {#automatic-upgrades}
+
+In **System → Box status**, choose **Automatic upgrades**. Enter the start and end in the venue’s
+local time, leaving at least 60 minutes. You can end after midnight.
+
+To pause installation and keep your hours, turn off **Allow automatic installation** and choose
+**Save**. To remove the window, clear both times and save. Choose **Cancel** to leave your saved
+settings as they were.
+
 ## Check the network {#network}
 
 When your box can report its network, **Network** shows the wired connection and its address,

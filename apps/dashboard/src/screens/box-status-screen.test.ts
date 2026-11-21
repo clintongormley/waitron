@@ -155,6 +155,39 @@ function deferred<T>() {
 }
 
 describe("dashboard-box-status-screen", () => {
+  it("opens upgrade settings for a system manager even before the first offer", async () => {
+    const getBoxUpgradeSettings = vi.fn().mockResolvedValue({
+      version: 1,
+      revision: 0,
+      automatic: true,
+      start: "03:00",
+      end: "05:00",
+    });
+    const refreshed = health({ at: "2026-10-22T19:50:00.000Z" });
+    const getBoxHealth = vi.fn().mockResolvedValueOnce(health()).mockResolvedValue(refreshed);
+    const api = stubApi({ getBoxUpgradeSettings, getBoxHealth });
+    const { el } = await mount(api);
+    expect(q(el, "[data-test=automatic-upgrades]")).toBeNull();
+
+    Object.assign(el, { canManageUpgrades: true });
+    await el.updateComplete;
+    expect(getBoxUpgradeSettings).not.toHaveBeenCalled();
+    const button = q(el, "[data-test=automatic-upgrades]");
+    expect(text(button)).toBe("Automatic upgrades");
+    await userEvent.click(button!);
+    const dialog = q(el, "dashboard-upgrade-settings-dialog");
+    const start = () =>
+      dialog?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=start]");
+    await expect.poll(() => start()?.value).toBe("03:00");
+    const control = start()!.shadowRoot!.querySelector("input")!;
+    control.value = "02:00";
+    control.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    api.liveData.refresh();
+    await expect.poll(() => text(q(el, "[data-test=legend]"))).toContain("19:50");
+    expect(start()?.value).toBe("02:00");
+    expect(getBoxUpgradeSettings).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["en", "upgraded", "Last offered upgrade", "Upgraded from 1.2.2 to 1.2.3"],
     [

@@ -576,9 +576,17 @@ sudo systemctl enable --now waitron-upgrade.timer
 sudo journalctl -u waitron-upgrade.service
 ```
 
-The service checks every half hour from 03:00 up to 05:00 in the venue's saved time zone, while the
-Waitron app service is running. You can turn the timer off with
-`sudo systemctl disable --now waitron-upgrade.timer`.
+The timer checks every half hour while Waitron is running. In **System → Box status → Automatic
+upgrades**, set the hours in the venue’s local time. The default is 03:00–05:00. Pausing installation
+keeps the saved hours and offer checks. Clearing both hours stops offered installs and returns
+offer checks to 03:00–05:00.
+
+If the saved settings are unreadable, stop the timer with `sudo systemctl stop waitron-upgrade.timer`.
+On a default installation, restore the latest intact settings file to
+`/opt/waitron.upgrade-settings.json`. If you have no intact copy, move the unreadable file aside.
+The box uses the defaults in the absence of that file. Reopen **Automatic upgrades**, set your
+intended hours or pause, and save before restarting the timer with
+`sudo systemctl start waitron-upgrade.timer`.
 
 A box built from a recipe that includes the timer can use it straight away. If you first upgrade
 from a numbered release whose installer predates the timer, that upgrade brings in the new
@@ -588,8 +596,9 @@ timer support again.
 
 #### Rehearsing an offered install
 
-On a numbered standalone test box, run the retained installer from 03:00 through 04:30 in
-the venue’s time zone.
+On a numbered standalone test box, allow installation in **Automatic upgrades**. Run the
+retained installer during the saved window and leave at least 30 minutes before the end for it to
+start applying the upgrade.
 
 ```bash
 sudo bash /opt/waitron-host/waitron.sh install-offered-upgrade

@@ -94,6 +94,7 @@ describe("the user guides", () => {
       "open",
       "diagnostics",
       "rows",
+      "automatic-upgrades",
       "network",
       "retry-now",
       "invoice-conflict",
