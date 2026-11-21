@@ -17542,8 +17542,7 @@ describe("the device profile decides which screens a device offers", () => {
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
 
-/** A fetch that always fails at the network level — the router here is used only as an EventTarget
- * (the app subscribes to its `server-changed`), never probed, so no /api/node answer is needed. */
+/** A fetch that always fails at the network level. */
 function probeFetch(): typeof fetch {
   return vi.fn(async () => {
     throw new TypeError("Failed to fetch");
@@ -17611,9 +17610,9 @@ describe("till-app follows a server move", () => {
     expect(offerChart).toHaveBeenCalledWith(membership);
   });
 
-  it("shows the waiting-for-promotion banner in the shell while the router waits", async () => {
+  it("shows the no-server-taking-sales banner in the shell while the router waits", async () => {
     // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
-    // `till-app` surfaces `server.waiting_promotion` in its own `role="status"` banner while the router
+    // `till-app` surfaces `server.waiting_sales` in its own `role="status"` banner while the router
     // reports no server is accepting sales. Two-sided: absent before a probe leaves the router waiting,
     // present after.
     const router = new ServerRouter({
@@ -17628,12 +17627,72 @@ describe("till-app follows a server move", () => {
     // Not waiting yet (no probe has run) → no banner.
     expect(router.waiting).toBe(false);
     expect(banner()).toBeNull();
-    // A probe round with every server unreachable leaves the router waiting for a promotion; the
-    // `state-changed` it dispatches repaints the app, which now shows the banner.
+    // A probe round with every server unreachable leaves the router waiting for a server that takes
+    // sales; the `state-changed` it dispatches repaints the app, which now shows the banner.
     await router.probeNow();
     await flush(el);
     expect(router.waiting).toBe(true);
-    expect(banner()!.textContent).toContain(t("server.waiting_promotion"));
+    expect(banner()!.textContent).toContain(t("server.waiting_sales"));
+  });
+
+  /** A fetch where each listed server answers its `/api/node` with the given body; the rest fail. */
+  function answeringFetch(answers: Record<string, object>): typeof fetch {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const at = Object.keys(answers).find((server) => url.startsWith(server));
+      if (at === undefined) throw new TypeError("Failed to fetch");
+      return Response.json(answers[at]);
+    }) as unknown as typeof fetch;
+  }
+
+  async function lockAfterRound(
+    fetchImpl: typeof fetch,
+    servers: { nodeId: string; url: string; standing: "serving-secondary" }[],
+  ) {
+    const router = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, servers }) });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await flush(el);
+    await router.probeNow();
+    await flush(el);
+    await lock(el)!.updateComplete;
+    return { router, status: lock(el)!.shadowRoot!.querySelector("[data-server-status]") };
+  }
+
+  const spare = [{ nodeId: "c", url: CLOUD, standing: "serving-secondary" as const }];
+
+  it("on the sign-in screen, says no server is taking sales and names no box", async () => {
+    const { router, status } = await lockAfterRound(
+      answeringFetch({ [CLOUD]: { acceptingSales: false, term: 2, nodeId: "c" } }),
+      spare,
+    );
+    expect(router.waiting).toBe(true);
+    expect(status!.textContent).toContain(t("server.waiting_sales"));
+    expect(status!.querySelector("[data-check-again]")).not.toBeNull();
+    expect(status!.textContent).not.toContain("box.deli.test");
+    expect(status!.textContent).not.toContain("cloud.deli.test");
+  });
+
+  it("draws no sign-in line on a one-box till whose box takes sales", async () => {
+    const { router, status } = await lockAfterRound(
+      answeringFetch({ [BOX]: { acceptingSales: true, term: 2, nodeId: "b" } }),
+      [],
+    );
+    expect(router.waiting).toBe(false);
+    expect(status).toBeNull();
+  });
+
+  it("draws no sign-in line on a two-box till whose main box takes sales", async () => {
+    const { router, status } = await lockAfterRound(
+      answeringFetch({
+        [BOX]: { acceptingSales: true, term: 2, nodeId: "b" },
+        [CLOUD]: { acceptingSales: false, term: 2, nodeId: "c" },
+      }),
+      spare,
+    );
+    expect(router.statuses().map((s) => s.state)).toEqual(["primary", "standby"]);
+    expect(router.waiting).toBe(false);
+    expect(status).toBeNull();
   });
 });
 
@@ -17724,7 +17783,7 @@ describe("the main-server strip", () => {
     lock(el)!.shadowRoot!.querySelector<Strip>("till-main-server-strip");
   const waitingLine = (el: TillApp) =>
     [...el.shadowRoot!.querySelectorAll<HTMLElement>(".banner[role='status']")].find((banner) =>
-      banner.textContent!.includes(t("server.waiting_promotion")),
+      banner.textContent!.includes(t("server.waiting_sales")),
     );
   const press = (strip: Strip) =>
     strip.dispatchEvent(new CustomEvent("switch-to-spare", { bubbles: true, composed: true }));

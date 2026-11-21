@@ -2555,7 +2555,7 @@ export class TillApp extends LitElement {
         margin: 0;
       }
 
-      /* The compact waiting-for-promotion banner, muted so it informs without the
+      /* The compact no-server-taking-sales banner, muted so it informs without the
          alarm weight of the danger .error banner above. */
       .banner {
         margin: 0 0 var(--wt-space-3);
@@ -23390,7 +23390,7 @@ export class TillApp extends LitElement {
         @start-in-cloud=${() => void this.#onStartInCloud()}
       ></till-main-server-strip>`;
     return this.router?.waiting
-      ? html`<p class="banner" role="status">${t("server.waiting_promotion")}</p>`
+      ? html`<p class="banner" role="status">${t("server.waiting_sales")}</p>`
       : nothing;
   }
 
@@ -25183,8 +25183,6 @@ export class TillApp extends LitElement {
                           .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}
                           .canChooseDevice=${this.devTab || this.devDevices !== undefined}
-                          .serverStatuses=${this.router?.statuses() ?? []}
-                          .serverCurrent=${this.router?.current ?? ""}
                           .serverWaiting=${this.router?.waiting ?? false}
                           .mainServerSilent=${this.#mainServerStrip() !== undefined}
                           .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}

@@ -25,7 +25,6 @@ import {
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
-import type { ServerStatus } from "../api/server-router.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };
 const ben: StaffMember = { personId: "p2", displayName: "Ben" };
@@ -583,9 +582,7 @@ describe("till-lock-screen", () => {
   it("keeps server status below the sign-in content, with the language chooser above both", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
-      serverStatuses: [
-        { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
-      ],
+      serverWaiting: true,
     });
     await flush(el);
     const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
@@ -963,37 +960,29 @@ describe("till-lock-screen", () => {
     expect(query(el, "[data-logged-out-by-other]")).toBeNull();
   });
 
-  it("renders one row per server with its state, and a check-again button", async () => {
-    const statuses: ServerStatus[] = [
-      { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
-      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 2 },
-    ];
+  it("while no server takes sales, says so beside Check again and names no box", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
-      serverStatuses: statuses,
       serverWaiting: true,
     });
     await flush(el);
-    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
-    expect(line).toContain("box.deli.test");
-    expect(line).toContain(t("server.unreachable"));
-    expect(line).toContain("cloud.deli.test");
-    expect(line).toContain(t("server.standby"));
-    expect(line).toContain(t("server.waiting_promotion"));
+    const status = el.shadowRoot!.querySelector<HTMLElement>("[data-server-status]")!;
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `${t("server.waiting_sales")} ${t("server.check_again")}`,
+    );
+    expect(t("server.waiting_sales", "en")).toBe(
+      "No server is taking sales right now. The till carries on as soon as one does.",
+    );
     const again = vi.fn();
     el.addEventListener("check-again", again);
     (el.shadowRoot!.querySelector("[data-check-again]") as HTMLElement).click();
     expect(again).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the main-server strip, with the switch, in place of the waiting line", async () => {
-    const statuses: ServerStatus[] = [
-      { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
-      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 2 },
-    ];
+  it("shows the main-server strip, with the switch, in place of the waiting sentence", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
-      serverStatuses: statuses,
       serverWaiting: true,
     });
     await flush(el);
@@ -1008,49 +997,43 @@ describe("till-lock-screen", () => {
     expect(strip.showSwitch).toBe(true);
     expect(strip.spareAnswering).toBe(true);
     expect(strip.refused).toBe(true);
-    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
-    expect(line).toContain("box.deli.test");
-    expect(line).not.toContain(t("server.waiting_promotion"));
+    const status = el.shadowRoot!.querySelector("[data-server-status]")!;
+    expect(status.textContent).not.toContain(t("server.waiting_sales"));
+    expect(status.querySelector("[data-check-again]")).not.toBeNull();
   });
 
-  it("marks the CURRENT server with On: <label> when it is primary; others stay label: state", async () => {
-    const statuses: ServerStatus[] = [
-      { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 2 },
-      { url: "https://cloud.deli.test", label: "cloud.deli.test", state: "standby", term: 1 },
-    ];
+  it("draws no line while a server takes sales", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
       api: stubApi(),
-      serverStatuses: statuses,
-      serverCurrent: "https://box.deli.test",
-      serverWaiting: false,
-    });
-    await flush(el);
-    const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
-    expect(line).toContain(`${t("server.on")} box.deli.test`); // "On: box.deli.test"
-    expect(line).not.toContain(`box.deli.test: ${t("server.primary")}`); // NOT the plain state row
-    expect(line).toContain(`cloud.deli.test: ${t("server.standby")}`); // the other server unmarked
-  });
-
-  it("renders nothing when no servers are known (the default — a till with no router)", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
-      api: stubApi(),
-      serverStatuses: [],
       serverWaiting: false,
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-check-again]")).toBeNull();
   });
 
-  it("renders nothing when only the page's own server is known and it is primary", async () => {
-    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
-      api: stubApi(),
-      serverStatuses: [
-        { url: "https://box.deli.test", label: "box.deli.test", state: "primary", term: 1 },
-      ],
-      serverWaiting: false,
-    });
+  it("draws no line by default, as on a till with no router", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-server-status]")).toBeNull();
+  });
+
+  it("says the waiting sentence in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        serverWaiting: true,
+      });
+      await flush(el);
+      const line = el.shadowRoot!.querySelector("[data-server-status]")!.textContent!;
+      expect(line).toContain(
+        "Ningún servidor acepta ventas ahora mismo. La caja continúa en cuanto uno las acepte.",
+      );
+    } finally {
+      setLocale(before);
+    }
   });
 });
 
@@ -1231,13 +1214,12 @@ describe("the venue logo and Powered by on the sign-in", () => {
     expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(box.bottom);
   }
 
-  const statuses: ServerStatus[] = [
-    { url: "https://box.deli.test", label: "box.deli.test", state: "unreachable", term: null },
-  ];
-
   it("Powered by comes last in .screen, after the names and Switch device, 16 px below it, before the server status", async () => {
     startFrom(withLogo(LIGHT));
-    const { el } = await mountWithLogo({ canChooseDevice: true, serverStatuses: statuses });
+    const { el } = await mountWithLogo({
+      canChooseDevice: true,
+      serverWaiting: true,
+    });
     expect(query(el, ".roster")).not.toBeNull();
     const switchDevice = query(el, "[data-switch-device]")!;
     expect(
@@ -1249,7 +1231,10 @@ describe("the venue logo and Powered by on the sign-in", () => {
 
   it("Powered by comes last after the PIN pad and Switch device", async () => {
     startFrom(withLogo(LIGHT));
-    const { el } = await mountWithLogo({ canChooseDevice: true, serverStatuses: statuses });
+    const { el } = await mountWithLogo({
+      canChooseDevice: true,
+      serverWaiting: true,
+    });
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     const pad = query(el, "till-numeric-pad")!;
@@ -1262,7 +1247,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
 
   it("without dev mode, Powered by sits 16 px under the names", async () => {
     startFrom(withLogo(LIGHT));
-    const { el } = await mountWithLogo({ serverStatuses: statuses });
+    const { el } = await mountWithLogo({ serverWaiting: true });
     await expectPoweredByLast(el, query(el, ".roster")!);
   });
 

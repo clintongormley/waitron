@@ -23,7 +23,6 @@ import { noticeLine, noticeLineStyles } from "../widgets/notice-strip.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
-import type { ServerStatus } from "../api/server-router.js";
 
 /** Keyed by deviceId so two enrolled browsers at one venue remember their last operator independently. */
 const lastOperatorKey = (deviceId: string): string => `waitron.lastOperator.${deviceId}`;
@@ -188,12 +187,6 @@ export class TillLockScreen extends LitElement {
   @property() deviceId?: string;
 
   @property({ type: Boolean }) canChooseDevice = false;
-
-  /** From `ServerRouter.statuses()`; empty on a till with no router, which renders no status line. */
-  @property({ attribute: false }) serverStatuses: ServerStatus[] = [];
-
-  /** The URL of the server the till is currently ON (`ServerRouter.current`). */
-  @property({ attribute: false }) serverCurrent = "";
 
   @property({ type: Boolean }) serverWaiting = false;
 
@@ -490,22 +483,11 @@ export class TillLockScreen extends LitElement {
     ></till-main-server-strip>`;
   }
 
-  /** Shows the operator WHY a till is not selling; a healthy single-primary till shows no line. */
   #renderServers() {
-    const known = this.serverStatuses;
-    if (known.length === 0) return nothing;
-    if (known.length === 1 && !this.serverWaiting && known[0]?.state === "primary") return nothing;
-    const row = (s: ServerStatus) =>
-      s.url === this.serverCurrent && s.state === "primary"
-        ? `${t("server.on")} ${s.label}`
-        : `${s.label}: ${t(`server.${s.state}` as StringKey)}`;
+    if (!this.serverWaiting) return nothing;
     return html`
       <p class="servers status" role="status" data-server-status>
-        ${known.map(row).join(" · ")}${
-          this.serverWaiting && !this.mainServerSilent
-            ? html` — ${t("server.waiting_promotion")}`
-            : nothing
-        }
+        ${this.mainServerSilent ? nothing : t("server.waiting_sales")}
         <wt-button
           variant="secondary"
           data-check-again

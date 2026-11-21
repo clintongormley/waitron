@@ -2126,12 +2126,8 @@ export const en = {
   "basket.blocked.unit": "The quantity no longer fits its unit",
   "basket.blocked.server": "Not available now",
   // Server status
-  "server.on": "On:",
-  "server.unknown": "checking",
-  "server.unreachable": "unreachable",
-  "server.standby": "standby, not promoted",
-  "server.primary": "accepting sales",
-  "server.waiting_promotion": "Local server unreachable — waiting for the standby to be promoted",
+  "server.waiting_sales":
+    "No server is taking sales right now. The till carries on as soon as one does.",
   "server.check_again": "Check again",
   "server.switched": "Moved to another server. Enter your PIN.",
   "server.main_silent": "The main server is not answering",
@@ -4335,13 +4331,8 @@ export const es: Record<StringKey, string> = {
   "basket.blocked.extra": "Ha cambiado un extra u opción",
   "basket.blocked.unit": "La cantidad ya no encaja con su unidad",
   "basket.blocked.server": "No disponible ahora",
-  "server.on": "Activo:",
-  "server.unknown": "comprobando",
-  "server.unreachable": "sin conexión",
-  "server.standby": "en espera, sin promover",
-  "server.primary": "aceptando ventas",
-  "server.waiting_promotion":
-    "Servidor local sin conexión — esperando a que se promueva el de reserva",
+  "server.waiting_sales":
+    "Ningún servidor acepta ventas ahora mismo. La caja continúa en cuanto uno las acepte.",
   "server.check_again": "Comprobar de nuevo",
   "server.switched": "Cambiado a otro servidor. Introduce tu PIN.",
   "server.main_silent": "El servidor principal no responde",

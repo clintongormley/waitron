@@ -129,6 +129,9 @@ filing results and cases unchanged.
 When the till says **This server is no longer the main server**, wait for the till to move to the
 main server, then try again. If you already charged a card on the terminal, refund it there first.
 
+When the till says **No server is taking sales right now**, keep it open: it carries on as soon as
+a server takes sales again. On the sign-in screen, **Check again** checks now.
+
 ## Keep a report about a problem {#problem-report}
 
 If the till behaves unexpectedly, choose **Report a problem** from **☰**. Before sign-in or while

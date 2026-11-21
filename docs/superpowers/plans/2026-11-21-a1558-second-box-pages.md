@@ -65,6 +65,7 @@ The work is in `apps/setup/src/screens/handover-screen.ts` and its strings, `app
   - Show the line only while the till cannot reach the main box. The main-box-silent strip is drawn separately and stays.
   - Never show a replaced (`sell-only`) box, and never show "spare unreachable" to staff: that is a manager's concern, and Box status already reports a spare that is behind.
 - **Wording.** It follows the refusal rule: say what happens, and never send the person to someone else. `till-notices.md#not-main-server` follows.
+- **As built (2026-11-21).** Review found the per-box list could not tell the page's own address from the box it answers as, so the line lists no boxes at all: while no box takes sales it shows `server.waiting_sales` and **Check again** (the sentence gives way to the main-server strip while the strip shows), and `standing` is not passed through to `statuses()`.
 
 ## PR 6: the Servers page lists the main box first and tells the truth about a replaced box
 
