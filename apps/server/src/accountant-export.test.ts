@@ -17,7 +17,7 @@ import {
   seedPurchaseInvoice,
   type SeededVenue,
 } from "@waitron/reporting/test/fixtures.js";
-import { computeVatReturn, vatMovements } from "@waitron/reporting";
+import { computeVatCorrections, computeVatReturn } from "@waitron/reporting";
 import {
   decimal,
   deviceOrigin,
@@ -862,21 +862,22 @@ describe("accountant period selection", () => {
       );
     }
 
-    const [first, second, secondMovements] = await withTransaction(suite.db, async (tx) => [
+    const [first, second, secondCorrections] = await withTransaction(suite.db, async (tx) => [
       await computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter: 1 } }),
       await computeVatReturn(tx, { year: 2026, period: { kind: "quarter", quarter: 2 } }),
-      await vatMovements(tx, { year: 2026, period: { kind: "quarter", quarter: 2 } }),
+      await computeVatCorrections(tx, { year: 2026, period: { kind: "quarter", quarter: 2 } }),
     ]);
     expect(first.taxTotal).toBe("3.30");
     expect(second.byRate).toEqual([]);
     expect(second.taxTotal).toBe("0.00");
-    const secondCorrections = secondMovements.filter(
-      (m) => m.madeDay >= "2026-04-01" && m.belongsDay < "2026-04-01",
-    );
     expect(toScale(sumDecimals(workbookTax), 2)).toBe("6.30");
     expect(
       toScale(
-        sumDecimals([first.taxTotal, second.taxTotal, ...secondCorrections.map((m) => m.tax)]),
+        sumDecimals([
+          first.taxTotal,
+          second.taxTotal,
+          ...secondCorrections.rows.map((row) => row.tax),
+        ]),
         2,
       ),
     ).toBe("6.30");

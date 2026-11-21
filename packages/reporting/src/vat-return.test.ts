@@ -14,6 +14,7 @@ import {
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeVatReturn } from "./vat-return.js";
 import { vatMovements } from "./vat-movements.js";
+import { computeVatCorrections } from "./vat-corrections.js";
 import type { LiquidationPeriod } from "./period.js";
 import type { VatReturn } from "./types.js";
 
@@ -722,7 +723,6 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
   });
 
   it("counts every movement of a year once: in its quarter's return or a later quarter's corrections", async () => {
-    const quarterFirstDays = ["2026-01-01", "2026-04-01", "2026-07-01", "2026-10-01"];
     // Ordinary invoices at two rates, one with a later correction and a correction of that.
     const mixed = await sale("2026-01-15", {
       total: "176.00",
@@ -781,6 +781,13 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
       substitutionSaleId: exchange,
       substitutedSaleId: exchanged,
     });
+    // A December invoice corrected in January of the next year.
+    const december = await sale("2026-12-10");
+    await sale("2027-01-12", {
+      correctsSaleId: december,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
 
     const net = new Map<string, { base: Decimal; tax: Decimal }>();
     const add = (line: { rate: string; base: string; tax: string }, sign: 1 | -1 = 1) => {
@@ -791,17 +798,52 @@ describe("computeVatReturn — a period counts what belongs to it and was made b
         tax: apply(now.tax, decimal(line.tax)),
       });
     };
-    for (const [index, first] of quarterFirstDays.entries()) {
-      const period: LiquidationPeriod = { kind: "quarter", quarter: index + 1 };
-      for (const line of (await runPeriod(period)).byRate) add(line);
-      const next = quarterFirstDays[index + 1] ?? "2027-01-01";
-      const movements = await withTransaction(suite.db, (tx) =>
-        vatMovements(tx, { year: 2026, period }),
+    const corrected: Record<string, string[][]> = {};
+    for (const [year, quarter] of [
+      [2026, 1],
+      [2026, 2],
+      [2026, 3],
+      [2026, 4],
+      [2027, 1],
+    ] as const) {
+      const period: LiquidationPeriod = { kind: "quarter", quarter };
+      if (year === 2026) for (const line of (await runPeriod(period)).byRate) add(line);
+      const corrections = await withTransaction(suite.db, (tx) =>
+        computeVatCorrections(tx, { year, period }),
       );
-      for (const m of movements) {
-        if (m.madeDay >= first && m.madeDay < next && m.belongsDay < first) add(m);
-      }
+      for (const row of corrections.rows) add(row);
+      corrected[corrections.madeIn] = corrections.rows.map((row) => [
+        row.madeDay,
+        `${row.invoice.seriesCode}/${row.invoice.number}`,
+        row.kind,
+        row.belongsTo,
+        row.rate,
+        row.direction,
+        row.base,
+        row.tax,
+      ]);
     }
+    expect(corrected).toEqual({
+      "2026-1T": [],
+      "2026-2T": [
+        ["2026-04-01", "A/4", "issued_late", "2026-1T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-05-02", "A/2", "correction", "2026-1T", "21.00", "reduction", "-20.00", "-4.20"],
+      ],
+      "2026-3T": [
+        ["2026-07-01", "A/5", "issued_late", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-07-05", "A/8", "date_moved_in", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-07-20", "A/6", "date_moved_out", "2026-2T", "10.00", "reduction", "-10.00", "-1.00"],
+        ["2026-07-20", "A/6", "date_moved_in", "2026-2T", "10.00", "addition", "10.00", "1.00"],
+        ["2026-08-02", "A/3", "correction", "2026-1T", "21.00", "addition", "10.00", "2.10"],
+      ],
+      "2026-4T": [
+        ["2026-10-02", "A/12", "void", "2026-3T", "10.00", "reduction", "-10.00", "-1.00"],
+        ["2026-11-03", "A/7", "void", "2026-2T", "10.00", "reduction", "-10.00", "-1.00"],
+      ],
+      "2027-1T": [
+        ["2027-01-12", "A/18", "correction", "2026-4T", "10.00", "reduction", "-5.00", "-0.50"],
+      ],
+    });
     const year = await withTransaction(suite.db, (tx) =>
       vatMovements(tx, { year: 2026, period: { kind: "year" } }),
     );
