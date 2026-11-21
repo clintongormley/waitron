@@ -3,10 +3,11 @@ import QRCode from "qrcode";
 import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
 import type { Logger } from "./logger.js";
+import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
-import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
+import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
 
 /** Public certificate files use a fixed state path; requests never choose a filesystem location. */
 export interface DiscoveryDeps {
@@ -23,6 +24,8 @@ export interface DiscoveryDeps {
   serveBoxCa?: boolean;
   /** Asked for each connection page and write; never asked when `serveBoxCa` is false, which refuses them. */
   repairAllowed?: (c: Context) => boolean;
+  /** Read on each page view; absent where no venue-name watch runs. */
+  venueNameState?: () => VenueNameState;
   /** Injected for tests. */
   listIpv4?: () => string[];
   /** Injected for tests; default `QRCode.toString(text, { type: "svg", margin: 1 })`. */
@@ -142,6 +145,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       qrSvg: qr ?? undefined,
       httpsUrl: reach.hostnameUrl,
       device: trustDeviceForRequest(c.req),
+      ownAddress: ownAddressFor(deps.venueNameState?.(), reach.ipUrls, new URL(c.req.url).hostname),
     });
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });

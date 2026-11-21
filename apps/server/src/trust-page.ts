@@ -4,6 +4,7 @@ import { renderConnectionPage } from "./connection-bootstrap-page.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
+import type { VenueNameState } from "./mdns.js";
 
 export const CA_CONTENT_TYPE = "application/x-x509-ca-cert";
 export const CA_FILENAME = "waitron-ca.crt";
@@ -25,6 +26,18 @@ export interface TrustPageInput {
   httpsUrl: string;
   /** Which device's steps to open, guessed by `detectTrustDevice`. "unknown" opens none. */
   device: DeviceId | "unknown";
+  /** This box's own HTTPS origin, offered first because another box answers `httpsUrl`'s name. */
+  ownAddress?: string;
+}
+
+/** `waitron.local` may reach another box, so a person joining this one is sent to its own address. */
+export function ownAddressFor(
+  state: VenueNameState | undefined,
+  ipUrls: readonly string[],
+  requestHostname: string,
+): string | undefined {
+  if (state !== "other-box-answers") return undefined;
+  return ipUrls.find((url) => new URL(url).hostname === requestHostname) ?? ipUrls[0];
 }
 
 function escapeHtml(value: string): string {
@@ -82,7 +95,16 @@ function installSection(device: DeviceId | "unknown"): string {
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
   if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
-  const { reachUrls, caAvailable, caDownloadPath, qrSvg, httpsUrl, device } = input;
+  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress } = input;
+  const reachUrls = ownAddress
+    ? [ownAddress, ...input.reachUrls.filter((url) => url !== ownAddress)]
+    : input.reachUrls;
+  const httpsUrl = ownAddress
+    ? ownAddress + input.httpsUrl.slice(new URL(input.httpsUrl).origin.length)
+    : input.httpsUrl;
+  const lead = ownAddress
+    ? `<p>Adding a spare? You don't need this box's certificate: open this address (<a href="${escapeHtml(ownAddress)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
+    : "";
   const urlItems = reachUrls
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
     .join("");
@@ -134,7 +156,7 @@ code, a { overflow-wrap: anywhere; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <h1>Connect <span class="accent">securely</span> to this Waitron server</h1>
-<p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
+${lead}<p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
 ${steps}
 <section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
 <p>Open Waitron with the link below, then check the address bar of the page it opens. If that still

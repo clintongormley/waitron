@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { readBoxPublicCa } from "./box-tls-repair.js";
 import type { Logger } from "./logger.js";
+import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
-import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
+import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
 import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
 import { type DeclarationPagesDeps, mountDeclarationPages } from "./declaration-pages.js";
 
@@ -17,6 +18,8 @@ export interface LandingDeps {
   /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
+  /** Read on each page view; absent where no venue-name watch runs. */
+  venueNameState?: () => VenueNameState;
   connection?: ConnectionBootstrapDeps;
   declarationPages?: DeclarationPagesDeps;
 }
@@ -33,6 +36,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
   }
 
   const known = deps.reachUrls.length ? deps.reachUrls : [deps.httpsUrl];
+  const ipUrls = deps.reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
   mountConnectionBootstrap(
     app,
     {
@@ -69,6 +73,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       httpsUrl:
         c.req.query("app") === "till" ? new URL("/till/", deps.httpsUrl).href : deps.httpsUrl,
       device: trustDeviceForRequest(c.req),
+      ownAddress: ownAddressFor(deps.venueNameState?.(), ipUrls, new URL(c.req.url).hostname),
     });
     // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.
     return c.html(html, 200, { "Cache-Control": "no-cache" });

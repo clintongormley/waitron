@@ -90,6 +90,53 @@ describe("landing app", () => {
     }
   });
 
+  describe("while another box answers waitron.local", () => {
+    const reachUrls = [
+      "https://waitron.local:8080",
+      "https://192.168.1.20:8080",
+      "https://10.0.0.7:8080",
+    ];
+    const pageFor = async (
+      url: string,
+      state: "other-box-answers" | "no-other-box" | "not-asked" | "ask-failed",
+    ) => {
+      const dir = stateDirWithCa();
+      try {
+        const app = buildLandingApp({
+          stateDir: dir,
+          reachUrls,
+          httpsUrl: "https://waitron.local:8080",
+          venueNameState: () => state,
+          log,
+        });
+        return await (await app.request(url)).text();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("continues on the address the person opened the page on", async () => {
+      const html = await pageFor("http://10.0.0.7/", "other-box-answers");
+      expect(html).toContain('<a class="button" href="https://10.0.0.7:8080">Continue');
+      expect(html).toContain("Adding a spare?");
+      expect(html).toMatch(/<ul><li><a href="https:\/\/10\.0\.0\.7:8080">/);
+    });
+
+    it("continues on the first address when the page was opened by name, keeping the till's path", async () => {
+      const html = await pageFor("http://waitron.local/setup/trust?app=till", "other-box-answers");
+      expect(html).toContain('<a class="button" href="https://192.168.1.20:8080/till/">Continue');
+    });
+
+    it.each(["no-other-box", "not-asked", "ask-failed"] as const)(
+      "is today's page when the state is %s",
+      async (state) => {
+        const html = await pageFor("http://10.0.0.7/", state);
+        expect(html).toContain('<a class="button" href="https://waitron.local:8080">Continue');
+        expect(html).not.toContain("Adding a spare");
+      },
+    );
+  });
+
   // Missing CA files remove the download offer and return the same no_box_ca response.
   it("omits the download link and 404s /ca.crt when there is no box CA", async () => {
     const dir = stateDirWithoutCa();

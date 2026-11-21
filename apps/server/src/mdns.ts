@@ -160,9 +160,12 @@ export interface VenueNameWatchDeps {
   ownAddresses?: () => string[];
 }
 
+export type VenueNameState = "other-box-answers" | "no-other-box" | "not-asked" | "ask-failed";
+
 export interface VenueNameWatch {
   /** `[hostname]` only while the last ask finished and heard no other box, else none. */
   names(): readonly string[];
+  state(): VenueNameState;
   stop(): Promise<void>;
 }
 
@@ -171,21 +174,20 @@ export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch 
   const { hostname } = deps;
   const answering: readonly string[] = [hostname];
   const silent: readonly string[] = [];
-  // Until the first ask finishes, the box cannot know that no other box answers the name.
-  let heardOthers = true;
+  let state: VenueNameState = "not-asked";
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> = Promise.resolve();
 
   const ask = async (): Promise<void> => {
     try {
-      heardOthers = await askedAndHeardOthers(hostname, {
+      const heardOthers = await askedAndHeardOthers(hostname, {
         makeSocket: deps.makeSocket,
         ownAddresses: deps.ownAddresses,
       });
+      state = heardOthers ? "other-box-answers" : "no-other-box";
     } catch {
-      // A failed ask cannot show that no other box answers.
-      heardOthers = true;
+      state = "ask-failed";
     }
     if (stopped) return;
     timer = setTimeout(
@@ -200,7 +202,9 @@ export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch 
   if (respondsOnLan(deps)) inFlight = ask();
 
   return {
-    names: () => (heardOthers ? silent : answering),
+    // Only a finished ask that heard nobody shows that no other box answers the name.
+    names: () => (state === "no-other-box" ? answering : silent),
+    state: () => state,
     async stop() {
       stopped = true;
       clearTimeout(timer);
