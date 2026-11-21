@@ -469,9 +469,17 @@ export class BusinessDayStartEditor extends LitElement {
       ? line
       : fill("business_day.conflict_in_season", { season: conflict.seasonName, line });
   }
-  #conflictLines(preview: BusinessDayStartPreview): { lines: string[]; count: number } {
-    const lines = [...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))];
-    return { lines, count: lines.length + preview.unlistedCount };
+  #conflictLines(preview: BusinessDayStartPreview): {
+    ranges: string[];
+    keptOpen: string[];
+    count: number;
+  } {
+    const distinct = (conflicts: BusinessDayStartPreview["conflicts"]) => [
+      ...new Set(conflicts.map((conflict) => this.#conflict(conflict))),
+    ];
+    const ranges = distinct(preview.conflicts.filter(({ reason }) => reason !== "kept_open"));
+    const keptOpen = distinct(preview.conflicts.filter(({ reason }) => reason === "kept_open"));
+    return { ranges, keptOpen, count: ranges.length + keptOpen.length + preview.unlistedCount };
   }
   override render() {
     const model = this.model;
@@ -564,7 +572,7 @@ export class BusinessDayStartEditor extends LitElement {
                                     <a href="/opening-hours">${t("business_day.open_hours")}</a>
                                   </p>
                                   <ul data-test="conflict-rows">
-                                    ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
+                                    ${conflicts!.ranges.map((line) => html`<li>${line}</li>`)}
                                     ${
                                       preview.unlistedCount > 0
                                         ? html`<li data-test="conflicts-more">
@@ -574,6 +582,7 @@ export class BusinessDayStartEditor extends LitElement {
                                           </li>`
                                         : nothing
                                     }
+                                    ${conflicts!.keptOpen.map((line) => html`<li>${line}</li>`)}
                                   </ul>`
                               : nothing
                           }

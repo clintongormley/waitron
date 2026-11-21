@@ -533,6 +533,22 @@ it("counts the lines shown plus the ranges the server left off, not the server's
   expect(count).toBe("Opening hours that clash with the new start: 3. Review opening hours");
 });
 
+it("puts the ranges the server left off straight after the listed ranges, before a zone kept open", async () => {
+  setLocale("en-GB");
+  const { lines, count } = await conflictLines(
+    [seasonConflict("Winter"), seasonConflict("Autumn"), keptOpen],
+    8,
+    5,
+  );
+  expect(lines.map((line) => line?.replace(/\s+/g, " ").trim())).toEqual([
+    "Winter: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
+    "Autumn: Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day",
+    "and 5 more",
+    "Restaurant · Terrace · Kept open until 04:30 tonight",
+  ]);
+  expect(count).toBe("Opening hours that clash with the new start: 8. Review opening hours");
+});
+
 const cardRows = (el: Editor) =>
   [...el.shadowRoot!.querySelectorAll("section.settings-card dt")].map(
     (label) =>
