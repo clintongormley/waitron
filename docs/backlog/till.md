@@ -116,22 +116,6 @@ on the plan at its kept size, shows no visible name (A503 part 3's look, shots
 is seen more. A672 decided its handles: a selected 2 × 2 shows its four corners and no side dots.
 Next: its name waits on the same decision as A561, in `wt-floor-plan-canvas`.
 
-## A594. Moving a bill to a free table in a group seats only that table
-
-**A594 (2026-10-13).** `moveBill`'s free-table branch opens a party at the one table it was given and
-leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
-can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
-Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
-no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
-whole group, as seating at one of its tables does.
-
-Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review,
-reproduced with a throwaway test before A650 Part 1 changed when MOVED slips print; since then
-the code has been re-read, not re-run): Move guests onto a table another party holds in the same named
-group can end the group (`leaveMergeOf`) after `combineAt` has queued its slips (`moveGuests`,
-`apps/server/src/table-actions.ts`). It needs a party holding part of a group, so taking the whole
-group should remove it (reasoned, not tested).
-
 ## A565. A reset does not wait for food on its way to an ordinary table
 
 **A565 (2026-10-13).** Any reset (Update layout, Reset to {set} plan, the day's first reset, the
@@ -1213,14 +1197,6 @@ Printer identity is separate from the till route inventory.
   (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).
   [Detail](till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
-## Bundle: Joined-table writers keep their rows right
-
-1 entry, size M. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **A594. Moving a bill to a free table in a group seats only that table (2026-10-13).** The party
-  holds part of the group, and can lose the group's today's name with no MOVED slip. Found by A579
-  part 3b's review.
-  [Detail](till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
 ## Bundle: One rule for what holds a table back at a reset
 
 3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
