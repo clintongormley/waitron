@@ -1078,6 +1078,36 @@ describe("what is left of an advance, on the bill's payments", () => {
   });
 });
 
+describe("a settled bill's received, once Correct invoice gave money back", () => {
+  async function balanceOf(billId: string) {
+    const read = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/working-orders/${billId}/payments`,
+    );
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    return read.json;
+  }
+
+  it("no advance: €120 paid and €90 back by Correct invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    await payRest(billId, "120.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+
+  it("example 1: €30 advance, €90 for the rest and €90 back on the rest's invoice shows €30 received of €30", async () => {
+    const billId = await seated("Tasting menu");
+    await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    await correct(await restId(billId), "90.00", [{ rate: "10.00", base: "81.82", tax: "8.18" }]);
+
+    expect(await balanceOf(billId)).toMatchObject({ total: "30.00", received: "30.00" });
+  });
+});
+
 describe("a whole credit of the rest's invoice (ruling L9)", () => {
   /** Credits the settled rest's invoice whole: its lines reversed as cancelling an order reverses
    * them, and its split the invoice's own negated. The credit's id. */

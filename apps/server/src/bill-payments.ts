@@ -18,6 +18,8 @@ import {
   insertInChunks,
   isUniqueViolation,
   sales,
+  tenderRefunds,
+  tenders,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -35,6 +37,7 @@ import {
   firstCodeInCauseChain,
   isAppError,
   multiplyDecimal,
+  rawCentsToDecimal,
   stringToThousandths,
   subtractDecimal,
   sumDecimals,
@@ -832,6 +835,24 @@ async function readBillFigures(
   return { issued, meal, due: subtractDecimal(meal, taken), advances };
 }
 
+/** The applied money the completed `tender_refunds` (Correct invoice and plain refunds) gave back
+ * from the tenders of these payments that paid no advance; an advance's own are already out of
+ * what is left of it. Reported only: no refusal or balance check reads it. */
+async function givenBackAfterSettling(
+  tx: Transaction,
+  held: readonly PaymentMoney[],
+  advances: BillAdvances,
+): Promise<Decimal> {
+  const ids = held.filter(({ row }) => !advances.payments.has(row.id)).map(({ row }) => row.id);
+  if (ids.length === 0) return ZERO;
+  const [row] = await tx
+    .select({ cents: sql<string>`cast(coalesce(sum(${tenderRefunds.appliedAmount}), 0) as text)` })
+    .from(tenderRefunds)
+    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+    .where(and(inArray(tenders.billPaymentId, ids), eq(tenderRefunds.state, "completed")));
+  return rawCentsToDecimal(row!.cents);
+}
+
 /**
  * The bill's balance and its payments; `working_order.not_found` for an unknown bill. `total` is
  * the bill's total when the caller has priced its current lines in this transaction already.
@@ -870,7 +891,11 @@ export async function readBillBalance(
     workingOrderId,
     status: order.status,
     total: money(funds.total),
-    received: money(funds.received),
+    received: money(
+      order.status === "settled"
+        ? subtractDecimal(funds.received, await givenBackAfterSettling(tx, held, advances))
+        : funds.received,
+    ),
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
     tips: money(
