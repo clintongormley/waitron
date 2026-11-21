@@ -793,7 +793,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
             attempt = undefined;
           }
         }
-        if (await options.readVenueId()) throw new AppError("cloud.binding_conflict", {});
+        if (!setup && (await options.readVenueId()))
+          throw new AppError("cloud.binding_conflict", {});
         if (attempt && Date.parse(attempt.expiresAt) > Date.now()) {
           if (!sameBinding(attempt, binding)) throw new AppError("cloud.binding_conflict", {});
         } else {

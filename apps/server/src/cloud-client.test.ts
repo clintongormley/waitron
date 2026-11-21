@@ -1,3 +1,4 @@
+import { AppError } from "@waitron/shared";
 import { mkdir } from "node:fs/promises";
 import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
@@ -176,6 +177,10 @@ async function installedSignInFixture(setup = false, provisional = false) {
   );
   const options = {
     ...f.options,
+    readVenueId: async () => {
+      if (setup && !published) throw new AppError("venue.not_found", {});
+      return f.options.readVenueId();
+    },
     signIn: {
       callback,
       setup,
