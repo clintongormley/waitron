@@ -45,6 +45,7 @@ export interface CloseOfDayRule {
 }
 
 const MONEY_MOVING: ReadonlySet<string> = new Set([
+  "advance.correction_open",
   "bill.refund_in_progress",
   "order.payment_in_flight",
 ]);
@@ -86,19 +87,14 @@ export async function issueBillAtClose(
   if (bill === undefined) return { kind: "not_due" };
   const reading = deps.clock.now();
   await deps.backend.refuseUntilRecordable(tx, reading);
-  try {
-    await refuseBillPaymentInFlight(deps.db, tx, billId, bill.status);
-  } catch (error) {
-    if (isAppError(error) && MONEY_MOVING.has(error.code)) return { kind: "money_moving" };
-    throw error;
-  }
-  // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
-  if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
-    return { kind: "left_open", reason: "dish_not_made" };
-
-  // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
   let invoice: PricedInvoice;
   try {
+    await refuseBillPaymentInFlight(deps.db, tx, billId, bill.status);
+    // A walkout refuses such a bill until staff cancel the dish (D4); once issued it would not.
+    if ((await ordersWithUnfiredDish(tx, [billId])).has(billId))
+      return { kind: "left_open", reason: "dish_not_made" };
+
+    // Dated by closeOfDayEnd, as every path that issues a bill the close counts as due is.
     invoice = await priceForIssuance(
       tx,
       pinnedAt(deps.clock, reading),
@@ -108,7 +104,7 @@ export async function issueBillAtClose(
       deps.log,
     );
   } catch (error) {
-    if (codeOf(error) === "advance.correction_open") return { kind: "money_moving" };
+    if (isAppError(error) && MONEY_MOVING.has(error.code)) return { kind: "money_moving" };
     throw error;
   }
   const total = invoice.priced.total;
