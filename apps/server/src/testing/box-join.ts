@@ -291,9 +291,8 @@ export function mountBoxJoin(
 
 /**
  * A whole join on routes {@link mountBoxJoin} mounted: hello, reveal, the person's tap on the right
- * code, then the new box's poll and unlock. Answers as the password route `POST
- * /management-api/mirror-bundle` did, so its callers' checks read the same: 200 with the bundle
- * when the poll hands one that opens, otherwise the hello's, reveal's or approve's refusal. A
+ * code, then the new box's poll and unlock. Answers 200 with the bundle when the poll hands one
+ * that opens, otherwise the hello's, reveal's or approve's refusal. A
  * refused approve dismisses the request, so it holds no place in the store.
  */
 export async function joinAsBundleAnswer(

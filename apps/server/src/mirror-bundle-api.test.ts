@@ -1,5 +1,4 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,7 +27,6 @@ import {
   type KeyRing,
 } from "@waitron/credentials";
 import { personIdForLoginEmail } from "@waitron/identity";
-import { generateSync } from "otplib";
 import {
   canonicalize,
   endorseKey,
@@ -61,13 +59,9 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { personHolding } from "./testing/session-holding.js";
 import { clearRemovedMachine, removeStandby } from "./membership-removal.js";
-import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
-import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import {
@@ -132,9 +126,6 @@ vi.mock("./membership-mint.js", async (importOriginal) => {
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const ADMIN_EMAIL = "owner@example.test";
-const STAFF_EMAIL = "cashier@example.test";
-const SUSPENDED_EMAIL = "suspended@example.test";
-const STAFF_PASSWORD = "staffPass123";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -227,19 +218,6 @@ async function setupVenue(): Promise<{
   return { designated, adminPersonId, primaryPublicKey };
 }
 
-async function seedStaff(): Promise<string> {
-  return withTransaction(db, async (tx) => {
-    const [row] = await seedPersons(tx, {
-      displayName: "Cashier",
-      email: STAFF_EMAIL,
-      pinHash: fixturePinHash("4321"),
-      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
-      role: "staff",
-    });
-    return row!.id;
-  });
-}
-
 function mountApp(
   designated: AdoptResult,
   log?: Logger,
@@ -248,23 +226,6 @@ function mountApp(
   wakeSpareJoin: () => void = () => {},
 ): Hono {
   const app = new Hono();
-  mountMirrorBundleApi(
-    app,
-    {
-      appDb: db,
-      node: suite.node,
-      ring: RING,
-      stateDir,
-      boxHostname: "waitron.local",
-      advertisedOrigin,
-      designated,
-
-      credentialKeyRing: TOTP_KEY_RING,
-      wakeSpareJoin,
-      now,
-    },
-    log,
-  );
   mountBoxJoin(app, {
     appDb: db,
     node: suite.node,
@@ -335,13 +296,6 @@ async function holdChartWithStandby(
   return term;
 }
 
-async function rawPost(app: Hono, body: unknown): Promise<Response> {
-  return app.request("/management-api/mirror-bundle", {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "content-type": "application/json" },
-  });
-}
 // The fiscal module joins as an unmarked stand-in unless `veriFactu` is set, so the join's
 // reservation path, which a module whose series open on activation never takes, stays reachable.
 async function withFixtureOperation(
@@ -403,27 +357,13 @@ async function withFixtureOperation(
   }
 }
 
-/** The password route, which the password cases still use. */
-async function post(
-  app: Hono,
-  body: unknown,
-  { veriFactu = false }: { veriFactu?: boolean } = {},
-): Promise<Response> {
-  if (typeof body !== "object" || body === null) return rawPost(app, body);
-  const request = body as Record<string, unknown>;
-  if (typeof request.email !== "string") return rawPost(app, body);
-  return withFixtureOperation(request, veriFactu, (moduleOperation) =>
-    rawPost(app, { ...request, moduleOperation }),
-  );
-}
-
 let joinAddresses = 0;
 
 /**
- * The same join as {@link post}, reaching `issueMirrorBundle` through the box-join routes: the
- * spare named in `body` asks from an address of its own, and the person `body.email` names, signed
- * in afresh, taps its code. Answers as the password route did (`joinAsBundleAnswer`). `plain`
- * sends no module operation, as the password route's plain path did.
+ * A join reaching `issueMirrorBundle` through the box-join routes: the spare named in `body` asks
+ * from an address of its own, and the person `body.email` names, signed in afresh, taps its code.
+ * Answers with the bundle or the refusal (`joinAsBundleAnswer`). `plain` sends no module
+ * operation.
  */
 async function approvedJoin(
   app: Hono,
@@ -486,7 +426,7 @@ afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
 });
 
-describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
+describe("issueMirrorBundle, through the box-join routes", () => {
   it("returns a bundle carrying the venue identity for an authorised admin credential", async () => {
     const { designated } = await setupVenue();
     const lines: string[] = [];
@@ -898,91 +838,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
   });
 
-  it("refuses a non-admin (staff) credential with 403", async () => {
-    const { designated } = await setupVenue();
-    await seedStaff();
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: STAFF_EMAIL,
-      password: STAFF_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error.code).toBe("authorization.not_permitted");
-  });
-
-  it("refuses a credential holding only invoice.inspect as lacking node.manage", async () => {
-    const { designated } = await setupVenue();
-    await personHolding(db, ["invoice.inspect"], {
-      email: STAFF_EMAIL,
-      passwordHash: fixturePasswordHash(STAFF_PASSWORD),
-    });
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: STAFF_EMAIL,
-      password: STAFF_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toEqual({
-      code: "authorization.not_permitted",
-      params: { permission: "node.manage" },
-    });
-  });
-
-  it("refuses a wrong password with 401 before it can authorize", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await post(app, { email: ADMIN_EMAIL, password: "wrong", ...validStandby() });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("refuses a non-string email with 401 password.invalid and no params", async () => {
-    const { designated } = await setupVenue();
-    const log = vi.fn();
-    const app = mountApp(designated, log);
-
-    const res = await post(app, { email: 42, password: ADMIN_PASSWORD, ...validStandby() });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    expect(log).toHaveBeenCalledWith(
-      "warn",
-      "password.invalid",
-      expect.objectContaining({ logReason: "malformed" }),
-    );
-  });
-
-  it("signs in by email whatever its letter case and surrounding spaces", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: "  Owner@Example.TEST ",
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-  });
-
-  it("signs in by email on the plain path, with no module operation", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await rawPost(app, { email: ADMIN_EMAIL, password: "wrong", ...validStandby() });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    const signedIn = await rawPost(app, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
-  });
-
   it("accepts a Veri*Factu venue's join with no module operation, reserving nothing fiscal", async () => {
     const { designated } = await setupVenue();
     const warnings: { event: string; fields: Record<string, unknown> | undefined }[] = [];
@@ -1030,275 +885,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       series: [],
     });
     expect(await allocationSnapshot()).toEqual(before);
-  });
-
-  it("refuses a present non-string totp with 401 (screened before loginManager)", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const res = await post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: 123 });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("signs in an admin with an authenticator who sends a correct current code", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      totp: generateSync({ secret }),
-      ...validStandby(),
-    });
-    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
-  });
-
-  it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const app = mountApp(designated);
-
-    const res = await post(app, {
-      email: ADMIN_EMAIL,
-      password: ADMIN_PASSWORD,
-      totp: wrongTotpCode(secret),
-      ...validStandby(),
-    });
-    expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("password.invalid");
-  });
-
-  it("answers every login that fails identically on the module-operation path, whatever the cause, and reserves nothing", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    await withTransaction(db, async (tx) => {
-      const [row] = await seedPersons(tx, {
-        displayName: "Suspended administrator",
-        email: SUSPENDED_EMAIL,
-        pinHash: fixturePinHash("1234"),
-        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
-        role: "admin",
-        status: "suspended",
-      });
-      return row!.id;
-    });
-    const app = mountApp(designated);
-    const counterBefore = await allocationSnapshot();
-
-    const causes: Record<string, Record<string, unknown>> = {
-      unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
-      // The suspended admin's own password, so only the suspension can be the cause.
-      suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
-      wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
-      wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
-      missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-    };
-    const answers: Record<string, unknown> = {};
-    for (const [cause, credential] of Object.entries(causes)) {
-      const res = await post(app, { ...credential, ...validStandby() });
-      answers[cause] = { status: res.status, body: await res.json() };
-    }
-    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
-    expect(answers).toEqual({
-      unknown: refused,
-      suspended: refused,
-      wrongPassword: refused,
-      wrongCode: refused,
-      missingCode: refused,
-    });
-    expect(await allocationSnapshot()).toEqual(counterBefore);
-  });
-
-  it("asks on the plain path for the authenticator code only once the password is right, and reserves nothing", async () => {
-    const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-    const suspendedPersonId = await withTransaction(db, async (tx) => {
-      const [row] = await seedPersons(tx, {
-        displayName: "Suspended administrator",
-        email: SUSPENDED_EMAIL,
-        pinHash: fixturePinHash("1234"),
-        passwordHash: fixturePasswordHash(ADMIN_PASSWORD),
-        role: "admin",
-      });
-      return row!.id;
-    });
-    // Enrolment needs an active account, so the suspension follows it.
-    await enrolAuthenticator(db, suspendedPersonId, TOTP_KEY_RING);
-    await db.execute(sql`update persons set status = 'suspended' where id = ${suspendedPersonId}`);
-    const app = mountApp(designated);
-    const counterBefore = await allocationSnapshot();
-
-    const causes: Record<string, Record<string, unknown>> = {
-      unknown: { email: "nobody@example.test", password: ADMIN_PASSWORD },
-      suspended: { email: SUSPENDED_EMAIL, password: ADMIN_PASSWORD },
-      wrongPassword: { email: ADMIN_EMAIL, password: "wrong", totp: generateSync({ secret }) },
-      wrongPasswordNoCode: { email: ADMIN_EMAIL, password: "wrong" },
-      wrongCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
-      missingCode: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-    };
-    const answers: Record<string, unknown> = {};
-    for (const [cause, credential] of Object.entries(causes)) {
-      const res = await rawPost(app, { ...credential, ...validStandby() });
-      answers[cause] = { status: res.status, body: await res.json() };
-    }
-    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
-    expect(answers).toEqual({
-      unknown: refused,
-      suspended: refused,
-      wrongPassword: refused,
-      wrongPasswordNoCode: refused,
-      wrongCode: refused,
-      missingCode: { status: 401, body: { error: { code: "totp.required", params: {} } } },
-    });
-    expect(await allocationSnapshot()).toEqual(counterBefore);
-  });
-
-  describe("repeated wrong passwords", () => {
-    const wrongAttempt = (email: string) => ({ email, password: "wrong", ...validStandby() });
-    const rightAttempt = (email = ADMIN_EMAIL) => ({
-      email,
-      password: ADMIN_PASSWORD,
-      ...validStandby(),
-    });
-    const throttled = {
-      status: 429,
-      body: {
-        error: { code: "password.throttled", params: { retryAfterSeconds: expect.any(Number) } },
-      },
-    };
-    const answer = async (res: Response) => ({ status: res.status, body: await res.json() });
-
-    it("refuses a fifth quick attempt for one email with 429 password.throttled, even with the right password", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-      const before = await allocationSnapshot();
-
-      for (let attempt = 0; attempt < 4; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
-      expect(await allocationSnapshot()).toEqual(before);
-    });
-
-    it("counts the plain path's wrong passwords against the same limit as the module-operation path", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 4; attempt += 1)
-        expect((await rawPost(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      expect(await answer(await rawPost(app, rightAttempt()))).toEqual(throttled);
-      expect(await answer(await post(app, rightAttempt()))).toEqual(throttled);
-    });
-
-    it("counts two spellings of one address against one limit", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (const email of [
-        ADMIN_EMAIL,
-        "  Owner@Example.TEST ",
-        "OWNER@EXAMPLE.TEST",
-        "owner@example.test  ",
-      ])
-        expect((await post(app, wrongAttempt(email))).status).toBe(401);
-
-      expect(await answer(await post(app, rightAttempt(" Owner@example.test")))).toEqual(throttled);
-    });
-
-    it("answers an unknown email's attempts exactly as a known one's, its two spellings sharing one limit", async () => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      const clock = vi.spyOn(performance, "now").mockReturnValue(0);
-      try {
-        const { designated } = await setupVenue();
-        const answers = async (emails: string[]) => {
-          const app = mountApp(designated);
-          const seen = [];
-          for (const email of emails) seen.push(await answer(await post(app, wrongAttempt(email))));
-          return seen;
-        };
-
-        const known = await answers(Array.from({ length: 5 }, () => ADMIN_EMAIL));
-        expect(known.map(({ status }) => status)).toEqual([401, 401, 401, 401, 429]);
-        expect(known[4]).toEqual(throttled);
-        const unknown = await answers([
-          "nobody@example.test",
-          " NOBODY@example.test",
-          "nobody@example.test",
-          "Nobody@Example.Test ",
-          "nobody@example.test",
-        ]);
-        expect(unknown).toEqual(known);
-      } finally {
-        clock.mockRestore();
-        vi.useRealTimers();
-      }
-    });
-
-    it("does not count a request for the authenticator code as a failed try", async () => {
-      const { designated, adminPersonId } = await setupVenue();
-      const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        expect(await answer(await rawPost(app, rightAttempt()))).toEqual({
-          status: 401,
-          body: { error: { code: "totp.required", params: {} } },
-        });
-
-      const signedIn = await rawPost(app, { ...rightAttempt(), totp: generateSync({ secret }) });
-      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
-    });
-
-    it("lets a correct sign-in through before the limit, and starts the count again after it", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-
-      for (let attempt = 0; attempt < 3; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-      const signedIn = await post(app, rightAttempt());
-      expect(signedIn.status, JSON.stringify(await signedIn.clone().json())).toBe(200);
-
-      const after: number[] = [];
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        after.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
-      expect(after).toEqual([401, 401, 401, 401, 429]);
-    });
-
-    it("does not count a refusal that checks no password, nor a join refused after a correct sign-in", async () => {
-      const { designated } = await setupVenue();
-      const app = mountApp(designated);
-      for (let attempt = 0; attempt < 3; attempt += 1)
-        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
-
-      const ownName = `${designated.nodeId.slice(0, 4)}${crypto.randomUUID().slice(4)}`;
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const gated = await post(app, { ...rightAttempt(), standbyNodeId: ownName });
-        expect((await gated.json()).error.code).toBe("mirror.standby_name_taken");
-        const badOperation = await rawPost(app, {
-          ...wrongAttempt(ADMIN_EMAIL),
-          moduleOperation: { nonsense: true },
-        });
-        expect((await badOperation.json()).error.code).toBe("module.operation_invalid");
-        const malformed = await post(app, { ...wrongAttempt(ADMIN_EMAIL), totp: 123 });
-        expect(await answer(malformed)).toEqual({
-          status: 401,
-          body: { error: { code: "password.invalid", params: {} } },
-        });
-        const badContact = await post(app, {
-          ...wrongAttempt(ADMIN_EMAIL),
-          standbyContactUrl: "https://cloud.deli.test/path",
-        });
-        expect((await badContact.json()).error.code).toBe("mirror.standby_invalid");
-      }
-
-      const statuses: number[] = [];
-      for (let attempt = 0; attempt < 5; attempt += 1)
-        statuses.push((await post(app, wrongAttempt(ADMIN_EMAIL))).status);
-      expect(statuses).toEqual([401, 401, 401, 401, 429]);
-    });
   });
 
   describe("the pair's store and its key", () => {
@@ -1869,52 +1455,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
     }
 
-    // Every table's row count, how many sign-ins are live, the chart, the reservations and the
-    // `nodes` rows.
-    async function venueState() {
-      const tables = await db.execute<{ name: string }>(
-        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,
-      );
-      const counts: Record<string, unknown> = {};
-      for (const { name } of tables.rows) {
-        counts[name] = (
-          await db.execute<{ n: number }>(
-            sql.raw(`select count(*) as n from "${name.replaceAll('"', '""')}"`),
-          )
-        ).rows[0]!.n;
-      }
-      const liveSessions = (
-        await db.execute<{ n: number }>(
-          sql`select count(*) as n from dashboard_sessions where ended_at is null`,
-        )
-      ).rows[0]!.n;
-      return {
-        counts,
-        liveSessions,
-        ...(await reservedAndListed()),
-        nodes: await db.select().from(nodes),
-      };
-    }
-
-    async function expectOnlySignInHistory(before: Awaited<ReturnType<typeof venueState>>) {
-      expect(await venueState()).toEqual({
-        ...before,
-        counts: {
-          ...before.counts,
-          activity_log: Number(before.counts["activity_log"]) + 2,
-        },
-      });
-      const entries = await db.execute<{ kind: string; data: string }>(
-        sql`select kind, data from activity_log order by rowid desc limit 2`,
-      );
-      expect(
-        entries.rows.reverse().map((row) => ({ kind: row.kind, data: JSON.parse(row.data) })),
-      ).toEqual([
-        { kind: "dashboard.signed_in", data: { method: "password" } },
-        { kind: "dashboard.signed_out", data: { reason: "operation_finished" } },
-      ]);
-    }
-
     describe("this box's recovery key", () => {
       afterEach(async () => {
         await holdRecoveryKey(stateDir);
@@ -1924,9 +1464,9 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const { designated } = await setupVenue();
         const app = mountApp(designated);
         await replaceBackupSettings(stateDir, null);
-        const before = await venueState();
+        const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -1936,7 +1476,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlySignInHistory(before);
+        expect(await reservedAndListed()).toEqual(before);
         expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
       });
 
@@ -1944,9 +1484,9 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         const { designated } = await setupVenue();
         const app = mountApp(designated);
         await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH - 1));
-        const before = await venueState();
+        const before = await reservedAndListed();
 
-        const res = await post(app, {
+        const res = await approvedJoin(app, {
           email: ADMIN_EMAIL,
           password: ADMIN_PASSWORD,
           ...validStandby(),
@@ -1956,7 +1496,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        await expectOnlySignInHistory(before);
+        expect(await reservedAndListed()).toEqual(before);
       });
 
       it("a key in backup.env lets the join through", async () => {
@@ -2354,7 +1894,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
 
     it.each([
-      ["missing", undefined],
       ["a string", "1700000000000"],
       ["null", null],
       ["far past a date's range", 1e300],
@@ -2364,7 +1903,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
 
-      const res = await rawPost(app, {
+      const res = await approvedJoin(app, {
         email: ADMIN_EMAIL,
         password: ADMIN_PASSWORD,
         ...validStandby(),
@@ -2871,18 +2410,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
-  });
-
-  it("lets another writer commit while it derives the key", async () => {
-    const { designated } = await setupVenue();
-    const app = mountApp(designated);
-
-    const { result, order } = await writerBesideRequest(db, () =>
-      post(app, { email: ADMIN_EMAIL, password: ADMIN_PASSWORD, ...validStandby() }),
-    );
-
-    expect(result.status).toBe(200);
-    expect(order.slice(0, 2)).toEqual(["writer", "request's transaction"]);
   });
 });
 

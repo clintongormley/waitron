@@ -18,7 +18,6 @@ import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer, Server as HttpsServer } from "node:https";
-import { X509Certificate } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -105,8 +104,7 @@ import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clo
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import * as bootHarness from "./testing/boot-harness.js";
-import { waitUntil } from "./testing/scenario-stages.js";
-import { stubMainBox } from "./testing/setup-join.js";
+import { joinThenFinish, stubMainBox, type SetupPageSend } from "./testing/setup-join.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
@@ -163,37 +161,17 @@ function bundleFor(overrides: {
   };
 }
 
-/**
- * Join the main box at `primaryUrl` on a setup start's page, wait until the main box has approved,
- * then Finish joining. Answers Join's refusal or Finish joining's answer.
- */
-async function joinThenFinish(
-  post: (path: string, init: RequestInit) => Promise<Response>,
-  primaryUrl: string,
-): Promise<Response> {
-  const started = await post("/setup-api/join/start", {
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ primaryUrl }),
-  });
-  if (started.status !== 200) return started;
-  const { handle } = (await started.json()) as { handle: string };
-  const headers = { "x-waitron-join-handle": handle };
-  await waitUntil(
-    "the main box to approve the join",
-    20_000,
-    async () => {
-      const read = await post("/setup-api/join", { method: "GET", headers });
-      const { state } = (await read.json()) as { state: string };
-      expect(state).not.toMatch(/^(ended|failed|replaced|none)$/);
-      return state === "approved" ? true : undefined;
-    },
-    undefined,
-    250,
-  );
-  return post("/setup-api/adopt", {
-    headers: { ...headers, "content-type": "application/json" },
-    body: "{}",
-  });
+/** {@link joinThenFinish} through a setup start's `post`. */
+function joinOn(post: (path: string, init: RequestInit) => Promise<Response>): SetupPageSend {
+  return (path, { method = "POST", body, handle }) =>
+    post(path, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        ...(handle === undefined ? {} : { "x-waitron-join-handle": handle }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
 }
 
 const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
@@ -2127,7 +2105,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const email = "owner@example.test";
     const operationId = "44444444-4444-4444-8444-444444444444";
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
@@ -2140,14 +2117,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             kind: "adopt",
             requestHash: "a-request",
             phase: "venue_committed",
-            data: { resetProof: { email, passwordHash: hashPassword("the-password") } },
+            data: { environment: "preproduction" },
             updatedAt: "2026-09-26T00:00:00.000Z",
           }),
         );
-        const response = await post("/setup-api/reset-incomplete-adopt", {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, password: "the-password" }),
-        });
+        const response = await post("/setup-api/reset-incomplete-adopt", {});
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
         expect(JSON.parse(await readFile(join(stateDir, "reset-request.json"), "utf8"))).toEqual({
@@ -2194,13 +2168,70 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         {},
         async ({ post, kills }) => {
-          const response = await joinThenFinish(post, primaryUrl);
+          const response = await joinThenFinish(joinOn(post), primaryUrl);
           expect(response.status).toBe(200);
           await poll(() => (restarts > 0 ? restarts : undefined));
           expect(restarts).toBe(1);
           expect(kills).toEqual([]);
         },
         { seams: { restart: () => (restarts += 1) } },
+      );
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // The setup page has words for neither code on Finish joining.
+  it("Finish joining asks the main box nothing, so neither its clock check nor its name check can refuse it", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const primaryKeys = generateNodeKeyPair();
+    const stub = stubMainBox({
+      nodeId: MAIN_NODE_ID,
+      keys: primaryKeys,
+      bundleFor: (standby) =>
+        bundleFor({
+          boxCaPem: MAIN_AUTHORITY.caCertPem,
+          boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+          endorsement: endorseKey(
+            standby.nodeId,
+            standby.publicKey,
+            MAIN_NODE_ID,
+            primaryKeys.privateKey,
+          ),
+          moduleOverrides: { "fiscal-verifactu": false },
+          primaryPublicKey: primaryKeys.publicKey,
+        }) as MirrorBundle,
+    });
+    // Once the join is approved, the main box refuses every request as its hello would.
+    let refusing = false;
+    const refused: string[] = [];
+    const primary = createHttpServer((req, res) => {
+      if (!refusing) return stub(req, res);
+      refused.push(req.url ?? "");
+      const code =
+        req.url === "/api/node/join/hello" ? "mirror.standby_name_taken" : "mirror.clocks_apart";
+      res.writeHead(409, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: { code, params: {} } }));
+    });
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post }) => {
+          const send = joinOn(post);
+          const response = await joinThenFinish((path, init) => {
+            if (path === "/setup-api/adopt") refusing = true;
+            return send(path, init);
+          }, primaryUrl);
+          expect(response.status, await response.clone().text()).toBe(200);
+          expect(refused).toEqual([]);
+        },
+        { seams: { restart: () => {} } },
       );
     } finally {
       await new Promise((resolve) => primary.close(resolve));
@@ -2247,7 +2278,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             secrets: await readFile(join(stateDir, "secrets.env"), "utf8"),
           });
           const before = await written();
-          const response = await joinThenFinish(post, primaryUrl);
+          const response = await joinThenFinish(joinOn(post), primaryUrl);
           expect(response.status).toBe(409);
           expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
             "mirror.vault_key_differs",
@@ -2264,60 +2295,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
     } finally {
       await new Promise((resolve) => primary.close(resolve));
-      await venue.store.close();
-      await rm(venue.directory, { recursive: true, force: true });
-    }
-  }, 60_000);
-
-  it("a setup start's box-to-box call resolves a `.local` name through the injected lookup", async () => {
-    beforeServerStarts();
-    const venue = await freshVenue();
-    const name = "nothing-else-resolves-this.local";
-    const served = mintSelfSignedServerCert({
-      hostnames: [name],
-      ipAddresses: [],
-      now: new Date(),
-    });
-    const main = createHttpsServer(
-      { cert: served.serverCertPem, key: served.serverKeyPem },
-      (req, res) => {
-        if (req.url !== "/ca.crt") {
-          res.writeHead(404).end();
-          return;
-        }
-        res.writeHead(200, { "content-type": "application/x-pem-file" });
-        res.end(MAIN_AUTHORITY.caCertPem);
-      },
-    );
-    await new Promise<void>((resolve) => main.listen(0, "127.0.0.1", resolve));
-    const port = (main.address() as AddressInfo).port;
-    const asked: string[] = [];
-    try {
-      await withSetupBoot(
-        venue.directory,
-        {},
-        async ({ post }) => {
-          const response = await post("/setup-api/primary-certificate", {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ primaryUrl: `https://${name}:${port}` }),
-          });
-          expect(response.status).toBe(200);
-          expect(((await response.json()) as { fingerprint256: string }).fingerprint256).toBe(
-            new X509Certificate(MAIN_AUTHORITY.caCertPem).fingerprint256,
-          );
-          expect(asked).toEqual([name]);
-        },
-        {
-          seams: {
-            boxLookup: async (hostname) => {
-              asked.push(hostname);
-              return { addresses: ["127.0.0.1"], remembered: false };
-            },
-          },
-        },
-      );
-    } finally {
-      await new Promise((resolve) => main.close(resolve));
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }
@@ -2394,29 +2371,28 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const bundle = bundleFor({
-      boxCaPem: "fixture-ca",
-      boxCaKeyPem: "fixture-ca-key",
-      endorsement: {
-        nodeId: "66666666-6666-4666-8666-666666666666",
-        publicKey: "fixture-key",
-        endorsedBy: MAIN_NODE_ID,
-        signature: "fixture-signature",
-      },
-      moduleOverrides: {},
-      primaryPublicKey: "fixture-primary-key",
-    });
-    const primary = createHttpServer((_req, res) => {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(bundle));
-    });
+    const primaryKeys = generateNodeKeyPair();
+    const primary = createHttpServer(
+      stubMainBox({
+        nodeId: MAIN_NODE_ID,
+        keys: primaryKeys,
+        bundleFor: (standby) =>
+          bundleFor({
+            boxCaPem: MAIN_AUTHORITY.caCertPem,
+            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+            endorsement: endorseKey(
+              standby.nodeId,
+              standby.publicKey,
+              MAIN_NODE_ID,
+              primaryKeys.privateKey,
+            ),
+            moduleOverrides: {},
+            primaryPublicKey: primaryKeys.publicKey,
+          }) as MirrorBundle,
+      }),
+    );
     await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
     const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
-    const adoptBody = (password: string) =>
-      JSON.stringify({
-        primaryUrl,
-        credential: { email: "owner@example.test", password },
-      });
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
         const stamped = await post("/__test/stamp-deployment", {});
@@ -2427,11 +2403,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             params: { stamped: "production", requested: "preproduction" },
           },
         };
-        for (const password of ["first", "second"]) {
-          const response = await post("/setup-api/adopt", {
-            headers: { "content-type": "application/json" },
-            body: adoptBody(password),
-          });
+        const send = joinOn(post);
+        let handle: string | undefined;
+        const first = await joinThenFinish((path, init) => {
+          if (path === "/setup-api/adopt") handle = init.handle;
+          return send(path, init);
+        }, primaryUrl);
+        const again = await send("/setup-api/adopt", { body: {}, handle });
+        for (const response of [first, again]) {
           expect(response.status).toBe(409);
           expect(await response.json()).toEqual(expected);
         }

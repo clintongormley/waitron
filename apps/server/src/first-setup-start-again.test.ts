@@ -1873,7 +1873,7 @@ it("lifetime: the in-app reset leaves the choice record unchanged", async () => 
   const operations = createSetupOperationStore(folders.stateDir);
   await operations
     .run("adopt", "a-request", async (operation) => {
-      await operation.advance("venue_committed", { resetProof: {} });
+      await operation.advance("venue_committed", { environment: "preproduction" });
       throw new Error("stopped partway");
     })
     .catch(() => {});

@@ -62,7 +62,7 @@ vi.mock("@hono/node-server", async () => {
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
 
-// Pass-through wrappers that record the mirror-bundle route's wake, the spare join's wakes, and
+// Pass-through wrappers that record the box-join person routes' wake, the spare join's wakes, and
 // the backup queue the spare join and the copy settings routes were given.
 const joinWiring = vi.hoisted(() => ({
   wakes: 0,
@@ -97,13 +97,13 @@ vi.mock("./stream-api.js", async (importOriginal) => {
     },
   };
 });
-vi.mock("./mirror-bundle-api.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./mirror-bundle-api.js")>();
+vi.mock("./box-join-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./box-join-api.js")>();
   return {
     ...actual,
-    mountMirrorBundleApi: (...args: Parameters<typeof actual.mountMirrorBundleApi>) => {
+    mountBoxJoinPersonApi: (...args: Parameters<typeof actual.mountBoxJoinPersonApi>) => {
       joinWiring.wakeSpareJoin = args[1].wakeSpareJoin;
-      return actual.mountMirrorBundleApi(...args);
+      return actual.mountBoxJoinPersonApi(...args);
     },
   };
 });
@@ -484,13 +484,10 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
-      // The mirror-bundle endpoint is primary-only; the primary control below answers 401 here.
-      const bundle = await fetch(`${base}/management-api/mirror-bundle`, {
-        method: "POST",
-        body: "{}",
-      });
-      expect(bundle.status).toBe(403);
-      expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+      // A box join is primary-only; the primary control below answers it.
+      const hello = await fetch(`${base}/api/node/join/hello`, { method: "POST", body: "{}" });
+      expect(hello.status).toBe(403);
+      expect(await hello.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
       // Removing a machine from the chart is a write; the primary control below answers 401.
       const removal = await fetch(`${base}/management-api/servers/${crypto.randomUUID()}/remove`, {
@@ -613,7 +610,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
   }, 60_000);
 
-  it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {
+  it("primary boot of the same identity mounts the box-join routes + operational groups (control: the mirror's absence is real)", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -623,9 +620,9 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     });
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
-      const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
-      expect(bundle.status).toBe(401);
-      expect((await bundle.json()).error.code).toBe("password.invalid");
+      const hello = await fetch(`${base}/api/node/join/hello`, { method: "POST", body: "{}" });
+      expect(hello.status).toBe(400);
+      expect((await hello.json()).error.code).toBe("mirror.join_invalid");
 
       const servers = await fetch(`${base}/management-api/servers`);
       expect(servers.status).toBe(401);
@@ -658,7 +655,7 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("the start hands the mirror-bundle route a wake that reaches the running spare join, and gives the join the copy routes' backup queue", async () => {
+  it("the start hands the box-join person routes a wake that reaches the running spare join, and gives the join the copy routes' backup queue", async () => {
     joinWiring.wakes = 0;
     joinWiring.wakeSpareJoin = undefined;
     joinWiring.turns = undefined;

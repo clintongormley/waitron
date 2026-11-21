@@ -333,6 +333,19 @@ describe("the setup page's join routes", () => {
     expect((await starting).status).toBe(200);
   });
 
+  it("still refuses a start while another first setup is under way", async () => {
+    mount({
+      firstSetup: {
+        coordinator: createFirstSetupCoordinator(),
+        assertOtherAllowed: async () => {
+          throw new AppError("setup.attempt_conflict", {});
+        },
+      },
+    });
+    expect(await refusal(await start())).toEqual({ status: 409, code: "setup.attempt_conflict" });
+    expect(fake.attempt.start).not.toHaveBeenCalled();
+  });
+
   const JOINED = { storeUrl: "https://box-aaaa.waitron.local:7600" } as unknown as JoinedBox;
   const ADOPTED = { breakGlassSecret: "the-server-key", breakGlassKeyName: "Spare key" };
 

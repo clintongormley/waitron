@@ -197,7 +197,6 @@ it("the staff entrance forwards dashboard requests and marks their source remote
     "/%2e%2e/setup",
     "/%2f..%2fsetup",
     "/management-api/membership",
-    "/management-api/mirror-bundle",
     "/management-api/promote",
     "/management-api/promote/preparation",
     "/management-api/box-joins/00000000-0000-4000-8000-000000000000/approve",

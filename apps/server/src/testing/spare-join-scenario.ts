@@ -2,7 +2,7 @@
 // provisions its box, but with no bucket copy or recovery key until the test switches them on while
 // M is down, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
-import { randomUUID, X509Certificate } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -61,6 +61,7 @@ import {
   switchOnStreaming,
   type BoxDirs,
 } from "./stream-box.js";
+import { joinThenFinish, type SetupPageSend } from "./setup-join.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
 import { offerProducts } from "./zone-offers.js";
 
@@ -569,7 +570,7 @@ export async function adoptFrom(
   primaryUrl: string,
   wait: <T>(what: string, ms: number, probe: () => Promise<T | undefined>) => Promise<T>,
 ): Promise<Answer> {
-  const onSpare = (path: string, init: { method?: string; body?: unknown; handle?: string }) =>
+  const onSpare: SetupPageSend = (path, init) =>
     fetch(`${spare.url}${path}`, {
       ...spare.via,
       method: init.method ?? "POST",
@@ -580,46 +581,43 @@ export async function adoptFrom(
       },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     });
-  const started = await answerOf(await onSpare("/setup-api/join/start", { body: { primaryUrl } }));
-  if (started.status !== 200) return started;
-  const { code, handle } = started.body as { code: string; handle: string };
 
-  const managing = await managementHeaders(main.url, main.origin, main.via);
-  const onMain = async (path: string, body?: unknown) =>
-    answerOf(
-      await fetch(`${main.url}${path}`, {
+  const approve = async ({ code, handle }: { code: string; handle: string }) => {
+    const managing = await managementHeaders(main.url, main.origin, main.via);
+    const onMain = (path: string, body?: unknown) =>
+      fetch(`${main.url}${path}`, {
         ...main.via,
         method: body === undefined ? "GET" : "POST",
         // The box-join routes take a person's request only from the page at the address it used.
         headers: { ...managing, origin: main.url },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      }),
+      });
+    const servers = await answerOf(await onMain("/management-api/servers"));
+    expect(servers.status, JSON.stringify(servers.body)).toBe(200);
+    const listed = (servers.body as { joinRequests: { id: string }[] }).joinRequests;
+    expect(listed, JSON.stringify(listed)).toHaveLength(1);
+    const requestId = listed[0]!.id;
+    const checked = await onMain(`/management-api/box-joins/${requestId}/check`, {});
+    if (checked.status !== 200) {
+      const dismissed = await answerOf(
+        await onMain(`/management-api/box-joins/${requestId}/dismiss`, {}),
+      );
+      expect(dismissed.status, JSON.stringify(dismissed.body)).toBe(204);
+      const cancelled = await onSpare("/setup-api/join/cancel", { handle });
+      expect(cancelled.status, await cancelled.text()).toBe(204);
+      return checked;
+    }
+    expect(((await checked.json()) as { choices: string[] }).choices).toContain(code);
+    const approved = await answerOf(
+      await onMain(`/management-api/box-joins/${requestId}/approve`, { code }),
     );
-  const servers = await onMain("/management-api/servers");
-  expect(servers.status, JSON.stringify(servers.body)).toBe(200);
-  const listed = (servers.body as { joinRequests: { id: string }[] }).joinRequests;
-  expect(listed, JSON.stringify(listed)).toHaveLength(1);
-  const requestId = listed[0]!.id;
-  const checked = await onMain(`/management-api/box-joins/${requestId}/check`, {});
-  if (checked.status !== 200) {
-    const dismissed = await onMain(`/management-api/box-joins/${requestId}/dismiss`, {});
-    expect(dismissed.status, JSON.stringify(dismissed.body)).toBe(204);
-    const cancelled = await onSpare("/setup-api/join/cancel", { handle });
-    expect(cancelled.status, await cancelled.text()).toBe(204);
-    return checked;
-  }
-  expect((checked.body as { choices: string[] }).choices).toContain(code);
-  const approved = await onMain(`/management-api/box-joins/${requestId}/approve`, { code });
-  expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+    expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+    return undefined;
+  };
 
-  await wait("the spare to collect the approved join", LINK_WAIT_MS, async () => {
-    const state = await answerOf(await onSpare("/setup-api/join", { method: "GET", handle }));
-    expect(state.status, JSON.stringify(state.body)).toBe(200);
-    const shown = state.body as { state: string };
-    expect(shown.state, JSON.stringify(shown)).not.toMatch(/^(ended|failed|replaced)$/);
-    return shown.state === "approved" ? true : undefined;
-  });
-  return answerOf(await onSpare("/setup-api/adopt", { body: {}, handle }));
+  return answerOf(
+    await joinThenFinish(onSpare, primaryUrl, { approve, wait, waitMs: LINK_WAIT_MS }),
+  );
 }
 
 /**
@@ -776,7 +774,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       });
       expect(sold.status, await sold.text()).toBe(200);
       expect(saleOf(dirsM.venue, workingOrderId)).toBe(true);
-      return { caM, viaM };
+      return { viaM };
     })();
     // S's setup start reads nothing of M's, so it runs while M starts and sells. Both settle before
     // either failure is thrown, so cleanup never runs while M's branch can still open a client.
@@ -789,7 +787,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     expect(adoption.adopted.size).toBe(2);
     await adoption.bound;
     adoption.restore();
-    const { caM, viaM } = selling.value;
+    const { viaM } = selling.value;
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.
@@ -799,17 +797,6 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // M's address is the one its chart gives it, at its own name; S reaches it through the lookup.
     const addressM = ownContactUrl(boxM.origin, m.nodeId);
     expect(new URL(addressM).hostname).not.toBe(BOX_HOSTNAME);
-    const read = await fetch(`${urlS}/setup-api/primary-certificate`, {
-      ...viaS,
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ primaryUrl: addressM }),
-    });
-    const answer = (await read.json()) as unknown;
-    expect(read.status, JSON.stringify(answer)).toBe(200);
-    expect(answer).toMatchObject({
-      fingerprint256: new X509Certificate(caM).fingerprint256,
-    });
 
     const adopt = () =>
       adoptFrom(

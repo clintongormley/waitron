@@ -230,6 +230,20 @@ describe("the new box's join attempt", () => {
     expect(attempt.joined()).toEqual(joined);
   });
 
+  it("sends its own clock, contact address and store address in the hello", async () => {
+    const attempt = createBoxJoinAttempt(deps());
+    await attempt.start(MAIN_URL);
+
+    const { newNodeId, contactUrl, storeUrl, at } = sent[0]!.body;
+    const name = `box-${(newNodeId as string).slice(0, 4)}.waitron.local`;
+    expect({ contactUrl, storeUrl, at }).toEqual({
+      contactUrl: `https://${name}:8443`,
+      storeUrl: `https://${name}:9000`,
+      at: NOW,
+    });
+    await attempt.cancel();
+  });
+
   it("collects a lost approved answer at the next poll", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let approvedPolls = 0;
@@ -475,6 +489,12 @@ describe("the new box's join attempt", () => {
       409,
       refusal("mirror.join_address_mismatch", { from: "x" }),
       { code: "mirror.join_address_mismatch", params: {} },
+    ],
+    [
+      "a refusal of the box's name",
+      409,
+      refusal("mirror.standby_name_taken"),
+      { code: "mirror.standby_name_taken", params: {} },
     ],
     [
       "the hello's shape refusal",

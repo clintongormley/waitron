@@ -168,7 +168,7 @@ async function halfAdoptedBox(joined = false): Promise<{
   const operations = createSetupOperationStore(stateDir);
   await operations
     .run("adopt", "a-request", async (operation) => {
-      await operation.advance("venue_committed", { resetProof: {} });
+      await operation.advance("venue_committed", { environment: "preproduction" });
       throw new Error("stopped partway");
     })
     .catch(() => {});

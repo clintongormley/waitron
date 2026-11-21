@@ -31,9 +31,7 @@ import {
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import {
   adoptFromPrimary,
-  adoptWithPassword,
   nodeTablesAdoptLeaves,
-  type AdoptCredential,
   type AdoptHooks,
   type PersistTradingArgs,
 } from "./adopt.js";
@@ -125,11 +123,6 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
   };
 }
 
-const CREDENTIAL: AdoptCredential = {
-  email: "owner@example.test",
-  password: "dashPass123",
-};
-const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;
 /** Not the address `deps()` would give, so a pair link holding it was taken from the attempt. */
 const HELLO_STORE_URL = "https://box-aaaa.waitron.local:7600";
 const joined = (bundle = makeBundle(), identity = STANDBY): JoinedBox => ({
@@ -137,7 +130,6 @@ const joined = (bundle = makeBundle(), identity = STANDBY): JoinedBox => ({
   bundle,
   storeUrl: HELLO_STORE_URL,
 });
-const ADVERTISED_ORIGIN = "https://standby.deli.test";
 const NO_HOOKS: AdoptHooks = { beforeFirstWrite: async () => {} };
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5a).toString("base64"),
@@ -166,15 +158,8 @@ function deps(
     persistTrading?: (a: PersistTradingArgs) => Promise<void>;
     assertStartsWith?: (a: PersistTradingArgs) => void;
     persistModuleConfig?: (c: ModuleConfig) => Promise<void>;
-    fetchBundle?: (
-      url: string,
-      c: AdoptCredential,
-      s: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string },
-      confirmedCaPem?: string,
-    ) => Promise<MirrorBundle>;
     environment?: "production" | "preproduction" | null;
     persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
-    advertisedOrigin?: string;
     baseEnv?: NodeJS.ProcessEnv;
   } = {},
 ) {
@@ -183,10 +168,7 @@ function deps(
     ownerNode: suite.node,
     ring: RING,
     environmentKeys: keyRingVariables(extra.baseEnv ?? {}),
-    advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
-    spareStorePort: 7443,
     environment: extra.environment === undefined ? ("preproduction" as const) : extra.environment,
-    fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
     assertStartsWith: extra.assertStartsWith ?? (() => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
@@ -202,27 +184,6 @@ function deps(
 }
 
 describe("adoptFromPrimary (mirror adopt)", () => {
-  it("sends this box's own clock as the spare's time, so the main box can compare the two", async () => {
-    const at = Date.UTC(2026, 10, 11, 9, 30);
-    let sentAt: number | undefined;
-
-    await adoptWithPassword(
-      {
-        ...deps({
-          fetchBundle: async (_u, _c, s) => {
-            sentAt = (s as { at?: number }).at;
-            return makeBundle();
-          },
-        }),
-        now: () => new Date(at),
-      },
-      REQ,
-      NO_HOOKS,
-    );
-
-    expect(sentAt).toBe(at);
-  });
-
   it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];
@@ -279,21 +240,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
     expect(result.breakGlassSecret).toMatch(/^[A-Za-z0-9_-]{20,}$/);
     expect(await verifyBreakGlass(suite.node, ownNodeId, result.breakGlassSecret)).toBe(true);
-  });
-
-  it("hands the confirmed authority to the bundle fetch", async () => {
-    let confirmed: string | undefined;
-    await adoptWithPassword(
-      deps({
-        fetchBundle: async (_u, _c, _s, ca) => {
-          confirmed = ca;
-          return makeBundle();
-        },
-      }),
-      { ...REQ, confirmedCaPem: "CONFIRMED-PEM" },
-      NO_HOOKS,
-    );
-    expect(confirmed).toBe("CONFIRMED-PEM");
   });
 
   it("leaves no mirror role behind when its link cannot be written", async () => {
@@ -375,37 +321,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
   });
 
-  it("threads this node's advertised origin to the primary as the standby's contactUrl", async () => {
-    let capturedStandby: { contactUrl: string } | undefined;
-    await adoptWithPassword(
-      deps({
-        fetchBundle: async (_u, _c, s) => {
-          capturedStandby = s;
-          return makeBundle();
-        },
-      }),
-      REQ,
-      NO_HOOKS,
-    );
-    expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
-  });
-
-  it("sends the spare's own address as its contactUrl", async () => {
-    let capturedStandby: { contactUrl: string } | undefined;
-    await adoptWithPassword(
-      deps({
-        advertisedOrigin: "https://waitron.local:8443",
-        fetchBundle: async (_u, _c, s) => {
-          capturedStandby = s;
-          return makeBundle();
-        },
-      }),
-      REQ,
-      NO_HOOKS,
-    );
-    expect(capturedStandby!.contactUrl).toBe("https://box-aaaa.waitron.local:8443");
-  });
-
   it("keeps the pair's key sealed in node.db, opening under the venue's ring", async () => {
     await adoptFromPrimary(deps(), joined(), NO_HOOKS);
     const bundle = makeBundle();
@@ -428,26 +343,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
     const raw = await suite.node.execute(sql`select * from node_pair_link`);
     expect(JSON.stringify(raw.rows)).not.toContain(bundle.store.secretAccessKey);
-  });
-
-  it("sends its own store address with the joining request", async () => {
-    let sent: { contactUrl: string; storeUrl: string } | undefined;
-    await adoptWithPassword(
-      {
-        ...deps({
-          advertisedOrigin: "https://waitron.local:8443",
-          fetchBundle: async (_u, _c, s) => {
-            sent = s;
-            return makeBundle();
-          },
-        }),
-        spareStorePort: 7500,
-      },
-      REQ,
-      NO_HOOKS,
-    );
-    expect(sent!.storeUrl).toBe("https://box-aaaa.waitron.local:7500");
-    expect(sent!.contactUrl).toBe("https://box-aaaa.waitron.local:8443");
   });
 
   it("a second join under a new id removes the first attempt's node.db rows", async () => {
@@ -835,7 +730,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
             {
               beforeFirstWrite: async () => {
                 if (stopBeforeFirstWrite) throw new Error("stopped");
-                await operation.advance("venue_committed", { resetProof: {} });
+                await operation.advance("venue_committed", { environment: "preproduction" });
               },
             },
           ),

@@ -10,7 +10,7 @@ const known = new Set(PEER_ROUTES.map(([method, path]) => `${method} ${path}`));
 const relevant = (path: string) =>
   path === "/api/node" ||
   path.startsWith("/api/node/") ||
-  /^\/management-api\/(handover|promote|mirror-bundle|return-clashes)(\/|$)/.test(path);
+  /^\/management-api\/(handover|promote|return-clashes)(\/|$)/.test(path);
 
 function unclassified(source: string): string[] {
   const file = ts.createSourceFile("routes.ts", source, ts.ScriptTarget.Latest, true);

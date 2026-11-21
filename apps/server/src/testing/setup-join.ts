@@ -13,6 +13,7 @@ import {
 } from "../box-join-code.js";
 import { lockJoinBundle } from "../box-join-seal.js";
 import { ownContactUrl } from "../box-name.js";
+import { waitUntil } from "./scenario-stages.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
 
 /** The store address a new box advertised at `advertisedOrigin` sends, as the join attempt builds it. */
@@ -46,11 +47,55 @@ export function approvedJoinAttempt(joined: () => JoinedBox | Promise<JoinedBox>
   };
 }
 
+/** How a test sends the new box's setup page's requests; `handle` travels as the join handle. */
+export type SetupPageSend = (
+  path: string,
+  init: { method?: "GET" | "POST"; body?: unknown; handle?: string },
+) => Promise<Response>;
+
+type Wait = (what: string, ms: number, probe: () => Promise<true | undefined>) => Promise<unknown>;
+
+const untilApproved: Wait = (what, ms, probe) => waitUntil(what, ms, probe, undefined, 250);
+
+/**
+ * Join the main box at `primaryUrl` on the new box's setup page, let `approve` act on the main box
+ * (an answer it gives is the result), wait until the join is approved, then Finish joining.
+ * Answers Join's refusal, `approve`'s answer, or Finish joining's answer.
+ */
+export async function joinThenFinish(
+  send: SetupPageSend,
+  primaryUrl: string,
+  options: {
+    approve?: (shown: { code: string; handle: string }) => Promise<Response | undefined>;
+    wait?: Wait;
+    waitMs?: number;
+  } = {},
+): Promise<Response> {
+  const started = await send("/setup-api/join/start", { body: { primaryUrl } });
+  if (started.status !== 200) return started;
+  const shown = (await started.json()) as { code: string; handle: string };
+  const answered = await options.approve?.(shown);
+  if (answered !== undefined) return answered;
+  await (options.wait ?? untilApproved)(
+    "the main box to approve the join",
+    options.waitMs ?? 20_000,
+    async () => {
+      const read = await send("/setup-api/join", { method: "GET", handle: shown.handle });
+      const body = await read.text();
+      if (read.status !== 200) throw new Error(`the join state read answered ${body}`);
+      const { state } = JSON.parse(body) as { state: string };
+      if (/^(ended|failed|replaced|none)$/.test(state)) throw new Error(`the join is ${body}`);
+      return state === "approved" ? true : undefined;
+    },
+  );
+  return send("/setup-api/adopt", { body: {}, handle: shown.handle });
+}
+
 const PAGE = "https://box.test";
 
 /**
- * Join, then Finish joining, on `app`'s setup routes, from the box's own page over an encrypted
- * connection. Answers Join's refusal, or Finish joining's answer.
+ * {@link joinThenFinish} on `app`'s setup routes, from the box's own page over an encrypted
+ * connection.
  */
 export async function finishJoining(
   app: Hono,
@@ -58,26 +103,25 @@ export async function finishJoining(
 ): Promise<Response> {
   const socket = new TLSSocket(new Socket());
   try {
-    const send = (path: string, body: unknown, handle?: string) =>
-      Promise.resolve(
-        app.request(
-          `${PAGE}/setup-api/${path}`,
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              origin: PAGE,
-              ...(handle === undefined ? {} : { "x-waitron-join-handle": handle }),
+    return await joinThenFinish(
+      (path, { method = "POST", body, handle }) =>
+        Promise.resolve(
+          app.request(
+            `${PAGE}${path}`,
+            {
+              method,
+              headers: {
+                "content-type": "application/json",
+                origin: PAGE,
+                ...(handle === undefined ? {} : { "x-waitron-join-handle": handle }),
+              },
+              ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             },
-            body: JSON.stringify(body),
-          },
-          { incoming: { socket } },
+            { incoming: { socket } },
+          ),
         ),
-      );
-    const started = await send("join/start", { primaryUrl });
-    if (started.status !== 200) return started;
-    const { handle } = (await started.json()) as { handle: string };
-    return await send("adopt", {}, handle);
+      primaryUrl,
+    );
   } finally {
     socket.destroy();
   }
