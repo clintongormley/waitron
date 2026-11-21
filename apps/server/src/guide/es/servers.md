@@ -317,7 +317,7 @@ Cuando un servidor pase a ser el principal, abre **Copias de seguridad** y compr
 ## Conectar un servidor de pruebas durante la configuración {#setup-cloud-sign-in}
 
 En un servidor de pruebas preparado para Cloud, elige **Iniciar sesión en Waitron Cloud** antes
-de introducir los datos del administrador en Preparar o en un ensayo de Puesta en marcha. Inicia
+de introducir los datos del administrador en **Preparación** o en un ensayo de Puesta en marcha. Inicia
 sesión o crea una cuenta y vuelve a la configuración en la pestaña original. Waitron registra el
 local después de que lo guardes y se reinicie el servidor. Comprueba la conexión en
 **Sistema → Servicios Cloud**.
@@ -327,7 +327,7 @@ una sugerencia en **Buscar el domicilio fiscal** o **Buscar la dirección**. Rev
 que se han rellenado y corrígelos antes de continuar. Si añades un local a una empresa que ya
 usa Cloud o la búsqueda no está disponible, escribe las direcciones a mano.
 
-En Preparar, puedes [elegir Cloud para el correo del personal](email.md#cloud-staff-email) y
+En **Preparación**, puedes [elegir Cloud para el correo del personal](email.md#cloud-staff-email) y
 continuar con el servidor de correo en blanco. Si eliges **Omitir** antes de abrir Cloud o importas
 una configuración, escribe las direcciones a mano, introduce tu servidor de correo y conéctate
 más tarde desde **Servicios Cloud**.

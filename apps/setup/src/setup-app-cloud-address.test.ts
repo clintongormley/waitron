@@ -210,7 +210,9 @@ it("points to System → Email when Cloud staff email could not be confirmed", a
   dispatchProvisionRequested(screen("review")!);
   const notice = () =>
     screen("done")?.shadowRoot?.querySelector('[data-test="cloud-staff-email-unavailable"]');
-  await expect.poll(() => notice()?.textContent).toContain("System → Email");
+  await expect
+    .poll(() => notice()?.textContent)
+    .toContain("add or check your mail server in System → Email");
   expect(notice()?.textContent).not.toContain("settings were saved");
   expect(notice()?.querySelector("a")?.getAttribute("href")).toBe(
     "/help/en/email#cloud-staff-email",

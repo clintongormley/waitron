@@ -19,7 +19,7 @@ Los mensajes enviados por tu servidor guardado y la prueba de esta página muest
 local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,
 elige **Cambiar servidor de correo** y corrige **Dirección del remitente** antes de repetir la prueba.
 
-Durante la configuración en Preparar o En vivo, introduce los ajustes del servidor de correo
+Durante la configuración en Preparación o En vivo, introduce los ajustes del servidor de correo
 y envía una prueba a la dirección del administrador. Puedes omitir el servidor en desarrollo o si
 [eliges Cloud para el correo del personal durante la configuración de prueba](email.md#cloud-staff-email).
 Si usas tu propio servidor, al guardarlo las invitaciones y los enlaces para restablecer
@@ -42,7 +42,7 @@ varios días, abre **Ventas y cobros** y elige un día anterior para consultar s
 
 ## Elegir el correo del personal durante la configuración de prueba {#cloud-staff-email}
 
-En un servidor de pruebas, abre Preparar e inicia sesión en Waitron Cloud. En el paso de correo,
+En un servidor de pruebas, abre **Preparación** e inicia sesión en Waitron Cloud. En el paso de correo,
 marca **Enviar el correo del personal a través de Waitron Cloud**. Deja el servidor de correo
 en blanco y continúa, o introduce los datos de tu servidor y envía una prueba. Cuando el equipo se
 reinicie y se conecte, Cloud podrá enviar invitaciones al personal, enlaces para restablecer
@@ -53,8 +53,7 @@ caja y el panel, y para enviar el informe diario, los demás avisos al personal 
 seguridad a la dirección anterior cuando alguien del personal cambie su correo.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
-**Sistema → Servicios Cloud** para terminar de [conectar el servidor de pruebas](servers.md#setup-cloud-sign-in),
-o configura tu servidor de correo en **Sistema → Correo**.
+**Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
 
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 

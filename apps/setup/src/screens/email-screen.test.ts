@@ -74,6 +74,10 @@ describe("wizard Email step", () => {
     expect(checkbox!.labels?.[0]?.textContent).toContain("Send staff email through Waitron Cloud");
     await userEvent.click(checkbox!);
     expect(button(el, "next").disabled).toBe(true);
+    const detail = el.shadowRoot!.getElementById(checkbox!.getAttribute("aria-describedby")!);
+    expect(detail?.textContent).toContain(
+      "leave the server, sender email, username and password blank",
+    );
     await test(el);
     expect(runEmailTest).toHaveBeenCalledExactlyOnceWith(email, "admin@example.com", "prepare");
     const patch = vi.fn();

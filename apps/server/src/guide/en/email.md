@@ -48,9 +48,8 @@ Add a mail server in **System → Email** to offer customer email on the till an
 send the daily report, other staff notices, and the security notice to the old address when a
 staff member changes their email.
 
-If setup says it could not confirm Cloud staff email, go to **System → Cloud services** to finish
-[connecting the test box](servers.md#setup-cloud-sign-in), or set up your mail server in
-**System → Email**.
+If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
+the mail server you use for staff email.
 
 ## Account email through test Cloud {#cloud-account-email}
 

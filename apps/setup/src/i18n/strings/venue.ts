@@ -7,7 +7,7 @@ export const venueEn = {
   "email.heading": "Set up email",
   "email.cloud_staff_email": "Send staff email through Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud sends staff invitations, password resets and email-change codes. Choose Cloud to continue with your mail server details blank.",
+    "Cloud sends staff invitations, password resets and email-change codes. To skip your mail server, leave the server, sender email, username and password blank.",
   "email.intro":
     "Send a test message to {recipient} before continuing. Use your mail provider’s settings.",
   "email.intro_optional":
@@ -276,7 +276,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "email.heading": "Configura el correo electrónico",
   "email.cloud_staff_email": "Enviar el correo del personal a través de Waitron Cloud",
   "email.cloud_staff_email_detail":
-    "Cloud envía invitaciones al personal, enlaces para restablecer contraseñas y códigos de cambio de correo. Elige Cloud para continuar sin rellenar los datos de tu servidor de correo.",
+    "Cloud envía invitaciones al personal, enlaces para restablecer contraseñas y códigos de cambio de correo. Para omitir tu servidor de correo, deja en blanco el servidor, el correo del remitente, el nombre de usuario y la contraseña.",
   "email.intro":
     "Envía un mensaje de prueba a {recipient} antes de continuar. Usa los ajustes de tu proveedor de correo.",
   "email.intro_optional":
