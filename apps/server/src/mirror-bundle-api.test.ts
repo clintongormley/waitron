@@ -73,6 +73,7 @@ import {
   pollJoin,
   signedInCookie,
 } from "./testing/box-join.js";
+import { createBoxJoinRequests, ENDED_KEPT_MS } from "./box-join-requests.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 
@@ -218,6 +219,12 @@ async function setupVenue(): Promise<{
   return { designated, adminPersonId, primaryPublicKey };
 }
 
+/**
+ * The join store's own clock. Each join in this suite stands alone, so the next arrives once the
+ * main box has forgotten the last approval, which otherwise holds back a second for 2 minutes.
+ */
+let joinClock = 0;
+
 function mountApp(
   designated: AdoptResult,
   log?: Logger,
@@ -227,6 +234,7 @@ function mountApp(
 ): Hono {
   const app = new Hono();
   mountBoxJoin(app, {
+    requests: createBoxJoinRequests({ steadyNow: () => joinClock }),
     appDb: db,
     node: suite.node,
     ring: RING,
@@ -391,7 +399,11 @@ async function approvedJoin(
       moduleOperation,
       at: body.standbyAt as number,
     });
-  return plain ? send(undefined) : withFixtureOperation(body, veriFactu, send);
+  try {
+    return await (plain ? send(undefined) : withFixtureOperation(body, veriFactu, send));
+  } finally {
+    joinClock += ENDED_KEPT_MS;
+  }
 }
 
 beforeAll(async () => {
