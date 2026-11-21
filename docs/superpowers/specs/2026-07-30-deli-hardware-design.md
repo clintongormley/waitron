@@ -19,7 +19,7 @@ first adapter, rather than a shopping list.
 | D1 | **The till must be general-purpose hardware; the card reader need not be.** A device running Waitron may not be a locked POS appliance. A reader bound to one PSP is acceptable — card data is the acquirer's problem by design ([2026-07-18-pos-architecture-design.md](2026-07-18-pos-architecture-design.md) §1) |
 | D2 | **Launch is two counter positions plus one handheld.** A self-order kiosk and further counter positions are wanted eventually but are not bought now |
 | D3 | **Peripheral drivers run on the local server**, not in the till browser |
-| D4 | **No weighed goods at the deli.** Scales, the priced-label parser and the metrology question all leave the launch path |
+| D4 | **No weighed goods at the deli.** Scales, the priced-label parser and the metrology question all leave the launch path. *Superseded 2026-11-21 (owner): the deli will sell salad and the like by weight, entered by choosing the product and typing the weight read off the venue's own certified scale; no label-printing scale and no scale-label barcodes. Whether that complies is adviser question S17(b).* |
 | D5 | **Cash is accepted, and an internet outage must not stop card acceptance** |
 | D6 | **SumUp is the recommended acquirer**, with the existing Stripe path retained rather than removed |
 

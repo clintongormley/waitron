@@ -656,8 +656,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `docs/superpowers/specs/2026-11-21-till-keyboard-input-design.md`, plan
   `docs/superpowers/plans/2026-11-21-till-keyboard-input.md`. Task 1 (Clear key) is on branch
   `till-keyboard-input`; Tasks 2–5 remain. Task 5's check needs the owner's Android phone and
-  tablet; Safari is untested (no Apple device). Comes before the Counter's custom item and
-  scale-label barcodes, which reuse its single key listener.
+  tablet; Safari is untested (no Apple device). Comes before the Counter's custom item.
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
