@@ -1054,6 +1054,8 @@ export interface StartServerSeams {
    * unset, `lookupBoxName`.
    */
   boxLookup?: BoxLookup;
+  /** This box's addresses as a new box's Join lists them; unset, the configured box addresses or its interface addresses. */
+  joinAddresses?: () => string[];
   /**
    * Takes every restart a start asks for, so a test running servers in its own process is not
    * stopped: `"restart"` where production calls `restartProcess`, `"signal"` where it sends itself
@@ -1673,7 +1675,11 @@ async function bootServer(
     };
     const joinAttempt = createBoxJoinAttempt({
       lookup: seams.boxLookup,
-      ...(config.boxAddresses === undefined ? {} : { addresses: () => config.boxAddresses! }),
+      ...(seams.joinAddresses !== undefined
+        ? { addresses: seams.joinAddresses }
+        : config.boxAddresses === undefined
+          ? {}
+          : { addresses: () => config.boxAddresses! }),
       advertisedOrigin: config.managementOrigin,
       spareStorePort: config.spareStorePort,
       now,

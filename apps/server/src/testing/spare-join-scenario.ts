@@ -265,6 +265,8 @@ export class TestBox {
           this.lookups.push(hostname);
           return loopbackLookup(hostname, ask);
         },
+        // Every box here listens and connects on loopback.
+        joinAddresses: () => ["127.0.0.1"],
         restart: () => void this.restart(),
       },
     );
@@ -545,23 +547,79 @@ export async function managementHeaders(
   return managing;
 }
 
-/** The spare at `spareUrl` asked to adopt the main box at `primaryUrl` as `ADMIN`. */
+interface Answer {
+  status: number;
+  body: unknown;
+}
+
+async function answerOf(response: Response): Promise<Answer> {
+  const text = await response.text();
+  return { status: response.status, body: text === "" ? null : (JSON.parse(text) as unknown) };
+}
+
+/**
+ * The spare at `spare.url` joins the main box at `primaryUrl` by code: Join on the spare, Check
+ * and a tap on the code the spare shows by `ADMIN` on the main box, then Finish joining on the
+ * spare. Answers Finish joining's answer, or the Join's or the Check's refusal; after a refused
+ * Check the request is dismissed and the spare's join cancelled, so neither holds a place.
+ */
 export async function adoptFrom(
-  spareUrl: string,
-  via: Via,
-  primary: { primaryUrl: string; caPem: string },
-): Promise<{ status: number; body: unknown }> {
-  const adopted = await fetch(`${spareUrl}/setup-api/adopt`, {
-    ...via,
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      primaryUrl: primary.primaryUrl,
-      credential: { email: ADMIN.email, password: ADMIN.password },
-      confirmedCaPem: primary.caPem,
-    }),
+  spare: { url: string; via: Via },
+  main: { url: string; via: Via; origin: string },
+  primaryUrl: string,
+  wait: <T>(what: string, ms: number, probe: () => Promise<T | undefined>) => Promise<T>,
+): Promise<Answer> {
+  const onSpare = (path: string, init: { method?: string; body?: unknown; handle?: string }) =>
+    fetch(`${spare.url}${path}`, {
+      ...spare.via,
+      method: init.method ?? "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: spare.url,
+        ...(init.handle === undefined ? {} : { "x-waitron-join-handle": init.handle }),
+      },
+      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    });
+  const started = await answerOf(await onSpare("/setup-api/join/start", { body: { primaryUrl } }));
+  if (started.status !== 200) return started;
+  const { code, handle } = started.body as { code: string; handle: string };
+
+  const managing = await managementHeaders(main.url, main.origin, main.via);
+  const onMain = async (path: string, body?: unknown) =>
+    answerOf(
+      await fetch(`${main.url}${path}`, {
+        ...main.via,
+        method: body === undefined ? "GET" : "POST",
+        // The box-join routes take a person's request only from the page at the address it used.
+        headers: { ...managing, origin: main.url },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  const servers = await onMain("/management-api/servers");
+  expect(servers.status, JSON.stringify(servers.body)).toBe(200);
+  const listed = (servers.body as { joinRequests: { id: string }[] }).joinRequests;
+  expect(listed, JSON.stringify(listed)).toHaveLength(1);
+  const requestId = listed[0]!.id;
+  const checked = await onMain(`/management-api/box-joins/${requestId}/check`, {});
+  if (checked.status !== 200) {
+    const dismissed = await onMain(`/management-api/box-joins/${requestId}/dismiss`, {});
+    expect(dismissed.status, JSON.stringify(dismissed.body)).toBe(204);
+    const cancelled = await onSpare("/setup-api/join/cancel", { handle });
+    expect(cancelled.status, await cancelled.text()).toBe(204);
+    return checked;
+  }
+  expect((checked.body as { choices: string[] }).choices).toContain(code);
+  const approved = await onMain(`/management-api/box-joins/${requestId}/approve`, { code });
+  expect(approved.status, JSON.stringify(approved.body)).toBe(202);
+
+  await wait("the spare to collect the approved join", LINK_WAIT_MS, async () => {
+    const state = await answerOf(await onSpare("/setup-api/join", { method: "GET", handle }));
+    expect(state.status, JSON.stringify(state.body)).toBe(200);
+    const shown = state.body as { state: string };
+    expect(shown.state, JSON.stringify(shown)).not.toMatch(/^(ended|failed|replaced)$/);
+    return shown.state === "approved" ? true : undefined;
   });
-  return { status: adopted.status, body: (await adopted.json()) as unknown };
+  return answerOf(await onSpare("/setup-api/adopt", { body: {}, handle }));
 }
 
 /**
@@ -753,7 +811,13 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       fingerprint256: new X509Certificate(caM).fingerprint256,
     });
 
-    const adopt = () => adoptFrom(urlS, viaS, { primaryUrl: addressM, caPem: caM });
+    const adopt = () =>
+      adoptFrom(
+        { url: urlS, via: viaS },
+        { url: urlM, via: viaM, origin: boxM.origin },
+        addressM,
+        wait,
+      );
 
     clock.begin("spare-refused-no-key");
     const beforeNoKey = await joinState(dirsM.venue, m.nodeId);

@@ -105,6 +105,9 @@ import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clo
 import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import * as bootHarness from "./testing/boot-harness.js";
+import { waitUntil } from "./testing/scenario-stages.js";
+import { stubMainBox } from "./testing/setup-join.js";
+import type { MirrorBundle } from "./mirror-bundle.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -158,6 +161,39 @@ function bundleFor(overrides: {
     backupSettings: null,
     ...rest,
   };
+}
+
+/**
+ * Join the main box at `primaryUrl` on a setup start's page, wait until the main box has approved,
+ * then Finish joining. Answers Join's refusal or Finish joining's answer.
+ */
+async function joinThenFinish(
+  post: (path: string, init: RequestInit) => Promise<Response>,
+  primaryUrl: string,
+): Promise<Response> {
+  const started = await post("/setup-api/join/start", {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ primaryUrl }),
+  });
+  if (started.status !== 200) return started;
+  const { handle } = (await started.json()) as { handle: string };
+  const headers = { "x-waitron-join-handle": handle };
+  await waitUntil(
+    "the main box to approve the join",
+    20_000,
+    async () => {
+      const read = await post("/setup-api/join", { method: "GET", headers });
+      const { state } = (await read.json()) as { state: string };
+      expect(state).not.toMatch(/^(ended|failed|replaced|none)$/);
+      return state === "approved" ? true : undefined;
+    },
+    undefined,
+    250,
+  );
+  return post("/setup-api/adopt", {
+    headers: { ...headers, "content-type": "application/json" },
+    body: "{}",
+  });
 }
 
 const { beforeServerStarts, startServer, httpPort, startConfiguredServer } =
@@ -2131,33 +2167,25 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     const primaryKeys = generateNodeKeyPair();
-    const primary = createHttpServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      req.on("end", () => {
-        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-          standbyNodeId: string;
-          standbyPublicKey: string;
-        };
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify(
-            bundleFor({
-              boxCaPem: MAIN_AUTHORITY.caCertPem,
-              boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-              endorsement: endorseKey(
-                sent.standbyNodeId,
-                sent.standbyPublicKey,
-                MAIN_NODE_ID,
-                primaryKeys.privateKey,
-              ),
-              moduleOverrides: { "fiscal-verifactu": false },
-              primaryPublicKey: primaryKeys.publicKey,
-            }),
-          ),
-        );
-      });
-    });
+    const primary = createHttpServer(
+      stubMainBox({
+        nodeId: MAIN_NODE_ID,
+        keys: primaryKeys,
+        bundleFor: (standby) =>
+          bundleFor({
+            boxCaPem: MAIN_AUTHORITY.caCertPem,
+            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+            endorsement: endorseKey(
+              standby.nodeId,
+              standby.publicKey,
+              MAIN_NODE_ID,
+              primaryKeys.privateKey,
+            ),
+            moduleOverrides: { "fiscal-verifactu": false },
+            primaryPublicKey: primaryKeys.publicKey,
+          }) as MirrorBundle,
+      }),
+    );
     await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
     const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
     let restarts = 0;
@@ -2166,13 +2194,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         {},
         async ({ post, kills }) => {
-          const response = await post("/setup-api/adopt", {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              primaryUrl,
-              credential: { email: "owner@example.test", password: "x" },
-            }),
-          });
+          const response = await joinThenFinish(post, primaryUrl);
           expect(response.status).toBe(200);
           await poll(() => (restarts > 0 ? restarts : undefined));
           expect(restarts).toBe(1);
@@ -2191,33 +2213,25 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     const primaryKeys = generateNodeKeyPair();
-    const primary = createHttpServer((req, res) => {
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      req.on("end", () => {
-        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
-          standbyNodeId: string;
-          standbyPublicKey: string;
-        };
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify(
-            bundleFor({
-              boxCaPem: MAIN_AUTHORITY.caCertPem,
-              boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
-              endorsement: endorseKey(
-                sent.standbyNodeId,
-                sent.standbyPublicKey,
-                MAIN_NODE_ID,
-                primaryKeys.privateKey,
-              ),
-              moduleOverrides: { "fiscal-verifactu": false },
-              primaryPublicKey: primaryKeys.publicKey,
-            }),
-          ),
-        );
-      });
-    });
+    const primary = createHttpServer(
+      stubMainBox({
+        nodeId: MAIN_NODE_ID,
+        keys: primaryKeys,
+        bundleFor: (standby) =>
+          bundleFor({
+            boxCaPem: MAIN_AUTHORITY.caCertPem,
+            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+            endorsement: endorseKey(
+              standby.nodeId,
+              standby.publicKey,
+              MAIN_NODE_ID,
+              primaryKeys.privateKey,
+            ),
+            moduleOverrides: { "fiscal-verifactu": false },
+            primaryPublicKey: primaryKeys.publicKey,
+          }) as MirrorBundle,
+      }),
+    );
     await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
     const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
     let restarts = 0;
@@ -2233,13 +2247,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             secrets: await readFile(join(stateDir, "secrets.env"), "utf8"),
           });
           const before = await written();
-          const response = await post("/setup-api/adopt", {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              primaryUrl,
-              credential: { email: "owner@example.test", password: "x" },
-            }),
-          });
+          const response = await joinThenFinish(post, primaryUrl);
           expect(response.status).toBe(409);
           expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
             "mirror.vault_key_differs",

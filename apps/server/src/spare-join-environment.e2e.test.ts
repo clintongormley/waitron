@@ -19,11 +19,11 @@ import { freePort } from "./testing/free-ports.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import {
-  ADMIN,
   BOOT_MS,
   MODULES_M,
   TestBox,
   VENUE_M,
+  WAIT_POLL_MS,
   adoptFrom,
   boundedStart,
   closeBoxes,
@@ -35,6 +35,7 @@ import {
   provisionStreamBox,
   type BoxDirs,
 } from "./testing/stream-box.js";
+import { waitUntil } from "./testing/scenario-stages.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 const UNTIMED_MS = 60_000;
@@ -163,7 +164,12 @@ describe("a joining box's environment", () => {
       adopt: async () => {
         const store = adoptRetainedListeners([storeListener]);
         try {
-          const answer = await adoptFrom(urlS, viaS, { primaryUrl, caPem: caM });
+          const answer = await adoptFrom(
+            { url: urlS, via: viaS },
+            { url: `https://127.0.0.1:${listenerM.port}`, via: viaM, origin: boxM.origin },
+            primaryUrl,
+            (what, ms, probe) => waitUntil(what, ms, probe, undefined, WAIT_POLL_MS),
+          );
           // The joined box's restart binds its store port, which this test holds until then.
           if (answer.status === 200)
             await boundedStart(
@@ -328,11 +334,10 @@ describe("a joining box's environment", () => {
         operation: { kind: "adopt", phase: "venue_committed" },
       });
       const restartsBeforeReset = pair.boxS.restarts;
+      // A join by code leaves no password proof, so its reset takes none.
       const reset = await fetch(`${pair.urlS}/setup-api/reset-incomplete-adopt`, {
         ...viaJoined,
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: ADMIN.email, password: ADMIN.password }),
       });
       expect(reset.status, await reset.text()).toBe(202);
       expect(await poll(() => (pair.boxS.restarts > restartsBeforeReset ? true : undefined))).toBe(
