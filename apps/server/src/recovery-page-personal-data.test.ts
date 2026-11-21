@@ -1,3 +1,4 @@
+import { requestIdMiddleware } from "./request-id.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sendSmtpMessage } from "./smtp-send.js";
@@ -329,6 +330,32 @@ const NAME_TAKEN = {
 };
 
 describe("the recovery page, the log file and stdout carry no person's details", () => {
+  it("keeps only safe request metadata in the unauthenticated log tail", async () => {
+    const r = await rig();
+    const app = new Hono();
+    const run = createErrorBoundary({}, "sale.failed");
+    app.use(
+      "*",
+      requestIdMiddleware(r.log, () => new Date()),
+    );
+    app.post("/api/working-orders/:id/collect", (c) =>
+      run(c, r.log, () => Promise.reject(new AppError("session.required", {}))),
+    );
+    const orderId = "2ecbbef3-e05d-4c56-9b52-81d596ebc74c";
+    const res = await app.request(
+      `/api/working-orders/${orderId}/collect?${MARTHA_EMAIL}=private-query-value`,
+      { method: "POST", headers: { "x-request-id": "collect-request" } },
+    );
+    expect(await res.json()).toEqual({ error: { code: "session.required", params: {} } });
+    const page = await r.page();
+    expect(page).toContain("http.request");
+    expect(page).toContain(`/api/working-orders/${orderId}/collect?***`);
+    expect(page).toContain("&quot;errorCode&quot;:&quot;session.required&quot;");
+    expect(page).toContain("collect-request");
+    expect(page).not.toContain(MARTHA_EMAIL);
+    expect(page).not.toContain("private-query-value");
+  });
+
   it("masks the email a new staff member was refused for", async () => {
     const { adminId } = await setupVenue();
     const r = await rig();

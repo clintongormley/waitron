@@ -1,4 +1,9 @@
 import { Hono } from "hono";
+import { createErrorBoundary } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
+import { createHandoverGate } from "./handover-gate.js";
+import { readOnlyGate } from "./read-only-gate.js";
+import "./errors.js";
 import { describe, expect, it } from "vitest";
 import { createLogger } from "./logger.js";
 import { requestIdMiddleware, sanitizeRequestId } from "./request-id.js";
@@ -79,7 +84,76 @@ describe("requestIdMiddleware", () => {
     },
   );
 
-  it("logs http.request with the route pattern, never the concrete path or query or body", async () => {
+  it("puts the answered code and safe IDs on a warning for a refused request", async () => {
+    const { a, lines } = app();
+    const saleId = "2ecbbef3-e05d-4c56-9b52-81d596ebc74c";
+    const deliveryId = "7a4c35e2-79e0-41c2-b0ac-64cfd6d91ef1";
+    const run = createErrorBoundary({ "invoice_delivery.email_unavailable": 409 }, "sale.failed");
+    a.post("/api/sales/:id/deliveries/:deliveryId/retry", (c) =>
+      run(
+        c,
+        () => {},
+        () => Promise.reject(new AppError("invoice_delivery.email_unavailable", {})),
+      ),
+    );
+    const response = await a.request(
+      `/api/sales/${saleId}/deliveries/${deliveryId}/retry?address=customer%40example.test`,
+      { method: "POST", headers: { "x-request-id": "email-retry" } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "invoice_delivery.email_unavailable", params: {} },
+    });
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      {
+        at: at().toISOString(),
+        level: "warn",
+        event: "http.request",
+        requestId: "email-retry",
+        method: "POST",
+        routePath: `/api/sales/${saleId}/deliveries/${deliveryId}/retry?***`,
+        status: 409,
+        durationMs: 0,
+        errorCode: "invoice_delivery.email_unavailable",
+      },
+    ]);
+  });
+
+  it.each([
+    ["/api/sales/:id", "/api/sales/customer%40example.test"],
+    ["/api/sales/:id", "/api/sales/https%3A%2F%2Fuser%3Apassword%40example.test"],
+    ["/api/sales/:id", "/api/sales/2ecbbef3-e05d-4c56-9b52-81d596ebc74c%0A"],
+    ["/management-api/staff/:id", "/management-api/staff/2ecbbef3-e05d-4c56-9b52-81d596ebc74c"],
+    ["/api/*", "/api/customer%40example.test"],
+  ])("keeps the template %s when the request path is %s", async (template, path) => {
+    const { a, lines } = app();
+    a.post(template, (c) => c.json({ ok: true }));
+    expect((await a.request(path, { method: "POST" })).status).toBe(200);
+    expect(JSON.parse(lines[0]!).routePath).toBe(template);
+  });
+
+  it.each([
+    [403, "node.read_only", readOnlyGate(() => true)],
+    [
+      503,
+      "handover.stepping_down",
+      (() => {
+        const gate = createHandoverGate();
+        gate.close({ allowed: () => false });
+        return gate.middleware;
+      })(),
+    ],
+  ])("logs the code on a direct refusal with status %s", async (status, code, gate) => {
+    const { a, lines } = app();
+    a.use("/gated", gate);
+    a.post("/gated", (c) => c.text("should stay gated"));
+    const response = await a.request("/gated", { method: "POST" });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: { code, params: {} } });
+    expect(JSON.parse(lines[0]!)).toMatchObject({ status, errorCode: code });
+  });
+
+  it("logs http.request with the route pattern and a masked query", async () => {
     const { a, lines } = app();
     await a.request("/api/thing/42?secret=shh", {
       method: "POST",
@@ -88,7 +162,7 @@ describe("requestIdMiddleware", () => {
     });
     const entry = lines.map((l) => JSON.parse(l)).find((e) => e.event === "http.request");
     expect(entry.level).toBe("debug");
-    expect(entry.routePath).toBe("/api/thing/:id");
+    expect(entry.routePath).toBe("/api/thing/:id?***");
     const blob = JSON.stringify(entry);
     expect(blob).not.toContain("42?secret");
     expect(blob).not.toContain("secret");

@@ -1538,7 +1538,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const client = new FakeStripe();
     client.declineNext();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
+    const log = vi.fn<Logger>();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), log);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1558,6 +1559,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
     expect(payRes.status).toBe(200);
     expect(await payRes.json()).toEqual({ outcome: "declined" });
+    expect(log).toHaveBeenCalledWith("warn", "payment.collection_failed", {
+      orderId: workingOrderId,
+      outcome: "declined",
+      requestId: undefined,
+    });
 
     const after = await withTransaction(suite.db, async (tx) => {
       return {

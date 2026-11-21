@@ -1926,17 +1926,30 @@ it("boot gives remote dashboard files the main handover stop and request metadat
     const localOpen = await local!.request("/devices", { headers: { accept: "text/html" } });
     const build = open.headers.get(BUILD_HEADER);
     gate!.close({ allowed: () => false });
-    for (const path of ["/devices", "/assets/app.js"]) {
-      const stopped = await staff!.request(`https://staff.example.test${path}`, {
-        headers: { accept: "text/html" },
+    const stoppedLines = await withLoggedLines(async () => {
+      for (const path of ["/devices", "/assets/app.js"]) {
+        const stopped = await staff!.request(`https://staff.example.test${path}`, {
+          headers: { accept: "text/html", "x-request-id": "remote-stopped" },
+        });
+        expect(stopped.status).toBe(503);
+        expect(await stopped.json()).toEqual({
+          error: { code: "handover.stepping_down", params: {} },
+        });
+      }
+      const stopped = await local!.request("/devices", {
+        headers: { accept: "text/html", "x-request-id": "local-stopped" },
       });
       expect(stopped.status).toBe(503);
-      expect(await stopped.json()).toEqual({
-        error: { code: "handover.stepping_down", params: {} },
-      });
-    }
-    expect((await local!.request("/devices", { headers: { accept: "text/html" } })).status).toBe(
-      503,
+    });
+    expect(stoppedLines.filter((line) => line.event === "http.request")).toEqual(
+      ["remote-stopped", "remote-stopped", "local-stopped"].map((requestId) =>
+        expect.objectContaining({
+          requestId,
+          level: "error",
+          status: 503,
+          errorCode: "handover.stepping_down",
+        }),
+      ),
     );
     expect(build).not.toBeNull();
     expect(build).toBe(localOpen.headers.get(BUILD_HEADER));

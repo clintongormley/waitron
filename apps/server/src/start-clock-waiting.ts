@@ -17,6 +17,8 @@ import { resolveLoginLocale } from "./login-locale.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import { requestFromBox } from "./request-from-box.js";
 import { matchesStagedNodeKey } from "./restore-request.js";
+import { requestIdMiddleware } from "./request-id.js";
+import type { Logger } from "./logger.js";
 import type { SetupClockSetter } from "./setup-clock-set.js";
 
 const CHALLENGES = 64;
@@ -27,6 +29,7 @@ export interface StartClockWaitingOptions {
   stateDir: string;
   /** The restore page's setter (`createSetupClockSet`), so a step is noted and alerted as there. */
   setBoxClock: SetupClockSetter;
+  log?: Logger;
   /** The box's clocks; the steady one must be the one the series check reads (`performance.now`). */
   clock?: { wall: () => number; monotonic: () => number };
   requestFromBox?: (c: Context) => boolean;
@@ -59,8 +62,14 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
   let confirmation: KeptClockConfirmation | null = null;
 
   const app = new Hono();
+  if (options.log)
+    app.use(
+      "*",
+      requestIdMiddleware(options.log, () => new Date(wall())),
+    );
   const waitingAnswer = (c: Context) => {
     const err = new AppError("server.waiting_for_clock", { confirmed: confirmation !== null });
+    c.set("refusalCode", err.code);
     return c.json({ error: { code: err.code, params: err.params } }, 503, {
       "Cache-Control": "no-store",
       "Retry-After": RETRY_AFTER_SECONDS,
@@ -81,10 +90,12 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       c.header("Cache-Control", "no-store");
       if (!sentFromThisOrigin(c)) {
         const err = new AppError("restore.clock_origin_refused", {});
+        c.set("refusalCode", err.code);
         return c.json({ error: { code: err.code, params: err.params } }, 403);
       }
       if (!(await matchesStagedNodeKey(options.stateDir, sent.key))) {
         const err = new AppError("promotion.break_glass_invalid", {});
+        c.set("refusalCode", err.code);
         return c.json({ error: { code: err.code, params: err.params } }, 403);
       }
       return answer(c, sent, received);

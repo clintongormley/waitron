@@ -331,38 +331,47 @@ export function mountBillPaymentsApi(
         );
       }
       const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
-      return c.json(
-        await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
-          takeReaderBillPayment(
-            {
-              ...fiscal,
-              provider,
-              settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
-                const settled = await settleFromProviderRow(
-                  tx,
-                  { ...fiscal, cfg: saleCfg },
-                  paymentId,
-                  now,
-                  print,
-                  guestCount,
-                );
-                return settled.settled === "received" ? settled.invoice : null;
-              },
-              ...(reader === undefined
-                ? {}
-                : { readerRef: reader.providerRef, readerId: reader.id }),
-              deviceProfileId: device.deviceProfileId,
-              ...(deps.disk === undefined ? {} : { disk: deps.disk }),
-              sayCardChargedNotRecorded: true,
+      const outcome = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+        takeReaderBillPayment(
+          {
+            ...fiscal,
+            provider,
+            settleCapturedReplay: async (tx, paymentId, now, print, guestCount) => {
+              const settled = await settleFromProviderRow(
+                tx,
+                { ...fiscal, cfg: saleCfg },
+                paymentId,
+                now,
+                print,
+                guestCount,
+              );
+              return settled.settled === "received" ? settled.invoice : null;
             },
-            saleCfg,
-            id,
-            request,
-            operator,
-            basket === undefined ? undefined : { ...basket, lateSend: late },
-          ),
+            ...(reader === undefined ? {} : { readerRef: reader.providerRef, readerId: reader.id }),
+            deviceProfileId: device.deviceProfileId,
+            ...(deps.disk === undefined ? {} : { disk: deps.disk }),
+            sayCardChargedNotRecorded: true,
+          },
+          saleCfg,
+          id,
+          request,
+          operator,
+          basket === undefined ? undefined : { ...basket, lateSend: late },
         ),
       );
+      if (
+        outcome.outcome === "declined" ||
+        outcome.outcome === "failed" ||
+        outcome.outcome === "timeout" ||
+        outcome.outcome === "network_unavailable"
+      ) {
+        log("warn", "payment.collection_failed", {
+          requestId: c.get("requestId"),
+          orderId: id,
+          outcome: outcome.outcome,
+        });
+      }
+      return c.json(outcome);
     }),
   );
 

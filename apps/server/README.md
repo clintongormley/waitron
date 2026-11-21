@@ -865,6 +865,11 @@ The ones worth grepping for:
   `Agent.close()` can only ever throw a socket-layer error, never one carrying a secret. Any other
   `Agent` the pass opened is still released concurrently, regardless of this one failing — it does not stop the
   sweep, does not stop the pass, and does not flip `/health`.
+- **`http.request`** carries the method, matched route, status, duration and request ID. On selected
+  order, sale and delivery routes it includes UUIDs. A query appears as `?***`. Requests with a
+  recorded refusal code include it at warn or error. Other request lines are debug.
+- **`payment.collection_failed`** (`warn`) records the order ID, request ID and fixed payment outcome
+  when a till's card collection answers with a decline, failure, timeout or network unavailability.
 - **`payment.automatic_recovery`** (`info`) — `{ filed }`. Automatic captures completed through the
   existing till recovery path. `payment.automatic_recovery_failed` (`warn`) names a retained payment
   and its error, or a failure reading the recovery set. Captured payments stay available for retry.

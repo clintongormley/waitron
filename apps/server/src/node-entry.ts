@@ -806,6 +806,7 @@ async function runAdmittedEntry(
               clock: { wall: () => Date.now(), monotonic: steady },
               stateDir: deps.stateDir,
               setBoxClock: setter,
+              log: deps.log,
               earliestMs: () => chosenMinuteMs,
             });
             const served = await deps.serveStartClockWaiting(page.app, transport);

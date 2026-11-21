@@ -1,3 +1,4 @@
+import { requestIdMiddleware } from "./request-id.js";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedDeviceProfiles, seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
@@ -222,6 +223,13 @@ async function venue(): Promise<Venue> {
   const app = new Hono();
   const email: Venue["email"] = { transport: true };
   const logged: unknown[][] = [];
+  app.use(
+    "*",
+    requestIdMiddleware(
+      (...args) => logged.push(args),
+      () => new Date(),
+    ),
+  );
   mountTillApi(
     app,
     {
@@ -1828,6 +1836,15 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     const { orderId, saleId } = await invoice(v);
     v.email.transport = false;
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.email_unavailable"));
+    expect(v.logged).toContainEqual([
+      "warn",
+      "http.request",
+      expect.objectContaining({
+        routePath: `/api/sales/${orderId}/deliveries`,
+        status: 409,
+        errorCode: "invoice_delivery.email_unavailable",
+      }),
+    ]);
     v.email.transport = true;
     await suite.db.update(departments).set({
       receiptText: null,

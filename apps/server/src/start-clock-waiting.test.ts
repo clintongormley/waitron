@@ -137,6 +137,24 @@ describe("the restore's waiting app: pages", () => {
     });
   });
 
+  it("logs the fixed code on a till request made while the restore waits", async () => {
+    const log = vi.fn();
+    const { app } = await waiting({ log });
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "x-request-id": "waiting-till" },
+    });
+    expect(res.status).toBe(503);
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "http.request",
+      expect.objectContaining({
+        errorCode: "server.waiting_for_clock",
+        requestId: "waiting-till",
+      }),
+    );
+  });
+
   it("says whether it holds a kept confirmation: none, kept, then dropped", async () => {
     const w = await waiting();
     const confirmed = async () => {
