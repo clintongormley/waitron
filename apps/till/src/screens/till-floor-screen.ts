@@ -516,9 +516,14 @@ export class TillFloorScreen extends LitElement {
       }
 
       @media (forced-colors: active) {
-        .zone-tab.filled-forgotten wt-button::part(button),
-        [data-tabs-edge].filled-forgotten {
+        .zone-tab.filled-forgotten::after,
+        [data-tabs-edge].filled-forgotten::after {
+          content: "";
+          position: absolute;
+          inset: calc(var(--wt-space-1) / 2);
           border: calc(var(--wt-space-1) / 2) dotted CanvasText;
+          border-radius: inherit;
+          pointer-events: none;
         }
       }
 

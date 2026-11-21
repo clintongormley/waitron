@@ -377,21 +377,19 @@ describe("till-floor-screen: zone tabs", () => {
       await commands.emulateColorScheme(theme);
       await emulateForcedColours("active");
       try {
-        const { el, host } = await mount([
+        const { el } = await mount([
           seated("t1", "z1"),
           seated("t2", "z2", { timingBand: "forgotten" }),
         ]);
-        host.dataset["theme"] = theme;
-        const edgeColours = async (id: string) => {
-          const button = buttonOf(el, id);
-          const { left, top, width } = button.getBoundingClientRect();
-          const at = await elementPixels(button);
-          return new Set(
-            Array.from({ length: 16 }, (_, i) => String(at(left + width / 2 - 8 + i, top + 1.5))),
-          );
-        };
-        expect((await edgeColours("z2")).size).toBeGreaterThan(1);
-        expect((await edgeColours("z1")).size).toBe(1);
+        const button = buttonOf(el, "z2");
+        const tab = tabOf(el, "z2").closest(".filled-forgotten")!;
+        expect(getComputedStyle(tab, "::after").borderTopStyle).toBe("dotted");
+        const marked = button.getBoundingClientRect();
+        const sample = [marked.left + 8, marked.top + 8] as const;
+        const markedFill = (await elementPixels(button))(...sample);
+        tab.classList.remove("filled-forgotten");
+        expect(button.getBoundingClientRect().toJSON()).toEqual(marked.toJSON());
+        expect((await elementPixels(button))(...sample)).toEqual(markedFill);
       } finally {
         await emulateForcedColours(null);
         await commands.emulateColorScheme(null);
@@ -623,7 +621,7 @@ describe("till-floor-screen: the zone strip's edge", () => {
         // As its tab is: a forgotten zone fills red when nothing may move.
         expect(getComputedStyle(edge).backgroundColor).toBe("rgb(4, 5, 6)");
         await emulateForcedColours("active")
-          .then(() => expect(getComputedStyle(edge).borderTopStyle).toBe("dotted"))
+          .then(() => expect(getComputedStyle(edge, "::after").borderTopStyle).toBe("dotted"))
           .finally(() => emulateForcedColours(null));
       },
       true,
