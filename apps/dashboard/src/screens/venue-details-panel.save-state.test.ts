@@ -144,7 +144,7 @@ it("marks a malformed changed postcode on Save and lets a corrected postcode be 
   expect(postcode.error).toBe("");
   expect(messages.error).toBe("");
   await press(el, "[data-test=save]");
-  expect(postcode.error).toMatch(/postcode/i);
+  expect(postcode.error).toBe(t("venue_details.postcode_invalid"));
   expect(messages.error).toBe(t("form.fix_fields"));
   expect(await state(el)).toEqual(blocked);
   expect(api.patchVenueDetails).not.toHaveBeenCalled();

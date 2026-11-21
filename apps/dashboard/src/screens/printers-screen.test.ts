@@ -7749,7 +7749,14 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(isDisabled(el, check)).toBe(true);
     expect(probe).not.toHaveBeenCalled();
 
-    for (const value of ["printer.local", "127.1", "[2001:db8::1]", "fe80::1%en0"]) {
+    for (const value of [
+      "printer.local",
+      "127.1",
+      "01.2.3.4",
+      "[2001:db8::1]",
+      "fe80::1%en0",
+      "::1]/[::2",
+    ]) {
       typeField(el, address, value);
       await flush(el);
       expect(isDisabled(el, check), value).toBe(true);
