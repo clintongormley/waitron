@@ -334,7 +334,6 @@ describe("a joining box's environment", () => {
         operation: { kind: "adopt", phase: "venue_committed" },
       });
       const restartsBeforeReset = pair.boxS.restarts;
-      // A join by code leaves no password proof, so its reset takes none.
       const reset = await fetch(`${pair.urlS}/setup-api/reset-incomplete-adopt`, {
         ...viaJoined,
         method: "POST",

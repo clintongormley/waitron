@@ -2099,7 +2099,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
-  it("refuses to adopt from a primary it cannot reach", async () => {
+  it("refuses to join a primary it cannot reach", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
     try {

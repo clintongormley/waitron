@@ -64,7 +64,7 @@ import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { mountSetup } from "./setup-api.js";
 import { createRecoveryEntryRunner } from "./recovery-entry.js";
 import { readSetupDatabase } from "./first-setup-database-holdings.js";
-import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
+import { approvedJoinAttempt } from "./testing/setup-join.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
@@ -1721,7 +1721,15 @@ it.each<[string, (p: Pending) => Promise<void>]>([
         },
         () => {},
       );
-      const response = await finishJoining(app);
+      const response = await app.request(
+        "https://box.test/setup-api/adopt",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "https://box.test" },
+          body: "{}",
+        },
+        tls(),
+      );
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
         error: { code: "setup.start_again_incomplete", params: {} },

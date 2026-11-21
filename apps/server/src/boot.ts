@@ -1054,7 +1054,10 @@ export interface StartServerSeams {
    * unset, `lookupBoxName`.
    */
   boxLookup?: BoxLookup;
-  /** This box's addresses as a new box's Join lists them; unset, the configured box addresses or its interface addresses. */
+  /**
+   * This box's addresses as a new box's Join lists them; unset, the configured box addresses or its
+   * interface addresses.
+   */
   joinAddresses?: () => string[];
   /**
    * Takes every restart a start asks for, so a test running servers in its own process is not

@@ -432,7 +432,7 @@ describe("runStagedReset", () => {
     const store = await openVenueDatabase(venueDir);
     try {
       const identity = generateStandbyIdentity();
-      const standbyNodeId: string | undefined = identity.nodeId;
+      const standbyNodeId = identity.nodeId;
       const bundle: MirrorBundle = {
         ...BUNDLE,
         reservedIdentity: {
@@ -494,7 +494,7 @@ describe("runStagedReset", () => {
       ) as PendingAdoption;
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
-      expect(await readMirrorLink(store.node, standbyNodeId!)).toMatchObject({
+      expect(await readMirrorLink(store.node, standbyNodeId)).toMatchObject({
         originNodeId: PRIMARY_NODE_ID,
       });
     } finally {
