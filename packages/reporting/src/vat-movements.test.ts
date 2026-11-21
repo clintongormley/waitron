@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql, type SQL } from "drizzle-orm";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleId } from "@waitron/shared";
 import {
@@ -417,5 +420,31 @@ describe("vatMovements", () => {
 
   it("refuses a bad period", async () => {
     await expect(movements(Q2, 99)).rejects.toThrow(/year must be/);
+  });
+
+  it("finds invoices issued after the period for a supply day in it by a range search on supply_day", async () => {
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const statements: SQL[] = [];
+      const recording = new Proxy(tx, {
+        get: (target, key, receiver) =>
+          key === "execute"
+            ? (query: SQL) => {
+                statements.push(query);
+                return target.execute(query);
+              }
+            : Reflect.get(target, key, receiver),
+      }) as Transaction;
+      await vatMovements(recording, { year: 2026, period: Q1 });
+      const movement = statements.find((q) =>
+        new SQLiteSyncDialect().sqlToQuery(q).sql.includes("s.supply_day >="),
+      );
+      expect(movement).toBeDefined();
+      return tx.execute<{ detail: string }>(sql`explain query plan ${movement!}`);
+    });
+    const details = plan.rows.map((r) => r.detail);
+    expect(details).toContain(
+      "SEARCH s USING INDEX sales_supply_day_idx (supply_day>? AND supply_day<?)",
+    );
+    expect(details).not.toContain("SEARCH s USING INDEX sales_issued_idx (issued_at>?)");
   });
 });

@@ -134,6 +134,9 @@ export const sales = table(
     unique("sales_series_invoice_number_key").on(t.seriesId, t.invoiceNumber),
     index("sales_issued_idx").on(t.issuedAt),
     index("sales_fiscal_state_idx").on(t.fiscalState),
+    index("sales_supply_day_idx")
+      .on(t.supplyDay)
+      .where(sql`${t.supplyDay} is not null`),
     // NOT unique: a sale may be corrected more than once by successive corrective invoices.
     foreignKey({
       columns: [t.correctsSaleId],

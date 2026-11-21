@@ -126,6 +126,11 @@ files, no database change. PR 2 (the margin setting and the free list): about 31
 35 of guide and backlog text and about 25 generated lines (the rebuilt starting database layout),
 about 40 files; it resets the test venues.
 
+_2026-11-21:_ at the owner's word (lane L `questions.md`, "WATCHER 2026-11-21 19:02") PR 1 also
+adds `sales_supply_day_idx`, so it rebuilds core's starting migration (about 13 generated lines)
+and resets every venue; PR 2 rebuilds it again. "Should this exist?" item 2's "one migration
+rebuild, one venue reset" is now two of each.
+
 ## Should this exist?
 
 1. **Need.** In the owner's words above: a filed quarter's figures never change, and later

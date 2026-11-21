@@ -1104,9 +1104,9 @@ movement table, which decides how each kind of record moves VAT, and the handove
 not put to the owner. Deliberate limits:
 a record stamped under a wrong clock counts where its stamp puts it; invoices and voids returned
 after a handover count on their own stamps, since nothing records when they arrived; every
-replacement and the invoice it replaces, and every invoice issued after the period, are read
-whatever their date. The purchases side is not covered: a supplier invoice dated in an ended period
-can still be added, changed or deleted, and that period's return changes with it.
+replacement and the invoice it replaces are read whatever their date. The purchases side is not
+covered: a supplier invoice dated in an ended period can still be added, changed or deleted, and
+that period's return changes with it.
 
 ### ADVISER-SPLIT-AFTER-PRINT: a printed bill is split by a whole credit note and copies of its dishes (watcher, 2026-11-20)
 

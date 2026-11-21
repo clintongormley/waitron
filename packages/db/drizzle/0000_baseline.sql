@@ -1470,6 +1470,7 @@ CREATE TABLE `sales` (
 --> statement-breakpoint
 CREATE INDEX `sales_issued_idx` ON `sales` (`issued_at`);--> statement-breakpoint
 CREATE INDEX `sales_fiscal_state_idx` ON `sales` (`fiscal_state`);--> statement-breakpoint
+CREATE INDEX `sales_supply_day_idx` ON `sales` (`supply_day`) WHERE "sales"."supply_day" is not null;--> statement-breakpoint
 CREATE INDEX `sales_corrects_idx` ON `sales` (`corrects_sale_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `sales_one_replacement_uq` ON `sales` (`corrects_sale_id`) WHERE "sales"."replaces_original" = 1;--> statement-breakpoint
 CREATE UNIQUE INDEX `sales_series_invoice_number_key` ON `sales` (`series_id`,`invoice_number`);--> statement-breakpoint

@@ -102,8 +102,8 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
   // own day). `placed`: each ordinary invoice and non-replacement corrective, with the day its VAT
   // first belongs to and the day it belongs to now (an ordinary invoice's replacement's
   // `supply_day`, voided or not, moves it). `sales_one_replacement_uq` admits at most one
-  // replacement per sale, so the joins add no rows. A box gathers no planner statistics, so the
-  // indexes are named.
+  // replacement per sale, so the joins add no rows. Each `indexed by` is there because a box gathers
+  // no planner statistics.
   const invoiceColumns = invoices
     ? sql`, ser.code as series_code, inv.invoice_number as number, ${issueDay("inv")} as issue_date,
         cser.code as corrected_series_code, cor.invoice_number as corrected_number,
@@ -121,7 +121,7 @@ function movementQuery(input: { year: number; period: LiquidationPeriod }, invoi
       select s.id from sales s indexed by sales_issued_idx
       where s.issued_at >= ${bound.from} and s.issued_at < ${bound.before}
       union
-      select s.id from sales s indexed by sales_issued_idx
+      select s.id from sales s indexed by sales_supply_day_idx
       where s.issued_at >= ${bound.before} and s.corrects_sale_id is null
         and s.supply_day >= ${first} and s.supply_day < ${next}
       union

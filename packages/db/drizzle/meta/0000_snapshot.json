@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c4625988-0bf6-44f3-af4d-9a0c0cc6d124",
+  "id": "da995eec-b6aa-4f65-952a-1af8f8f50523",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9403,6 +9403,14 @@
             "fiscal_state"
           ],
           "isUnique": false
+        },
+        "sales_supply_day_idx": {
+          "name": "sales_supply_day_idx",
+          "columns": [
+            "supply_day"
+          ],
+          "isUnique": false,
+          "where": "\"sales\".\"supply_day\" is not null"
         },
         "sales_corrects_idx": {
           "name": "sales_corrects_idx",
