@@ -3,6 +3,7 @@ export type {
   AbandonedAttemptOutcome,
   AsyncPaymentProvider,
   CardDetails,
+  CardDetailFollowUp,
   CollectParams,
   CompletedRefunds,
   CollectionOwners,

@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type {
   CompletedRefunds,
   CardDetails,
+  CardDetailFollowUp,
   CollectParams,
   CollectionOwners,
   ForwardResult,
@@ -121,6 +122,13 @@ type PollOutcome =
   | { kind: "pending"; refundUncertain?: boolean }
   | { kind: "deferred" };
 
+interface CardDetailRetry {
+  attempts: number;
+  settledAt: number;
+  expiresAt: number;
+  dueAt: number | null;
+}
+
 /** The attempt is committed before the checkout begins. While attempting, `externalRef` is the
  * poll key; capture replaces it with the refundable transaction id. */
 export class SumUpCloudProvider implements PaymentProvider {
@@ -130,10 +138,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   readonly refundResendWindowMs = null;
   private readonly poll: Required<NonNullable<SumUpCloudProviderOptions["poll"]>>;
   private readonly now: () => Date;
-  private readonly cardDetailRetries = new Map<
-    string,
-    { attempts: number; expiresAt: number; dueAt: number | null }
-  >();
+  private readonly cardDetailRetries = new Map<string, CardDetailRetry>();
 
   constructor(private readonly opts: SumUpCloudProviderOptions) {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
@@ -424,7 +429,7 @@ export class SumUpCloudProvider implements PaymentProvider {
 
   async fillMissingCardDetails(
     owners: CollectionOwners,
-    onOutcome: (paymentRef: string, outcome: "filled" | "exhausted") => void,
+    onOutcome: (result: CardDetailFollowUp) => void,
     signal?: AbortSignal,
   ): Promise<Date | null> {
     if (signal?.aborted) return null;
@@ -435,9 +440,22 @@ export class SumUpCloudProvider implements PaymentProvider {
       owners,
       new Date(discoveredAt - CARD_DETAILS_MAX_AGE_MS),
     );
+    const report = (
+      outcome: CardDetailFollowUp["outcome"],
+      paymentRef: string,
+      retry: CardDetailRetry,
+    ) =>
+      onOutcome({
+        outcome,
+        paymentRef,
+        attempts: retry.attempts,
+        ageSeconds: Math.max(0, Math.floor((this.now().getTime() - retry.settledAt) / 1_000)),
+      });
     const refs = new Set(rows.map((row) => row.paymentRef));
-    for (const ref of this.cardDetailRetries.keys()) {
-      if (!refs.has(ref)) this.cardDetailRetries.delete(ref);
+    for (const [ref, retry] of this.cardDetailRetries) {
+      if (refs.has(ref)) continue;
+      this.cardDetailRetries.delete(ref);
+      if (retry.dueAt !== null && discoveredAt > retry.expiresAt) report("exhausted", ref, retry);
     }
 
     let nextDueAt = Infinity;
@@ -449,6 +467,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       const ref = row.paymentRef;
       const retry = this.cardDetailRetries.get(ref) ?? {
         attempts: 0,
+        settledAt,
         expiresAt: Math.min(
           settledAt + CARD_DETAILS_MAX_AGE_MS,
           discoveredAt + CARD_DETAILS_WINDOW_MS,
@@ -459,36 +478,36 @@ export class SumUpCloudProvider implements PaymentProvider {
       if (retry.dueAt === null) continue;
       if (at > retry.expiresAt) {
         retry.dueAt = null;
-        onOutcome(ref, "exhausted");
+        report("exhausted", ref, retry);
         continue;
       }
       if (retry.dueAt <= at) {
         const card = await this.lookupCapturedCard(row.externalRef, row.amount);
         if (signal?.aborted) return null;
-        if (card !== undefined) {
-          // Recheck the stop inside the write turn in case shutdown began while we queued for it.
-          const filled = await this.inTransaction(
-            async (tx) =>
-              !signal?.aborted &&
-              fillCapturedCard(
-                tx,
-                {
-                  provider: SUMUP_PROVIDER,
-                  paymentRef: ref,
-                  externalRef: row.externalRef,
-                },
-                card,
-              ),
-          );
-          if (filled) onOutcome(ref, "filled");
-          retry.dueAt = null;
-          continue;
-        }
         retry.attempts += 1;
+        if (card !== undefined) {
+          try {
+            // Recheck the stop inside the write turn in case shutdown began while we queued for it.
+            const filled = await this.inTransaction(
+              async (tx) =>
+                !signal?.aborted &&
+                fillCapturedCard(
+                  tx,
+                  { provider: SUMUP_PROVIDER, paymentRef: ref, externalRef: row.externalRef },
+                  card,
+                ),
+            );
+            retry.dueAt = null;
+            if (filled) report("filled", ref, retry);
+            continue;
+          } catch {
+            // A write refusal uses the same retry budget and leaves the next capture eligible.
+          }
+        }
         retry.dueAt = at + CARD_DETAILS_RETRY_MS;
         if (retry.attempts >= CARD_DETAILS_MAX_ATTEMPTS || retry.dueAt > retry.expiresAt) {
           retry.dueAt = null;
-          onOutcome(ref, "exhausted");
+          report("exhausted", ref, retry);
           continue;
         }
       }

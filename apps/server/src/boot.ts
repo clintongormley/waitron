@@ -636,7 +636,8 @@ export function sweepOwners(
 }
 
 /** Resolve pending payments, settle bills, then look up receipt details. Secondary boxes
- * sweep their own payments even when they never settle bills. */
+ * sweep their own payments even when they never settle bills. This stays out of health duties
+ * because a box without a card provider has nothing to sweep. */
 export function withPendingSweep(
   settle: (now: Date) => Promise<PassReport>,
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
@@ -682,17 +683,19 @@ export function withPendingSweep(
       try {
         const due = await provider.fillMissingCardDetails?.(
           owned,
-          (paymentRef, outcome) =>
+          ({ outcome, ...fields }) =>
             log("info", `payment.card_details_${outcome}`, {
               provider: provider.provider,
-              paymentRef,
+              ...fields,
             }),
           signal,
         );
         if (due != null && (nextDueAt === null || due < nextDueAt)) nextDueAt = due;
-      } catch {
-        // A failed write can include the card details in the query error.
-        log("warn", "payment.card_details_failed", { provider: provider.provider });
+      } catch (error) {
+        log("warn", "payment.card_details_failed", {
+          provider: provider.provider,
+          errorCode: codeOf(error),
+        });
       }
     }
     return nextDueAt === report.nextDueAt ? report : { ...report, nextDueAt };

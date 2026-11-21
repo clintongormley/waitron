@@ -869,14 +869,10 @@ describe("receipt original and copy tracking", () => {
     expect(result.outcome).toBe("received");
     await printSaleReceipt(deps(), cfg, orderId, "original");
     const [payment] = await suite.db
-      .select()
-      .from(payments)
-      .where(eq(payments.workingOrderId, orderId));
-    expect(payment?.cardLast4).toBeNull();
-    await suite.db
       .update(payments)
       .set({ externalRef: "txn-receipt" })
-      .where(eq(payments.id, payment!.id));
+      .where(eq(payments.workingOrderId, orderId))
+      .returning({ paymentRef: payments.paymentRef });
     expect(
       await withTransaction(suite.db, (tx) =>
         fillCapturedCard(

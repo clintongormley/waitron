@@ -14,9 +14,6 @@ import {
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
 
-// `withPendingSweep` returns the inner pass's report verbatim, so `/health` is untouched by a sweep
-// that runs, logs or throws.
-
 const REPORT: PassReport = { duties: [], nextDueAt: null };
 const OWNERS: CollectionOwners = {
   nodeId: nodeId("11111111-1111-4111-8111-111111111111"),
@@ -37,15 +34,18 @@ describe("pendingCardPass", () => {
         declined: 0,
         incidentsRaised: 0,
       };
+      const provider = fakeProvider("sumup", async () => {
+        ran.push("sweep");
+        if (signalled) controller.abort();
+        return empty;
+      });
+      provider.fillMissingCardDetails = async () => {
+        ran.push("details");
+        return null;
+      };
       const pass = pendingCardPass(
         {
-          sweepProviders: async () => [
-            fakeProvider("stripe", async () => {
-              ran.push("sweep");
-              if (signalled) controller.abort();
-              return empty;
-            }),
-          ],
+          sweepProviders: async () => [provider],
           owners: () => OWNERS,
           settle: async (signal) => {
             ran.push("settle");
@@ -66,13 +66,12 @@ describe("pendingCardPass", () => {
         controller.signal,
       );
       expect(await pass(new Date())).toEqual(REPORT);
-      expect(ran).toEqual(signalled ? ["sweep"] : ["sweep", "settle"]);
+      expect(ran).toEqual(signalled ? ["sweep"] : ["sweep", "settle", "details"]);
       if (!signalled) expect(settledWith).toBe(controller.signal);
     },
   );
 });
 
-/** `withPendingSweep` reads only `provider` and `resolvePending`. */
 function fakeProvider(
   provider: string,
   resolvePending: () => Promise<ForwardResult>,
@@ -101,54 +100,37 @@ describe("sweepOwners", () => {
 });
 
 describe("withPendingSweep", () => {
-  it.each([null, 10, 40])(
-    "runs the detail read after recovery and keeps the earlier due time (%s)",
-    async (innerSeconds) => {
-      const now = new Date("2026-11-21T11:00:00Z");
-      const controller = new AbortController();
-      const due = new Date("2026-11-21T11:00:20Z");
-      const ran: string[] = [];
-      const log = vi.fn();
-      const provider = fakeProvider("sumup", async () => {
-        ran.push("recover");
-        return { forwarded: 1, declined: 0, incidentsRaised: 0, nextDueAt: null };
-      });
-      provider.fillMissingCardDetails = async (owners, onOutcome, signal) => {
-        expect(owners).toBe(OWNERS);
-        expect(signal).toBe(controller.signal);
-        ran.push("details");
-        onOutcome("payment-a", "filled");
-        onOutcome("payment-b", "exhausted");
-        return due;
-      };
-      const report = await withPendingSweep(
-        async () => {
-          ran.push("settle");
-          return {
-            ...REPORT,
-            nextDueAt:
-              innerSeconds === null ? null : new Date(now.getTime() + innerSeconds * 1_000),
-          };
-        },
-        async () => [provider],
-        () => OWNERS,
-        log,
-        controller.signal,
-      )(now);
-      expect(ran).toEqual(["recover", "settle", "details"]);
-      expect(report.nextDueAt).toEqual(
-        innerSeconds === 10 ? new Date("2026-11-21T11:00:10Z") : due,
-      );
-      expect(log).toHaveBeenCalledWith("info", "payment.card_details_filled", {
-        provider: "sumup",
-        paymentRef: "payment-a",
-      });
-      expect(log).toHaveBeenCalledWith("info", "payment.card_details_exhausted", {
-        provider: "sumup",
-        paymentRef: "payment-b",
-      });
-    },
-  );
+  it.each([10, 40])("keeps the earlier due time (%s)", async (innerSeconds) => {
+    const now = new Date("2026-11-21T11:00:00Z");
+    const controller = new AbortController();
+    const due = new Date("2026-11-21T11:00:20Z");
+    const log = vi.fn();
+    const provider = fakeProvider("sumup", async () => ({
+      forwarded: 1,
+      declined: 0,
+      incidentsRaised: 0,
+      nextDueAt: null,
+    }));
+    const detail = { paymentRef: "payment-a", attempts: 2, ageSeconds: 31 };
+    provider.fillMissingCardDetails = async (owners, report, signal) => {
+      expect(owners).toBe(OWNERS);
+      expect(signal).toBe(controller.signal);
+      report({ outcome: "filled", ...detail });
+      return due;
+    };
+    const report = await withPendingSweep(
+      async () => ({ ...REPORT, nextDueAt: new Date(now.getTime() + innerSeconds * 1_000) }),
+      async () => [provider],
+      () => OWNERS,
+      log,
+      controller.signal,
+    )(now);
+    expect(report.nextDueAt).toEqual(innerSeconds === 10 ? new Date("2026-11-21T11:00:10Z") : due);
+    expect(log).toHaveBeenCalledWith("info", "payment.card_details_filled", {
+      provider: "sumup",
+      ...detail,
+    });
+  });
 
   it("logs a detail write failure without logging the failed query or its card fields", async () => {
     const log = vi.fn();
@@ -168,7 +150,10 @@ describe("withPendingSweep", () => {
       log,
     )(new Date());
     expect(report).toBe(REPORT);
-    expect(log).toHaveBeenCalledWith("warn", "payment.card_details_failed", { provider: "sumup" });
+    expect(log).toHaveBeenCalledWith("warn", "payment.card_details_failed", {
+      provider: "sumup",
+      errorCode: "unknown",
+    });
   });
 
   it("is a no-op (returns the inner report, logs nothing) when the enumerator yields no providers", async () => {

@@ -103,6 +103,13 @@ export interface ForwardResult {
   incidentsRaised: number;
 }
 
+export interface CardDetailFollowUp {
+  outcome: "filled" | "exhausted";
+  paymentRef: string;
+  attempts: number;
+  ageSeconds: number;
+}
+
 /** Which payments a box may handle in its provider sweep. */
 export interface CollectionOwners {
   /** This box. */
@@ -258,7 +265,7 @@ export interface PaymentProvider {
   /** Fill missing receipt details for recent captures, returning the next retry time, if any. */
   fillMissingCardDetails?(
     owners: CollectionOwners,
-    onOutcome: (paymentRef: string, outcome: "filled" | "exhausted") => void,
+    onOutcome: (result: CardDetailFollowUp) => void,
     signal?: AbortSignal,
   ): Promise<Date | null>;
 
