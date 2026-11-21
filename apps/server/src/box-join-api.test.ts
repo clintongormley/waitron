@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
@@ -8,14 +8,11 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   JOIN_CANCEL_LABEL,
-  JOIN_HELLO_LABEL,
   JOIN_POLL_LABEL,
   JOIN_REVEAL_LABEL,
   commitmentFor,
-  helloMessageFields,
   joinCode,
   revealAnswerFields,
-  signJoinMessage,
   verifyJoinMessage,
 } from "./box-join-code.js";
 import { mountBoxJoinApi } from "./box-join-api.js";
@@ -25,7 +22,16 @@ import {
   type JoinHello,
 } from "./box-join-requests.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { generateStandbyIdentity, type StandbyIdentity } from "./reserved-identity.js";
+import { generateStandbyIdentity } from "./reserved-identity.js";
+import {
+  boxPost,
+  helloBody as joinHelloBody,
+  joiningBox,
+  revealBody,
+  signedBy,
+  type HelloAnswer,
+  type JoiningBox,
+} from "./testing/box-join.js";
 import { holdChartNamingMainBox } from "./testing/membership-doc-fixture.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -34,45 +40,13 @@ const RING: KeyRing = loadKeyRing({
 });
 const NOW = Date.parse("2026-11-21T10:00:00.000Z");
 
-interface NewBox {
-  identity: StandbyIdentity;
-  hello: JoinHello;
-  address: string;
-  newNonce: Buffer;
-}
+type NewBox = JoiningBox;
 
-function newBox(address: string, identity = generateStandbyIdentity()): NewBox {
-  const ek = generateKeyPairSync("x25519").publicKey.export({ format: "der", type: "spki" });
-  return {
-    identity,
-    address,
-    newNonce: randomBytes(32),
-    hello: {
-      newNodeId: identity.nodeId,
-      newPublicKey: identity.publicKey,
-      encryptionKey: ek.toString("base64"),
-      contactUrl: `https://${address}:8443`,
-      storeUrl: `https://${address}:9000`,
-      addresses: [address, "10.0.0.9"],
-    },
-  };
-}
+const newBox = (address: string, identity = generateStandbyIdentity()): NewBox =>
+  joiningBox(address, { identity, addresses: [address, "10.0.0.9"] });
 
-function helloBody(box: NewBox, overrides: Record<string, unknown> = {}, at = NOW) {
-  return {
-    protocol: 1,
-    ...box.hello,
-    at,
-    signature: signJoinMessage(
-      JOIN_HELLO_LABEL,
-      "",
-      0,
-      helloMessageFields(box.hello, at),
-      box.identity.privateKey,
-    ),
-    ...overrides,
-  };
-}
+const helloBody = (box: NewBox, overrides: Record<string, unknown> = {}, at = NOW) =>
+  joinHelloBody(box, overrides, at);
 
 describe("the main box's box-to-box join routes", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS], timeoutMs: 60_000 });
@@ -102,39 +76,15 @@ describe("the main box's box-to-box join routes", () => {
     mount();
   }, 60_000);
 
-  const post = (path: string, body: unknown, from: string) =>
-    app.request(
-      `https://waitron.local/api/node/join/${path}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      },
-      { incoming: { socket: { remoteAddress: from } } },
-    );
+  const post = (path: string, body: unknown, from: string) => boxPost(app, path, body, from);
 
   async function hello(box: NewBox) {
     const response = await post("hello", helloBody(box), box.address);
     expect(response.status).toBe(200);
-    return (await response.json()) as {
-      requestId: string;
-      mainNodeId: string;
-      mainPublicKey: string;
-      commitment: string;
-      expiresAt: string;
-    };
+    return (await response.json()) as HelloAnswer;
   }
 
-  function signed(box: NewBox, label: string, requestId: string, seq: number, fields: Buffer[]) {
-    return signJoinMessage(label, requestId, seq, fields, box.identity.privateKey);
-  }
-
-  const revealBody = (box: NewBox, requestId: string) => ({
-    requestId,
-    seq: 1,
-    newNonce: box.newNonce.toString("base64"),
-    signature: signed(box, JOIN_REVEAL_LABEL, requestId, 1, [box.newNonce]),
-  });
+  const signed = signedBy;
 
   const err = (code: string, params: Record<string, unknown> = {}) => ({
     error: { code, params },

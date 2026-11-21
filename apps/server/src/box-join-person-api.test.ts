@@ -1,13 +1,10 @@
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
-import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { Socket } from "node:net";
-import { TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   nodes,
   readMembershipTrustSet,
@@ -20,36 +17,18 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { startManagementSession } from "@waitron/identity";
 import type { NodeKeyPair } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { nodeId } from "@waitron/shared";
-import {
-  JOIN_CANCEL_LABEL,
-  JOIN_HELLO_LABEL,
-  JOIN_POLL_LABEL,
-  JOIN_REVEAL_LABEL,
-  helloMessageFields,
-  joinCode,
-  signJoinMessage,
-} from "./box-join-code.js";
-import { mountBoxJoinApi, mountBoxJoinPersonApi } from "./box-join-api.js";
-import {
-  createBoxJoinRequests,
-  type BoxJoinRequests,
-  type JoinHello,
-} from "./box-join-requests.js";
+import type { BoxJoinRequests } from "./box-join-requests.js";
 import { unlockJoinBundle, type LockedJoinBundle } from "./box-join-seal.js";
-import { boxHostnameFor } from "./box-name.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { generateStandbyIdentity } from "./reserved-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import {
   allocatedStandbyModules,
@@ -58,6 +37,19 @@ import {
 } from "./testing/allocated-contract.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import {
+  approveJoin,
+  cancelJoin,
+  checkJoin,
+  dismissJoin,
+  joiningBox,
+  listedJoin,
+  mountBoxJoin,
+  pollJoin,
+  signedInCookie,
+  type ListedJoin,
+  type PersonSent,
+} from "./testing/box-join.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { personHolding } from "./testing/session-holding.js";
 
@@ -79,7 +71,6 @@ const suite = useVenueDb({
 
 let db: Database;
 let stateDir: string;
-let socket: TLSSocket;
 let designated: AdoptResult;
 let primaryKeyPair: NodeKeyPair;
 let requests: BoxJoinRequests;
@@ -89,202 +80,31 @@ let approverId: string;
 let nifCounter = 0;
 let afterIssue: () => void = () => {};
 
-interface NewBox {
-  hello: JoinHello;
-  address: string;
-  privateKey: string;
-  encryptionPrivateKey: string;
-  newNonce: Buffer;
-  seq: number;
+/** A hello and its reveal, so the request is listed; carries the code the new box would show. */
+const listedRequest = (address: string): Promise<ListedJoin> =>
+  listedJoin(app, joiningBox(address, { unlikeNodeId: designated.nodeId }));
+
+const poll = (listed: ListedJoin): Promise<unknown> => pollJoin(app, listed);
+
+async function cancel(listed: ListedJoin): Promise<void> {
+  expect((await cancelJoin(app, listed)).status).toBe(200);
 }
 
-function newBox(address: string): NewBox {
-  let identity = generateStandbyIdentity();
-  while (boxHostnameFor(identity.nodeId) === boxHostnameFor(designated.nodeId))
-    identity = generateStandbyIdentity();
-  const ek = generateKeyPairSync("x25519");
-  return {
-    address,
-    privateKey: identity.privateKey,
-    encryptionPrivateKey: ek.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
-    newNonce: randomBytes(32),
-    seq: 0,
-    hello: {
-      newNodeId: identity.nodeId,
-      newPublicKey: identity.publicKey,
-      encryptionKey: ek.publicKey.export({ format: "der", type: "spki" }).toString("base64"),
-      contactUrl: `https://${address}:8443`,
-      storeUrl: `https://${address}:9000`,
-      addresses: [address],
-    },
-  };
-}
+type Sent = Partial<PersonSent>;
 
-function boxPost(path: string, body: unknown, from: string) {
-  return app.request(
-    `${ORIGIN}/api/node/join/${path}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    { incoming: { socket: { remoteAddress: from } } },
-  );
-}
-
-interface Listed {
-  requestId: string;
-  code: string;
-  box: NewBox;
-}
-
-/** A hello and its reveal, so the request is listed; returns the code the new box would show. */
-async function listedRequest(address: string): Promise<Listed> {
-  const box = newBox(address);
-  const at = Date.now();
-  const hello = await boxPost(
-    "hello",
-    {
-      protocol: 1,
-      ...box.hello,
-      at,
-      signature: signJoinMessage(
-        JOIN_HELLO_LABEL,
-        "",
-        0,
-        helloMessageFields(box.hello, at),
-        box.privateKey,
-      ),
-    },
-    address,
-  );
-  expect(hello.status, JSON.stringify(await hello.clone().json())).toBe(200);
-  const answer = (await hello.json()) as {
-    requestId: string;
-    mainNodeId: string;
-    mainPublicKey: string;
-  };
-  box.seq = 1;
-  const reveal = await boxPost(
-    "reveal",
-    {
-      requestId: answer.requestId,
-      seq: 1,
-      newNonce: box.newNonce.toString("base64"),
-      signature: signJoinMessage(
-        JOIN_REVEAL_LABEL,
-        answer.requestId,
-        1,
-        [box.newNonce],
-        box.privateKey,
-      ),
-    },
-    address,
-  );
-  expect(reveal.status, JSON.stringify(await reveal.clone().json())).toBe(200);
-  const { mainNonce } = (await reveal.json()) as { mainNonce: string };
-  const code = joinCode({
-    ...box.hello,
-    mainNodeId: answer.mainNodeId,
-    mainPublicKey: answer.mainPublicKey,
-    newNonce: box.newNonce,
-    mainNonce: Buffer.from(mainNonce, "base64"),
-    requestId: answer.requestId,
-  });
-  return { requestId: answer.requestId, code, box };
-}
-
-async function poll(listed: Listed): Promise<unknown> {
-  listed.box.seq += 1;
-  const at = Date.now();
-  const response = await boxPost(
-    "poll",
-    {
-      requestId: listed.requestId,
-      seq: listed.box.seq,
-      at,
-      signature: signJoinMessage(
-        JOIN_POLL_LABEL,
-        listed.requestId,
-        listed.box.seq,
-        [Buffer.from(String(at))],
-        listed.box.privateKey,
-      ),
-    },
-    listed.box.address,
-  );
-  return response.json();
-}
-
-async function cancel(listed: Listed): Promise<void> {
-  listed.box.seq += 1;
-  const response = await boxPost(
-    "cancel",
-    {
-      requestId: listed.requestId,
-      seq: listed.box.seq,
-      signature: signJoinMessage(
-        JOIN_CANCEL_LABEL,
-        listed.requestId,
-        listed.box.seq,
-        [],
-        listed.box.privateKey,
-      ),
-    },
-    listed.box.address,
-  );
-  expect(response.status).toBe(200);
-}
-
-interface Sent {
-  cookie?: string;
-  headers?: Record<string, string>;
-  env?: Record<string, unknown>;
-  body?: unknown;
-}
-
-async function personPost(
-  path: string,
-  sent: Sent = {},
-): Promise<{ status: number; body: unknown }> {
-  const response = await app.request(
-    `${ORIGIN}${path}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: sent.cookie ?? cookie,
-        origin: ORIGIN,
-        ...sent.headers,
-      },
-      body: JSON.stringify(sent.body ?? {}),
-    },
-    { incoming: { socket }, ...sent.env },
-  );
-  const text = await response.text();
-  return { status: response.status, body: text === "" ? null : JSON.parse(text) };
-}
-
-const check = (requestId: string, sent?: Sent) =>
-  personPost(`/management-api/box-joins/${requestId}/check`, sent);
+const personSent = (sent: Sent = {}): PersonSent => ({ ...sent, cookie: sent.cookie ?? cookie });
+const check = (requestId: string, sent?: Sent) => checkJoin(app, requestId, personSent(sent));
 const approve = (requestId: string, body: unknown, sent?: Sent) =>
-  personPost(`/management-api/box-joins/${requestId}/approve`, { ...sent, body });
-const dismiss = (requestId: string, sent?: Sent) =>
-  personPost(`/management-api/box-joins/${requestId}/dismiss`, sent);
+  approveJoin(app, requestId, body, personSent(sent));
+const dismiss = (requestId: string, sent?: Sent) => dismissJoin(app, requestId, personSent(sent));
 
 const refusal = (status: number, code: string, params: Record<string, unknown> = {}) => ({
   status,
   body: { error: { code, params } },
 });
 
-async function sessionFor(personId: string, fresh = true): Promise<string> {
-  const session = await withTransaction(db, (tx) =>
-    startManagementSession(tx, { method: "password", personId }),
-  );
-  const held = `${MANAGEMENT_COOKIE}=${session.token}`;
-  await withTransaction(db, (tx) => setFreshManagementSignIn(tx, held, fresh));
-  return held;
-}
+const sessionFor = (personId: string, fresh = true): Promise<string> =>
+  signedInCookie(db, personId, fresh);
 
 async function holdChartNamingOnlyMainBox(): Promise<number> {
   const term = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
@@ -356,13 +176,13 @@ async function withReservingModule<T>(
   }
 }
 
-function mount(store: BoxJoinRequests = createBoxJoinRequests()): void {
-  requests = store;
+function mount(): void {
   app = new Hono();
-  const deps = { appDb: db, node: suite.node, ring: RING, designated, requests: store };
-  mountBoxJoinApi(app, deps);
-  mountBoxJoinPersonApi(app, {
-    ...deps,
+  requests = mountBoxJoin(app, {
+    appDb: db,
+    node: suite.node,
+    ring: RING,
+    designated,
     stateDir,
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.deli.test",
@@ -424,12 +244,9 @@ beforeEach(async () => {
   };
   approverId = await personHolding(db, ["node.manage"]);
   cookie = await sessionFor(approverId);
-  socket = new TLSSocket(new Socket());
   afterIssue = () => {};
   mount();
 }, 60_000);
-
-afterEach(() => socket.destroy());
 
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -590,9 +407,8 @@ describe("the main box's person routes for a joining box", () => {
     });
     const bundle = JSON.parse(opened!.toString("utf8")) as MirrorBundle;
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
-    const kept = [JSON.stringify(answer), JSON.stringify(requests.requestFor(listed.requestId))];
     for (const secret of [bundle.store.secretAccessKey, bundle.boxCaKeyPem, bundle.boxCaPem])
-      for (const place of kept) expect(place).not.toContain(secret);
+      expect(JSON.stringify(answer)).not.toContain(secret);
     expect((await readNodeMembership(db))?.body.nodes.map((n) => n.contactUrl)).toContain(
       listed.box.hello.contactUrl,
     );

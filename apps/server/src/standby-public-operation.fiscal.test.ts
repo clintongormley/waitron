@@ -3,7 +3,12 @@ import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js"
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { Hono } from "hono";
 import { hashPassword } from "@waitron/identity";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import {
+  joinAsBundleAnswer,
+  joiningBox,
+  mountBoxJoin,
+  signedInCookie,
+} from "./testing/box-join.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -206,31 +211,24 @@ async function reserve(standby = generateStandbyIdentity()) {
   const held = joinRequest(standby.nodeId, "reserve");
   await writeFile(configuration().confirmationPath, JSON.stringify(held.confirmation));
   const app = new Hono();
-  mountMirrorBundleApi(app, {
+  mountBoxJoin(app, {
     appDb: primary.db,
     node: primary.node,
     ring: RING,
     stateDir: stateDir!,
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
-
     designated: { nodeId: PRIMARY },
-    credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });
-  const response = await app.request("/management-api/mirror-bundle", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      email: ADMIN_EMAIL,
-      password: PASSWORD,
-      standbyNodeId: standby.nodeId,
-      standbyPublicKey: standby.publicKey,
-      standbyContactUrl: "https://spare.test",
-      standbyStoreUrl: "https://spare.test:7443",
-      standbyAt: Date.now(),
-      moduleOperation: { binding: held.binding, input: held.input },
+  const response = await joinAsBundleAnswer(app, {
+    box: joiningBox("192.168.1.20", {
+      identity: standby,
+      contactUrl: "https://spare.test",
+      storeUrl: "https://spare.test:7443",
     }),
+    sent: { cookie: await signedInCookie(primary.db, ADMIN) },
+    moduleOperation: { binding: held.binding, input: held.input },
   });
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
   const bundle = await response.json();
