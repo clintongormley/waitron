@@ -20,6 +20,8 @@ and the city allow 200, the postcode 20 and the province 100. The tax number
 allows 32 UTF-16 code units and the legal name allows 200. The encoder serializes
 the tuple as supplied. The verifier checks its shape, field limits, signature
 and 8,192-character encoded payload limit.
+`isPairingV4Profile` checks a `complete` action's business profile against the same
+field rules on its own.
 The receiving app checks the configured callback and box key, accepts the
 one-use code and decides whether the account may register the venue.
 

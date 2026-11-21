@@ -1,5 +1,6 @@
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import {
+  isPairingV4Profile,
   pairingPayload,
   pairingV4Payload,
   pairingVenueName,
@@ -416,6 +417,11 @@ it("accepts a completion with maximum UTF-8 bytes in each text field", () => {
   const envelope = signed(v4Vector("complete", args));
   expect(envelope.payload.length).toBeGreaterThan(4096);
   expect(checkV4(envelope)).toEqual({ ...complete, args });
+});
+
+it("accepts a business profile on its own and refuses one without a legal name", () => {
+  expect(isPairingV4Profile(profile)).toBe(true);
+  expect(isPairingV4Profile(["ES", profile[1], profile[2], profile[3], ""])).toBe(false);
 });
 
 it("accepts exactly 8192 encoded characters and refuses a larger proof", () => {
