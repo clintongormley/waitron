@@ -1232,6 +1232,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   offer during the quiet window and rolls back a failed candidate. Box status shows the latest
   completed offered install or rollback. Still open are the first signed publication, first live
   offer, physical test-box upgrade, timer settings, automatic timer activation and paired upgrades.
+  Before enabling scheduled installs, measure the timer, download and trial and use the measured preparation time to set the minimum window.
   After the first venue come the Cloud release check, password-checked go-back, proof-of-close and
   backup-stream handoff. Current-build synthetic Linux
   rehearsal does not qualify historical releases, a physical box or the whole shell `install` entry
