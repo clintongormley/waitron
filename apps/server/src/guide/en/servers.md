@@ -296,8 +296,10 @@ search is unavailable, enter the addresses by hand.
 Enter the mail server during setup. If you choose **Skip** before opening Cloud or import a
 configuration, fill in the addresses by hand and connect later from **Cloud services**.
 
-If you started Cloud sign-in and the registration did not finish, you can still save the venue.
-Ask the pilot operator to prepare a replacement key if Cloud services refuses a new sign-in.
+If your Cloud session expires or you sign out before the venue is registered, finish saving the
+venue. Then go to **System → Cloud services**, choose **Sign in to Waitron Cloud** and use the
+same Cloud account to finish registering the venue. If Cloud still refuses the connection, ask
+the pilot operator for help.
 
 ## Turn remote staff access on or off {#remote-access}
 

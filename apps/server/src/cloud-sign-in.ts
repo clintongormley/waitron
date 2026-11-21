@@ -22,6 +22,7 @@ type Attempt = CloudSignInBinding & {
   expiresAt: string;
   phase: "awaiting_cloud" | "redeeming" | "account_bound";
   profile?: CloudSignInProfile;
+  resumeSetup?: true;
   publishedNodeId?: string;
   provisionalRegistration?: CloudRegistration;
 };
@@ -83,7 +84,10 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
       (value.kind !== "setup" ||
         value.phase !== "account_bound" ||
         !cloudSignInId(value.publishedNodeId))) ||
-    (value.provisionalRegistration !== undefined && value.kind !== "setup")
+    (value.resumeSetup !== undefined && (value.resumeSetup !== true || value.kind !== undefined)) ||
+    (value.provisionalRegistration !== undefined &&
+      value.kind !== "setup" &&
+      value.resumeSetup !== true)
   )
     throw new AppError("cloud.state_invalid", {});
   const attempt = value as unknown as Attempt;
@@ -95,7 +99,9 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
   return attempt;
 }
 
-export function newCloudSignInAttempt(binding: CloudSignInBinding): Attempt {
+export function newCloudSignInAttempt(
+  binding: CloudSignInBinding & Pick<Attempt, "resumeSetup" | "provisionalRegistration">,
+): Attempt {
   return {
     ...binding,
     requestId: randomUUID(),
@@ -146,7 +152,7 @@ export function readCloudSignInReply(
     const provisionalRegistration = result.provisionalRegistration;
     if (provisionalRegistration !== undefined) {
       const provisional = readRegistration(provisionalRegistration);
-      if (attempt.kind !== "setup" || !provisional) throw new Error();
+      if ((!attempt.resumeSetup && attempt.kind !== "setup") || !provisional) throw new Error();
       return { state: "account_bound", expiresAt, provisionalRegistration: provisional };
     }
     return { state: "account_bound", expiresAt };

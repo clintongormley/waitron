@@ -331,9 +331,10 @@ Introduce el servidor de correo durante la configuración. Si eliges **Omitir** 
 Cloud o importas una configuración, escribe las direcciones a mano y conéctate más tarde desde
 **Servicios Cloud**.
 
-Si iniciaste sesión en Cloud y el registro quedó pendiente, aún puedes guardar el local. Si
-Servicios Cloud rechaza un nuevo inicio de sesión, pide al responsable de la prueba que prepare
-una clave nueva.
+Si tu sesión de Cloud caduca o la cierras antes de que se registre el local, termina de
+guardarlo. Luego abre **Sistema → Servicios Cloud**, elige **Iniciar sesión en Waitron Cloud**
+y usa la misma cuenta de Cloud para terminar de registrar el local. Si Cloud sigue rechazando
+la conexión, pide ayuda al responsable de la prueba.
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
