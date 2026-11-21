@@ -3934,7 +3934,8 @@ venue's address is used, copied when the form is saved. The parts are saved as o
 "street, line 2, postcode city, province" leaving blank parts out (`joinRegisteredAddress` in
 `@waitron/country-packs`), and opening splits that line back into them (`registeredAddressParts`).
 Street, postcode and city are required; the server refuses a line it cannot split back into
-them, for a country whose pack has a postcode rule (`apps/server/src/registered-address-check.ts`).
+them, or whose postcode lies outside the province it names, for a country whose pack has a postcode
+rule (`apps/server/src/registered-address-check.ts`).
 Setup opens with the switch on unless a different line was saved; the dialog opens with it on
 only when the saved line is the venue's address. Choosing a suggestion fills the parts, as for
 the venue's address, takes the province from the address's area code, else its postcode, and turns
