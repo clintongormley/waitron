@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import * as lineServiceState from "./line-service-state.js";
 import type { TradingContext } from "./trading-context.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
@@ -479,11 +480,9 @@ async function expectRefusedWithNothingWritten(
 }
 
 async function stillPaying(tabId: string): Promise<void> {
-  const [order] = await db
-    .select({ paymentAttemptAt: workingOrders.paymentAttemptAt })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, tabId));
-  expect(order!.paymentAttemptAt).not.toBeNull();
+  expect(db.all(sql`select state from bill_payments where working_order_id = ${tabId}`)).toEqual([
+    { state: "pending" },
+  ]);
 }
 
 /** A received card payment of the bill, and a refund of it the provider has not answered. */
@@ -1979,10 +1978,7 @@ describe("two orders of events", () => {
 
 describe("during a card payment", () => {
   async function paying(tabId: string): Promise<void> {
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: new Date().toISOString() })
-      .where(eq(workingOrders.id, tabId));
+    await seedPendingCardPayment(db, tabId);
   }
 
   it("refuses a submission (order.payment_in_flight), writing nothing", async () => {
@@ -5798,10 +5794,7 @@ describe("splitting a held line into units", () => {
         code = "working_order.not_open";
       }
       if (state === "paying") {
-        await db
-          .update(workingOrders)
-          .set({ paymentAttemptAt: new Date().toISOString() })
-          .where(eq(workingOrders.id, s.tabId));
+        await seedPendingCardPayment(db, s.tabId);
         code = "order.payment_in_flight";
       }
       if (state === "stale") {
@@ -5980,10 +5973,7 @@ describe("splitting a held line into units", () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [source] = await linesIn(s.partyId, s.mains);
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: new Date().toISOString() })
-      .where(eq(workingOrders.id, s.tabId));
+    await seedPendingCardPayment(db, s.tabId);
     const command = await args(s.partyId);
     const copy = vi.spyOn(lineServiceState, "splitLineServiceState");
     try {
@@ -6212,10 +6202,7 @@ describe("Fire now on one held dish", () => {
 
   it("fires a dish while its bill is being paid, leaving the payment in place", async () => {
     const { v, s, steak } = await fixture(true);
-    await db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: "2026-10-17T10:00:00.000Z" })
-      .where(eq(workingOrders.id, s.tabId));
+    await seedPendingCardPayment(db, s.tabId);
     const command = await args(s.partyId);
     await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command));
     expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);

@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -3569,12 +3570,7 @@ describe("the bill's own rules", () => {
 
   it("refuses while a card payment of the bill is in flight", async () => {
     const { billId } = await bill([{ name: "Bottle" }]);
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: new Date().toISOString() })
-        .where(eq(workingOrders.id, billId)),
-    );
+    await inTx(venue, (tx) => seedPendingCardPayment(tx, billId));
     await refusedWith(
       billId,
       { action: "discount_amount", amount: "1.00" },

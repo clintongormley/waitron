@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  billPayments,
   devices,
   drawerOpens,
   orderAmendments,
@@ -1216,11 +1217,7 @@ describe("paying a parked pay-first order sends its dishes to the kitchen", () =
   );
 });
 
-// POST /api/pay resolves the reader (request `readerId`, else the paying device's chosen reader in
-// `devices.card_reader_id`, else its profile's default), pre-checks its provider is connected, and drives it through
-// `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader
-// ROUTING: which reader a collect drives, and which id lands on `payments.reader_id`.
-describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
+describe("reader payments over HTTP", () => {
   it("answers 400 course.not_found for a course only the body names", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((product) => product.pricingUnit === "each")!;
@@ -1233,15 +1230,13 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
     const courseId = randomUUID();
 
-    const response = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: randomUUID(),
-        lines: [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
-      }),
-    });
+    const response = await payFreshBasket(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      randomUUID(),
+      [{ menuItemId: each.menuItemId, quantity: "1", courseId }],
+      { method: "card", entry: "reader" },
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
@@ -1269,21 +1264,18 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       await setChosenReader(deviceIdOf(deviceCookie), reader.id);
       const id = randomUUID();
 
-      const response = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          dining: "eat_in",
-          id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          tip,
-        }),
-      });
+      const response = await payFreshBasket(
+        app,
+        `${cookie}; ${deviceCookie}`,
+        id,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        { method: "card", entry: "reader", addedTip: tip },
+      );
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        outcome: "captured",
-        ticket: { total: "1.50" },
+        outcome: "received",
+        invoice: { total: "1.50" },
       });
       expect(suite.db.all(sql`select amount from payments where working_order_id = ${id}`)).toEqual(
         [{ amount: charged }],
@@ -1317,20 +1309,17 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       await setChosenReader(deviceIdOf(deviceCookie), reader.id);
       const id = randomUUID();
 
-      const response = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          dining: "eat_in",
-          id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-          tip,
-        }),
-      });
+      const response = await payFreshBasket(
+        app,
+        `${cookie}; ${deviceCookie}`,
+        id,
+        [{ menuItemId: each.menuItemId, quantity: "1" }],
+        { method: "card", entry: "reader", addedTip: tip },
+      );
 
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "tip" } },
+        error: { code: "management.request_invalid", params: { field: "addedTip" } },
       });
       expect(client.lastCreateIntent).toBeUndefined();
       expect(suite.db.all(sql`select id from payments where working_order_id = ${id}`)).toEqual([]);
@@ -1794,10 +1783,9 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     await connectStripe();
     const reader = await seedReader();
     await setChosenReader(deviceIdOf(deviceCookie), reader.id);
-    const payRes = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({ dining: "eat_in", id: randomUUID(), lines: [] }),
+    const payRes = await payFreshBasket(app, `${cookie}; ${deviceCookie}`, randomUUID(), [], {
+      method: "card",
+      entry: "reader",
     });
 
     expect(payRes.status).toBe(400);
@@ -1834,7 +1822,7 @@ function poolWithHook(client: FakeStripe, beforeCollect: () => Promise<void>): C
   return { get: () => Promise.resolve(provider), evict: () => {} };
 }
 
-describe("POST /api/pay when the device changes profile while the payment is starting", () => {
+describe("a reader bill payment when the device changes profile while the payment is starting", () => {
   async function payWhile(
     beforeCollect: (deviceId: string) => Promise<void>,
   ): Promise<{ res: Response; workingOrderId: string; client: FakeStripe }> {
@@ -1858,15 +1846,12 @@ describe("POST /api/pay when the device changes profile while the payment is sta
     const reader = await seedReader();
     await setChosenReader(deviceId, reader.id);
     const workingOrderId = randomUUID();
-    const res = await app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        dining: "eat_in",
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-      }),
-    });
+    const res = await payFreshBasketOnReader(
+      app,
+      `${cookie}; ${deviceCookie}`,
+      workingOrderId,
+      each.menuItemId,
+    );
     return { res, workingOrderId, client };
   }
 
@@ -1887,18 +1872,18 @@ describe("POST /api/pay when the device changes profile while the payment is sta
     expect(
       suite.db.all(sql`select id from payments where working_order_id = ${workingOrderId}`),
     ).toEqual([]);
-    const [order] = await suite.db
-      .select({ attemptAt: workingOrders.paymentAttemptAt })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, workingOrderId));
-    expect(order).toEqual({ attemptAt: null });
+    const [payment] = await suite.db
+      .select({ state: billPayments.state })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, workingOrderId));
+    expect(payment).toEqual({ state: "failed" });
   });
 
   it("charges the card when the device stays on its profile", async () => {
     const { res, workingOrderId } = await payWhile(() => Promise.resolve());
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ outcome: "captured" });
+    expect(await res.json()).toMatchObject({ outcome: "received" });
     expect(
       suite.db.all(sql`select state from payments where working_order_id = ${workingOrderId}`),
     ).toEqual([{ state: "captured" }]);

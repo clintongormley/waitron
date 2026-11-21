@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
@@ -200,10 +201,7 @@ it.each(["reserved", "unlisted", "taken", "stale", "payment", "invoice limit"] a
     }
     if (kind === "payment") {
       await inTx(fixture.venue, async (tx) => {
-        await tx
-          .update(workingOrders)
-          .set({ paymentAttemptAt: new Date().toISOString() })
-          .where(eq(workingOrders.id, tab.billId));
+        await seedPendingCardPayment(tx, tab.billId);
       });
     }
     const before = await row(tab.dishId);

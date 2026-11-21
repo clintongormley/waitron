@@ -1,3 +1,4 @@
+import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import { seedDepartmentReceipt } from "@waitron/db/testing/seed.js";
 import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
@@ -461,10 +462,7 @@ describe("department transfer till writes", () => {
         tableId: null,
       }),
     ).toMatchObject({ status: 409, body: { error: { code: "working_order.out_of_date" } } });
-    await suite.db
-      .update(workingOrders)
-      .set({ paymentAttemptAt: "2026-10-07T09:00:00.000Z" })
-      .where(eq(workingOrders.id, f.tab));
+    await seedPendingCardPayment(suite.db, f.tab);
     expect(
       await post(f.desk.cookie, resolutionPath(id, "accept"), {
         revision: 1,
