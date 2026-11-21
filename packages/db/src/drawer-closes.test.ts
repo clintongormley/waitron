@@ -9,6 +9,8 @@ import { billPayments } from "./schema/bill-payments.js";
 import { drawerEntries } from "./schema/drawer-entries.js";
 import { printers } from "./schema/printers.js";
 import {
+  seedCashSale,
+  seedCompletedCashRefund,
   seedDevice,
   seedNode,
   seedPerson,
@@ -89,6 +91,35 @@ function move(amount: number) {
       kind: amount > 0 ? "cash_in" : "cash_out",
       amount,
       recordedAt: "2026-11-21T11:00:00.000Z",
+    }),
+  );
+}
+
+async function takePayment(method: "cash" | "card", amount: number) {
+  const order = await seedWorkingOrder(fx.db);
+  const [payment] = await fx.db
+    .insert(billPayments)
+    .values({
+      workingOrderId: order.id,
+      submissionId: randomUUID(),
+      fingerprint: method,
+      kind: "contribution",
+      method,
+      applied: amount,
+      ...(method === "cash" ? { tendered: amount } : {}),
+      state: "received",
+      requestedBy: second.personId,
+      source: "device",
+      deviceId: second.deviceId,
+      receivedAt: recordedAt,
+    })
+    .returning({ id: billPayments.id });
+  await withTransaction(fx.db, (tx) =>
+    appendDrawerEntry(tx, {
+      ...second,
+      kind: method === "cash" ? "cash_payment" : "card_payment",
+      amount,
+      billPaymentId: payment!.id,
     }),
   );
 }
@@ -196,8 +227,22 @@ it("refreshes a stale withdrawal, keeps the count difference, and starts the nex
   const saved = await count("100.00", 1);
   expect(saved).toMatchObject({ available: "100.00" });
   const id = saved.first.id;
-  await move(3000);
-  await move(-500);
+  await takePayment("cash", 3000);
+  const sale = await seedCashSale(fx.db);
+  const refundId = await seedCompletedCashRefund(fx.db, {
+    ...sale,
+    personId: second.personId,
+    appliedAmount: 500,
+  });
+  await withTransaction(fx.db, (tx) =>
+    appendDrawerEntry(tx, {
+      ...second,
+      nodeId: sale.nodeId,
+      kind: "cash_refund",
+      amount: -500,
+      refundId,
+    }),
+  );
   await expect(finish(id, "20.00", saved.confirmSequence)).rejects.toMatchObject({
     code: "drawer.close_changed",
   });
@@ -253,42 +298,24 @@ it("refuses to leave more money than remains after cash goes out", async () => {
 
 it("keeps card payments out of the cash figures while including them in the close interval", async () => {
   await move(1000);
+  await takePayment("card", 2500);
   const counted = await count("10.00", 1);
-  const order = await seedWorkingOrder(fx.db);
-  const [payment] = await fx.db
-    .insert(billPayments)
-    .values({
-      workingOrderId: order.id,
-      submissionId: "card",
-      fingerprint: "card",
-      kind: "contribution",
-      method: "card",
-      applied: 2500,
-      state: "received",
-      requestedBy: second.personId,
-      source: "device",
-      deviceId: second.deviceId,
-      receivedAt: recordedAt,
-    })
-    .returning({ id: billPayments.id });
-  await withTransaction(fx.db, (tx) =>
-    appendDrawerEntry(tx, {
-      ...second,
-      kind: "card_payment",
-      amount: 2500,
-      billPaymentId: payment!.id,
-    }),
-  );
+  expect(counted.first).toMatchObject({
+    expected: "10.00",
+    difference: "0.00",
+    cashMovedWhileCounting: false,
+  });
+  await takePayment("card", 5000);
   expect(await current()).toMatchObject({
     available: "10.00",
-    first: { expected: "10.00", difference: "0.00" },
-    confirmSequence: 3,
+    confirmSequence: 4,
   });
-  await expect(finish(counted.first.id, "0.00", 2)).rejects.toMatchObject({
+  await expect(finish(counted.first.id, "10.00", 3)).rejects.toMatchObject({
     code: "drawer.close_changed",
   });
-  expect(await finish(counted.first.id, "0.00", 3)).toMatchObject({
-    bankWithdrawal: "10.00",
-    throughSequence: 3,
+  expect(await finish(counted.first.id, "10.00", 4)).toMatchObject({
+    bankWithdrawal: "0.00",
+    amountLeft: "10.00",
+    throughSequence: 4,
   });
 });

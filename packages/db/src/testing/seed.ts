@@ -402,7 +402,13 @@ export async function seedCashSale(db: Database | Transaction) {
 
 export async function seedCompletedCashRefund(
   db: Database | Transaction,
-  input: { saleId: string; tenderId: string; nodeId: string; personId: string },
+  input: {
+    saleId: string;
+    tenderId: string;
+    nodeId: string;
+    personId: string;
+    appliedAmount?: number;
+  },
 ): Promise<string> {
   const { saleId, tenderId, nodeId, personId } = input;
   const [refund] = await db
@@ -413,7 +419,7 @@ export async function seedCompletedCashRefund(
       nodeId,
       submissionId: newId(),
       fingerprint: "cash refund",
-      appliedAmount: 200,
+      appliedAmount: input.appliedAmount ?? 200,
       reason: "Goodwill",
       authorizedBy: personId,
       requestedBy: personId,
