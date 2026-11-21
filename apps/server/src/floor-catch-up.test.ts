@@ -1206,17 +1206,51 @@ describe("no reset puts a table down on another", () => {
     return { ...z, t8 };
   }
 
-  it("a room whose only waiting rows are stored tables with their place taken is caught up only once the place clears", async () => {
+  it("a stored table is put down when its only blocker needs moving", async () => {
     await needsClearingEverywhere(false);
     const z = await sixBehindEight();
     expect(await todayRow(z.t6)).toMatchObject({ x: null });
 
     await setToday(z.t8, { x: 120 });
+    expect(await todayRow(z.t7)).toMatchObject({ x: 40, takenOff: false });
     expect(await dueIn(z.d.zoneId)).toBe(1);
     await readStates();
 
     expect(await todayRow(z.t6)).toMatchObject({ x: 40 });
     expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
+    expect(await readyOf(z.t7)).toEqual({ pending: true, readyToMove: true });
+  });
+
+  it("a pending saved group is due while a moving member still stands in a stored sibling's place", async () => {
+    await needsClearingEverywhere(false);
+    const s = await standardAndDinner(
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+      ],
+      { standard: { t4: 68 }, dinner: { t45: 60 } },
+    );
+    const [t4, t5] = [s.live("t4"), s.live("t5")];
+    const party = await seatAt(t4);
+    await s.onto(s.d.dinner);
+    await finish(party);
+    expect(await todayRows([t4, t5])).toMatchObject([{ x: 68 }, { x: null }]);
+    expect(await readyOf(t4)).toEqual({ pending: true, readyToMove: false });
+    expect(await dueIn(s.d.zoneId)).toBe(1);
+
+    await readStates();
+
+    expect(await todayRows([t4, t5])).toMatchObject([{ x: 68 }, { x: null }]);
+    expect(await readyOf(t4)).toEqual({ pending: true, readyToMove: true });
+    expect(await readyOf(t5)).toEqual({ pending: true, readyToMove: true });
+    expect(
+      await (await send("POST", `/api/tables/${t4}/today/mark-moved`, {})).json(),
+    ).toMatchObject({
+      zoneId: s.d.zoneId,
+    });
+    expect(await todayRows([t4, t5])).toMatchObject([{ x: 60 }, { x: 68 }]);
+    expect(await readyOf(t5)).toEqual({ pending: false, readyToMove: false });
   });
 
   it("a table taken off after the reset no longer blocks a stored table", async () => {

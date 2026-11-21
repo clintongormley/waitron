@@ -281,6 +281,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Food is on its way to that table",
     es: "Hay comida en camino a esa mesa",
   },
+  "table.open_delivery_order": {
+    en: "Finish the open order in this group first",
+    es: "Termina primero el pedido abierto de este grupo",
+  },
   "table.not_found": {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",

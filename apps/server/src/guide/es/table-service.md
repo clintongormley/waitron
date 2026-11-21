@@ -860,6 +860,10 @@ Para deshacer los cambios de hoy en una zona, abre su menú ⋮, elige **Volver 
 
 Después de restablecer la zona, coloca las mesas libres como aparecen en el mapa.
 
+Deja las mesas con comida en camino donde están hasta que entregues el pedido. Antes de que el
+restablecimiento pueda unir mesas separadas, termina los pedidos abiertos para esas mesas.
+Cuando una mesa indique **Por mover**, muévela y elige **Marcar movida**.
+
 ## Elegir el equipo de este dispositivo {#equipment}
 
 En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**

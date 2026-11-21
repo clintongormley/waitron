@@ -803,6 +803,10 @@ To undo today's changes to a zone, open its ⋮ menu, choose **Reset to … plan
 
 After resetting, move the free tables to match the map.
 
+Keep tables with food on the way where they are until you hand over the order. Before a reset can
+join separate tables, finish any open delivery order at those tables.
+When a table shows **Needs moving**, move it and choose **Mark moved**.
+
 ## Choose this device's equipment {#equipment}
 
 On a till, choose **More**, **Settings**, then **Equipment**. On a handheld, choose **More**,

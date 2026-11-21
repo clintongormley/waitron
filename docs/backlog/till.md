@@ -116,26 +116,6 @@ on the plan at its kept size, shows no visible name (A503 part 3's look, shots
 is seen more. A672 decided its handles: a selected 2 × 2 shows its four corners and no side dots.
 Next: its name waits on the same decision as A561, in `wt-floor-plan-canvas`.
 
-## A565. A reset does not wait for food on its way to an ordinary table
-
-**A565 (2026-10-13).** Any reset (Update layout, Reset to {set} plan, the day's first reset, the
-dashboard's first save) moves a free table to its place in the layout it applies without asking
-about food on its way: a plain table the layout turns into a part of a joined table, or drops, loses
-its place on today's map while a kitchen order still names it. #1604 made a split joined table's group wait for
-food on its way (`foodComingTo`, `apps/server/src/floor-today-store.ts`); ordinary tables were left
-as they were. It was reproduced with a throwaway test in #1604's finish run; the behaviour dates from
-`29801d74a` (floor plans, slice 1). Next: decide whether a reset holds such a table back, as it now
-holds a split group.
-
-## A566. An open order with nothing sent yet does not hold a split group back at a reset
-
-**A566 (2026-10-13).** A split joined table's group waits at a reset while one of its tables has
-guests, needs clearing, has food on its way or is in a guest-holding merge (#1604, and
-`splitWithBusy` in `apps/server/src/floor-reset-plan.ts`); an open order at a split-off table with no
-food sent yet does not count, so the reset can put the joined table back whole over it. Noted by the
-fix worker in #1604's finish run and not changed. Next: decide whether an open order counts as busy
-here, and check what the reset does with that order's table.
-
 ## A turned floor plan table narrower than its unturned box stops short of the plan's left or top edge
 
 **Left open by A672 (2026-10-16).** A table's saved x and y are its corner before it is turned, and
@@ -662,13 +642,6 @@ Delete dialog's "Used by Dinner." reads oddly when a set and a period share a na
 banner is a plain line where the mock-up draws a tinted box (`wt-banner` would be close); the 390 px
 floor menu's heading is in sentence case, not small capitals. Mock-ups:
 removed from the repository on 2026-11-02. Left open by A504.
-
-## A860. Automatic floor-place checks in TypeScript and SQL
-
-The automatic catch-up decides whether a table's new place is taken in `catchUpPass` and in SQL
-`catchUpDue`/`placeTaken` (`apps/server/src/floor-today-store.ts`). Only their geometry is pinned
-across the two (`apps/server/src/reset-row-moves.test.ts`). Next: share or test the exclusions too.
-Manual actions no longer apply this rule. Left open by A504.
 
 ## A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice 4b).
 
@@ -1197,20 +1170,6 @@ Printer identity is separate from the till route inventory.
   A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
   (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).
   [Detail](till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
-
-## Bundle: One rule for what holds a table back at a reset
-
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A565. A reset does not wait for food on its way to an ordinary table (2026-10-13).** Dates
-  from floor plans slice 1; #1604 made only split groups wait.
-  [Detail](till.md#a565-a-reset-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
-- **A566. An open order with nothing sent yet does not hold a split group back at a reset
-  (2026-10-13).** Left open by #1604.
-  [Detail](till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
-- **A860. Automatic floor-place checks in TypeScript and SQL.** Share or test their exclusions;
-  manual actions no longer apply this rule. Left open by A504.
-  [Detail](till.md#a860-automatic-floor-place-checks-in-typescript-and-sql)
 
 ## Bundle: Show a table's short name where the full name does not fit
 

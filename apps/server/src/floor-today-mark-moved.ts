@@ -4,6 +4,7 @@ import { diningTables, floorResetTables, needsMoving } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
+import { deliveryTablesMatching, openDeliveryToJoiningGroup } from "./delivery-release.js";
 import { catchUpZone, refuseDeliveryPending } from "./floor-today-store.js";
 import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import { refusedByAModule } from "./table-removal.js";
@@ -105,9 +106,7 @@ export async function leaveHere(
 
 /**
  * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
- * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
- * them or at a table tied to them by today's merges or a pending joined group, as the
- * catch-up's waiting rules (`waitingTogether`) tie them. `table.needs_moving` is the answer when none of those is found.
+ * its way, a party, clearing, a module's refusal or an open delivery to a pending group's member.
  */
 async function refuseHeldBack(
   tx: Transaction,
@@ -154,6 +153,10 @@ async function refuseHeldBack(
     const refusal = refusals.get(id);
     if (refusal !== undefined) throw refusal;
   }
+  const openDeliveries = await deliveryTablesMatching(tx, ids, openDeliveryToJoiningGroup());
+  const waitingForOrder = ids.find((id) => openDeliveries.has(id));
+  if (waitingForOrder !== undefined)
+    throw new AppError("table.open_delivery_order", { tableId: waitingForOrder });
   throw new AppError("table.needs_moving", { tableId });
 }
 

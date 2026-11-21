@@ -31,7 +31,7 @@ export interface LiveTable {
   shortName: string | null;
   /** An open party sits there now. */
   held: boolean;
-  /** A module refuses to let it go, so it waits whole as a held table does, but is never seeded. */
+  /** A delivery or a module's refusal keeps the table wherever it is today. */
   refused: boolean;
   /** Held, or used earlier by a party still open, or an order to it unpaid or with food on its way. */
   tied: boolean;
