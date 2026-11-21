@@ -88,6 +88,8 @@ export class SetupAdminScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
+  @property({ type: Boolean }) heldCredentials = false;
+  @property() refusal?: string;
 
   @state() private values: Record<AdminField, string> = {
     firstNames: "",
@@ -176,9 +178,13 @@ export class SetupAdminScreen extends LitElement {
     this.#scope?.changed();
   }
 
+  #required(key: AdminField): boolean {
+    return !this.heldCredentials || (key !== "password" && key !== "pin");
+  }
+
   #errors(): Set<AdminField> {
     if (!this.attempted) return new Set();
-    return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
+    return new Set(FIELDS.filter((key) => this.#required(key) && this.values[key].trim() === ""));
   }
 
   #next(): void {
@@ -230,7 +236,7 @@ export class SetupAdminScreen extends LitElement {
       name=${fieldPurpose.name}
       autocomplete=${fieldPurpose.autocomplete}
       type=${this.visible.has(key) ? "text" : type}
-      required
+      ?required=${this.#required(key)}
       error=${invalid ? t(text.error) : ""}
       ?invalid=${invalid}
       .value=${this.values[key]}
@@ -273,7 +279,7 @@ export class SetupAdminScreen extends LitElement {
       <div class="pair">${field("firstNames")} ${field("lastNames")}</div>
       ${field("displayName")} ${field("email", "email")}
       <div class="pair">${field("password", "password")} ${field("pin", "password")}</div>
-      <wt-form-actions .error=${errors.size > 0 ? t("admin.fix_fields") : ""}>
+      <wt-form-actions .error=${errors.size > 0 ? t("admin.fix_fields") : (this.refusal ?? "")}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("admin.back")}</wt-button
         >

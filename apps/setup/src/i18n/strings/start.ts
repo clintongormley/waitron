@@ -1,6 +1,8 @@
 // The connection, role, connect, mode and admin screens, the old-box question and server-fields.ts.
 
 export const startEn = {
+  "admin.cloud_expired":
+    "The box stopped holding your administrator credentials. Enter your password and PIN again to continue.",
   "cloud_sign_in.heading": "Connect to Waitron Cloud",
   "cloud_sign_in.copy":
     "Sign in or create an account. Waitron will connect this box when you save the venue.",
@@ -190,6 +192,8 @@ export const startEn = {
 } as const;
 
 export const startEs: Record<keyof typeof startEn, string> = {
+  "admin.cloud_expired":
+    "El servidor ha dejado de guardar tus credenciales de administrador. Vuelve a introducir la contraseña y el PIN para continuar.",
   "cloud_sign_in.heading": "Conecta con Waitron Cloud",
   "cloud_sign_in.copy":
     "Inicia sesión o crea una cuenta. Waitron conectará este servidor cuando guardes el local.",

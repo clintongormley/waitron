@@ -884,6 +884,9 @@ export class SetupApp extends LitElement {
       return sessionStorage.getItem("waitron-setup-cloud-signed-in") ?? undefined;
   }
   @state() private cloudSignInError = false;
+  @state() private adminRefusal?: Message;
+  #cloudPrepareTab?: string;
+  #prepareCloudOffered = false;
 
   #resumeCloudSignIn(): boolean {
     if (!this.#cloudSignInAvailable) return false;
@@ -893,14 +896,14 @@ export class SetupApp extends LitElement {
     const saved = sessionStorage.getItem("waitron-setup-cloud-return");
     sessionStorage.removeItem("waitron-setup-cloud-return");
     if (!saved) return false;
-    let data: { mode?: unknown; locale?: unknown };
+    let data: { mode?: unknown; locale?: unknown; admin?: Record<string, unknown> };
     try {
       data = JSON.parse(saved);
     } catch {
       return false;
     }
     if (!data) return false;
-    const { mode, locale } = data;
+    const { mode, locale, admin } = data;
     if (mode !== "prepare" && (mode !== "live" || !this.developmentMode)) return false;
     if (typeof locale === "string") {
       this.#localeChosen = true;
@@ -908,10 +911,35 @@ export class SetupApp extends LitElement {
     }
     this.draft = { mode };
     this.connectionAnswered = true;
+    const tab = sessionStorage.getItem("waitron-setup-cloud-tab");
+    if (
+      mode === "prepare" &&
+      tab &&
+      admin &&
+      typeof admin.firstNames === "string" &&
+      typeof admin.lastNames === "string" &&
+      typeof admin.displayName === "string" &&
+      typeof admin.email === "string"
+    ) {
+      this.#cloudPrepareTab = tab;
+      this.draft = {
+        mode,
+        venue: {
+          admin: {
+            firstNames: admin.firstNames,
+            lastNames: admin.lastNames,
+            displayName: admin.displayName,
+            email: admin.email,
+            password: "",
+            pin: "",
+          },
+        },
+      };
+    }
     if (outcome === "signed-in") {
-      const tab = sessionStorage.getItem("waitron-setup-cloud-tab");
       if (tab) sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
-      this.screen = "admin";
+      this.#prepareCloudOffered = this.#cloudPrepareTab !== undefined;
+      this.screen = this.#prepareCloudOffered ? "venue" : "admin";
     } else {
       this.cloudSignInError = outcome !== "cancelled";
       this.screen = "cloud-sign-in";
@@ -922,17 +950,51 @@ export class SetupApp extends LitElement {
   async #startCloudSignIn(isCurrent: () => boolean): Promise<void> {
     const tab = sessionStorage.getItem("waitron-setup-cloud-tab") ?? crypto.randomUUID();
     sessionStorage.setItem("waitron-setup-cloud-tab", tab);
-    const { authorizationUrl } = await this.api.startCloudSignIn(tab);
+    const admin = this.draft.mode === "prepare" ? this.draft.venue?.admin : undefined;
+    let authorizationUrl: string | undefined;
+    try {
+      ({ authorizationUrl } = await this.api.startCloudSignIn(tab, admin));
+    } catch (error) {
+      const refusal = error as ApiError | undefined;
+      if (
+        admin &&
+        isCurrent() &&
+        this.#cloudPrepareTab &&
+        refusal?.code === "setup.request_invalid" &&
+        (refusal.params?.field === "admin.password" || refusal.params?.field === "admin.pin")
+      ) {
+        this.#reenterCloudAdmin();
+        return;
+      }
+      throw error;
+    }
     if (!isCurrent()) return;
+    if (admin) {
+      this.#cloudPrepareTab = tab;
+      this.draft = {
+        ...this.draft,
+        venue: { ...this.draft.venue, admin: { ...admin, password: "", pin: "" } },
+      };
+      this.#rootBaseline = structuredClone(this.draft);
+      this.#rootScope?.commit(this.#rootBaseline);
+    }
     if (authorizationUrl === undefined) {
       sessionStorage.setItem("waitron-setup-cloud-signed-in", tab);
-      this.#goto("admin");
+      this.#goto(admin ? "venue" : "admin");
       return;
     }
     sessionStorage.setItem(
       "waitron-setup-cloud-return",
       JSON.stringify({
         mode: this.draft.mode,
+        ...(admin && {
+          admin: {
+            firstNames: admin.firstNames,
+            lastNames: admin.lastNames,
+            displayName: admin.displayName,
+            email: admin.email,
+          },
+        }),
         ...(this.#localeChosen ? { locale: currentLocale() } : {}),
       }),
     );
@@ -1374,6 +1436,12 @@ export class SetupApp extends LitElement {
     } else navigate();
   }
 
+  #reenterCloudAdmin(): void {
+    this.#cloudPrepareTab = undefined;
+    this.#goto("admin");
+    this.adminRefusal = say("admin.cloud_expired");
+  }
+
   #goto(destination: Screen): void {
     ++this.#firstGeneration;
     this.firstOwnerBusy = false;
@@ -1434,15 +1502,27 @@ export class SetupApp extends LitElement {
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
+    this.adminRefusal = undefined;
     if (
-      destination === "admin" &&
       this.#cloudSignInAvailable &&
-      !this.leave.coordinator.isDirty([this]) &&
-      ((this.screen === "mode" && this.draft.mode === "prepare") ||
-        (this.screen === "live-source" && this.draft.mode === "live" && this.developmentMode))
+      ((this.screen === "admin" &&
+        destination === "venue" &&
+        this.draft.mode === "prepare" &&
+        !this.#prepareCloudOffered) ||
+        (this.screen === "live-source" &&
+          destination === "admin" &&
+          this.draft.mode === "live" &&
+          this.developmentMode &&
+          !this.leave.coordinator.isDirty([this])))
     ) {
       this.cloudSignInError = false;
       destination = "cloud-sign-in";
+    }
+    if (this.screen === "cloud-sign-in" && destination === "venue")
+      this.#prepareCloudOffered = true;
+    if (destination === "mode") {
+      this.#cloudPrepareTab = undefined;
+      this.#prepareCloudOffered = false;
     }
     if (this.#cloudSignInAvailable && (destination === "mode" || destination === "cloud-sign-in"))
       sessionStorage.removeItem("waitron-setup-cloud-signed-in");
@@ -1898,7 +1978,10 @@ export class SetupApp extends LitElement {
     try {
       const request = assembleBody(submitted);
       const locale = currentLocale();
-      const cloudSignInTab = this.#cloudSignInTab;
+      const cloudSignInTab =
+        request.mode === "prepare"
+          ? (this.#cloudPrepareTab ?? this.#cloudSignInTab)
+          : this.#cloudSignInTab;
       const cloudSignInArgs: [string?] = cloudSignInTab ? [cloudSignInTab] : [];
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
@@ -2002,6 +2085,14 @@ export class SetupApp extends LitElement {
         this.screen = "review";
         return;
       }
+      case "cloud.request_unavailable":
+        if (this.#cloudPrepareTab) {
+          this.#reenterCloudAdmin();
+          return;
+        }
+        this.provisionMessage = say("shell.provision.failed");
+        this.provisionCanRetry = true;
+        return;
       case "person.email_invalid":
         this.reviewError = say("shell.review.email_invalid");
         this.screen = "review";
@@ -2959,6 +3050,7 @@ export class SetupApp extends LitElement {
         return html`<setup-cloud-sign-in-screen
           data-test="screen-cloud-sign-in"
           .returnFailed=${this.cloudSignInError}
+          .afterAdmin=${this.draft.mode === "prepare"}
           .start=${(isCurrent: () => boolean) => this.#startCloudSignIn(isCurrent)}
         ></setup-cloud-sign-in-screen>`;
       case "live-source":
@@ -3021,6 +3113,8 @@ export class SetupApp extends LitElement {
         return html`<setup-admin-screen
           data-test="screen-admin"
           .draft=${this.draft}
+          .heldCredentials=${this.draft.mode === "prepare" && this.#cloudPrepareTab !== undefined}
+          .refusal=${this.adminRefusal?.()}
         ></setup-admin-screen>`;
       case "venue":
         return html`<setup-venue-screen

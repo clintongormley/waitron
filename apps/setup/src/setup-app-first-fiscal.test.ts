@@ -923,7 +923,7 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
   sessionStorage.setItem("waitron-setup-cloud-tab", initial.attemptId);
   sessionStorage.setItem(
     "waitron-setup-cloud-return",
-    JSON.stringify({ mode: "prepare", locale: "es" }),
+    JSON.stringify({ mode: "prepare", locale: "es", admin: initial.venue.admin }),
   );
   sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
   try {
@@ -938,9 +938,10 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
             })
           : undefined,
     });
-    await screen(app, "admin");
+    await screen(app, "venue");
     expect(currentLocale()).toBe("es");
-    await liveVenueAfterAdmin(app);
+    emit(app, "setup-patch", { patch: { venue: { ...venue, admin: undefined } } });
+    emit(app, "setup-advance");
     await screen(app, "email");
     emit(app, "provision-requested");
     await screen(app, "done");
@@ -949,6 +950,10 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
         .find((r) => r.path === "/setup-api/provision")
         ?.headers.get("X-Waitron-Setup-Cloud-Tab"),
     ).toBe(initial.attemptId);
+    const saved = requests.find((r) => r.path === "/setup-api/provision")?.body;
+    expect(saved).toMatchObject({
+      venue: { admin: { email: initial.venue.admin.email, password: "", pin: "" } },
+    });
     expect(sessionStorage.getItem("waitron-setup-cloud-signed-in")).toBeNull();
   } finally {
     setLocale(locale);
@@ -1030,15 +1035,19 @@ it.each([
       await click(choice, "[data-test=understand]");
       await click(choice, "[data-test=confirm-live]");
       await click(await screen(app, "live-source"), "[data-test=empty]");
+    } else {
+      await screen(app, "admin");
+      emit(app, "setup-patch", { patch: { venue } });
+      emit(app, "setup-goto", { screen: "venue" });
     }
     if (offered) {
       const signIn = await screen(app, "cloud-sign-in");
       await click(signIn, "[data-test=skip]");
     }
-    await screen(app, "admin");
+    await screen(app, mode === "prepare" ? "venue" : "admin");
     expect(requests.some((request) => request.path.includes("/cloud/sign-in/"))).toBe(false);
     if (mode === "prepare") {
-      await liveVenueAfterAdmin(app);
+      emit(app, "setup-advance");
       await screen(app, "email");
       emit(app, "provision-requested");
       await screen(app, "done");

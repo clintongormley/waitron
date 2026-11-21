@@ -1,4 +1,5 @@
 import { FIRST_SETUP_FILE, VENUE_FILE, VENUE_WAL_FILE } from "@waitron/store";
+import { discardHeldSetupAdmin } from "./cloud-client.js";
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -471,6 +472,7 @@ export function createFirstSetupResolutionActions(
             if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
               unavailable("too-large");
             matchesInspection(await host.resolution.inspectFirstSetupResolution(), request);
+            await discardHeldSetupAdmin(assessed.box.stateDir);
             await writeStartAgainMarker(assessed.box, marker);
             await deleteMarkedAttempt(assessed.box, marker, options.remove);
             await clearStartAgainMarker(assessed.box.venueDir);
@@ -497,6 +499,7 @@ export function createFirstSetupResolutionActions(
             !isDeepStrictEqual(request.confirmUnreadableDatabase?.shown, shown)
           )
             conflict();
+          await discardHeldSetupAdmin(box.stateDir);
           await writeStartAgainMarker(box, marker);
           try {
             await deleteMarkedAttempt(box, marker, options.remove);

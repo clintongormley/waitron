@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  X509Certificate,
+} from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Socket, type AddressInfo } from "node:net";
@@ -31,6 +37,8 @@ import {
   type BoxServer,
 } from "./testing/box-authority.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
+import { cloudFixture } from "../test/cloud-fixture.js";
+import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
 vi.mock("./break-glass.js", async (original) => ({
@@ -89,10 +97,15 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
       app,
       {
         environment: "preproduction",
+        devMode: true,
         cloudSignIn: {
           origin: "https://box.test",
           connection: {
             setupAddressLookup: async () => ({ available: false }),
+            readSetupAdmin: async () => {
+              throw new Error("no held administrator");
+            },
+            clearSetupAdmin: async () => {},
             setupSignInAvailable: async () => true,
             startSignIn,
             returnSignIn,
@@ -438,6 +451,145 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 const asRec = (v: unknown): Record<string, unknown> => v as Record<string, unknown>;
 
 describe("POST /setup-api/provision — orchestration, onboarding intent, cert gate, latch", () => {
+  it("checks and hashes the Prepare administrator before Cloud and saves it after cancellation", async () => {
+    const f = await cloudFixture(undefined, "test", async (values, saved, _req, res) => {
+      const [, origin, , requestId, , , , args] = values;
+      const [, state, codeChallenge] = args as string[];
+      const url = new URL("/login", origin as string);
+      url.search = new URLSearchParams({
+        request_id: requestId as string,
+        state: state!,
+        code_challenge: codeChallenge!,
+        code_challenge_method: "S256",
+      }).toString();
+      const text = JSON.stringify(saved);
+      expect(text).not.toContain("correct-horse-battery");
+      expect(text).not.toContain('"1357"');
+      res.end(
+        JSON.stringify({
+          requestId,
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
+          state: "awaiting_cloud",
+          authorizationUrl: url.href,
+        }),
+      );
+    });
+    const socket = new TLSSocket(new Socket());
+    try {
+      const statePath = join(f.stateDir, "cloud/connection.json");
+      const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+      mkdirSync(join(f.stateDir, "cloud"), { mode: 0o700 });
+      writeFileSync(
+        statePath,
+        JSON.stringify({
+          version: 4,
+          origin: f.options.origin,
+          privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
+          publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+        }),
+        { mode: 0o600 },
+      );
+      const connection = createCloudConnection({
+        ...f.options,
+        signIn: {
+          callback: "https://box.test/cloud/pairing/callback",
+          setup: true,
+          readProfile: async () => {
+            throw new Error("no venue yet");
+          },
+        },
+      });
+      const deps = makeDeps({ operations: createSetupOperationStore(f.stateDir) });
+      const cloudSignIn = { origin: "https://box.test", connection };
+      const app = new Hono();
+      mountSetup(app, { ...deps.deps, cloudSignIn }, noopLog);
+      const tab = randomUUID();
+      const origin = { origin: "https://box.test" };
+      const post = (action: string, body: unknown, headers: Record<string, string> = origin) =>
+        app.request(
+          `https://box.test/setup-api/cloud/sign-in/${action}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers },
+            body: JSON.stringify(body),
+          },
+          { incoming: { socket } },
+        );
+      const venue = asRec(prepareBody().venue);
+      const admin = asRec(venue.admin);
+      const expired = await post("start", { tab, prepare: true });
+      expect(await expired.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
+      const incomplete = await post("start", {
+        tab,
+        prepare: true,
+        admin: { ...admin, email: "" },
+      });
+      expect(await incomplete.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "admin.email" } },
+      });
+      expect(
+        (
+          await post("start", {
+            tab,
+            prepare: true,
+            admin: { ...admin, password: "x".repeat(32_768) },
+          })
+        ).status,
+      ).toBe(400);
+      expect(f.requests).toHaveLength(0);
+
+      const start = await post("start", { tab, prepare: true, admin });
+      expect(start.status).toBe(200);
+      const cookie = start.headers.get("set-cookie")!.split(";")[0]!;
+      const headers = { ...origin, cookie };
+      const url = new URL((await start.json()).authorizationUrl);
+      const cancel = await post(
+        "return",
+        {
+          tab,
+          requestId: url.searchParams.get("request_id"),
+          state: url.searchParams.get("state"),
+          error: "access_denied",
+        },
+        headers,
+      );
+      expect(await cancel.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
+      const other = await post("start", { tab: randomUUID(), prepare: true, admin }, headers);
+      expect(await other.json()).toMatchObject({ error: { code: "cloud.binding_conflict" } });
+      expect(f.requests).toHaveLength(1);
+
+      const body = {
+        ...prepareBody(),
+        venue: { ...venue, admin: { ...admin, password: "", pin: "" } },
+      };
+      const provisionHeaders = { ...headers, "x-waitron-setup-cloud-tab": tab };
+      const beforeExpiry = readFileSync(statePath, "utf8");
+      const expiredDraft = JSON.parse(beforeExpiry);
+      expiredDraft.setupAdmin.expiresAt = Date.now() - 1;
+      writeFileSync(statePath, JSON.stringify(expiredDraft));
+      const refused = await postProvision(app, body, provisionHeaders);
+      expect(await refused.json()).toMatchObject({ error: { code: "cloud.request_unavailable" } });
+      expect(JSON.parse(readFileSync(statePath, "utf8"))).not.toHaveProperty("setupAdmin");
+      writeFileSync(statePath, beforeExpiry);
+      const provision = await postProvision(app, body, provisionHeaders);
+      expect(await provision.json()).toMatchObject({ provisioned: true });
+      const administrator = deps.provisionRequests[0]!.venue.admin;
+      expect(await verifyPassword("correct-horse-battery", administrator.passwordHash)).toBe(true);
+      expect(await verifyPin("1357", administrator.pinHash)).toBe(true);
+      expect(readFileSync(statePath, "utf8")).not.toContain(administrator.passwordHash);
+
+      const restarted = new Hono();
+      const next = makeDeps({ operations: createSetupOperationStore(f.stateDir) });
+      mountSetup(restarted, { ...next.deps, cloudSignIn }, noopLog);
+      const replay = await postProvision(restarted, body, provisionHeaders);
+      expect(await replay.json()).toMatchObject({ provisioned: true });
+      expect(next.provision).not.toHaveBeenCalled();
+    } finally {
+      socket.destroy();
+      await f.close();
+    }
+  });
+
   it("runs an explicit fiscal test and refuses activation when its bound evidence is absent", async () => {
     const fiscalTest = new Hono();
     const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
@@ -671,6 +823,10 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
           origin: "https://box.test",
           connection: {
             setupAddressLookup: async () => ({ available: false }),
+            readSetupAdmin: async () => {
+              throw new Error("no held administrator");
+            },
+            clearSetupAdmin: async () => {},
             setupSignInAvailable: async () => true,
             startSignIn: async () => ({}),
             returnSignIn: async () => {},
@@ -712,6 +868,10 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
           origin: "https://box.test",
           connection: {
             setupAddressLookup: async () => ({ available: false }),
+            readSetupAdmin: async () => {
+              throw new Error("no held administrator");
+            },
+            clearSetupAdmin: async () => {},
             setupSignInAvailable: async () => true,
             startSignIn: async () => ({}),
             returnSignIn: async () => {},

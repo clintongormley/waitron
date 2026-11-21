@@ -191,6 +191,10 @@ it("owned development Live saves its durable hour and marks the matching Cloud s
       origin: "https://box.test",
       connection: {
         setupAddressLookup: async () => ({ available: false }),
+        readSetupAdmin: async () => {
+          throw new Error("no held administrator");
+        },
+        clearSetupAdmin: async () => {},
         setupSignInAvailable: async () => true,
         startSignIn: async () => ({}),
         returnSignIn: async () => {},
