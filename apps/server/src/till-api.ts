@@ -249,6 +249,7 @@ import { mountFindBillApi } from "./find-bill-api.js";
 import { mountTransactionReceiptApi } from "./transaction-receipt-api.js";
 import { mountTenderRefundApi } from "./tender-refund-api.js";
 import { mountInvoiceCorrectionApi } from "./invoice-correction-api.js";
+import { mountDrawerApi } from "./drawer-api.js";
 import { mountDeferredCloseApi } from "./deferred-close-api.js";
 import {
   readInvoiceDeliveries,
@@ -673,6 +674,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.refund_exceeds_capture": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
+  "drawer.close_not_found": 404,
+  "drawer.close_changed": 409,
+  "drawer.recount_unavailable": 409,
   // No till address holds a reason id: only a request body can name a missing one.
   "adjustment_reason.not_found": 400,
   // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
@@ -1387,6 +1391,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountTenderRefundApi(app, deps, log, pinThrottle);
   mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
   mountDeferredCloseApi(app, deps, log, run);
+  mountDrawerApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it.

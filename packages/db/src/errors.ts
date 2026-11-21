@@ -8,6 +8,10 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "drawer.close_not_found": Record<string, never>;
+    "drawer.close_changed": Record<string, never>;
+    "drawer.recount_unavailable": Record<string, never>;
+    "drawer.close_invalid_amount": { field: "amountLeft" };
     /** A save named a revision that is no longer current. */
     "settings.out_of_date": { module: string; revision: number };
     /** A stored or offered settings document fails its definition. */

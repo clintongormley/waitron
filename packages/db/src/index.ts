@@ -210,6 +210,12 @@ export { billAdvances } from "./schema/bill-advances.js";
 export { CORE_ALERTS } from "./alerts.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+export {
+  readDrawerClose,
+  saveDrawerCount,
+  recountDrawer,
+  finishDrawerClose,
+} from "./drawer-closes.js";
 export { appendDrawerEntry } from "./drawer-entries.js";
 export { drawerEntries } from "./schema/drawer-entries.js";
 export { drawerOpens } from "./schema/drawer-opens.js";
