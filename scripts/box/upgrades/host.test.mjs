@@ -1051,3 +1051,23 @@ it("rejects a multiline environment value before it can introduce another variab
   const { upgradeEnvironment } = await import("./host.mjs");
   expect(() => upgradeEnvironment({ VALUE: "first\nOTHER=value" })).toThrow("multiline");
 });
+
+it("surfaces an unreadable saved box ID through the read-only state mount lookup", async () => {
+  const { installedBoxId } = await import("./host.mjs");
+  const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { onTestFinished } = await import("vitest");
+  const root = await mkdtemp(join(tmpdir(), "upgrade-box-id-"));
+  onTestFinished(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "trading.env"));
+  await expect(
+    installedBoxId(root, async (_file, args) => {
+      if (args.includes("config"))
+        return { stdout: '{"volumes":{"state":{"name":"existing_state"}}}' };
+      if (args.join(" ") === "volume inspect existing_state")
+        return { stdout: JSON.stringify([{ Mountpoint: root }]) };
+      throw new Error(`unexpected Docker command: ${args.join(" ")}`);
+    }),
+  ).rejects.toMatchObject({ code: "EISDIR" });
+});

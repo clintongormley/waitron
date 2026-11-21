@@ -62,6 +62,17 @@ export async function stopUpgradeWriters({ run = command, compose }) {
 
 const COPIED_VOLUMES = ["state", "print_agent", "mailpit", "tunnel_control", "tunnel_keys"];
 
+async function volumeMountpoint(name, run) {
+  const [volume] = JSON.parse((await run("docker", ["volume", "inspect", name])).stdout);
+  return volume.Mountpoint;
+}
+
+export async function installedBoxId(boxDirectory, run = command) {
+  const config = await composeConfig(boxDirectory, run);
+  const state = await volumeMountpoint(config.volumes.state.name, run);
+  return readBoxId(state);
+}
+
 export async function createUpgradeHost({
   boxDirectory,
   candidate,
@@ -85,8 +96,7 @@ export async function createUpgradeHost({
       `com.docker.compose.volume=${key}`,
       name,
     ]);
-    const [volume] = JSON.parse((await run("docker", ["volume", "inspect", name])).stdout);
-    volumePaths.set(key, volume.Mountpoint);
+    volumePaths.set(key, await volumeMountpoint(name, run));
   }
   const paths = [...volumePaths.values()];
   const staffSocket = join(volumePaths.get("tunnel_control"), "staff.sock");
@@ -387,15 +397,16 @@ const hasTable = (db, name) =>
   db.prepare("select name from sqlite_master where type = 'table' and name = ?").get(name) !==
   undefined;
 
-async function assertSingleBox(stateDirectory) {
-  let nodeId;
+async function readBoxId(stateDirectory) {
   try {
-    nodeId = parseEnv(
-      await fs.readFile(join(stateDirectory, "trading.env"), "utf8"),
-    ).WAITRON_NODE_ID;
+    return parseEnv(await fs.readFile(join(stateDirectory, "trading.env"), "utf8")).WAITRON_NODE_ID;
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
+}
+
+async function assertSingleBox(stateDirectory) {
+  const nodeId = await readBoxId(stateDirectory);
   let sole = false;
   try {
     await fs.access(join(stateDirectory, "venue", "venue.db"));
