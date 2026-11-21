@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 54,
+  version: 55,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -166,6 +166,10 @@ describe("staged configuration import", () => {
     ["export before set-menu configuration", { version: 49 }],
     ["export before theme logos moved to columns", { version: 53 }],
     ["export before set-menu takeaway VAT", { version: 52 }],
+    [
+      "export still carrying print agents",
+      { version: 54, tables: { ...bundle.tables, print_agents: [] } },
+    ],
     ["old version", { version: 1 }],
     ["A1308 earlier schema export", { version: 11 }],
     ["previous format before venue-language storage", { version: 15 }],
