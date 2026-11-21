@@ -28,6 +28,15 @@ export function t(key: StringKey, l: string = locale): string {
   return catalogues[l]?.[key] ?? en[key];
 }
 
+export function passwordVisibility(l: string = locale) {
+  return {
+    show: t("admin.show_password", l),
+    hide: t("admin.hide_password", l),
+    shown: t("admin.password_shown", l),
+    hidden: t("admin.password_hidden", l),
+  };
+}
+
 /** `t(key)` with each `{name}` filled from `params`; a placeholder with no value is left as written. */
 export function format(key: StringKey, params: Record<string, string | number>): string {
   return t(key).replace(/\{(\w+)\}/g, (placeholder, name: string) =>

@@ -617,6 +617,32 @@ describe("your profile", () => {
     await click(el, "save");
     expect(api.confirmProfileEmail).toHaveBeenCalledWith("123456");
   });
+  it("shows each new password independently and reopens with both fields masked", async () => {
+    const { el, api } = await mount();
+    await click(el, "change-password");
+    input(el, "password", "replacement password");
+    input(el, "confirmPassword", "replacement password");
+    await el.updateComplete;
+    const native = (name: string) =>
+      el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.shadowRoot!.querySelector("input")!;
+    await page.getByRole("button", { name: "Mostrar contraseña", exact: true }).click();
+    expect(native("password").type).toBe("text");
+    expect(native("confirmPassword").type).toBe("password");
+    expect(api.changePassword).not.toHaveBeenCalled();
+
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    const closed = new Promise<void>((resolve) =>
+      modal.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await click(el, "cancel");
+    await closed;
+    await click(el, "change-password");
+    expect(native("password").type).toBe("password");
+    expect(native("confirmPassword").type).toBe("password");
+    expect(native("password").value).toBe("");
+    expect(native("confirmPassword").value).toBe("");
+  });
+
   it("validates matching new passwords before the shared confirmation", async () => {
     const { el, api } = await mount();
     await click(el, "change-password");

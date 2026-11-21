@@ -1,7 +1,7 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "../field-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import { formatDecimalInput, readDecimalInput } from "../decimal-input.js";
@@ -11,6 +11,13 @@ import { formatDecimalInput, readDecimalInput } from "../decimal-input.js";
 const DEFAULT_AUTOCOMPLETE: Readonly<Record<string, string>> = {
   password: "new-password",
   search: "off",
+};
+
+type PasswordVisibilityText = {
+  show: string;
+  hide: string;
+  shown: string;
+  hidden: string;
 };
 
 @customElement("wt-input")
@@ -47,6 +54,21 @@ export class WtInput extends LitElement {
       .field.has-end .end {
         display: flex;
       }
+
+      .end wt-button:not(:defined) {
+        visibility: hidden;
+      }
+
+      .end svg {
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        fill: none;
+        stroke: currentColor;
+      }
+
+      .visibility-status {
+        ${visuallyHiddenStyles}
+      }
     `,
   ];
 
@@ -77,7 +99,11 @@ export class WtInput extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   /** Names the input by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  /** Localized action and announcement text opts a password field into the fallback end action. */
+  @property({ attribute: false }) passwordVisibility?: PasswordVisibilityText;
   @state() private hasEnd = false;
+  @state() private visibility?: "shown" | "hidden";
+  #typedValue?: string;
 
   // Unnamed legacy fields retain a generated id. Named fields use the semantic name for both native
   // attributes, so consumers never have to infer "email" from "wt-input-2". Each input owns its own
@@ -89,12 +115,38 @@ export class WtInput extends LitElement {
   private onInput(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.value = this.decimalLocale ? readDecimalInput(input, this.decimalLocale) : input.value;
+    this.#typedValue = this.value;
+    if (!this.value) this.visibility = undefined;
     if (this.decimalLocale) this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
   }
 
   private onEndSlotChange(event: Event): void {
     this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
+    if (this.hasEnd) this.visibility = undefined;
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    // Importing a plain wt-input must not register an unrelated element.
+    if (
+      changed.has("passwordVisibility") &&
+      this.passwordVisibility &&
+      !customElements.get("wt-button")
+    )
+      void import("./wt-button.js");
+    // A form replacing the value must start masked even if the previous password was revealed.
+    if (changed.has("type") || (changed.has("value") && this.value !== this.#typedValue))
+      this.visibility = undefined;
+    this.#typedValue = undefined;
+  }
+
+  private async togglePassword(): Promise<void> {
+    if (this.disabled) return;
+    const input = this.shadowRoot!.querySelector("input")!;
+    const { selectionStart, selectionEnd, selectionDirection } = input;
+    this.visibility = this.visibility === "shown" ? "hidden" : "shown";
+    await this.updateComplete;
+    input.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? undefined);
   }
 
   /** Selects the whole value, so typing replaces it. Does nothing before the first render. */
@@ -114,10 +166,13 @@ export class WtInput extends LitElement {
       type: this.type,
     });
     const showLabel = this.label !== "" && !this.hideLabel;
+    const passwordVisibility =
+      this.type === "password" && !this.decimalLocale ? this.passwordVisibility : undefined;
+    const revealed = passwordVisibility !== undefined && this.visibility === "shown";
     return html`
       <div class="row">
         <div
-          class=${this.hasEnd ? "field has-end" : "field"}
+          class=${this.hasEnd || passwordVisibility ? "field has-end" : "field"}
           part="field"
           data-label=${labelState}
           ?data-invalid=${this.invalid || hasError}
@@ -130,7 +185,7 @@ export class WtInput extends LitElement {
             id=${inputId}
             name=${this.name || nothing}
             .value=${this.decimalLocale ? live(formatDecimalInput(this.value, this.decimalLocale)) : this.value}
-            type=${this.decimalLocale ? "text" : this.type}
+            type=${this.decimalLocale || revealed ? "text" : this.type}
             inputmode=${this.decimalLocale ? "decimal" : nothing}
             autocomplete=${this.autocomplete || DEFAULT_AUTOCOMPLETE[this.type] || nothing}
             autocapitalize=${this.autocapitalize || nothing}
@@ -147,10 +202,35 @@ export class WtInput extends LitElement {
             aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
             @input=${this.onInput}
           />
-          <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
+          <slot class="end" name="end" @slotchange=${this.onEndSlotChange}>
+            ${
+              passwordVisibility
+                ? html`<wt-button
+                    variant="ghost"
+                    shape="round"
+                    aria-label=${revealed ? passwordVisibility.hide : passwordVisibility.show}
+                    ?disabled=${this.disabled}
+                    @click=${this.togglePassword}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
+                      <circle cx="8" cy="8" r="2"></circle>
+                      ${revealed ? html`<path d="m2 2 12 12"></path>` : nothing}
+                    </svg>
+                  </wt-button>`
+                : nothing
+            }
+          </slot>
         </div>
         <slot name="help"></slot>
       </div>
+      ${
+        passwordVisibility
+          ? html`<span class="visibility-status" role="status"
+              >${this.visibility ? passwordVisibility[this.visibility] : nothing}</span
+            >`
+          : nothing
+      }
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;

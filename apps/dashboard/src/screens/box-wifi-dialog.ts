@@ -18,7 +18,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { BoxWifiNetwork, DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { passwordVisibility, t } from "../i18n/t.js";
 import { ssidName } from "./box-status-rows.js";
 
 type Draft = { choice: string; password: string };
@@ -245,6 +245,7 @@ export class BoxWifiDialog extends LitElement {
               <wt-input
                 name="psk"
                 type="password"
+                .passwordVisibility=${passwordVisibility()}
                 required
                 label=${t("box_status.network.password")}
                 .value=${this.password}

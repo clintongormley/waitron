@@ -9,7 +9,7 @@ import { toDataURL } from "qrcode";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -25,7 +25,7 @@ import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import type { DashboardApi, OwnProfile, ProfileSaveResult } from "../api/client.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { currentLocale, fill, passwordVisibility, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -200,12 +200,6 @@ export class ProfileScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
-      svg {
-        width: var(--wt-font-size-lg);
-        height: var(--wt-font-size-lg);
-        fill: none;
-        stroke: currentColor;
-      }
       .authenticator-qr {
         display: block;
         width: min(var(--wt-authenticator-qr-size), 100%);
@@ -229,7 +223,7 @@ export class ProfileScreen extends LitElement {
   @state() private activeTab: "details" | "security" = "details";
   @state() private mode: Mode = "view";
   @state() private fields = emptyFields();
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A request refusal naming a shown field, until the operator changes that field. */
   @state() private requestRefused: Partial<Record<Field, string>> = {};
   /** The message above the action that names no field this form shows. */
@@ -243,7 +237,6 @@ export class ProfileScreen extends LitElement {
   @state() private emailStatus: "sent" | "captured" | "unconfigured" | null = null;
   @state() private saved = false;
   @state() private busy = false;
-  @state() private visible = new Set<Field>();
   @state() private locales: Array<{ code: string; label: string }> = [];
   private venueLocale = "";
   private removingId = "";
@@ -389,11 +382,10 @@ export class ProfileScreen extends LitElement {
     this.mode = mode;
     if (mode === "details") this.emailStatus = null;
     this.removingId = id;
-    this.attempted = false;
+    this.#feedback.reset();
     this.requestRefused = {};
     this.#showError("");
     this.saved = false;
-    this.visible = new Set();
     this.totpSetup = null;
     this.totpQr = "";
     if (mode !== "codes") this.recoveryCodes = [];
@@ -443,7 +435,27 @@ export class ProfileScreen extends LitElement {
   #changeLocale(event: CustomEvent<{ value: string }>): void {
     this.fields = { ...this.fields, locale: event.detail.value };
     this.#scope?.changed();
-    if ("locale" in this.requestRefused) this.requestRefused = {};
+    this.#feedback.dismiss("locale");
+  }
+  #credentialVisibility(field: Field) {
+    switch (field) {
+      case "password":
+        return passwordVisibility();
+      case "confirmPassword":
+        return {
+          ...passwordVisibility(),
+          show: t("account.show_password_confirmation"),
+          hide: t("account.hide_password_confirmation"),
+        };
+      case "pin":
+      case "confirmPin":
+        return {
+          show: t(field === "pin" ? "account.show_new_pin" : "account.show_pin_confirmation"),
+          hide: t(field === "pin" ? "account.hide_new_pin" : "account.hide_pin_confirmation"),
+          shown: t("account.pin_shown"),
+          hidden: t("account.pin_hidden"),
+        };
+    }
   }
   #input(
     field: Field,
@@ -452,13 +464,13 @@ export class ProfileScreen extends LitElement {
     autocomplete = "",
     required = true,
   ): unknown {
-    const revealed = this.visible.has(field);
     return html`<wt-input
       name=${field}
       label=${t(label)}
       ?required=${required}
       ?disabled=${this.busy}
-      type=${type === "password" && revealed ? "text" : type}
+      type=${type}
+      .passwordVisibility=${this.#credentialVisibility(field)}
       autocomplete=${autocomplete}
       .value=${this.fields[field]}
       error=${this.#fieldErrors[field] ?? ""}
@@ -468,7 +480,7 @@ export class ProfileScreen extends LitElement {
         const prev = this.fields;
         const value = event.detail.value;
         this.fields = { ...this.fields, [field]: value };
-        if (field in this.requestRefused) this.requestRefused = {};
+        this.#feedback.dismiss(field);
         if (field === "firstNames" || field === "lastNames") {
           const nextFirst = field === "firstNames" ? value : prev.firstNames;
           const nextLast = field === "lastNames" ? value : prev.lastNames;
@@ -483,33 +495,10 @@ export class ProfileScreen extends LitElement {
             ),
           };
         }
-        if (this.fields.displayName !== prev.displayName && "displayName" in this.requestRefused)
-          this.requestRefused = {};
+        if (this.fields.displayName !== prev.displayName) this.#feedback.dismiss("displayName");
         this.#scope?.changed();
       }}
-    >
-      ${
-        type === "password"
-          ? html`<wt-button
-              slot="end"
-              variant="ghost"
-              aria-label=${t(revealed ? "login.hide_password" : "login.show_password")}
-              @click=${() => {
-                const next = new Set(this.visible);
-                if (revealed) next.delete(field);
-                else next.add(field);
-                this.visible = next;
-              }}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M1 8s2.5-4 7-4 7 4 7 4-2.5 4-7 4-7-4-7-4Z"></path>
-                <circle cx="8" cy="8" r="2"></circle>
-                ${revealed ? html`<path d="m2 2 12 12"></path>` : nothing}
-              </svg>
-            </wt-button>`
-          : nothing
-      }
-    </wt-input>`;
+    ></wt-input>`;
   }
   #detailsErrors(): Partial<Record<Field, string>> {
     const f = this.fields;
@@ -567,8 +556,8 @@ export class ProfileScreen extends LitElement {
   /** Each shown field's message, the one message above the action, and whether the action waits
    * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
-    const own = this.attempted ? this.#validate() : {};
-    const errors = { ...own, ...this.requestRefused };
+    const own = this.#feedback.attempted ? this.#validate() : {};
+    const errors = { ...own, ...this.#feedback.remaining(this.requestRefused) };
     const shown = this.#shownFields();
     const fields: Partial<Record<Field, string>> = {};
     const messages = this.error === "" ? [] : [this.error];
@@ -588,7 +577,7 @@ export class ProfileScreen extends LitElement {
   #focusFirstInvalid(): void {
     void this.updateComplete.then(() => {
       const dialog = this.isConnected ? this.shadowRoot!.querySelector("wt-modal") : null;
-      if (dialog) void focusFirstInvalid(dialog);
+      if (dialog) void this.#feedback.focus(dialog);
     });
   }
 
@@ -600,7 +589,7 @@ export class ProfileScreen extends LitElement {
     const scope = this.#scope;
     const submitted = this.#draftValue(f);
     const active = () => this.isConnected && this.#operation === operation && this.#scope === scope;
-    this.attempted = true;
+    this.#feedback.press();
     this.requestRefused = {};
     this.#showError("");
     if (Object.keys(this.#validate()).length) {
@@ -641,7 +630,7 @@ export class ProfileScreen extends LitElement {
         this.totpSetup = setup;
         this.fields = { ...this.fields, totp: "" };
         this.#registerDraft();
-        this.attempted = false;
+        this.#feedback.reset();
         return;
       } else if (this.mode === "totp") {
         const result = await this.api.finishTotp(this.totpSetup!.enrollmentId, f.setupCode);
@@ -748,6 +737,7 @@ export class ProfileScreen extends LitElement {
                           ? "setupCode"
                           : undefined;
       if (field !== undefined && this.#shownFields().has(field)) {
+        this.#feedback.newRefusal(field);
         this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
       } else this.#showError(message);

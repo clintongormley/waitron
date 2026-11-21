@@ -339,6 +339,23 @@ export async function verifyPackage(
     assert.equal(await single.evaluate(() => !!customElements.get("wt-input")), true);
     assert.equal(await single.evaluate(() => !!customElements.get("wt-card")), false);
     assert.equal(await single.evaluate(() => !!customElements.get("wt-button")), false);
+    await single.evaluate(() => {
+      const field = document.querySelector("wt-input");
+      field.type = "password";
+      field.value = "consumer password";
+      field.passwordVisibility = {
+        show: "Show password",
+        hide: "Hide password",
+        shown: "Password shown",
+        hidden: "Password hidden",
+      };
+    });
+    const field = single.locator("wt-input input");
+    await single.getByRole("button", { name: "Show password", exact: true }).waitFor();
+    assert.equal(await field.getAttribute("type"), "password");
+    await single.getByRole("button", { name: "Show password", exact: true }).click();
+    assert.equal(await field.getAttribute("type"), "text");
+    assert.equal(await field.inputValue(), "consumer password");
     await isolated.close();
     await rm(join(installed, "dist/components/wt-input.js"));
     await assert.rejects(build(options), /Could not resolve/);

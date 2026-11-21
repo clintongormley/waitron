@@ -257,10 +257,18 @@ describe("setup-connect-screen", () => {
     ]);
   });
 
-  it("renders the password field as a password input (never a plaintext one)", async () => {
-    const { el } = await mount();
-    await toLogin(el);
-    expect(q(el, "[data-test=password]")!.getAttribute("type")).toBe("password");
+  it("shows the primary password on request without submitting the sign-in", async () => {
+    const { el, host } = await mount();
+    const events = collect(host);
+    await fillValid(el);
+    const input = q(el, "[data-test=password]")!.shadowRoot!.querySelector("input")!;
+    expect(input.type).toBe("password");
+    await page.getByRole("button", { name: "Show password", exact: true }).click();
+    expect(input.type).toBe("text");
+    expect(input.value).toBe("correct horse");
+    expect(events).toEqual([]);
+    await page.getByRole("button", { name: "Hide password", exact: true }).click();
+    expect(input.type).toBe("password");
   });
 
   it("asks for the admin's sign-in email in a named email field with login autocomplete", async () => {

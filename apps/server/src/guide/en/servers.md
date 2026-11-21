@@ -37,8 +37,9 @@ after **Use this box's own address**. Choose **Join or recover**, then **Add a m
 Enter the main box's address by its name, `https://waitron.local`, and choose **Continue**; its IP address, such as `https://192.168.1.10`, is refused. On a device already signed in to the
 main box's dashboard, open **System → Servers** and compare **This server's public certificate
 fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
-Then enter the account's email and password and choose **Connect**. If the account uses an
-authenticator, the page then asks for its current code: enter it and choose **Connect** again. The
+Enter the account's email and password. You can use the eye button to check what you typed.
+Choose **Connect**. If the account uses an authenticator, the page asks for its current code.
+Enter it and choose **Connect** again. The
 new box takes its first copy over the venue's network and restarts by itself as the spare. The new
 box's page stays on **This server is joining** and does not change.
 
