@@ -451,3 +451,16 @@ it("Cancel discards restored manual details without a reader before reopening", 
   expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("");
   expect(unload()).toBe(false);
 });
+it("Escape on a part-typed cash amount does what Cancel does: back to Cash, nothing asked", async () => {
+  const { app, form } = await mount();
+  for (const leave of ["cancel", "escape"] as const) {
+    await click(form, ".pay");
+    await press(form, "5");
+    if (leave === "cancel") await click(form, ".cancel");
+    else await userEvent.keyboard("{Escape}");
+    await form.updateComplete;
+    expect((await question(app)).open).toBe(false);
+    expect(form.shadowRoot!.querySelector(".pay")).not.toBeNull();
+  }
+  expect(app.payments).toEqual([]);
+});

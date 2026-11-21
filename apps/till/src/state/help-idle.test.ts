@@ -1,7 +1,9 @@
 import { LitElement, html } from "lit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { currentHelpMode, setHelpMode } from "@waitron/ui";
 import { HelpIdleController, KITCHEN_HELP_IDLE_MS } from "./help-idle.js";
+import "../widgets/numeric-pad.js";
 
 class IdleHost extends LitElement {
   applies = true;
@@ -98,6 +100,36 @@ describe("HelpIdleController", () => {
     touch(document.body);
     vi.advanceTimersByTime(20_000);
     expect(currentHelpMode()).toBe(false);
+  });
+
+  it("a digit typed with nothing focused, which the pad in front takes, starts the two minutes again", async () => {
+    const pad = document.createElement("till-numeric-pad");
+    document.body.append(pad);
+    onTestFinished(() => pad.remove());
+    await pad.updateComplete;
+    const typed = vi.fn();
+    pad.addEventListener("wt-change", typed);
+    await mounted();
+    setHelpMode(true);
+    vi.advanceTimersByTime(100_000);
+    await userEvent.keyboard("5");
+    expect(typed).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(119_999);
+    expect(currentHelpMode()).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(currentHelpMode()).toBe(false);
+  });
+
+  it("stops hearing key presses on the page once the host leaves it", async () => {
+    const removed = vi.spyOn(document, "removeEventListener");
+    onTestFinished(() => removed.mockRestore());
+    const added = vi.spyOn(document, "addEventListener");
+    onTestFinished(() => added.mockRestore());
+    const host = await mounted();
+    const heard = added.mock.calls.find(([type]) => type === "keydown");
+    expect(heard).toBeDefined();
+    host.remove();
+    expect(removed).toHaveBeenCalledWith("keydown", heard?.[1], { capture: true });
   });
 
   it("where it does not apply, help stays on", async () => {

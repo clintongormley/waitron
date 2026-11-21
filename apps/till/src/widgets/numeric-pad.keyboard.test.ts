@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtDialog } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { blurAll, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
 import "./numeric-pad.js";
 import type { TillNumericPad } from "./numeric-pad.js";
@@ -43,13 +43,6 @@ function watch(pad: TillNumericPad) {
       return escapes;
     },
   };
-}
-
-async function blurAll(): Promise<void> {
-  let active: Element | null = document.activeElement;
-  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
-  (active as HTMLElement | null)?.blur();
-  await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
 }
 
 async function mountPad(mode: "decimal" | "pin" = "decimal") {

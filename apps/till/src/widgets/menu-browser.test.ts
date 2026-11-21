@@ -8,7 +8,7 @@ import { formatMoney, HOME_DISPLAY_DEFAULTS, setMenuCopyOf } from "@waitron/shar
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
 import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
+import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import { setMenuProduct } from "./product-pick.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -4056,4 +4056,40 @@ it("closes dish information when the filtered offer disappears", async () => {
   el.products = [];
   await el.updateComplete;
   expect(root(el).querySelector("till-product-info")).toBeNull();
+});
+
+describe("typing a weighed dish's weight with a keyboard", () => {
+  async function weighHam() {
+    const mounted = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)), weighs: true });
+    const selected: unknown[] = [];
+    mounted.store.on("product-selected", (picked) => selected.push(picked));
+    await userEvent.click(entry(mounted.el, "shortcuts", "Jamón"));
+    await mounted.el.updateComplete;
+    const weigh = root(mounted.el).querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("till-tender-pay")!;
+    await weigh.updateComplete;
+    const pad = () =>
+      weigh.shadowRoot!.querySelector<HTMLElement & { value: string }>("till-numeric-pad")!;
+    return { ...mounted, selected, weigh, pad };
+  }
+
+  it("after tapping the tile, Enter adds the typed weight and does not pick the dish again", async () => {
+    const { store, selected, weigh } = await weighHam();
+    await userEvent.keyboard("0.25");
+    await weigh.updateComplete;
+    await userEvent.keyboard("{Enter}");
+    await weigh.updateComplete;
+    expect(store.lines).toEqual([{ product: ham, quantity: "0.25" }]);
+    expect(selected).toEqual([ham]);
+  });
+
+  it("while the order is sending and the menu is inert, typing does not change the weight", async () => {
+    const { host, weigh, pad } = await weighHam();
+    host.inert = true;
+    await blurAll();
+    await userEvent.keyboard("0.25");
+    await weigh.updateComplete;
+    expect(pad().value).toBe("");
+  });
 });

@@ -36,6 +36,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
+import { pressIfEnabled } from "../state/pad-keys.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -1516,6 +1517,10 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  #button(selector: string): HTMLElement | null {
+    return this.renderRoot.querySelector<HTMLElement>(selector);
+  }
+
   #renderPaying() {
     const total = this.store.total;
     const entered = this.#enteredDecimal();
@@ -1547,6 +1552,8 @@ export class TillTenderPay extends LitElement {
       <till-numeric-pad
         .value=${this.entry}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @pad-enter=${() => pressIfEnabled(this.#button(".confirm"))}
+        @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
       ></till-numeric-pad>
       <div class="actions">
         <wt-button
@@ -1583,6 +1590,8 @@ export class TillTenderPay extends LitElement {
       <till-numeric-pad
         .value=${this.entry}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @pad-enter=${() => pressIfEnabled(this.#button(".add"))}
+        @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
       ></till-numeric-pad>
       <div class="actions">
         <wt-button

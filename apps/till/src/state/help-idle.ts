@@ -12,8 +12,9 @@ export interface HelpIdleOptions {
 }
 
 /**
- * Turns help off and calls `onIdle` after `idleMs` without a `pointerdown` or `keydown` inside
- * the host, while the host is in the page, `applies()` holds, and help is on or `held()` holds.
+ * Turns help off and calls `onIdle` after `idleMs` without a `pointerdown` inside the host or a
+ * `keydown` anywhere on the page (a key pressed with nothing focused lands on the body), while the
+ * host is in the page, `applies()` holds, and help is on or `held()` holds.
  * Listens in the capture phase so a child that stops an event still counts.
  * A host update is not a touch: it starts a clock that is not running, never restarts one.
  */
@@ -36,14 +37,14 @@ export class HelpIdleController implements ReactiveController {
 
   hostConnected(): void {
     this.#host.addEventListener("pointerdown", this.#onTouch, { capture: true });
-    this.#host.addEventListener("keydown", this.#onTouch, { capture: true });
+    document.addEventListener("keydown", this.#onTouch, { capture: true });
     this.#unsubscribe = subscribeHelpMode(() => this.#check());
     this.#check();
   }
 
   hostDisconnected(): void {
     this.#host.removeEventListener("pointerdown", this.#onTouch, { capture: true });
-    this.#host.removeEventListener("keydown", this.#onTouch, { capture: true });
+    document.removeEventListener("keydown", this.#onTouch, { capture: true });
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
     this.#stop();

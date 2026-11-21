@@ -127,6 +127,14 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
+/** Takes focus off whatever holds it, down through shadow roots, so a key press lands on the page. */
+export async function blurAll(): Promise<void> {
+  let active: Element | null = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  (active as HTMLElement | null)?.blur();
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
+}
+
 /**
  * Makes this browser report a touch screen, which headless Chromium lacks; the returned function
  * undoes it.
