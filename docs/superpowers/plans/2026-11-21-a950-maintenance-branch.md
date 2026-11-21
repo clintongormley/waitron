@@ -25,10 +25,16 @@ The Lane F queue item and the watcher's 21 November 03:21 note record the ask.
   the tag's history so another lower release cannot prevent a retry.
 - [ ] In `.github/workflows/ci.yml`, run maintenance PR and push CI. Give
   publish and root guards full history with `blob:none` on both attempts. Use
-  the standard bounded Node setup in publish. Keep the direct tag and annotation
-  checks. In `scripts/ci-workflow.test.mjs`, exercise the workflow step on real
-  Git history, the older line's patch and minor, retry after another lower tag,
-  refusal on an unprotected branch, and refusal on later main.
+  the standard bounded Node setup in publish and keep the direct tag and
+  annotation checks. The rules API gets the same 90-second limit and second
+  attempt as the fetch. An empty or failed read cannot qualify a branch.
+- [ ] Test patch, minor, its patch, later main refusal, untagged fork refusal
+  and sibling-tag retry once in `release-source.test.mjs`. In the CLI suite
+  exercise the latest lower stable tag before signing and tagging, branch
+  rules and exact-tip green CI. Keep publish's annotation checks and exercise
+  its protected-branch admission, retry and shallow refusal. The CLI's existing
+  command double supplies the rules JSON. The workflow suite runs real Git
+  with a `gh` stand-in returning rules JSON, an empty list or a failed call.
 - [ ] In `scripts/released-declarations.test.ts`, show that main and maintenance
   can each lack the other's declaration. In `scripts/released-declarations.mjs`,
   check every tagged version's own file and any tagged declaration at HEAD.
@@ -37,8 +43,9 @@ The Lane F queue item and the watcher's 21 November 03:21 note record the ask.
 - [ ] In `scripts/release/github-release.sh` and its test, use the publish result
   to keep maintenance releases out of GitHub's Latest slot.
 
-Run the four focused suites and the Git-spawning cases with `GIT_DIR` set.
+Run the five focused suites and the Git-spawning cases with `GIT_DIR` set.
 Use disposable versions for qualification. Update the release runbook, CI
-notes and A950 backlog. The owner applies the branch rules and creates each
-maintenance branch at a release tag. Older branches carry release tooling
+notes and A950 backlog. List the exact ruleset on `refs/heads/maintenance/*`
+and how to carry fixes forward by hand. The owner applies the ruleset and
+creates each maintenance branch at a release tag. Older branches carry release tooling
 through backports when needed. Estimate 220 production and 230 test lines.
