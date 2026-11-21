@@ -80,6 +80,9 @@ type NamesTableInvoice = "sale.correction_not_admitted" | "sale.correction_histo
  * that invoice can still give back money for a dish at the advance's rate: `moneyLeft` is the
  * smaller of what is left of its dishes at that rate and the money still refundable on it. A whole
  * credit of that invoice leaves it nothing, and its correctable lines are then unreadable.
+ * Otherwise refuses `advance.final_invoice_refund_pending` while a refund of that invoice waits
+ * for its result and it has a dish left at that rate, or its lines cannot be read: a failed refund
+ * would give it money to give back.
  */
 export async function refuseFinalInvoiceFirst(
   tx: Transaction,
@@ -103,12 +106,21 @@ export async function refuseFinalInvoiceFirst(
     .where(inArray(saleLines.correctsLineId, [final.deductionLineId, ...deductions]))
     .limit(1);
   if (credit !== undefined) return;
+  const refundable = await readRefundableTenders(tx, final.id);
+  // `appliedRemaining` already leaves out pending refunds, and a failed one gives its money back.
   const money = sumDecimals([
     decimal("0.00"),
-    ...(await readRefundableTenders(tx, final.id)).map((row) => decimal(row.appliedRemaining)),
+    ...refundable.map((row) => decimal(row.appliedRemaining)),
   ]);
+  const pending = refundable.find((row) => row.pendingRefundId !== null);
+  const noMoney = compareDecimal(money, decimal("0.00")) <= 0;
   // Nothing to send staff to, so a refusal of reading the table's invoice must not block this one.
-  if (compareDecimal(money, decimal("0.00")) <= 0) return;
+  if (noMoney && pending === undefined) return;
+  const refundPending = () =>
+    new AppError("advance.final_invoice_refund_pending", {
+      ...takenOffParams(saleId, final),
+      refundId: pending!.pendingRefundId!,
+    });
   const [own] = await tx
     .select({ rate: saleLines.vatRate })
     .from(saleLines)
@@ -121,6 +133,7 @@ export async function refuseFinalInvoiceFirst(
         (hasCode(error, "sale.correction_not_admitted") ||
           hasCode(error, "sale.correction_history_unusable"))
       ) {
+        if (noMoney) throw refundPending();
         throw new AppError<NamesTableInvoice>(
           error.code,
           { ...error.params, tableInvoiceNumber: takenOffParams(saleId, final).invoiceNumber },
@@ -135,12 +148,13 @@ export async function refuseFinalInvoiceFirst(
     ...lines.filter((line) => compareDecimal(line.rate, rate) === 0).map((line) => line.left),
   ]);
   const moneyLeft = compareDecimal(dishes, money) < 0 ? dishes : money;
-  if (compareDecimal(moneyLeft, decimal("0.00")) <= 0) return;
-  throw new AppError("advance.final_invoice_first", {
-    ...takenOffParams(saleId, final),
-    rate,
-    moneyLeft,
-  });
+  if (compareDecimal(moneyLeft, decimal("0.00")) > 0)
+    throw new AppError("advance.final_invoice_first", {
+      ...takenOffParams(saleId, final),
+      rate,
+      moneyLeft,
+    });
+  if (pending !== undefined && compareDecimal(dishes, decimal("0.00")) > 0) throw refundPending();
 }
 
 type AdvanceRefundCode = "tender.refund_of_advance" | "bill.refund_of_advance";

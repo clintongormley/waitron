@@ -1083,6 +1083,22 @@ it("sends staff to Correct invoice on the table's receipt first, naming it, the 
     expect(codeMessage("advance.final_invoice_first", locale)).not.toMatch(/[{}]/);
 });
 
+it("sends staff to check the table's receipt's pending refund before correcting the payment on account, naming that receipt", () => {
+  const final = { invoiceNumber: "A/45" };
+  expect(codeMessage("advance.final_invoice_refund_pending", "en", final)).toBe(
+    "A refund on the table's receipt A/45 is still waiting for its result, and whether this money comes back on that receipt or on this payment on account depends on it. Check that refund under Refund a payment on the table's receipt, then try again.",
+  );
+  expect(codeMessage("advance.final_invoice_refund_pending", "es", final)).toBe(
+    "Una devolución del ticket de la mesa A/45 aún espera su resultado, y de ella depende si este dinero se devuelve con ese ticket o con este pago a cuenta. Consulta esa devolución en Devolver un pago del ticket de la mesa y vuelve a intentarlo.",
+  );
+  expect(codeMessage("advance.final_invoice_refund_pending", "en")).toMatch(
+    /^A refund on the table's receipt is still waiting /,
+  );
+  expect(codeMessage("advance.final_invoice_refund_pending", "es")).toMatch(
+    /^Una devolución del ticket de la mesa aún espera /,
+  );
+});
+
 it("names the table's receipt when its refusal is answered on Correct invoice of a payment on account", () => {
   const refused = { reason: "filing_refused", tableInvoiceNumber: "A/45" };
   expect(codeMessage("sale.correction_not_admitted", "en", refused)).toBe(

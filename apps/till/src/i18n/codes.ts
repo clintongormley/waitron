@@ -670,6 +670,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The table's receipt{invoiceNumber} can still give back {moneyLeft} for dishes at {rate}% VAT, this payment on account's rate. Use Correct invoice on that receipt first. Once it has given back all it can at that rate, correct this payment on account.",
     es: "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft} de platos al {rate} % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket. Cuando ya haya devuelto todo lo que puede a ese tipo, rectifica este pago a cuenta.",
   },
+  "advance.final_invoice_refund_pending": {
+    en: "A refund on the table's receipt{invoiceNumber} is still waiting for its result, and whether this money comes back on that receipt or on this payment on account depends on it. Check that refund under Refund a payment on the table's receipt, then try again.",
+    es: "Una devolución del ticket de la mesa{invoiceNumber} aún espera su resultado, y de ella depende si este dinero se devuelve con ese ticket o con este pago a cuenta. Consulta esa devolución en Devolver un pago del ticket de la mesa y vuelve a intentarlo.",
+  },
   "advance.correction_open": {
     en: "The table's receipt cannot be issued while a correction of the payment on account{invoiceNumber} is open. In Correct invoice, use Finish now or Discard, then try again.",
     es: "El ticket de la mesa no se puede emitir mientras siga abierta una rectificación del pago a cuenta{invoiceNumber}. En Rectificar factura, usa Terminar ahora o Descartar y vuelve a intentarlo.",
@@ -1156,6 +1160,7 @@ export function codeMessage(
     code === "tender.refund_of_advance" ||
     code === "bill.refund_of_advance" ||
     code === "advance.taken_off_final_invoice" ||
+    code === "advance.final_invoice_refund_pending" ||
     code === "advance.correction_open"
   )
     return message.replace("{invoiceNumber}", () => invoiceNumberOf(params));
