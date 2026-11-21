@@ -1275,7 +1275,7 @@ describe("servers screen order, addresses and the replaced box", () => {
       expect(inTable(el, `replaced-note-${id}`)).toBeNull();
   });
 
-  it("drops the keep-it-on line once the replaced box's return is complete or abandoned", async () => {
+  it("drops the keep-it-on line when the listing says the replaced box owes no return", async () => {
     const el = await mount();
     expect(inTable(el, `role-${FORMER}`)!.textContent!.trim()).toBe("Replaced; not selling");
     expect(inTable(el, `replaced-note-${FORMER}`)).toBeNull();
