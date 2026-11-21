@@ -259,12 +259,5 @@ export default tseslint.config(
     },
   },
 
-  {
-    files: ["packages/country-es/scripts/gen-demo-media.mjs"],
-    languageOptions: {
-      globals: { Buffer: "readonly", console: "readonly", process: "readonly" },
-    },
-  },
-
   eslintConfigPrettier,
 );
