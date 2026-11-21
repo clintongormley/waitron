@@ -6,7 +6,8 @@ import {
   type DepartmentReceiptWrite,
 } from "@waitron/shared";
 import type { DepartmentReceiptLanguages } from "./department-receipt-languages.js";
-import type { Transaction } from "@waitron/db";
+import { readTaxpayer, type Transaction } from "@waitron/db";
+import { isValidVenueTelephone } from "@waitron/country-packs";
 import { authorizeManager } from "@waitron/identity";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -39,6 +40,13 @@ export async function checkedDepartmentReceiptWrite(
     validateOperationDescription,
     options.allowEmptyDescription,
   );
+  const phone = checked.receipt.phone;
+  if (
+    phone !== undefined &&
+    phone !== current.phone &&
+    !isValidVenueTelephone(phone, (await readTaxpayer(tx))?.country)
+  )
+    throw new AppError("receipt.invalid", { reason: "invalid_phone", field: "phone" });
   return { input: checked, scope };
 }
 

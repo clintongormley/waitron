@@ -178,7 +178,7 @@ export interface CountryPack {
   readonly countryNames?: Readonly<Record<string, string>>;
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
-  readonly telephone?: ValueValidator<string>;
+  readonly telephone?: ValueValidator<string> & { readonly callingCode: string };
   readonly holidayCalendar?: CountryHolidayCalendar;
 }
 

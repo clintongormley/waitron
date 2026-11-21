@@ -18,6 +18,7 @@ import {
   classifyTimeZone,
   contentLanguageCode,
   FALLBACK_LOCALE,
+  isValidTelephone,
   type ContentLanguageRules,
   type ContentLanguagePresentation,
 } from "@waitron/shared";
@@ -66,6 +67,17 @@ export function installedContentLanguagePresentation(): ContentLanguagePresentat
 export function getCountryPack(countryCode: string): CountryPack | undefined {
   const normalized = countryCode.trim().toUpperCase();
   return COUNTRY_PACKS.find((pack) => pack.countryCode === normalized);
+}
+
+export function isValidVenueTelephone(value: string, country: string | undefined): boolean {
+  if (!isValidTelephone(value)) return false;
+  const rule = country === undefined ? undefined : getCountryPack(country)?.telephone;
+  if (rule === undefined) return true;
+
+  const internationalDigits = value.replace(/[ ().-]/g, "").match(/^(?:\+|00)(\d+)/)?.[1];
+  if (internationalDigits !== undefined && !internationalDigits.startsWith(rule.callingCode))
+    return true;
+  return rule.validate(value).valid;
 }
 
 /** Packs whose fiscal selection and validators are complete enough for interactive venue creation. */

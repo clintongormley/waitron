@@ -15,6 +15,8 @@ La búsqueda y la ordenación por columnas abarcan a todas las personas que coin
 Como encargado, abre el menú de una persona y elige **Editar** para cambiar sus nombres y teléfono.
 Su correo es su dirección de acceso. Cambiar el de otra persona requiere un permiso adicional, que solo tiene Admin de forma predeterminada.
 
+Si el teléfono es extranjero, incluye el prefijo del país, por ejemplo `+44 7700 900123`.
+
 Elige **Idioma** y **Guardar** para fijar su idioma guardado. Si su panel sigue el idioma del
 navegador, elige el idioma expresamente, aunque ya aparezca seleccionado. El panel lo aplica al
 recargar, al volver a iniciar sesión o al regresar a la pestaña; la caja lo usa en el próximo acceso.

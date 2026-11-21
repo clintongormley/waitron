@@ -220,14 +220,15 @@ describe("person-edit", () => {
     expect(displayValue()).toBe("Augusta Lovelace");
   });
 
-  it("rejects a malformed telephone beside the field and blocks Save, then saves a valid or blank one", async () => {
+  it.each(["12345", "512 345 678"])("blocks telephone %s and allows clearing it", async (phone) => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
       canAdminister: true,
       canChangeEmail: true,
       person,
       open: true,
     });
-    change(el, "edit-telephone", "12345"); // 5 digits — below the 6-digit floor
+    el.venueCountry = "ES";
+    change(el, "edit-telephone", phone);
     let saved = false;
     el.addEventListener("save-person", () => {
       saved = true;
@@ -245,6 +246,19 @@ describe("person-edit", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     });
     expect(savedEvent.detail.telephone).toBeNull();
+  });
+
+  it("edits staff details with an unchanged old telephone", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person: { ...person, telephone: "12345" },
+      open: true,
+    });
+    el.venueCountry = "ES";
+    const save = vi.fn();
+    el.addEventListener("save-person", save);
+    await edited(el);
+    saveOf(el).click();
+    expect(save.mock.calls[0]?.[0].detail.telephone).toBe("12345");
   });
 
   it("resends a pending invitation without a confirmation step — it isn't destructive", async () => {

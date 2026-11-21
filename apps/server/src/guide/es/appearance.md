@@ -220,6 +220,9 @@ imprimen ningún logotipo, en lugar de uno que podría no ser el correcto.
 
 En la vista previa de **Recibos** de un departamento, las palabras fijas del ticket siguen el idioma de ticket elegido. El idioma de los controles del panel no cambia esas palabras.
 
+Si añades un teléfono extranjero en **Recibos**, incluye el prefijo del país, por ejemplo
+`+44 7700 900123`.
+
 ## Fija colores y texto a mano {#advanced}
 
 Debajo de las elecciones y de la vista previa, el editor tiene una sección titulada **Avanzado:

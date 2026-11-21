@@ -88,18 +88,28 @@ it("allows installations without a description field to save their empty receipt
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({ email: "bar@example.com" });
 });
-it("validates the telephone before writing and sends the saved description unchanged", async () => {
-  const { el, api } = await mountReceiptEditor();
-  await editReceipt(el, "phone", "not a telephone");
-  await clickReceiptSave(el);
-  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  expect(receiptField(el, "phone").error).toBe(t("receipts.invalid_phone"));
-  await editReceipt(el, "phone", "+34 912 345 678");
-  await clickReceiptSave(el);
-  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.operationDescription).toBe(
-    "Dining service",
-  );
-});
+it.each(["not a telephone", "512 345 678"])(
+  "leaves telephone %s out of preview and blocks Save",
+  async (phone) => {
+    const { el, api } = await mountReceiptEditor();
+    el.venueCountry = "ES";
+    await editReceipt(el, "email", "bar@example.com");
+    await editReceipt(el, "phone", phone);
+    await clickReceiptSave(el);
+    expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+    expect(receiptField(el, "phone").error).toBe(t("receipts.invalid_phone"));
+    await expect
+      .poll(() => api.previewReceiptDraft.mock.lastCall?.[0]?.receipt)
+      .toMatchObject({ email: "bar@example.com" });
+    expect(api.previewReceiptDraft.mock.lastCall?.[0]?.receipt.phone).toBeUndefined();
+    await editReceipt(el, "phone", "+34 912-345-678");
+    await clickReceiptSave(el);
+    expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toMatchObject({
+      operationDescription: "Dining service",
+      phone: "+34 912-345-678",
+    });
+  },
+);
 it("edits receipt policies with the same venue authority as receipt text", async () => {
   const { el, api } = await mountReceiptEditor();
   await el.updateComplete;

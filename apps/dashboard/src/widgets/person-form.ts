@@ -1,6 +1,7 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { deriveDisplayName, isValidEmail, isValidTelephone } from "@waitron/shared";
+import { isValidVenueTelephone } from "@waitron/country-packs";
+import { deriveDisplayName, isValidEmail } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -61,6 +62,7 @@ export class PersonForm extends LitElement {
     `,
   ];
 
+  @property({ attribute: false }) venueCountry?: string;
   @property({ type: Boolean, reflect: true }) open = false;
   @property({ type: Boolean }) busy = false;
   @property() error: string | null = null;
@@ -184,7 +186,8 @@ export class PersonForm extends LitElement {
       errors.email = codeMessage("person.email_invalid");
     }
     const tel = this.telephone.trim();
-    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    if (tel && !isValidVenueTelephone(tel, this.venueCountry))
+      errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
   }
 

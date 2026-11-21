@@ -1,11 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  deriveDisplayName,
-  isValidEmail,
-  isValidTelephone,
-  isSupportedLocale,
-} from "@waitron/shared";
+import { isValidVenueTelephone } from "@waitron/country-packs";
+import { deriveDisplayName, isValidEmail, isSupportedLocale } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -78,6 +74,7 @@ export class PersonEdit extends LitElement {
     `,
   ];
 
+  @property({ attribute: false }) venueCountry?: string;
   @property({ attribute: false }) person: PersonSummary | null = null;
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
@@ -303,7 +300,8 @@ export class PersonEdit extends LitElement {
     if (this.details.locale !== null && !isSupportedLocale(this.details.locale))
       errors.locale = codeMessage("locale.unsupported");
     const tel = this.details.telephone?.trim() ?? "";
-    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    if (tel && tel !== this.#baseline?.telephone && !isValidVenueTelephone(tel, this.venueCountry))
+      errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
   }
 

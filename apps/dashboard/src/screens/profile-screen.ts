@@ -17,7 +17,8 @@ import {
   type LeaveReason,
 } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
-import { deriveDisplayName, isValidEmail, isValidTelephone } from "@waitron/shared";
+import { isValidVenueTelephone } from "@waitron/country-packs";
+import { deriveDisplayName, isValidEmail } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -209,6 +210,7 @@ export class ProfileScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) venueCountry?: string;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -509,7 +511,12 @@ export class ProfileScreen extends LitElement {
     if (!f.email.trim()) errors.email = t("form.email_required");
     else if (!isValidEmail(f.email.trim())) errors.email = codeMessage("person.email_invalid");
     const tel = f.telephone.trim();
-    if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
+    if (
+      tel &&
+      tel !== this.profile?.telephone?.trim() &&
+      !isValidVenueTelephone(tel, this.venueCountry)
+    )
+      errors.telephone = codeMessage("person.telephone_invalid");
     return errors;
   }
 

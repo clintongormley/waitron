@@ -14,6 +14,8 @@ Search and column sorting cover everyone who matches your filters. Use **Previou
 As a manager, open a person's row menu and choose **Edit** to change their names and telephone.
 Their email is their login address. Changing someone else's address needs an extra permission, which only Admin holds by default.
 
+For a foreign phone number, include its country code, for example `+44 7700 900123`.
+
 Choose **Language** and **Save** to set their saved language. If their dashboard follows their
 browser, choose the language explicitly, even if it is already shown. The dashboard picks it up
 when reloaded, signed in again or returned to; the till uses it at their next sign-in. Changing your

@@ -263,6 +263,7 @@ describe("mountMeApi — whoami", () => {
         venueLocale: string;
         sessionDefault: string;
         venueName: string;
+        venueCountry: string;
         onboardingIntent: string;
         permissions: string[];
         modules: string[];
@@ -277,6 +278,7 @@ describe("mountMeApi — whoami", () => {
       venueLocale: VENUE_LOCALE,
       sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
+      venueCountry: "ES",
       onboardingIntent: "prepare",
       simulatedCardPayments: false,
       permissions: ["payment.take"],
@@ -334,6 +336,7 @@ describe("mountMeApi — whoami", () => {
         venueLocale: string;
         sessionDefault: string;
         venueName: string;
+        venueCountry: string;
         onboardingIntent: string;
         permissions: string[];
         modules: string[];
@@ -348,6 +351,7 @@ describe("mountMeApi — whoami", () => {
       venueLocale: VENUE_LOCALE,
       sessionDefault: VENUE_LOCALE,
       venueName: "Test SL",
+      venueCountry: "ES",
       onboardingIntent: "prepare",
       simulatedCardPayments: false,
       permissions: ["payment.take"],

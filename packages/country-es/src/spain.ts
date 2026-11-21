@@ -358,6 +358,6 @@ export const SPAIN: CountryPack = {
   },
   taxIdentifier: { label: "NIF", validate: validateSpanishNif },
   postalCode: { validate: validateSpanishPostalCode },
-  telephone: { validate: validateSpanishPhone },
+  telephone: { callingCode: "34", validate: validateSpanishPhone },
   holidayCalendar: SPAIN_HOLIDAY_CALENDAR,
 };

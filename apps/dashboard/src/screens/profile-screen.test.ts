@@ -951,17 +951,21 @@ describe("your profile", () => {
     expect(displayName()).toBe("Grace Byron");
   });
 
-  it("blocks a malformed telephone client-side and marks the field without calling the API", async () => {
-    const { el, api } = await mount();
-    await editDetails(el);
-    input(el, "telephone", "12345"); // only five digits — too short to be valid
-    await click(el, "save");
-    expect(api.saveProfile).not.toHaveBeenCalled();
-    expect(
-      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=telephone]")!
-        .error,
-    ).toBe(codeMessage("person.telephone_invalid"));
-  });
+  it.each(["12345", "512 345 678"])(
+    "blocks telephone %s beside the profile field",
+    async (phone) => {
+      const { el, api } = await mount();
+      el.venueCountry = "ES";
+      await editDetails(el);
+      input(el, "telephone", phone);
+      await click(el, "save");
+      expect(api.saveProfile).not.toHaveBeenCalled();
+      expect(
+        el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=telephone]")!
+          .error,
+      ).toBe(codeMessage("person.telephone_invalid"));
+    },
+  );
 
   it("shows the already-registered message when the device holds a passkey, without verifying", async () => {
     const { el, api } = await mount();

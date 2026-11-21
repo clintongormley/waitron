@@ -32,7 +32,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount(overrides: Partial<DashboardApi> = {}) {
+async function mount(overrides: Partial<DashboardApi> = {}, venueCountry?: string) {
   history.replaceState(null, "", "/profile");
   const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
     api: {
@@ -43,6 +43,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
+        venueCountry,
         permissions: [],
         modules: [],
       }),
@@ -118,6 +119,18 @@ function close(mounted: Mounted, route: "footer" | "escape") {
       .shadowRoot!.querySelector("dialog")!
       .dispatchEvent(new Event("cancel", { cancelable: true }));
 }
+
+it("validates the profile telephone in the session's venue country", async () => {
+  const saveProfile = vi.fn();
+  const m = await mount({ saveProfile }, "ES");
+  change(m, "512 345 678");
+  await m.screen.updateComplete;
+  m.screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await expect
+    .poll(() => m.screen.shadowRoot!.querySelector<WtInput>("wt-input[name=telephone]")!.error)
+    .not.toBe("");
+  expect(saveProfile).not.toHaveBeenCalled();
+});
 
 // Removing either outer dismissal gate loses the child value before a decision.
 for (const route of ["footer", "escape"] as const) {

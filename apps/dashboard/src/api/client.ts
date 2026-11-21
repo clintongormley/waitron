@@ -4796,6 +4796,7 @@ export class DashboardApi {
     permissions: string[];
     modules: string[];
     venueName: string;
+    venueCountry?: string;
     onboardingIntent?: "demo" | "prepare" | "live";
     simulatedCardPayments?: boolean;
     sessionExpiresInSeconds?: number;
@@ -4812,6 +4813,7 @@ export class DashboardApi {
       permissions: string[];
       modules: string[];
       venueName: string;
+      venueCountry?: string;
       onboardingIntent?: "demo" | "prepare" | "live";
       simulatedCardPayments?: boolean;
       sessionExpiresInSeconds?: number;

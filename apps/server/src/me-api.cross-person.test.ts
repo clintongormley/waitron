@@ -337,6 +337,7 @@ describe("Me API — the identity property: the session's person, never the body
         venueLocale: string;
         sessionDefault: string;
         venueName: string;
+        venueCountry: string;
         sessionExpiresInSeconds: number;
         sessionIdleTimeoutSeconds: number;
         permissions: string[];
@@ -360,6 +361,7 @@ describe("Me API — the identity property: the session's person, never the body
       // No Accept-Language on this request, so the browser match lands on the venue default.
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
+      venueCountry: "ES",
       // A staff person holds only the payment permission; this fixture injects no enabled modules.
       permissions: ["payment.take"],
       modules: [],

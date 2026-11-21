@@ -84,6 +84,7 @@ export class StaffScreen extends LitElement {
       if (this.#readErrorShown) this.#showError(null);
     },
   );
+  @property({ attribute: false }) venueCountry?: string;
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean }) canAdminister = false;
   @property({ type: Boolean }) canChangeEmail = false;
@@ -716,6 +717,7 @@ export class StaffScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>
       <dashboard-person-form
+        .venueCountry=${this.venueCountry}
         .accessRoles=${this.accessRoles}
         .viewerPermissions=${this.viewerPermissions}
         .viewerAdmin=${this.accessRoles.some((role) => role.builtInKey === "admin" && this.viewerRoleIds.includes(role.id))}
@@ -736,6 +738,7 @@ export class StaffScreen extends LitElement {
         @wt-close=${() => (this.formOpen = false)}
       ></dashboard-person-form>
       <dashboard-person-edit
+        .venueCountry=${this.venueCountry}
         .canChangeEmail=${this.canChangeEmail}
         .viewerPermissions=${this.viewerPermissions}
         .viewerAdmin=${this.accessRoles.some((role) => role.builtInKey === "admin" && this.viewerRoleIds.includes(role.id))}
