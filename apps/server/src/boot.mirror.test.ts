@@ -944,6 +944,37 @@ describe("mirror-mode boot (box.mode = 'mirror')", () => {
     }
   }, 60_000);
 
+  it("a mirror whose chart names it the spare answers /api/node as the venue's serving secondary", async () => {
+    // A print agent on the spare box reads these three to say it is waiting on the spare.
+    const removeChart = await holdMainBoxChart("mirror");
+    const { seam } = scriptedMainBox();
+    try {
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venueDir.mirror,
+          WAITRON_HTTP_PORT: String(await freePort()),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        },
+        {},
+        seam,
+      );
+      try {
+        const probe = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+        expect(probe.status).toBe(200);
+        expect(await probe.json()).toMatchObject({
+          acceptingSales: false,
+          standing: "serving-secondary",
+          environment: "preproduction",
+        });
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await removeChart();
+    }
+  }, 60_000);
+
   it("a spare's full start runs its store on loopback with the pair's key, serves the leaf the start repaired, and stops it on close", async () => {
     const fake = await fakeVersitygw();
     const removePair = await servePair("mirror");

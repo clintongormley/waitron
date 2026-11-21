@@ -57,7 +57,8 @@ type LocalDevice = VisibleDevice & { devicePath: string };
 export type LinuxDevices = Pick<
   Host,
   "visibleDevices" | "scan" | "pair" | "pairedBluetooth" | "forgetBluetooth" | "resolve"
->;
+> &
+  Pick<BluetoothStatusSource, "bluetoothAvailability">;
 
 export interface BluetoothStatusSource {
   /** Undefined until the first check. */

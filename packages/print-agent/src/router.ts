@@ -21,6 +21,10 @@ export interface RouterOptions {
 export interface ProbeRound {
   moved: boolean;
   anyAccepting: boolean;
+  /** Set only when, in this round, the configured address is this box's own loopback and answered
+   * as the venue's spare in the pinned environment. An agent on a separate machine following the
+   * spare is not on the spare itself. */
+  configuredIsSpare?: true;
 }
 
 function parseHttpOrigin(url: string): string | undefined {
@@ -32,6 +36,19 @@ function parseHttpOrigin(url: string): string | undefined {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
   return parsed.origin;
+}
+
+/** Matches the hostname the URL parser prints: dotted decimal for any IPv4 spelling, lower case,
+ * and an IPv4-mapped IPv6 address in hex (`[::ffff:127.0.0.1]` becomes `[::ffff:7f00:1]`). */
+function isLoopbackOrigin(origin: string): boolean {
+  const host = new URL(origin).hostname;
+  return (
+    host === "localhost" ||
+    host === "localhost." ||
+    host === "[::1]" ||
+    /^127\.\d+\.\d+\.\d+$/.test(host) ||
+    /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(host)
+  );
 }
 
 /**
@@ -49,6 +66,7 @@ export class Router {
   #environment: string | undefined;
   #round: Promise<ProbeRound> | undefined;
   readonly #configured: string;
+  readonly #configuredIsLoopback: boolean;
   readonly #probe: AgentClient["probeNode"];
 
   constructor(opts: RouterOptions) {
@@ -59,6 +77,7 @@ export class Router {
       );
     }
     this.#configured = origin;
+    this.#configuredIsLoopback = isLoopbackOrigin(origin);
     this.#current = origin;
     this.#environment = opts.environment;
     this.#probe = opts.probe;
@@ -109,6 +128,7 @@ export class Router {
     const results = new Map(
       await Promise.all(this.#servers.map(async (s) => [s.url, await this.#probe(s.url)] as const)),
     );
+    let configuredIsSpare = false;
     for (const s of this.#servers) {
       // Keyed by URL, never by list position, so a `merge` mid-round cannot hand one server's
       // answer to another.
@@ -125,10 +145,20 @@ export class Router {
       s.term = node.term;
       s.state =
         node.acceptingSales && node.environment === this.#environment ? "primary" : "standby";
+      if (s.url === this.#configured && this.#configuredIsLoopback) {
+        configuredIsSpare =
+          !node.acceptingSales &&
+          node.environment === this.#environment &&
+          node.standing === "serving-secondary";
+      }
     }
     if (this.#environment === undefined) return { moved: false, anyAccepting: false };
     const accepting = this.#servers.filter((s) => s.state === "primary");
-    if (accepting.length === 0) return { moved: false, anyAccepting: false };
+    if (accepting.length === 0) {
+      return configuredIsSpare
+        ? { moved: false, anyAccepting: false, configuredIsSpare: true }
+        : { moved: false, anyAccepting: false };
+    }
     // Equal terms take the earlier list entry, never `#current`, to match the till's
     // `ServerRouter`.
     const best = accepting.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));

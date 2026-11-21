@@ -101,6 +101,11 @@ box has not loaded. It goes in `/etc/apparmor.d/` because that is the folder the
 afterwards `.env` still named the profile and `bluetoothctl list` inside the print agent still
 reached the Bluetooth service.
 
+On a host with apt and systemd where the `bluez` package (the Linux Bluetooth service) is missing,
+`install` first installs it and tries to start Bluetooth; if apt cannot install it, `install` says
+it is carrying on without Bluetooth and that Bluetooth printers will not be found until BlueZ is
+installed.
+
 On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `install` also writes
 `/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf`. It runs the unit's own Bluetooth
 daemon command with `--noplugin=autopair` added. On the owner's box (BlueZ 5.82, 2026-09-29),
@@ -108,8 +113,8 @@ BlueZ's `autopair` plugin answered a printer's PIN request with `0000` by itself
 the operator typed could be asked for. BlueZ's retry then went over Low Energy, which that printer
 refuses, so the printer, whose PIN is 1234, never paired. With the plugin off it paired. Where the
 file is in effect, the operator types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
-the file changed, so installing again does not interrupt it. A box with no `bluetooth.service`
-gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
+the file changed, so installing again does not interrupt it. A box still with no `bluetooth.service` gets one line saying
+so. If the file cannot be written or Bluetooth will not restart, `install`
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
 `install` tries again. If Bluetooth will not restart even without the file, `install` says Bluetooth
 may be stopped and to run `systemctl restart bluetooth` or restart the box. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
@@ -285,8 +290,11 @@ so and installs from the beginning instead. A first start that failed can alread
 volume, and `install` then treats the box as existing; `--reset install`, described under "Wiping
 and installing in one run", does not take the upgrade path on such a box: once its production check
 and confirmation pass, it wipes the box as `reset` does and installs. On a host with apt, an upgrade
-installs the `libatomic1` package when it is missing, because the host runtime needs it. On a host
-without apt, install the library that provides `libatomic.so.1` before upgrading.
+installs the `libatomic1` package when it is missing, because the host runtime needs it, and, on a
+host that also has systemd, the `bluez` package when it is missing, so the print agent can find
+Bluetooth printers. On a host
+without apt, install the library that provides `libatomic.so.1` before upgrading, and BlueZ if the
+box uses Bluetooth printers.
 
 An already-stopped app skips the online trial, so you can repair a broken version through
 the same stopped-copy checks and mandatory sale. The trial copy is discarded and is never

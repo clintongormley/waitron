@@ -16,6 +16,8 @@ const agent: PrintAgentRow = {
   active: true,
   host: "kitchen.local",
   nodeId: null,
+  onThisBox: false,
+  bluetooth: null,
   lastSeenAt: null,
   setupUrl: null,
   enrolledAt: "2026-08-20T09:00:00.000Z",

@@ -8,6 +8,7 @@ import {
   type BluetoothCommand,
   type BluetoothCommandOutcome,
   type BluetoothFailureReason,
+  type BluetoothState,
   type Failure,
   type JobOutcome,
   type PageHold,
@@ -647,6 +648,15 @@ export function createAgent(opts: AgentOptions): Agent {
     // A server in a DIFFERENT environment must never be sent the token (CLAUDE.md §5).
     if (!round.anyAccepting) {
       outOfTouch = true;
+      if (round.configuredIsSpare) {
+        report({
+          phase: "spare_box",
+          serverUrl: config.serverUrl,
+          current,
+          lastError: undefined,
+        });
+        return false;
+      }
       report({
         phase: "unreachable",
         serverUrl: config.serverUrl,
@@ -757,6 +767,7 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
+    const bluetooth = bluetoothState(host.bluetoothAvailability?.());
     const inventory = {
       visible,
       scanned,
@@ -765,6 +776,7 @@ export function createAgent(opts: AgentOptions): Agent {
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
+      ...(bluetooth === undefined ? {} : { bluetooth }),
     };
     const pulled = activePull
       ? await client.pullJobs(current, token, inventory, activePull.signal)
@@ -883,7 +895,9 @@ export function createAgent(opts: AgentOptions): Agent {
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();
-        if (!isJoined(config, token) || !outOfTouch) return false;
+        // The round this waited behind may have found the spare, which the page no longer offers a
+        // reset on.
+        if (!isJoined(config, token) || !outOfTouch || status.phase === "spare_box") return false;
         resetAt ??= host.now() + RESET_WINDOW_MS;
         wake();
         return true;
@@ -911,4 +925,10 @@ export function createAgent(opts: AgentOptions): Agent {
       };
     },
   };
+}
+
+/** Rebuilt rather than passed on, so a host's own failure text never reaches the server. */
+function bluetoothState(state: BluetoothState | undefined): BluetoothState | undefined {
+  if (state === undefined) return undefined;
+  return state.available ? { available: true } : { available: false, reason: state.reason };
 }

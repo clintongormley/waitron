@@ -1261,9 +1261,17 @@ export interface PrintAgentRow {
   setupUrl: string | null;
   active: boolean;
   nodeId: string | null;
+  onThisBox: boolean;
+  /** Null when the agent has reported nothing recently. */
+  bluetooth: "available" | BluetoothUnavailableReason | null;
   lastSeenAt: string | null;
   enrolledAt: string;
 }
+
+/** The agent's reason codes (`BLUETOOTH_UNAVAILABLE_REASONS`, packages/print-agent/src/client.ts),
+ * repeated here because the dashboard does not import that package. */
+export type BluetoothUnavailableReason =
+  "dbus_unreachable" | "bluez_not_answering" | "no_controller" | "failed";
 
 export interface Printer {
   lastPrintAgentId: string | null;

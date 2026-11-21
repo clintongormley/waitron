@@ -1,11 +1,13 @@
 import { getConnInfo } from "@hono/node-server/conninfo";
-import type { AgentPhase, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
+import type {
+  AgentPhase,
+  AgentSetupSnapshot,
+  AgentStatus,
+  BluetoothUnavailableReason,
+} from "@waitron/print-agent";
 import { Hono, type Context } from "hono";
 import { isIP } from "node:net";
-import type {
-  BluetoothAvailability,
-  BluetoothUnavailableReason,
-} from "./bluetooth-availability.js";
+import type { BluetoothAvailability } from "./bluetooth-availability.js";
 
 export interface SetupDeps {
   snapshot: () => Promise<AgentSetupSnapshot>;
@@ -151,6 +153,9 @@ ${lastError}
       return `<h1>Waitron print agent</h1>
 <p>Can't reach ${server} right now — retrying.</p>${detail}`;
     }
+    case "spare_box":
+      return `<h1>Waitron print agent</h1>
+<p>This box is the venue's spare. This agent starts printing again if this box becomes the main box.</p>`;
   }
 }
 
@@ -206,7 +211,9 @@ function renderRoot(deps: SetupDeps, snapshot: AgentSetupSnapshot): string {
     sections.push(card(formCard(deps, snapshot.config?.serverUrl ?? "")));
   } else {
     sections.push(card(connectionCard(snapshot.status)));
-    if (snapshot.outOfTouch) sections.push(card(resetCard(snapshot, deps.now())));
+    // The spare is not lost, and a reset would make it forget its approval for nothing.
+    const offerReset = snapshot.status.phase !== "spare_box" || snapshot.resetAt !== undefined;
+    if (snapshot.outOfTouch && offerReset) sections.push(card(resetCard(snapshot, deps.now())));
   }
   sections.push(bluetoothCard(deps.bluetooth?.()));
   return layout(sections.join(""));
@@ -259,7 +266,12 @@ export function createSetupApp(deps: SetupDeps): Hono {
   app.post("/network/reset", async (c) => {
     const snapshot = await deps.snapshot();
     if (networkRefused(snapshot, c)) return forbidden(c);
-    if (!snapshot.joined || !snapshot.outOfTouch || snapshot.resetAt !== undefined) {
+    if (
+      !snapshot.joined ||
+      !snapshot.outOfTouch ||
+      snapshot.resetAt !== undefined ||
+      snapshot.status.phase === "spare_box"
+    ) {
       return c.text("A network reset is not available now.", 409);
     }
     if (!(await deps.beginNetworkReset())) {

@@ -5,6 +5,7 @@ import { Router } from "./router.js";
 const A = "http://a.test";
 const B = "http://b.test";
 const C = "http://c.test";
+const LOCAL = "https://127.0.0.1";
 
 function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
   return vi.fn(async (url: string): Promise<Result<NodeProbe>> => {
@@ -18,6 +19,7 @@ function probeFrom(table: Record<string, Partial<NodeProbe> | "down">) {
         term: row.term ?? null,
         acceptingSales: row.acceptingSales ?? false,
         environment: row.environment ?? "preproduction",
+        ...(row.standing === undefined ? {} : { standing: row.standing }),
       },
     };
   });
@@ -90,6 +92,83 @@ describe("Router", () => {
     expect(router.environment).toBeUndefined();
     await router.probe();
     expect(router.environment).toBe("production");
+  });
+
+  it("marks the round when the configured loopback address answers as the venue's spare in the pinned environment", async () => {
+    const spare: Partial<NodeProbe> = { acceptingSales: false, standing: "serving-secondary" };
+    const table: Record<string, Partial<NodeProbe> | "down"> = { [LOCAL]: spare };
+    const router = new Router({
+      configuredUrl: LOCAL,
+      environment: "preproduction",
+      probe: probeFrom(table),
+    });
+    expect(await router.probe()).toEqual({
+      moved: false,
+      anyAccepting: false,
+      configuredIsSpare: true,
+    });
+
+    // Each round decides afresh: a failure or any other answer clears the mark.
+    for (const row of [
+      "down",
+      { ...spare, environment: "production" },
+      { acceptingSales: false, standing: "serving-primary" },
+      { acceptingSales: false },
+    ] as const) {
+      table[LOCAL] = row;
+      expect((await router.probe()).configuredIsSpare).toBeFalsy();
+      table[LOCAL] = spare;
+      expect((await router.probe()).configuredIsSpare).toBe(true);
+    }
+  });
+
+  it.each([
+    ["https://127.0.0.1", true],
+    ["http://127.0.0.2:8443", true],
+    ["http://localhost:8080", true],
+    ["https://[::1]", true],
+    ["https://[::ffff:127.0.0.1]", true],
+    ["https://localhost.", true],
+    ["https://waitron.local", false],
+    ["https://192.168.1.10", false],
+    ["https://[::ffff:192.168.1.10]", false],
+    ["https://127.example.test", false],
+  ])(
+    "marks a spare only when the configured address %s is the box's own loopback",
+    async (url, marked) => {
+      const router = new Router({
+        configuredUrl: url,
+        environment: "preproduction",
+        probe: vi.fn(async (): Promise<Result<NodeProbe>> => ({
+          ok: true,
+          value: {
+            nodeId: "n1",
+            term: null,
+            acceptingSales: false,
+            environment: "preproduction",
+            standing: "serving-secondary",
+          },
+        })),
+      });
+      expect(await router.probe()).toEqual(
+        marked
+          ? { moved: false, anyAccepting: false, configuredIsSpare: true }
+          : { moved: false, anyAccepting: false },
+      );
+    },
+  );
+
+  it("does not mark the round from a spare that is not the configured address", async () => {
+    const router = new Router({
+      configuredUrl: LOCAL,
+      environment: "preproduction",
+      probe: probeFrom({
+        [LOCAL]: { acceptingSales: false },
+        [B]: { acceptingSales: false, standing: "serving-secondary" },
+      }),
+    });
+    router.merge([{ url: B }]);
+    expect((await router.probe()).configuredIsSpare).toBeFalsy();
   });
 
   it("merge never drops the configured url, dedupes by origin and drops non-http urls", () => {

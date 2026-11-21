@@ -1123,6 +1123,9 @@ export const en = {
   "printers.preview_incomplete": "Some content could not be previewed.",
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
+  "printers.bluetooth_unavailable": "{agent}: {reason}",
+  "printers.bluetooth_unavailable.no_controller": "No Bluetooth adapter found.",
+  "printers.bluetooth_unavailable.not_enabled": "Bluetooth not enabled.",
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
   "printers.seen_on": "Seen on",
@@ -2077,6 +2080,7 @@ export const en = {
   "printers.join_hint":
     "On the computer the printer is plugged into (or from here, at http://<that computer>:9110), open the print-agent setup page and enter this server address:",
   "printers.provenance_self": "On this box",
+  "printers.provenance_other_box": "On another box",
   "printers.list_title": "Printers",
   "printers.no_printers": "No printers yet.",
   "printers.name": "Name",
@@ -2145,10 +2149,10 @@ export const en = {
   "printers.scan_empty": "No printers found yet. Still searching…",
   "printers.no_discovered":
     "No printers found. Check that the printer is on and connected, then scan again.",
+  "printers.discovered_all_added": "Every printer found is already added.",
   "printers.discovered_seen_on": "Seen on {agent}",
   "printers.page_printer_new_name": "Name for a new printer",
   "printers.page_printer_add": "Add as A4 printer",
-  "printers.page_printer_added": "Added as A4 printer",
   "printers.page_printer_use_agent": "Use this agent",
   "printers.page_printer_other_agent": "Added; it prints through another agent",
   "printers.page_printer_no_agent": "Added; the agent it printed through is gone",
@@ -5759,6 +5763,9 @@ export const es: Record<StringKey, string> = {
   "printers.preview_incomplete": "No se ha podido mostrar parte del contenido.",
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
   "printers.discovery_hint": "Buscando impresoras de red, USB y Bluetooth.",
+  "printers.bluetooth_unavailable": "{agent}: {reason}",
+  "printers.bluetooth_unavailable.no_controller": "No se ha encontrado ningún adaptador Bluetooth.",
+  "printers.bluetooth_unavailable.not_enabled": "Bluetooth no activado.",
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
   "printers.seen_on": "Detectada en",
@@ -6734,6 +6741,7 @@ export const es: Record<StringKey, string> = {
   "printers.join_hint":
     "En el ordenador al que está conectada la impresora (o desde aquí, en http://<ese ordenador>:9110), abre la página de configuración del agente de impresión e introduce esta dirección del servidor:",
   "printers.provenance_self": "En este servidor",
+  "printers.provenance_other_box": "En otro servidor",
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",
@@ -6802,10 +6810,10 @@ export const es: Record<StringKey, string> = {
   "printers.scan_empty": "Aún no se ha encontrado ninguna impresora. Seguimos buscando…",
   "printers.no_discovered":
     "No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar.",
+  "printers.discovered_all_added": "Todas las impresoras encontradas ya están añadidas.",
   "printers.discovered_seen_on": "Detectada en {agent}",
   "printers.page_printer_new_name": "Nombre para una impresora nueva",
   "printers.page_printer_add": "Añadir como impresora A4",
-  "printers.page_printer_added": "Añadida como impresora A4",
   "printers.page_printer_use_agent": "Usar este agente",
   "printers.page_printer_other_agent": "Añadida; imprime a través de otro agente",
   "printers.page_printer_no_agent": "Añadida; el agente por el que imprimía ya no existe",

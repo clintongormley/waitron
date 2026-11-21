@@ -36,6 +36,8 @@ const agents: PrintAgentRow[] = [
     active: true,
     host: null,
     nodeId: null,
+    onThisBox: false,
+    bluetooth: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -46,6 +48,8 @@ const agents: PrintAgentRow[] = [
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled + revoked: axe scans the provenance marker and the allow-again control
+    onThisBox: true,
+    bluetooth: null,
     lastSeenAt: null,
     setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -596,7 +600,12 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
               },
             }),
           ]),
-          listPagePrinters: vi.fn().mockResolvedValue([row("10.0.0.62"), row("10.0.0.63")]),
+          listPagePrinters: vi
+            .fn()
+            .mockResolvedValue([
+              row("10.0.0.62", { agentId: null, agentName: null }),
+              row("10.0.0.63"),
+            ]),
           registerPagePrinter: vi.fn().mockRejectedValue({ code: "page_printer.not_found" }),
         }),
       },
@@ -606,7 +615,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openDiscovery(el);
     q(el, "[data-test='repoint-page-printer-a2:10.0.0.63:9100']")!.click();
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a1:10.0.0.62:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.62:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.63:9100']")).not.toBeNull();
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-a1:10.0.0.65:9100']")).not.toBeNull();
@@ -919,11 +928,16 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
   it("renders Bluetooth devices, Show all and the Pair dialog accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
-      { api: bluetoothApi() },
+      {
+        api: bluetoothApi({
+          listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, bluetooth: "no_controller" }]),
+        }),
+      },
       theme,
     );
     await flush(el);
     await openDiscovery(el);
+    expect(q(el, "[data-test=bluetooth-unavailable-a1]")).not.toBeNull();
     expect(q(el, '[data-test="discovered-row-a1:66:77:88:99:AA:BB"]')).toBeNull();
     expect(q(el, "[data-test=bluetooth-note]")).not.toBeNull();
     await expectNoA11yViolations(host);

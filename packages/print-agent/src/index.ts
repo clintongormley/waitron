@@ -26,6 +26,7 @@ export type {
 export {
   BLUETOOTH_COMMAND_LIMIT,
   BLUETOOTH_FAILURE_REASONS,
+  BLUETOOTH_UNAVAILABLE_REASONS,
   DEFAULT_TIMEOUT_MS,
   MAX_OUTCOME_ERROR_LENGTH,
   PAGE_DOCUMENT_TIMEOUT_MS,
@@ -45,6 +46,8 @@ export type {
   BluetoothCommandKind,
   BluetoothCommandOutcome,
   BluetoothFailureReason,
+  BluetoothState,
+  BluetoothUnavailableReason,
   Failure,
   JobOutcome,
   InvoicePrintClaim,

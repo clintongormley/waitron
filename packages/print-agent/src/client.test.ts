@@ -49,6 +49,21 @@ describe("createClient — probeNode", () => {
     expect(result).toMatchObject({ ok: true, value: { term: null } });
   });
 
+  it("passes on the server's standing when it is a string, and leaves it out otherwise", async () => {
+    const base = { nodeId: "n1", term: 3, acceptingSales: false, environment: "preproduction" };
+    const spare = createClient({
+      fetch: stub(200, { ...base, standing: "serving-secondary" }),
+    });
+    expect(await spare.probeNode(URL_A)).toEqual({
+      ok: true,
+      value: { ...base, standing: "serving-secondary" },
+    });
+
+    const odd = createClient({ fetch: stub(200, { ...base, standing: 7 }) });
+    const result = await odd.probeNode(URL_A);
+    expect(result.ok && "standing" in result.value).toBe(false);
+  });
+
   it("a thrown fetch, a timeout and a 5xx are all `unreachable`", async () => {
     const thrown = createClient({ fetch: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) });
     expect(await thrown.probeNode(URL_A)).toMatchObject({
@@ -437,6 +452,24 @@ describe("createClient — pullJobs", () => {
       "pairedBluetooth",
     );
     expect(JSON.parse(fetchImpl.mock.calls[1]![1]!.body as string).pairedBluetooth).toEqual([]);
+  });
+
+  it("sends the agent's Bluetooth state in the pull body only when it has one", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: [] }));
+    const client = createClient({ fetch: fetchImpl });
+    const inventory = { visible: [], scanned: [], bluetoothOutcomes: [] };
+    await client.pullJobs(URL_A, "a1.secret", inventory);
+    await client.pullJobs(URL_A, "a1.secret", { ...inventory, bluetooth: { available: true } });
+    await client.pullJobs(URL_A, "a1.secret", {
+      ...inventory,
+      bluetooth: { available: false, reason: "no_controller" },
+    });
+    const bodies = fetchImpl.mock.calls.map(([, init]) => JSON.parse(init!.body as string));
+    expect(bodies[0]).not.toHaveProperty("bluetooth");
+    expect(bodies[1].bluetooth).toStrictEqual({ available: true });
+    expect(bodies[2].bluetooth).toStrictEqual({ available: false, reason: "no_controller" });
   });
 
   it("skips a server entry without a string url and keeps a url-only entry without a nodeId", async () => {

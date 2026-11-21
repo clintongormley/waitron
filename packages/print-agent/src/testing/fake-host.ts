@@ -12,7 +12,7 @@ import type {
   TransportKind,
   VisibleDevice,
 } from "../host.js";
-import type { PageFormat, PageHold, PageMedia, WireJob } from "../client.js";
+import type { BluetoothState, PageFormat, PageHold, PageMedia, WireJob } from "../client.js";
 import { FakeSink, type PrinterTarget, type Transport } from "../transport.js";
 
 /** The default `fetch` rejects (unreachable); `resolve` maps a job's `localKey` straight to a device
@@ -30,6 +30,7 @@ export function fakeHost(
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string, pin?: string) => Promise<PairResult>;
     pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
+    bluetoothAvailability: () => BluetoothState | undefined;
     forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
     printPage: (
       target: PageTarget,
@@ -121,5 +122,8 @@ export function fakeHost(
         (async () => ({ ok: false, error: "not implemented in fake host" })),
     ),
     ...(overrides.printPage === undefined ? {} : { printPage: overrides.printPage }),
+    ...(overrides.bluetoothAvailability === undefined
+      ? {}
+      : { bluetoothAvailability: overrides.bluetoothAvailability }),
   };
 }

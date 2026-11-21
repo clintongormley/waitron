@@ -550,6 +550,32 @@ describe("createSetupApp — mutations", () => {
     expect(countdown).not.toContain('action="/network/reset"');
   });
 
+  it("on the venue's spare, explains the wait and offers no network reset", async () => {
+    const state = snapshot({
+      status: { ...RUNNING, phase: "spare_box", lastError: undefined },
+      config: CONFIG,
+      joined: true,
+      outOfTouch: true,
+    });
+    const app = createSetupApp(deps({ snapshot: async () => state }));
+    const response = await request(app, "/", undefined, "192.168.20.5");
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(
+      "This box is the venue's spare. This agent starts printing again if this box becomes the main box.",
+    );
+    expect(html).not.toContain("Can't reach");
+    expect(html).not.toContain("This agent cannot reach its venue");
+    expect(html).not.toContain("Join a new network");
+    expect(html).not.toContain('action="/network/reset"');
+
+    // A reset already under way keeps its countdown and its Cancel.
+    state.resetAt = 301_000;
+    const pending = await (await request(app, "/", undefined, "192.168.20.5")).text();
+    expect(pending).toContain("Resetting in");
+    expect(pending).toContain('action="/network/reset/cancel"');
+  });
+
   it("refuses reset outside its state and reports a stale serialized precondition", async () => {
     const beginNetworkReset = vi.fn(async () => true);
     const unavailable = createSetupApp(deps({ beginNetworkReset }));
@@ -569,6 +595,26 @@ describe("createSetupApp — mutations", () => {
     expect(
       (await request(stale, "/network/reset", { method: "POST" }, "192.168.20.5")).status,
     ).toBe(409);
+  });
+
+  it("refuses reset on the venue's spare, which the page does not offer", async () => {
+    const beginNetworkReset = vi.fn(async () => true);
+    const app = createSetupApp(
+      deps({
+        beginNetworkReset,
+        snapshot: async () =>
+          snapshot({
+            status: { ...RUNNING, phase: "spare_box", lastError: undefined },
+            config: CONFIG,
+            joined: true,
+            outOfTouch: true,
+          }),
+      }),
+    );
+    const response = await request(app, "/network/reset", { method: "POST" }, "192.168.20.5");
+    expect(response.status).toBe(409);
+    expect(await response.text()).toBe("A network reset is not available now.");
+    expect(beginNetworkReset).not.toHaveBeenCalled();
   });
 
   it("allows cancel only during a countdown and reports a stale serialized precondition", async () => {

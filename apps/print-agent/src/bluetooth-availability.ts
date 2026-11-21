@@ -1,5 +1,4 @@
-export type BluetoothUnavailableReason =
-  "dbus_unreachable" | "bluez_not_answering" | "no_controller" | "failed";
+import type { BluetoothUnavailableReason } from "@waitron/print-agent";
 
 export type BluetoothAvailability =
   { available: true } | { available: false; reason: BluetoothUnavailableReason; detail: string };

@@ -253,6 +253,18 @@ load_print_agent_apparmor() {
   rm -f "$tmp"
 }
 
+# A minimal Debian install has no BlueZ, so the print agent finds no Bluetooth printer. Bluetooth is
+# optional: apt_get's die is kept inside a subshell, and a failure warns and the install carries on.
+ensure_bluez() {
+  command -v apt-get >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 || return 0
+  [ "$(dpkg-query -W -f '${db:Status-Status}' bluez 2>/dev/null)" != installed ] || return 0
+  if ! (apt_get update && apt_get install -y --no-install-recommends bluez); then
+    echo "waitron.sh: carrying on without Bluetooth: could not install BlueZ, the Linux Bluetooth service, so Bluetooth printers will not be found until it is installed; install the bluez package and re-run this command" >&2
+    return 0
+  fi
+  as_root systemctl enable --now bluetooth || true
+}
+
 # 2c. On the owner's box (BlueZ 5.82, 2026-09-29) bluetoothd's autopair plugin answered a PIN-1234
 #     printer's PIN request with 0000 before any agent was asked; bluetoothd's retry then went over
 #     Low Energy, which that printer refuses, so it never paired. With the plugin off the agent was
@@ -1124,6 +1136,7 @@ cmd_manual_install() (
     echo 'waitron.sh: could not load release trust files — use a published main image with both release keys and check that the files can be downloaded' >&2
   fi
   load_print_agent_apparmor "$sha"
+  ensure_bluez
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$sha"
@@ -1251,6 +1264,7 @@ cmd_install() (
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$source_ref"
   load_print_agent_apparmor "$source_ref"
+  ensure_bluez
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$source_ref"

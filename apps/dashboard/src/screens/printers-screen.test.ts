@@ -113,6 +113,8 @@ const agents: PrintAgentRow[] = [
     active: true,
     host: null,
     nodeId: null, // manually enrolled — no provenance marker
+    onThisBox: false,
+    bluetooth: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -123,6 +125,8 @@ const agents: PrintAgentRow[] = [
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
+    onThisBox: true,
+    bluetooth: null,
     lastSeenAt: null,
     setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -2266,6 +2270,52 @@ describe("printers-screen", () => {
     );
     // a1 has a null node id (manual enrolment) → no marker.
     expect(q(el, "[data-test=agent-provenance-a1]")).toBeNull();
+  });
+
+  it("marks an agent another box enrolled for itself as on another box, not this one", async () => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue([
+        { ...agents[0]!, onThisBox: false },
+        { ...agents[1]!, active: true, onThisBox: false },
+        { ...agents[1]!, id: "a3", active: false, onThisBox: false },
+      ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    expect(q(el, "[data-test=agent-provenance-a2]")).toBeNull();
+    const marker = q(el, "[data-test=agent-provenance-other-a2]")!;
+    expect(marker.textContent?.trim()).toBe(t("printers.provenance_other_box", "es-ES"));
+    expect(marker.getAttribute("part")).toBe("printer-provenance");
+    expect(q(el, "[data-test=agent-provenance-other-a1]")).toBeNull();
+
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    const retained = text(el, "[data-test=retained-agent-a3]");
+    expect(retained).toContain(t("printers.provenance_other_box", "es-ES"));
+    expect(retained).not.toContain(t("printers.provenance_self", "es-ES"));
+  });
+
+  it("finds an agent by its host cell's provenance words", async () => {
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValue([
+        { ...agents[0]!, id: "a1", nodeId: "n2", onThisBox: false },
+        { ...agents[1]!, id: "a2", active: true, onThisBox: true },
+      ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+
+    const columns = (
+      q(el, "[data-test=agents-table]") as unknown as {
+        columns: { key: string; searchValue?: (row: PrintAgentRow) => string }[];
+      }
+    ).columns;
+    const host = columns.find((column) => column.key === "host")!;
+    const rows = (await api.listAgents()) as PrintAgentRow[];
+    expect(host.searchValue!(rows[0]!)).toContain(t("printers.provenance_other_box", "es-ES"));
+    expect(host.searchValue!(rows[0]!)).not.toContain(t("printers.provenance_self", "es-ES"));
+    expect(host.searchValue!(rows[1]!)).toContain(t("printers.provenance_self", "es-ES"));
   });
 
   it("sizes the provenance marker from the small font token, inside the table's shadow root", async () => {
@@ -7937,6 +7987,110 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("show-all-bluetooth"))).toBeNull();
   });
 
+  describe("says why an agent cannot look for Bluetooth printers", () => {
+    const reasonKey = {
+      no_controller: "printers.bluetooth_unavailable.no_controller",
+      bluez_not_answering: "printers.bluetooth_unavailable.not_enabled",
+      failed: "printers.bluetooth_unavailable.not_enabled",
+      dbus_unreachable: "printers.bluetooth_unavailable.not_enabled",
+    } as const satisfies Record<string, StringKey>;
+    const mountWithAgents = (rows: PrintAgentRow[]) =>
+      mountPairing(discovered, { listAgents: vi.fn().mockResolvedValue(rows) });
+    const unavailableLines = (el: PrintersScreen) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=bluetooth-unavailable-]")].map(
+        (line) => [line.dataset.test, line.textContent!.trim()],
+      );
+
+    for (const [reason, key] of Object.entries(reasonKey)) {
+      it(`names the agent and why for ${reason}, under the searching line`, async () => {
+        const { el } = await mountWithAgents([
+          { ...agents[0]!, bluetooth: reason as keyof typeof reasonKey },
+        ]);
+        await openDiscovery(el);
+        expect(unavailableLines(el)).toEqual([
+          [
+            "bluetooth-unavailable-a1",
+            fill("printers.bluetooth_unavailable", { agent: "Kitchen agent", reason: t(key) }),
+          ],
+        ]);
+        const hint = q(el, "[data-test=new-printer-modal] p.hint")!;
+        expect(hint.textContent!.trim()).toBe(t("printers.discovery_hint"));
+        expect(hint.nextElementSibling?.getAttribute("data-test")).toBe("bluetooth-unavailable-a1");
+      });
+    }
+
+    it("gives a reason this dashboard does not know the not-enabled wording", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, bluetooth: "adapter_on_fire" as PrintAgentRow["bluetooth"] },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([
+        [
+          "bluetooth-unavailable-a1",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Kitchen agent",
+            reason: t("printers.bluetooth_unavailable.not_enabled"),
+          }),
+        ],
+      ]);
+    });
+
+    it("says nothing for an agent that can use Bluetooth, one with no recent report, or an inactive one", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, id: "a1", bluetooth: "available" },
+        { ...agents[0]!, id: "a3", bluetooth: null },
+        { ...agents[1]!, id: "a2", active: false, bluetooth: "no_controller" },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([]);
+    });
+
+    it("says nothing for an active agent whose row has no Bluetooth field at all", async () => {
+      const withoutField: Partial<PrintAgentRow> = { ...agents[0]! };
+      delete withoutField.bluetooth;
+      const { el } = await mountWithAgents([withoutField as PrintAgentRow]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([]);
+    });
+
+    it("gives each active agent its own line", async () => {
+      const { el } = await mountWithAgents([
+        { ...agents[0]!, bluetooth: "dbus_unreachable" },
+        { ...agents[1]!, active: true, bluetooth: "no_controller" },
+      ]);
+      await openDiscovery(el);
+      expect(unavailableLines(el)).toEqual([
+        [
+          "bluetooth-unavailable-a1",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Kitchen agent",
+            reason: t("printers.bluetooth_unavailable.not_enabled"),
+          }),
+        ],
+        [
+          "bluetooth-unavailable-a2",
+          fill("printers.bluetooth_unavailable", {
+            agent: "Bar agent",
+            reason: t("printers.bluetooth_unavailable.no_controller"),
+          }),
+        ],
+      ]);
+    });
+
+    it("uses the owner's words in both languages", () => {
+      expect(en["printers.bluetooth_unavailable"]).toBe("{agent}: {reason}");
+      expect(es["printers.bluetooth_unavailable"]).toBe("{agent}: {reason}");
+      expect(en["printers.bluetooth_unavailable.no_controller"]).toBe(
+        "No Bluetooth adapter found.",
+      );
+      expect(es["printers.bluetooth_unavailable.no_controller"]).toBe(
+        "No se ha encontrado ningún adaptador Bluetooth.",
+      );
+      expect(en["printers.bluetooth_unavailable.not_enabled"]).toBe("Bluetooth not enabled.");
+      expect(es["printers.bluetooth_unavailable.not_enabled"]).toBe("Bluetooth no activado.");
+    });
+  });
+
   it("asks for the PIN, checks it beside the field and in the bottom message, then pairs through the named agent", async () => {
     const { el, api } = await mountPairing([barPrinter]);
     await openDiscovery(el);
@@ -11457,7 +11611,7 @@ describe("office printers in discovery", () => {
           },
         );
         expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
-        expect(q(el, "[data-test='page-printer-added-a1:10.0.0.57:9100']")).not.toBeNull();
+        expect(q(el, "[data-test='discovered-row-a1:10.0.0.57:9100']")).toBeNull();
         expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.58:9100']")).not.toBeNull();
         expect(q(el, "[data-test='add-page-printer-a1:10.0.0.59:9100']")).not.toBeNull();
         if (font === "Verdana") {
@@ -11635,10 +11789,7 @@ describe("office printers in discovery", () => {
       name: "Back office",
     });
     await flush(el);
-    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
     expect(text(el, "[data-test=printer-added]")).toBe(
       t("printers.added").replace("{name}", "Back office"),
     );
@@ -11678,12 +11829,8 @@ describe("office printers in discovery", () => {
       [office(), office({ agentId: "a2", agentName: "Bar agent" })],
       { listPagePrinters },
     );
-    // The recorded agent's own row is already added, with nothing to press.
-    expect(text(el, "[data-test='page-printer-added-a1:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).toBeNull();
-    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBeNull();
+    // The recorded agent's own row is already added, so the scan leaves it out.
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
     const repoint = q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")!;
     expect(repoint.textContent!.trim()).toBe(t("printers.page_printer_use_agent"));
     listPagePrinters.mockResolvedValue([{ ...added, agentId: "a2", agentName: "Bar agent" }]);
@@ -11695,11 +11842,167 @@ describe("office printers in discovery", () => {
       port: 631,
       path: "/ipp/print",
     });
-    expect(text(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).toBe(
-      t("printers.page_printer_added"),
-    );
-    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
     expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("answers that a checked office printer already added through the same agent is added, without pointing at a row", async () => {
+    const requestedAt = Date.now();
+    const device: DiscoveredPrinter = {
+      agentId: "a1",
+      agentName: "Kitchen agent",
+      transport: "network_tcp",
+      host: "10.0.0.56",
+      port: 9100,
+      name: "HP LaserJet",
+      pagePrinter: true,
+      office: printable,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: new Date(requestedAt).toISOString(),
+    };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({
+      probePrinterAddress,
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+  });
+
+  it("stops pointing a checked office printer at its row once a live update shows it added through that agent", async () => {
+    const requestedAt = Date.now();
+    const device = office({ lastSeenAt: new Date(requestedAt).toISOString() });
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const liveData = new LiveData();
+    const listPagePrinters = vi.fn().mockResolvedValue([]);
+    const api = Object.assign(stubApi({ probePrinterAddress, listPagePrinters }), { liveData });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_page_printer"));
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).not.toBeNull();
+    listPagePrinters.mockResolvedValue([added]);
+    liveData.invalidate([{ type: "printers", id: "pp1" }]);
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_registered"));
+  });
+
+  it("answers a checked address with the move row an agent still shows, not the hidden added one", async () => {
+    const requestedAt = Date.now();
+    const seen = { lastSeenAt: new Date(requestedAt).toISOString() };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: "10.0.0.56",
+      port: 9100,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({
+      probePrinterAddress,
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([
+      office(seen),
+      office({ ...seen, agentId: "a2", agentName: "Bar agent" }),
+    ]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_page_printer"));
+    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).not.toBeNull();
+  });
+
+  it("offers a plain Add for an office printer whose A4 registration is switched off, whichever agent it was on", async () => {
+    const { el } = await mountWith([office(), office({ host: "10.0.0.57" })], {
+      listPagePrinters: vi.fn().mockResolvedValue([
+        { ...added, active: false },
+        { ...added, id: "pp2", host: "10.0.0.57", agentId: "a2", active: false },
+      ]),
+    });
+    for (const host of ["10.0.0.56", "10.0.0.57"]) {
+      expect(q(el, `[data-test='add-page-printer-a1:${host}:9100']`)).not.toBeNull();
+      expect(q(el, `[data-test='repoint-page-printer-a1:${host}:9100']`)).toBeNull();
+      expect(text(el, `[data-test='discovered-row-a1:${host}:9100']`)).not.toContain(
+        t("printers.page_printer_other_agent"),
+      );
+    }
+  });
+
+  const notAPrinter = (): DiscoveredPrinter => ({
+    ...office(),
+    transport: "bluetooth",
+    host: undefined,
+    localKey: "AA:BB:CC:DD:EE:01",
+    name: "Headphones",
+    pagePrinter: undefined,
+    office: undefined,
+    printerLike: false,
+  });
+
+  it("says every printer found is already added when the scan found only added ones", async () => {
+    const { el } = await mountWith([office(), notAPrinter()], {
+      listPagePrinters: vi.fn().mockResolvedValue([added]),
+    });
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    expect(table.emptyMessage).toBe(t("printers.discovered_all_added"));
+  });
+
+  it("keeps the nothing-found message when the scan found only devices that are not printers", async () => {
+    const { el } = await mountWith([notAPrinter()]);
+    const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+    expect([t("printers.scan_empty"), t("printers.no_discovered")]).toContain(table.emptyMessage);
+  });
+
+  it("leaves out an office printer already added through the agent that reports it, and keeps one to move from a gone agent", async () => {
+    const { el } = await mountWith(
+      [office(), office({ host: "10.0.0.57" }), office({ host: "10.0.0.58" })],
+      {
+        listPagePrinters: vi
+          .fn()
+          .mockResolvedValue([
+            added,
+            { ...added, id: "pp2", host: "10.0.0.57", agentId: null, agentName: null },
+          ]),
+      },
+    );
+    expect(q(el, "[data-test='discovered-row-a1:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.57:9100']")).not.toBeNull();
+    expect(text(el, "[data-test='discovered-row-a1:10.0.0.57:9100']")).toContain(
+      t("printers.page_printer_no_agent"),
+    );
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.58:9100']")).not.toBeNull();
   });
 
   it("keeps a live list delivered while a move's own re-read is still out", async () => {
@@ -11720,12 +12023,12 @@ describe("office printers in discovery", () => {
     liveData.invalidate([{ type: "printers", id: "pp1" }]);
     await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(3));
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
     // The re-read began before the live delivery, so its older answer must not replace it.
     answerReread([added]);
     await flush(el);
-    expect(q(el, "[data-test='page-printer-added-a2:10.0.0.56:9100']")).not.toBeNull();
-    expect(q(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='discovered-row-a2:10.0.0.56:9100']")).toBeNull();
+    expect(q(el, "[data-test='repoint-page-printer-a1:10.0.0.56:9100']")).not.toBeNull();
   });
 
   it("sends one move however often it is pressed while the first is out", async () => {
@@ -12001,7 +12304,10 @@ describe("one table for every printer", () => {
       "printers.invoice_printer_a4": ["A4", "A4"],
       "printers.invoice_printer_letter": ["Letter", "Carta"],
       "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
-      "printers.page_printer_added": ["Added as A4 printer", "Añadida como impresora A4"],
+      "printers.discovered_all_added": [
+        "Every printer found is already added.",
+        "Todas las impresoras encontradas ya están añadidas.",
+      ],
     } as const;
     for (const [key, [english, spanish]] of Object.entries(words)) {
       expect(en[key as StringKey], key).toBe(english);
@@ -12011,6 +12317,7 @@ describe("one table for every printer", () => {
       "printers.invoice_printers_title",
       "printers.invoice_printer_rename",
       "printers.invoice_printer_rename_heading",
+      "printers.page_printer_added",
     ])
       expect(gone in en, gone).toBe(false);
   });
