@@ -68,14 +68,16 @@ async function replacement(issuedDay: string, original: SaleId, supplyDay?: stri
 describe("vatMovements", () => {
   it("gives an ordinary invoice one movement per rate line, made and belonging on its issue date", async () => {
     const id = await sale("2026-04-10", {
-      total: "176.00",
+      total: "186.40",
       lines: [
         { vatRate: "21.00", lineTotal: "100.00" },
         { vatRate: "10.00", lineTotal: "50.00" },
+        { vatRate: "4.00", lineTotal: "10.00" },
       ],
       vatBreakdown: [
         { rate: "21.00", base: "100.00", tax: "21.00" },
         { rate: "10.00", base: "50.00", tax: "5.00" },
+        { rate: "4.00", base: "10.00", tax: "0.40" },
       ],
     });
     const common = {
@@ -85,7 +87,9 @@ describe("vatMovements", () => {
       saleId: id,
       correctedSaleId: null,
     };
+    // Numerically: as text "10.00" and "21.00" would sort before "4.00".
     expect(await movements(Q2)).toEqual([
+      { ...common, rate: "4.00", base: "10.00", tax: "0.40" },
       { ...common, rate: "10.00", base: "50.00", tax: "5.00" },
       { ...common, rate: "21.00", base: "100.00", tax: "21.00" },
     ]);
@@ -163,6 +167,22 @@ describe("vatMovements", () => {
         correctedSaleId: original,
       },
     ]);
+  });
+
+  it("puts a corrective of a corrective where the corrected corrective's VAT belongs", async () => {
+    const original = await sale("2026-03-10");
+    const first = await refund("2026-04-10", original);
+    const second = await sale("2026-05-10", {
+      correctsSaleId: first,
+      total: "12.10",
+      lines: [{ vatRate: "10.00", lineTotal: "11.00" }],
+    });
+    expect((await movements(Q2)).find((m) => m.saleId === second)).toMatchObject({
+      kind: "correction",
+      madeDay: "2026-05-10",
+      belongsDay: "2026-03-10",
+      correctedSaleId: first,
+    });
   });
 
   describe("a replacement", () => {
@@ -359,7 +379,7 @@ describe("vatMovements", () => {
     ]);
   });
 
-  it("refuses a bad period before any query", async () => {
+  it("refuses a bad period", async () => {
     await expect(movements(Q2, 99)).rejects.toThrow(/year must be/);
   });
 });

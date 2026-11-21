@@ -74,25 +74,19 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
   },
   {
     file: "packages/reporting/src/vat-movements.ts",
-    fragment: "left join d t on t.id = d.corrects_sale_id",
+    fragment: "left join sales o on o.id = root.corrects_sale_id",
     lines: 1,
-    reason: "finds the one invoice a corrective corrects, to read the day its VAT belongs to",
+    reason: "finds the original of a replacement a corrective corrects, to read its own day",
   },
   {
     file: "packages/reporting/src/vat-movements.ts",
-    fragment: "left join d o on o.id = t.corrects_sale_id",
-    lines: 1,
-    reason: "finds the original of a corrected replacement, to read its own day",
-  },
-  {
-    file: "packages/reporting/src/vat-movements.ts",
-    fragment: "left join sales r on r.corrects_sale_id = d.id and r.replaces_original = 1",
+    fragment: "left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1",
     lines: 1,
     reason: "looks up a replaced sale's supply day, where a void of it takes its VAT off",
   },
   {
     file: "packages/reporting/src/vat-movements.ts",
-    fragment: "from d join d o on o.id = d.corrects_sale_id",
+    fragment: "join sales o on o.id = st.corrects_sale_id",
     lines: 1,
     reason:
       "finds a replacement's original, to take the replacement's split off the original's own day",

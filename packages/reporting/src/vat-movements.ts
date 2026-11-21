@@ -31,9 +31,25 @@ export interface VatMovement {
   correctedSaleId: SaleId | null;
 }
 
-/** The filed issue date: the stamp shifted by `offsetMinutes`, as `vatReturnDay` reads it. */
-function civilDate(stamp: SQL, offsetMinutes: SQL): SQL {
-  return sql`date(${stamp}, printf('%+d minutes', ${offsetMinutes}))`;
+/** The filed issue date of `sales` row `alias`, as `vatReturnDay` reads it. */
+function issueDay(alias: string): SQL {
+  const s = sql.raw(alias);
+  return sql`date(${s}.issued_at, printf('%+d minutes', ${s}.issued_offset_minutes))`;
+}
+
+/** An ordinary invoice's own day: its `supply_day`, else its issue date. */
+function ownDay(alias: string): SQL {
+  return sql`coalesce(${sql.raw(alias)}.supply_day, ${issueDay(alias)})`;
+}
+
+/**
+ * The day before the period's first day, `"YYYY-MM-DD"`: a lower bound on any stored stamp
+ * whose civil date, in any offset, lies in the period or after it.
+ */
+function dayBeforePeriod(year: number, period: LiquidationPeriod): string {
+  const month =
+    period.kind === "month" ? period.month : period.kind === "quarter" ? 3 * period.quarter - 2 : 1;
+  return new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10);
 }
 
 /**
@@ -47,10 +63,16 @@ export async function vatMovements(
 ): Promise<VatMovement[]> {
   validatePeriod(input.year, input.period);
   const inPeriod = (day: SQL): SQL => periodDateFilter(day, input.year, input.period);
+  // A movement is never made before the day it belongs to (a supply day is never after its issue
+  // day; a void follows its sale), so one made before the period cannot reach it. A record stamped
+  // with a wrong clock is outside this, as the plan states.
+  const bound = dayBeforePeriod(input.year, input.period);
 
-  // `d`: every sale with its issue date and own day. `placed`: each ordinary invoice and
-  // non-replacement corrective, with the day its VAT first belongs to and the day it belongs to
-  // now (an ordinary invoice's replacement's `supply_day`, voided or not, moves it).
+  // `starts`: the sales issued, or voided, from the bound on. `chain` walks each up through the
+  // correctives it corrects to the invoice whose day they take: an ordinary invoice (its own day)
+  // or a replacement (its `supply_day`, else its original's own day). `placed`: each ordinary
+  // invoice and non-replacement corrective, with the day its VAT first belongs to and the day it
+  // belongs to now (an ordinary invoice's replacement's `supply_day`, voided or not, moves it).
   // `sales_one_replacement_uq` admits at most one replacement per sale, so the joins add no rows.
   const { rows } = await tx.execute<{
     rate: string;
@@ -63,58 +85,61 @@ export async function vatMovements(
     sale_id: string;
     corrected_sale_id: string | null;
   }>(sql`
-    with d as (
-      select
-        s.id,
-        s.corrects_sale_id,
-        s.replaces_original,
-        s.supply_day,
-        s.vat_breakdown,
-        s.issued_at,
-        s.issued_offset_minutes,
-        ${civilDate(sql`s.issued_at`, sql`s.issued_offset_minutes`)} as issue_day,
-        coalesce(s.supply_day, ${civilDate(sql`s.issued_at`, sql`s.issued_offset_minutes`)}) as own_day,
-        exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id) as is_exchange
-      from sales s
+    with recursive
+    starts(id) as (
+      select s.id from sales s indexed by sales_issued_idx where s.issued_at >= ${bound}
+      union
+      select sv.sale_id from sale_voids sv indexed by sale_voids_voided_at_idx
+      where sv.voided_at >= ${bound}
     ),
-    placed as (
-      select
-        d.id,
-        case
-          when d.corrects_sale_id is null then d.own_day
-          when t.replaces_original = 1 then coalesce(t.supply_day, o.own_day)
-          else t.own_day
-        end as first_day,
-        case
-          when d.corrects_sale_id is null then coalesce(r.supply_day, d.own_day)
-          when t.replaces_original = 1 then coalesce(t.supply_day, o.own_day)
-          else t.own_day
-        end as now_day
-      from d
-      left join d t on t.id = d.corrects_sale_id
-      left join d o on o.id = t.corrects_sale_id
-      left join sales r on r.corrects_sale_id = d.id and r.replaces_original = 1
-      where d.replaces_original = 0 and d.is_exchange = 0
+    chain(start_id, cur_id) as (
+      select id, id from starts
+      union all
+      select c.start_id, up.corrects_sale_id from chain c join sales up on up.id = c.cur_id
+      where up.corrects_sale_id is not null and up.replaces_original = 0
+    ),
+    rooted(id, corrects_sale_id, day) as (
+      select st.id, st.corrects_sale_id, case
+        when root.replaces_original = 1 then coalesce(root.supply_day, ${ownDay("o")})
+        else ${ownDay("root")}
+      end
+      from chain c
+      join sales st on st.id = c.start_id
+      join sales root on root.id = c.cur_id
+      left join sales o on o.id = root.corrects_sale_id
+      where (root.corrects_sale_id is null or root.replaces_original = 1)
+        and st.replaces_original = 0
+        and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = st.id)
+    ),
+    placed(id, first_day, now_day) as (
+      select t.id, t.day,
+        case when t.corrects_sale_id is null then coalesce(r.supply_day, t.day) else t.day end
+      from rooted t
+      left join sales r on r.corrects_sale_id = t.id and r.replaces_original = 1
     ),
     m as (
-      select d.id as sale_id, d.corrects_sale_id, d.issued_at,
-        case when d.corrects_sale_id is null then 'invoice' else 'correction' end as kind,
-        1 as branch, 1 as sign, d.issue_day as made_day, p.first_day as belongs_day, d.vat_breakdown
-      from d join placed p on p.id = d.id
+      select st.id as sale_id, st.corrects_sale_id, st.issued_at,
+        case when st.corrects_sale_id is null then 'invoice' else 'correction' end as kind,
+        1 as branch, 1 as sign, ${issueDay("st")} as made_day, p.first_day as belongs_day,
+        st.vat_breakdown
+      from placed p join sales st on st.id = p.id
       union all
-      select d.id, d.corrects_sale_id, d.issued_at, 'date_moved_out', 2, -1, d.issue_day,
-        o.own_day, d.vat_breakdown
-      from d join d o on o.id = d.corrects_sale_id
-      where d.replaces_original = 1 and d.supply_day is not null
+      select st.id, st.corrects_sale_id, st.issued_at, 'date_moved_out', 2, -1, ${issueDay("st")},
+        ${ownDay("o")}, st.vat_breakdown
+      from starts x join sales st on st.id = x.id join sales o on o.id = st.corrects_sale_id
+      where st.replaces_original = 1 and st.supply_day is not null
       union all
-      select d.id, d.corrects_sale_id, d.issued_at, 'date_moved_in', 3, 1, d.issue_day,
-        d.supply_day, d.vat_breakdown
-      from d
-      where d.replaces_original = 1 and d.supply_day is not null
+      select st.id, st.corrects_sale_id, st.issued_at, 'date_moved_in', 3, 1, ${issueDay("st")},
+        st.supply_day, st.vat_breakdown
+      from starts x join sales st on st.id = x.id
+      where st.replaces_original = 1 and st.supply_day is not null
       union all
-      select d.id, d.corrects_sale_id, d.issued_at, 'void', 4, -1,
-        ${civilDate(sql`sv.voided_at`, sql`d.issued_offset_minutes`)}, p.now_day, d.vat_breakdown
-      from sale_voids sv join d on d.id = sv.sale_id join placed p on p.id = d.id
+      select st.id, st.corrects_sale_id, st.issued_at, 'void', 4, -1,
+        date(sv.voided_at, printf('%+d minutes', st.issued_offset_minutes)), p.now_day,
+        st.vat_breakdown
+      from sale_voids sv indexed by sale_voids_voided_at_idx
+      join sales st on st.id = sv.sale_id join placed p on p.id = st.id
+      where sv.voided_at >= ${bound}
     )
     select
       b.value ->> 'rate' as rate,
