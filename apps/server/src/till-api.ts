@@ -1944,6 +1944,17 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           { personId, sessionId: session.sessionId },
         ),
       );
+      if (
+        outcome.outcome === "declined" ||
+        outcome.outcome === "timeout" ||
+        outcome.outcome === "network_unavailable"
+      ) {
+        log("warn", "payment.collection_failed", {
+          requestId: c.get("requestId"),
+          orderId: body.id,
+          outcome: outcome.outcome,
+        });
+      }
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
   );

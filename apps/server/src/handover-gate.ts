@@ -12,6 +12,7 @@ export interface HandoverGate {
 
 export function steppingDownResponse(c: Context): Response {
   const err = new AppError("handover.stepping_down", {});
+  c.set("refusalCode", err.code);
   return c.json({ error: { code: err.code, params: err.params } }, 503, {
     "Cache-Control": "no-store",
   });

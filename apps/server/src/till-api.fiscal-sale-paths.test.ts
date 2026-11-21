@@ -62,6 +62,7 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -1538,7 +1539,15 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const client = new FakeStripe();
     client.declineNext();
     const app = new Hono();
-    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), noopLog);
+    const log = vi.fn<Logger>();
+    app.use(
+      "*",
+      requestIdMiddleware(
+        () => {},
+        () => 0,
+      ),
+    );
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(client)), log);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
     const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
     await connectStripe();
@@ -1548,7 +1557,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      headers: {
+        "content-type": "application/json",
+        cookie: `${cookie}; ${deviceCookie}`,
+        "x-request-id": "whole-order-decline",
+      },
       body: JSON.stringify({
         dining: "eat_in",
         id: workingOrderId,
@@ -1558,6 +1571,11 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
     expect(payRes.status).toBe(200);
     expect(await payRes.json()).toEqual({ outcome: "declined" });
+    expect(log).toHaveBeenCalledWith("warn", "payment.collection_failed", {
+      orderId: workingOrderId,
+      outcome: "declined",
+      requestId: "whole-order-decline",
+    });
 
     const after = await withTransaction(suite.db, async (tx) => {
       return {

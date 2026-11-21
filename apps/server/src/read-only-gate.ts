@@ -21,6 +21,7 @@ export function readOnlyGate(
     if (isExempt?.(c) === true) return next();
     if (isReadOnly() && !SAFE_METHODS.has(c.req.method)) {
       const err = new AppError("node.read_only", {});
+      c.set("refusalCode", err.code);
       return c.json({ error: { code: err.code, params: err.params } }, 403);
     }
     return next();

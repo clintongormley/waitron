@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
 import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { escapeHtml } from "./html-page.js";
@@ -128,13 +128,22 @@ describe("the restore's waiting app: pages", () => {
     ["GET", "/", { accept: "application/json" }],
     ["POST", "/restore-clock/reading", {}],
   ] as const)("answers %s %s with server.waiting_for_clock", async (method, path, headers) => {
-    const { app } = await waiting();
+    const log = vi.fn();
+    const { app } = await waiting({ log });
     const res = await app.request(path, { method, headers });
     expect(res.status).toBe(503);
     expect(res.headers.get("retry-after")).toBe("60");
     expect(await res.json()).toEqual({
       error: { code: "server.waiting_for_clock", params: { confirmed: false } },
     });
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "http.request",
+      expect.objectContaining({
+        errorCode: "server.waiting_for_clock",
+        requestId: res.headers.get("x-request-id"),
+      }),
+    );
   });
 
   it("says whether it holds a kept confirmation: none, kept, then dropped", async () => {
@@ -157,7 +166,8 @@ describe("the restore's waiting app: the node recovery key", () => {
   it.each(["challenge", "compare", "confirm", "set"])(
     "/restore-clock/%s refuses a missing or wrong key, keeping and setting nothing",
     async (path) => {
-      const w = await waiting();
+      const log = vi.fn();
+      const w = await waiting({ log });
       const id = await w.challenge();
       for (const key of [
         undefined,
@@ -173,6 +183,13 @@ describe("the restore's waiting app: the node recovery key", () => {
         expect(res.status).toBe(403);
         expect(await res.json()).toEqual(refused);
       }
+      expect(log).toHaveBeenLastCalledWith(
+        "warn",
+        "http.request",
+        expect.objectContaining({
+          errorCode: "promotion.break_glass_invalid",
+        }),
+      );
       expect(w.confirmation()).toBeNull();
       expect(w.sets).toEqual([]);
     },
@@ -189,7 +206,8 @@ describe("the restore's waiting app: the node recovery key", () => {
   ])(
     "/restore-clock/%s refuses the right key from another site's page (%o)",
     async (path, headers) => {
-      const w = await waiting();
+      const log = vi.fn();
+      const w = await waiting({ log });
       const id = await w.challenge();
       const res = await w.app.request(`/restore-clock/${path}`, {
         method: "POST",
@@ -200,6 +218,13 @@ describe("the restore's waiting app: the node recovery key", () => {
       expect(await res.json()).toEqual({
         error: { code: "restore.clock_origin_refused", params: {} },
       });
+      expect(log).toHaveBeenLastCalledWith(
+        "warn",
+        "http.request",
+        expect.objectContaining({
+          errorCode: "restore.clock_origin_refused",
+        }),
+      );
       expect(w.confirmation()).toBeNull();
       expect(w.sets).toEqual([]);
     },
@@ -454,9 +479,12 @@ describe("the restore's waiting app: with the key", () => {
   });
 
   it("a set that steps the box's clock, then a confirm against a fresh challenge, keeps a confirmation", async () => {
+    const log = vi.fn();
     const w = await waiting({
+      log,
       setBoxClock: (request) => {
         w.clock.wall += request.offsetMs;
+        w.clock.monotonic += 7.25;
         return Promise.resolve({ status: "set" });
       },
     });
@@ -464,6 +492,14 @@ describe("the restore's waiting app: with the key", () => {
     expect(await (await w.send("set", await w.challenge(), deviceMs)).json()).toEqual({
       status: "set",
     });
+    expect(log).toHaveBeenLastCalledWith(
+      "debug",
+      "http.request",
+      expect.objectContaining({
+        routePath: "/restore-clock/set",
+        durationMs: 7,
+      }),
+    );
     expect(w.confirmation()).toBeNull();
     const res = await w.send("confirm", await w.challenge(), deviceMs);
     expect(await res.json()).toMatchObject({ result: "confirmed" });

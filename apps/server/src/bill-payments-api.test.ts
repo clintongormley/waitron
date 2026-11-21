@@ -86,6 +86,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
+import { requestIdMiddleware } from "./request-id.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { printedLines, withoutRules } from "./testing/decode-ticket.js";
@@ -5210,7 +5211,7 @@ describe("a payment no card provider stands behind", () => {
 });
 
 describe("a reader payment on a device that changes profile while it is starting", () => {
-  async function readerOnStripe() {
+  async function readerOnStripe(log: Logger = quiet) {
     const [profile] = await inTx((tx) =>
       tx
         .select({ id: deviceProfiles.id })
@@ -5266,6 +5267,13 @@ describe("a reader payment on a device that changes profile while it is starting
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const app = new Hono();
+    app.use(
+      "*",
+      requestIdMiddleware(
+        () => {},
+        () => 0,
+      ),
+    );
     mountTillApi(
       app,
       {
@@ -5278,7 +5286,7 @@ describe("a reader payment on a device that changes profile while it is starting
         venueLocale: LOCALE,
         pool: { get: () => Promise.resolve(provider), evict: () => {} },
       },
-      quiet,
+      log,
     );
     const billId = await bill120();
     const pay = async (amount: string) =>
@@ -5286,6 +5294,7 @@ describe("a reader payment on a device that changes profile while it is starting
         method: "POST",
         headers: {
           "content-type": "application/json",
+          "x-request-id": "reader-payment",
           cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
         },
         body: JSON.stringify({
@@ -5351,7 +5360,8 @@ describe("a reader payment on a device that changes profile while it is starting
   });
 
   it("returns the reader's reason when a card is declined", async () => {
-    const { client, pay } = await readerOnStripe();
+    const log = vi.fn<Logger>();
+    const { billId, client, pay } = await readerOnStripe(log);
     vi.spyOn(client, "readerOutcome").mockResolvedValue({
       status: "failed",
       failureCode: "lost_card",
@@ -5359,6 +5369,11 @@ describe("a reader payment on a device that changes profile while it is starting
     const res = await pay("30.00");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ outcome: "declined", failureReason: "lost_card" });
+    expect(log).toHaveBeenCalledWith("warn", "payment.collection_failed", {
+      orderId: billId,
+      outcome: "declined",
+      requestId: "reader-payment",
+    });
   });
 
   it("charges the card and receives the bill payment when the device stays on its profile", async () => {

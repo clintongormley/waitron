@@ -9,6 +9,7 @@ import type { Logger } from "./logger.js";
 declare module "hono" {
   interface ContextVariableMap {
     requestId: string;
+    refusalCode?: string;
     venueDiskFull?: () => Promise<boolean>;
   }
 }
@@ -43,6 +44,7 @@ export function createErrorBoundary(
         firstCodeInCauseChain(cause, (code) => code === "ENOSPC") !== null &&
         (await c.get("venueDiskFull")?.());
       if (diskFullIn(cause) || venueFull) {
+        c.set("refusalCode", "storage.disk_full");
         log("error", "storage.disk_full", { requestId });
         const params = isAppError(cause) && cause.code === "storage.disk_full" ? cause.params : {};
         return c.json(
@@ -54,9 +56,11 @@ export function createErrorBoundary(
         const httpStatus = status[cause.code] ?? UNMAPPED_STATUS[cause.code] ?? 400;
         // `logReason`, not `reason`: several codes carry a param named `reason`, which it would hide.
         const logReason = cause.reason === undefined ? {} : { logReason: cause.reason };
+        c.set("refusalCode", cause.code);
         log("warn", cause.code, { ...cause.params, requestId, ...logReason });
         return c.json({ error: { code: cause.code, params: cause.params } }, httpStatus);
       }
+      c.set("refusalCode", "server.internal");
       log("error", tag, { errorCode: codeOf(cause), requestId });
       return c.json({ error: { code: "server.internal" } }, 500);
     }

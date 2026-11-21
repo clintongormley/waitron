@@ -1489,7 +1489,10 @@ async function bootServer(
     now: () => Date.now(),
   });
   const handoverGate = createHandoverGate({ cors: corsForVenue(allowOrigin) });
-  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs; its refusals
+  // /health is mounted above the request log. Wrap the gate so its refusals also carry a request ID.
+  const requestMetadata = requestIdMiddleware(log, now);
+  app.use("*", requestMetadata);
+  // Ahead of the routes, so once a stepdown closes it nothing behind it runs; its refusals
   // under /api/ carry the venue's CORS headers, which the /api/* layer behind it would otherwise
   // have added.
   app.use("*", handoverGate.middleware);
@@ -1506,11 +1509,7 @@ async function bootServer(
   const boxLookup = seams.boxLookup;
   const storeLookup =
     boxLookup === undefined ? undefined : (name: string) => boxLookup(name, { fresh: false });
-  // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
-  // deliberately left out of the request log and names no build.
-  const requestMetadata = requestIdMiddleware(log, now);
   const buildMetadata = buildHeaderMiddleware(build);
-  app.use("*", requestMetadata);
   app.use("*", buildMetadata);
   const ownPageCheck = requireManagementChangeFromOwnPage(
     async (origin) => origin === config.managementOrigin || (await allowOrigin(origin)),
@@ -2503,8 +2502,8 @@ async function bootServer(
         });
   undoOnFailure.push(async () => mainSilence?.stop());
   const staffPageGates: MiddlewareHandler[] = [
-    handoverGate.middleware,
     requestMetadata,
+    handoverGate.middleware,
     buildMetadata,
   ];
   if (isMirror) {
