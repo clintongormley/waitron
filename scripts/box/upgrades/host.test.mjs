@@ -1,11 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { stopUpgradeWriters } from "./host.mjs";
+import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
 import { useVenueDb } from "../../../packages/db/src/testing/venue-db.js";
-import { withNodeTransaction } from "../../../packages/db/src/index.js";
+import {
+  BUSINESS_DAY_SETTINGS,
+  CORE_MIGRATIONS,
+  saveSettings,
+  withNodeTransaction,
+  withTransaction,
+} from "../../../packages/db/src/index.js";
 import { NODE_MIGRATIONS, setNodeModeTx } from "../../../packages/node-db/src/index.js";
 
 describe("upgrade admission against the current node schema", () => {
@@ -1070,4 +1079,35 @@ it("surfaces an unreadable saved box ID through the read-only state mount lookup
       throw new Error(`unexpected Docker command: ${args.join(" ")}`);
     }),
   ).rejects.toMatchObject({ code: "EISDIR" });
+});
+
+describe("the installed venue time zone", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it.each([" Europe/Madrid ", undefined])(
+    "reads the stored spelling or missing row: %j",
+    async (timeZone) => {
+      const state = await mkdtemp(join(tmpdir(), "upgrade-venue-zone-"));
+      onTestFinished(() => rm(state, { recursive: true, force: true }));
+      await mkdir(join(state, "venue"));
+      if (timeZone !== undefined) {
+        await withTransaction(suite.db, (tx) =>
+          saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+            doc: { timeZone },
+            expectedRevision: 0,
+            personId: null,
+          }),
+        );
+      }
+      await suite.db.archiveTo(join(state, "venue/venue.db"));
+      const run = async (file, args) => {
+        if (file === "docker" && args.includes("config"))
+          return { stdout: '{"volumes":{"state":{"name":"venue_state"}}}' };
+        if (file === "docker" && args.join(" ") === "volume inspect venue_state")
+          return { stdout: JSON.stringify([{ Mountpoint: state }]) };
+        throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
+      };
+      expect(await installedVenueTimeZone(state, run)).toBe(timeZone);
+    },
+  );
 });

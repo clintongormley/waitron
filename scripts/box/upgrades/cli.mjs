@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createUpgradeHost, installedBoxId, recoverInstalledUpgrade } from "./host.mjs";
+import {
+  createUpgradeHost,
+  installedBoxId,
+  installedVenueTimeZone,
+  recoverInstalledUpgrade,
+} from "./host.mjs";
 import { applyUpgrade, upgradeStatus, writeFileDurable } from "./transaction.mjs";
 import { checkUpgradeCandidate, removeUpgradeCheckContainers } from "./candidate.mjs";
 
@@ -36,6 +41,7 @@ async function pending(boxDirectory) {
 }
 
 const offerVerb = "check-upgrade-offer";
+const windowVerb = "check-upgrade-window";
 const downloadOfferVerb = "download-upgrade-offer";
 const deferred = (reason) => ({ status: "deferred", reason });
 const offerUrl =
@@ -147,6 +153,29 @@ async function checkUpgradeOffer(boxDirectory, installedVersion, trustDirectory,
   return version ? { status: "offered", version } : { status: "none" };
 }
 
+async function checkUpgradeWindow(boxDirectory, run) {
+  let timeZone;
+  try {
+    timeZone = await installedVenueTimeZone(boxDirectory, run);
+  } catch {
+    throw new Error("upgrade check skipped: could not read the venue time zone");
+  }
+  if (timeZone === undefined || timeZone === "")
+    throw new Error("upgrade check skipped: the venue time zone is missing");
+  const invalid = "upgrade check skipped: the saved venue time zone is invalid";
+  if (typeof timeZone !== "string") throw new Error(invalid);
+  let formatter;
+  try {
+    formatter = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" });
+  } catch {
+    throw new Error(invalid);
+  }
+  if (/^[+-]/.test(formatter.resolvedOptions().timeZone)) throw new Error(invalid);
+  const hour = formatter.format(new Date());
+  if (hour !== "03" && hour !== "04")
+    throw new Error("upgrade check skipped: outside 03:00–05:00 in the venue time zone");
+}
+
 // Mutating callers hold <box>.upgrade.lock; status takes no lock and writes nothing.
 export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = command } = {}) {
   if (
@@ -158,6 +187,7 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
       "recover",
       "offline-recovery",
       offerVerb,
+      windowVerb,
       downloadOfferVerb,
     ].includes(verb) ||
     !boxDirectory?.startsWith("/")
@@ -165,6 +195,7 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
     throw new Error(
       "Expected apply, status, restore, keep or offline-recovery, or check-upgrade-offer, and an absolute box directory",
     );
+  if (verb === windowVerb) return checkUpgradeWindow(boxDirectory, run);
   if (verb === downloadOfferVerb) return downloadUpgradeOffer(run);
   if (verb === offerVerb)
     return checkUpgradeOffer(boxDirectory, prepare[0], prepare[1], prepare[2], run);
@@ -211,9 +242,10 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
   });
 }
 
-export async function runUpgradeCliMain(args, { stdout, stderr } = process) {
+export async function runUpgradeCliMain(args, { stdout, stderr, run } = process) {
   try {
-    const result = await runUpgradeCli(args);
+    const result = await runUpgradeCli(args, { run });
+    if (args[0] === windowVerb) return 0;
     if (args[0] === downloadOfferVerb && result === null) return 1;
     stdout.write(args[0] === downloadOfferVerb ? result : JSON.stringify(result) + "\n");
     return args[0] === offerVerb && result.status === "deferred" ? 1 : 0;

@@ -560,6 +560,24 @@ checking again. The box then starts with the first verified offer it reads and l
 replay history. A fresh-identity restore or a full reset can change which rollout group matches
 this box.
 
+To rehearse overnight checks on a numbered test box, enable the timer and read its results in the
+system log.
+
+```bash
+sudo systemctl enable --now waitron-upgrade.timer
+sudo journalctl -u waitron-upgrade.service
+```
+
+The service checks every half hour from 03:00 up to 05:00 in the venue's saved time zone, while the
+Waitron app service is running. You can turn the timer off with
+`sudo systemctl disable --now waitron-upgrade.timer`.
+
+A box built from a recipe that includes the timer can use it straight away. If you first upgrade
+from a numbered release whose installer predates the timer, that upgrade brings in the new
+installer. The next checked upgrade to a release that includes the timer brings in both units.
+If you install a release that predates the timer, checks pause until the box runs a release with
+timer support again.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and

@@ -302,6 +302,7 @@ stub(
   "curl",
   `
 out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in *"\${WT_DRIVER_MISSING:-__never__}"*) exit 22 ;; esac
 case "$url" in
   */releases/download/*/waitron-release.json)
     [ -n "\${WT_RELEASE_ASSET:-}" ] || exit 22
@@ -316,7 +317,6 @@ case "$url" in
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
   */scripts/box/upgrades/*)
-    case "$url" in *"\${WT_DRIVER_MISSING:-__never__}"*) exit 22 ;; esac
     if [[ "$url" == */bootstrap.sh ]]; then cp "$WT_BOOTSTRAP" "$out"; else printf 'source:%s\\n' "$url" > "$out"; fi
     exit 0 ;;
   */deploy/compose.yml)
@@ -379,6 +379,7 @@ stub(
 dest="\${@: -1}"
 case "$dest" in
   "\${WT_SANDBOX}"/*)
+    if [ "$1" != "-d" ]; then [ -f "\${@: -2:1}" ] || exit 1; fi
     if [ "$1" = "-d" ]; then mkdir -p "$dest"; else cp "\${@: -2:1}" "$dest"; fi
     mode=""; prev=""; for a in "$@"; do [ "$prev" = "-m" ] && mode="$a"; prev="$a"; done
     [ -n "$mode" ] && chmod "$mode" "$dest" ;;
@@ -958,6 +959,24 @@ describe("waitron.sh manual upgrade invocation", () => {
       }
     },
   );
+
+  it("fetches and installs the upgrade units without switching the timer on", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const result = run(sb, ["install", "my-branch"], { WAITRON_SH_REFRESHED: "1" });
+    expect(result.status, result.stderr).toBe(0);
+    const calls = loggedCalls(sb);
+    for (const unit of ["waitron-upgrade.service", "waitron-upgrade.timer"]) {
+      expect(
+        calls.some((line) => line.includes(`/deploy/box/${unit}`)),
+        unit,
+      ).toBe(true);
+      expect(existsSync(join(sb.root, "etc/systemd/system", unit))).toBe(true);
+      expect(calls.filter((line) => line.startsWith("systemctl ") && line.includes(unit))).toEqual(
+        [],
+      );
+    }
+  });
 
   it("installs libatomic1 before the host's Node is fetched when the box has none", () => {
     const sb = sandbox({ systemd: true });
@@ -1563,6 +1582,23 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
+  it("installs a signed release whose driver predates the upgrade timer", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    const olderDriver = join(sb.root, "older-driver.sh");
+    const source = readFileSync(SCRIPT, "utf8");
+    writeFileSync(olderDriver, source.replace(/^ {4}check-upgrade-window\).*\n/m, ""));
+    const result = run(sb, ["install", "v1.2.3"], {
+      ...release,
+      WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      WT_SELF_SCRIPT: olderDriver,
+      WT_DRIVER_MISSING: "/deploy/box/waitron-upgrade.",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(loggedCalls(sb).some((line) => /cli\.mjs apply /.test(line))).toBe(true);
+  });
+
   it.each(["committed", "restored"])(
     "accepts the rotated key and uses the refreshed verifier after a %s upgrade",
     (outcome) => {
@@ -3986,8 +4022,16 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
     expect(calls.filter((line) => line === "flock -n 9")).toHaveLength(2);
   });
 
-  it("refuses while another process holds the lock", async () => {
+  const lockCases = [[args], [["check-upgrade-window"]]];
+  it.each(lockCases)("refuses %j while the lock is held", async (command) => {
     const sb = managedBox();
+    const checkingWindow = command[0] === "check-upgrade-window";
+    if (checkingWindow) {
+      const runtime = join(sb.root, "host/node-v26.7.0/bin");
+      mkdirSync(runtime, { recursive: true });
+      copyFileSync(HOST_NODE_STUB, join(runtime, "node"));
+      expect(run(sb, command, { WT_REAL_FLOCK: "1" }).status).toBe(0);
+    }
     const holder = spawn(
       "perl",
       [
@@ -4010,10 +4054,12 @@ describe("waitron.sh --reset install on a managed box, with a real host lock", (
         holder.once("error", reject);
         exited.then(() => reject(new Error("the lock holder exited before holding the lock")));
       });
-      const result = run(sb, args, { WT_REAL_FLOCK: "1" });
+      const result = run(sb, command, { WT_REAL_FLOCK: "1" });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("another host operation is running");
       expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+      if (checkingWindow)
+        expect(loggedCalls(sb).filter((line) => line.startsWith("host:"))).toHaveLength(1);
     } finally {
       clearTimeout(timer);
       holder.kill("SIGKILL");

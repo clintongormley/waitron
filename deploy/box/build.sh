@@ -37,8 +37,8 @@ install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/sys
 systemctl --root="$root" enable waitron-dev.service
 install -D -m 0755 "$repo/deploy/waitron.sh" "$root/opt/waitron-host/waitron.sh"
 install -D -m 0755 "$repo/deploy/box/upgrade-restart.sh" "$root/usr/local/lib/waitron/upgrade-restart.sh"
-for unit in waitron-app waitron-upgrade-recovery; do
-  install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
+for unit in waitron-app.service waitron-upgrade-recovery.service waitron-upgrade.service waitron-upgrade.timer; do
+  install -m 0644 "$repo/deploy/box/$unit" "$root/etc/systemd/system/"
 done
 install -D -m 0644 "$repo/deploy/box/docker-waitron-disk.conf" "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
 # Recovery precedes Docker; only the disk gate may precede recovery.

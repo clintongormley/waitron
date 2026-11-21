@@ -943,6 +943,13 @@ upgrade_cli() {
   "$HOST_NODE" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
 }
 
+cmd_check_upgrade_window() (
+  # Even a read-only WAL connection can create side files while copying or restoring the venue.
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die 'another host operation is running'
+  upgrade_cli check-upgrade-window
+)
+
 defer_upgrade_offer() {
   printf '{"status":"deferred","reason":"%s"}\n' "$1"
   exit 1
@@ -989,6 +996,12 @@ fetch_upgrade_driver() {
   for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
     fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
   done
+  # A checked install can target a release whose driver cannot run the timer.
+  if grep -Eq '^[[:blank:]]+check-upgrade-window[[:blank:]]*\)' "$stage/waitron.sh"; then
+    for file in waitron-upgrade.service waitron-upgrade.timer; do
+      fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
+    done
+  fi
 }
 
 fetch_release_trust() {
@@ -1032,6 +1045,11 @@ install_upgrade_driver() {
   for file in waitron-app.service waitron-upgrade-recovery.service; do
     as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
   done
+  if [ -f "$stage/waitron-upgrade.timer" ]; then
+    for file in waitron-upgrade.service waitron-upgrade.timer; do
+      as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
+    done
+  fi
   printf 'WAITRON_DIR="%s"\nWAITRON_HOST_DIR="%s"\n' "$WAITRON_DIR" "$WAITRON_HOST_DIR" > "$WAITRON_HOST_DIR/service.env"
   chmod 600 "$WAITRON_HOST_DIR/service.env"
   as_root install -d -m 0755 "$BOX_UNIT_DIR/docker.service.d" "$BOX_UNIT_DIR/docker.socket.d"
@@ -1361,7 +1379,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | check-upgrade-offer | restore | keep | reset | __candidate | "" | -h | --help) ;;
+    install | update | status | check-upgrade-offer | check-upgrade-window | restore | keep | reset | __candidate | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -1374,6 +1392,7 @@ main() {
     __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
     check-upgrade-offer) cmd_check_upgrade_offer ;;
+    check-upgrade-window) cmd_check_upgrade_window ;;
     restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;

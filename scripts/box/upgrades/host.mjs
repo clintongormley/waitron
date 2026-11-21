@@ -67,10 +67,26 @@ async function volumeMountpoint(name, run) {
   return volume.Mountpoint;
 }
 
-export async function installedBoxId(boxDirectory, run = command) {
+async function installedStateDirectory(boxDirectory, run) {
   const config = await composeConfig(boxDirectory, run);
-  const state = await volumeMountpoint(config.volumes.state.name, run);
-  return readBoxId(state);
+  return volumeMountpoint(config.volumes.state.name, run);
+}
+
+export async function installedBoxId(boxDirectory, run = command) {
+  return readBoxId(await installedStateDirectory(boxDirectory, run));
+}
+
+export async function installedVenueTimeZone(boxDirectory, run = command) {
+  const state = await installedStateDirectory(boxDirectory, run);
+  const db = new DatabaseSync(join(state, "venue", "venue.db"), { readOnly: true });
+  try {
+    const row = db
+      .prepare("select doc from settings where module = 'business_day' and version = 1")
+      .get();
+    return row === undefined ? undefined : JSON.parse(row.doc).timeZone;
+  } finally {
+    db.close();
+  }
 }
 
 export async function createUpgradeHost({
