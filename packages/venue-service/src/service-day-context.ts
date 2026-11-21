@@ -1,8 +1,8 @@
 import {
   businessDayAt,
   businessDayBounds,
-  businessDayBoundaryAt,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
 } from "@waitron/shared";
 export interface ServiceDayContext {
@@ -49,13 +49,9 @@ export function scheduleCutovers(clock: BusinessDayClock, day?: string): string[
 
 /** The clock without the changes still waiting at `at`. */
 export function settledClock(clock: BusinessDayClock, at: Date): BusinessDayClock {
-  const now = at.toISOString();
-  return {
-    ...clock,
-    cutoverChanges: clock.cutoverChanges.filter(
-      (change) => businessDayBoundaryAt(clock, change.effectiveBusinessDay) <= now,
-    ),
-  };
+  if (clock.cutoverChanges.length === 0) return clock;
+  const { settled } = splitBusinessDayChanges(clock, businessDayAt(clock, at));
+  return { ...clock, cutoverChanges: settled };
 }
 
 /** The start in force at `at` as the clock's only start: what an undated weekly check fits. */
@@ -63,9 +59,10 @@ export function inForceClock(clock: BusinessDayClock, at: Date): BusinessDayCloc
   // Without changes the first start is in force at every moment, and the time zone, which a
   // writer may hold unreadable, is not consulted.
   if (clock.cutoverChanges.length === 0) return clock;
+  const { settled } = splitBusinessDayChanges(clock, businessDayAt(clock, at));
   return {
     ...clock,
-    dayCutover: cutoverForBusinessDay(clock, businessDayAt(clock, at)),
+    dayCutover: settled.at(-1)?.dayCutover ?? clock.dayCutover,
     cutoverChanges: [],
   };
 }

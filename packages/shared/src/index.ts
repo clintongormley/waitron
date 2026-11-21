@@ -213,6 +213,7 @@ export {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
+  splitBusinessDayChanges,
   type BusinessDayClock,
   type BusinessDayBounds,
   type CutoverChange,

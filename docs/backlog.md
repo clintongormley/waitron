@@ -119,7 +119,7 @@ close the day, then A947 and its handover bundles.
 - [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
 - [Joined-table writers keep their rows right](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
-- [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
+- [Business-day start checks after A760](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
@@ -587,7 +587,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
   shows a closed venue as open. Needs a design. Not started.
 
-- **After A760: A877's one helper first** (bundle of 4, 1 important, size L, waits for another entry). [Detail](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
+- **Business-day start checks after A760** (bundle of 4, 1 important, size L). [Detail](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)

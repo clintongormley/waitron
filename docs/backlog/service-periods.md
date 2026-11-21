@@ -115,14 +115,8 @@ code, not run again here.
   caps the day at 1440 minutes for the paint layer, which works on one 1440-minute day. Found by
   A788's finish review, which ran it. Next: teach the paint layer a day longer than 1440
   minutes, or decide the cut is the intended drawing.
-- **A877, one answer for "settled or waiting".** A788's finish review (read only) found the
-  question "which start changes have taken effect at this moment, and which still wait" answered
-  five ways: `planBusinessDayStart`, `settledClock`, `inForceClock`, the server's
-  `readBusinessDayClockModel` and venue-service's `readBusinessDayScheduleStatus`, plus the
-  editor's `#waiting()`. Each hours writer also derives its clocks and then calls
-  `assertWaitingChangeFits` by hand, and `assertWaitingChangeFits` re-reads the venue's hours once
-  per waiting change. Next: one browser-safe helper in `@waitron/shared` beside `businessDayAt`
-  that every caller uses, and a write gate that runs the waiting-start check itself.
+- **A877, one write gate for waiting starts.** Each hours writer derives its clocks and calls
+  `assertWaitingChangeFits` itself. Build one write gate that runs the check for all hours writers.
 
 ## Loose ends left by A720.
 
@@ -159,9 +153,9 @@ now could not be routed apart; the resolver is asked for extras made at their ow
 (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
 its id. Left open by A789 slice 3, #2051 (plan D33).
 
-## Bundle: After A760: A877's one helper first
+## Bundle: Business-day start checks after A760
 
-4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size L.
 
 - **Loose ends left by A788 (the business-day start changes at the next changeover).**
   [Detail](service-periods.md#loose-ends-left-by-a788)
@@ -174,6 +168,9 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   Delete it or give it a case that needs it — left open by A789 slice 1, #1948.
 
 ## Decisions and deliberate limits
+
+- **A877, watcher 2026-11-21.** Keep the hours read per waiting change. The Save planner keeps at
+  most two changes waiting.
 
 - **Nothing stops a dish being ordered for someone standing at a counter** (owner, 2026-11-17).
   A counter zone sells every menu of its department, burger included; telling a standing guest

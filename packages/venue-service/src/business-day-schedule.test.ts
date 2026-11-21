@@ -730,6 +730,16 @@ describe("a waiting change checks the hours written while it waits", () => {
     await expect(writeWeek(v, 6, [range("21:00", "00:30")])).resolves.toBeUndefined();
     expect(await stored(v)).toEqual(["6 21:00:00-00:30:00"]);
   });
+  it("shows the earlier start in the hours model when two changes wait", async () => {
+    const v = await fixture([]);
+    await waiting(v, "03:00", { effectiveBusinessDay: "2026-11-05", dayCutover: "07:00" });
+    const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, at));
+    expect(model.pending).toEqual({
+      effectiveBusinessDay: E,
+      dayCutover: "03:00",
+      startsAt: "2026-11-04T02:00:00.000Z",
+    });
+  });
   it("accepts a period rename beside a stored range that clashes with the waiting start", async () => {
     const v = await fixture([]);
     await withTransaction(suite.db, (tx) =>

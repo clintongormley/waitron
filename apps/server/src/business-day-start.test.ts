@@ -1099,6 +1099,11 @@ describe("a Save takes the next changeover", () => {
         { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00:00" },
         { effectiveBusinessDay: "2026-10-22", dayCutover: "10:00:00" },
       ]);
+      expect((await response.json()).model.businessDayClock.pending).toEqual({
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "21:00",
+        startsAt: "2026-10-21T19:00:00.000Z",
+      });
       expect(await bounds("2026-10-21")).toEqual({
         startAt: "2026-10-21T19:00:00.000Z",
         endAt: "2026-10-22T08:00:00.000Z",

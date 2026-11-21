@@ -27,6 +27,7 @@ import {
   firstUnusedStationColour,
   isStationColour,
   PRIVACY_CONTACT_FIELDS,
+  splitBusinessDayChanges,
 } from "@waitron/shared";
 import {
   recordActivity,
@@ -139,7 +140,7 @@ export async function buildConfigurationBundle(
   const { doc } = await readVenueSettings(db);
   const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
-  if (clock.cutoverChanges.some((change) => change.effectiveBusinessDay > businessDay))
+  if (splitBusinessDayChanges(clock, businessDay).waiting.length > 0)
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
