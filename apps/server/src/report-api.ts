@@ -28,6 +28,7 @@ import {
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
+  computeVatCorrections,
   computeVatReturn,
   computeVatSummaryForPeriod,
   currentBusinessDay,
@@ -53,6 +54,7 @@ import {
   renderDeferredPaymentCsv,
 } from "./deferred-payment-export.js";
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
+import { renderCorrectionsWorkbook } from "./corrections-report.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
@@ -323,6 +325,28 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         "Content-Disposition": `attachment; filename="modelo-303-${year}-${token}.txt"`,
         "Cache-Control": "no-store",
       });
+    }),
+  );
+
+  app.get("/management-api/reports/corrections", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const year = requireYear(c.req.query("year"));
+      const { period, token } = requireLiquidationPeriod(c.req.query("period"));
+      const corrections = await gated(sessionId, REPORT_EXPORT_PERMISSION, (tx) =>
+        computeVatCorrections(tx, { year, period }),
+      );
+      const madeIn = `${year}-${token}`;
+      return c.body(
+        await renderCorrectionsWorkbook(corrections, madeIn, toLanguage(deps.venueLocale)),
+        200,
+        {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="corrections-${madeIn}.xlsx"`,
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      );
     }),
   );
 
