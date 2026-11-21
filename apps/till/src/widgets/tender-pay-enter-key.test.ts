@@ -74,6 +74,7 @@ it("Enter in the card operation-number field confirms the card tender with that 
   expect(confirmed).toHaveBeenCalledWith({
     method: "card",
     amount: "1.50",
+    externalProvider: "other",
     externalRef: "OP-4471",
   });
 });

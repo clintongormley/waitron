@@ -21,7 +21,6 @@ import {
 
 import { deferred } from "../test/clock-app.js";
 import { transactionRow } from "../test/find-bill-fixtures.js";
-import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import type {
   DeviceEquipmentRead,
   InvoiceDeliveryStatus,

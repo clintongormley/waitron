@@ -1023,16 +1023,7 @@ describe("a payment after the ticket was issued", () => {
   it("does not infer a payment to print from a settled order", async () => {
     const bill = await billPrintedByPrintTheBill();
     const before = await jobCount();
-    const paid = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${bill.id}/collect`,
-      {
-        expectedEdit: await withTransaction(venue.db, (tx) => readBillEditState(tx, bill.id)),
-        tender: { method: "cash", amount: "30.00" },
-      },
-    );
+    const paid = await billPayment(bill.id, cash("30.00"));
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     const response = await send(
       venue.app,
