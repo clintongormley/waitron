@@ -140,9 +140,11 @@ export class SetupHandoverScreen extends LitElement {
     noParallelRecovery: false,
     missingTailAccepted: false,
   };
-  @state() private refusalLink = "";
+  @state() private refusalLink?: { href: string; label: StringKey };
   @state() private copyRefused = false;
   @state() private declarationSaved = false;
+  /** From the declaration this page saved; a resumed one carries its time in the preview. */
+  @state() private declaredAtMs?: number;
   /** The device's own check of the main server, before the switch is offered (4d plan, D5). */
   @state() private mainCheck: "checking" | { serversUrl: string } | "clear" = "clear";
   #mainCheckController?: AbortController;
@@ -168,6 +170,20 @@ export class SetupHandoverScreen extends LitElement {
   }
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
+  }
+  /** Whether the backup choice is drawn with the sign-in: no other copy can be chosen otherwise. */
+  get #offersOtherCopy(): boolean {
+    return this.#isEmergency && !this.#declared && !this.copyPreview?.operation;
+  }
+  /** The button that opened it is gone, so focus moves to the first field it reveals. */
+  async #openSignIn(): Promise<void> {
+    this.signInOpen = true;
+    await this.updateComplete;
+    const root = this.shadowRoot!;
+    (
+      root.querySelector<HTMLElement>('[name="handover-email"]') ??
+      root.querySelector<HTMLElement>('[name="handover-sign-in-method"]')
+    )?.focus();
   }
   get #signInShown(): boolean {
     return !this.copyPreview || this.signInOpen || (this.attempted && !this.#valid());
@@ -245,6 +261,7 @@ export class SetupHandoverScreen extends LitElement {
     this.#signInChecked = false;
     this.copyPreview = undefined;
     this.declarationSaved = false;
+    this.declaredAtMs = undefined;
     this.reason = "";
     this.statements = {
       sourceSwitchedOff: false,
@@ -486,12 +503,19 @@ export class SetupHandoverScreen extends LitElement {
       params?: { operationId?: string; sourceServersUrl?: string; reason?: string; min?: number };
     } | null;
     const code = error?.code;
+    const serversUrl =
+      code === "handover.source_still_answering"
+        ? (error?.params?.sourceServersUrl ?? this.copyPreview?.sourceServersUrl)
+        : undefined;
     this.refusalLink =
       typeof error?.params?.operationId === "string"
-        ? `/handover/${encodeURIComponent(error.params.operationId)}`
-        : code === "handover.source_still_answering"
-          ? (error?.params?.sourceServersUrl ?? this.copyPreview?.sourceServersUrl ?? "")
-          : "";
+        ? {
+            href: `/handover/${encodeURIComponent(error.params.operationId)}`,
+            label: "handover.emergency.progress",
+          }
+        : serversUrl
+          ? { href: serversUrl, label: "handover.emergency.servers" }
+          : undefined;
     this.copyRefused = [
       "handover.copy_damaged",
       "handover.chain_broken",
@@ -585,7 +609,7 @@ export class SetupHandoverScreen extends LitElement {
     this.signInOpen = false;
     this.#signInChecked = true;
     this.copyRefused = false;
-    this.refusalLink = "";
+    this.refusalLink = undefined;
     if (preview.operation !== null && preview.operation.reason !== null) {
       this.reason = preview.operation.reason;
       await this.#resume(preview.operation.operationId);
@@ -814,7 +838,11 @@ export class SetupHandoverScreen extends LitElement {
         },
       };
       const declaration = this.#pendingDeclaration;
-      await this.#step((signIn) => this.api.declareEmergencyHandover({ ...declaration, signIn }));
+      const answer = await this.#step((signIn) =>
+        this.api.declareEmergencyHandover({ ...declaration, signIn }),
+      );
+      this.declaredAtMs = answer.declaration.body.declaredAtMs;
+      this.signInOpen = false;
       await this.#resume(this.#pendingDeclaration.operationId);
       if (this.isConnected) this.#prepareClock();
     } catch (cause) {
@@ -865,6 +893,20 @@ export class SetupHandoverScreen extends LitElement {
       }
     </p>`;
   }
+  /** What the copy holds, and for a copy from the main box, when this spare joined it. */
+  #copyLines(preview: EmergencyHandoverPreview) {
+    if (preview.copy.source === "mirror-copy")
+      return html`${this.#joinedLine(preview)}${this.#activityLine(preview.copy.lastChangeAtMs)}`;
+    return html`${this.#activityLine(preview.copy.lastChangeAtMs)}${
+      preview.copy.source === "followed-copy" && preview.joinedAtMs !== null
+        ? html`<p>
+            ${format("handover.emergency.spare_joined", {
+              joined: new Date(preview.joinedAtMs).toLocaleString(currentLocale()),
+            })}
+          </p>`
+        : nothing
+    }`;
+  }
   #activityLine(date: number | null) {
     return html`<p>
       ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
@@ -876,13 +918,13 @@ export class SetupHandoverScreen extends LitElement {
     return html`${this.following ? html`<p role="status">${t("handover.emergency.catching_up")}</p>` : nothing}
     ${this.heldWaiting ? html`<p role="status">${t("handover.emergency.held_waiting")}</p>` : nothing}
     ${this.following && held ? html`<p>${t("handover.emergency.still_catching_up")}</p>` : nothing}
-    ${held ? html`<section data-test="held-copy">${held.copy.source === "mirror-copy" ? this.#joinedLine(held) : nothing}${this.#activityLine(held.copy.lastChangeAtMs)}</section>` : nothing}`;
+    ${held ? html`<section data-test="held-copy">${this.#copyLines(held)}</section>` : nothing}`;
   }
   #emergencyContent() {
     const preview = this.copyPreview;
     if (!preview) return nothing;
-    const about = html`${preview.copy.source === "mirror-copy" ? this.#joinedLine(preview) : nothing}
-      ${this.#activityLine(preview.copy.lastChangeAtMs)}
+    const declaredAt = this.declaredAtMs ?? preview.operation?.declaredAtMs;
+    const about = html`${this.#copyLines(preview)}
       <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>`;
     return html`<section data-test="emergency-copy" data-wording-version="a1018-emergency-v1">
       <h2>
@@ -895,7 +937,7 @@ export class SetupHandoverScreen extends LitElement {
                 <summary>${t("handover.emergency.details")}</summary>
                 ${about}
                 <p>${this.reason}</p>
-                ${preview.operation?.declaredAtMs ? html`<p>${t("handover.emergency.declared_at")} ${new Date(preview.operation.declaredAtMs).toLocaleString(currentLocale())}</p>` : nothing}
+                ${declaredAt ? html`<p>${t("handover.emergency.declared_at")} ${new Date(declaredAt).toLocaleString(currentLocale())}</p>` : nothing}
               </details>`
           : html`${about}
               ${preview.operation ? html`<p><a href=${`/handover/${encodeURIComponent(preview.operation.operationId)}`}>${t("handover.emergency.controlled_link")}</a></p>` : nothing}
@@ -961,6 +1003,7 @@ export class SetupHandoverScreen extends LitElement {
             this.copyPreview = this.heldCopy = undefined;
             this.heldOffered = this.following = this.heldWaiting = this.heldChosen = false;
             this.declarationSaved = false;
+            this.declaredAtMs = undefined;
             this.reason = "";
             this.statements = {
               sourceSwitchedOff: false,
@@ -1000,7 +1043,7 @@ export class SetupHandoverScreen extends LitElement {
       }
       ${passkey ? nothing : html`${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`}
       ${
-        this.#isEmergency && !this.#declared && !this.copyPreview?.operation
+        this.#offersOtherCopy
           ? html`
               <p>${t("handover.emergency.backup_intro")}</p>
               <wt-file-input
@@ -1038,19 +1081,17 @@ export class SetupHandoverScreen extends LitElement {
     return html`${
         this.#signInShown
           ? signIn
-          : this.#declared
-            ? nothing
-            : html`<p>
+          : this.#offersOtherCopy
+            ? html`<p>
                 <wt-button
                   variant="ghost"
                   data-test="different-copy"
                   ?disabled=${this.busy}
-                  @click=${() => {
-                    this.signInOpen = true;
-                  }}
+                  @click=${() => void this.#openSignIn()}
                   >${t("handover.emergency.different_copy")}</wt-button
                 >
               </p>`
+            : nothing
       }
       ${this.#isEmergency ? html`${this.#followContent()}${this.#emergencyContent()}` : nothing}
       ${
@@ -1110,7 +1151,7 @@ export class SetupHandoverScreen extends LitElement {
                   >`
         }
       </wt-form-actions>
-      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink}>${t("handover.emergency.progress")}</a>` : nothing} ${this.#leaveLink()}</p>` : nothing}`;
+      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a>` : nothing} ${this.#leaveLink()}</p>` : nothing}`;
   }
   #content() {
     const status = this.status;

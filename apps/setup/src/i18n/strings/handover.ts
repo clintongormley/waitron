@@ -65,6 +65,7 @@ export const handoverEn = {
     "This is the copy from when this spare joined, on {joined}. It has nothing newer.",
   "handover.emergency.held_undated":
     "This is the copy from when this spare joined. It has nothing newer.",
+  "handover.emergency.spare_joined": "This spare joined on {joined}.",
   "handover.emergency.backup_intro":
     "To use an encrypted backup instead, choose its file. This replaces the copy on this spare and restarts it before you review and declare.",
   "handover.emergency.backup_file": "Encrypted backup file",
@@ -87,7 +88,7 @@ export const handoverEn = {
   "handover.emergency.no_date": "No dated activity was found in this copy.",
   "handover.emergency.servers": "Open Servers on the old main box",
   "handover.emergency.warning":
-    "Switch off the old main box and keep it, with its data. This cannot be undone.",
+    "Switch off the old main box and keep it off, or both boxes could take payments. Keep it and its data. This cannot be undone.",
   "handover.emergency.sourceSwitchedOff": "I have switched off the old main box.",
   "handover.emergency.noParallelRecovery":
     "No other box or cloud recovery is being started for this venue.",
@@ -116,7 +117,7 @@ export const handoverEn = {
   "handover.emergency.controlled":
     "An unfinished controlled handover must be resolved first. Open its progress page.",
   "handover.emergency.copy_failed":
-    "This copy could not be verified against the saved declaration. Stop here; keep this box and the old box’s data intact.",
+    "This copy could not be verified against the saved declaration. Do not continue; keep this box and the old box’s data intact.",
   "handover.emergency.changed":
     "The venue or handover has changed. Check progress and use the current main box.",
   "handover.emergency.trust":
@@ -149,6 +150,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Es la copia de cuando se incorporó este servidor de reserva, el {joined}. No tiene nada posterior.",
   "handover.emergency.held_undated":
     "Es la copia de cuando se incorporó este servidor de reserva. No tiene nada posterior.",
+  "handover.emergency.spare_joined": "Este servidor de reserva se incorporó el {joined}.",
   "handover.emergency.backup_intro":
     "Para usar una copia de seguridad cifrada, elige su archivo. Sustituye la copia de este servidor de reserva y lo reinicia antes de que la revises y hagas la declaración.",
   "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",
@@ -218,7 +220,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
   "handover.emergency.servers": "Abrir Servidores en el servidor principal anterior",
   "handover.emergency.warning":
-    "Apaga el servidor principal anterior y guárdalo con sus datos. Esto no se puede deshacer.",
+    "Apaga el servidor principal anterior y mantenlo apagado, o ambos servidores podrían cobrar. Consérvalo con sus datos. Esto no se puede deshacer.",
   "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
   "handover.emergency.noParallelRecovery":
     "No se está iniciando otro servidor ni una recuperación en la nube para este local.",
@@ -248,7 +250,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.controlled":
     "Primero hay que resolver un traspaso controlado pendiente. Abre su página de progreso.",
   "handover.emergency.copy_failed":
-    "No se pudo verificar esta copia con la declaración guardada. Para aquí y conserva los datos de ambos servidores.",
+    "No se pudo verificar esta copia con la declaración guardada. No continúes y conserva los datos de ambos servidores.",
   "handover.emergency.changed":
     "El local o el traspaso ha cambiado. Comprueba el progreso y usa el servidor principal actual.",
   "handover.emergency.trust":

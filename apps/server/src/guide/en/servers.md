@@ -71,11 +71,12 @@ be undone.
 
 On a till or handheld, the red **The main server is not answering** strip offers **Switch to the
 spare server** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
-spare, and **Don't switch, go back** or **Continue to this box** brings you back to the till. Once the main box has
-been silent for about half a minute, a till, phone or dashboard that reloads the venue’s usual
-address also lands on this page. A main box that restarts for longer than about 20 seconds, during
-an update for example, brings a reloading device here too; if you did not mean to switch, do not
-declare anything, and reload the page once the main box is back. From any other device,
+spare, and **Don't switch, go back** (after declaring, **Leave this page**) or **Continue to this
+box** brings you back to the till. Once the main box has been silent for about half a minute, a
+till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
+box that restarts for longer than about 20 seconds, during an update for example, brings a
+reloading device here too; if you did not mean to switch, do not declare anything, and reload the
+page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
 current authenticator code, if set up, or choose **Use your passkey**; then choose **Check this

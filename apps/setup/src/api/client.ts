@@ -428,7 +428,9 @@ export class SetupApi {
     if (!response.ok) throw await apiError(response);
   }
 
-  declareEmergencyHandover(request: EmergencyHandoverDeclaration): Promise<unknown> {
+  declareEmergencyHandover(
+    request: EmergencyHandoverDeclaration,
+  ): Promise<{ declaration: { body: { declaredAtMs: number } } }> {
     return this.#request("/api/node/handover/emergency/declare", "POST", request);
   }
 

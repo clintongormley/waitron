@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
 import { SetupApi } from "../api/client.js";
@@ -129,6 +130,13 @@ async function mount(
     noInternetTime?: boolean;
     /** The proof lapses as the first select arrives. */
     proofLapsesAtSelect?: boolean;
+    /** When the main box's latest copy last changed; otherwise it has no dated activity. */
+    followedChangeAtMs?: number;
+    /**
+     * Activation answers that this box had already taken over, with no restart, and progress cannot
+     * be read after it.
+     */
+    alreadyActivated?: boolean;
   } = {},
 ) {
   const posts: { path: string; body: Record<string, unknown> }[] = [];
@@ -163,7 +171,10 @@ async function mount(
       proof.issued.set(challenge, Date.now());
       return new Response(JSON.stringify({ options: { challenge, rpId: location.hostname } }));
     }
-    if (init?.method === "GET" && options.statusUnavailable)
+    if (
+      init?.method === "GET" &&
+      (options.statusUnavailable || (options.alreadyActivated && activated))
+    )
       throw new TypeError("progress unavailable");
     if (init?.method === "GET")
       return new Response(
@@ -288,7 +299,13 @@ async function mount(
             ...(backupSelected && next !== "unplaced"
               ? { source: "selected-backup", sourceId: "b".repeat(64) }
               : {}),
-            ...(followedPlaced ? { lastChangeAtMs: copyChanged ? 1792152000000 : null } : {}),
+            ...(followedPlaced
+              ? {
+                  lastChangeAtMs: copyChanged
+                    ? 1792152000000
+                    : (options.followedChangeAtMs ?? null),
+                }
+              : {}),
           },
           operation:
             recorded || next === "declared"
@@ -331,7 +348,14 @@ async function mount(
       saved.operationId = body.operationId as string;
       if (options.lostAnswer) throw new TypeError("declaration answer lost");
       return new Response(
-        JSON.stringify({ declaration: { body: { binding: { operationId: saved.operationId } } } }),
+        JSON.stringify({
+          declaration: {
+            body: {
+              binding: { operationId: saved.operationId },
+              declaredAtMs: saved.declaredAtMs,
+            },
+          },
+        }),
       );
     }
     if (path.endsWith("/activate")) {
@@ -345,7 +369,9 @@ async function mount(
           status: 409,
         });
       activated = true;
-      return new Response(JSON.stringify({ activated: true, restarting: true }));
+      return new Response(
+        JSON.stringify({ activated: true, restarting: !options.alreadyActivated }),
+      );
     }
     if (!path.endsWith("/preparation")) throw new Error(`Unexpected request: ${path}`);
     if (options.preparationRefusal)
@@ -802,7 +828,13 @@ it.each([
   );
   expect(posts.map(({ path }) => path.split("/").at(-1))).toEqual(requests);
   if (link)
-    expect(el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${link}"]`)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLAnchorElement>(`a[href="${link}"]`)!.textContent).toBe(
+      t(
+        link.startsWith("/handover/")
+          ? "handover.emergency.progress"
+          : "handover.emergency.servers",
+      ),
+    );
   expect(el.shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/"]')!.textContent).toBe(
     t("handover.emergency.leave"),
   );
@@ -1333,10 +1365,11 @@ it("a take refused by the main box itself names the cause, with no progress link
   await check(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.source_answered")));
   expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.progress"));
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.servers"));
   expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.held_waiting"));
 });
 
-it("a declaration refused because the main box answers links that copy's servers page", async () => {
+it("a declaration refused because the main box answers links that copy's servers page, named as Servers", async () => {
   const { el } = await mount({
     declareRefusal: { code: "handover.source_still_answering", recorded: false },
   });
@@ -1344,10 +1377,11 @@ it("a declaration refused because the main box answers links that copy's servers
   await declarationFields(el);
   q(el, "[data-test=emergency-declare]").click();
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.source_answered")));
-  const link = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-    (anchor) => anchor.textContent === t("handover.emergency.progress"),
+  const link = leaveLink(el).parentElement!.querySelector<HTMLAnchorElement>(
+    `a[href="${preview.sourceServersUrl}"]`,
   );
-  expect(link?.getAttribute("href")).toBe(preview.sourceServersUrl);
+  expect(link?.textContent).toBe(t("handover.emergency.servers"));
+  expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.progress"));
 });
 
 it("a declaration that was recorded though its answer was refused carries on to the clock without declaring again", async () => {
@@ -1388,6 +1422,8 @@ it("a controlled handover already under way is linked from the copy, without the
   );
   expect(link.textContent).toBe(t("handover.emergency.controlled_link"));
   expect(q(el, 'wt-file-input[name="handover-backup"]')).toBeNull();
+  // No other copy can be chosen here, so nothing offers one.
+  expect(q(el, "[data-test=different-copy]")).toBeNull();
   expect(q(el, "[data-test=emergency-declare]")).not.toBeNull();
 });
 
@@ -2134,14 +2170,69 @@ it("an expired code at the clock check opens the sign-in again, without Use a di
   expect(q(el, "[data-test=different-copy]")).toBeNull();
 });
 
-it("fields the page marks invalid are drawn, even while folded", async () => {
+it("a start that cleared the password while progress cannot be read draws the fields it marks", async () => {
+  const { el } = await mount({ saved: true, alreadyActivated: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+  await startVenue(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.read_failed")));
+  expect(actions(el)).toContain(t("handover.fix"));
+  expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
+  const password = q<LitElement & { error: string }>(el, '[name="handover-password"]');
+  expect(password.error).toBe(t("handover.required"));
+});
+
+it("a successful Declare folds a sign-in opened with Use a different copy", async () => {
   const { el } = await mount();
   await authenticate(el);
-  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
-  Reflect.set(el, "password", "");
-  Reflect.set(el, "attempted", true);
-  await el.updateComplete;
+  await useDifferentCopy(el);
   expect(signInDrawn(el)).toEqual([true, true, true, true, true]);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+});
+
+it("a fresh declaration's Details show the time it was saved", async () => {
+  const { el } = await mount();
+  await authenticate(el);
+  await declarationFields(el);
+  q(el, "[data-test=emergency-declare]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  expect(q(el, "[data-test=emergency-details]").textContent).toContain(
+    `${t("handover.emergency.declared_at")} ${new Date(saved.declaredAtMs).toLocaleString("en-GB")}`,
+  );
+});
+
+it.each(["en-GB", "es-ES"])(
+  "the main box's latest copy is named by its latest activity and when this spare joined (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const changed = 1791000000000;
+    const { el } = await mount({ followedChangeAtMs: changed });
+    await authenticate(el);
+    const copy = q(el, "[data-test=emergency-copy]").textContent!;
+    expect(copy).toContain(t("handover.emergency.followed"));
+    expect(copy).toContain(new Date(changed).toLocaleString(locale));
+    expect(copy).toContain(
+      format("handover.emergency.spare_joined", {
+        joined: new Date(preview.joinedAtMs).toLocaleString(locale),
+      }),
+    );
+    expect(copy).not.toContain(t("handover.emergency.held_undated"));
+  },
+);
+
+it("Enter on Use a different copy moves focus to the email field it reveals", async () => {
+  const { el } = await mount();
+  await authenticate(el);
+  q(el, "[data-test=different-copy]").shadowRoot!.querySelector("button")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.activeElement).toBe(q(el, '[name="handover-email"]')),
+  );
 });
 
 it.each(["en-GB", "es-ES"])(
