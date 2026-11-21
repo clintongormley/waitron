@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CA_CONTENT_TYPE,
   CA_FILENAME,
+  ownAddressFor,
   renderTrustPage,
   type TrustPageInput,
 } from "./trust-page.js";
@@ -164,8 +165,11 @@ it("shows a QR only when one was rendered, and says nothing when there is none",
   expect(withQr).not.toContain("This QR opens the box address.");
 });
 
-it("calls it a server, never a box", () => {
-  const html = renderTrustPage(base);
+it.each([
+  ["plain", {}],
+  ["with the spare's lead line", { ownAddress: "https://192.168.1.50" }],
+])("calls it a server, never a box (%s)", (_name, extra) => {
+  const html = renderTrustPage({ ...base, ...extra });
   expect(html).not.toMatch(/\bbox(es)?\b/i);
   expect(html).not.toContain("numeric network address");
 });
@@ -199,4 +203,100 @@ it("gives a safe device alternative when certificate removal or installation is 
   );
   expect(html).toContain("If installation is blocked, use a venue device that permits it.");
   expect(html).not.toMatch(/ask whoever|an administrator may have to/);
+});
+
+describe("a page opened while another box answers waitron.local", () => {
+  const LEAD =
+    "Adding a spare? You don't need this server's certificate: open this address " +
+    '(<a href="https://192.168.1.50">https://192.168.1.50</a>) and accept your browser\'s warning once.';
+
+  it("leads with the spare's way in, above the certificate steps, and keeps those steps", () => {
+    const html = renderTrustPage({ ...base, ownAddress: "https://192.168.1.50" });
+    expect(html).toContain(LEAD);
+    expect(html.indexOf(LEAD)).toBeLessThan(html.indexOf("1. Remove any old Waitron certificate"));
+    const plain = renderTrustPage(base);
+    const stepsOf = (page: string) =>
+      page.slice(page.indexOf("<section><h2>1."), page.indexOf('<section class="go">'));
+    expect(stepsOf(html)).toBe(stepsOf(plain));
+  });
+
+  it("sends the button and the first link to this box's own address, keeping waitron.local after it", () => {
+    const html = renderTrustPage({ ...base, ownAddress: "https://192.168.1.50" });
+    expect(html).toContain('<a class="button" href="https://192.168.1.50">Continue to Waitron</a>');
+    expect(html).toContain(
+      '<ul><li><a href="https://192.168.1.50">https://192.168.1.50</a></li>' +
+        '<li><a href="https://waitron.local">https://waitron.local</a></li></ul>',
+    );
+  });
+
+  it("keeps the till's path on this box's own address", () => {
+    const html = renderTrustPage({
+      ...base,
+      httpsUrl: "https://waitron.local:8080/till/",
+      reachUrls: ["https://waitron.local:8080", "https://192.168.1.50:8080"],
+      ownAddress: "https://192.168.1.50:8080",
+    });
+    expect(html).toContain(
+      '<a class="button" href="https://192.168.1.50:8080/till/">Continue to Waitron</a>',
+    );
+  });
+
+  it("sends the lead line's link where Continue goes, naming the address", () => {
+    const html = renderTrustPage({
+      ...base,
+      httpsUrl: "https://waitron.local:8080/till/",
+      reachUrls: ["https://waitron.local:8080", "https://192.168.1.50:8080"],
+      ownAddress: "https://192.168.1.50:8080",
+    });
+    expect(html).toContain(
+      'open this address (<a href="https://192.168.1.50:8080/till/">https://192.168.1.50:8080</a>)',
+    );
+  });
+
+  it("makes the certificate a choice only after the lead line", () => {
+    const SENTENCE =
+      "install the Waitron secure certificate before entering passwords and sensitive information into this website:";
+    const led = renderTrustPage({ ...base, ownAddress: "https://192.168.1.50" });
+    expect(led).toContain(`warning once.</p>\n<p>Otherwise, you need to ${SENTENCE}</p>`);
+    const plain = renderTrustPage(base);
+    expect(plain).toContain(`<p>You need to ${SENTENCE}</p>`);
+    expect(plain).not.toContain("Otherwise");
+  });
+
+  it("escapes the address it leads with", () => {
+    const html = renderTrustPage({ ...base, ownAddress: 'https://x"<y' });
+    expect(html).toContain('href="https://x&quot;&lt;y"');
+    expect(html).not.toContain('https://x"<y');
+  });
+
+  it("is today's page when there is no own address to offer", () => {
+    const html = renderTrustPage({ ...base, ownAddress: undefined });
+    expect(html).toBe(renderTrustPage(base));
+    expect(html).not.toContain("Adding a spare");
+  });
+});
+
+describe("ownAddressFor", () => {
+  const ips = ["https://192.168.1.50:8080", "https://10.0.0.7:8080"];
+
+  it("prefers the address the person opened the page on", () => {
+    expect(ownAddressFor("other-box-answers", ips, "10.0.0.7")).toBe("https://10.0.0.7:8080");
+  });
+
+  it("falls back to the first address when the page was opened by name", () => {
+    expect(ownAddressFor("other-box-answers", ips, "waitron.local")).toBe(
+      "https://192.168.1.50:8080",
+    );
+  });
+
+  it("offers nothing when the box has no address of its own", () => {
+    expect(ownAddressFor("other-box-answers", [], "waitron.local")).toBeUndefined();
+  });
+
+  it.each(["no-other-box", "not-asked", "ask-failed", undefined] as const)(
+    "offers nothing unless another box answers (%s)",
+    (state) => {
+      expect(ownAddressFor(state, ips, "10.0.0.7")).toBeUndefined();
+    },
+  );
 });

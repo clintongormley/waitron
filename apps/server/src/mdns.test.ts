@@ -622,6 +622,56 @@ describe("a box in setup mode and the venue's name", () => {
     await first.w.stop();
   });
 
+  it("tells apart another box answering, nobody answering, no answer yet and a failed ask", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { net, w } = watch(() => 0, [OWN, OTHER]);
+    expect(w.state()).toBe("not-asked");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.state()).toBe("other-box-answers");
+    expect(w.names()).toEqual([]);
+    net.answering = [OWN];
+    await vi.advanceTimersByTimeAsync(32_000);
+    expect(w.state()).toBe("no-other-box");
+    net.fail = new Error("bind EADDRINUSE 0.0.0.0:5353");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(w.state()).toBe("ask-failed");
+    expect(w.names()).toEqual([]);
+    net.fail = undefined;
+    net.answering = [OWN, OTHER];
+    await vi.advanceTimersByTimeAsync(32_000);
+    expect(w.state()).toBe("other-box-answers");
+    await w.stop();
+  });
+
+  it("keeps the other box answering through a failed ask, until an ask hears nobody", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { net, w } = watch(() => 0, [OWN, OTHER]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.state()).toBe("other-box-answers");
+    net.fail = new Error("bind EADDRINUSE 0.0.0.0:5353");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(w.state()).toBe("other-box-answers");
+    expect(w.names()).toEqual([]);
+    net.fail = undefined;
+    net.answering = [OWN];
+    await vi.advanceTimersByTimeAsync(32_000);
+    expect(w.state()).toBe("no-other-box");
+    expect(w.names()).toEqual(["waitron.local"]);
+    await w.stop();
+  });
+
+  it("stays not asked where the responder is off", async () => {
+    const w = watchVenueNameInSetup({
+      hostname: "waitron.local",
+      devMode: true,
+      httpHost: "0.0.0.0",
+      random: () => 0,
+      makeSocket: vi.fn(),
+    });
+    expect(w.state()).toBe("not-asked");
+    await w.stop();
+  });
+
   it.each([
     { devMode: true, httpHost: "0.0.0.0" },
     { devMode: false, httpHost: "127.0.0.1" },

@@ -421,6 +421,7 @@ import { keepRunningDeclaration, keptDeclarationsReader } from "./keep-declarati
 import {
   startMdnsResponder,
   watchVenueNameInSetup,
+  type VenueNameState,
   type MdnsResponder,
   type MdnsSocket,
 } from "./mdns.js";
@@ -943,6 +944,7 @@ export function startLandingListener(
   config: LandingListenerConfig,
   log: Logger,
   declarationPages: DeclarationPagesDeps = {},
+  venueNameState?: () => VenueNameState,
 ): { close(): Promise<void> } | undefined {
   if (
     config.landingPort === 0 ||
@@ -951,21 +953,26 @@ export function startLandingListener(
   ) {
     return undefined;
   }
-  const reach = buildReachInfo({
-    hostname: BOX_HOSTNAME,
-    port: config.httpPort,
-    secure: true,
-    listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
-  });
+  const reachNow = () =>
+    buildReachInfo({
+      hostname: BOX_HOSTNAME,
+      port: config.httpPort,
+      secure: true,
+      listIpv4: () => config.boxAddresses ?? listBoxIpv4(),
+    });
   const app = buildLandingApp({
     stateDir: config.stateDir,
-    reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
-    httpsUrl: reach.hostnameUrl,
+    reachUrls: () => {
+      const reach = reachNow();
+      return [reach.hostnameUrl, ...reach.ipUrls];
+    },
+    httpsUrl: reachNow().hostnameUrl,
     log,
     connection: config.connection,
     landingPort: config.landingPort,
     connectionHostnames: BOX_LEAF_HOSTNAMES,
     declarationPages,
+    venueNameState,
   });
   const server = serve(
     buildServeOptions(
@@ -1538,6 +1545,8 @@ async function bootServer(
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
   let spare = false;
+  // Only setup mode runs a venue-name watch, and it starts after this mount.
+  let readVenueNameState: () => VenueNameState = () => "not-asked";
   const fromBox = seams.requestProvenFromBox ?? requestProvenFromBox;
   mountDiscovery(
     app,
@@ -1554,6 +1563,7 @@ async function bootServer(
       serveBoxCa: config.tls === undefined,
       repairAllowed: (c) => !spare || fromBox(c),
       connectionHostnames: BOX_LEAF_HOSTNAMES,
+      venueNameState: () => readVenueNameState(),
     },
     log,
   );
@@ -1919,6 +1929,7 @@ async function bootServer(
       ownAddresses: () => [...ownInterfaceAddresses(), ...(config.boxAddresses ?? [])],
     });
     undoOnFailure.push(() => venueName.stop());
+    readVenueNameState = venueName.state;
     const responder = startMdnsResponder({
       names: venueName.names,
       makeSocket: seams.mdnsSocket,
@@ -1944,7 +1955,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       mdns,
-      startLandingListener(config, log),
+      startLandingListener(config, log, {}, venueName.state),
     );
   }
 

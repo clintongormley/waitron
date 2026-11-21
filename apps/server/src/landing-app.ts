@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { readBoxPublicCa } from "./box-tls-repair.js";
 import type { Logger } from "./logger.js";
+import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
-import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
+import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
 import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
 import { type DeclarationPagesDeps, mountDeclarationPages } from "./declaration-pages.js";
 
@@ -12,11 +13,18 @@ export interface LandingDeps {
   connectionHostnames?: string[];
   /** The persisted state dir (config.stateDir); the CA lives at `<stateDir>/tls/ca.crt`. */
   stateDir: string;
-  /** The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4. */
-  reachUrls: string[];
+  /**
+   * The URLs a device can open the box on over HTTPS — the `.local` URL then one per detected IPv4.
+   * A function is asked again for each trust page view and each time the connection page checks or
+   * repairs the certificate's addresses. That page's allowed origins, its address list and its
+   * Continue link stay those at startup.
+   */
+  reachUrls: string[] | (() => string[]);
   /** The box's canonical HTTPS URL, used by the "Continue to Waitron" link. */
   httpsUrl: string;
   log: Logger;
+  /** Read on each page view; absent where no venue-name watch runs. */
+  venueNameState?: () => VenueNameState;
   connection?: ConnectionBootstrapDeps;
   declarationPages?: DeclarationPagesDeps;
 }
@@ -32,14 +40,17 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     return app;
   }
 
-  const known = deps.reachUrls.length ? deps.reachUrls : [deps.httpsUrl];
+  const reachUrlsNow = (): string[] =>
+    typeof deps.reachUrls === "function" ? deps.reachUrls() : deps.reachUrls;
+  const startUrls = reachUrlsNow();
+  const known = startUrls.length ? startUrls : [deps.httpsUrl];
   mountConnectionBootstrap(
     app,
     {
       stateDir: deps.stateDir,
       hostnames: deps.connectionHostnames ?? [new URL(deps.httpsUrl).hostname],
       listIpv4: () =>
-        known
+        reachUrlsNow()
           .map((url) => new URL(url).hostname)
           .filter((host) => /^\d+\.\d+\.\d+\.\d+$/.test(host)),
       now: () => new Date(),
@@ -62,13 +73,16 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     );
 
   app.on("GET", ["/", "/setup/trust"], async (c) => {
+    const reachUrls = reachUrlsNow();
+    const ipUrls = reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
     const html = renderTrustPage({
-      reachUrls: deps.reachUrls,
+      reachUrls,
       caAvailable: await caExists(),
       caDownloadPath: CA_DOWNLOAD_PATH,
       httpsUrl:
         c.req.query("app") === "till" ? new URL("/till/", deps.httpsUrl).href : deps.httpsUrl,
       device: trustDeviceForRequest(c.req),
+      ownAddress: ownAddressFor(deps.venueNameState?.(), ipUrls, new URL(c.req.url).hostname),
     });
     // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.
     return c.html(html, 200, { "Cache-Control": "no-cache" });

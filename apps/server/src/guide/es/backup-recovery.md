@@ -56,8 +56,8 @@ restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el
 (para tu bucket), y la clave del servidor de esa copia. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor Waitron», donde eliges cómo
 configurar este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
-elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», pulsa
-**Continuar con la configuración**; después, para restaurar, elige **Unirse o recuperar**.
+elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», elige ahí
+**Unirse o recuperar** para restaurar.
 
 Si la página dice «Borrado interrumpido», después de **Empezar de nuevo** o de **Recuperar desde una
 copia**, recárgala para continuar.
@@ -84,14 +84,15 @@ sin repararla. **Detener** finaliza este intento; puedes cerrar la pestaña o co
 Si la reparación sigue fallando, detente aquí. Esta página no puede reparar todos los archivos
 de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
 por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
-dispositivo bloquea la instalación del certificado, usa uno del local que la permita. Introduce
-contraseñas, claves de cifrado de copias y claves del servidor solo cuando HTTPS se abra sin avisos.
+dispositivo bloquea la instalación del certificado, usa uno del local que la permita.
 
 Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
 ## Elige tu copia {#source}
 
-En «Unirse a un restaurante existente o recuperarlo», elige **Restaurar desde una copia de
+En un servidor nuevo no hace falta instalar su certificado: acepta una vez el aviso del navegador
+y elige **Unirse o recuperar** en la primera pantalla. En «Unirse a un restaurante existente o
+recuperarlo», elige **Restaurar desde una copia de
 seguridad** para un archivo de copia, o **Restaurar desde mi bucket** para la copia en tu
 propio bucket de almacenamiento. Para una copia de Waitron Cloud, elige **Restaurar desde una copia
 de seguridad** y después **Restaurar desde Waitron Cloud**.

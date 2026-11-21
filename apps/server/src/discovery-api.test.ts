@@ -93,6 +93,22 @@ it("renders a trust page with the CA link and the inline QR", async () => {
   expect(html).toMatch(/iOS/); // per-OS steps present
 });
 
+it("trust page leads a spare to this box's own address only while another box answers", async () => {
+  const d = await stateDirWithCa();
+  const html = async (state: "other-box-answers" | "ask-failed") =>
+    (
+      await appFor(d, { venueNameState: () => state }).request(
+        "https://waitron.local:8080/setup/trust",
+      )
+    ).text();
+  const answered = await html("other-box-answers");
+  expect(answered).toContain('<a class="button" href="https://192.168.1.5:8080">Continue');
+  expect(answered).toContain("Adding a spare?");
+  const failed = await html("ask-failed");
+  expect(failed).toContain('<a class="button" href="https://waitron.local:8080">Continue');
+  expect(failed).not.toContain("Adding a spare");
+});
+
 it("trust page notes the operator-cert case instead of a download when no box CA", async () => {
   const d = await mkdtemp(join(tmpdir(), "disc-noca3-"));
   dirs.push(d);

@@ -17,7 +17,7 @@ import {
   themeLabelsPerLocale,
   type DraftScope,
 } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { DROPDOWN_ICONS, baseStyles, registerIcons } from "@waitron/ui";
 import "./screens/role-screen.js";
@@ -1047,7 +1047,8 @@ export class SetupApp extends LitElement {
     } else this.connectionFailure = describeConnectionFailure(error);
   }
 
-  async #continueConnection(): Promise<void> {
+  /** `join` goes on as the mode screen's Join or recover choice does, through `#requestModeChoice`. */
+  async #continueConnection(next: "mode" | "join" = "mode"): Promise<void> {
     if (this.connectionChecking) return;
     const generation = ++this.#connectionGeneration;
     this.connectionChecking = true;
@@ -1060,7 +1061,8 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       const first = await this.api.firstSetupStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
-      this.connectionAnswered = true;
+      // Joining needs no certificate here, so a person who comes Back from it still sees the help.
+      if (next === "mode") this.connectionAnswered = true;
       if (first.claimed || first.conflict) {
         try {
           await this.#resumeFirstSession(
@@ -1073,6 +1075,10 @@ export class SetupApp extends LitElement {
           }
           throw error;
         }
+      } else if (next === "join") {
+        this.#joinAbort.abort();
+        this.#joinAbort = new AbortController();
+        this.#requestModeChoice(undefined, () => this.#navigateTo("role"), this.#joinAbort.signal);
       } else this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
@@ -1117,13 +1123,22 @@ export class SetupApp extends LitElement {
 
   #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };
 
+  #joinAbort = new AbortController();
+
+  override willUpdate(changed: PropertyValues): void {
+    // The connection screen's Join question must not outlive the screen that asked it.
+    if (changed.has("screen") && this.screen !== "connection") this.#joinAbort.abort();
+  }
+
   #requestModeChoice(
     mode: "demo" | "prepare" | "live" | undefined,
     proceed: () => void,
     signal: AbortSignal,
   ): void {
-    const owner = this.shadowRoot?.querySelector("setup-mode-screen");
-    if (!this.isConnected || this.screen !== "mode" || !owner) return;
+    const origin = this.screen;
+    if (origin !== "mode" && origin !== "connection") return;
+    const owner = this.shadowRoot?.querySelector(`setup-${origin}-screen`);
+    if (!this.isConnected || !owner) return;
     const generation = this.#rootGeneration;
     const abandonsRoot =
       mode === undefined ||
@@ -1145,7 +1160,7 @@ export class SetupApp extends LitElement {
           signal.aborted ||
           !this.isConnected ||
           generation !== this.#rootGeneration ||
-          this.screen !== "mode" ||
+          this.screen !== origin ||
           !owner.isConnected
         )
           return;
@@ -2731,6 +2746,7 @@ export class SetupApp extends LitElement {
           .checking=${this.connectionChecking}
           .setupUnavailable=${this.connectionFailure?.canRetry === false}
           @connection-continue=${() => void this.#continueConnection()}
+          @connection-join=${() => void this.#continueConnection("join")}
         ></setup-connection-screen>`;
       case "role":
         return html`<setup-role-screen data-test="screen-role"></setup-role-screen>`;
