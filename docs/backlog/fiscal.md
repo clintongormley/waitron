@@ -100,9 +100,8 @@ invoice still has money to give back and a dish at the advance's own rate left t
 invoice on the advance's ticket is refused with `advance.final_invoice_first`, naming the table's
 invoice, the rate and the smaller of the two amounts (`apps/server/src/advance-taken-off.ts`;
 `apps/server/src/advance-corrections.test.ts`, "refuses Correct invoice on the advance's ticket
-while the rest's invoice can give back €90 at 10%, naming it, and files nothing"). What the table's
-invoice cannot give back, such as any of an advance that equals the meal, comes back as an R5 of
-the advance's own ticket at its 10%, filed by `recordCorrection` unchanged, cash with its own drawer
+while the rest's invoice can give back €90 at 10%, naming it, and files nothing"). Otherwise, as for any of
+an advance that equals the meal, it comes back as an R5 of the advance's own ticket at its 10%, filed by `recordCorrection` unchanged, cash with its own drawer
 opening or card ("a €0.00 rest's invoice: €20 in cash back on the advance files an R5 of it at 10%
 −18.18 and −1.82, opens the drawer once, and leaves the bill and the rest's record as they were");
 the table's invoice is never altered by it. The till's Refund beside such a payment opens Correct
@@ -111,12 +110,12 @@ invoice on its ticket, printed bill or not, and a plain or bill refund of its mo
 2026-11-20 14:26 rule that refused the advance's own correction once the table's invoice existed
 (owner, 2026-11-20 ~22:40: "I think we have to allow a refund"; watcher, 2026-11-21 04:35, O1;
 [plan](../superpowers/plans/2026-11-21-advance-refund-after-final.md)). On a bill holding a dish
-below 10%, the advance's 10% corrective can declare a few cents less VAT than the dishes it gives
-back (O2 (ii)); that, and whether one corrective should name both tickets, are A1 and A2 in
+below 10%, the advance's 10% corrective can declare less VAT than the dishes it gives back: €0.52
+less over the bill when €10 of water at 4% comes back that way (the plan's measured case, O2 (ii)); that, and whether one corrective should name both tickets, are A1 and A2 in
 question 12 of the 19 November sheet. `advance.taken_off_final_invoice` is left only for a leg of a
 correction opened before the table's invoice took the advance off. The table's invoice is held
-back while a correction of one of its advances is open, so that it never takes off an advance whose
-correction is still open: the payment that pays the bill off (refused before any card reader is
+back while a correction of one of its advances is open, so that the table's invoice takes the advance off as
+corrected: the payment that pays the bill off (refused before any card reader is
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave
 it paid are refused with `advance.correction_open`; a reader payment started before the correction
 was opened keeps its money and issues no invoice; when the correction is closed or discarded, the

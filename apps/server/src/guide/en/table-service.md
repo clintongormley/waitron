@@ -218,9 +218,8 @@ and the note is recorded as the reason. A payment for particular items is refund
 those items can then be paid for again.
 
 **Refund** beside a payment that has a ticket of its own opens **Correct invoice** on that ticket
-instead. Once the table's receipt has taken that payment off, give money back first with **Correct
-invoice** on the table's receipt, and correct the payment's own ticket only for what the table's
-receipt cannot give back.
+instead. Once the bill is paid, open that ticket from **Find a bill**. If the table's receipt has
+to give the money back first, the till says so.
 
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you

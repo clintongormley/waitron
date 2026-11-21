@@ -230,9 +230,9 @@ here is **not settled**: adviser questions A1 and A2.
   turns out bigger than that, the advance lines stay under **Not recorded**.
 - **Adviser A1 and A2.** *"Once the table's ticket has taken off Ana's €30 advance (ticket A/12), the
   guests get money back for more than the table's ticket can give back: dishes are sent back, or the
-  advances paid for the whole meal and the table's ticket came to €0.00. We plan to give back what
-  the table's ticket holds by a corrective of it, and the rest by a corrective (R5) of A/12 at A/12's
-  10%. Is that right? Or should one corrective name both tickets (art. 15.4) and carry the returned
+  advances paid for the whole meal and the table's ticket came to €0.00. While the table's ticket still
+  holds money for dishes at A/12's 10%, we give it back by a corrective of the table's ticket;
+  otherwise by a corrective (R5) of A/12 at 10%. Is that right? Or should one corrective name both tickets (art. 15.4) and carry the returned
   dishes' own rates? When the dishes sent back were at 4% or 21%, may the part taken off A/12 stay
   at 10%? On a bill with water at 4%, may it stay at 10% when the water is what went back (€120 menu,
   €20 water, €130 advance: €0.52 less VAT declared than the meal's)?"* Recommended default until

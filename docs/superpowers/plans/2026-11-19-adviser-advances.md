@@ -239,9 +239,7 @@ beside them and must be answered before the PR lands.
    **Refund** on a payment that has its own ticket opens **Correct invoice** on that ticket; once
    the table's invoice has taken it off, the till refuses (`advance.taken_off_final_invoice`) and
    names Correct invoice on the table's invoice (owner, 20 November, 14:26).
-   (2026-11-21: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md):
-   the table's invoice gives money back first, and the rest comes back through Correct invoice on
-   the advance's own ticket.) On a bill set for a full invoice the
+   (2026-11-21: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md).) On a bill set for a full invoice the
    question is not asked until piece 1b. The staff guide, in English and Spanish, says all of this.
    Test venues are reset.
 2. **Piece 3: correctives of full invoices (its own plan).** Today no full invoice can be
@@ -419,10 +417,7 @@ stops and reports to you rather than editing the test.
    by Correct invoice on the advance's ticket and by a plain or bill refund of its money, and still
    refused after a whole credit of the table's invoice. The €10 beyond what the table's invoice
    carries therefore has no way back through the till.
-   (2026-11-21: this answer is replaced by [the refund-after-final
-   plan](2026-11-21-advance-refund-after-final.md), on the owner's "I think we have to allow a
-   refund": the table's invoice gives money back first, and what it cannot give back comes back as
-   a corrective of the advance's own ticket.)
+   (2026-11-21: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md).)
    A correction of an advance still open holds the table's invoice back
    (`advance.correction_open`, `refuseWhileAdvanceCorrectionOpen` in `bill-advances.ts`), so it
    cannot file a credit note after that invoice took the advance off. A reader payment started
