@@ -181,7 +181,7 @@ subtracts. Nothing changes `credits`, the amount the table's ticket takes off. A
 `left`, which makes a part payment the one payment whose plain refund lowers received, and needs a
 guard against the outstanding figure rising.
 
-**(d) The export** gains a sheet "Refunds without a corrective invoice": when, amount, cash or card,
+**(d) The export** gains a sheet "Refunds, no corrective invoice": when, amount, cash or card,
 reason, who asked and approved (names read at export time), the ticket refunded, for a part
 payment the table's ticket that took it off, and **the VAT left declared**: one row per VAT rate of
 the refunded ticket, with that rate, base and VAT of the refund's share. The share is pro rata to

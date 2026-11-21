@@ -237,6 +237,29 @@ describe("accountant workbook", () => {
       expect(strFromU8(files["xl/_rels/workbook.xml.rels"]!)).toContain("worksheets/sheet2.xml");
     },
   );
+  it.each(["en", "es"] as const)(
+    "names every sheet within Excel's 31-character limit (%s)",
+    async (language) => {
+      const workbook = strFromU8(
+        unzipSync(
+          await renderAccountantWorkbook(
+            { invoices: [], purchases: [], outsidePayments: [], refundsWithoutCorrective: [] },
+            language,
+          ),
+        )["xl/workbook.xml"]!,
+      );
+      const names = [...workbook.matchAll(/<sheet name="([^"]*)"/g)].map(([, name]) =>
+        name!
+          .replaceAll("&lt;", "<")
+          .replaceAll("&gt;", ">")
+          .replaceAll("&quot;", '"')
+          .replaceAll("&apos;", "'")
+          .replaceAll("&amp;", "&"),
+      );
+      expect(names).toHaveLength(4);
+      for (const name of names) expect(name.length, name).toBeLessThanOrEqual(31);
+    },
+  );
 
   it("keeps invoice VAT groups, later voids and signed correction links, with gross only once", async () => {
     const files = unzipSync(
@@ -1429,7 +1452,7 @@ describe("refunds without a corrective invoice", () => {
         ),
       );
       expect(strFromU8(files["xl/workbook.xml"]!)).toContain(
-        `name="${language === "en" ? "Refunds without a corrective invoice" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
+        `name="${language === "en" ? "Refunds, no corrective invoice" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
       );
       const xml = strFromU8(files["xl/worksheets/sheet4.xml"]!);
       expect(row(xml, 1)).toEqual([

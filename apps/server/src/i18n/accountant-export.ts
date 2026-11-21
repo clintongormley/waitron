@@ -25,7 +25,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Current state",
       "Successful refunds (EUR)",
     ],
-    refundSheet: "Refunds without a corrective invoice",
+    refundSheet: "Refunds, no corrective invoice",
     refundNote:
       "Note: no corrective invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts",
     refundColumns: [
@@ -132,7 +132,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Estado actual",
       "Reembolsos completados (EUR)",
     ],
-    refundSheet: "Reembolsos sin factura rectificativa",
+    refundSheet: "Devoluciones sin rectificativa",
     refundNote:
       "Nota: no se emitió factura rectificativa por estos reembolsos, así que el IVA indicado sigue declarado hasta que actúe el gestor",
     refundColumns: [
