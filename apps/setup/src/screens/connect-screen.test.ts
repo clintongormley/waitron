@@ -313,6 +313,21 @@ describe("setup-connect-screen: approved and Finish joining", () => {
     el.refusal = refusal;
     await vi.waitFor(async () => expect(await bottomOf(el)).toBe(words));
   });
+
+  it("names Start again, which is drawn, when Finish joining cannot check the main box's copy", async () => {
+    const { el } = await mount(stubApi({ state: "approved", code: "482913" }), { handle: "h1" });
+    el.refusal = { code: "mirror.bundle_fetch_failed" };
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(
+        "This box could not get a copy from the main box that checks out, so nothing was installed. Choose Start again: it asks the main box for a new code.",
+      ),
+    );
+    expect(q(el, "[data-test=start-again]")).not.toBeNull();
+    setLocale("es-ES");
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(es["connect.finish.bundle_fetch_failed"]),
+    );
+  });
 });
 
 const START_AGAIN_FOR_CODE = "Choose Start again for a new code.";

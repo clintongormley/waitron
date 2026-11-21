@@ -96,6 +96,8 @@ export const startEn = {
   "connect.join": "Join",
   "connect.start_again": "Start again",
   "connect.finish": "Finish joining",
+  "connect.finish.bundle_fetch_failed":
+    "This box could not get a copy from the main box that checks out, so nothing was installed. Choose Start again: it asks the main box for a new code.",
   "connect.reading": "Checking this box's join…",
   "connect.waiting.lead":
     "On the main box, open System → Servers, choose Check beside the request from this box, and tap this code:",
@@ -330,6 +332,8 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "connect.join": "Unirse",
   "connect.start_again": "Empezar de nuevo",
   "connect.finish": "Terminar la unión",
+  "connect.finish.bundle_fetch_failed":
+    "Este servidor no ha podido obtener del servidor principal una copia que supere la comprobación, así que no se ha instalado nada. Elige Empezar de nuevo: pide al servidor principal un código nuevo.",
   "connect.reading": "Comprobando la unión de este servidor…",
   "connect.waiting.lead":
     "En el servidor principal, abre Sistema → Servidores, elige Comprobar junto a la solicitud de este servidor y toca este código:",

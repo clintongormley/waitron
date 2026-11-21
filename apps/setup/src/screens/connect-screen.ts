@@ -80,6 +80,11 @@ const REFUSAL_WORDS: Record<string, StringKey> = {
   "setup.adopt_incomplete": "connect.refusal.adopt_incomplete",
 };
 
+/** Refusals of Finish joining whose Join words would name a button the approved view does not draw. */
+const FINISH_WORDS: Record<string, StringKey> = {
+  "mirror.bundle_fetch_failed": "connect.finish.bundle_fetch_failed",
+};
+
 const FULL_WORDS: Record<string, StringKey> = {
   address: "connect.refusal.join_full_address",
   network: "connect.refusal.join_full_network",
@@ -373,6 +378,9 @@ export class SetupConnectScreen extends LitElement {
   #message(): string | undefined {
     if (this.shownRefusal === undefined) return undefined;
     const { refusal, routedBack } = this.shownRefusal;
+    const finishKey =
+      routedBack && typeof refusal.code === "string" ? FINISH_WORDS[refusal.code] : undefined;
+    if (finishKey !== undefined) return t(finishKey);
     const shellWords = routedBack && this.errorMessage !== "" ? this.errorMessage : undefined;
     return refusalWords(refusal) ?? shellWords ?? t("connect.refusal.generic");
   }
