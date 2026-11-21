@@ -1,4 +1,4 @@
-import { madridWithPhotos } from "./testing/madrid-photos.js";
+import { madridWithPhotos, removeMadridSectionPhotos } from "./testing/madrid-photos.js";
 import { madridWithMenuReleases } from "./testing/madrid-releases.js";
 import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
@@ -216,6 +216,24 @@ const SHARED_DRINKS: Record<"en" | "es", MadridSharedOffers> = {
     beer: { name: "Botellín", kitchenName: "BOTELLÍN · BARRA" },
   }),
 };
+const SECTION_PHOTOS = [
+  // The shared Drinks menu uploads the photo reused by the deli's Drinks section.
+  ["Drinks", "Bebidas", "Drinks", "Bebidas", "drinks", "menu_root"],
+  ["Drinks", "Bebidas", "Cocktails", "Cócteles", "cocktails"],
+  ["Drinks", "Bebidas", "Wine and beer", "Vino y cerveza", "wine-and-beer"],
+  ["Drinks", "Bebidas", "Soft drinks", "Refrescos", "soft-drinks"],
+  ["Drinks", "Bebidas", "Coffee", "Café", "coffee"],
+  ["Casa Delgado", "Casa Delgado", "Tapas", "Tapas", "tapas"],
+  ["Casa Delgado", "Casa Delgado", "Sharing plates", "Raciones", "sharing-plates"],
+  ["Casa Delgado", "Casa Delgado", "Mains", "Platos principales", "mains"],
+  ["Casa Delgado", "Casa Delgado", "Desserts", "Postres", "desserts"],
+  ["Set lunch", "Menú del Día", "Starters", "Primeros", "starters"],
+  ["Set lunch", "Menú del Día", "Mains", "Segundos", "lunch-mains"],
+  ["Deli takeaway", "Charcutería para llevar", "Charcuterie", "Charcutería", "charcuterie"],
+  ["Deli takeaway", "Charcutería para llevar", "Cheeses", "Quesos", "cheeses"],
+  ["Deli takeaway", "Charcutería para llevar", "Conserves", "Conservas", "conserves"],
+  ["Deli takeaway", "Charcutería para llevar", "Drinks", "Bebidas", "drinks"],
+] as const;
 const periodChange = (
   department: string,
   replaced: string,
@@ -531,6 +549,24 @@ for (const locale of ["en", "es"] as const) {
       provisioned: await canonicalMadridSemantics(provisioned),
       seeded: await canonicalMadridSemantics(seeded),
     };
+    const sectionPhotos = new Map(
+      await Promise.all(
+        SECTION_PHOTOS.map(async ([enMenu, esMenu, enName, esName, photo, role = "section"]) => {
+          const menu = `@menus:${stable([locale === "en" ? enMenu : esMenu])}`;
+          const section = `@sections:${stable([menu, role, locale === "en" ? enName : esName])}`;
+          const source = demoMediaPath(
+            CASA_DELGADO_ES.mediaDataSet,
+            `section-${photo}.png`,
+            undefined,
+          );
+          const { filename } = await prepareImage(await readFile(source), {
+            maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
+          });
+          return [section, filename] as const;
+        }),
+      ),
+    );
+    removeMadridSectionPhotos(canonical.seeded, sectionPhotos);
     const root = DEMO_BASELINE_FIXTURE_ROOTS[CASA_DELGADO_ES.id];
     expect(root).toBeInstanceOf(URL);
     const previousPhotoHashes = JSON.parse(

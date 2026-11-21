@@ -70,6 +70,7 @@ export type StrictCountryDemoData<L extends string = string> = Omit<
     readonly lunch: SeedMenu<L>;
     readonly drinksName: StaffText;
     readonly drinksCustomerName: CountryDemoData<L>["menus"]["drinksCustomerName"];
+    readonly drinksImage?: string;
   };
   readonly floor: Omit<CountryDemoData<L>["floor"], "zones" | "tables"> & {
     readonly zones: readonly SeedZone[];

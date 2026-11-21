@@ -7,13 +7,18 @@ import { DEMO_DATA_SETS, DEMO_MEDIA_ROOTS } from "../packages/country-packs/src/
 const sharp = createRequire(resolve("apps/server/package.json"))("sharp");
 
 it.each(Object.values(DEMO_DATA_SETS))(
-  "$id ships product images with more than two colours",
+  "$id ships product and section photos with more than two colours",
   async ({ mediaDataSet, menus }) => {
-    const images = new Set(
-      [menus.restaurant, menus.deli, menus.lunch].flatMap((menu) =>
-        menu.categories.flatMap((category) => category.products.map((product) => product.image)),
+    const images = new Set([
+      menus.drinksImage,
+      menus.deli.listedSection.image,
+      ...[menus.restaurant, menus.deli, menus.lunch].flatMap((menu) =>
+        menu.categories.flatMap((category) => [
+          category.sectionImage,
+          ...category.products.map((product) => product.image),
+        ]),
       ),
-    );
+    ]);
     const placeholders = [];
     for (const image of images) {
       const path = fileURLToPath(new URL(image, DEMO_MEDIA_ROOTS[mediaDataSet]));

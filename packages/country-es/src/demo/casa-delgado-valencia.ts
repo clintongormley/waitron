@@ -179,6 +179,7 @@ const REGIONAL_SECTION = {
   },
   color: "#b46b35",
   station: "kitchen",
+  sectionImage: "section-valencia.png",
   products: REGIONAL_DISHES,
 } as const;
 export const CASA_DELGADO_VALENCIA = {

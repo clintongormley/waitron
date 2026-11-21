@@ -51,6 +51,7 @@ describe("Catalan practice restaurant", () => {
     )!;
     expect(section.station).toBe("kitchen");
     expect(section.name.ca).toBe("Especialitats de la casa");
+    expect(section.sectionImage).toBe("section-catalonia.png");
     expect(demos.CASA_DELGADO_ES.menus.restaurant.categories.map((c) => c.color)).not.toContain(
       section.color,
     );
@@ -200,6 +201,7 @@ describe("Valencian practice restaurant", () => {
     expect(added.map((p) => p.vatClass)).toEqual(Array(8).fill("reduced"));
     const section = set.menus.restaurant.categories.at(-1)!;
     expect(section.name["ca-ES-valencia"]).toBe("Especialitats de l'Horta");
+    expect(section.sectionImage).toBe("section-valencia.png");
     expect(section.station).toBe("kitchen");
     expect(set.menus.restaurant.categories).toHaveLength(
       demos.CASA_DELGADO_ES.menus.restaurant.categories.length + 1,
@@ -333,6 +335,7 @@ describe("Galician practice restaurant", () => {
     expect(added.map((p) => p.vatClass)).toEqual(Array(8).fill("reduced"));
     const section = set.menus.restaurant.categories.at(-1)!;
     expect(section.name["gl"]).toBe("Especialidades da casa");
+    expect(section.sectionImage).toBe("section-galicia.png");
     expect(section.station).toBe("kitchen");
     expect(set.menus.restaurant.categories).toHaveLength(
       demos.CASA_DELGADO_ES.menus.restaurant.categories.length + 1,

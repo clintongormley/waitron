@@ -35,21 +35,29 @@ describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
     await provisionVenue();
 
-    const { productsByImage, images } = await withTransaction(suite.db, async (tx) => {
+    const { productsByImage, images, uploaded } = await withTransaction(suite.db, async (tx) => {
       const { productsByImage } = await seedMenus(tx, {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
+      const filenames = sql`select filename from media_images`;
+      const { rows: before } = await tx.execute<{ filename: string }>(filenames);
       await seedMedia(tx, { productsByImage, mediaDataSet: CASA_DELGADO_ES.mediaDataSet });
+      const { rows: after } = await tx.execute<{ filename: string }>(filenames);
+      const existing = new Set(before.map((row) => row.filename));
+      const uploaded = new Set(
+        after.map((row) => row.filename).filter((name) => !existing.has(name)),
+      );
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
         sql`select id, image from products `,
       );
       const images = new Map(rows.map((r) => [r.id, r.image]));
-      return { productsByImage, images };
+      return { productsByImage, images, uploaded };
     });
 
     expect(productsByImage.size).toBeGreaterThan(35);
 
+    const expectedUploads = new Set<string>();
     // Each reference names the shrunk copy of its committed tile and resolves to exactly those bytes.
     for (const [basename, productId] of productsByImage) {
       const stored = images.get(productId);
@@ -63,6 +71,7 @@ describe("seedMedia", () => {
       );
       const prepared = await prepareImage(srcBytes, { maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES });
       expect(stored).toBe(prepared.filename);
+      expectedUploads.add(prepared.filename);
 
       const storedImage = await withTransaction(suite.db, async (tx) => {
         return readImageBytes(tx, stored!);
@@ -71,25 +80,7 @@ describe("seedMedia", () => {
       expect(storedImage!.bytes).toEqual(prepared.bytes);
     }
 
-    const written = await suite.db.execute<{ count: number }>(
-      sql`select cast(count(*) as integer) as count from media_images`,
-    );
-    const distinctPhotos = new Set(
-      await Promise.all(
-        [...productsByImage.keys()].map(
-          async (basename) =>
-            (
-              await prepareImage(
-                await readFile(demoMediaPath(CASA_DELGADO_ES.mediaDataSet, basename, undefined)),
-                {
-                  maxUploadBytes: DEFAULT_MAX_UPLOAD_BYTES,
-                },
-              )
-            ).filename,
-        ),
-      ),
-    );
-    expect(written.rows[0]!.count).toBe(distinctPhotos.size);
+    expect(uploaded).toEqual(expectedUploads);
   });
 
   it("reuses existing image bytes when the media step runs twice", async () => {

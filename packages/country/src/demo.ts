@@ -40,6 +40,7 @@ interface CountryDemoCategoryFields<L extends string = string> {
   name: DemoText<L>;
 
   categoryName?: DemoPlainText<L>;
+  sectionImage?: string;
   color: string;
   station: "kitchen" | "bar" | "deli" | null;
   products: CountryDemoProduct<L>[];
@@ -49,8 +50,9 @@ interface CountryDemoMenuFields<L extends string = string> {
   name: DemoPlainText<L>;
   customerName: DemoText<L>;
   categories: CountryDemoCategory<L>[];
+  image?: string;
   /** A section offering products another menu creates, named by image; it creates none. */
-  listedSection?: { name: DemoText<L>; productImages: string[] };
+  listedSection?: { name: DemoText<L>; image?: string; productImages: string[] };
 }
 
 interface CountryDemoOptionLabelFields<L extends string = string> {
@@ -115,6 +117,7 @@ interface CountryDemoDataFields<L extends string = string> {
     readonly lunch: CountryDemoMenu<L>;
     readonly drinksName: DemoPlainText<L>;
     readonly drinksCustomerName: DemoText<L>;
+    readonly drinksImage?: string;
   };
   readonly productOptionLists: readonly CountryDemoProductOptionLists<L>[];
   readonly productExtraLists: readonly CountryDemoProductExtraLists<L>[];

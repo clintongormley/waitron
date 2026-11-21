@@ -137,6 +137,7 @@ export const PRODUCT_EXTRA_LISTS = [
 
 const COMBINED_CASA_DELGADO_CATEGORIES = [
   {
+    sectionImage: "section-charcuterie.png",
     name: {
       en: "Charcuterie",
       es: "Charcutería",
@@ -312,6 +313,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-cheeses.png",
     name: {
       en: "Cheeses",
       es: "Quesos",
@@ -454,6 +456,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-conserves.png",
     name: {
       en: "Conserves",
       es: "Conservas",
@@ -575,6 +578,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-tapas.png",
     name: { en: "Tapas", es: "Tapas", ca: "Tapes", "ca-ES-valencia": "Tapes", gl: "Tapas" },
     station: "kitchen",
     color: "#ffa987",
@@ -738,6 +742,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-sharing-plates.png",
     name: {
       en: "Sharing plates",
       es: "Raciones",
@@ -853,6 +858,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-mains.png",
     name: {
       en: "Mains",
       es: "Platos principales",
@@ -974,6 +980,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-desserts.png",
     name: {
       en: "Desserts",
       es: "Postres",
@@ -1089,6 +1096,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-cocktails.png",
     name: {
       en: "Cocktails",
       es: "Cócteles",
@@ -1129,6 +1137,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-wine-and-beer.png",
     name: {
       en: "Wine and beer",
       es: "Vino y cerveza",
@@ -1224,6 +1233,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-soft-drinks.png",
     name: {
       en: "Soft drinks",
       es: "Refrescos",
@@ -1335,6 +1345,7 @@ const COMBINED_CASA_DELGADO_CATEGORIES = [
     ],
   },
   {
+    sectionImage: "section-coffee.png",
     name: { en: "Coffee", es: "Café", ca: "Cafè", "ca-ES-valencia": "Café", gl: "Café" },
     station: "bar",
     color: "#d2c0ad",
@@ -1470,6 +1481,7 @@ export const DELI_TAKEAWAY = {
     })),
   ],
   listedSection: {
+    image: "section-drinks.png",
     name: {
       en: "Drinks",
       es: "Bebidas",
@@ -1498,6 +1510,7 @@ export const MENU_DEL_DIA = {
   },
   categories: [
     {
+      sectionImage: "section-starters.png",
       name: {
         en: "Starters",
         es: "Primeros",
@@ -1625,6 +1638,7 @@ export const MENU_DEL_DIA = {
       ],
     },
     {
+      sectionImage: "section-lunch-mains.png",
       name: {
         en: "Mains",
         es: "Segundos",

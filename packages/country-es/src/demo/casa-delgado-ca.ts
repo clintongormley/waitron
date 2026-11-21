@@ -135,6 +135,7 @@ const REGIONAL_SECTION = {
   },
   color: "#8d5678",
   station: "kitchen",
+  sectionImage: "section-catalonia.png",
   products: REGIONAL_DISHES,
 } as const;
 export const CASA_DELGADO_CA = {
