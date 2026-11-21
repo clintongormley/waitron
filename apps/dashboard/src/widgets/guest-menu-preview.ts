@@ -225,6 +225,16 @@ export class GuestMenuPreview extends LitElement {
         ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
         ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
         ${this.sharing?.delivery ? html`<p id="cloud-delivery" role="status">${t(`menus.guest_cloud_${this.sharing.delivery.state}`)}</p>` : nothing}
+        ${
+          this.sharing?.delivery?.state === "plan_required" && this.sharing.delivery.billingUrl
+            ? html`<a
+                href=${this.sharing.delivery.billingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                >${t("menus.guest_cloud_billing")}</a
+              >`
+            : nothing
+        }
         ${this.sharingError || this.sharingReadError ? html`<p id="sharing-error" role="alert">${this.sharingError || this.sharingReadError}</p>` : nothing}
         <wt-button
           id="sharing-action"

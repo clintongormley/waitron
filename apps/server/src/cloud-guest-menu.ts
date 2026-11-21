@@ -9,6 +9,7 @@ export interface CloudGuestMenuView {
   url: string;
   revision: number;
   state: "off" | "current" | "blocked";
+  planRequired?: true;
   publication: null | { bodySha256: string; defaultLanguage: string; receivedAt: string };
 }
 
@@ -56,6 +57,7 @@ function readView(value: Record<string, unknown>, state: SavedCloudState): Cloud
     revision: Number(value.revision),
     state: value.state as CloudGuestMenuView["state"],
     publication,
+    ...(value.planRequired === true ? { planRequired: true } : {}),
   };
 }
 
@@ -127,8 +129,9 @@ export async function withdrawCloudGuestMenu(
 }
 
 export interface GuestMenuDeliveryStatus {
-  state: "not_connected" | "pending" | "current" | "off" | "blocked" | "refused";
+  state: "not_connected" | "pending" | "current" | "off" | "blocked" | "refused" | "plan_required";
   receivedAt: string | null;
+  billingUrl?: string;
 }
 
 export function createGuestMenuDelivery(options: {
@@ -158,7 +161,11 @@ export function createGuestMenuDelivery(options: {
         if (body === null) {
           if (remote.state === "current")
             confirmed = await options.connection.withdrawGuestMenu(signal);
-        } else if (remote.state !== "blocked" && remote.publication?.bodySha256 !== digest(body)) {
+        } else if (
+          remote.state !== "blocked" &&
+          !remote.planRequired &&
+          remote.publication?.bodySha256 !== digest(body)
+        ) {
           confirmed = await options.connection.publishGuestMenu(remote.revision, body, signal);
         }
         refused = undefined;
@@ -175,6 +182,13 @@ export function createGuestMenuDelivery(options: {
         return { state: "not_connected", receivedAt: null };
       const body = await desiredBody();
       const remote = venue === identity && options.isPrimary() ? confirmed : undefined;
+      const receivedAt = remote?.publication?.receivedAt ?? null;
+      if (body !== null && remote?.planRequired && remote.state !== "blocked" && local.accountUrl)
+        return {
+          state: "plan_required",
+          receivedAt,
+          billingUrl: new URL("/account/billing", local.accountUrl).href,
+        };
       const state =
         remote?.state === "blocked"
           ? "blocked"
@@ -187,7 +201,7 @@ export function createGuestMenuDelivery(options: {
               : remote?.state === "current" && remote.publication?.bodySha256 === digest(body)
                 ? "current"
                 : "pending";
-      return { state, receivedAt: remote?.publication?.receivedAt ?? null };
+      return { state, receivedAt };
     },
   };
 }

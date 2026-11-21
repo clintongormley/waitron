@@ -3601,8 +3601,10 @@ export class DashboardApi {
     revision: number;
     available: boolean;
     delivery?: {
-      state: "not_connected" | "pending" | "current" | "off" | "blocked" | "refused";
+      state:
+        "not_connected" | "pending" | "current" | "off" | "blocked" | "refused" | "plan_required";
       receivedAt: string | null;
+      billingUrl?: string;
     };
     paper?: import("@waitron/shared").GuestMenuPaperAppearance;
   }> {

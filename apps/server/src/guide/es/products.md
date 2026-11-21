@@ -562,8 +562,13 @@ sin conexión, Cloud conserva la última copia enviada. Al dejar de compartir, e
 cuando llega la actualización. Puedes dejar de compartir desde el portal de Cloud mientras el servidor
 está sin conexión; vuelve a activarlo allí para reanudar los envíos. Si Cloud rechaza la publicación,
 revisa la carta y sus idiomas de contenido; el servidor vuelve a intentarlo. Tras desconectar el servidor,
-retira cualquier copia enviada desde el portal de Cloud. El enlace para clientes con datos
-móviles aún se está preparando.
+retira cualquier copia enviada desde el portal de Cloud.
+
+Si la vista previa indica que necesitas un plan de Cloud, elige **Abrir Facturación de Cloud**.
+Tras iniciar sesión, elige **Facturación** si llegas a la página de la cuenta y selecciona tu local
+si se te pide. Inicia una prueba gratuita si está disponible.
+
+El enlace para clientes con datos móviles aún se está preparando.
 
 ## Imprime una carta publicada {#guest-paper}
 

@@ -3715,6 +3715,9 @@ export const en = {
     "Cloud has the current publication. Public access is still being prepared.",
   "menus.guest_cloud_refused":
     "Cloud could not accept this publication. Check the menu and its content languages. The box will retry; to remove the last delivered copy, stop sharing in the Cloud portal.",
+  "menus.guest_cloud_plan_required":
+    "Your Cloud guest menu is hidden until your venue has an active trial or paid plan. Start the venue’s free trial in Waitron Cloud Billing.",
+  "menus.guest_cloud_billing": "Open Cloud Billing",
   "menus.guest_cloud_off": "Cloud has confirmed that the menu is off.",
   "menus.guest_cloud_blocked":
     "Guest sharing is stopped in Cloud. Enable it in the Cloud portal to resume delivery.",
@@ -8372,6 +8375,9 @@ export const es: Record<StringKey, string> = {
     "Cloud tiene la publicación actual. El acceso público aún se está preparando.",
   "menus.guest_cloud_refused":
     "Cloud no ha podido aceptar esta publicación. Revisa la carta y sus idiomas de contenido. El servidor volverá a intentarlo; para retirar la última copia enviada, deja de compartir desde el portal de Cloud.",
+  "menus.guest_cloud_plan_required":
+    "Tu carta para clientes de Cloud está oculta hasta que tu local tenga una prueba activa o un plan de pago. Inicia la prueba gratuita del local en Facturación de Waitron Cloud.",
+  "menus.guest_cloud_billing": "Abrir Facturación de Cloud",
   "menus.guest_cloud_off": "Cloud ha confirmado que la carta ya no se comparte.",
   "menus.guest_cloud_blocked":
     "La carta está bloqueada en Cloud. Actívala en el portal de Cloud para reanudar los envíos.",
