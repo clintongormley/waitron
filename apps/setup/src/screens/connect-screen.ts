@@ -1,8 +1,7 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
-  breakAfterColons,
-  focusFirstInvalid,
+  FormFeedback,
   submitOnEnter,
   baseStyles,
   pageTitleStyles,
@@ -12,30 +11,25 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { actionsStyles, fieldStyles, helpLinkStyles } from "../form-styles.js";
-import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
-import { SetupApi, type AdoptBody, type PrimaryCertificate } from "../api/client.js";
-import { passwordVisibility, t } from "../i18n/t.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
+import { dispatchJoinFinishRequested, dispatchJoinHandle, dispatchSetupGoto } from "../events.js";
+import { SetupApi, type JoinState } from "../api/client.js";
+import { format, localTime, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { serversPageOf } from "../servers-page.js";
 
+/** The shell's adopt field maps still name the old login fields; only the address is drawn. */
 export type ConnectField = "primaryUrl" | "email" | "password" | "totp";
-type ConnectForm = Record<ConnectField, string>;
 
-/**
- * The address comes first and its certificate is compared before the login is asked for, so no
- * password is typed for a machine the person has not recognised.
- */
-type Step = "address" | "compare" | "stopped" | "login";
+/** The holding tab reads every 2 seconds, which keeps it counted as open on the server. */
+const READ_EVERY_MS = 2_000;
 
-const REQUIRED_FIELDS: Record<"address" | "login", readonly ConnectField[]> = {
-  address: ["primaryUrl"],
-  login: ["email", "password"],
-};
+interface Refusal {
+  code?: unknown;
+  params?: Record<string, unknown>;
+}
 
-/** Only plain http needs no comparison, and the server allows it to this machine alone. */
-const isPlainHttp = (url: string): boolean => /^http:/i.test(url.trim());
+type View = JoinState | { state: "address" } | { state: "reading" };
 
 /**
  * A main box's address is its origin, so a typed path, query or fragment is dropped. Anything that
@@ -50,40 +44,75 @@ function originOf(typed: string): string {
   }
 }
 
-interface FieldText {
-  label: StringKey;
-  error: StringKey;
-  hint: StringKey;
-}
+/** "482913" as "482 913", as the main box's Servers page shows it, never broken across lines. */
+const grouped = (code: string) => `${code.slice(0, 3)}\u00a0${code.slice(3)}`;
 
-const FIELD_TEXT: Record<ConnectField, FieldText> = {
-  primaryUrl: {
-    label: "connect.primary_url.label",
-    error: "connect.primary_url.error",
-    hint: "connect.primary_url.hint",
-  },
-  email: {
-    label: "connect.email.label",
-    error: "connect.email.error",
-    hint: "connect.email.hint",
-  },
-  password: {
-    label: "connect.password.label",
-    error: "connect.password.error",
-    hint: "connect.password.hint",
-  },
-  totp: {
-    label: "connect.totp.label",
-    error: "connect.totp.error",
-    hint: "connect.totp.hint",
-  },
+const ENDED_WORDS: Record<string, StringKey> = {
+  wrong_code: "connect.ended.wrong_code",
+  dismissed: "connect.ended.dismissed",
+  replaced: "connect.replaced",
+  cancelled: "connect.ended.cancelled",
+  code_taken: "connect.refusal.join_code_taken",
+  invalid: "connect.refusal.join_invalid",
 };
 
+const REFUSAL_WORDS: Record<string, StringKey> = {
+  "mirror.join_invalid": "connect.refusal.join_invalid",
+  "mirror.standby_invalid": "connect.refusal.join_invalid",
+  "mirror.join_not_found": "connect.refusal.join_not_found",
+  "mirror.join_address_mismatch": "connect.refusal.join_address_mismatch",
+  "mirror.join_code_taken": "connect.refusal.join_code_taken",
+  "mirror.join_waiting": "connect.refusal.join_waiting",
+  "mirror.join_in_use": "connect.refusal.join_in_use",
+  "mirror.join_handle_invalid": "connect.refusal.join_handle_invalid",
+  "mirror.bundle_fetch_failed": "connect.refusal.unreachable",
+  "mirror.standby_name_taken": "connect.refusal.name_taken",
+  "setup.connection_insecure": "connect.refusal.insecure",
+  "setup.owner_required": "shell.setup_not_accepted",
+  "setup.already_provisioning": "shell.already_provisioning",
+  "setup.not_ready": "shell.not_ready",
+  "setup.adopt_incomplete": "connect.refusal.adopt_incomplete",
+};
+
+const FULL_WORDS: Record<string, StringKey> = {
+  address: "connect.refusal.join_full_address",
+  network: "connect.refusal.join_full_network",
+  listed: "connect.refusal.join_full_listed",
+  recent: "connect.refusal.join_full_recent",
+};
+
+/** The words for a refusal this screen knows, or undefined. */
+function refusalWords({ code, params }: Refusal): string | undefined {
+  const { limit, retryAt, primaryAt, standbyAt } = params ?? {};
+  if (code === "mirror.join_full" && typeof limit === "string" && FULL_WORDS[limit] !== undefined)
+    return format(FULL_WORDS[limit], {
+      retryAt: typeof retryAt === "string" ? (localTime(retryAt) ?? retryAt) : "",
+    });
+  if (
+    code === "mirror.clocks_apart" &&
+    typeof primaryAt === "string" &&
+    typeof standbyAt === "string"
+  )
+    return format("connect.refusal.clocks_apart", {
+      primaryAt: localTime(primaryAt) ?? primaryAt,
+      standbyAt: localTime(standbyAt) ?? standbyAt,
+    });
+  const key = typeof code === "string" ? REFUSAL_WORDS[code] : undefined;
+  return key === undefined ? undefined : t(key);
+}
+
+const isAddressRefusal = ({ code, params }: Refusal) =>
+  code === "mirror.primary_url_invalid" ||
+  (code === "setup.request_invalid" && params?.field === "primaryUrl");
+
+/** Finish joining on a join that is no longer approved: the state changed underneath. */
+const isJoinNotApproved = ({ code, params }: Refusal) =>
+  code === "setup.request_invalid" && params?.field === "join";
+
 /**
- * The mirror path's connect step. It posts to this box's OWN `/setup-api/adopt`, which fetches the
- * primary's bundle server-side (`fetchBundle`, `apps/server/src/adopt.ts`), so the admin credential
- * never goes from the browser to the primary. The certificate is read the same way, through
- * `/setup-api/primary-certificate`.
+ * The join screen. Join starts a request on the main box and shows the code to tap there; only the
+ * tab holding the join's handle is shown the code. The shell keeps the handle (`join-handle`) and
+ * posts Finish joining (`join-finish-requested`).
  */
 @customElement("setup-connect-screen")
 export class SetupConnectScreen extends LitElement {
@@ -92,87 +121,70 @@ export class SetupConnectScreen extends LitElement {
     pageTitleStyles,
     fieldStyles,
     actionsStyles,
-    helpLinkStyles,
     css`
       :host {
         display: block;
       }
-      .fingerprint-label {
-        margin: var(--wt-space-4) 0 var(--wt-space-1);
+      .code {
+        margin: var(--wt-space-4) 0;
+        font-family: var(--wt-font-family-mono);
+        font-size: var(--wt-font-size-xl);
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text);
+        letter-spacing: var(--wt-letter-spacing-wide);
       }
-      .fingerprint {
-        margin: 0 0 var(--wt-space-4);
-        font-family: var(--wt-font-family-mono);
-        color: var(--wt-color-text);
+      .detail {
+        margin: 0 0 var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+        overflow-wrap: anywhere;
       }
     `,
   ];
 
-  @property({ attribute: false }) api: Pick<SetupApi, "primaryCertificate"> = new SetupApi();
+  @property({ attribute: false }) api: Pick<SetupApi, "startJoin" | "joinState" | "cancelJoin"> =
+    new SetupApi();
 
-  /** An adopt failure the shell routed back here that names no field this form shows. */
+  /** This tab's handle for the join, kept by the shell; without it no code is shown. */
+  @property({ attribute: false }) handle?: string;
+
+  /** A refusal of Finish joining the shell routed back, with `errorMessage` as its words. */
+  @property({ attribute: false }) refusal?: Refusal;
+
   @property() errorMessage?: string;
 
-  /** Whether `errorMessage` is about the login, which the address step does not show. */
-  @property({ type: Boolean }) errorAboutLogin = false;
+  @state() private view: View = { state: "reading" };
 
-  /**
-   * Set when the main server asked for the authenticator code for `request`, which it does only
-   * after the right password. The code field is drawn, required, only while the address and email
-   * are still `request`'s, and takes focus unless a refusal came with it.
-   */
-  @property({ type: Boolean }) askForCode = false;
+  @state() private primaryUrl = "";
 
-  /** A field the shell found an adopt refusal to be about. It never disables Connect. */
-  @property() invalidField?: ConnectField;
+  /** Words for the last refusal of Join, Start again or Finish joining. */
+  @state() private message?: string;
 
-  /**
-   * The body the shell last sent, returned with a refusal so the operator's entries are kept — all
-   * but the one-time code, left empty by owner decision (C87, 2026-09-30).
-   */
-  @property({ attribute: false }) request?: AdoptBody;
-
-  @state() private values: ConnectForm = {
-    primaryUrl: "",
-    email: "",
-    password: "",
-    totp: "",
-  };
-
-  @state() private attempted = false;
-
-  @state() private refusalDismissed = false;
-
-  @state() private fieldRefusalDismissed = false;
-
-  @state() private step: Step = "address";
-
-  /** The certificate read for the address, shown on the compare step. */
-  @state() private certificate?: PrimaryCertificate;
-
-  /** Set once the person says the fingerprint matches; the adopt request then trusts only it. */
-  @state() private confirmedCaPem?: string;
-
-  @state() private reading = false;
-
-  /** The certificate read's own refusal of the address, cleared when the address is edited. */
   @state() private addressRefused = false;
 
-  @state() private readFailed = false;
+  @state() private busy = false;
 
-  #readGeneration = 0;
+  readonly #feedback = new FormFeedback(this);
 
-  #baseline?: ConnectForm;
-  #scope?: DraftScope<ConnectForm>;
+  /** Bumped by every start, cancel and disconnect, so a read sent before it is dropped. */
+  #generation = 0;
+  #timer?: ReturnType<typeof setTimeout>;
+
+  #baseline?: { primaryUrl: string };
+  #scope?: DraftScope<{ primaryUrl: string }>;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#registerScope();
+    void this.#read();
   }
 
   override disconnectedCallback(): void {
+    this.#stopReading();
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
@@ -182,333 +194,276 @@ export class SetupConnectScreen extends LitElement {
     if (!this.isConnected || !this.#baseline || this.#scope) return;
     this.#scope = leaveCoordinatorFor(this)?.register({
       id: this,
-      current: () => this.values,
+      current: () => ({ primaryUrl: this.primaryUrl }),
       snapshot: (form) => ({ ...form }),
-      equal: (a, b) =>
-        a.primaryUrl.trim() === b.primaryUrl.trim() &&
-        a.email.trim() === b.email.trim() &&
-        a.password === b.password &&
-        a.totp.trim() === b.totp.trim(),
+      equal: (a, b) => a.primaryUrl.trim() === b.primaryUrl.trim(),
       restore: (form) => {
-        this.values = { ...form };
-        this.attempted = false;
+        this.primaryUrl = form.primaryUrl;
+        this.#feedback.reset();
       },
     });
     this.#scope?.commit(this.#baseline);
   }
 
-  constructor() {
-    super();
-    new LocaleChangeController(this);
-  }
-
   protected override willUpdate(changed: PropertyValues<this>): void {
-    // A returned request is a refused submission, not a saved baseline.
-    this.#baseline ??= { ...this.values };
-    // Each refusal returns its request; a translated `errorMessage` is not a new refusal.
-    if (changed.has("request")) this.refusalDismissed = false;
-    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
-    if (changed.has("request") && this.request !== undefined) {
-      const { primaryUrl, credential, confirmedCaPem } = this.request;
-      this.values = {
-        primaryUrl,
-        email: credential.email,
-        password: credential.password,
-        totp: "",
-      };
-      this.confirmedCaPem = confirmedCaPem;
-      const checked = confirmedCaPem !== undefined || isPlainHttp(primaryUrl);
-      this.#show(checked && this.invalidField !== "primaryUrl" ? "login" : "address");
-      this.#scope?.changed();
-    }
-  }
-
-  protected override updated(changed: PropertyValues<this>): void {
-    this.#registerScope();
-    if (changed.has("invalidField") && this.#refusedField() !== undefined) {
-      void focusFirstInvalid(this.shadowRoot!);
-    } else if (
-      changed.has("askForCode") &&
-      this.#codeAsked() &&
-      this.errorMessage === undefined &&
-      this.invalidField === undefined
-    ) {
-      const code = this.shadowRoot!.querySelector<LitElement>("[data-test=totp]");
-      void code?.updateComplete.then(() => code.focus());
-    }
-  }
-
-  #refusedField(): ConnectField | undefined {
-    if (this.addressRefused) return "primaryUrl";
-    return this.fieldRefusalDismissed ? undefined : this.invalidField;
-  }
-
-  /** Another address or account may not use an authenticator, so the ask lapses for them. */
-  #codeAsked(): boolean {
-    return (
-      this.askForCode &&
-      this.request !== undefined &&
-      this.values.primaryUrl.trim() === this.request.primaryUrl &&
-      this.values.email.trim() === this.request.credential.email
-    );
-  }
-
-  #errors(): Set<ConnectField> {
-    if (!this.attempted || (this.step !== "address" && this.step !== "login")) return new Set();
-    const required: readonly ConnectField[] =
-      this.step === "login" && this.#codeAsked()
-        ? [...REQUIRED_FIELDS.login, "totp"]
-        : REQUIRED_FIELDS[this.step];
-    return new Set(required.filter((key) => this.values[key].trim() === ""));
-  }
-
-  #show(step: Step): void {
-    this.step = step;
-    this.attempted = false;
-  }
-
-  #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.values = { ...this.values, [key]: event.detail.value };
-    // A one-time code typed for the asked-about login may have expired by the time it comes back.
-    if ((key === "email" || key === "primaryUrl") && !this.#codeAsked())
-      this.values = { ...this.values, totp: "" };
-    this.#scope?.changed();
-    if (key === this.invalidField) this.fieldRefusalDismissed = true;
-    if (key === "primaryUrl") {
-      this.addressRefused = false;
-      this.readFailed = false;
-      // A read still under way is for the address as it was; its answer is dropped.
-      this.#readGeneration++;
-      this.reading = false;
-    }
-  }
-
-  /** Marks a blank required field of this step and moves focus to it; true when one was blank. */
-  #blocked(): boolean {
-    this.attempted = true;
-    this.refusalDismissed = true;
-    this.fieldRefusalDismissed = true;
-    if (this.#errors().size === 0) return false;
-    void this.updateComplete.then(() => {
-      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
-    });
-    return true;
-  }
-
-  async #continue(): Promise<void> {
-    if (this.reading) return;
-    this.addressRefused = false;
-    this.readFailed = false;
-    if (this.#blocked()) return;
-    const address = originOf(this.values.primaryUrl.trim());
-    this.values = { ...this.values, primaryUrl: address };
-    const generation = ++this.#readGeneration;
-    this.reading = true;
-    try {
-      const certificate = await this.api.primaryCertificate(address);
-      if (generation !== this.#readGeneration || !this.isConnected) return;
-      this.certificate = certificate ?? undefined;
-      this.confirmedCaPem = undefined;
-      this.#show(certificate === null ? "login" : "compare");
-    } catch (error) {
-      if (generation !== this.#readGeneration || !this.isConnected) return;
-      const { code, params } = (error ?? {}) as { code?: unknown; params?: { field?: unknown } };
-      if (
-        code === "mirror.primary_url_invalid" ||
-        (code === "setup.request_invalid" && params?.field === "primaryUrl")
-      ) {
-        this.addressRefused = true;
-        void this.updateComplete.then(() => {
-          if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
-        });
+    this.#baseline ??= { primaryUrl: this.primaryUrl };
+    if (changed.has("refusal") && this.refusal !== undefined) {
+      if (isJoinNotApproved(this.refusal)) {
+        this.message = undefined;
+        void this.#read();
       } else {
-        this.readFailed = true;
+        this.message = refusalWords(this.refusal) ?? this.errorMessage;
+      }
+    }
+  }
+
+  protected override updated(): void {
+    this.#registerScope();
+  }
+
+  #stopReading(): void {
+    this.#generation++;
+    clearTimeout(this.#timer);
+  }
+
+  async #read(): Promise<void> {
+    this.#stopReading();
+    const generation = this.#generation;
+    const handle = this.handle;
+    try {
+      const answer = await this.api.joinState(handle);
+      if (generation !== this.#generation || !this.isConnected) return;
+      this.#show(answer, handle);
+    } catch {
+      if (generation !== this.#generation || !this.isConnected) return;
+      // A lost read is asked again; without a join to follow, the address is the way on.
+      if (this.view.state === "reading") this.view = { state: "address" };
+      if (handle !== undefined) this.#readLater(generation);
+    }
+  }
+
+  #readLater(generation: number): void {
+    if (generation !== this.#generation) return;
+    this.#timer = setTimeout(() => void this.#read(), READ_EVERY_MS);
+  }
+
+  #show(answer: JoinState, handle: string | undefined): void {
+    const holds = handle !== undefined;
+    // The code belongs to the tab that holds the handle, whatever an answer carries.
+    const shown: JoinState =
+      !holds && (answer.state === "waiting" || answer.state === "approved")
+        ? { state: "elsewhere" }
+        : answer;
+    if (shown.state === "waiting") this.primaryUrl = shown.primaryUrl;
+    this.view = shown.state === "none" ? { state: "address" } : shown;
+    if (shown.state === "waiting" || shown.state === "approved") this.#readLater(this.#generation);
+  }
+
+  #onAddress(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.primaryUrl = event.detail.value;
+    this.addressRefused = false;
+    this.#scope?.changed();
+  }
+
+  #blank(): boolean {
+    return this.#feedback.attempted && this.primaryUrl.trim() === "";
+  }
+
+  async #join(): Promise<void> {
+    if (this.busy) return;
+    this.#feedback.press();
+    this.message = undefined;
+    this.addressRefused = false;
+    if (this.#blank()) {
+      void this.#feedback.focus(this.shadowRoot!);
+      return;
+    }
+    const address = originOf(this.primaryUrl.trim());
+    this.primaryUrl = address;
+    // A read sent with the previous handle while the start waits would answer `replaced`.
+    this.#stopReading();
+    const generation = this.#generation;
+    this.busy = true;
+    try {
+      const started = await this.api.startJoin(address, this.handle);
+      if (generation !== this.#generation || !this.isConnected) return;
+      this.handle = started.handle;
+      dispatchJoinHandle(this, started.handle);
+      this.#scope?.commit({ primaryUrl: address });
+      this.#feedback.reset();
+      this.#show({ state: "waiting", primaryUrl: address, ...started }, started.handle);
+    } catch (error) {
+      if (generation !== this.#generation || !this.isConnected) return;
+      const refusal = (error ?? {}) as Refusal;
+      if (isAddressRefusal(refusal)) {
+        this.view = { state: "address" };
+        this.addressRefused = true;
+        void this.#feedback.focus(this.shadowRoot!);
+      } else {
+        this.message = refusalWords(refusal) ?? t("connect.refusal.generic");
       }
     } finally {
-      if (generation === this.#readGeneration) this.reading = false;
+      if (generation === this.#generation) this.busy = false;
     }
   }
 
-  #matches(): void {
-    this.confirmedCaPem = this.certificate?.pem;
-    this.certificate = undefined;
-    this.#show("login");
+  async #startAgain(): Promise<void> {
+    if (this.busy) return;
+    this.message = undefined;
+    this.#stopReading();
+    const generation = this.#generation;
+    this.busy = true;
+    try {
+      await this.api.cancelJoin(this.handle);
+    } catch (error) {
+      if (generation !== this.#generation || !this.isConnected) return;
+      this.busy = false;
+      this.message = refusalWords((error ?? {}) as Refusal) ?? t("connect.refusal.generic");
+      if (this.view.state === "waiting" || this.view.state === "approved")
+        this.#readLater(generation);
+      return;
+    }
+    if (generation !== this.#generation || !this.isConnected) return;
+    this.busy = false;
+    this.handle = undefined;
+    dispatchJoinHandle(this, undefined);
+    this.#feedback.reset();
+    this.view = { state: "address" };
+    if (this.primaryUrl.trim() !== "") await this.#join();
   }
 
-  #mismatch(): void {
-    this.certificate = undefined;
-    this.#show("stopped");
-  }
-
-  /** Back to the editable address, keeping the login; Continue then reads and compares again. */
-  #checkAddress(): void {
-    this.fieldRefusalDismissed = true;
-    if (this.errorAboutLogin) this.refusalDismissed = true;
-    this.#show("address");
-  }
-
-  #connect(): void {
-    if (this.#blocked()) return;
-
-    const totp = this.#codeAsked() ? this.values.totp.trim() : "";
-    // `password` is not trimmed: whitespace can be intentional in a secret.
-    const body: AdoptBody = {
-      primaryUrl: this.values.primaryUrl.trim(),
-      credential: {
-        email: this.values.email.trim(),
-        password: this.values.password,
-        ...(totp === "" ? {} : { totp }),
-      },
-      ...(this.confirmedCaPem === undefined ? {} : { confirmedCaPem: this.confirmedCaPem }),
-    };
-    dispatchAdoptRequested(this, body);
-  }
-
-  #back(): void {
-    dispatchSetupGoto(this, "role");
-  }
-
-  #field(key: ConnectField, error: StringKey | undefined, type = "text"): TemplateResult {
-    const invalid = error !== undefined;
-    const text = FIELD_TEXT[key];
-    const readonly = key === "primaryUrl" && this.step !== "address";
-    return html`<wt-input
-      @keydown=${(e: KeyboardEvent) =>
-        submitOnEnter(
-          e,
-          this.shadowRoot!.querySelector<HTMLElement>(
-            this.step === "address" ? "[data-test=continue]" : "[data-test=connect]",
-          ),
-        )}
-      class="field"
-      ?readonly=${readonly}
-      label=${t(text.label)}
-      name=${key}
-      autocapitalize="none"
-      autocorrect="off"
-      spellcheck="false"
-      autocomplete=${key === "password" ? "current-password" : key === "email" ? "username" : key === "totp" ? "one-time-code" : "off"}
-      ?required=${!readonly}
-      hint=${t(text.hint)}
-      error=${error === undefined ? "" : t(error)}
-      data-test=${key}
-      type=${type}
-      .passwordVisibility=${key === "password" ? passwordVisibility() : undefined}
-      ?invalid=${invalid}
-      .value=${this.values[key]}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-    ></wt-input>`;
-  }
-
-  #actions(blocked: boolean): TemplateResult {
-    switch (this.step) {
+  #actions(): TemplateResult {
+    const view = this.view.state;
+    const startAgain = (variant: "primary" | "secondary") =>
+      html`<wt-button
+        variant=${variant}
+        slot=${variant === "secondary" ? "secondary" : nothing}
+        data-test="start-again"
+        .loading=${this.busy && view !== "address"}
+        ?disabled=${this.busy}
+        @click=${() => void this.#startAgain()}
+        >${t("connect.start_again")}</wt-button
+      >`;
+    switch (view) {
+      case "reading":
+        return html``;
       case "address":
-        return html`<wt-button
-          variant="primary"
-          data-test="continue"
-          ?disabled=${blocked}
-          .loading=${this.reading}
-          @click=${() => void this.#continue()}
-          >${t("connect.continue")}</wt-button
-        >`;
-      case "compare":
-        return html`<wt-button
-            variant="secondary"
-            slot="secondary"
-            data-test="mismatch"
-            @click=${() => this.#mismatch()}
-            >${t("connect.compare.mismatch")}</wt-button
-          ><wt-button variant="primary" data-test="matches" @click=${() => this.#matches()}
-            >${t("connect.compare.matches")}</wt-button
-          >`;
-      case "stopped":
-        return html`<wt-button
-          variant="primary"
-          data-test="check-address"
-          @click=${() => this.#checkAddress()}
-          >${t("connect.check_address")}</wt-button
-        >`;
-      case "login":
-        return html`<wt-button
-            variant="secondary"
-            slot="secondary"
-            data-test="check-address"
-            @click=${() => this.#checkAddress()}
-            >${t("connect.check_address")}</wt-button
-          ><wt-button
+        return html`${
+            this.message === t("connect.refusal.join_waiting") ? startAgain("secondary") : nothing
+          }<wt-button
             variant="primary"
-            data-test="connect"
-            ?disabled=${blocked}
-            @click=${() => this.#connect()}
-            >${t("connect.connect")}</wt-button
+            data-test="join"
+            ?disabled=${this.#blank()}
+            .loading=${this.busy}
+            @click=${() => void this.#join()}
+            >${t("connect.join")}</wt-button
           >`;
+      case "waiting":
+        return startAgain("secondary");
+      case "approved":
+        return html`${startAgain("secondary")}<wt-button
+            variant="primary"
+            data-test="finish"
+            ?disabled=${this.busy}
+            @click=${() => dispatchJoinFinishRequested(this)}
+            >${t("connect.finish")}</wt-button
+          >`;
+      default:
+        return startAgain("primary");
     }
   }
 
-  #body(
-    field: (key: ConnectField, type?: string) => TemplateResult,
-  ): TemplateResult | typeof nothing {
-    switch (this.step) {
-      case "address":
-      case "stopped":
-        return nothing;
-      case "compare": {
-        const fingerprint = breakAfterColons(this.certificate?.fingerprint256 ?? "");
-        const servers = serversPageOf(this.values.primaryUrl.trim());
-        return html`<p data-test="compare">
-            ${t("connect.compare.intro_before")}
-            ${
-              servers
-                ? html`<a
-                    data-test="servers-link"
-                    href=${servers}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    >${t("connect.compare.intro_link")}</a
-                  >`
-                : t("connect.compare.intro_link")
-            }
-            ${t("connect.compare.intro_after")}
-          </p>
-          <p class="fingerprint-label">${t("connect.compare.label")}</p>
-          <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;
-      }
-      case "login":
-        return html`${field("email", "email")} ${field("password", "password")}
-        ${
-          this.#codeAsked()
-            ? html`<p data-test="totp-notice" role="status">${t("connect.totp.notice")}</p>
-                ${field("totp")}`
-            : nothing
-        }`;
+  #stateWords(): string {
+    const view = this.view;
+    switch (view.state) {
+      case "waiting":
+        return t("connect.waiting.lead");
+      case "approved":
+        return `${format("connect.approved", { code: grouped(view.code) })} ${t("connect.approved.hint")}`;
+      case "elsewhere":
+        return t("connect.elsewhere");
+      case "replaced":
+        return t("connect.replaced");
+      case "ended":
+        return t(ENDED_WORDS[view.reason] ?? "connect.ended.unknown");
+      case "failed":
+        return refusalWords({ code: view.error }) ?? t("connect.failed");
+      default:
+        return "";
     }
+  }
+
+  #waiting(): TemplateResult | typeof nothing {
+    const view = this.view;
+    if (view.state !== "waiting") return nothing;
+    const minutes = Math.max(0, Math.ceil((Date.parse(view.expiresAt) - Date.now()) / 60_000));
+    return html`<p class="code" data-test="code">${grouped(view.code)}</p>
+      <p class="detail" data-test="addresses">
+        ${format("connect.waiting.addresses", { addresses: view.addresses.join(", ") })}
+      </p>
+      <p class="detail" data-test="main">
+        ${format("connect.waiting.main", { primaryUrl: view.primaryUrl })}
+      </p>
+      <p class="detail" data-test="time-left">
+        ${Number.isNaN(minutes) ? nothing : format("connect.waiting.time_left", { minutes })}
+      </p>`;
+  }
+
+  #address(): TemplateResult {
+    const error = this.#blank()
+      ? t("connect.primary_url.error")
+      : this.addressRefused
+        ? t("connect.primary_url.refused")
+        : "";
+    return html`<p data-test="connect-intro">${t("connect.intro")}</p>
+      <wt-input
+        class="field"
+        label=${t("connect.primary_url.label")}
+        name="primaryUrl"
+        type="url"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+        autocomplete="off"
+        required
+        hint=${t("connect.primary_url.hint")}
+        error=${error}
+        ?invalid=${error !== ""}
+        data-test="primaryUrl"
+        .value=${this.primaryUrl}
+        @keydown=${(e: KeyboardEvent) =>
+          submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=join]"))}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onAddress(e)}
+      ></wt-input>`;
   }
 
   override render(): TemplateResult {
-    const errors = this.#errors();
-    const refused = this.#refusedField();
-    const errorOf = (key: ConnectField): StringKey | undefined => {
-      if (errors.has(key)) return FIELD_TEXT[key].error;
-      if (refused !== key) return undefined;
-      return key === "primaryUrl" ? "connect.primary_url.refused" : FIELD_TEXT[key].error;
-    };
-    const field = (key: ConnectField, type?: string) => this.#field(key, errorOf(key), type);
+    const view = this.view.state;
+    const fieldMarked = view === "address" && (this.#blank() || this.addressRefused);
     const bottom = [
-      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
-      ...(this.readFailed ? [t("connect.certificate_failed")] : []),
-      ...(this.step === "stopped" ? [t("connect.stopped")] : []),
-      ...(errors.size > 0 || refused !== undefined ? [t("connect.fix_fields")] : []),
+      ...(this.message === undefined ? [] : [this.message]),
+      ...(fieldMarked ? [t("connect.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("connect.heading")}</h1>
-      ${this.step === "address" ? html`<p data-test="connect-intro">${t("connect.intro")}</p>` : nothing}
-      ${field("primaryUrl", "url")} ${this.#body(field)}
+      ${
+        view === "reading"
+          ? html`<p data-test="reading" role="status">${t("connect.reading")}</p>`
+          : view === "address"
+            ? this.#address()
+            : html`<p data-test="state" role="status">${this.#stateWords()}</p>
+                ${this.#waiting()}`
+      }
       <wt-form-actions .error=${bottom}>
-        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+        <wt-button
+          variant="ghost"
+          slot="cancel"
+          data-test="back"
+          @click=${() => dispatchSetupGoto(this, "role")}
           >${t("connect.back")}</wt-button
         >
-        ${this.#actions(errors.size > 0)}
+        ${this.#actions()}
       </wt-form-actions>
     `;
   }

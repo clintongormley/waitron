@@ -346,6 +346,58 @@ describe("SetupApi", () => {
     expect(await api.primaryCertificate("http://127.0.0.1:8080")).toBeNull();
   });
 
+  it("sends the join's handle on every join request that has one, and the same empty body to finish", async () => {
+    const started = { code: "482913", addresses: ["192.168.1.23"], expiresAt: "x", handle: "h1" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(started))
+      .mockResolvedValueOnce(jsonResponse({ state: "approved", code: "482913" }))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse({ adopted: true, restarting: true }))
+      .mockResolvedValueOnce(jsonResponse({ state: "none" }));
+    const api = new SetupApi("", fetchImpl);
+    const handle = { "x-waitron-join-handle": "h0" };
+    expect(await api.startJoin("https://waitron.local", "h0")).toEqual(started);
+    expect(await api.joinState("h1")).toEqual({ state: "approved", code: "482913" });
+    await api.cancelJoin("h1");
+    await api.finishJoin("h1");
+    await api.joinState(undefined);
+    expect(fetchImpl.mock.calls).toEqual([
+      [
+        "/setup-api/join/start",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", ...handle },
+          body: JSON.stringify({ primaryUrl: "https://waitron.local" }),
+        },
+      ],
+      [
+        "/setup-api/join",
+        { method: "GET", credentials: "include", headers: { "x-waitron-join-handle": "h1" } },
+      ],
+      [
+        "/setup-api/join/cancel",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", "x-waitron-join-handle": "h1" },
+          body: "{}",
+        },
+      ],
+      [
+        "/setup-api/adopt",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json", "x-waitron-join-handle": "h1" },
+          body: "{}",
+        },
+      ],
+      ["/setup-api/join", { method: "GET", credentials: "include" }],
+    ]);
+  });
+
   it("resetIncompleteAdopt POSTs the admin login as JSON and returns the result", async () => {
     const result = { resetStaged: true, restarting: true };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(result, true, 202));

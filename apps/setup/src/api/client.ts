@@ -160,6 +160,27 @@ export interface AdoptOutcome {
   restarting: true;
 }
 
+/** A join's code as the new box first shows it, with the handle that keeps it on this tab. */
+export interface JoinStarted {
+  code: string;
+  addresses: string[];
+  expiresAt: string;
+  handle: string;
+}
+
+/**
+ * `elsewhere`: another page holds this box's join; `replaced`: this page's handle no longer counts.
+ * `reason` and `error` are kept as strings: a newer server may send one this page does not know.
+ */
+export type JoinState =
+  | { state: "none" }
+  | { state: "elsewhere" }
+  | { state: "replaced" }
+  | { state: "waiting"; code: string; addresses: string[]; primaryUrl: string; expiresAt: string }
+  | { state: "approved"; code: string }
+  | { state: "ended"; reason: string }
+  | { state: "failed"; error: string };
+
 /** The admin login used on the connect screen for the join that stopped partway. */
 export interface ResetCredential {
   email: string;
@@ -291,6 +312,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * The body is untrusted: a failed response need not carry our envelope, may not be JSON, or may be
  * a literal `null`, which parses. Nothing about it may throw here, or the `status` is lost.
  */
+const joinHeaders = (handle: string | undefined): Record<string, string> =>
+  handle === undefined ? {} : { "x-waitron-join-handle": handle };
+
 async function apiError(res: Response): Promise<ApiError> {
   const parsed: unknown = await res.json().catch(() => undefined);
   const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
@@ -592,6 +616,23 @@ export class SetupApi {
     return this.#request<PrimaryCertificate | null>("/setup-api/primary-certificate", "POST", {
       primaryUrl,
     });
+  }
+
+  startJoin(primaryUrl: string, handle: string | undefined): Promise<JoinStarted> {
+    return this.#request("/setup-api/join/start", "POST", { primaryUrl }, joinHeaders(handle));
+  }
+
+  joinState(handle: string | undefined): Promise<JoinState> {
+    return this.#request("/setup-api/join", "GET", undefined, joinHeaders(handle));
+  }
+
+  cancelJoin(handle: string | undefined): Promise<void> {
+    return this.#request("/setup-api/join/cancel", "POST", {}, joinHeaders(handle));
+  }
+
+  /** Finish joining: the server reads nothing from the body, so every resend is the same request. */
+  finishJoin(handle: string): Promise<AdoptOutcome> {
+    return this.#request("/setup-api/adopt", "POST", {}, joinHeaders(handle));
   }
 
   adopt(body: AdoptBody): Promise<AdoptOutcome> {

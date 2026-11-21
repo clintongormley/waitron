@@ -2,146 +2,57 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./connect-screen.js";
 import type { SetupConnectScreen } from "./connect-screen.js";
+import type { JoinState } from "../api/client.js";
 import type { Theme } from "../widgets/test-helpers.js";
 
 afterEach(cleanupWidgets);
 
-async function bottomOf(el: SetupConnectScreen): Promise<string> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
-}
-
-const CERTIFICATE = {
-  pem: "-----BEGIN CERTIFICATE-----\nAUTHORITY-X\n-----END CERTIFICATE-----\n",
-  fingerprint256:
-    "3F:A1:9C:0B:7E:22:D4:51:88:6A:E0:13:BC:47:F9:2D:65:0E:A8:31:DC:74:5B:96:C2:0F:E7:38:41:AD:9B:16",
-};
-
-function mount(props: Partial<SetupConnectScreen>, theme: Theme) {
-  return mountWidget<SetupConnectScreen>(
+async function mount(state: JoinState, theme: Theme) {
+  const api = {
+    startJoin: vi.fn(),
+    joinState: vi.fn().mockResolvedValue(state),
+    cancelJoin: vi.fn(),
+  };
+  const mounted = await mountWidget<SetupConnectScreen>(
     "setup-connect-screen",
-    { api: { primaryCertificate: vi.fn().mockResolvedValue(CERTIFICATE) }, ...props },
+    { api, handle: "h1" },
     theme,
   );
-}
-
-/** Opens the login fields on a clean form, as a confirmed comparison would. */
-async function atLogin(el: SetupConnectScreen): Promise<void> {
-  Object.assign(el, { step: "login" });
-  await el.updateComplete;
-}
-
-async function toCompare(el: SetupConnectScreen): Promise<void> {
-  el.shadowRoot!.querySelector("[data-test=primaryUrl]")!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "https://waitron.local" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=fingerprint]")).not.toBeNull(),
+    expect(mounted.el.shadowRoot!.querySelector("[data-test=reading]")).toBeNull(),
   );
+  return mounted;
 }
+
+const LAYOUTS: [string, JoinState, string][] = [
+  ["the address", { state: "none" }, "primaryUrl"],
+  [
+    "waiting, with the code",
+    {
+      state: "waiting",
+      code: "482913",
+      addresses: ["192.168.1.23"],
+      primaryUrl: "https://waitron.local",
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    },
+    "code",
+  ],
+  ["approved, with Finish joining", { state: "approved", code: "482913" }, "finish"],
+  ["ended", { state: "ended", reason: "wrong_code" }, "start-again"],
+];
 
 describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)", (theme) => {
-  it("has no violations on the pristine form", async () => {
-    const { host } = await mount({}, theme);
+  it.each(LAYOUTS)("has no violations: %s", async (_name, state, shown) => {
+    const { el, host } = await mount(state, theme);
+    expect(el.shadowRoot!.querySelector(`[data-test=${shown}]`)).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations once the main server asked for the authenticator code", async () => {
-    const { el, host } = await mount(
-      {
-        request: {
-          primaryUrl: "https://waitron.local",
-          credential: { email: "op1@example.com", password: "correct horse" },
-          confirmedCaPem: CERTIFICATE.pem,
-        },
-        askForCode: true,
-      },
-      theme,
-    );
-    expect(el.shadowRoot!.querySelector("[data-test=totp-notice]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations with the message above Connect and invalid fields shown", async () => {
-    const { el, host } = await mount({}, theme);
-    await atLogin(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+  it("has no violations with the address marked and the message above Join", async () => {
+    const { el, host } = await mount({ state: "none" }, theme);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
     await el.updateComplete;
-    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations with a routed-back server error shown above Continue", async () => {
-    const { el, host } = await mount({ errorMessage: "Couldn't reach the primary server." }, theme);
-    expect(await bottomOf(el)).toBe("Couldn't reach the primary server.");
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations when a server error and a client error coincide (one alert)", async () => {
-    const { el, host } = await mount({ errorMessage: "Couldn't reach the primary server." }, theme);
-    await atLogin(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
-    await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations on the compare step showing the fingerprint", async () => {
-    const { el, host } = await mount({}, theme);
-    await toCompare(el);
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations once the person says the fingerprint doesn't match", async () => {
-    const { el, host } = await mount({}, theme);
-    await toCompare(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=mismatch]")!.click();
-    await el.updateComplete;
-    expect(await bottomOf(el)).toContain("The fingerprints don't match");
-    await expectNoA11yViolations(host);
-  });
-
-  it.each([
-    [
-      "the certificate read's failure",
-      { code: "mirror.bundle_fetch_failed", params: {}, status: 502 },
-      "Couldn't read the primary server's certificate.",
-    ],
-    [
-      "the address marked invalid by the certificate read",
-      { code: "mirror.primary_url_invalid", params: {}, status: 400 },
-      "Correct the highlighted fields to continue.",
-    ],
-  ])("has no violations with %s shown", async (_label, refusal, sentence) => {
-    const { el, host } = await mount(
-      { api: { primaryCertificate: vi.fn().mockRejectedValue(refusal) } },
-      theme,
-    );
-    el.shadowRoot!.querySelector("[data-test=primaryUrl]")!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "https://waitron.local" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
-    await vi.waitFor(async () => expect(await bottomOf(el)).toContain(sentence));
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations on the login step with the address read-only", async () => {
-    const { el, host } = await mount({}, theme);
-    await toCompare(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=matches]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=primaryUrl]")!.hasAttribute("readonly")).toBe(
+    expect(el.shadowRoot!.querySelector("[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(
       true,
     );
     await expectNoA11yViolations(host);

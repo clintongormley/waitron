@@ -37,6 +37,20 @@ export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
   );
 }
 
+/** The join's new handle, or none once Start again ended the join; the shell keeps it for the tab. */
+export function dispatchJoinHandle(el: EventTarget, handle: string | undefined): void {
+  el.dispatchEvent(
+    new CustomEvent("join-handle", { detail: { handle }, bubbles: true, composed: true }),
+  );
+}
+
+/** Finish joining, chosen on an approved join; the shell posts it with the tab's handle. */
+export function dispatchJoinFinishRequested(el: EventTarget): void {
+  el.dispatchEvent(
+    new CustomEvent("join-finish-requested", { detail: {}, bubbles: true, composed: true }),
+  );
+}
+
 /** Carries the login itself; the shell does not keep it. */
 export function dispatchResetRequested(el: EventTarget, credential: ResetCredential): void {
   el.dispatchEvent(
