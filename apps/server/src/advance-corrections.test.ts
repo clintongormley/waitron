@@ -756,6 +756,18 @@ async function billPaymentsOf(billId: string): Promise<Record<string, unknown>[]
   return (read.json as { payments: Record<string, unknown>[] }).payments;
 }
 
+/** The ticket view's read of `saleId`. */
+async function ticketOf(saleId: string): Promise<Record<string, unknown>> {
+  const read = await send(
+    venue().app,
+    venue().cookie,
+    "GET",
+    `/api/transactions/${saleId}/receipt`,
+  );
+  expect(read.status, JSON.stringify(read.json)).toBe(200);
+  return read.json;
+}
+
 describe("the link between an advance and the rest's invoice that took it off", () => {
   it("the bill's payment names the advance's ticket, its day and VAT, and the rest's invoice once it is issued", async () => {
     const billId = await seated("Tasting menu");
@@ -784,6 +796,40 @@ describe("the link between an advance and the rest's invoice that took it off", 
     });
     for (const key of ["invoiceNumber", "issuedOn", "vatBreakdown", "takenOffBy"])
       expect(rest).not.toHaveProperty(key);
+  });
+
+  it("the advance's ticket names the rest's invoice that took it off; the rest's invoice and a ticket with no advance name none", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    expect(await ticketOf(advanceId)).not.toHaveProperty("takenOffBy");
+
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+
+    expect((await ticketOf(advanceId)).takenOffBy).toEqual({
+      saleId: finalSaleId,
+      invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+    });
+    expect(await ticketOf(finalSaleId)).not.toHaveProperty("takenOffBy");
+    const plainBill = await seated("Tasting menu");
+    await payRest(plainBill, "120.00");
+    expect(await ticketOf(await restId(plainBill))).not.toHaveProperty("takenOffBy");
+  });
+
+  it("a corrective of the rest's invoice names nothing, and the advance's ticket still names the rest's invoice", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    const finalSaleId = await restId(billId);
+    const corrective = await correct(finalSaleId, "20.00", [
+      { rate: "10.00", base: "18.18", tax: "1.82" },
+    ]);
+
+    expect(await ticketOf(corrective)).not.toHaveProperty("takenOffBy");
+    expect((await ticketOf(advanceId)).takenOffBy).toEqual({
+      saleId: finalSaleId,
+      invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+    });
   });
 });
 
@@ -1066,15 +1112,17 @@ describe("a whole credit of the rest's invoice (ruling L9)", () => {
     });
   });
 
-  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment", async () => {
+  it("still names only the credited rest's invoice as taking the advance off, on the bill's payment and on the advance's ticket", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
-    await creditWhole(rest.saleId);
+    const credit = await creditWhole(rest.saleId);
     const takenOffBy = {
       saleId: rest.saleId,
       invoiceNumber: (await advanceFacts(rest.saleId)).invoiceNumber,
     };
 
     expect((await billPaymentsOf(rest.billId))[0]).toMatchObject({ takenOffBy });
+    expect((await ticketOf(rest.advanceIds[0]!)).takenOffBy).toEqual(takenOffBy);
+    expect(await ticketOf(credit)).not.toHaveProperty("takenOffBy");
   });
 
   it("example 8: files −3.92/−0.43, reversing the seven dishes and the deduction line", async () => {

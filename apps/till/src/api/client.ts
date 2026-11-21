@@ -1058,6 +1058,13 @@ export type TenderBlock =
     };
 
 /** The recorded ticket carried by payment answers and receipt reads. */
+/** A ticket as the ticket view reads it. */
+export interface TransactionReceipt extends TillSaleResult {
+  /** On a part payment's ticket, the table's ticket that took it off; absent on any other ticket
+   * and on a corrective. Shown on screen only. */
+  takenOffBy?: { saleId: string; invoiceNumber: string };
+}
+
 export interface TillSaleResult extends ReceiptPresentation {
   slipPaymentId?: string;
   slipPrintFailed?: true;
@@ -4391,7 +4398,7 @@ export class TillApi {
     );
   }
 
-  getTransactionReceipt(saleId: string, options: ReadOptions = {}): Promise<TillSaleResult> {
+  getTransactionReceipt(saleId: string, options: ReadOptions = {}): Promise<TransactionReceipt> {
     return this.#request(
       `/api/transactions/${encodeURIComponent(saleId)}/receipt`,
       "GET",
