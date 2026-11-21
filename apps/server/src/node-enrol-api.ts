@@ -63,7 +63,7 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
   const limiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
   const fromBox = deps.requestProvenFromBox ?? requestProvenFromBox;
   // The agent asks again every round while refused, so the forwarding warning is written only when
-  // its reason changes; the error boundary still logs each refusal it answers.
+  // its main box or reason changes; the error boundary still logs each refusal it answers.
   let lastFailure: string | undefined;
 
   async function askMainBox(spare: NonNullable<NodeEnrolApiDeps["spare"]>, name: string) {
@@ -79,8 +79,10 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
     )
       throw new AppError("node.enrol_unavailable", {});
     const failed = (reason: string): never => {
-      if (reason !== lastFailure) log("warn", "node.enrol_forward_failed", { reason });
-      lastFailure = reason;
+      const failure = `${mainId} ${reason}`;
+      if (failure !== lastFailure)
+        log("warn", "node.enrol_forward_failed", { peerNodeId: mainId, reason });
+      lastFailure = failure;
       throw new AppError("node.enrol_unavailable", {});
     };
     const base = contactUrl.replace(/\/+$/, "");
@@ -116,7 +118,7 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
       answered = undefined;
     }
     if (!isRecord(answered) || typeof answered.token !== "string") return failed("malformed");
-    log("info", "node.enrol_forwarded", { mainNodeId: mainId });
+    log("info", "node.enrol_forwarded", { peerNodeId: mainId });
     lastFailure = undefined;
     const token: AgentEnrolAnswer = { token: answered.token };
     return token;

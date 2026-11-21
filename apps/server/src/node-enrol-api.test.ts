@@ -284,7 +284,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
       },
       opts.log ?? noopLog,
     );
-    return { app, spareId, publicKey, sent, fetchSeam, lookup };
+    return { app, spareId, publicKey, sent, fetchSeam, lookup, body };
   }
 
   async function spareRows(spareId: string): Promise<number> {
@@ -438,7 +438,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
     it("logs no_authority, and sends nothing, when this box holds no venue authority", async () => {
       const { res, reasons, server } = await forwardFailures({ server: authorityX });
       expect(await outcome(res)).toEqual(REFUSED);
-      expect(reasons).toEqual([{ reason: "no_authority" }]);
+      expect(reasons).toEqual([{ peerNodeId: MAIN_ID, reason: "no_authority" }]);
       expect(server.requests).toHaveLength(0);
     });
 
@@ -448,7 +448,7 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
         server: authorityY,
       });
       expect(await outcome(res)).toEqual(REFUSED);
-      expect(reasons).toEqual([{ reason: "certificate" }]);
+      expect(reasons).toEqual([{ peerNodeId: MAIN_ID, reason: "certificate" }]);
       expect(server.requests).toHaveLength(0);
     });
   });
@@ -471,9 +471,49 @@ describe("POST /api/node/enrol-self on the venue's spare", () => {
       Response.json({ error: { code: "node.enrol_unavailable", params: {} } }, { status: 409 });
     await post(app, { name: "a" }, "127.0.0.1");
     expect(lines).toEqual([
-      ["warn", "node.enrol_forward_failed", { reason: "node.enrol_unavailable" }],
-      ["info", "node.enrol_forwarded", { mainNodeId: MAIN_ID }],
-      ["warn", "node.enrol_forward_failed", { reason: "node.enrol_unavailable" }],
+      [
+        "warn",
+        "node.enrol_forward_failed",
+        { peerNodeId: MAIN_ID, reason: "node.enrol_unavailable" },
+      ],
+      ["info", "node.enrol_forwarded", { peerNodeId: MAIN_ID }],
+      [
+        "warn",
+        "node.enrol_forward_failed",
+        { peerNodeId: MAIN_ID, reason: "node.enrol_unavailable" },
+      ],
+    ]);
+  });
+
+  it("logs the same failure again when the chart names another main box", async () => {
+    const OTHER_MAIN = "55555555-5555-4555-8555-555555555555";
+    const reasons: unknown[] = [];
+    const { app, body } = await spareApp({
+      answer: async () =>
+        Response.json({ error: { code: "node.enrol_unavailable", params: {} } }, { status: 409 }),
+      log: (_level, event, fields) => {
+        if (event === "node.enrol_forward_failed") reasons.push(fields);
+      },
+    });
+    await post(app, { name: "a" }, "127.0.0.1");
+    await writeNodeMembership(suite.db, {
+      body: {
+        ...body,
+        term: body.term + 1,
+        nodes: [
+          { ...body.nodes[0]!, standing: "serving-secondary" },
+          body.nodes[1]!,
+          { nodeId: OTHER_MAIN, contactUrl: MAIN_URL, standing: "serving-primary" },
+        ],
+      },
+      signerNodeId: OTHER_MAIN,
+      signature: "placeholder",
+      endorsements: [],
+    });
+    await post(app, { name: "a" }, "127.0.0.1");
+    expect(reasons).toEqual([
+      { peerNodeId: MAIN_ID, reason: "node.enrol_unavailable" },
+      { peerNodeId: OTHER_MAIN, reason: "node.enrol_unavailable" },
     ]);
   });
 });
