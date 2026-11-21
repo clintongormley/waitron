@@ -656,6 +656,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
+        unlistedCount: 0,
         conflicts: [
           expect.objectContaining({
             weekday: 6,
