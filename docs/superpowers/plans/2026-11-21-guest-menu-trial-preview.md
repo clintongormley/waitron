@@ -1,39 +1,40 @@
 # Explain the guest-menu sharing requirement
 
-**Goal.** When Cloud requires a trial or paid plan for menu sharing, a manager sees why in
-Guest menu preview and can open Cloud Billing to start a free trial if the venue can still take one.
+**Goal.** When Cloud hides a guest menu for lack of an active trial or paid plan, a manager
+sees why in Guest menu preview and can open Billing to start a free trial where available.
 Scope is Lane D’s `GUEST-MENU-TRIAL-PREVIEW` queue entry of 21 November 2026 at 06:05.
 
-[Cloud #1342](https://github.com/waitron-io/waitron-cloud/pull/1342) gives the existing signed
-guest-menu status an optional `planRequired: true`. It also returns
-`403 guest_menu_plan_required` if a publish reaches Cloud after eligibility lapses. Use these
-answers for this venue. The box’s billing display has billing level and dates, while its
-local Cloud connection status already supplies the configured `accountUrl`. Build the existing
-Cloud portal route `/account/billing` from that origin. Cloud handles sign-in and trial availability.
+The existing signed guest-menu status carries `planRequired: true` while the venue is ineligible.
+Cloud hides any held copy, allows withdrawal and serves a still-shared copy again when eligibility
+returns. Use the existing poll for this decision. The box’s local Cloud status already supplies
+the configured account origin. The proposed link uses Cloud’s existing `/account/billing` route.
+[Cloud #1342 contract](https://github.com/waitron-io/waitron-cloud/blob/85e0a5829e5c613b025e104673537a83a06d3346/docs/waitron-integration-contract.md#L2834-L2841)
 
-- [ ] Write the failing cases in `apps/server/src/cloud-guest-menu.test.ts` using the signed HTTP
-  fixture. Show that an enabled publication gets `plan_required` and the trusted billing URL when
-  the status carries the flag, including when Cloud holds a previously delivered copy. Check the
-  exact publish refusal after an eligible status read, recovery on the next eligible pass, and
-  withdrawal of a held copy while ineligible. Run the focused file and observe the failure.
-- [ ] In `apps/server/src/cloud-guest-menu.ts`, retain the optional literal flag and project
-  `plan_required` with `billingUrl` through the existing guest-menu GET and PUT delivery object.
-  Map only the exact publish status and code using `serviceExchange`’s existing refusal hook, with
-  the code in `apps/server/src/errors.ts`. Keep the result tied to the existing venue and serving
-  checks. A plan flag stops a publish Cloud would decline. Cloud’s explicit block keeps precedence,
-  and turning sharing off still withdraws. A subsequent signed status replaces the plan flag.
-- [ ] In `apps/dashboard/src/widgets/guest-menu-preview.test.ts`, use the existing preview and
-  sharing fixtures to show the one-line requirement, the Cloud Billing link and the available
-  Turn sharing off action. Check a generic refusal still shows its own wording without the link.
-  See the test fail before changing `apps/dashboard/src/api/client.ts`,
-  `widgets/guest-menu-preview.ts` and `i18n/strings.ts`. Reuse the current status paragraph and
-  a native link in both languages. “Sharing through Cloud needs an active trial or paid plan.”
-  “Open Cloud Billing” leads to the trial and plan choices for the signed-in account.
-- [ ] Add the Billing step to the English and Spanish `apps/server/src/guide/*/products.md`
-  guest-sharing sections. Run focused Cloud delivery, guest-menu route, Dashboard preview and guide
-  tests and the error-code guard. Inspect the preview in English and Spanish, both themes and
-  phone and desktop widths. Check `git diff --check` and commit with sign-off.
+- [ ] In `apps/server/src/cloud-guest-menu.test.ts`, use the signed HTTP fixture to show
+  `plan_required` with the configured billing URL when Cloud flags a still-shared menu, including
+  a held copy. Check a completed pass sends no publish then, a later status without the flag
+  restores current delivery, and turning sharing off still withdraws the held copy. Run
+  `pnpm --filter @waitron/server exec vitest run src/cloud-guest-menu.test.ts` and see the new
+  assertions fail before changing delivery.
+- [ ] In `apps/server/src/cloud-guest-menu.ts`, read only literal `true` as the plan flag and
+  project `plan_required` with `billingUrl` from the box’s configured `accountUrl` through the
+  existing delivery object. The venue and serving checks, Cloud’s explicit block, and the
+  off or no-publication path take precedence. When there are pages to share, skip a publish
+  the signed status says Cloud will decline. Each new status replaces the flag, so a refusal
+  after the status read gets its explanation from the next successful poll.
+- [ ] In `apps/dashboard/src/widgets/guest-menu-preview.test.ts`, assert the plan line, exact
+  billing link and available Turn sharing off action. Check the generic refusal keeps its
+  current wording. Run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/guest-menu-preview.test.ts`
+  before changing `apps/dashboard/src/api/client.ts`, `widgets/guest-menu-preview.ts` and
+  `i18n/strings.ts`. Reuse the status paragraph in both languages. “Your Cloud guest menu is
+  hidden until your venue has an active trial or paid plan.” Add “Open Cloud Billing” as a native
+  link using the existing Cloud new-tab attributes so the print draft stays open.
+- [ ] Add the Billing step to both `apps/server/src/guide/*/products.md` guest-sharing sections.
+  After Cloud sign-in, choose Billing and select your venue if asked. Start a free trial if
+  offered. Update the A670 delivery note in `docs/backlog/menu.md`. Rerun the focused suites,
+  guest-menu route and guide checks. Inspect the preview in English and Spanish, both themes
+  and phone and desktop widths. Run `git diff --check` and commit with sign-off.
 
-Estimate 45–70 product lines and 75–115 test lines, plus two short guide additions. Reuse the
-current Cloud poll and box routes. This slice covers the preview and its billing link. Cloud
-enforcement, account setup, and mobile-data qualification are outside this slice.
+Estimate 30–50 product lines and 50–80 test lines, plus two short guide additions and the backlog
+line. The current Cloud poll and box routes suffice. Cloud enforcement and mobile-data
+qualification have their own work.
