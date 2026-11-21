@@ -229,28 +229,29 @@ export function activeSalesClause(): SQL {
       and ${notReplacementClause()}`;
 }
 
-/**
- * The sales a day-scoped report counts on their ISSUE day: issued in the window, not an F3-canje
- * substitute or a replacement, and not voided inside the same window — a sale and its void in one
- * window cancel, so neither is listed. A void made after the window leaves the sale counted, which is what keeps a
- * closed day's re-derived figures equal to its frozen close. Assumes `sales` is aliased `s`. No
- * leading `and`.
- */
+function saleInTradingWindow(window: WindowClause): SQL {
+  return sql`s.id in (
+    select ordinary.id from sales ordinary indexed by sales_issued_idx
+    where ${window(sql`ordinary.issued_at`)} and ordinary.source <> 'business_day_close'
+    union all
+    select automatic.id from working_orders wo indexed by working_orders_trusted_opened_at_idx
+    cross join sales automatic on automatic.working_order_id = wo.id
+    where ${window(sql`wo.trusted_opened_at`)} and automatic.source = 'business_day_close'
+  )`;
+}
+
+/** A condition on `sales s`. Sales and their voids in the same trading window cancel. */
 export function issuedSalesClause(window: WindowClause): SQL {
-  return sql`${window(sql`s.issued_at`)}
+  return sql`${saleInTradingWindow(window)}
       and ${notSubstituteClause()}
       and ${notReplacementClause()}
       and not exists (select 1 from sale_voids vd where vd.sale_id = s.id and ${window(sql`vd.voided_at`)})`;
 }
 
-/**
- * The sales a day-scoped report REVERSES: voided in the window, issued outside it, and not an
- * F3-canje substitute or a replacement (never counted, so never reversed). Assumes the outer query joins
- * `sale_voids` as `sv` to `sales` as `s`. No leading `and`.
- */
+/** A condition on `sale_voids sv` joined to `sales s`. The void reverses a sale from another trading window. */
 export function reversedSalesClause(window: WindowClause): SQL {
   return sql`${window(sql`sv.voided_at`)}
-      and not (${window(sql`s.issued_at`)})
+      and not (${saleInTradingWindow(window)})
       and ${notSubstituteClause()}
       and ${notReplacementClause()}`;
 }

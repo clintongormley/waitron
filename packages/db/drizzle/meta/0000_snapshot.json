@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7fb1dd65-279f-4c3a-8953-67cfa181d30e",
+  "id": "ba60d3f0-f98e-4dcb-8d5f-f59204b7a9e7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1443,6 +1443,13 @@
           "name": "working_orders_opened_at_idx",
           "columns": [
             "opened_at"
+          ],
+          "isUnique": false
+        },
+        "working_orders_trusted_opened_at_idx": {
+          "name": "working_orders_trusted_opened_at_idx",
+          "columns": [
+            "trusted_opened_at"
           ],
           "isUnique": false
         },
@@ -18451,7 +18458,7 @@
       "checkConstraints": {
         "outgoing_mail_kind_ck": {
           "name": "outgoing_mail_kind_ck",
-          "value": "\"outgoing_mail\".\"kind\" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed', 'security_change')"
+          "value": "\"outgoing_mail\".\"kind\" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed', 'security_change', 'daily_report')"
         },
         "outgoing_mail_status_ck": {
           "name": "outgoing_mail_status_ck",

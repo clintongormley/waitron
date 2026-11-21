@@ -645,6 +645,10 @@ Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su t
 imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
 o sin enviar sigue abierta.
 
+Si la cuenta se emitió al terminar el día de trabajo, selecciona el día en que se abrió en
+**Ventas y recaudación**. Para los impuestos, consulta **Modelo 303 (IVA)**. Las fechas registradas
+en las facturas pueden situar la cuenta en otro período.
+
 Si un cobro consta como no cobrado, puedes volver a cobrarlo. Si su resultado no se ha confirmado,
 elige **Comprobar de nuevo** para continuar ese mismo cobro antes de cobrar otro. Si no estaba
 registrado, puede cobrar la tarjeta o registrar el efectivo.

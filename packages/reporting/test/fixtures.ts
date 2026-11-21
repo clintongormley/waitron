@@ -126,8 +126,8 @@ export async function seedSale(
     /** A fixed sale id, for a test that needs a known id order; absent means a fresh one. */
     id?: SaleId;
     invoiceNumber: number;
-    /** A sample sale the Demo seed recorded, with no device; otherwise `seed.deviceId` rang it. */
-    source?: "demo_seed";
+    /** A sale recorded by a job, with no device. Otherwise `seed.deviceId` rang it. */
+    source?: "demo_seed" | "business_day_close";
     issuedAt: string;
     total: string;
     lines: Array<{

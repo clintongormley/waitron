@@ -601,6 +601,10 @@ A bill still open when the business day ends gets its receipt then, without prin
 payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
 open.
 
+To find a bill issued when the business day ended, choose the day it opened in **Sales & takings**.
+For tax reporting, use **VAT return (modelo 303)**. The dates recorded on invoices can place a
+bill in a different period.
+
 If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
 **Check again** to continue the same payment before taking another. If it was not recorded, this
 may charge the card or record the cash payment.

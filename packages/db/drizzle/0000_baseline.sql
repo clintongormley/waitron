@@ -251,6 +251,7 @@ CREATE UNIQUE INDEX `working_orders_order_number_key` ON `working_orders` (`orde
 CREATE INDEX `working_orders_uncollected_idx` ON `working_orders` (`id`) WHERE "working_orders"."collected_at" is null and "working_orders"."status" <> 'abandoned';--> statement-breakpoint
 CREATE INDEX `working_orders_status_idx` ON `working_orders` (`status`);--> statement-breakpoint
 CREATE INDEX `working_orders_opened_at_idx` ON `working_orders` (`opened_at`);--> statement-breakpoint
+CREATE INDEX `working_orders_trusted_opened_at_idx` ON `working_orders` (`trusted_opened_at`);--> statement-breakpoint
 CREATE INDEX `working_orders_party_idx` ON `working_orders` (`party_id`);--> statement-breakpoint
 CREATE TABLE `bill_set_menu_copies` (
 	`working_order_id` text NOT NULL,
@@ -2811,7 +2812,7 @@ CREATE TABLE `outgoing_mail` (
 	`failure_code` text,
 	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "outgoing_mail_kind_ck" CHECK("outgoing_mail"."kind" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed', 'security_change')),
+	CONSTRAINT "outgoing_mail_kind_ck" CHECK("outgoing_mail"."kind" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed', 'security_change', 'daily_report')),
 	CONSTRAINT "outgoing_mail_status_ck" CHECK("outgoing_mail"."status" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'expired', 'cancelled')),
 	CONSTRAINT "outgoing_mail_failure_ck" CHECK("outgoing_mail"."failure_code" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned', 'mail.relay_refused', 'mail.relay_unknown')),
 	CONSTRAINT "outgoing_mail_attempts_ck" CHECK("outgoing_mail"."attempts" >= 0),

@@ -12,6 +12,7 @@ import {
 import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { readDailyClose } from "@waitron/reporting";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
 import type { ClockServiceStatus } from "./box-host-client.js";
@@ -237,6 +238,24 @@ describe("bills.close_of_day", () => {
     await look(job());
     expect(issued(older)).toBe(true);
     expect(issued(newer)).toBe(true);
+  });
+
+  it("reports a caught-up bill on the day its table opened", async () => {
+    const bill = await billOpenedAt(day(-4).startAt + HOUR);
+    at = day(-1).startAt + HOUR;
+    await look(job());
+
+    const businessDay = addDays(today, -4);
+    const close = await inTx(venue, (tx) =>
+      readDailyClose(tx, { ...venueClock, nodeIds: [venue.cfg.nodeId], businessDay }),
+    );
+    expect(salesOf(bill)).toEqual([
+      expect.objectContaining({
+        source: "business_day_close",
+        issuedAt: new Date(at).toISOString(),
+      }),
+    ]);
+    expect(close.counts.sales).toBe(1);
   });
 
   it("issues no ticket when the gate lets go on a box whose clock ran a day behind, only at the end of the corrected day", async () => {

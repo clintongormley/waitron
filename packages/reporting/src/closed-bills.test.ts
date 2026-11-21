@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedBillPayment,
@@ -81,6 +82,46 @@ describe("department closed bills", () => {
 
   it("counts a bill on the business day it was settled, not the day it was invoiced", async () => {
     await bill(venue, 1, { total: "100.00", issuedAt: evening, settledAt: nextNoon });
+
+    expect(await run()).toEqual({ count: 0, total: "0.00" });
+    expect(await run({ businessDay: NEXT_DAY })).toEqual({ count: 1, total: "100.00" });
+  });
+
+  it("counts a zero-total bill settled by the automatic close on its opening day", async () => {
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    await suite.db
+      .update(workingOrders)
+      .set({ openedAt: evening, trustedOpenedAt: evening })
+      .where(eq(workingOrders.id, orderId));
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      source: "business_day_close",
+      issuedAt: nextNoon,
+      total: "0.00",
+      lines: [{ vatRate: "10.00", lineTotal: "0.00" }],
+      workingOrderId: orderId,
+    });
+    await settleOrder(suite.db, orderId, nextNoon);
+
+    expect(await run()).toEqual({ count: 1, total: "0.00" });
+    expect(await run({ businessDay: NEXT_DAY })).toEqual({ count: 0, total: "0.00" });
+  });
+
+  it("counts a nonzero automatic close bill when staff settle it later", async () => {
+    const { orderId } = await seedOpenOrder(suite.db, venue, 1);
+    await suite.db
+      .update(workingOrders)
+      .set({ openedAt: evening, trustedOpenedAt: evening })
+      .where(eq(workingOrders.id, orderId));
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      source: "business_day_close",
+      issuedAt: nextNoon,
+      total: "100.00",
+      lines: [{ vatRate: "10.00", lineTotal: "100.00" }],
+      workingOrderId: orderId,
+    });
+    await settleOrder(suite.db, orderId, nextNoon);
 
     expect(await run()).toEqual({ count: 0, total: "0.00" });
     expect(await run({ businessDay: NEXT_DAY })).toEqual({ count: 1, total: "100.00" });
