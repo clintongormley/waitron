@@ -251,6 +251,22 @@ describe("setup venue unsaved changes", () => {
     expect(unload()).toBe(false);
   });
 
+  it("turning the registered-address switch on and back off leaves without asking", async () => {
+    const { venue } = await mount();
+    const flip = async (checked: boolean) => {
+      venue
+        .shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+        );
+      await venue.updateComplete;
+    };
+    await flip(true);
+    expect(unload()).toBe(true);
+    await flip(false);
+    expect(unload()).toBe(false);
+  });
+
   it("clean and reverted values leave without asking", async () => {
     const { el, venue } = await mount();
     expect(unload()).toBe(false);

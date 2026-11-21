@@ -848,22 +848,21 @@ describe("setup-app", () => {
       goto(el, "venue");
       await el.updateComplete;
       const venue = await screenHost(el, "venue");
-      // The registered address is asked for in parts, so its line is read from Street.
-      const shownAs = (key: string) => (key === "taxpayerDomicile" ? "registeredStreet" : key);
+      // The old registered address is dropped: an empty line opens as the venue's address.
+      const fiscal = Object.keys(sixFields).filter((key) => key !== "taxpayerDomicile");
       expect(
-        Object.fromEntries(
-          Object.keys(sixFields).map((key) => [key, venueValue(venue, shownAs(key))]),
-        ),
-      ).toEqual({
+        venue.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+          "[data-test=registeredSameAsVenue]",
+        )!.checked,
+      ).toBe(true);
+      expect(venue.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+      expect(Object.fromEntries(fiscal.map((key) => [key, venueValue(venue, key)]))).toEqual({
         taxId: "",
         legalName: "",
-        taxpayerDomicile: "",
         seriesCode: "FS",
         fullSeriesCode: "FF",
         rectificativeSeriesCode: "FR",
       });
-      expect(venueValue(venue, "registeredPostalCode")).toBe("");
-      expect(venueValue(venue, "registeredCity")).toBe("");
       expect(venueValue(venue, "name")).toBe("Prepared");
       patch(el, { venue: typed });
       provisionRequest(el);

@@ -598,7 +598,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   /** The draft's own parts while they still make the saved line (so Back keeps line 2); otherwise
-   * the saved line split, with the switch on only when that is the venue's address. */
+   * the saved line split, with the switch on when that is empty or is the venue's address. */
   #seedRegisteredAddress(line: string): void {
     const pack = this.#pack();
     const saved = line.trim();
@@ -627,6 +627,7 @@ export class SetupVenueScreen extends LitElement {
         : registeredAddressParts(saved, pack);
     this.values = { ...this.values, ...registeredValues(parts) };
     this.sameAsVenue =
+      saved === "" ||
       joinRegisteredAddress(parts) === joinRegisteredAddress(venueAddressParts(pack, this.values));
   }
 
@@ -768,7 +769,14 @@ export class SetupVenueScreen extends LitElement {
     event.stopPropagation();
     const country = event.detail.value;
     const pack = getVenueSetupCountryPack(country);
-    this.values = { ...this.values, country, postalCode: "", province: "" };
+    this.values = {
+      ...this.values,
+      country,
+      postalCode: "",
+      province: "",
+      registeredPostalCode: "",
+      registeredProvince: "",
+    };
     this.foreignAddress = undefined;
     this.#followDemoName(pack, undefined);
     if (pack !== undefined) {
@@ -834,6 +842,8 @@ export class SetupVenueScreen extends LitElement {
     }
     for (const key of this.#registeredErrors().keys()) invalid.add(key);
     const pack = this.#pack();
+    const unreadable = this.#unreadableCity(invalid);
+    if (unreadable !== undefined) invalid.add(unreadable);
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
     const postalArea =
@@ -905,6 +915,23 @@ export class SetupVenueScreen extends LitElement {
       if (error !== undefined) errors.set(key, error);
     }
     return errors;
+  }
+
+  /** The server splits the line it is sent and checks the split, where the pack has a postcode
+   * rule. Parts that pass on their own can still join into a line that splits otherwise, as when
+   * the city holds a comma; that marks the City the line was joined from. Checked once the fields
+   * it joins pass, so a field is not marked twice. */
+  #unreadableCity(invalid: ReadonlySet<FormField>): "city" | "registeredCity" | undefined {
+    const pack = this.#pack();
+    if (this.#demo || pack?.postalCode === undefined) return undefined;
+    const joined: readonly TextField[] = this.sameAsVenue
+      ? ["addressLine1", "addressLine2", "postalCode", "city", "province"]
+      : REGISTERED_FIELDS;
+    if (joined.some((key) => invalid.has(key))) return undefined;
+    const line = registeredLine(pack, this.values, this.sameAsVenue);
+    const readBack = registeredAddressErrors(registeredAddressParts(line, pack), pack);
+    if (Object.keys(readBack).length === 0) return undefined;
+    return this.sameAsVenue ? "city" : "registeredCity";
   }
 
   #collectErrors(): Map<FieldKey, string> {
@@ -993,6 +1020,7 @@ export class SetupVenueScreen extends LitElement {
     if (key === "invoiceLocales") return t("venue.error.invoice_locales");
     if (this.values[key].trim() === "")
       return format("venue.enter_field", { field: t(FIELD_NOUNS[key]) });
+    if (key === "city" || key === "registeredCity") return t("venue.error.city_comma");
     if (key === "taxId") return t("venue.error.tax_id");
     if (key === "registeredPostalCode") return t("venue.error.registered_postal_code");
     if (key === "registeredProvince") return t("venue.error.province");

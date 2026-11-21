@@ -1180,6 +1180,93 @@ describe("the registered business address in parts", () => {
     expect(valueOf(el, "registeredPostalCode")).toBe("28002");
   });
 
+  it("refuses parts whose joined line could not be read back, marking City", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare" },
+    });
+    const events = collect(host);
+    await fillValid(el, { registeredCity: "Madrid, Centro" });
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    const city = q(el, "[data-test=registeredCity]") as HTMLElement & { error: string };
+    expect(city.hasAttribute("invalid")).toBe(true);
+    expect(city.error).toBe("Write the city without a comma.");
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    await type(el, "registeredCity", "Madrid");
+    q(el, "[data-test=next]")!.click();
+    expect(venueOf(events).taxpayerDomicile).toBe("Calle Fiscal 8, 28013 Madrid, Madrid");
+  });
+
+  it("refuses the venue's address as the registered one when its line could not be read back, marking the venue's City", async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: {
+        mode: "prepare",
+        venue: { ...EXPECTED_VENUE, city: "Madrid, Centro", taxpayerDomicile: "" },
+      },
+    });
+    const events = collect(host);
+    expect(sameSwitch(el).checked).toBe(true);
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    const city = q(el, "[data-test=city]") as HTMLElement & { error: string };
+    expect(city.hasAttribute("invalid")).toBe(true);
+    expect(city.error).toBe("Escribe la ciudad sin comas.");
+    expect(await bottomOf(el)).toBe(t("venue.fix_fields"));
+    await type(el, "city", "Madrid");
+    q(el, "[data-test=next]")!.click();
+    expect(venueOf(events).taxpayerDomicile).toBe("Calle Mayor 1, 28013 Madrid, Madrid");
+  });
+
+  it("clears the registered postal code and province when the country changes", async () => {
+    const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
+    packs.push(SPARSE_PACK);
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { mode: "prepare", venue: EXPECTED_VENUE },
+      });
+      expect(valueOf(el, "registeredPostalCode")).toBe("28013");
+      expect(valueOf(el, "registeredProvince")).toBe("28");
+      await type(el, "country", "ZZ");
+      expect(valueOf(el, "registeredPostalCode")).toBe("");
+      expect(valueOf(el, "registeredProvince")).toBe("");
+      expect(valueOf(el, "registeredStreet")).toBe("Calle Fiscal 8");
+    } finally {
+      packs.pop();
+    }
+  });
+
+  it("seeds the switch on from the draft's parts, keeping the parts behind it", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: {
+        mode: "prepare",
+        registeredAddress: {
+          sameAsVenue: true,
+          street: "Calle Fiscal 8",
+          line2: "2º 1ª",
+          postalCode: "28013",
+          city: "Madrid",
+          province: "Madrid",
+        },
+        venue: { ...EXPECTED_VENUE, taxpayerDomicile: "Calle Mayor 1, 28013 Madrid, Madrid" },
+      },
+    });
+    expect(sameSwitch(el).checked).toBe(true);
+    await type(el, "registeredSameAsVenue", "off");
+    expect(valueOf(el, "registeredStreet")).toBe("Calle Fiscal 8");
+    expect(valueOf(el, "registeredLine2")).toBe("2º 1ª");
+  });
+
+  it("opens an empty saved line with the switch on, even beside a venue address", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: { ...EXPECTED_VENUE, taxpayerDomicile: "" } },
+    });
+    expect(sameSwitch(el).checked).toBe(true);
+  });
+
   it("sends the pack's own spelling of a province given in another", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: {
