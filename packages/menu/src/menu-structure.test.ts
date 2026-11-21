@@ -26,6 +26,7 @@ import {
   updateProduct,
 } from "./operations.js";
 import { createExtraList } from "./extras.js";
+import { addSetMenuDishes } from "./set-menus.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import * as menuStructure from "./menu-structure.js";
 import * as sectionGraph from "./section-graph.js";
@@ -658,6 +659,56 @@ describe("syncing menus that have no structure", () => {
     await app((tx) => syncMenuOffers(tx, []));
     await app((tx) => syncMenuOffers(tx, [crypto.randomUUID()]));
     expect(await app((tx) => tx.select().from(menuItems))).toEqual([]);
+  });
+});
+
+describe("a set menu's revision after a sync with no earlier graph", () => {
+  const saved = new Date("2026-01-02T03:04:05.000Z");
+
+  /** A set menu offering water, its revision put back to `saved`. */
+  async function cleanSetMenu(f: Fixture): Promise<string> {
+    return app(async (tx) => {
+      const set = await createMenu(tx, {
+        name: "Daily menu",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      });
+      await addSetMenuDishes(tx, set.id, [{ productId: f.water, excludedVariantIds: [] }]);
+      await tx.update(menus).set({ updatedAt: saved }).where(eq(menus.id, set.id));
+      return set.id;
+    });
+  }
+
+  const revision = async (menuId: string) =>
+    (await app((tx) => tx.select().from(menus).where(eq(menus.id, menuId))))[0]!.updatedAt;
+
+  it("keeps the saved revision of a set menu the sync finds nothing to repair in", async () => {
+    const f = await fixture();
+    const set = await cleanSetMenu(f);
+    await app((tx) =>
+      tx.insert(menuItems).values({ menuId: set, productId: f.burger, grossPrice: null }),
+    );
+    await app((tx) => syncMenuOffers(tx, [set]));
+    expect(await revision(set)).toEqual(saved);
+  });
+
+  it("moves the revision of a set menu whose stale row it reset", async () => {
+    const f = await fixture();
+    const set = await cleanSetMenu(f);
+    await app((tx) =>
+      tx.insert(menuItems).values({ menuId: set, productId: f.burger, grossPrice: 300 }),
+    );
+    await app((tx) => syncMenuOffers(tx, [set]));
+    expect(await revision(set)).not.toEqual(saved);
+  });
+
+  it("moves the revision of a set menu missing a row for a dish it offers", async () => {
+    const f = await fixture();
+    const set = await cleanSetMenu(f);
+    await app((tx) => tx.delete(menuItems).where(eq(menuItems.menuId, set)));
+    await app((tx) => syncMenuOffers(tx, [set]));
+    expect(await revision(set)).not.toEqual(saved);
   });
 });
 

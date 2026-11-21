@@ -254,11 +254,15 @@ export async function syncMenuOffers(
       heldBefore === undefined
         ? reached
         : reached.filter((productId) => !heldBefore.has(productId));
+    let rowsWritten = 0;
     for (const batch of batches(adding))
-      await tx
-        .insert(menuItems)
-        .values(batch.map((productId) => ({ menuId, productId })))
-        .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] });
+      rowsWritten += (
+        await tx
+          .insert(menuItems)
+          .values(batch.map((productId) => ({ menuId, productId })))
+          .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] })
+          .returning({ id: menuItems.id })
+      ).length;
     const stale =
       heldBefore === undefined
         ? await rowsNotHeld(tx, menuId, held)
@@ -269,25 +273,43 @@ export async function syncMenuOffers(
           );
     for (const batch of batches(stale)) {
       if (setMenu) {
-        await tx
-          .delete(setMenuVariantExclusions)
-          .where(inArray(setMenuVariantExclusions.menuItemId, batch));
-        await tx.delete(setMenuDishCourses).where(inArray(setMenuDishCourses.menuItemId, batch));
+        rowsWritten += (
+          await tx
+            .delete(setMenuVariantExclusions)
+            .where(inArray(setMenuVariantExclusions.menuItemId, batch))
+            .returning({ id: setMenuVariantExclusions.menuItemId })
+        ).length;
+        rowsWritten += (
+          await tx
+            .delete(setMenuDishCourses)
+            .where(inArray(setMenuDishCourses.menuItemId, batch))
+            .returning({ id: setMenuDishCourses.menuItemId })
+        ).length;
       }
-      await tx
-        .delete(menuItemVariantOverrides)
-        .where(inArray(menuItemVariantOverrides.menuItemId, batch));
-      await tx
-        .update(menuItems)
-        .set({ grossPrice: null })
-        .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice)));
+      rowsWritten += (
+        await tx
+          .delete(menuItemVariantOverrides)
+          .where(inArray(menuItemVariantOverrides.menuItemId, batch))
+          .returning({ id: menuItemVariantOverrides.menuItemId })
+      ).length;
+      rowsWritten += (
+        await tx
+          .update(menuItems)
+          .set({ grossPrice: null })
+          .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice)))
+          .returning({ id: menuItems.id })
+      ).length;
     }
     if (setMenu) {
       if (adding.length > 0) setMenuAdditions.set(menuId, adding);
+      // Without `before` (an import), a set menu whose rows were already in step keeps its saved
+      // revision.
       if (
-        stale.length > 0 ||
-        reached.length !== previouslyReached?.length ||
-        reached.some((id, index) => id !== previouslyReached[index])
+        previouslyReached === undefined
+          ? rowsWritten > 0
+          : stale.length > 0 ||
+            reached.length !== previouslyReached.length ||
+            reached.some((id, index) => id !== previouslyReached[index])
       )
         await touchSetMenu(tx, menuId);
     }

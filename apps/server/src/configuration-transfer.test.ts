@@ -41,6 +41,7 @@ import {
   createCategory,
   createExtraList,
   addProductToMenu,
+  addSetMenuDishes,
   createOptionList,
   createProduct,
   updateProduct,
@@ -1429,6 +1430,51 @@ describe("configuration transfer database path", () => {
       { name: "Gin", gross_price: null, overrides: 0 },
       { name: "Tonic", gross_price: 550, overrides: 1 },
     ]);
+  });
+
+  it("keeps a clean set menu's saved revision through an import", async () => {
+    const source = await applyVenue(planVenue(venue("B66778813"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const saved = new Date("2026-01-02T03:04:05.000Z");
+    await withTransaction(suite.db, async (tx) => {
+      const set = await createMenu(tx, {
+        name: "Daily menu",
+        kind: "set_menu",
+        setPrice: "14.00",
+        setVatClass: "reduced",
+      });
+      const dish = await createProduct(tx, {
+        categoryId: null,
+        name: "Soup",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      await addSetMenuDishes(tx, set.id, [{ productId: dish.id, excludedVariantIds: [] }]);
+      await tx.update(menus).set({ updatedAt: saved }).where(eq(menus.id, set.id));
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const clean = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    await applyVenue(planVenue(venue("B99887712"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, clean, ALL_MODULES, versions),
+    });
+    const [imported] = await withTransaction(targetSuite.db, (tx) =>
+      tx.select({ updatedAt: menus.updatedAt }).from(menus).where(eq(menus.kind, "set_menu")),
+    );
+    expect(imported).toEqual({ updatedAt: saved });
   });
 
   it("refuses a bundle whose menu lost its root section, where no offer sync would reach", async () => {
