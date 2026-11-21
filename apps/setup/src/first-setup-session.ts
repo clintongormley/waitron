@@ -566,7 +566,7 @@ export class FirstSetupSession {
   provision(
     settings: Omit<FirstSetupProvisionBody, "firstSetup">,
     locale?: string,
-    cloudSignInTab?: string,
+    ...cloudSignInArgs: [cloudSignInTab?: string]
   ) {
     return this.#run(async (current) => {
       const owner = this.#owner();
@@ -575,7 +575,7 @@ export class FirstSetupSession {
           owner,
           this.#publicationBody(owner, settings),
           locale,
-          cloudSignInTab,
+          ...cloudSignInArgs,
         );
         current();
         this.#needsRefresh = true;

@@ -1834,6 +1834,7 @@ export class SetupApp extends LitElement {
       const request = assembleBody(submitted);
       const locale = currentLocale();
       const cloudSignInTab = this.#cloudSignInTab;
+      const cloudSignInArgs: [string?] = cloudSignInTab ? [cloudSignInTab] : [];
       const result = await (this.#firstSession
         ? this.#firstSession.provision(
             {
@@ -1842,14 +1843,14 @@ export class SetupApp extends LitElement {
               email: submitted.email as ProvisionBody["email"],
             },
             locale,
-            cloudSignInTab,
+            ...cloudSignInArgs,
           )
         : request.mode === "prepare" || cloudSignInTab
           ? this.api.provision(
               request,
               this.#localeChosen ? locale : undefined,
               request.mode === "prepare" ? locale : undefined,
-              cloudSignInTab,
+              ...cloudSignInArgs,
             )
           : this.#localeChosen
             ? this.api.provision(request, locale)
