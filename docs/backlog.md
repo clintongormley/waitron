@@ -98,8 +98,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 - [One session at the real box: printers, paper, tax QR, the drawer](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 - [One session with real phones and password managers](backlog/dashboard.md#bundle-one-session-with-real-phones-and-password-managers)
 - [One owner session with a real certificate against AEAT](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)
-- Design with the owner: the A1323 master key, because A1187 parts 2 and 3 change the same restore
-  steps.
 
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
@@ -1122,12 +1120,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-backup-read-limits) to reduce bucket requests.
 
-- **A1323. One master key for the venue (owner, 2026-11-04; wanted, not designed).**
-  The owner keeps one key, printed in the recovery pack, in place of the backup key and the server key; the box keeps only a check value and numbered backup keys calculated from it.
-  Design it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
+- **A1323. One master key for the venue (owner, 2026-11-04; designed with the owner 2026-11-21, not built).**
+  The owner keeps one key, printed in the recovery pack, in place of the backup key, the server key, the Cloud emergency code and the disk key; the box keeps only a check value and numbered backup keys calculated from it. The emergency start in Cloud needs the master key typed in, and the pack no longer holds the storage password.
+  Build it beside A1187 and A1188, which change the same restore steps. It changes the fiscal authority check, so the owner lands it.
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
-- **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack
+- **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. The owner folded the disk key into the A1323 master key on 2026-11-21, so the pack gets no separate disk-key page ([A1323](backlog/box.md#a1323-one-master-key-for-the-venue)). A pack
   that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
 

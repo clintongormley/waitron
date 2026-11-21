@@ -505,6 +505,11 @@ account". Left open by A1185.
 
 Before A1188 activation ships, recheck A1187-2’s printed emergency steps against the actual hosted flow; printing the page does not qualify hosted activation.
 
+The A1323 master key replaces the emergency code (owner, 2026-11-21): the emergency start in Cloud
+needs the master key typed in, and emergency start can be switched on at any time, including after
+the box has died, from the owner's Cloud sign-in.
+[A1323](box.md#a1323-one-master-key-for-the-venue).
+
 Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
 show the emergency link to an administrator when the box disappears. The locked copy Cloud
 restores after a valid emergency code offers only an administrator sign-in; a manager
