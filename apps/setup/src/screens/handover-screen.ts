@@ -279,6 +279,7 @@ export class SetupHandoverScreen extends LitElement {
         this.restarting = false;
         this.#resetSelection();
         this.password = this.code = "";
+        this.attempted = false;
       }
       this.readFailed = false;
     } catch {
@@ -468,6 +469,7 @@ export class SetupHandoverScreen extends LitElement {
       this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
+      this.attempted = false;
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
@@ -563,7 +565,12 @@ export class SetupHandoverScreen extends LitElement {
       )
     )
       return "handover.emergency.backup_invalid";
-    if (this.copyRefused) return "handover.emergency.copy_failed";
+    if (this.copyRefused)
+      return this.#declared
+        ? "handover.emergency.copy_failed"
+        : this.#offersOtherCopy
+          ? "handover.emergency.copy_unchecked"
+          : "handover.emergency.copy_unchecked_only";
     if (
       ["node.read_only", "handover.source_no_longer_main", "handover.step_out_of_order"].includes(
         code ?? "",
@@ -591,6 +598,7 @@ export class SetupHandoverScreen extends LitElement {
       if (activated(status) || closed(status)) {
         this.#resetSelection();
         this.password = this.code = "";
+        this.attempted = false;
       }
       this.readFailed = false;
     } catch {

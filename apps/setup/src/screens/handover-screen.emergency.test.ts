@@ -810,7 +810,7 @@ it.each([
     "/handover/controlled",
     ["preview"],
   ],
-  ["handover.copy_mismatch", "handover.emergency.copy_failed", null, ["preview"]],
+  ["handover.copy_mismatch", "handover.emergency.copy_unchecked", null, ["preview"]],
   ["password.throttled", "handover.emergency.throttled", null, ["preview"]],
   ["node.operation_page_required", "handover.emergency.connection", null, ["preview"]],
   ["authorization.not_permitted", "handover.emergency.permission", null, ["preview", "followed"]],
@@ -1562,6 +1562,32 @@ it("after choosing a backup, a changed copy is waited out but a refused check en
   expect(previews(posts)).toBe(4);
 });
 
+// Before a declaration is saved, a refused copy check offers the backup choice where one is drawn.
+it.each([
+  // Without a controlled handover, Check takes the main box's copy and reads one more preview.
+  [false, "handover.emergency.copy_unchecked", ["ok", "handover.copy_damaged"]],
+  [true, "handover.emergency.copy_unchecked_only", ["handover.copy_damaged"]],
+] as const)(
+  "a copy check refused before any declaration does not mention one (unfinished controlled handover: %s)",
+  async (controlledOperation, key, later) => {
+    const { el } = await mount({
+      controlledOperation,
+      changeBeforeDeclare: true,
+      later: [...later],
+    });
+    await authenticate(el);
+    await declarationFields(el);
+    q(el, "[data-test=emergency-declare]").click();
+    await vi.waitFor(() => expect(actions(el)).toContain(t(key)));
+    expect(actions(el)).not.toContain(t("handover.emergency.copy_failed"));
+    if (controlledOperation) expect(q(el, "[data-test=different-copy]")).toBeNull();
+    else {
+      await useDifferentCopy(el);
+      expect(q(el, 'wt-file-input[name="handover-backup"]')).not.toBeNull();
+    }
+  },
+);
+
 it("a changed copy whose fresh check is refused says why instead of asking to confirm again", async () => {
   const { el } = await mount({ changeBeforeDeclare: true, later: ["ok", "password.throttled"] });
   await authenticate(el);
@@ -2170,7 +2196,7 @@ it("an expired code at the clock check opens the sign-in again, without Use a di
   expect(q(el, "[data-test=different-copy]")).toBeNull();
 });
 
-it("a start that cleared the password while progress cannot be read draws the fields it marks", async () => {
+it("a successful start whose progress cannot be read asks for nothing until the step is pressed again", async () => {
   const { el } = await mount({ saved: true, alreadyActivated: true });
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
@@ -2178,10 +2204,16 @@ it("a start that cleared the password while progress cannot be read draws the fi
   expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
   await startVenue(el);
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("handover.read_failed")));
-  expect(actions(el)).toContain(t("handover.fix"));
+  expect(actions(el)).not.toContain(t("handover.fix"));
+  expect(signInDrawn(el)).toEqual([false, false, false, false, false]);
+  // Pressing the step again needs the password the start cleared, so the fields come back marked.
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(actions(el)).toContain(t("handover.fix")));
   expect(signInDrawn(el)).toEqual([true, true, true, true, false]);
   const password = q<LitElement & { error: string }>(el, '[name="handover-password"]');
   expect(password.error).toBe(t("handover.required"));
+  await password.updateComplete;
+  expect(password.shadowRoot!.querySelector("input")!.value).toBe("");
 });
 
 it("a successful Declare folds a sign-in opened with Use a different copy", async () => {

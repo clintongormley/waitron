@@ -118,6 +118,10 @@ export const handoverEn = {
     "An unfinished controlled handover must be resolved first. Open its progress page.",
   "handover.emergency.copy_failed":
     "This copy could not be verified against the saved declaration. Do not continue; keep this box and the old box’s data intact.",
+  "handover.emergency.copy_unchecked":
+    "This copy could not be checked. Keep the old main box and its data, and choose a backup instead.",
+  "handover.emergency.copy_unchecked_only":
+    "This copy could not be checked. Keep the old main box and its data.",
   "handover.emergency.changed":
     "The venue or handover has changed. Check progress and use the current main box.",
   "handover.emergency.trust":
@@ -251,6 +255,10 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Primero hay que resolver un traspaso controlado pendiente. Abre su página de progreso.",
   "handover.emergency.copy_failed":
     "No se pudo verificar esta copia con la declaración guardada. No continúes y conserva los datos de ambos servidores.",
+  "handover.emergency.copy_unchecked":
+    "No se ha podido comprobar esta copia. Conserva el servidor principal anterior y sus datos, y elige una copia de seguridad.",
+  "handover.emergency.copy_unchecked_only":
+    "No se ha podido comprobar esta copia. Conserva el servidor principal anterior y sus datos.",
   "handover.emergency.changed":
     "El local o el traspaso ha cambiado. Comprueba el progreso y usa el servidor principal actual.",
   "handover.emergency.trust":
