@@ -6,6 +6,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
   AppError,
+  businessDayBounds,
   nodeId as brandNodeId,
   type BusinessDayClock,
   type NodeId,
@@ -59,6 +60,8 @@ import { workbookDownloadHeaders } from "./xlsx-workbook.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readDailySalesFigures, summariseClosures } from "./daily-sales-figures.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
+import { listDrawerCloses, readDrawerCloseForPrint } from "./drawer-close-report.js";
+import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
 import type { FiscalBackend } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 
@@ -87,6 +90,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "printer.not_found": 404,
+  "drawer.close_not_found": 404,
   // Today's menu fails the checks a sale's snapshot passes, as the till route answers it.
   "sale_classification.invalid": 409,
 };
@@ -513,6 +517,58 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         categoryReport(tx, req),
       );
       return c.json(result);
+    }),
+  );
+
+  app.get("/management-api/reports/drawer-closes", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
+      const rawDrawerId = c.req.query("drawerId");
+      const drawerId =
+        rawDrawerId === undefined ? undefined : requireBodyUuid(rawDrawerId, "drawerId");
+      const result = await gated(session, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { nodeIds, clock } = await buildReportContext(tx);
+        const closes = await listDrawerCloses(tx, nodeIds, {
+          startAt: businessDayBounds(clock, from).startAt,
+          endAt: businessDayBounds(clock, to).endAt,
+          ...(drawerId === undefined ? {} : { drawerId }),
+        });
+        return { timeZone: clock.timeZone, closes };
+      });
+      return c.json(result);
+    }),
+  );
+
+  app.post("/management-api/reports/drawer-closes/:closeId/print", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const printerId = requireBodyUuid(body.printerId, "printerId");
+      const closeId = requireBodyUuid(c.req.param("closeId"), "closeId");
+      const job = await gated(session, REPORT_VIEW_PERMISSION, async (tx) => {
+        const { nodeIds, clock } = await buildReportContext(tx);
+        const close = await readDrawerCloseForPrint(tx, nodeIds, closeId);
+        if (close === null) throw new AppError("drawer.close_not_found", {});
+        const [printer] = await tx
+          .select(receiptRollColumns)
+          .from(printers)
+          .where(and(eq(printers.id, printerId), activePrinters()));
+        if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
+        const locale = await resolveSessionLocale(
+          tx,
+          session,
+          c.req.header("Accept-Language"),
+          deps.venueLocale,
+        );
+        return enqueuePrintJob(
+          tx,
+          printerId,
+          formatDrawerCloseTicket(close, printer, locale, clock.timeZone),
+          "document",
+        );
+      });
+      return c.json(job, 202);
     }),
   );
 

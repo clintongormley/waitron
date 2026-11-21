@@ -1,4 +1,5 @@
 import "../widgets/handover-report-warning.js";
+import "../widgets/drawer-close-history.js";
 import {
   renderDepartmentTakings,
   departmentTakingsStyles,
@@ -494,7 +495,20 @@ export class SalesScreen extends LitElement {
       }
       ${this.close ? this.#renderClose(this.close) : nothing}
       ${this.period ? this.#renderPeriod(this.period) : nothing}
-      ${this.#rangeRunsBackwards() ? nothing : this.#renderCategories()}
+      ${
+        this.#rangeRunsBackwards()
+          ? nothing
+          : html`
+              <dashboard-drawer-close-history
+                .api=${this.api}
+                .from=${this.from}
+                .to=${this.to}
+                .printers=${this.printers}
+                .printersError=${this.printersErrorKey}
+              ></dashboard-drawer-close-history>
+              ${this.#renderCategories()}
+            `
+      }
     `;
   }
 

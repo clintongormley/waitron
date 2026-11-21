@@ -29,6 +29,7 @@ export const GUIDE_LINKS = {
   "printers.calibrate": { page: "printers", section: "calibrate" },
   "printers.printer-details": { page: "printers", section: "printer-details" },
   "invoices.overview": { page: "invoices" },
+  "sales.drawer-close-history": { page: "sales", section: "drawer-close-history" },
   "table-service.bill-switcher": { page: "table-service", section: "bill-switcher" },
 } as const;
 

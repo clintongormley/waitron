@@ -12,7 +12,7 @@ it("quiets only the audited database queries while connected", () => {
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
     listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
-    getReportPrinters getOrderPrinters listOrderStaff listStaff listStaffPage getStaffRoster getProfile
+    getDrawerCloses getReportPrinters getOrderPrinters listOrderStaff listStaff listStaffPage getStaffRoster getProfile
     listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles
     getDeviceProfile listProfileKitchenScreens getProfileScopeChoices listDevices listStations
     listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
@@ -444,6 +444,19 @@ it.each([
       "sale_lines",
       "sale_voids",
       "sale_substitutions",
+      "settings.business_day",
+      "settings.venue",
+      "day_cutover_changes",
+    ],
+  ],
+  [
+    "getDrawerCloses",
+    ["2026-11-20", "2026-11-20"],
+    [
+      "drawer_entries",
+      "printers",
+      "devices",
+      "persons",
       "settings.business_day",
       "settings.venue",
       "day_cutover_changes",
