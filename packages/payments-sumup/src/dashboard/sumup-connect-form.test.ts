@@ -237,6 +237,16 @@ describe("sumup-connect-form", () => {
     expect(request).toHaveBeenCalledWith(CONNECT_PATH, "POST", { apiKey: "k" });
   });
 
+  it("marks the API key as a new password, so the browser does not fill the sign-in into the page", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+    const native = el
+      .shadowRoot!.querySelector("[data-test=api-key]")!
+      .shadowRoot!.querySelector("input")!;
+    expect(native.type).toBe("password");
+    expect(native.autocomplete).toBe("new-password");
+  });
+
   it("refuses to re-submit an ambiguous key until a merchant is picked", async () => {
     const request = vi.fn(async () => {
       throw {

@@ -41,7 +41,7 @@ export const dashboardPath: UrlPathConfig = {
       operationTo: "operation-to",
       kind: "kind",
     },
-    modules: { view: "view", state: "state" },
+    modules: { view: "view", state: "state", returnTo: "return-to" },
     printers: { view: "view", printer: "printer", editor: "editor", step: "step" },
     devices: { device: "device" },
     payments: { view: "view", reader: "reader" },

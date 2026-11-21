@@ -225,6 +225,7 @@ export class SumUpConnectForm extends LitElement {
       <wt-input
         class="field"
         type="password"
+        autocomplete="new-password"
         name="apiKey"
         data-test="api-key"
         label=${t("payments.sumup.api_key")}

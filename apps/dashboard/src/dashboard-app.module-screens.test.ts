@@ -264,7 +264,7 @@ it("redirects the old provider setup address to all card providers", async () =>
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
   );
-  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all/return-to/card-readers");
 });
 
 it.each([true, false])(
@@ -325,3 +325,118 @@ it.each([true, false])(
     );
   },
 );
+
+const FROM_READERS = "/modules/view/card-providers/state/all/return-to/card-readers";
+
+async function mountForCardSetup(path: string) {
+  history.replaceState(null, "", path);
+  const api = stubApi();
+  vi.mocked(api.getMe).mockResolvedValue({
+    ...(await api.getMe()),
+    locale: "en",
+    permissions: ["hardware.manage"],
+    modules: [],
+  });
+  const providers = vi
+    .fn()
+    .mockResolvedValue([{ providerId: "sumup", state: "not_connected", canUnpair: true }]);
+  const availableReaders = vi.fn().mockResolvedValue([]);
+  const listModules = vi
+    .fn()
+    .mockResolvedValue([{ id: "sumup", category: "card-provider", enabled: true }]);
+  Object.assign(api, { listModules, listPaymentProviders: providers, availableReaders });
+  for (const name of [
+    "listReaders",
+    "listReaderHolders",
+    "listStuckPayments",
+    "listStuckBillPayments",
+    "listStuckTenderRefunds",
+    "listStuckBillRefunds",
+    "listAbandonedRefunds",
+    "listHeldPayments",
+  ])
+    Object.assign(api, { [name]: vi.fn().mockResolvedValue([]) });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api,
+    request: async () => ({ merchantName: "Deli" }) as never,
+  });
+  return { el, providers, availableReaders, listModules };
+}
+
+const configureSumup = (el: DashboardApp) =>
+  el
+    .shadowRoot!.querySelector("dashboard-modules-screen")
+    ?.shadowRoot?.querySelector("wt-data-table")
+    ?.shadowRoot?.querySelector<HTMLElement>("[data-test=configure-sumup]");
+
+async function connectSumup(el: DashboardApp, providers: ReturnType<typeof vi.fn>): Promise<void> {
+  await vi.waitFor(() => expect(configureSumup(el)).toBeTruthy());
+  const modules = el.shadowRoot!.querySelector("dashboard-modules-screen")!;
+  configureSumup(el)!.click();
+  await vi.waitFor(() =>
+    expect(modules.shadowRoot!.querySelector("sumup-connect-form")).not.toBeNull(),
+  );
+  const form = modules.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<boolean> }
+  >("sumup-connect-form")!;
+  await form.updateComplete;
+  form
+    .shadowRoot!.querySelector("[data-test=api-key]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "synthetic-key" } }));
+  await form.updateComplete;
+  providers.mockResolvedValue([{ providerId: "sumup", state: "connected", canUnpair: true }]);
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+}
+
+it("opens Card readers once a provider connects on Modules, when Card readers sent the person there", async () => {
+  const { el, providers, availableReaders } = await mountForCardSetup(FROM_READERS);
+  const modules = await vi.waitFor(() => {
+    const screen = el.shadowRoot!.querySelector("dashboard-modules-screen");
+    expect(screen).not.toBeNull();
+    return screen!;
+  });
+  await connectSumup(el, providers);
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("dashboard-payments-screen")).not.toBeNull(),
+  );
+  expect(location.pathname).toBe("/payments");
+  expect(modules.isConnected).toBe(false);
+  expect(navItem(el, "payments")?.getAttribute("aria-current")).toBe("page");
+  const readers = el.shadowRoot!.querySelector<PaymentsScreen>("dashboard-payments-screen")!;
+  expect(readers.surface).toBe("readers");
+  const add = await vi.waitFor(() => {
+    const button = readers.shadowRoot!.querySelector<HTMLElement>("[data-test=add-reader]");
+    expect(button?.hasAttribute("disabled")).toBe(false);
+    return button!;
+  });
+  add.click();
+  await vi.waitFor(() => expect(availableReaders).toHaveBeenCalledWith("sumup"));
+});
+
+it("returns to Card readers only once: Back reaches Modules without the return, and a later save stays there", async () => {
+  const { el, providers, listModules } = await mountForCardSetup(FROM_READERS);
+  await connectSumup(el, providers);
+  await vi.waitFor(() => expect(location.pathname).toBe("/payments"));
+  providers.mockResolvedValue([{ providerId: "sumup", state: "not_connected", canUnpair: true }]);
+  history.back();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
+  );
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
+  await vi.waitFor(() => expect(configureSumup(el)).toBeTruthy());
+  const reads = listModules.mock.calls.length;
+  await connectSumup(el, providers);
+  await vi.waitFor(() => expect(listModules.mock.calls.length).toBeGreaterThan(reads));
+  expect(location.pathname).toBe("/modules/view/card-providers/state/all");
+  expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull();
+});
+
+it("does not carry the Card readers return into another screen's address", async () => {
+  const { el } = await mountForCardSetup(FROM_READERS);
+  await vi.waitFor(() => expect(navItem(el, "orders")).not.toBeNull());
+  navItem(el, "orders")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull(),
+  );
+  expect(location.pathname).toBe("/orders");
+});

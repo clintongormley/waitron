@@ -4,6 +4,7 @@ import {
   baseStyles,
   pageTitleStyles,
   draftScopeFor,
+  navigationGuardFor,
   UrlStateController,
   type DataTableColumn,
   type DraftScope,
@@ -34,6 +35,7 @@ import { t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 
 export const CARD_PROVIDERS_PATH = "/modules/view/card-providers/state/all";
+export const CARD_PROVIDERS_FROM_READERS_PATH = `${CARD_PROVIDERS_PATH}/return-to/card-readers`;
 
 @customElement("dashboard-modules-screen")
 export class ModulesScreen extends LitElement {
@@ -244,7 +246,21 @@ export class ModulesScreen extends LitElement {
   #saved(): void {
     this.renderRoot.querySelector<WtDialog>("wt-dialog")?.closeAfter("saved");
     this.#closed();
-    void this.#load();
+    if (this.#url.read("returnTo") === "card-readers") void this.#returnToCardReaders();
+    else void this.#load();
+  }
+  /** Clears the return from this entry first, so Back lands on Modules without sending a later
+   *  save to Card readers again; a guarded write would ask the leave question though nothing is
+   *  left. */
+  async #returnToCardReaders(): Promise<void> {
+    const guard = navigationGuardFor(window);
+    if (guard) {
+      const url = new URL(guard.href);
+      url.pathname = url.pathname.replace(/\/return-to\/[^/]+/, "");
+      guard.rewrite(url);
+    } else this.#url.write({ returnTo: null }, true);
+    const left = await this.#url.write({ dashboard: "payments", view: null, state: null });
+    if (left !== undefined && left !== "proceeded") await this.#load();
   }
   async #switchProvider(): Promise<void> {
     const row = this.switching;

@@ -52,7 +52,7 @@ import type {
   HeldPaymentRow,
 } from "../api/client.js";
 import { dashboardPath } from "../navigation.js";
-import { CARD_PROVIDERS_PATH } from "./modules-screen.js";
+import { CARD_PROVIDERS_FROM_READERS_PATH } from "./modules-screen.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -2186,7 +2186,7 @@ export class PaymentsScreen extends LitElement {
       this.providers !== undefined && !this.#listQueries.failing("listPaymentProviders");
     const connected = this.providers?.filter((provider) => provider.state === "connected") ?? [];
     if (loaded && connected.length === 0)
-      return html`<a data-test="configure-providers" href=${CARD_PROVIDERS_PATH}
+      return html`<a data-test="configure-providers" href=${CARD_PROVIDERS_FROM_READERS_PATH}
         >${tRaw("modules.configure_providers")}</a
       >`;
     return html`<wt-button
@@ -2224,7 +2224,7 @@ export class PaymentsScreen extends LitElement {
               >`,
           )}
       </div>
-      <p><a href=${CARD_PROVIDERS_PATH}>${tRaw("modules.configure_providers")}</a></p>
+      <p><a href=${CARD_PROVIDERS_FROM_READERS_PATH}>${tRaw("modules.configure_providers")}</a></p>
       <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"

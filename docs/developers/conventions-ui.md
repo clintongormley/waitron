@@ -88,8 +88,8 @@ enabled"); when handling a refusal empties or reveals a required field, that fie
 the action until the field is filled. Cost: before C54, many forms outside the till — the login and
 profile screens and the menu editors among them — disabled their action after a server refusal
 naming a field, until that field changed. Every input has a semantic
-`name` (plus the standard `autocomplete` purpose when one exists), never a generated widget id as
-its identity. A customer's details typed on a shared till or office machine take `autocomplete="off"`
+`name` (plus the standard `autocomplete` purpose when one exists, and `new-password` or `off` on a
+secret that is not the person's sign-in), never a generated widget id as its identity. A customer's details typed on a shared till or office machine take `autocomplete="off"`
 instead, so one customer's details are not offered to the next. Password reveal buttons use the
 input's `end` slot and an action-specific accessible label. An inline confirmation embedded IN a form suspends that form's Save and implicit Enter
 submission until resolved — no current form embeds one (person-edit.ts's own confirmation moved out

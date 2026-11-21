@@ -134,6 +134,18 @@ describe("stripe-connect-form", () => {
     expect(onConnected).toHaveBeenCalledTimes(1);
   });
 
+  it("marks both secrets as new passwords, so the browser does not fill the sign-in into the page", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+    for (const field of ["secret-key", "webhook-secret"]) {
+      const native = el
+        .shadowRoot!.querySelector(`[data-test=${field}]`)!
+        .shadowRoot!.querySelector("input")!;
+      expect(native.type).toBe("password");
+      expect(native.autocomplete).toBe("new-password");
+    }
+  });
+
   it("requires the secret key before it will post", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
