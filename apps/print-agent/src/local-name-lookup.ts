@@ -40,9 +40,9 @@ function isLocalName(hostname: string): boolean {
  * lookup may not resolve a three-part `.local` name, but a host-file entry or the host's own
  * multicast lookup may.
  *
- * The socket listens on 5353 in the group because the box's server (`multicast-dns`) answers to
- * the group whatever port the question came from; an answer sent straight back arrives on the
- * same socket. Address reuse lets it share 5353 with avahi and the server.
+ * The socket listens on 5353 in the group, where the box's server answers a question asked from
+ * 5353; an answer sent straight back arrives on the same socket. Address reuse lets it share 5353
+ * with avahi and the server.
  */
 export function createLocalNameLookup(deps: LocalNameLookupDeps = {}): LookupFunction {
   const openSocket =

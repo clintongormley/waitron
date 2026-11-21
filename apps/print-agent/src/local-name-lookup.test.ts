@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalNameLookup, type MdnsSocket } from "./local-name-lookup.js";
 
 /**
- * A socket on a network whose responders answer only to the mDNS group, as the `multicast-dns`
- * library the box's server answers with does: `fromGroup` reaches the socket only once it is bound
+ * A socket on a network whose responders answer a question asked from 5353 only to the mDNS
+ * group, as the box's server does: `fromGroup` reaches the socket only once it is bound
  * to 5353 and has joined 224.0.0.251. A plain `emit("message")` is an answer sent to it directly.
  */
 class FakeSocket extends EventEmitter implements MdnsSocket {

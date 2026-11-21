@@ -11,16 +11,39 @@ export interface MdnsAnswer {
   data: string;
 }
 
+export interface MdnsQuestion {
+  name: string;
+  type: string;
+  class?: string;
+}
+
+export interface MdnsPeer {
+  address: string;
+  port: number;
+}
+
+/** A conventional DNS reply to a one-shot query: its id and questions, sent to its source. */
+export interface MdnsDirectResponse {
+  id?: number;
+  flags?: number;
+  questions: MdnsQuestion[];
+  answers: MdnsAnswer[];
+}
+
 /** A minimal view of a multicast-dns instance, so the responder can be unit-tested with a fake. */
 export interface MdnsSocket {
   on(
     event: "query",
-    handler: (query: { questions: { name: string; type: string }[] }) => void,
+    handler: (
+      query: { id?: number; flags?: number; questions: MdnsQuestion[] },
+      from: MdnsPeer,
+    ) => void,
   ): void;
   /** A bind failure (EADDRINUSE/EACCES) arrives here; unhandled, it would throw and kill the process. */
   on(event: "error", handler: (err: Error) => void): void;
-  /** `sent` is called once the send has finished, or failed. */
+  /** Sent to the mDNS group; `sent` is called once the send has finished, or failed. */
   respond(response: { answers: MdnsAnswer[] }, sent?: (err?: Error | null) => void): void;
+  respond(response: MdnsDirectResponse, to: MdnsPeer): void;
   destroy(cb?: () => void): void;
 }
 
@@ -47,6 +70,22 @@ export interface MdnsDeps {
   /** Socket factory, injected for tests. Default: the real multicast-dns instance. */
   makeSocket?: () => MdnsSocket;
 }
+
+const MDNS_PORT = 5353;
+/** RFC 6762 §6.7: a reply to a one-shot query SHOULD NOT carry a lifetime above 10 seconds. */
+const LEGACY_UNICAST_TTL_SECONDS = 10;
+const RECURSION_DESIRED = 0x0100;
+// dns-packet 5.6.1 leaves a question's unicast-response bit (RFC 6762 §5.4) in its class, so IN
+// and ANY asked that way arrive under these names.
+const UNICAST_RESPONSE_CLASSES: Readonly<Record<string, string>> = {
+  UNKNOWN_32769: "IN",
+  UNKNOWN_33023: "ANY",
+};
+const plainClass = (q: MdnsQuestion): string | undefined =>
+  q.class === undefined ? undefined : (UNICAST_RESPONSE_CLASSES[q.class] ?? q.class);
+// RFC 4343 §3: DNS names compare without regard to the case of ASCII letters only.
+const asciiLower = (name: string): string => name.replace(/[A-Z]+/g, (m) => m.toLowerCase());
+const sameName = (a: string, b: string): boolean => asciiLower(a) === asciiLower(b);
 
 /** How long `stop()` waits for its goodbyes to be sent before closing the socket regardless. */
 export const MDNS_GOODBYE_WAIT_MS = 1_000;
@@ -81,15 +120,17 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   const sending = new Set<Promise<void>>();
   let stopped = false;
 
-  socket.on("query", (query) => {
+  socket.on("query", (query, from) => {
     // A stopping responder's answer would re-cache a name its goodbye has just withdrawn.
     if (stopped) return;
     const ours = names();
-    // Every query on the network arrives here, so one asking for none of ours allocates nothing.
+    // Every query on the network arrives here, so one asking for none of ours builds no set.
     let asked: Set<string> | undefined;
     for (const q of query.questions) {
-      if ((q.type === "A" || q.type === "ANY") && ours.includes(q.name)) {
-        (asked ??= new Set()).add(q.name);
+      const cls = plainClass(q) ?? "IN";
+      if ((q.type === "A" || q.type === "ANY") && (cls === "IN" || cls === "ANY")) {
+        const name = ours.find((n) => sameName(n, q.name));
+        if (name !== undefined) (asked ??= new Set()).add(name);
       }
     }
     if (asked === undefined) return;
@@ -98,6 +139,21 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     if (answers.length === 0) return;
     for (const name of asked) for (const a of addresses) givenAt.get(name)?.add(a);
     socket.respond({ answers });
+    // RFC 6762 §6.7: a querier asking from a port other than 5353 does not hear the group, so
+    // it gets a conventional DNS reply at its own address and port. Port 0 cannot be sent to,
+    // and the send would throw outside the socket's error listener.
+    if (from.port !== MDNS_PORT && from.port > 0) {
+      socket.respond(
+        {
+          id: query.id,
+          flags: (query.flags ?? 0) & RECURSION_DESIRED,
+          // dns-packet would send a class it does not name as 0.
+          questions: query.questions.map((q) => ({ ...q, class: plainClass(q) })),
+          answers: answers.map((a) => ({ ...a, ttl: LEGACY_UNICAST_TTL_SECONDS })),
+        },
+        { address: from.address, port: from.port },
+      );
+    }
   });
 
   // A failed discovery socket must not stop the HTTP server from serving its IP address.
