@@ -62,7 +62,7 @@ is any hook that passes no budget of its own — which includes this helper's cl
   thresholds in one invocation. Plain `pnpm test` does not measure coverage.
 - `pnpm mutation` runs Stryker. DB mutation testing runs nightly or is dispatched through
   `mutation.yml`; it is not a merge gate. That run DOES gate: its reusable workflow's `aggregate` job
-  merges the thirteen whole-file shard reports and fails below 90. A local `pnpm mutation` prints a score and
+  merges the sixteen whole-file shard reports and fails below 90. A local `pnpm mutation` prints a score and
   fails at nothing — the bar is deliberately not in this package's stryker config, because CI
   passes each shard its own `--mutate` list and a bar there would gate one slice.
 - `db:generate` rebuilds the starting migration; write hand-written SQL in `triggers/core.sql`.

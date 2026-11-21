@@ -19,7 +19,7 @@ const realSetTimeout = globalThis.setTimeout;
 /** Setup budget for opening the files and applying the migration sets. */
 const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
 
-/** Per-test reset budget: far above its normal cost, below `hookTimeout` so a hang fails sooner. */
+/** Per-test reset budget, far above its normal cost. */
 const RESET_TIMEOUT_MS = 30_000;
 
 /**
