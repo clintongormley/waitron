@@ -19,7 +19,7 @@ import {
 } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
-import { isAppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import {
   loadKeyRing,
   nodeSigningPublicKey,
@@ -158,6 +158,7 @@ afterEach(async () => {
 function deps(
   extra: {
     persistTrading?: (a: PersistTradingArgs) => Promise<void>;
+    assertStartsWith?: (a: PersistTradingArgs) => void;
     persistModuleConfig?: (c: ModuleConfig) => Promise<void>;
     fetchBundle?: (
       url: string,
@@ -181,6 +182,7 @@ function deps(
     environment: extra.environment === undefined ? ("preproduction" as const) : extra.environment,
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
+    assertStartsWith: extra.assertStartsWith ?? (() => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
     persistBackupSettings: (settings: Record<string, string> | null) =>
       replaceBackupSettings(stateDir, settings),
@@ -685,8 +687,9 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
-  it("takes the main box's environment when this box's was never set, and writes it to trading.env", async () => {
+  it("takes the main box's environment when this box's was never set, and hands it to the hook and persistTrading", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
+    const announced: string[] = [];
     await adoptFromPrimary(
       deps({
         environment: null,
@@ -696,10 +699,43 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         fetchBundle: async () => makeBundle({ environment: "production" }),
       }),
       REQ,
-      NO_HOOKS,
+      {
+        beforeFirstWrite: async (environment) => {
+          announced.push(environment);
+        },
+      },
     );
+    expect(announced).toEqual(["production"]);
     expect(persistedTrading.map((a) => a.environment)).toEqual(["production"]);
     expect(await readDeploymentEnvironment(suite.db)).toBe("production");
+  });
+
+  it("refuses a join this box could not start after, before its first write", async () => {
+    const checked: PersistTradingArgs[] = [];
+    let wrote = false;
+    const error = await adoptFromPrimary(
+      deps({
+        environment: null,
+        assertStartsWith: (a) => {
+          checked.push(a);
+          throw new AppError("server.config_missing", { variable: "WAITRON_MANAGEMENT_RP_ID" });
+        },
+        persistTrading: async () => {
+          wrote = true;
+        },
+        fetchBundle: async () => makeBundle({ environment: "production" }),
+      }),
+      REQ,
+      {
+        beforeFirstWrite: async () => {
+          wrote = true;
+        },
+      },
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("server.config_missing");
+    expect(checked).toEqual([{ nodeId: expect.any(String), environment: "production" }]);
+    expect(wrote).toBe(false);
+    expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
 
   it("refuses a foreign taxpayer without stamping the local deployment", async () => {

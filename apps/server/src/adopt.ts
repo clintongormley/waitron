@@ -91,8 +91,9 @@ export interface AdoptRequest {
 }
 
 export interface AdoptHooks {
-  /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step. */
-  beforeFirstWrite: () => Promise<void>;
+  /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step,
+   * with the environment the join is about to stamp. */
+  beforeFirstWrite: (environment: DeploymentEnvironment) => Promise<void>;
 }
 
 export interface AdoptDeps {
@@ -127,10 +128,13 @@ export interface AdoptDeps {
   advertisedOrigin: string;
   /** This box's store port; its name and this port are sent as the spare's store address (D15). */
   spareStorePort: number;
-  /** This box's WAITRON_ENV, or `null` when it is not set: the box then takes the main box's. */
+  /** The environment this box's `WAITRON_ENV` names, or `null` when it is unset or empty: the box
+   * then takes the main box's. */
   environment: DeploymentEnvironment | null;
   /** Persists `trading.env` so the next boot enters the trading branch. */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
+  /** Throws what this box's next start would refuse with `args` in `trading.env`. */
+  assertStartsWith: (args: PersistTradingArgs) => void;
   /** So the mirror's next boot sees the primary's enabled module set. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** Replaces `backup.env` with the main box's settings, or removes it for `null`. */
@@ -187,6 +191,7 @@ export async function adoptFromPrimary(
       actual: bundle.environment,
     });
   }
+  deps.assertStartsWith({ nodeId: standby.nodeId, environment: bundle.environment });
 
   assertNoForeignTaxpayer(
     await readTaxpayerIdentities(deps.ownerDb),
@@ -234,7 +239,7 @@ export async function adoptFromPrimary(
   const ring = loadKeyRing(bundleEnv);
   const recovery = await makeBreakGlassSecret();
 
-  await hooks.beforeFirstWrite();
+  await hooks.beforeFirstWrite(bundle.environment);
   // Before the main box's ring replaces this box's, so a join stopped at any later point leaves
   // the marker.
   await markJoined(deps.stateDir, designated.nodeId);

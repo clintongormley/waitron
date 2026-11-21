@@ -93,6 +93,7 @@ function deps(value = bundle()) {
     }),
     advertisedOrigin: "https://spare.test",
     spareStorePort: 7443,
+    assertStartsWith: () => {},
     environment: "preproduction" as const,
     // The main box endorses the identity this box sends.
     fetchBundle: async (

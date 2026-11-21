@@ -461,6 +461,7 @@ it("a refused public adoption retains its independently signed reservation witho
       ring: RING,
       advertisedOrigin: "https://spare.test",
       spareStorePort: 7443,
+      assertStartsWith: () => {},
       environment: "production",
       database: "synthetic-empty-spare",
       listIpv4: () => [],

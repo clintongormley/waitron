@@ -1,21 +1,25 @@
 // A main box and a joining box started in this process, as `spare-join.e2e.test.ts` starts them,
 // but with no bucket copy: which environment the joining box ends up in when its WAITRON_ENV is
 // unset, empty or set.
-import { readFile, rm, writeFile, mkdtemp } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile, mkdtemp } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import type { DeploymentEnvironment } from "@waitron/db";
+import { startServer } from "./boot.js";
+import { loadBoxEnv } from "./box-env.js";
 import { BOX_HOSTNAME, ownContactUrl } from "./box-name.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "./modules.js";
-import { fetchHealthOk, httpsVia } from "./testing/boot-harness.js";
+import { runStagedReset } from "./reset-request.js";
+import { fetchHealthOk, httpsVia, poll } from "./testing/boot-harness.js";
 import { freePort } from "./testing/free-ports.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import {
+  ADMIN,
   BOOT_MS,
   MODULES_M,
   TestBox,
@@ -37,56 +41,62 @@ const UNTIMED_MS = 60_000;
 const ADOPT_TIMEOUT_MS = 3 * BOOT_MS + UNTIMED_MS;
 // S starts for setup, once after joining and once more; M starts once.
 const RESTART_TIMEOUT_MS = 4 * BOOT_MS + UNTIMED_MS;
+// S starts for setup, once refused, once after the join stopped, once after the reset was asked
+// for and once after it ran; M starts once.
+const STOPPED_JOIN_TIMEOUT_MS = 6 * BOOT_MS + UNTIMED_MS;
 
 interface Pair {
   boxS: TestBox;
   dirsS: BoxDirs;
+  envS: NodeJS.ProcessEnv;
+  urlS: string;
   adopt: () => Promise<{ status: number; body: unknown }>;
 }
 
 describe("a joining box's environment", () => {
-  let scratch: string;
+  let scratch: string | undefined;
   let migrationsRoot: string;
-  const savedEnv = process.env.WAITRON_ENV;
   const boxes: TestBox[] = [];
   const retained: RetainedHttpListener[] = [];
   const closers: (() => Promise<void>)[] = [];
 
   beforeAll(async () => {
-    delete process.env.WAITRON_ENV;
     scratch = await mkdtemp(join(tmpdir(), "waitron-join-env-"));
     migrationsRoot = await copyMigrations(scratch);
   });
 
   afterAll(async () => {
-    if (savedEnv === undefined) delete process.env.WAITRON_ENV;
-    else process.env.WAITRON_ENV = savedEnv;
     const failures = await closeBoxes(boxes);
-    for (const held of retained) if (held.server.listening) await held.close();
+    for (const held of retained)
+      if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
     for (const close of closers) await close().catch(() => {});
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     if (failures.length > 0) throw new AggregateError(failures, "join environment teardown failed");
-    await rm(scratch, { recursive: true, force: true });
   });
 
   /** M provisioned in `main` with a recovery key and no bucket copy, and S's empty folder, both
-   * started; S's own WAITRON_ENV is `joining` (undefined leaves it out). */
+   * started; S's own WAITRON_ENV is `joining` (undefined leaves it out), and S's environment
+   * leaves out the variables `leftOutOfS` names. */
   async function startPair(
     name: string,
     main: DeploymentEnvironment,
     joining: string | undefined,
+    leftOutOfS: readonly string[] = [],
   ): Promise<Pair> {
+    const root = scratch!;
     const [listenerM, listenerS, storeListener] = await Promise.all([
       retainHttpListener(),
       retainHttpListener(),
       retainHttpListener(),
     ]);
     retained.push(listenerM, listenerS, storeListener);
+    // Litestream is never run here: no box has a bucket copy.
     const boxEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
-      ...bootEnv(dirs, port, migrationsRoot, "litestream"),
+      ...bootEnv(dirs, port, migrationsRoot, join(root, "no-litestream")),
       WAITRON_MANAGEMENT_ORIGIN: `https://${BOX_HOSTNAME}:${port}`,
       WAITRON_MANAGEMENT_RP_ID: BOX_HOSTNAME,
     });
-    const dirsM = await boxDirs(scratch, `${name}-m`);
+    const dirsM = await boxDirs(root, `${name}-m`);
     const m = await provisionStreamBox({
       dirs: dirsM,
       advertisedOrigin: `https://${BOX_HOSTNAME}:${listenerM.port}`,
@@ -105,31 +115,30 @@ describe("a joining box's environment", () => {
       boxHost: synchronisedBoxHost(),
     });
     boxes.push(boxM);
-    const dirsS = await boxDirs(scratch, `${name}-s`);
-    const boxS = new TestBox(
-      dirsS,
-      listenerS.port,
-      {
-        ...boxEnv(dirsS, listenerS.port),
-        ...(joining === undefined ? {} : { WAITRON_ENV: joining }),
-        WAITRON_SPARE_STORE_PORT: String(storeListener.port),
-        WAITRON_SPARE_STORE_LOOPBACK_PORT: String(await freePort()),
-      },
-      {},
-    );
+    const dirsS = await boxDirs(root, `${name}-s`);
+    const envS: NodeJS.ProcessEnv = {
+      ...boxEnv(dirsS, listenerS.port),
+      ...(joining === undefined ? {} : { WAITRON_ENV: joining }),
+      WAITRON_SPARE_STORE_PORT: String(storeListener.port),
+      WAITRON_SPARE_STORE_LOOPBACK_PORT: String(await freePort()),
+    };
+    for (const variable of leftOutOfS) delete envS[variable];
+    const boxS = new TestBox(dirsS, listenerS.port, envS, {});
     boxes.push(boxS);
 
     const adoption = adoptRetainedListeners([listenerM, listenerS]);
+    const starts = [boxM.start(), boxS.start()];
     try {
-      // Both settle before either failure is thrown, so neither start outlives the adoption.
-      const starts = await Promise.allSettled([
-        boundedStart(boxM.start(), `${name}: M's start`),
-        boundedStart(boxS.start(), `${name}: S's setup start`),
+      const bounded = await Promise.allSettled([
+        boundedStart(starts[0]!, `${name}: M's start`),
+        boundedStart(starts[1]!, `${name}: S's setup start`),
       ]);
-      for (const start of starts) if (start.status === "rejected") throw start.reason;
+      for (const start of bounded) if (start.status === "rejected") throw start.reason;
       expect(adoption.adopted.size).toBe(2);
       await adoption.bound;
     } finally {
+      // Restored only once both starts have settled, so neither binds after the handoff ends.
+      await Promise.allSettled(starts);
       adoption.restore();
     }
     const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
@@ -144,6 +153,8 @@ describe("a joining box's environment", () => {
     return {
       boxS,
       dirsS,
+      envS,
+      urlS,
       adopt: async () => {
         const store = adoptRetainedListeners([storeListener]);
         try {
@@ -161,6 +172,19 @@ describe("a joining box's environment", () => {
       },
     };
   }
+
+  /** Trusts the authority S serves under now: its own in setup, M's once its join installs it. */
+  const viaNow = async (dirs: BoxDirs): Promise<RequestInit> => {
+    const { via, close } = httpsVia(await readFile(join(dirs.state, "tls", "ca.crt")));
+    closers.push(close);
+    return via;
+  };
+
+  const setupStatus = async (url: string, via: RequestInit): Promise<unknown> => {
+    const answer = await fetch(`${url}/setup-api/status`, via);
+    expect(answer.status).toBe(200);
+    return answer.json();
+  };
 
   const tradingEnv = async (dirs: BoxDirs) =>
     parseEnvFile(await readFile(join(dirs.state, "trading.env"), "utf8"));
@@ -196,10 +220,13 @@ describe("a joining box's environment", () => {
     ADOPT_TIMEOUT_MS,
   );
 
-  it(
-    "refuses a box set to preproduction joining a production main box",
-    async () => {
-      const pair = await startPair("set-preproduction", "production", "preproduction");
+  it.each([
+    { name: "set-preproduction", joining: "preproduction" },
+    { name: "set-dev", joining: "dev" },
+  ] as const)(
+    "refuses a box whose WAITRON_ENV is $joining joining a production main box",
+    async ({ name, joining }) => {
+      const pair = await startPair(name, "production", joining);
       const refused = await pair.adopt();
       expect(refused.status, JSON.stringify(refused.body)).toBe(409);
       expect(refused.body).toEqual({
@@ -211,5 +238,83 @@ describe("a joining box's environment", () => {
       expect(existsSync(join(pair.dirsS.state, "trading.env"))).toBe(false);
     },
     ADOPT_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a box with WAITRON_ENV unset joining a production main box when it could not start in production",
+    async () => {
+      const pair = await startPair("no-rp-id", "production", undefined, [
+        "WAITRON_MANAGEMENT_RP_ID",
+      ]);
+      const refused = await pair.adopt();
+      expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+      expect(refused.body).toEqual({
+        error: {
+          code: "server.config_missing",
+          params: { variable: "WAITRON_MANAGEMENT_RP_ID" },
+        },
+      });
+      expect(existsSync(join(pair.dirsS.state, "trading.env"))).toBe(false);
+      const status = await setupStatus(pair.urlS, await viaNow(pair.dirsS));
+      expect(status).toMatchObject({ environment: "preproduction" });
+      expect(status).not.toHaveProperty("operation");
+    },
+    ADOPT_TIMEOUT_MS,
+  );
+
+  it(
+    "a box with WAITRON_ENV unset whose join stops after its database is stamped starts again in setup and can be reset",
+    async () => {
+      const pair = await startPair("stopped", "production", undefined);
+      // A folder where `trading.env` goes fails the join's last write, after its stamp.
+      const blocker = join(pair.dirsS.state, "trading.env");
+      await mkdir(blocker);
+      const stopped = await pair.adopt();
+      expect(stopped.status, JSON.stringify(stopped.body)).toBe(500);
+      await rm(blocker, { recursive: true });
+      await pair.boxS.stopForRestart();
+
+      // Set to preproduction, the same box still refuses the database its join stamped.
+      const refused = startServer(
+        await loadBoxEnv({ ...pair.envS, WAITRON_ENV: "preproduction" }, pair.dirsS.state),
+      ).then(async (server) => {
+        await server.close();
+        return "started";
+      });
+      await expect(refused).rejects.toMatchObject({ code: "deployment.environment_mismatch" });
+
+      await boundedStart(pair.boxS.start(), "S's start after its join stopped");
+      const viaJoined = await viaNow(pair.dirsS);
+      expect(await setupStatus(pair.urlS, viaJoined)).toMatchObject({
+        environment: "production",
+        operation: { kind: "adopt", phase: "venue_committed" },
+      });
+      const restartsBeforeReset = pair.boxS.restarts;
+      const reset = await fetch(`${pair.urlS}/setup-api/reset-incomplete-adopt`, {
+        ...viaJoined,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: ADMIN.email, password: ADMIN.password }),
+      });
+      expect(reset.status, await reset.text()).toBe(202);
+      expect(await poll(() => (pair.boxS.restarts > restartsBeforeReset ? true : undefined))).toBe(
+        true,
+      );
+      await pair.boxS.stopForRestart();
+      // Run as the next start through the entrypoint runs it.
+      expect(
+        await runStagedReset({
+          stateDir: pair.dirsS.state,
+          venueDir: pair.dirsS.venue,
+          log: () => {},
+        }),
+      ).toBe(true);
+      await boundedStart(pair.boxS.start(), "S's start after the reset");
+      // The reset took the main box's authority away, so S minted its own again.
+      const fresh = await setupStatus(pair.urlS, await viaNow(pair.dirsS));
+      expect(fresh).toMatchObject({ provisioned: false, environment: "preproduction" });
+      expect(fresh).not.toHaveProperty("operation");
+    },
+    STOPPED_JOIN_TIMEOUT_MS,
   );
 });

@@ -140,6 +140,7 @@ beforeAll(async () => {
       ring: RING_B_OWN,
       advertisedOrigin: "https://spare.test",
       spareStorePort: 7443,
+      assertStartsWith: () => {},
       environment: "preproduction",
       database: "spare",
       listIpv4: () => [],

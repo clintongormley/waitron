@@ -460,6 +460,7 @@ describe("runStagedReset", () => {
             },
             advertisedOrigin: "https://standby.example",
             spareStorePort: 7443,
+            assertStartsWith: () => {},
             environment: "preproduction",
             persistTrading: async (cfg) => {
               await writeTradingEnv(stateDir, cfg);

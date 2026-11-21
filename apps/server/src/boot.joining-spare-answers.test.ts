@@ -247,6 +247,7 @@ async function joinedPair() {
       },
       advertisedOrigin: `https://waitron.local:${sparePort}`,
       spareStorePort: storePort,
+      assertStartsWith: () => {},
       environment: "preproduction",
       persistTrading: async (args) => {
         spareId = args.nodeId;

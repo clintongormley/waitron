@@ -183,6 +183,7 @@ export async function joinSpare(
       },
       advertisedOrigin: spareUrl,
       spareStorePort: 7443,
+      assertStartsWith: () => {},
       environment: "preproduction",
       persistTrading: async (args) => {
         spareId = args.nodeId;
