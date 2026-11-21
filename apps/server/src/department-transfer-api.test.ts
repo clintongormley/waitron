@@ -45,18 +45,15 @@ import {
 } from "@waitron/venue-service";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { parkOrder, issueUnpaidInvoice, priceForIssuance } from "./working-order.js";
-import {
-  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
-  settleIssuedOwingNothing,
-} from "./testing/whole-payment-fixture.js";
+import { settleIssuedOwingNothing } from "./testing/whole-payment-fixture.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { takeBillPayment, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./testing/party-close-fixture.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";
 import { numberBill } from "./testing/bill-identities.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { decimal } from "@waitron/shared";
-import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { requestCfg } from "./request-config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mountTillApi } from "./till-api.js";
@@ -1567,12 +1564,8 @@ describe("department transfer tab lifecycle", () => {
       const f = await ready();
       f.tab = await counterOrder(v, "Water");
       await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
-      const deps = {
-        db: suite.db,
-        backend: v.backend,
-        clock: v.clock,
-        provider: new SimulatorPaymentProvider(suite.db),
-      };
+      const provider = new FakePaymentProvider(suite.db);
+      const deps = { ...v, admission: testTradingAdmission() };
       if (kind.startsWith("issued")) {
         await withTransaction(suite.db, async (tx) => {
           const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
@@ -1581,53 +1574,31 @@ describe("department transfer tab lifecycle", () => {
         await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, f.tab, personId);
       }
       const id = await pending(f);
-      if (kind.endsWith("recovery"))
-        await withTransaction(suite.db, (tx) =>
-          insertCapturedPayment(tx, {
-            origin: v.cfg.origin,
-            nodeId: v.cfg.nodeId,
-            workingOrderId: f.tab,
-            provider: "simulator",
-            paymentRef: randomUUID(),
-            amount: decimal("2.00"),
-            settledAt: new Date(),
-            externalRef: randomUUID(),
-          }),
-        );
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
-      const recovery = kind.endsWith("recovery");
+      const request = {
+        submissionId: id,
+        kind: "contribution",
+        amount: "2.00",
+        method: "card",
+        entry: "reader",
+        applied: "2.00",
+        tip: "0.00",
+      } as const;
       const pay = () =>
-        recovery
-          ? payWorkingOrderIntegrated(
-              { ...deps, admission: testTradingAdmission() },
-              v.cfg,
-              { id: f.tab, lines: [], simulationOutcome: "captured" },
-              personId,
-            )
-          : takeReaderBillPayment(
-              { ...deps, admission: testTradingAdmission() },
-              v.cfg,
-              f.tab,
-              {
-                submissionId: id,
-                kind: "contribution",
-                amount: "2.00",
-                method: "card",
-                entry: "reader",
-                applied: "2.00",
-                tip: "0.00",
-                simulationOutcome: "captured",
-              },
-              operator,
-            );
-      const expectedOutcome = recovery ? "captured" : "received";
-      expect((await pay()).outcome).toBe(expectedOutcome);
+        takeReaderBillPayment({ ...deps, provider }, v.cfg, f.tab, request, operator);
+      if (kind.endsWith("recovery")) {
+        provider.crashNextCollect("captured");
+        await expect(pay()).rejects.toThrow("after writing a captured row");
+        expect((await settlePendingBillPayments(deps)).received).toBe(1);
+      }
+      expect((await pay()).outcome).toBe("received");
       expect((await state(f.tab)).tab!.status).toBe("settled");
       await withdrawn(f, id);
       const issued = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
       expect(issued).toHaveLength(1);
       if (kind.startsWith("issued")) expect(issued).toEqual(before);
-      expect((await pay()).outcome).toBe(expectedOutcome);
+      expect((await pay()).outcome).toBe("received");
+      expect(provider.collectCalls).toHaveLength(1);
       expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab))).toEqual(
         issued,
       );
