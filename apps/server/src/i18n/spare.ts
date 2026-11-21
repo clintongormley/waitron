@@ -19,11 +19,11 @@ export const SPARE_WORDS: Record<
     body: "It keeps a copy and takes over if the main box fails.",
     openMain: "Open the main box",
     refusal: "This is the venue’s spare box. Use the main box.",
-    mainBack: "The main server is answering again. This page reloads in a few seconds.",
-    mainSilent: "The main server has not answered for {duration}.",
+    mainBack: "The main box is answering again. This page reloads in a few seconds.",
+    mainSilent: "The main box has not answered for {duration}.",
     openSwitch: "Open the switch page",
     mainUnreached:
-      "This spare cannot reach the main server, so it could not take over if the main server failed. Check the network cable of each server.",
+      "This spare cannot reach the main box, so it could not take over if the main box failed. Check the network cable of each box.",
   },
   "es-ES": {
     title: "Este es el servidor de reserva del local",

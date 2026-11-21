@@ -9,7 +9,7 @@ screens and data. The spare takes no sales and offers no dashboard sign-in.
 
 The spare’s page also tells you how the main box looks from the spare. If the main box has stopped
 answering, it says for how long and links to the [switch page](servers.md#emergency). If it says the spare
-cannot reach the main server, check the network cable of each box: until the spare can reach the
+cannot reach the main box, check the network cable of each box: until the spare can reach the
 main box, it could not take over if the main box failed.
 
 ## Add a spare box {#adding-a-spare}
