@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "52460e69-a7d9-4518-a9e5-b0d4d0a7361f",
+  "id": "c4625988-0bf6-44f3-af4d-9a0c0cc6d124",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15421,6 +15421,45 @@
           "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustments_requested_by_fk": {
+          "name": "adjustments_requested_by_fk",
+          "tableFrom": "adjustments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustments_approved_by_fk": {
+          "name": "adjustments_approved_by_fk",
+          "tableFrom": "adjustments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustments_credited_to_fk": {
+          "name": "adjustments_credited_to_fk",
+          "tableFrom": "adjustments",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "credited_to"
           ],
           "columnsTo": [
             "id"

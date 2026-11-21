@@ -216,7 +216,7 @@ describe("adjustment reason management routes", () => {
         afterAmount: decimal("0.00"),
         reduction: decimal("20.00"),
         nominalValue: decimal("20.00"),
-        requestedBy: randomUUID(),
+        requestedBy: fx.personIds.staff,
         approvedBy: null,
         note: null,
       }),

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_CLASSIFICATION, CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
 import { seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
@@ -26,8 +27,10 @@ const absent = useVenueDb({
     for (const table of [...ADJUSTMENTS_TABLES].reverse()) db.run(sql.raw(`drop table "${table}"`));
   },
 });
-beforeEach(() => {
+beforeEach(async () => {
   for (const db of [original.db, restored.db]) {
+    for (const id of ["former-person", "requester", "approver"])
+      await seedPerson(db, { id, displayName: id });
     db.run(
       sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"privacyNoticeUrl":null,"privacyEmail":null,"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
     );
@@ -133,7 +136,7 @@ function hideTable(table: string) {
 }
 
 describe("adjustment backup evidence", () => {
-  it("retains issued adjustments after reason line and staff removal", async () => {
+  it("retains issued adjustments after reason and line removal", async () => {
     expect(await run()).toEqual(passed);
   });
   it("declares every adjustment table without extra obligations", () => {

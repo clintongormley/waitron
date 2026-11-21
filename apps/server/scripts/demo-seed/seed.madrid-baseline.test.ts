@@ -2913,6 +2913,7 @@ for (const locale of ["en", "es"] as const) {
       ];
 
       for (const [name, columns] of [
+        ["adjustments", ["credited_to", "approved_by", "requested_by"]],
         ["bill_payments", ["attested_by", "requested_by"]],
         ["department_transfer_requests", ["resolved_by", "sender_id"]],
         ["line_service_cancellations", ["actor_id"]],

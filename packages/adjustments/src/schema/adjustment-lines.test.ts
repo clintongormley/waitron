@@ -13,6 +13,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { policySnapshotOf } from "../policy.js";
 import { recordAdjustment } from "../record.js";
@@ -29,6 +30,7 @@ const WAITER = "11111111-1111-4111-8111-111111111111";
 
 /** A 10% discount on a row of three €10.00 dishes; returns the adjustment's id. */
 async function discount(): Promise<string> {
+  await seedPerson(db, { id: WAITER, displayName: "Waiter" });
   const order = await seedWorkingOrder(db);
   const reason = await seedReason(db);
   return withTransaction(db, (tx) =>

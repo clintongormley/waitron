@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import {
   createAdjustmentReason,
@@ -136,6 +137,7 @@ describe("adjustment reason operations", () => {
   it("deletes a reason that past adjustments name, leaving them as they were", async () => {
     const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
     const workingOrderId = await seedWorkingOrder(db);
+    const requestedBy = await seedPerson(db);
     const adjustmentId = await inTx((tx) =>
       recordAdjustment(tx, {
         workingOrderId,
@@ -159,7 +161,7 @@ describe("adjustment reason operations", () => {
         afterAmount: decimal("0.00"),
         reduction: decimal("12.00"),
         nominalValue: decimal("12.00"),
-        requestedBy: randomUUID(),
+        requestedBy,
         approvedBy: null,
         note: "Cold",
       }),

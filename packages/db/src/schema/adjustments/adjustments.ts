@@ -15,6 +15,7 @@ import {
   table,
   tsString,
 } from "../columns.js";
+import { persons } from "../identity/persons.js";
 import { workingOrders } from "../orders.js";
 import { ADJUSTMENT_ACTIONS, type AdjustmentPolicySnapshot } from "@waitron/shared";
 
@@ -44,14 +45,13 @@ export const adjustments = table(
     // No foreign key: a cancel deletes the line, and a key from a row nothing may change would
     // refuse that delete.
     lineId: id("line_id"),
-    /** Each row this adjustment split off, with the row it came from. A bill discount records its
-     * splits too. */
+    // Keep the split ids here because a split can leave no adjustment_lines row.
+    // Cancelling a line can delete it, so these ids have no foreign key.
     splits: json<AdjustmentSplit[]>("splits").notNull(),
     lineName: label("line_name"),
     lineQuantity: quantity("line_quantity"),
     /** The line's unit price before any adjustment touched it. */
     lineListUnitPrice: money("line_list_unit_price"),
-    // No key yet, nor on `requested_by` and `approved_by`.
     creditedTo: id("credited_to"),
     // No foreign key: the configuration import deletes every reason; `reason_name` and
     // `policy_snapshot` keep the history, and this id only groups rows.
@@ -84,6 +84,21 @@ export const adjustments = table(
       columns: [t.workingOrderId],
       foreignColumns: [workingOrders.id],
       name: "adjustments_working_order_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.requestedBy],
+      foreignColumns: [persons.id],
+      name: "adjustments_requested_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.approvedBy],
+      foreignColumns: [persons.id],
+      name: "adjustments_approved_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.creditedTo],
+      foreignColumns: [persons.id],
+      name: "adjustments_credited_to_fk",
     }).onDelete("restrict"),
     index("adjustments_order_reason_idx").on(t.workingOrderId, t.reasonId),
     index("adjustments_requested_by_idx").on(t.requestedBy),

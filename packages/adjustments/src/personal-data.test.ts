@@ -8,7 +8,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { jsonFile } from "@waitron/module";
 import { describe, expect, it } from "vitest";
 import { ADJUSTMENTS_PERSONAL_DATA } from "./personal-data.js";
@@ -48,6 +48,9 @@ async function fileOf(personId: string): Promise<string> {
 }
 
 async function seedOrders(db: Database): Promise<Record<41 | 42 | 43, string>> {
+  await seedPerson(db, { id: MARTA, displayName: "Marta" });
+  await seedPerson(db, { id: LUIS, displayName: "Luis" });
+  await seedPerson(db, { id: ANA, displayName: "Ana" });
   await seedVenue(db, {
     name: "Dining room",
     invoiceLocales: ["es"],
