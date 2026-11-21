@@ -1,42 +1,18 @@
 // A main box and a joining box started in this process, as `spare-join.e2e.test.ts` starts them,
 // but with no bucket copy: which environment the joining box ends up in when its WAITRON_ENV is
 // unset, empty or set.
-import { mkdir, readFile, rm, writeFile, mkdtemp } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { enabledModules, parseModuleConfig } from "@waitron/module";
-import type { DeploymentEnvironment } from "@waitron/db";
-import { startServer, type StartServerSeams } from "./boot.js";
+import { startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
-import { BOX_HOSTNAME, ownContactUrl } from "./box-name.js";
-import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { ALL_MODULES } from "./modules.js";
+import { parseEnvFile } from "./env-file.js";
 import { runStagedReset } from "./reset-request.js";
-import { fetchHealthOk, httpsVia, poll } from "./testing/boot-harness.js";
-import { freePort } from "./testing/free-ports.js";
-import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
-import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
-import {
-  BOOT_MS,
-  MODULES_M,
-  TestBox,
-  VENUE_M,
-  WAIT_POLL_MS,
-  adoptFrom,
-  boundedStart,
-  closeBoxes,
-} from "./testing/spare-join-scenario.js";
-import {
-  bootEnv,
-  boxDirs,
-  copyMigrations,
-  provisionStreamBox,
-  type BoxDirs,
-} from "./testing/stream-box.js";
-import { waitUntil } from "./testing/scenario-stages.js";
-import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
+import { poll } from "./testing/boot-harness.js";
+import { BOOT_MS, boundedStart } from "./testing/spare-join-scenario.js";
+import { JoinPairs } from "./testing/spare-join-pair.js";
+import type { BoxDirs } from "./testing/stream-box.js";
 
 const UNTIMED_MS = 60_000;
 const ADOPT_TIMEOUT_MS = 3 * BOOT_MS + UNTIMED_MS;
@@ -46,150 +22,18 @@ const RESTART_TIMEOUT_MS = 4 * BOOT_MS + UNTIMED_MS;
 // for and once after it ran; M starts once.
 const STOPPED_JOIN_TIMEOUT_MS = 6 * BOOT_MS + UNTIMED_MS;
 
-interface Pair {
-  boxS: TestBox;
-  dirsS: BoxDirs;
-  envS: NodeJS.ProcessEnv;
-  urlS: string;
-  adopt: () => Promise<{ status: number; body: unknown }>;
-}
-
 describe("a joining box's environment", () => {
-  let scratch: string | undefined;
-  let migrationsRoot: string;
-  const boxes: TestBox[] = [];
-  const retained: RetainedHttpListener[] = [];
-  const closers: (() => Promise<void>)[] = [];
+  const pairs = new JoinPairs();
 
-  beforeAll(async () => {
-    scratch = await mkdtemp(join(tmpdir(), "waitron-join-env-"));
-    migrationsRoot = await copyMigrations(scratch);
-  });
+  beforeAll(() => pairs.open("waitron-join-env-"));
 
   afterAll(async () => {
-    const failures = await closeBoxes(boxes);
-    for (const held of retained)
-      if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));
-    for (const close of closers) await close().catch(() => {});
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    const failures = await pairs.close();
     if (failures.length > 0) throw new AggregateError(failures, "join environment teardown failed");
   });
 
-  /** M provisioned in `main` with a recovery key and no bucket copy, and S's empty folder, both
-   * started; S's own WAITRON_ENV is `joining` (undefined leaves it out). `s.leftOut` names
-   * variables S's environment leaves out, `s.set` adds to it, and `s.seams` are S's start seams. */
-  async function startPair(
-    name: string,
-    main: DeploymentEnvironment,
-    joining: string | undefined,
-    s: {
-      leftOut?: readonly string[];
-      set?: NodeJS.ProcessEnv;
-      seams?: StartServerSeams;
-    } = {},
-  ): Promise<Pair> {
-    const root = scratch!;
-    const [listenerM, listenerS, storeListener] = await Promise.all([
-      retainHttpListener(),
-      retainHttpListener(),
-      retainHttpListener(),
-    ]);
-    retained.push(listenerM, listenerS, storeListener);
-    // Litestream is never run here: no box has a bucket copy.
-    const boxEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
-      ...bootEnv(dirs, port, migrationsRoot, join(root, "no-litestream")),
-      WAITRON_MANAGEMENT_ORIGIN: `https://${BOX_HOSTNAME}:${port}`,
-      WAITRON_MANAGEMENT_RP_ID: BOX_HOSTNAME,
-    });
-    const dirsM = await boxDirs(root, `${name}-m`);
-    const m = await provisionStreamBox({
-      dirs: dirsM,
-      advertisedOrigin: `https://${BOX_HOSTNAME}:${listenerM.port}`,
-      modulesJson: MODULES_M,
-      venue: {
-        request: VENUE_M,
-        modules: enabledModules(ALL_MODULES, parseModuleConfig(MODULES_M, ALL_MODULES)),
-      },
-      environment: main,
-    });
-    await writeFile(
-      join(dirsM.state, "backup.env"),
-      formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: `join-env-${name}` }),
-    );
-    const boxM = new TestBox(dirsM, listenerM.port, boxEnv(dirsM, listenerM.port), {
-      boxHost: synchronisedBoxHost(),
-    });
-    boxes.push(boxM);
-    const dirsS = await boxDirs(root, `${name}-s`);
-    const envS: NodeJS.ProcessEnv = {
-      ...boxEnv(dirsS, listenerS.port),
-      ...(joining === undefined ? {} : { WAITRON_ENV: joining }),
-      WAITRON_SPARE_STORE_PORT: String(storeListener.port),
-      WAITRON_SPARE_STORE_LOOPBACK_PORT: String(await freePort()),
-      ...s.set,
-    };
-    for (const variable of s.leftOut ?? []) delete envS[variable];
-    const boxS = new TestBox(dirsS, listenerS.port, envS, s.seams ?? {});
-    boxes.push(boxS);
-
-    const adoption = adoptRetainedListeners([listenerM, listenerS]);
-    const starts = [boxM.start(), boxS.start()];
-    try {
-      const bounded = await Promise.allSettled([
-        boundedStart(starts[0]!, `${name}: M's start`),
-        boundedStart(starts[1]!, `${name}: S's setup start`),
-      ]);
-      for (const start of bounded) if (start.status === "rejected") throw start.reason;
-      expect(adoption.adopted.size).toBe(2);
-      await adoption.bound;
-    } finally {
-      // Restored only once both starts have settled, so neither binds after the handoff ends.
-      await Promise.allSettled(starts);
-      adoption.restore();
-    }
-    const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
-    const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
-    const { via: viaM, close: closeM } = httpsVia(caM);
-    const { via: viaS, close: closeS } = httpsVia(caS);
-    closers.push(closeM, closeS);
-    await fetchHealthOk(`https://127.0.0.1:${listenerM.port}/health`, viaM);
-    const urlS = `https://127.0.0.1:${listenerS.port}`;
-    const primaryUrl = ownContactUrl(boxM.origin, m.nodeId);
-    expect(existsSync(join(dirsS.state, "trading.env"))).toBe(false);
-    return {
-      boxS,
-      dirsS,
-      envS,
-      urlS,
-      adopt: async () => {
-        const store = adoptRetainedListeners([storeListener]);
-        try {
-          const answer = await adoptFrom(
-            { url: urlS, via: viaS },
-            { url: `https://127.0.0.1:${listenerM.port}`, via: viaM, origin: boxM.origin },
-            primaryUrl,
-            (what, ms, probe) => waitUntil(what, ms, probe, undefined, WAIT_POLL_MS),
-          );
-          // The joined box's restart binds its store port, which this test holds until then.
-          if (answer.status === 200)
-            await boundedStart(
-              store.bound.then(() => {}),
-              `${name}: S's store listener`,
-            );
-          return answer;
-        } finally {
-          store.restore();
-        }
-      },
-    };
-  }
-
-  /** Trusts the authority S serves under now: its own in setup, M's once its join installs it. */
-  const viaNow = async (dirs: BoxDirs): Promise<RequestInit> => {
-    const { via, close } = httpsVia(await readFile(join(dirs.state, "tls", "ca.crt")));
-    closers.push(close);
-    return via;
-  };
+  const startPair = pairs.start.bind(pairs);
+  const viaNow = (dirs: BoxDirs) => pairs.viaNow(dirs);
 
   const setupStatus = async (url: string, via: RequestInit): Promise<unknown> => {
     const answer = await fetch(`${url}/setup-api/status`, via);
