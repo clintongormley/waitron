@@ -139,7 +139,7 @@ Command: `pnpm --filter @waitron/country-packs exec vitest run src/registered-ad
 `setup-first-fiscal-api.ts:419`) and the edit route (a `check` on `venue-settings-api.ts:337-342`) split the line
 with `registeredAddressParts` in the business's country and refuse it with `registeredAddressErrors`:
 - setup: `setup.request_invalid` with field `taxpayerDomicile`, as today;
-- the route: `venue.detail_invalid` with reason `incomplete`, or `postal_code` for a postcode that fails the check.
+- the route: `venue.detail_invalid` with reason `incomplete`, or `postcode` for a postcode that fails the check.
 
 The check is not added to the command-line setup (`packages/provisioning/src/cli.ts:205`) or to configuration import
 beyond setup. Several tests now send a line the check refuses:
@@ -190,7 +190,7 @@ Command: as for 4a, plus `src/screens/venue-screen.address-lookup.test.ts src/sc
 - The shared base gains two hooks that subclasses can override: one draws the fields, the other gives the value they
   make. The legal-name dialog keeps the base's single field.
 - The registered dialog draws the parts, pre-filled through the split. The draft scope compares joined lines, so an
-  edit that ends on the same line keeps Save quiet. It shows the server's `incomplete` and `postal_code` refusals
+  edit that ends on the same line keeps Save quiet. It shows the server's `incomplete` and `postcode` refusals
   beside the right fields.
 - Rewrite the 22 cases in `registered-address-dialog.test.ts` (`:93`-`:543`) to the parts, each keeping its
   assertion:

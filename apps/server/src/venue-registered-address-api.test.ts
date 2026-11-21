@@ -203,7 +203,7 @@ describe("changing the taxpayer's registered address", () => {
     ["whitespace-only", "   ", "required"],
     ["without a postcode", "Calle Mayor 1, Madrid", "incomplete"],
     ["the box's own floor and door alone", ORIGINAL, "incomplete"],
-    ["with a postcode outside its province", "Calle Mayor 1, 08010 Madrid, Madrid", "postal_code"],
+    ["with a postcode outside its province", "Calle Mayor 1, 08010 Madrid, Madrid", "postcode"],
   ])("refuses an address that is %s and writes nothing", async (_label, value, reason) => {
     await suite.db.execute(sql`update taxpayer set taxpayer_domicile = ${COMPLETE} where id = 1`);
     const response = await put({ taxpayerDomicile: value, expected: COMPLETE });

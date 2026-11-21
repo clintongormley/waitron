@@ -39,7 +39,7 @@ const SETTINGS: TaxpayerFieldSettings = {
   refusals: {
     unchanged: "venue_details.taxpayer_domicile_unchanged",
     incomplete: "venue_details.taxpayer_domicile_incomplete",
-    postal_code: "venue_details.taxpayer_domicile_postal_code",
+    postcode: "venue_details.taxpayer_domicile_postcode",
   },
   send: (api, taxpayerDomicile, expected) =>
     api.changeTaxpayerDomicile({ taxpayerDomicile, expected }),
@@ -239,7 +239,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
         [SAME_AS_VENUE]:
           reason === "unchanged" ? message : t("venue_details.registered_same_unusable"),
       };
-    return { [reason === "postal_code" ? NAMES.postalCode : NAMES.street]: message };
+    return { [reason === "postcode" ? NAMES.postalCode : NAMES.street]: message };
   }
 
   protected override reset(): void {

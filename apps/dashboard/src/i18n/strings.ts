@@ -1346,7 +1346,7 @@ export const en = {
   "venue_details.registered_province_mismatch": "Choose the province the postcode is in.",
   "venue_details.registered_city_comma": "Write the city without a comma.",
   "venue_details.taxpayer_domicile_incomplete": "Enter the street, postcode and city.",
-  "venue_details.taxpayer_domicile_postal_code": "This postcode is not in the province given.",
+  "venue_details.taxpayer_domicile_postcode": "This postcode is not in the province given.",
   "venue_details.taxpayer_domicile_note":
     "Full invoices issued from now on print the new address. Invoices already issued keep theirs.",
   "venue_details.taxpayer_domicile_unchanged": "This is already the registered address.",
@@ -5928,8 +5928,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.registered_province_mismatch": "Elige la provincia del código postal.",
   "venue_details.registered_city_comma": "Escribe la ciudad sin comas.",
   "venue_details.taxpayer_domicile_incomplete": "Introduce la calle, el código postal y la ciudad.",
-  "venue_details.taxpayer_domicile_postal_code":
-    "Este código postal no es de la provincia indicada.",
+  "venue_details.taxpayer_domicile_postcode": "Este código postal no es de la provincia indicada.",
   "venue_details.taxpayer_domicile_note":
     "Las facturas completas que se emitan a partir de ahora llevarán la nueva dirección. Las ya emitidas conservan la suya.",
   "venue_details.taxpayer_domicile_unchanged": "Ya es el domicilio fiscal.",

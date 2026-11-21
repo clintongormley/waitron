@@ -33,7 +33,7 @@ const refusals = {
   same: undefined,
   sameRefused: {
     code: "venue.detail_invalid",
-    params: { field: "taxpayerDomicile", reason: "postal_code" },
+    params: { field: "taxpayerDomicile", reason: "postcode" },
   },
   postcode: undefined,
 };

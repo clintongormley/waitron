@@ -284,7 +284,7 @@ it("a refusal of the venue's address is the bottom message, and turning the swit
     const api = stubApi(OLD);
     api.changeTaxpayerDomicile.mockRejectedValue({
       code: "venue.detail_invalid",
-      params: { field: "taxpayerDomicile", reason: "postal_code" },
+      params: { field: "taxpayerDomicile", reason: "postcode" },
     });
     const panel = await mount(api);
     await open(panel);
@@ -518,7 +518,7 @@ it("a postal_code refusal shows under Postal code with the bottom message, and l
     const api = stubApi();
     api.changeTaxpayerDomicile.mockRejectedValue({
       code: "venue.detail_invalid",
-      params: { field: "taxpayerDomicile", reason: "postal_code" },
+      params: { field: "taxpayerDomicile", reason: "postcode" },
     });
     const panel = await mount(api);
     await open(panel);
@@ -528,13 +528,7 @@ it("a postal_code refusal shows under Postal code with the bottom message, and l
       taxpayerDomicile: NEW,
       expected: OLD,
     });
-    expect(errors(panel)).toEqual([
-      "",
-      "",
-      t("venue_details.taxpayer_domicile_postal_code"),
-      "",
-      "",
-    ]);
+    expect(errors(panel)).toEqual(["", "", t("venue_details.taxpayer_domicile_postcode"), "", ""]);
     expect(actions(panel).error).toBe(t("form.fix_fields"));
     expect(save(panel).disabled).toBe(false);
     await type(panel, { registeredPostalCode: "08011" });
@@ -878,13 +872,13 @@ it("a refusal is not shown once a chosen address replaces the refused one", asyn
   const api = stubApi();
   api.changeTaxpayerDomicile.mockRejectedValue({
     code: "venue.detail_invalid",
-    params: { field: "taxpayerDomicile", reason: "postal_code" },
+    params: { field: "taxpayerDomicile", reason: "postcode" },
   });
   const panel = await mountSearching(api);
   await open(panel);
   await type(panel, NEW_PARTS);
   await press(panel);
-  expect(errors(panel)[2]).toBe(t("venue_details.taxpayer_domicile_postal_code"));
+  expect(errors(panel)[2]).toBe(t("venue_details.taxpayer_domicile_postcode"));
   await choose(panel, MADRID);
   expect(errors(panel)).toEqual(["", "", "", "", ""]);
   expect(actions(panel).error).toBe("");
