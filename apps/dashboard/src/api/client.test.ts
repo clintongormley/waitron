@@ -2753,16 +2753,19 @@ describe("DashboardApi — reporting (sales & takings)", () => {
 });
 
 describe("DashboardApi — recent logs and log verbosity", () => {
-  it("getRecentLogs GETs the recent endpoint with the given limit", async () => {
+  it("getRecentLogs GETs the recent endpoint with the chosen limit and level", async () => {
     const lines = [{ at: "2026-08-31T10:00:00Z", level: "info", event: "boot" }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ lines }));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getRecentLogs(50)).toEqual({ lines });
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/diagnostics/recent?limit=50", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
+    expect(await api.getRecentLogs(50, "all")).toEqual({ lines });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/diagnostics/recent?limit=50&level=all",
+      {
+        method: "GET",
+        credentials: "include",
+        signal: expect.any(AbortSignal),
+      },
+    );
   });
 
   it("getRecentLogs defaults the limit to 200", async () => {

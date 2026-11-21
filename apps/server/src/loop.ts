@@ -75,7 +75,7 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
     // A stop during the pass skips the wait.
     if (deps.signal.aborted) break;
     const sleepMs = sleepMsFor(nextDueAt, deps.now(), deps.minTickMs, deps.maxTickMs);
-    deps.log("info", "loop.sleeping", { sleepMs });
+    deps.log("debug", "loop.sleeping", { sleepMs });
     try {
       await deps.sleep(sleepMs, deps.signal);
     } catch (error) {

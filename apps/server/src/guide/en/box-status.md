@@ -25,6 +25,12 @@ reads do not count as activity, so an open page does not keep you signed in.
 On a box that only keeps a read-only copy of another box, the **Free** button cannot be pressed,
 and the page says why under **Disk space**.
 
+## Read the box’s log {#diagnostics}
+
+Open **System → Diagnostics**. The list starts with warnings and errors and shows times in the
+venue’s time zone. Search by event, detail or request ID. To reproduce a problem, choose **Turn on
+detailed logging**. Right after reproducing the problem, choose **All levels (last 5 minutes)**.
+
 ## Read the rows {#rows}
 
 Each part has a row with a coloured dot:

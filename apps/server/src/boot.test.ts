@@ -1,3 +1,4 @@
+import { enableDebugForNextBoot } from "./testing/boot-debug.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import * as cloudWorkerModule from "./cloud-worker.js";
 import * as cloudClientModule from "./cloud-client.js";
@@ -2920,6 +2921,7 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       const server = await withCapturedStdout(async (lines) => {
+        enableDebugForNextBoot();
         const started = await startServer({
           ...KEY_ENV,
           WAITRON_VENUE_DIR: sharedVenueDir,
@@ -3050,6 +3052,7 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       const server = await withCapturedStdout(async (lines) => {
+        enableDebugForNextBoot();
         const started = await startServer({
           ...KEY_ENV,
           WAITRON_VENUE_DIR: sharedVenueDir,
@@ -3104,6 +3107,7 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       const server = await withCapturedStdout(async (lines) => {
+        enableDebugForNextBoot();
         const started = await startServer(
           {
             ...KEY_ENV,

@@ -24,10 +24,21 @@ export function requestIdMiddleware(log: Logger, now: () => Date): MiddlewareHan
     const start = now().getTime();
     await next();
     c.header("x-request-id", id);
+    const routePath = c.req.routePath;
+    // The viewer polls both routes and would otherwise fill the tail it reads.
+    if (
+      c.res.ok &&
+      c.req.method === "GET" &&
+      c.req.header("x-waitron-live") === "1" &&
+      (routePath === "/management-api/diagnostics/recent" ||
+        routePath === "/management-api/diagnostics/verbosity")
+    ) {
+      return;
+    }
     log("debug", "http.request", {
       requestId: id,
       method: c.req.method,
-      routePath: c.req.routePath, // the matched pattern, never the concrete path/query
+      routePath, // the matched pattern, never the concrete path/query
       status: c.res.status,
       durationMs: now().getTime() - start,
     });

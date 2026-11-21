@@ -1,15 +1,22 @@
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
+import type { DashboardApi, DiagnosticsLine, DiagnosticsLog } from "../api/client.js";
 import { DiagnosticsScreen } from "./diagnostics-screen.js";
 
 afterEach(cleanupWidgets);
 
 const SEED: DiagnosticsLine[] = [
   { at: "2026-08-31T10:00:00Z", level: "info", event: "http.request", requestId: "r1" },
-  { at: "2026-08-31T10:00:01Z", level: "error", event: "db.timeout" },
+  {
+    at: "2026-08-31T10:00:01Z",
+    level: "error",
+    event: "db.timeout",
+    requestId: "r2",
+    reason: "Timed out",
+  },
 ];
 
 function stubApi(
@@ -17,11 +24,21 @@ function stubApi(
   lines: DiagnosticsLine[] = SEED,
 ): DashboardApi {
   return {
-    getRecentLogs: vi.fn().mockResolvedValue({ lines: lines.map((l) => ({ ...l })) }),
+    getRecentLogs: vi.fn().mockResolvedValue({
+      lines: lines.filter((line) => line.level !== "info"),
+      timeZone: "Asia/Tokyo",
+      oldestScannedAt: lines[0]?.at ?? null,
+    }),
     getVerbosity: vi.fn().mockResolvedValue({ level: "info", revertsAt: null }),
     setVerbosity: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
+}
+
+function deferredLog() {
+  let resolve!: (value: DiagnosticsLog) => void;
+  const promise = new Promise<DiagnosticsLog>((finish) => (resolve = finish));
+  return { promise, resolve };
 }
 
 async function flush(el: DiagnosticsScreen): Promise<void> {
@@ -38,11 +55,67 @@ describe("diagnostics-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
     await flush(el);
-    expect(api.getRecentLogs).toHaveBeenCalledWith(200);
+    expect(api.getRecentLogs).toHaveBeenCalledWith(200, "warn");
     expect(api.getVerbosity).toHaveBeenCalled();
-    expect(el.shadowRoot!.textContent).toContain("http.request");
-    expect(el.shadowRoot!.textContent).toContain("db.timeout");
+    const log = q(el, "[data-test=log]")!;
+    expect(log.textContent).not.toContain("http.request");
+    expect(log.textContent).toContain("db.timeout");
+    expect(log.textContent).toContain("19:00:01");
+    expect(log.textContent).toContain("reason=Timed out");
+    expect(log.textContent).toContain("r2");
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
+  });
+
+  it("requests all levels and searches visible details and request IDs", async () => {
+    const response = { timeZone: "Asia/Tokyo", oldestScannedAt: SEED[0]!.at };
+    const api = stubApi({
+      getRecentLogs: vi
+        .fn()
+        .mockResolvedValueOnce({ ...response, lines: [SEED[1]] })
+        .mockResolvedValue({ ...response, lines: SEED }),
+    });
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
+    await flush(el);
+    const filter = q(el, "wt-combobox[name=log-level]");
+    expect(filter).not.toBeNull();
+    await chooseOption(filter!, "all");
+    await vi.waitFor(() => {
+      expect(api.getRecentLogs).toHaveBeenLastCalledWith(200, "all");
+      expect(q(el, "[data-test=log]")?.textContent).toContain("http.request");
+    });
+
+    const search = q(el, "wt-input[name=log-search]")!.shadowRoot!.querySelector("input")!;
+    for (const term of ["timed OUT", "r2", "outside this log"]) {
+      search.value = term;
+      search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      if (term === "outside this log") {
+        expect(q(el, "[data-test=no-matches]")).not.toBeNull();
+      } else {
+        const text = q(el, "[data-test=log]")?.textContent;
+        expect(text).toContain("db.timeout");
+        expect(text).not.toContain("http.request");
+      }
+    }
+  });
+
+  it("keeps a late response for the old level out of the current log", async () => {
+    const warning = deferredLog();
+    const all = deferredLog();
+    const getRecentLogs = vi.fn().mockReturnValueOnce(warning.promise).mockReturnValue(all.promise);
+    const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+      api: stubApi({ getRecentLogs }),
+    });
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox")!, "all");
+
+    const info = { timeZone: "Europe/Madrid", oldestScannedAt: SEED[0]!.at };
+    warning.resolve({ ...info, lines: [SEED[1]!] });
+    await vi.waitFor(() => expect(getRecentLogs).toHaveBeenLastCalledWith(200, "all"));
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).not.toContain("db.timeout");
+
+    all.resolve({ ...info, lines: SEED });
+    await vi.waitFor(() => expect(q(el, "[data-test=log]")?.textContent).toContain("http.request"));
   });
 
   it("sets the log lines in the design system's monospace font", async () => {
@@ -76,7 +149,7 @@ describe("diagnostics-screen", () => {
     );
   });
 
-  it("renders the revert window with its {time} placeholder filled (never a literal brace)", async () => {
+  it("reports when detailed logging ends in the venue time zone", async () => {
     const api = stubApi({
       getVerbosity: vi
         .fn()
@@ -85,9 +158,7 @@ describe("diagnostics-screen", () => {
     const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
     await flush(el);
     const window = q(el, "[data-test=verbosity-window]");
-    expect(window).not.toBeNull();
-    // The whole rendered tree must never leak the raw `{time}` token.
-    expect(el.shadowRoot!.textContent).not.toContain("{");
+    expect(window?.textContent).toContain("19:15");
   });
 
   it("does not render the verbosity banner while the level is the standing default", async () => {
@@ -151,14 +222,9 @@ describe("diagnostics-screen", () => {
     try {
       // The first getRecentLogs is DEFERRED (a promise we resolve by hand); later calls resolve at
       // once. So the connect refresh stays in flight until we release it.
-      let releaseFirst!: (v: { lines: DiagnosticsLine[] }) => void;
-      const firstPending = new Promise<{ lines: DiagnosticsLine[] }>((resolve) => {
-        releaseFirst = resolve;
-      });
-      const getRecentLogs = vi
-        .fn()
-        .mockReturnValueOnce(firstPending)
-        .mockResolvedValue({ lines: [] });
+      const first = deferredLog();
+      const empty = { lines: [], timeZone: "Europe/Madrid", oldestScannedAt: null };
+      const getRecentLogs = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(empty);
       const api = stubApi({ getRecentLogs });
       await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
@@ -172,7 +238,7 @@ describe("diagnostics-screen", () => {
       expect(calls()).toBe(1);
 
       // Release the first response; the guard clears in its `finally`.
-      releaseFirst({ lines: [] });
+      first.resolve(empty);
       await vi.advanceTimersByTimeAsync(0);
 
       // The next tick is now free to poll again.

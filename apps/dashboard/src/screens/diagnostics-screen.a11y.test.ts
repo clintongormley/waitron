@@ -1,3 +1,4 @@
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./diagnostics-screen.js";
@@ -17,7 +18,12 @@ const SEED: DiagnosticsLine[] = [
 
 function stubApi(lines: DiagnosticsLine[], overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
-    getRecentLogs: vi.fn().mockResolvedValue({ lines: lines.map((l) => ({ ...l })) }),
+    getRecentLogs: vi.fn(async (_limit, level) => ({
+      lines:
+        level === "all" ? lines : lines.filter(({ level }) => ["warn", "error"].includes(level)),
+      timeZone: "Europe/Madrid",
+      oldestScannedAt: lines[0]?.at ?? null,
+    })),
     getVerbosity: vi.fn().mockResolvedValue({ level: "info", revertsAt: null }),
     setVerbosity: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -38,6 +44,8 @@ describe.each(["light", "dark"] as const)("diagnostics-screen a11y (%s theme)", 
       { api: stubApi(SEED) },
       theme,
     );
+    await flush(el);
+    await chooseOption(el.shadowRoot!.querySelector("wt-combobox")!, "all");
     await flush(el);
     await expectNoA11yViolations(host);
   });

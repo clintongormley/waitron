@@ -661,7 +661,9 @@ export function withPendingSweep(
     for (const provider of providers) {
       try {
         const r = await provider.resolvePending(now, owned, signal);
-        log("info", "resolve_pending.complete", {
+        const hasWork =
+          r.nextDueAt !== null || r.forwarded > 0 || r.declined > 0 || r.incidentsRaised > 0;
+        log(hasWork ? "info" : "debug", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
           failed: r.declined,
@@ -3399,7 +3401,7 @@ async function bootServer(
     },
     log,
   );
-  mountDiagnosticsApi(app, { db, reader, verbosity }, log);
+  mountDiagnosticsApi(app, { db, reader, verbosity, now }, log);
   mountMenuApi(
     app,
     {
