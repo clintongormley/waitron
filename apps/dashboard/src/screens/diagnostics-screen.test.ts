@@ -35,6 +35,12 @@ function stubApi(
   } as unknown as DashboardApi;
 }
 
+function deferredLog() {
+  let resolve!: (value: DiagnosticsLog) => void;
+  const promise = new Promise<DiagnosticsLog>((finish) => (resolve = finish));
+  return { promise, resolve };
+}
+
 async function flush(el: DiagnosticsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -94,8 +100,8 @@ describe("diagnostics-screen", () => {
   });
 
   it("keeps a late response for the old level out of the current log", async () => {
-    const warning = Promise.withResolvers<DiagnosticsLog>();
-    const all = Promise.withResolvers<DiagnosticsLog>();
+    const warning = deferredLog();
+    const all = deferredLog();
     const getRecentLogs = vi.fn().mockReturnValueOnce(warning.promise).mockReturnValue(all.promise);
     const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
       api: stubApi({ getRecentLogs }),
@@ -216,14 +222,9 @@ describe("diagnostics-screen", () => {
     try {
       // The first getRecentLogs is DEFERRED (a promise we resolve by hand); later calls resolve at
       // once. So the connect refresh stays in flight until we release it.
-      let releaseFirst!: (v: { lines: DiagnosticsLine[] }) => void;
-      const firstPending = new Promise<{ lines: DiagnosticsLine[] }>((resolve) => {
-        releaseFirst = resolve;
-      });
-      const getRecentLogs = vi
-        .fn()
-        .mockReturnValueOnce(firstPending)
-        .mockResolvedValue({ lines: [] });
+      const first = deferredLog();
+      const empty = { lines: [], timeZone: "Europe/Madrid", oldestScannedAt: null };
+      const getRecentLogs = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(empty);
       const api = stubApi({ getRecentLogs });
       await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });
       await vi.advanceTimersByTimeAsync(0);
@@ -237,7 +238,7 @@ describe("diagnostics-screen", () => {
       expect(calls()).toBe(1);
 
       // Release the first response; the guard clears in its `finally`.
-      releaseFirst({ lines: [] });
+      first.resolve(empty);
       await vi.advanceTimersByTimeAsync(0);
 
       // The next tick is now free to poll again.
