@@ -288,8 +288,10 @@ administrator's details in Prepare or a development Live rehearsal. Sign in or c
 then return to setup in the original tab. Waitron files the venue after you save it and the box
 restarts. Check **System → Cloud services** for the connection.
 
-To finish setup manually, choose **Skip** and enter the address and mail server. For a configuration
-import, connect after setup from **Cloud services**. The planned address pilot will require a Cloud
+Enter the address and mail server during setup. Choose **Skip** to finish setup manually.
+If you skip before opening Cloud or import a configuration, connect later from **Cloud services**.
+
+The planned address pilot will require a Cloud
 account with one Spanish business, no tax number and no venues. Adding a venue to an existing
 Cloud business will still use manual address entry.
 

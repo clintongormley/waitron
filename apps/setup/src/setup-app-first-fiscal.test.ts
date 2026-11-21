@@ -12,6 +12,8 @@ beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   mounted.splice(0).forEach((el) => el.remove());
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
+  for (const key of ["tab", "return", "result", "signed-in"])
+    sessionStorage.removeItem("waitron-setup-cloud-" + key);
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
 async function mount(options: Parameters<typeof wizardApi>[0] = {}) {
@@ -947,17 +949,15 @@ it("resumes Prepare in the chosen language after returning from Cloud", async ()
         .find((r) => r.path === "/setup-api/provision")
         ?.headers.get("X-Waitron-Setup-Cloud-Tab"),
     ).toBe(initial.attemptId);
+    expect(sessionStorage.getItem("waitron-setup-cloud-signed-in")).toBeNull();
   } finally {
-    sessionStorage.removeItem("waitron-setup-cloud-tab");
-    sessionStorage.removeItem("waitron-setup-cloud-return");
-    sessionStorage.removeItem("waitron-setup-cloud-result");
-    sessionStorage.removeItem("waitron-setup-cloud-signed-in");
     setLocale(locale);
   }
 });
 
 it("keeps the original Cloud sign-in when development Live resumes a held setup after reload", async () => {
-  sessionStorage.setItem("waitron-setup-cloud-tab", initial.attemptId);
+  const tab = crypto.randomUUID();
+  sessionStorage.setItem("waitron-setup-cloud-tab", tab);
   sessionStorage.setItem("waitron-setup-cloud-return", JSON.stringify({ mode: "live" }));
   sessionStorage.setItem("waitron-setup-cloud-result", "signed-in");
   const options = {
@@ -973,28 +973,23 @@ it("keeps the original Cloud sign-in when development Live resumes a held setup 
           })
         : undefined,
   };
-  try {
-    const first = await mount(options);
-    await screen(first.app, "admin");
-    await liveVenueAfterAdmin(first.app);
-    await screen(first.app, "first-setup");
-    first.app.remove();
-    await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
-    const { app, requests } = await mount({ ...options, claimed: true, resolution: false });
-    const allocation = await screen(app, "first-setup");
-    allocation.dispatchEvent(
-      new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
-    );
-    await screen(app, "review");
-    emit(app, "provision-requested");
-    await screen(app, "done");
-    expect(
-      requests.find((r) => r.path.endsWith("/provision"))?.headers.get("X-Waitron-Setup-Cloud-Tab"),
-    ).toBe(initial.attemptId);
-  } finally {
-    for (const key of ["tab", "return", "result", "signed-in"])
-      sessionStorage.removeItem("waitron-setup-cloud-" + key);
-  }
+  const first = await mount(options);
+  await screen(first.app, "admin");
+  await liveVenueAfterAdmin(first.app);
+  await screen(first.app, "first-setup");
+  first.app.remove();
+  await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
+  const { app, requests } = await mount({ ...options, claimed: true, resolution: false });
+  const allocation = await screen(app, "first-setup");
+  allocation.dispatchEvent(
+    new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
+  );
+  await screen(app, "review");
+  emit(app, "provision-requested");
+  await screen(app, "done");
+  expect(
+    requests.find((r) => r.path.endsWith("/provision"))?.headers.get("X-Waitron-Setup-Cloud-Tab"),
+  ).toBe(tab);
 });
 
 async function liveVenueAfterAdmin(app: SetupApp) {
@@ -1043,19 +1038,15 @@ it.each([
     await screen(app, "admin");
     expect(requests.some((request) => request.path.includes("/cloud/sign-in/"))).toBe(false);
     if (mode === "prepare") {
-      try {
-        await liveVenueAfterAdmin(app);
-        await screen(app, "email");
-        emit(app, "provision-requested");
-        await screen(app, "done");
-        expect(
-          requests
-            .find((r) => r.path.endsWith("/provision"))
-            ?.headers.get("X-Waitron-Setup-Cloud-Tab"),
-        ).toBeNull();
-      } finally {
-        sessionStorage.removeItem("waitron-setup-cloud-signed-in");
-      }
+      await liveVenueAfterAdmin(app);
+      await screen(app, "email");
+      emit(app, "provision-requested");
+      await screen(app, "done");
+      expect(
+        requests
+          .find((r) => r.path.endsWith("/provision"))
+          ?.headers.get("X-Waitron-Setup-Cloud-Tab"),
+      ).toBeNull();
     }
   },
 );

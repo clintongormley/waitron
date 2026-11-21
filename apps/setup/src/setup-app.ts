@@ -1857,6 +1857,7 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
+      if (cloudSignInTab) sessionStorage.removeItem("waitron-setup-cloud-signed-in");
       this.recoveryPackPdf = result.recoveryPackPdf;
       this.breakGlassSecret = result.breakGlassSecret;
       this.breakGlassKeyName = result.breakGlassKeyName;

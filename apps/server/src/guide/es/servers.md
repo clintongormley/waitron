@@ -322,9 +322,11 @@ sesión o crea una cuenta y vuelve a la configuración en la pestaña original. 
 local después de que lo guardes y se reinicie el servidor. Comprueba la conexión en
 **Sistema → Servicios Cloud**.
 
-Para terminar la configuración manualmente, elige **Omitir** e introduce la dirección y el servidor
-de correo. Si importas una configuración, conéctate al terminar desde **Servicios Cloud**. La
-prueba de búsqueda de direcciones requerirá una cuenta de Cloud con una sola empresa española,
+Introduce la dirección y el servidor de correo durante la configuración. Elige **Omitir** para
+continuar con la configuración manual. Si omites el paso antes de abrir Cloud o importas una
+configuración, conéctate más tarde desde **Servicios Cloud**.
+
+La prueba de búsqueda de direcciones requerirá una cuenta de Cloud con una sola empresa española,
 sin NIF ni locales. Si añades un local a una empresa que ya usa Cloud, introduce la dirección
 manualmente.
 
