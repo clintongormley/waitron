@@ -67,8 +67,9 @@ type TextField =
   | "rectificativeSeriesCode";
 
 /**
- * Every value is `"off"` on purpose: these fields describe the VENUE, while a browser's stored values
- * describe the PERSON filling the form in — their home address, the company they work for.
+ * Only the venue's postal address takes the browser's address autofill. Its tokens share one
+ * section: without it, Chromium filled the street from one choice and the postcode and city from
+ * another.
  */
 const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   country: "off",
@@ -76,11 +77,11 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   legalName: "off",
   taxpayerDomicile: "off",
   name: "off",
-  addressLine1: "off",
-  addressLine2: "off",
-  postalCode: "off",
-  city: "off",
-  province: "off",
+  addressLine1: "section-venue address-line1",
+  addressLine2: "section-venue address-line2",
+  postalCode: "section-venue postal-code",
+  city: "section-venue address-level2",
+  province: "section-venue address-level1",
   dayCutover: "off",
   seriesCode: "off",
   fullSeriesCode: "off",

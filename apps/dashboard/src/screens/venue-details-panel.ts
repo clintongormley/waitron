@@ -67,6 +67,12 @@ const REASONS: Record<string, StringKey> = {
   geography_context: "venue_details.geography_context",
 };
 const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : field);
+const AUTOCOMPLETE: Partial<Record<VenueDetailField, string>> = {
+  addressLine1: "section-venue address-line1",
+  addressLine2: "section-venue address-line2",
+  postalCode: "section-venue postal-code",
+  city: "section-venue address-level2",
+};
 /** The fields a chosen address fills; the province is never among them, as the server locks it. */
 const SEARCH_FILLS: readonly VenueDetailField[] = [
   "addressLine1",
@@ -650,6 +656,7 @@ export class VenueDetailsPanel extends LitElement {
             ></wt-combobox>`
           : html`<wt-input
               name=${nameOf(field)}
+              autocomplete=${AUTOCOMPLETE[field] ?? nothing}
               label=${t(LABELS[field])}
               .value=${value}
               ?required=${required}

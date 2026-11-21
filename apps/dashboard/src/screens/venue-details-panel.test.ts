@@ -773,6 +773,23 @@ it("draws no help buttons anywhere in the open form", async () => {
   expect(q(el, "wt-help-tooltip")).toBeNull();
 });
 
+it("lets the browser fill the venue's postal address", async () => {
+  const el = await editing(rig().api);
+  const autocomplete: Record<string, string | null> = {};
+  for (const name of ["addressLine1", "addressLine2", "postalCode", "city"]) {
+    await field(el, name).updateComplete;
+    autocomplete[name] = field(el, name)
+      .shadowRoot!.querySelector("input")!
+      .getAttribute("autocomplete");
+  }
+  expect(autocomplete).toEqual({
+    addressLine1: "section-venue address-line1",
+    addressLine2: "section-venue address-line2",
+    postalCode: "section-venue postal-code",
+    city: "section-venue address-level2",
+  });
+});
+
 it.each([
   [1280, true],
   [390, false],

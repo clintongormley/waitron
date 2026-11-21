@@ -1720,6 +1720,54 @@ describe("owner's fixes of 2026-11-20", () => {
     expect(native.getAttribute("autocomplete")).toBe("off");
   });
 
+  it("lets the browser fill the venue's postal address and keeps the other text fields off", async () => {
+    const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
+    packs.push(SPARSE_PACK);
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      await type(el, "country", "ZZ");
+      const autocomplete: Record<string, string | null> = {};
+      for (const key of [
+        "taxId",
+        "legalName",
+        "taxpayerDomicile",
+        "name",
+        "addressLine1",
+        "addressLine2",
+        "postalCode",
+        "city",
+        "province",
+        "dayCutover",
+        "seriesCode",
+        "fullSeriesCode",
+        "rectificativeSeriesCode",
+      ]) {
+        const field = q(el, `wt-input[data-test=${key}]`) as HTMLElement & {
+          updateComplete: Promise<unknown>;
+        };
+        await field.updateComplete;
+        autocomplete[key] = field.shadowRoot!.querySelector("input")!.getAttribute("autocomplete");
+      }
+      expect(autocomplete).toEqual({
+        taxId: "off",
+        legalName: "off",
+        taxpayerDomicile: "off",
+        name: "off",
+        addressLine1: "section-venue address-line1",
+        addressLine2: "section-venue address-line2",
+        postalCode: "section-venue postal-code",
+        city: "section-venue address-level2",
+        province: "section-venue address-level1",
+        dayCutover: "off",
+        seriesCode: "off",
+        fullSeriesCode: "off",
+        rectificativeSeriesCode: "off",
+      });
+    } finally {
+      packs.pop();
+    }
+  });
+
   it("asks for the receipt language after the province, which decides the languages offered", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const province = q(el, "[data-test=province]")!;

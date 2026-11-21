@@ -140,7 +140,7 @@ tal como aparece. Puedes usar un pasaporte con una dirección española: el paí
 al documento, independientemente de dónde viva el cliente. Una factura completa necesita un
 identificador. **Cancelar** vuelve sin guardar.
 
-Elige el país de la dirección e introduce la calle y el número y la localidad. Una dirección
+Elige el país de la dirección e introduce la calle y el número y la ciudad. Una dirección
 española también necesita un código postal válido de cinco cifras y la provincia; ambos son
 opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 Main Street**,
 **París**, **Francia**, sin código postal ni provincia. No añadas el país a la calle. La factura

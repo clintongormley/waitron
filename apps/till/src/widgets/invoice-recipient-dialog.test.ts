@@ -126,6 +126,23 @@ describe("till-invoice-recipient-dialog", () => {
     },
   );
 
+  it.each([
+    ["en", "Customer city"],
+    ["es-ES", "Ciudad del cliente"],
+  ] as const)("labels the town field as the city in %s", async (locale, label) => {
+    const previousLocale = currentLocale();
+    try {
+      setLocale(locale);
+      const el = await mountDialog();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { label: string }>("wt-input[name=locality]")!
+          .label,
+      ).toBe(label);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("shows Spain in the selected language", async () => {
     const el = await mountDialog();
     const country = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
@@ -936,9 +953,7 @@ describe("till-invoice-recipient-dialog Spanish locality and province commas", (
       });
       if (locale === "es-ES")
         expect(errors[field]).toBe(
-          field === "locality"
-            ? "Quita la coma de la localidad."
-            : "Quita la coma de la provincia.",
+          field === "locality" ? "Quita la coma de la ciudad." : "Quita la coma de la provincia.",
         );
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
       expect(
