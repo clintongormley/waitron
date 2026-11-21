@@ -6971,7 +6971,7 @@ and a primary Issue invoice and close (Close bill when the invoice is already is
 ### Final payment documents
 
 Final payment and an initiating edit that settles a bill open a transient document dialog with
-Receipt selected, Full invoice and None. Print names the chosen printer; selecting a document
+Receipt and Full invoice; a full-invoice sale starts on Full invoice, any other sale on Receipt. Print names the chosen printer; selecting a document
 prints nothing. An existing F1 keeps its recorded recipient. Both receipt and full-invoice delivery
 offer Email separately when available, using the existing address form and Send action. An email
 original in progress holds paper delivery; after email succeeds, paper is a copy. F2's

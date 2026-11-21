@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TillTicketView } from "../screens/till-ticket-view.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -67,6 +67,27 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     return html`<p data-settlement-closing=${state}>${text}</p>`;
   }
 
+  #tapped = false;
+  #followed = false;
+
+  /** Until a choice is tapped, the choice follows the result's document. */
+  override willUpdate(changed: PropertyValues<this>): void {
+    super.willUpdate(changed);
+    if (this.#tapped || !changed.has("result") || this.result === undefined) return;
+    const choice = this.result.invoiceType === "F1" ? "invoice" : "receipt";
+    if (choice === this.choice) return;
+    this.choice = choice;
+    this.printDocument = choice;
+    this.#followed = true;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    super.updated(changed);
+    if (!this.#followed) return;
+    this.#followed = false;
+    this.readInvoicePrinters();
+  }
+
   #close(): void {
     this.dispatchEvent(new CustomEvent("settlement-close", { bubbles: true, composed: true }));
   }
@@ -105,6 +126,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
         aria-pressed=${this.choice === "receipt"}
         variant=${this.choice === "receipt" ? "primary" : "secondary"}
         @click=${() => {
+          this.#tapped = true;
           this.choice = "receipt";
           this.printDocument = "receipt";
           this.readInvoicePrinters();
@@ -116,6 +138,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
         aria-pressed=${this.choice === "invoice"}
         variant=${this.choice === "invoice" ? "primary" : "secondary"}
         @click=${() => {
+          this.#tapped = true;
           this.choice = "invoice";
           this.printDocument = this.result.invoiceType === "F1" ? "invoice" : "receipt";
           this.readInvoicePrinters();

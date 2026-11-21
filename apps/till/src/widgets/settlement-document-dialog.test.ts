@@ -801,3 +801,105 @@ describe("one line about the receipt printer while the original is unsent", () =
     expect(el.shadowRoot!.textContent!.split(t("document.no_printers"))).toHaveLength(2);
   });
 });
+
+describe("the choice a sale's document window starts on", () => {
+  const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+  const full = {
+    ...invoiceOf("30.00"),
+    invoiceType: "F1" as const,
+    recipient: {
+      legalName: "Harbour Ltd",
+      taxId: "B12345678",
+      address: "1 Harbour Road",
+      countryCode: "ES",
+    },
+  };
+  const props = (result: typeof full | ReturnType<typeof invoiceOf>) => ({
+    result,
+    invoicePrintersEnabled: true,
+    originalReceiptAvailable: true,
+    originalReceiptPrint: { status: "not_queued" } as OriginalReceiptPrint,
+    receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
+    deliveries: {
+      current: null,
+      originalCompleted: true,
+      originalPrinterId: "office",
+      history: [],
+      actions: {
+        print: {
+          designation: "duplicate" as const,
+          printers: [{ id: "office", name: "Office", kind: "a4" as const }],
+        },
+        retryOriginal: null,
+        receiptInstead: null,
+        email: null,
+      },
+    },
+  });
+  async function mount(result: typeof full | ReturnType<typeof invoiceOf>) {
+    const asked: string[] = [];
+    const heard = (event: Event) =>
+      asked.push((event as CustomEvent<{ role: string }>).detail.role);
+    document.addEventListener("invoice-printer-open", heard);
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      props(result),
+    );
+    document.removeEventListener("invoice-printer-open", heard);
+    el.addEventListener("invoice-printer-open", heard);
+    return { el, asked };
+  }
+  const pressed = (el: TillSettlementDocumentDialog, choice: string) =>
+    el
+      .shadowRoot!.querySelector(`[data-settlement-choice=${choice}]`)!
+      .getAttribute("aria-pressed");
+
+  it("starts a full-invoice sale on Full invoice with its recipient and the invoice's own copy", async () => {
+    const { el, asked } = await mount(full);
+    expect(pressed(el, "invoice")).toBe("true");
+    expect(pressed(el, "receipt")).toBe("false");
+    expect(el.shadowRoot!.textContent).toContain("Harbour Ltd");
+    expect(el.shadowRoot!.querySelector("[data-test=print-invoice]")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-test=print-receipt], [data-test=reprint]"),
+    ).toBeNull();
+    expect(asked).toEqual(["invoice"]);
+  });
+
+  it("starts a simplified sale on Receipt", async () => {
+    const { el, asked } = await mount({ ...invoiceOf("30.00"), invoiceType: "F2" });
+    expect(pressed(el, "receipt")).toBe("true");
+    expect(el.shadowRoot!.querySelector("[data-test=print-invoice]")).toBeNull();
+    expect(asked).toEqual([]);
+  });
+
+  it("follows a later result's invoice type until a tap", async () => {
+    const { el, asked } = await mount({ ...invoiceOf("30.00"), invoiceType: "F2" });
+    el.result = full;
+    await el.updateComplete;
+    expect(pressed(el, "invoice")).toBe("true");
+    expect(el.shadowRoot!.querySelector("[data-test=print-invoice]")).not.toBeNull();
+    expect(asked).toEqual(["invoice"]);
+  });
+
+  it("asks for the invoice printers once when a later result is a full invoice too", async () => {
+    const { el, asked } = await mount(full);
+    el.result = { ...full };
+    await el.updateComplete;
+    expect(pressed(el, "invoice")).toBe("true");
+    expect(asked).toEqual(["invoice"]);
+  });
+
+  it("switches a full-invoice sale to Receipt on a tap, and a later result does not switch it back", async () => {
+    const { el, asked } = await mount(full);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-settlement-choice=receipt]")!.click();
+    await el.updateComplete;
+    expect(pressed(el, "receipt")).toBe("true");
+    expect(asked).toEqual(["invoice", "receipt"]);
+    el.result = { ...full, total: "31.00" };
+    await el.updateComplete;
+    expect(pressed(el, "receipt")).toBe("true");
+    expect(el.shadowRoot!.querySelector("[data-test=print-invoice]")).toBeNull();
+    expect(asked).toEqual(["invoice", "receipt"]);
+  });
+});

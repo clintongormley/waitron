@@ -35,3 +35,26 @@ export function composeRecipientAddress(draft: RecipientAddressDraft): string {
   const place = [draft.postalCode.trim(), draft.locality.trim()].filter(Boolean).join(" ");
   return [draft.streetAddress.trim(), place, draft.province.trim()].filter(Boolean).join(", ");
 }
+
+/** Fields that `composeRecipientAddress` turns back into `address`, trimmed; they need not be the
+ * fields the address was composed from. */
+export function recipientAddressFields(
+  address: string,
+  countryCode: string,
+): Omit<RecipientAddressDraft, "countryCode"> {
+  const whole = { streetAddress: address, postalCode: "", locality: "", province: "" };
+  const parts = address.split(", ");
+  if (parts.length < 2) return whole;
+  const province = parts.length >= 3 ? parts.pop()! : "";
+  const place = parts.pop()!;
+  const words = /^(\S+) (\S.*)$/su.exec(place);
+  const split =
+    words !== null && (normalizeRecipientCountryCode(countryCode) === "ES" || /\d/.test(words[1]!));
+  const fields = {
+    streetAddress: parts.join(", "),
+    postalCode: split ? words[1]! : "",
+    locality: split ? words[2]! : place,
+    province,
+  };
+  return composeRecipientAddress({ ...fields, countryCode }) === address.trim() ? fields : whole;
+}
