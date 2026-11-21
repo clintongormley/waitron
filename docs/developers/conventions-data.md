@@ -2480,11 +2480,10 @@ layout, with each member's `part_of_reset_table_id` naming its group row, then r
 a name. Joined design rows remain reset metadata; their members become the live group. The copy keeps a later save from changing what a reset is still applying.
 
 A table waits, its reset row left pending, while a party holds it, a module refuses to let it go,
-it needs clearing, or food is on its way to it. A member of a pending saved group also waits while
-an open delivery order names it, even before the kitchen gets anything. `waitingTogether` extends
-the wait to every member of today's merge or the pending saved group. If Mark moved reaches a
-group member held by an open delivery order, it can answer `table.open_delivery_order` with that
-member's id.
+it needs clearing, or food is on its way to it. Before a reset can bring separate tables together,
+it waits for open delivery orders to those members. `waitingTogether` extends the wait to today's
+merge and the pending saved group. If Mark moved reaches a group member held by an open delivery
+order, it can answer `table.open_delivery_order` with that member's id.
 Outside a full reset, a group containing an outside member waits until that member leaves;
 a subgroup wholly inside the saved membership may reform. A full reset may dissolve free groups.
 
@@ -2517,12 +2516,11 @@ refused `table.needs_moving` when a tab is opened at it (`openTab`,
 Automatic resets and catch-up keep a table in place while another staying on the map stands in
 its new place (`standsIn`, `apps/server/src/joined-split-layout.ts`): drawn, it is marked
 `ready_to_move`; off the map, it waits. Its current place then blocks in turn (`blockedMoves`,
-`apps/server/src/floor-reset-plan.ts`; in SQL, `placeTaken` in `catchUpDue`). Tables taken off
-today, tables moving in the same saved group and tables needing moving block nothing. A table standing
-exactly at its own place in the recorded layout also blocks nothing (`blocksPlace` and
-`blocksPlaceSql`) because the layout was saved that way. `floor-catch-up.test.ts` checks each
-exclusion at the SQL gate and on the resulting map. Mark moved carries its reset rows past these
-place checks. Mark moved and Back to its saved place accept occupied places.
+`apps/server/src/floor-reset-plan.ts`; in SQL, `placeTaken` in `catchUpDue`). For a stored table's
+place, TypeScript skips tables leaving in the same pass. SQL skips pending members of the same
+saved group. Both skip tables taken off today, tables needing moving, and tables already standing
+at their own recorded place. `floor-catch-up.test.ts` exercises these cases at the SQL gate and on
+the resulting map. Mark moved and Back to its saved place accept occupied places.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
 (`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery

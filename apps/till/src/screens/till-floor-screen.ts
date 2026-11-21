@@ -1780,6 +1780,12 @@ export class TillFloorScreen extends LitElement {
           ? undefined
           : tableSentence(table, "floor.booked_first", "floor.booked_first_named");
       }
+      case "table.open_delivery_order": {
+        const table = tableOf(refused.tableId);
+        return table === undefined
+          ? undefined
+          : tableSentence(table, "floor.open_delivery_first", "floor.open_delivery_first_named");
+      }
 
       default:
         return undefined;

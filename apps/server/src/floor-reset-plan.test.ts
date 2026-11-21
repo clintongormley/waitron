@@ -25,7 +25,6 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   shortName: null,
   held: false,
   refused: false,
-  deliveryWaiting: false,
   tied: false,
   hasToday: true,
   mergedWithHeld: false,

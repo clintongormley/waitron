@@ -464,6 +464,21 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(refusal(el)).not.toBe(codeMessage("server.internal"));
   });
 
+  it.each([
+    ["en", "Finish the open order at Window first."],
+    ["es", "Termina primero el pedido abierto de Window."],
+  ] as const)(
+    "names the table with an open order in a Mark moved refusal (%s)",
+    async (locale, text) => {
+      setLocale(locale);
+      const api = stubApi();
+      api.markMovedToday.mockRejectedValue({ code: "table.open_delivery_order", tableId: "t4" });
+      const el = await mount([moving("t3", 12), planned("t4", 30, { name: "Window" })], api);
+      await refuseMarkMoved(el);
+      expect(refusal(el)).toBe(text);
+    },
+  );
+
   it("says what still holds the table back in that code's own words", async () => {
     const api = stubApi();
     api.markMovedToday.mockRejectedValue({ code: "tab.already_open", tableId: "t4" });

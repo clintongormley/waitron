@@ -46,7 +46,11 @@ import {
   type ResetPlan,
   type Target,
 } from "./floor-reset-plan.js";
-import { deliveryTablesMatching, foodOnItsWay, openDelivery } from "./delivery-release.js";
+import {
+  deliveryTablesMatching,
+  foodOnItsWay,
+  openDeliveryToJoiningGroup,
+} from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
 import { blocksPlaceSql, partPlaces } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
@@ -510,13 +514,10 @@ async function catchUpPass(
       ? [...ids]
       : [];
   });
-  const groupTableIds = groups.flatMap((group) =>
-    group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])),
-  );
   const deliveryHolds = await deliveryTablesMatching(
     tx,
     ids,
-    sql`(${foodOnItsWay()} or (${openDelivery()} and ${inArray(workingOrders.deliveryTableId, groupTableIds)}))`,
+    sql`(${foodOnItsWay()} or ${openDeliveryToJoiningGroup()})`,
   );
   const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup, ...deliveryHolds]);
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
@@ -564,8 +565,7 @@ async function catchUpPass(
       label: table.label,
       shortName: table.shortName,
       held: held.has(table.id),
-      refused: refused.has(table.id),
-      deliveryWaiting: deliveryHolds.has(table.id),
+      refused: refused.has(table.id) || deliveryHolds.has(table.id),
       tied: held.has(table.id) || tied.has(table.id),
       hasToday: withToday.has(table.id),
       mergedWithHeld: mergedWithHeld.has(table.id),

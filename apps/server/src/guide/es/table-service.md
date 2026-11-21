@@ -860,8 +860,8 @@ Para deshacer los cambios de hoy en una zona, abre su menú ⋮, elige **Volver 
 
 Después de restablecer la zona, coloca las mesas libres como aparecen en el mapa.
 
-Deja las mesas con comida en camino donde están hasta que entregues el pedido. Si hoy has separado
-un grupo, termina cualquier pedido abierto en una mesa separada antes de volver a unir el grupo.
+Deja las mesas con comida en camino donde están hasta que entregues el pedido. Antes de que el
+restablecimiento pueda unir mesas separadas, termina los pedidos abiertos para esas mesas.
 Cuando una mesa indique **Por mover**, muévela y elige **Marcar movida**.
 
 ## Elegir el equipo de este dispositivo {#equipment}

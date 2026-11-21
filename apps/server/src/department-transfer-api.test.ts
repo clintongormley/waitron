@@ -63,6 +63,7 @@ import { openTillSession } from "./testing/session-device.js";
 import {
   setupPartyVenue,
   counterOrder,
+  inTx,
   OPERATOR,
   seat,
   pricedInZone,
@@ -110,10 +111,7 @@ async function ready(destination?: { departmentId: string; zoneId: string }) {
     });
     const b =
       destination === undefined
-        ? await createDepartment(tx, {
-            name: randomUUID(),
-            orderStart: "table",
-          })
+        ? await createDepartment(tx, { name: randomUUID(), orderStart: "table" })
         : { id: destination.departmentId };
     for (const department of [a, b])
       await seedDepartmentReceipt(tx, department.id, { operationDescription: "Restaurante" });
@@ -330,14 +328,11 @@ describe("department transfer till writes", () => {
         { key: "second", label: "Transfer 2" },
         { key: "joined", label: "Transfer group", partKeys: ["first", "second"] },
       ],
-      {
-        standard: { joined: 10 },
-        dinner: { joined: 50 },
-      },
+      { standard: { joined: 10 }, dinner: { joined: 50 } },
     );
     const f = await ready(z.d);
     const [first, second] = [z.live("first"), z.live("second")];
-    await withTransaction(suite.db, (tx) =>
+    await inTx(v, (tx) =>
       splitOff(tx, v.cfg, [], now, {
         tableId: first,
         partIds: [second],
@@ -347,12 +342,11 @@ describe("department transfer till writes", () => {
     );
     const { partyId, revision } = await seat(v, second);
     await z.onto(z.d.dinner);
-    const moving = () => withTransaction(suite.db, (tx) => tableNeedsMoving(tx, first));
-    await withTransaction(suite.db, async (tx) => {
+    await inTx(v, async (tx) => {
       await finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR });
       await catchUpZone(tx, [], f.bz, now);
     });
-    expect(await moving()).toBe(true);
+    expect(await inTx(v, (tx) => tableNeedsMoving(tx, first))).toBe(true);
 
     const id = await pending(f);
     expect(
@@ -365,13 +359,9 @@ describe("department transfer till writes", () => {
     expect((await state(f.tab)).tab).toMatchObject({ status: "open", deliveryTableId: second });
     const before = await todayRow(v, first);
     const resetRows = () =>
-      withTransaction(suite.db, (tx) =>
-        tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, f.bz)),
-      );
+      inTx(v, (tx) => tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, f.bz)));
     const marked = await resetRows();
-    await expect(
-      withTransaction(suite.db, (tx) => markMoved(tx, [], first, now)),
-    ).rejects.toMatchObject({
+    await expect(inTx(v, (tx) => markMoved(tx, [], first, now))).rejects.toMatchObject({
       code: "table.open_delivery_order",
       params: { tableId: second },
     });
