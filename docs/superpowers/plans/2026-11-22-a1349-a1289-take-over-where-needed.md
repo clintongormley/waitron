@@ -1,47 +1,53 @@
 # Take over unsent orders during joins and moves
 
-**Finish line.** From Join a table, Move guests, Move this bill or Move dishes, staff can see which
-bills blocked the change, take over the named unsent orders one at a time, and review and retry the
-original action. The floor's Join with and drag-to-join use the same rows. For Move dishes, keep the
-selected dishes and destination available for review. The watcher assigned A1349/A1289 on 22 November
-2026 at 00:42 in Lane H's queue. [A773 §6](../specs/2026-10-17-a773-one-editor-design.md#6-joinmove-conflicts-and-the-floor)
-sets the ownership rule.
+**Finish line.** Join a table, Move guests, Move this bill and Move dishes show the bills holding
+up the action. Staff can take over the named unsent orders one at a time, then review and retry.
+This includes Join with and drag-to-join on the floor and Move to table from Held orders on the
+counter. Move dishes keeps the selected dishes and destination for review. The watcher assigned
+A1349/A1289 at 00:42 on 22 November 2026 in the Lane H queue.
+[A773 §6](../specs/2026-10-17-a773-one-editor-design.md#6-joinmove-conflicts-and-the-floor)
+documents the existing ownership rule; git records the design decision in `fed95a2faa`.
 
-**Reuse the refusal and takeover.** In `apps/till/src/state/bill-edit-conflicts.ts`, read the
-client's flattened `draft.taken_over` conflicts with a draft id and revision. Pair each bill with
-the source or destination party from the observations sent with the action. Use known bill labels and
-table names to distinguish two Bill 1s. Extract the holder row from `widgets/split-picker.ts` and reuse
-its button and existing confirmation copy in `widgets/bill-edit-conflicts-dialog.ts`, using the
-shared `wt-dialog`. Show one row per refused bill. Confirming sends only that row's takeover.
-Use `DraftSync.takeOver` for the open bill so it retains any local edits, and `takeOverOn` for
-another bill in the same party. Check that the observation still matches the row before sending.
-For another party or a floor join, send the refused edit as the expectation through the existing
-party-scoped `takeOverDraft` request. A changed or missing draft uses the existing takeover refusals.
+**Reuse the refusal and takeover.** Read the client's flattened `draft.taken_over` conflicts in
+`apps/till/src/state/bill-edit-conflicts.ts`. Keep source and destination groups from the draft
+reads before sorting the combined observations for the action. Label rows using current bill
+labels or the floor party's unsent bill numbers and table names. A missing number uses the
+existing unnumbered bill label and its table. Extract the holder row from
+`widgets/split-picker.ts` for both callers. In `widgets/bill-edit-conflicts-dialog.ts`, use
+one `wt-dialog` for the list and confirmation step. Reuse the Take over copy, offer Cancel, and
+show a refused takeover in the dialog. A row whose draft or revision is missing asks for review.
 
-**Wire the actions.** Handle these conflicts where `till-app.ts` receives the table relocation
-and Move dishes refusals, before their ordinary error recovery. In
-`screens/till-table-order-screen.ts`, return staff to the chosen action for review. In
-`screens/till-floor-screen.ts`, handle the same refusal from the shared floor join path. Offer
-review when the listed takeovers finish, and let staff cancel. A retry fetches fresh observations
-and needs a separate press. A late answer belongs to the same panel visit, party and sign-in.
-This slice uses the server's existing rules for whole-bill moves and dish transfers. Merge bills,
-the counter's separate held-order/allergy flow, and changes to server rules or stored data are
-outside the proposed slice.
+Confirming sends only the chosen row. For the open bill, use `DraftSync.takeOver` so it keeps
+local edits. For another bill in the same party, use `takeOverOn`. Check that the observed edit
+still identifies the row before sending. For the other party or the floor, call the existing
+`takeOverDraft` with the row's party and refused edit. A changed draft uses the existing refusal
+and requires another review. Closing the panel, leaving the visit or changing sign-in retires it.
 
-**Proposed panel words for the watcher** in `apps/till/src/i18n/strings.ts`.
+**Return to the action.** In `till-app.ts` and the table order screen, handle conflicts before
+ordinary recovery. Restore Move dishes picks and destination against the latest eligible rows.
+For a floor join, Review prepares the original drop again from the current floor and opens the
+seats prompt if needed. A join without a seats prompt still needs a new press. In the counter's
+held-order move, handle conflicts from both the allergy preview and the move write. Reopen the
+target choice for review and run the current draft and allergy checks on a fresh press. The
+party-scoped endpoint can take over destination drafts. If the refusal names the counter bill
+itself, explain the limit and let staff choose another table or stop. Each retry uses fresh
+observations. Merge bills, server changes and a new counter takeover endpoint are outside
+this item. A1289 refers to Move dishes.
+
+**Proposed words for the watcher** in `apps/till/src/i18n/strings.ts`.
 
 | Where | English | Spanish |
 | --- | --- | --- |
-| Join and whole moves | Unsent orders are holding up this change. Take over the orders below, then review the change. | Hay pedidos sin enviar que impiden el cambio. Toma los pedidos de abajo y luego revisa el cambio. |
+| Join or whole move | Unsent orders are holding up this change. Take over the orders below, then review the change. | Hay pedidos sin enviar que impiden el cambio. Toma los pedidos de abajo y luego revisa el cambio. |
 | Move dishes | The dishes haven't moved. Take over the orders below, then review the move. | Los platos siguen en su cuenta. Toma los pedidos de abajo y luego revisa el traslado. |
-| Row and confirmation | Reuse Take over draft and its confirmation. | Reutilizar Tomar el pedido y su confirmación. |
+| Counter bill without a party | This counter order has unsent dishes you can't take over here. Choose another table or leave the order where it is. | Este pedido de barra tiene platos sin enviar que no puedes tomar aquí. Elige otra mesa o deja el pedido donde está. |
 
-**Checks and size.** Test first. In `src/till-app-parties.test.ts` cover Join, Move guests and
-Move this bill with real-shaped conflicts and check that the chosen off-screen bill goes to its
-own party. In `src/till-app-move-dishes.test.ts` a refused destination keeps the chosen dishes and
-destination, Cancel sends no takeover, and the explicit retry uses fresh edits. In
-`src/screens/till-floor-screen.today-joins.test.ts` confirm one conflicting bill and verify the
-join waits for a new press. Keep `src/widgets/split-picker.test.ts` and the existing server ownership
-checks as controls. Open the refusal in English and Spanish, light and dark, at phone and desktop
-widths. Update both `apps/server/src/guide/{en,es}/table-service.md` guides and remove the two
-backlog entries and their summary links. Expect about 330 production lines and 240 test lines.
+**Checks and size.** Test first. In `src/till-app-parties.test.ts` cover the three table actions
+and check the off-screen bill goes to its own party. In `src/till-app-move-dishes.test.ts` show
+the chosen dishes and destination survive the refusal, Cancel sends no takeover, and a new
+press uses fresh edits. In `src/screens/till-floor-screen.today-joins.test.ts` check the join
+waits for a new press. In `src/till-app-allergy.move.test.ts` check the counter's preview and
+write refusals and the message for a counter bill without a party. Keep the split-picker and
+server ownership tests. Open the refusal in EN/ES, light and dark, at phone and desktop widths.
+Update both till guides and remove both backlog entries, their detail and stale A803 links from
+`docs/backlog.md` and `docs/backlog/till.md`. Expect about 470 production lines and 320 test lines.
