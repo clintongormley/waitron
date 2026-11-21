@@ -1627,6 +1627,57 @@ describe("getHeldOrder", () => {
   );
 
   it.each(["open", "placed"] as const)(
+    "reads the customer and delivery saved on a %s full-invoice counter order",
+    async (status) => {
+      const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
+      const id = randomUUID();
+      await parkOrder({ db }, cfg, {
+        id,
+        zoneId,
+        lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
+      });
+      const unchosen = await getHeldOrder({ db }, id);
+      expect("recipient" in unchosen).toBe(false);
+      expect("invoiceDelivery" in unchosen).toBe(false);
+      await setOrderInvoiceChoice(db, { recipientNameMaxLength: null }, cfg, id, {
+        revision: 0,
+        operatorId: undefined,
+        expectedEdit: null,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "AB-09",
+          identifierType: "passport",
+          identifierCountryCode: "FR",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+      });
+      await db.execute(
+        sql`update working_orders set status = ${status}, invoice_delivery = ${JSON.stringify({
+          medium: "email",
+          recipient: "customer@example.test",
+          personId: "staff-1",
+        })} where id = ${id}`,
+      );
+      const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
+      const order = await read({ db }, id);
+      expect(order.recipient).toEqual({
+        taxId: "AB-09",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+        legalName: "Cliente SL",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      });
+      expect(order.invoiceDelivery).toEqual({
+        medium: "email",
+        recipient: "customer@example.test",
+      });
+    },
+  );
+
+  it.each(["open", "placed"] as const)(
     "refuses a %s counter line whose stored menu offer is missing",
     async (status) => {
       const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();

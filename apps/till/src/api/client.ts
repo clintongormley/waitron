@@ -1489,6 +1489,10 @@ export interface HeldOrder {
   receiptLanguage?: string;
   /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
   invoiceType: "F1" | "F2";
+  /** The customer a full invoice names; absent on a simplified invoice or one without a customer. */
+  recipient?: NonNullable<PartyBill["recipient"]>;
+  /** How the invoice is to be delivered; absent while no delivery has been chosen. */
+  invoiceDelivery?: InvoiceDeliveryChoice;
   /** The order's own way, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;

@@ -262,6 +262,57 @@ it.each(["identifierType", "identifierCountryCode"])(
     expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   },
 );
+it("reopens a retrieved full-invoice order on its saved customer and A4 delivery, and keeps them", async () => {
+  const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 5 });
+  const el = await placeCounter({
+    retrieveWorkingOrder: vi.fn().mockResolvedValue({
+      ...heldOrder(4),
+      invoiceType: "F1",
+      recipient: { ...recipient, address: "Calle Mayor 1, 28013 Madrid, Madrid" },
+      invoiceDelivery: { medium: "a4", pagePrinterId: "pp-office" },
+    }),
+    getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({
+      invoicePrinter: { id: "pp-office", name: "Office HP" },
+      emailAvailable: false,
+      emailNeedsReceiptContact: false,
+    }),
+    setOrderInvoiceChoice,
+    placeOrder: vi.fn().mockResolvedValue({ id: "wo-9", status: "placed" }),
+  });
+  emit(counter(el), "choose-invoice");
+  await flush(el);
+  const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+  await form.updateComplete;
+  const value = (name: string) =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name=${name}]`)!.value;
+  expect([value("taxId"), value("legalName"), value("countryCode")]).toEqual([
+    "P123",
+    "Guest",
+    "ES",
+  ]);
+  expect(value("delivery")).toBe("a4");
+
+  const legalName =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=legalName]")!;
+  await userEvent.fill(
+    page.elementLocator(legalName.shadowRoot!.querySelector("input")!),
+    "Guest Ltd",
+  );
+  await form.updateComplete;
+  const save = form.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!;
+  save.click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+  emit(counter(el), "place-order");
+  await flush(el);
+
+  expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(1);
+  expect(setOrderInvoiceChoice.mock.calls[0]![1]).toMatchObject({
+    invoiceType: "F1",
+    recipient: { taxId: "P123", legalName: "Guest Ltd" },
+    delivery: { medium: "a4", pagePrinterId: "pp-office" },
+  });
+});
 it("offers no way back to a simplified invoice in the Counter's own invoice window", async () => {
   const el = await placeCounter({
     setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 5 }),

@@ -557,6 +557,15 @@ interface ReleasedBill {
   savedBefore?: number;
 }
 
+function storedInvoiceOf(orderId: string, order: HeldOrder) {
+  return {
+    orderId,
+    invoiceType: order.invoiceType,
+    ...(order.recipient === undefined ? {} : { recipient: order.recipient }),
+    ...(order.invoiceDelivery === undefined ? {} : { invoiceDelivery: order.invoiceDelivery }),
+  };
+}
+
 /** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
  * someone else now edits it. A failed save reloads the store from the box and keeps this device's
  * lines as the candidate. */
@@ -4555,9 +4564,14 @@ export class TillApp extends LitElement {
   /** The delivery options are being read before the full-invoice dialog opens. */
   @state() private invoiceRecipientReading = false;
   private invoiceChoice?: { orderId: string; invoice: InvoiceRecipientDetail; saved?: true };
-  /** The invoice type stored on the Counter order last read into the basket, which
-   * {@link invoiceChoice} does not hold for an order this till did not set it on. */
-  #counterStoredInvoice?: { orderId: string; invoiceType: "F1" | "F2" };
+  /** The invoice type, customer and delivery stored on the Counter order last read into the basket,
+   * which {@link invoiceChoice} does not hold for an order this till did not set it on. */
+  #counterStoredInvoice?: {
+    orderId: string;
+    invoiceType: "F1" | "F2";
+    recipient?: HeldOrder["recipient"];
+    invoiceDelivery?: InvoiceDeliveryChoice;
+  };
   /** Whether the server still let the Counter order last read into the basket switch its way. */
   @state() private counterDiningChoice?: { orderId: string; choice: DiningChoice };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
@@ -7606,8 +7620,19 @@ export class TillApp extends LitElement {
         this.invoiceRecipientOrderId === orderId &&
         this.#store.id === orderId &&
         this.#operatorSession === session,
-      this.invoiceChoice?.orderId === orderId ? this.invoiceChoice.invoice : undefined,
+      this.invoiceChoice?.orderId === orderId
+        ? this.invoiceChoice.invoice
+        : this.#storedFullInvoice(orderId),
     );
+  }
+
+  #storedFullInvoice(orderId: string) {
+    const stored = this.#counterStoredInvoice;
+    if (stored?.orderId !== orderId || stored.invoiceType !== "F1") return undefined;
+    return {
+      ...(stored.invoiceDelivery === undefined ? {} : { delivery: stored.invoiceDelivery }),
+      recipient: stored.recipient ?? null,
+    };
   }
 
   /** Null when the read fails or outlasts {@link INVOICE_OPTIONS_LIMIT_MS}. */
@@ -8849,7 +8874,7 @@ export class TillApp extends LitElement {
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
       order.revision,
     );
-    this.#counterStoredInvoice = { orderId: id, invoiceType: order.invoiceType };
+    this.#counterStoredInvoice = storedInvoiceOf(id, order);
     this.counterDiningChoice = { orderId: id, choice: order.diningChoice };
     this.counterLines = listed;
     this.#commitBasket(this.#basketPayload());
@@ -10569,7 +10594,7 @@ export class TillApp extends LitElement {
       visit: this.#store.loadGeneration,
       expectedEdit: structuredClone(order.expectedEdit),
     };
-    this.#counterStoredInvoice = { orderId: order.id, invoiceType: order.invoiceType };
+    this.#counterStoredInvoice = storedInvoiceOf(order.id, order);
     this.counterDiningChoice = { orderId: order.id, choice: order.diningChoice };
     this.#rememberReceiptLanguage(
       order.id,

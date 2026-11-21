@@ -297,14 +297,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unpaid departure, Print the bill or the close of the business day that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
-- **A counter order saved as a full invoice reopens its Full invoice window blank once the till no
-  longer holds the choice** (left open by #3914). Saving the order, starting a new sale and then
-  retrieving it, or opening it on another till, shows an empty form, while a table bill shows its
-  saved customer: the order read (`HeldOrder` in `apps/till/src/api/client.ts`, built in
-  `apps/server/src/working-order.ts`) carries only `invoiceType`, not the customer or delivery.
-  Fix: send `recipient` and `invoiceDelivery` with it, as the table bills' read does, and pass them
-  to the window from `#askInvoiceRecipientForOrder`.
-
 - **Decide whether any screen shows an invoice email's address** (bundle of 1, size S, needs the owner). Holds A554. [Detail](backlog/fiscal.md#bundle-decide-whether-any-screen-shows-an-invoice-emails-address)
 
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
