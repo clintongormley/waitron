@@ -115,10 +115,10 @@ running this code therefore pairs only with a Cloud that has adopted a release c
 while Cloud uses that verifier unchanged it refuses a box that still signs v2.
 
 The shared package also provides `pairingV4Payload` and `verifyPairingV4Proof`
-for the test Cloud sign-in round trip. For setup-time sign-in it provides
+for the test Cloud sign-in round trip. The [Cloud sign-in plan](../superpowers/plans/2026-11-20-setup-cloud-sign-in.md)
+tracks that round trip. For setup-time sign-in the package provides
 `pairingV5Payload` and `verifyPairingV5Proof`, which use the same claim fields
-with a separate signed version marker. The box and Cloud application changes
-are tracked in the [Cloud sign-in plan](../superpowers/plans/2026-11-20-setup-cloud-sign-in.md).
+with a separate signed version marker.
 
 ## Run the integration proof
 
