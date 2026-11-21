@@ -17,7 +17,7 @@ export default defineConfig({
           clearMocks: false,
           include: ["src/**/*.test.ts"],
           exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**"],
-          // `useVenueDb` times its own beforeAll, so `hookTimeout` bounds only its afterEach/afterAll
+          // `useVenueDb` times its own beforeAll, so `hookTimeout` bounds only its afterAll
           // and hooks a suite writes itself.
           testTimeout: 120_000,
           hookTimeout: 180_000,

@@ -317,7 +317,10 @@ describe("HEAVY_FILES", () => {
 
 describe("shardFiles", () => {
   it("packs db sales whole exactly once alongside the other whole files", () => {
-    const all = Array.from({ length: 13 }, (_, i) => shardFilesOf("db", i + 1, 13, root)).flat();
+    const total = workflowShardCount("db");
+    const all = Array.from({ length: total }, (_, i) =>
+      shardFilesOf("db", i + 1, total, root),
+    ).flat();
     expect(all.filter((path) => path.startsWith("src/schema/sales.ts"))).toEqual([
       "src/schema/sales.ts",
     ]);

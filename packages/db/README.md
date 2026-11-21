@@ -50,8 +50,8 @@ The `testTimeout: 30_000` in `vitest.config.ts` is margin for a loaded CI runner
 `hookTimeout` and `useVenueDb`'s default setup budget all cut to 2s. **Neither that budget nor the
 `hookTimeout: 120_000` beside it bounds the database's own setup**: `useVenueDb` hands its own
 `beforeAll` a 60-second default (`src/testing/venue-db.ts`), and a timeout passed to a hook
-overrides the config's. What `hookTimeout` reaches is any hook that passes no budget of its own —
-which includes this helper's reset and its close.
+overrides the config's. Its per-test reset passes 30 seconds of its own. What `hookTimeout` reaches
+is any hook that passes no budget of its own — which includes this helper's close.
 
 ## What CI runs
 
@@ -62,7 +62,7 @@ which includes this helper's reset and its close.
   thresholds in one invocation. Plain `pnpm test` does not measure coverage.
 - `pnpm mutation` runs Stryker. DB mutation testing runs nightly or is dispatched through
   `mutation.yml`; it is not a merge gate. That run DOES gate: its reusable workflow's `aggregate` job
-  merges the thirteen whole-file shard reports and fails below 90. A local `pnpm mutation` prints a score and
+  merges the sixteen whole-file shard reports and fails below 90. A local `pnpm mutation` prints a score and
   fails at nothing — the bar is deliberately not in this package's stryker config, because CI
   passes each shard its own `--mutate` list and a bar there would gate one slice.
 - `db:generate` rebuilds the starting migration; write hand-written SQL in `triggers/core.sql`.

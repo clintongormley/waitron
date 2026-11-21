@@ -6,7 +6,7 @@ export default defineConfig({
     clearMocks: false,
     // `useVenueDb` times its own `beforeAll` (`packages/db/src/testing/venue-db.ts`, 60s unless a
     // suite passes `timeoutMs`), so `hookTimeout` bounds only the hooks left untimed: that helper's
-    // per-test reset and close, and any hook a test file writes for itself. `testTimeout` covers a
+    // close, and any hook a test file writes for itself. `testTimeout` covers a
     // test body that opens a database of its own (`src/migrations.test.ts`).
     testTimeout: 120_000,
     hookTimeout: 180_000,

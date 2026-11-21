@@ -3370,7 +3370,7 @@ describe("the test shards", () => {
     const callers = mutationCallers(workflow);
     expect(callers.map((caller) => caller.package).sort()).toEqual(["db", "ui", "ui-core"]);
     for (const [pkg, total, browser, minutes] of [
-      ["db", 13, false, 25],
+      ["db", 16, false, 25],
       ["ui", 30, true, 50],
       ["ui-core", 4, true, 25],
     ]) {

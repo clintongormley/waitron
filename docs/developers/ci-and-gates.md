@@ -1012,7 +1012,7 @@ nothing notices is behaviour no test is checking. `thresholds.break` turns that 
 Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that
 the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
-their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty for ui, four for
+their own configs, deliberately: CI splits each run into shards (sixteen for db, thirty for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
 rather than the package. Their bars live in the `aggregate` job of `.github/workflows/mutation-sharded.yml`,
 called once per package by `mutation.yml`. It merges that package's shard reports and scores them once. ui held its bar in its own config from 2026-09-19 until A539 moved it to the
@@ -1027,7 +1027,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `ui-core` | `mutation-ui-core` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
 | `ui` | `mutation-ui` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | `mutation-db` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `db` | `mutation-db` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the sixteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
 | `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
@@ -1158,7 +1158,7 @@ job:
 
 ```
 gh run download <run-id> -D /tmp/db-mut -p "mutation-report-db-shard-*"
-node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 13 --break 90
+node scripts/mutation-aggregate.mjs /tmp/db-mut --package db --shards 16 --break 90
 ```
 
 Two things that script does deliberately, each because the obvious version was wrong. It keys a
@@ -1276,7 +1276,7 @@ list.
 
 ## db's mutation shards are packed by estimated cost
 
-`scripts/mutation-shard.mjs` packs every `packages/db` file into thirteen nightly shards by `packages/db/mutation-costs.json`, a table of
+`scripts/mutation-shard.mjs` packs every file selected for db mutation testing into sixteen nightly shards by `packages/db/mutation-costs.json`, a table of
 estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
 table's own seconds per byte. `ui-core` and `ui` use their own recorded-duration tables (below);
 `shared` has no table and is still packed by bytes.
@@ -1469,6 +1469,19 @@ shard 11 left none); the replay counts only files with a report in that run. 828
 seconds is not a measured finishing time: the old shard 10's 1,210 took 24 min 34 s.
 Dispatched run `44875671062`, on this table over main at `3682c7536b`, finished all 13 db
 shards; the slowest, shard 6, took 21 min 03 s of job time, and the fastest, shard 1, 9 min 33 s.
+
+**21 November, the reset's own limit and sixteen shards.** The mutant that empties the timer-turn wait at the end of `useVenueDb`'s `afterEach`
+(`src/testing/venue-db.ts`) is killed only by that hook's time limit. On 21 November, on a Mac,
+`pnpm exec stryker run --mutate "src/testing/venue-db.ts:223-223" --force --concurrency 4` in
+`packages/db` reported it Killed after 120,011 ms under the package's `hookTimeout`; with the hook
+given its own 30-second limit, the same command on line 226 (where the wait had moved) reported it
+Killed after 30,005 ms. The mutation phase took about 122 s, then about 32 s.
+On 21 November db moved from 13 to 16 shards, its 25-minute limit unchanged: over the same files,
+the slowest shard took 21 min 03 s of job time in run `44875671062` and 25 min 03 s in run
+`44878081202` (shard 10, cancelled after uploading its complete report). Between those two runs
+each shard's job time changed by between −21% (shard 2, 15 min 13 s to 11 min 59 s) and +72%
+(shard 1, 9 min 33 s to 16 min 25 s), and the 13 shards averaged 15.1 and 16.5 minutes (job
+start to finish, from the Actions API's job times).
 
 **Refreshing the table.** Use reports only from runs after the 13 November whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
@@ -3198,7 +3211,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
 | mutation.yml       | mutation-ui (matrix shards)       | 23.7 (run 38256003987, slowest of 30) | 50    |
 | mutation.yml       | mutation-ui-aggregate             | under 1 (run 38256003987)      | 5     |
-| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066); 24.6 (run 44869195665, slowest of 12 completed); that run's shard 11 hit the limit | 25    |
+| mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066); 24.6 (run 44869195665, slowest of 12 completed); that run's shard 11 hit the limit; at 16 shards since 21 November, not yet measured | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
 | mutation.yml       | mutation-handover                 | 3.4 (run 42075592113)          | 10    |

@@ -38,7 +38,7 @@ export default defineConfig({
           ],
           // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times its
           // own beforeAll (packages/db/src/testing/venue-db.ts, default 60s), so what this bounds is
-          // that helper's untimed afterEach/afterAll plus any hook a suite writes for itself.
+          // that helper's untimed afterAll plus any hook a suite writes for itself.
           // `testTimeout` covers a database opened inside an `it` body.
           testTimeout: 120_000,
           hookTimeout: 180_000,
