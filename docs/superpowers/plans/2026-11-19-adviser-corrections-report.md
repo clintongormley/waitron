@@ -311,7 +311,8 @@ so "every movement lands once" holds. **RAN** today's behaviour for both cases (
 --reporter=verbose --silent=false`, 2 passed), a ticket stamped 1 April, replaced on 10 April naming
 31 March, then voided on 10 May: V (void the original) first quarter `1.10` → `[]`, second `[]`
 → `[]`; R (void the replacement) first quarter `1.10` → `1.10`, second `[]` → `[]`. Under the rule:
-V leaves the first quarter at `1.10` and the second's return `[]`, and the second quarter's
+V leaves the first quarter's return `[]` (the replacement that moves the ticket into it was made
+after it ended) and the second's `[]`, and the second quarter's
 corrections list `+1.10` (made 10 April) and `−1.10` (the void, made 10 May) for the first; R
 changes nothing.
 

@@ -9,7 +9,7 @@ import {
   toScale,
 } from "@waitron/shared";
 import type { Decimal, SaleId } from "@waitron/shared";
-import { periodDateFilter, validatePeriod } from "./period.js";
+import { periodDateFilter, periodDays, validatePeriod } from "./period.js";
 import type { LiquidationPeriod } from "./period.js";
 
 /**
@@ -49,15 +49,10 @@ function ownDay(alias: string): SQL {
  * stamp is never more than a day from its civil date.
  */
 function stampBounds(year: number, period: LiquidationPeriod): { from: string; before: string } {
-  const [first, months] =
-    period.kind === "month"
-      ? [period.month, 1]
-      : period.kind === "quarter"
-        ? [3 * period.quarter - 2, 3]
-        : [1, 12];
-  const day = (n: number, d: number) =>
-    new Date(Date.UTC(year, n - 1, d)).toISOString().slice(0, 10);
-  return { from: day(first, 0), before: day(first + months, 2) };
+  const { first, next } = periodDays(year, period);
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  return { from: shift(first, -1), before: shift(next, 1) };
 }
 
 /**

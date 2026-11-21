@@ -3,8 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { isZeroDecimal, subtractDecimal } from "@waitron/shared";
 import { sumByRate } from "./vat-summary.js";
 import { computeInputVat } from "./input-vat.js";
-import { validatePeriod } from "./period.js";
-import type { LiquidationPeriod } from "./period.js";
+import { periodDays, validatePeriod } from "./period.js";
 import type { VatReturn, VatReturnInput } from "./types.js";
 import { vatMovements } from "./vat-movements.js";
 
@@ -25,27 +24,16 @@ export function saleVatDay(sale: {
   return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 
-/** The period's first day and the day after its last, as `"YYYY-MM-DD"`. */
-function periodBounds(year: number, period: LiquidationPeriod): { first: string; next: string } {
-  const [firstMonth, months] =
-    period.kind === "month"
-      ? [period.month, 1]
-      : period.kind === "quarter"
-        ? [3 * period.quarter - 2, 3]
-        : [1, 12];
-  const day = (month: number) => new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
-  return { first: day(firstMonth), next: day(firstMonth + months) };
-}
-
 /**
  * The modelo 303 aggregate over one liquidation period (month/quarter/year), across ALL nodes of the
  * legal entity, both sides of the return:
  *
  *   - *IVA devengado* (output), the casilla 27 side: the per-rate sum of the VAT movements
- *     (`vatMovements`) that belong to the period and were made by its last day, so a period that
- *     has ended never changes. A movement made later for an earlier period is on the corrections of
- *     the period it was made in, never in a return. A rate line whose base and VAT both net to zero
- *     is left out.
+ *     (`vatMovements`) that belong to the period and were made by its last day, so a step recorded
+ *     after the period ends does not change its sales figures, except a record stamped by a wrong
+ *     clock and invoices and voids returned after a handover, which count as made on their own
+ *     stamps. A movement made later for an earlier period is on the corrections of the period it
+ *     was made in, never in a return. A rate line whose base and VAT both net to zero is left out.
  *   - *IVA deducible* (input): `computeInputVat`'s régimen-general per-(rate, kind) aggregate over the
  *     received supplier invoices, bucketed by `received_on` — the casilla 45 side (`deductible`).
  *   - `result`: the régimen-general result `taxTotal − deductible.taxTotal` (casilla 46 = 27 − 45).
@@ -56,7 +44,7 @@ function periodBounds(year: number, period: LiquidationPeriod): { first: string;
 export async function computeVatReturn(tx: Transaction, input: VatReturnInput): Promise<VatReturn> {
   validatePeriod(input.year, input.period);
 
-  const { first, next } = periodBounds(input.year, input.period);
+  const { first, next } = periodDays(input.year, input.period);
   const movements = await vatMovements(tx, { year: input.year, period: input.period });
   const summary = sumByRate(
     movements.filter((m) => m.belongsDay >= first && m.belongsDay < next && m.madeDay < next),

@@ -1229,6 +1229,10 @@ tap just after midnight still files the earlier day. The owner's answers relayed
 2026-11-15 at 12:12 and 20:59 (lane L `archive/questions-to-2026-11-18.md`): "sale day" for the
 VAT return and the export, and "(a) By meal date" for how the export picks such an invoice.
 [Plan](../superpowers/plans/2026-11-15-later-sale-date.md)._
+_2026-11-21: since the corrections report's PR 1, such an invoice counts in that day's period on
+the VAT return only when issued within that period; otherwise it is on the corrections list of the
+period it was issued in
+([plan](../superpowers/plans/2026-11-19-adviser-corrections-report.md))._
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

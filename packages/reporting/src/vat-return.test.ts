@@ -486,13 +486,15 @@ describe("computeVatReturn — annual + period boundaries", () => {
   });
 });
 
-describe("computeVatReturn — quarter equals the sum of its months", () => {
-  it("Q2 equals the merged sum of April, May and June (exactness inherited)", async () => {
+describe("computeVatReturn — quarter equals the sum of its months when nothing is corrected after its month", () => {
+  it("Q2 equals the merged sum of April, May and June when nothing is corrected after its month (exactness inherited)", async () => {
     // A spread across Q2's three civil months at mixed rates, deliberately including cuotas the DIFFERENCE
     // method lands a céntimo off round(base × rate): two difference-method sales (20.99 / 21.01 on a 21%
     // base 100.00) and a difference-method purchase (41.99, not 42.00, on a 21% base 200.00). The quarter
     // aggregate must equal the byte-for-byte addDecimal sum of the three monthly aggregates — because
     // both sum the FILED per-invoice cuotas over the same rows, never re-rounding round(Σ base × rate).
+    // That holds only when nothing is corrected after its month: a later correction is in no month's
+    // return but can be in the quarter's.
     // Offset 0 → filed date = UTC date.
     // April sales.
     await seedSale(suite.db, venue, {

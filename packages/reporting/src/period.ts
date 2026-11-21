@@ -71,42 +71,47 @@ function firstOfMonth(year: number, month: number): string {
 }
 
 /**
- * The half-open civil-date window `[first day of (year, firstMonth), that day + months)` as a
- * predicate on a date-valued SQL expression.
- *
- * Both sides of every comparison are a civil date in the fixed `"YYYY-MM-DD"` spelling —
- * `received_on` is stored that way, and SQLite's `date(...)`, which the output side's `filedDate`
- * uses, returns that shape — so a string comparison is a date comparison here.
+ * A period's first day and the day after its last, as `"YYYY-MM-DD"` — pure calendar dates, no DST
+ * subtlety. A quarter is the three calendar months of the trimestre; the whole year is Jan 1 → next
+ * Jan 1.
  */
-function civilDateWindow(dateExpr: SQL, year: number, firstMonth: number, months: number): SQL {
-  const lower = firstOfMonth(year, firstMonth);
-  const upper = firstOfMonth(year, firstMonth + months);
-  return sql`${dateExpr} >= ${lower} and ${dateExpr} < ${upper}`;
+export function periodDays(
+  year: number,
+  period: LiquidationPeriod,
+): { first: string; next: string } {
+  const [firstMonth, months] = ((): [number, number] => {
+    switch (period.kind) {
+      case "month":
+        return [period.month, 1];
+      case "quarter":
+        // Q1→1, Q2→4, Q3→7, Q4→10
+        return [3 * (period.quarter - 1) + 1, 3];
+      case "year":
+        return [1, 12];
+      /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than
+         returning an undefined bound that would silently widen or empty the fiscal aggregate
+         (mirrors validatePeriod's guard above). */
+      default: {
+        const exhaustive: never = period;
+        throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
+      }
+      /* v8 ignore stop */
+    }
+  })();
+  return { first: firstOfMonth(year, firstMonth), next: firstOfMonth(year, firstMonth + months) };
 }
 
 /**
- * The half-open civil-date bound `[firstDay, upper)` on a date-valued SQL expression for a
- * `LiquidationPeriod` — pure calendar dates, no DST subtlety. The input side passes
- * `received_on`. A quarter is the three calendar months of the trimestre; the whole year is Jan 1 →
- * next Jan 1. A quarter's filter selects exactly the rows of its three months' filters. The output
- * side's return is not such a filter: a month's return leaves out what was made after it ends.
+ * The half-open civil-date bound `[first, next)` of `periodDays` on a date-valued SQL expression.
+ * The input side passes `received_on`. A quarter's filter selects exactly the rows of its three
+ * months' filters. The output side's return is not such a filter: a month's return leaves out what
+ * was made after it ends.
+ *
+ * Both sides of every comparison are a civil date in the fixed `"YYYY-MM-DD"` spelling —
+ * `received_on` is stored that way, and SQLite's `date(...)` returns that shape — so a string
+ * comparison is a date comparison here.
  */
 export function periodDateFilter(dateExpr: SQL, year: number, period: LiquidationPeriod): SQL {
-  switch (period.kind) {
-    case "month":
-      return civilDateWindow(dateExpr, year, period.month, 1);
-    case "quarter":
-      // Q1→1, Q2→4, Q3→7, Q4→10
-      return civilDateWindow(dateExpr, year, 3 * (period.quarter - 1) + 1, 3);
-    case "year":
-      return civilDateWindow(dateExpr, year, 1, 12);
-    /* v8 ignore start -- unreachable: closed union; a malformed kind fails LOUD rather than returning
-       an undefined SQL bound that would silently widen or empty the fiscal aggregate (mirrors
-       validatePeriod's guard above). */
-    default: {
-      const exhaustive: never = period;
-      throw new Error(`reporting: unhandled liquidation period ${JSON.stringify(exhaustive)}`);
-    }
-    /* v8 ignore stop */
-  }
+  const { first, next } = periodDays(year, period);
+  return sql`${dateExpr} >= ${first} and ${dateExpr} < ${next}`;
 }
