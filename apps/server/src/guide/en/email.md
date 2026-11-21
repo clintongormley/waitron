@@ -26,6 +26,15 @@ development boxes keep invoice email locally even when account email uses a save
 
 In Demo, use the **Email inbox** link in the top bar. Sign in as a Manager or Admin to open captured messages.
 
+## Email the daily sales report {#daily-report}
+
+In **System → Email**, turn on **Email the daily report**, choose recipients and save. Each
+recipient needs an account email address and access to **Sales & takings**. Set up a mail server
+on the same page so Waitron can deliver the report.
+
+Waitron sends the most recently ended trading day after the automatic close completes. After a
+closure spanning several days, open **Sales & takings** and select an earlier day to see its figures.
+
 ## Account email through test Cloud {#cloud-account-email}
 
 When you pair your box with the test Cloud and enable its email relay, invitations,

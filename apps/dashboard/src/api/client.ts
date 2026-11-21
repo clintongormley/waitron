@@ -747,6 +747,16 @@ export interface EmailSettingsDraft {
   from: string;
 }
 
+export interface DailyReportSettingsDraft {
+  enabled: boolean;
+  recipientIds: string[];
+  revision: number;
+}
+
+export interface DailyReportSettingsView extends DailyReportSettingsDraft {
+  recipients: { id: string; name: string }[];
+}
+
 export interface EmailSettingsView {
   mode: "smtp" | "local_capture" | "unconfigured";
   editable: boolean;
@@ -3129,6 +3139,14 @@ export class DashboardApi {
 
   getEmailSettings(): Promise<EmailSettingsView> {
     return this.#request<EmailSettingsView>("/management-api/email/settings", "GET");
+  }
+
+  getDailyReportSettings(): Promise<DailyReportSettingsView> {
+    return this.#request("/management-api/email/settings/daily-report", "GET");
+  }
+
+  saveDailyReportSettings(body: DailyReportSettingsDraft): Promise<DailyReportSettingsDraft> {
+    return this.#request("/management-api/email/settings/daily-report", "PUT", body);
   }
 
   saveEmailSettings(body: EmailSettingsDraft): Promise<{ saved: true }> {

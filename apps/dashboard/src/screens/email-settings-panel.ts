@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "../widgets/email-settings-form.js";
+import "../widgets/daily-report-mail-form.js";
 import type { DashboardApi, EmailSettingsView } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -50,6 +51,7 @@ export class EmailSettingsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canConfigureDailyReport = false;
   @property() intent?: "demo" | "prepare" | "live";
   @state() private view?: EmailSettingsView;
   @state() private readError?: string;
@@ -241,6 +243,13 @@ export class EmailSettingsPanel extends LitElement {
                 }
               </div>`
             : nothing
+      }
+      ${
+        this.canConfigureDailyReport && this.intent !== "demo"
+          ? html`<dashboard-daily-report-mail-form
+              .api=${this.api}
+            ></dashboard-daily-report-mail-form>`
+          : nothing
       }
       <wt-dialog
         data-test="remove-dialog"

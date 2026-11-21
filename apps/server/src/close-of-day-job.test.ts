@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
   dayCutoverChanges,
   installChangeFeed,
   readVenueClock,
+  outgoingMail,
+  saveSettings,
+  settings,
   taxpayer,
   withTransaction,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { persons } from "@waitron/identity";
 import { readDailyClose } from "@waitron/reporting";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { AppError, businessDayAt, businessDayBounds, type BusinessDayClock } from "@waitron/shared";
@@ -32,6 +36,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
 import "./errors.js";
 
 const refused = vi.hoisted(() => new Map<string, Error>());
@@ -238,6 +243,46 @@ describe("bills.close_of_day", () => {
     await look(job());
     expect(issued(older)).toBe(true);
     expect(issued(newer)).toBe(true);
+  });
+
+  it("queues only the latest ended day after the close can finish", async ({ onTestFinished }) => {
+    const [recipient] = await venue.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    expect(recipient).toBeDefined();
+    await inTx(venue, (tx) =>
+      saveSettings(tx, DAILY_REPORT_MAIL_SETTINGS, {
+        doc: { enabled: true, recipientIds: [recipient!.id] },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    onTestFinished(async () => {
+      await venue.db.delete(settings).where(eq(settings.module, DAILY_REPORT_MAIL_SETTINGS.module));
+      await venue.db.delete(outgoingMail).where(eq(outgoingMail.kind, "daily_report"));
+    });
+    const queued = () =>
+      venue.db.select().from(outgoingMail).where(eq(outgoingMail.kind, "daily_report"));
+    const bill = await billOpenedAt(day(-2).startAt + HOUR);
+    const definition = job();
+    at = day(0).startAt + HOUR;
+    const held = new AppError("order.payment_in_flight", { workingOrderId: bill });
+    refused.set(bill, held);
+    try {
+      await look(definition);
+      expect(await queued()).toEqual([]);
+    } finally {
+      refused.delete(bill);
+    }
+    await look(definition);
+    expect(issued(bill)).toBe(true);
+    expect(await queued()).toEqual([
+      expect.objectContaining({
+        personId: recipient!.id,
+        params: { businessDay: addDays(today, -1) },
+      }),
+    ]);
   });
 
   it("reports a caught-up bill on the day its table opened", async () => {

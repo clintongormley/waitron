@@ -26,6 +26,8 @@ import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { parseEmailSettings } from "@waitron/provisioning";
 export { parseEmailSettings } from "@waitron/provisioning";
+import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
+import { readStaffEmailRecipients } from "./manager-email-recipients.js";
 import "./errors.js";
 
 interface EmailSettingsApiDeps {
@@ -45,6 +47,9 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       "email.settings_not_allowed": 409,
       "email.settings_invalid": 400,
       "email.test_recipient_missing": 409,
+      "management.request_invalid": 400,
+      "settings.invalid": 500,
+      "settings.out_of_date": 409,
       "server.credential_unusable": 500,
     },
     "email_settings.failed",
@@ -60,6 +65,55 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
     });
   };
   const editable = deps.config.onboardingIntent !== "demo";
+  async function dailyReportAccess(tx: Transaction, c: Context) {
+    const actor = await authorize(tx, c);
+    if (!holds(actor.authority, "report.view"))
+      throw new AppError("authorization.not_permitted", { permission: "report.view" });
+    if (!editable) throw new AppError("email.settings_not_allowed", {});
+    return actor.authorizedBy;
+  }
+  const reportPath = "/management-api/email/settings/daily-report";
+  app.get(reportPath, (c) =>
+    run(c, log, () =>
+      withTransaction(deps.db, async (tx) => {
+        await dailyReportAccess(tx, c);
+        const { doc, revision } = await readSettings(tx, DAILY_REPORT_MAIL_SETTINGS);
+        const choices = await readStaffEmailRecipients(tx, "en", "report.view");
+        return c.json({
+          ...doc,
+          revision,
+          recipients: choices.map(({ personId, displayName }) => ({
+            id: personId,
+            name: displayName,
+          })),
+        });
+      }),
+    ),
+  );
+  app.put(reportPath, (c) =>
+    run(c, log, async () => {
+      requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      return withTransaction(deps.db, async (tx) => {
+        const personId = await dailyReportAccess(tx, c);
+        const parsed = DAILY_REPORT_MAIL_SETTINGS.parse(body);
+        if (!parsed.ok) throw new AppError("management.request_invalid", { field: parsed.field });
+        const { revision } = body;
+        if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
+          throw new AppError("management.request_invalid", { field: "revision" });
+        const choices = await readStaffEmailRecipients(tx, "en", "report.view");
+        const eligible = new Set(choices.map((choice) => choice.personId));
+        if (parsed.doc.recipientIds.some((id) => !eligible.has(id)))
+          throw new AppError("management.request_invalid", { field: "recipientIds" });
+        const saved = await saveSettings(tx, DAILY_REPORT_MAIL_SETTINGS, {
+          doc: parsed.doc,
+          expectedRevision: revision,
+          personId,
+        });
+        return c.json({ ...saved.doc, revision: saved.revision });
+      });
+    }),
+  );
   app.get("/management-api/email/settings", (c) =>
     run(c, log, () =>
       withTransaction(deps.db, async (tx) => {
