@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createAgent,
+  HALTED_SELF_ENROL_INTERVAL_MS,
   PAGE_RENEW_INTERVAL_MS,
   PAGE_RENEW_SETTLE_MS,
   PAGE_REPORT_GIVE_UP_MS,
@@ -1117,6 +1118,95 @@ describe("createAgent — on-node self-enrol", () => {
     expect(c.enrolSelf).toHaveBeenCalledTimes(1); // second tick had a token, so it did not self-enrol
     expect(c.joinStatus).not.toHaveBeenCalled(); // `approved` was set, so no status poll
     expect(c.pullJobs).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes pulling after its saved token is refused, once its own box enrols it again", async () => {
+    const loopback = "https://127.0.0.1";
+    const main = "https://main.test";
+    const host = fakeHost({ config: { serverUrl: loopback, name: "spare agent" } });
+    let admitted = true;
+    let serial = 0;
+    const c = client({
+      probeNode: vi.fn(async (url: string) =>
+        okR<NodeProbe>(
+          url === loopback
+            ? { ...primary, nodeId: "spare", acceptingSales: false, standing: "serving-secondary" }
+            : primary,
+        ),
+      ),
+      mainServer: vi.fn(async () => okR(main)),
+      enrolSelf: vi.fn(async () =>
+        admitted ? okR({ token: `agent.secret-${++serial}` }) : failR({ kind: "refused" }),
+      ),
+      pullJobs: vi.fn(async () =>
+        admitted
+          ? okR<PullReply>({
+              nodeId: "n1",
+              servers: [{ url: main, nodeId: "n1" }],
+              jobs: [],
+              discoveryExpiresInMs: null,
+            })
+          : failR({ kind: "unauthorized" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(c.pullJobs).toHaveBeenCalledWith(main, "agent.secret-1", expect.anything());
+    admitted = false;
+    await agent.runOnce();
+    expect(await host.token()).toBeNull();
+    expect(agent.status.phase).toBe("unauthorized");
+    admitted = true;
+    await agent.runOnce();
+    await agent.runOnce();
+    expect({
+      phase: agent.status.phase,
+      enrolments: serial,
+      pulls: vi.mocked(c.pullJobs).mock.calls.length,
+    }).toEqual({ phase: "running", enrolments: 2, pulls: 3 });
+    expect(c.pullJobs).toHaveBeenLastCalledWith(main, "agent.secret-2", expect.anything());
+    expect(c.join).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["its own box refuses", failR({ kind: "refused" })],
+    ["nothing answers on loopback", failR({ kind: "unreachable", detail: "ECONNREFUSED" })],
+  ])("a halted agent stays unauthorized and never knocks when %s", async (_case, answer) => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const c = client({
+      pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })),
+      enrolSelf: vi.fn(async () => answer),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let round = 0; round < 4; round++) await agent.runOnce();
+    expect(agent.status.phase).toBe("unauthorized");
+    expect(await host.token()).toBeNull();
+    expect(c.join).not.toHaveBeenCalled();
+    expect(c.pullJobs).toHaveBeenCalledTimes(1);
+  });
+
+  it(`a halted agent asks its own box at once, then at most every ${HALTED_SELF_ENROL_INTERVAL_MS / 1000} s`, async () => {
+    expect(HALTED_SELF_ENROL_INTERVAL_MS).toBe(30_000);
+    let now = 0;
+    const host = fakeHost({ config: CONFIG, token: "a1.s", now: () => now });
+    const c = client({ pullJobs: vi.fn(async () => failR({ kind: "unauthorized" })) });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce(); // the token is refused: halted
+    expect(c.enrolSelf).toHaveBeenCalledTimes(0);
+    now += 2_000;
+    await agent.runOnce(); // the first round after the halt asks
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1);
+    for (let round = 0; round < 14; round++) {
+      now += 2_000;
+      await agent.runOnce();
+    }
+    expect(now).toBe(30_000);
+    expect(c.enrolSelf).toHaveBeenCalledTimes(1); // 28 s after that ask: still waiting
+    now += 2_000;
+    await agent.runOnce();
+    expect(c.enrolSelf).toHaveBeenCalledTimes(2); // 30 s after it
+    expect(agent.status.phase).toBe("unauthorized");
   });
 });
 

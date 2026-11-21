@@ -29,6 +29,10 @@ import { Router } from "./router.js";
 /** Failed pulls and active discovery passes use this interval. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
+/** A halted agent asks its own box for a token on its next round, then at most this often: two
+ * asks a minute against the enrol limit of 30 a minute (`ENROL_RATE_MAX`,
+ * `apps/server/src/enrol-rate-limit.ts`), which every spare's asks share on the main box. */
+export const HALTED_SELF_ENROL_INTERVAL_MS = 30_000;
 /** A third of the server's 60 s claim lease (`INVOICE_DELIVERY_LEASE_MS`,
  * `apps/server/src/invoice-delivery.ts`), so one renewal that does not get through leaves the claim
  * alive. */
@@ -90,7 +94,7 @@ function describe(failure: Failure): string {
  * `runOnce` turns whatever a tick throws into a status the host renders; a throw from that
  * handling itself (the host's logger or `status` callback, or a thrown value that cannot be turned
  * into a string) still escapes. An agent never pulls with an unapproved token (that reads as
- * `unauthorized` and halts it until setup supplies a new configuration).
+ * `unauthorized` and halts it until setup supplies a new configuration or its own box enrols it).
  */
 export function createAgent(opts: AgentOptions): Agent {
   const host = opts.host;
@@ -99,6 +103,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let router: Router | undefined;
   let approved = false;
   let halted = false;
+  let haltedEnrolAt = 0;
   let running = false;
   let pullController: AbortController | undefined;
   // Set by stop() and cleared by start(): a job still out then reports, but nothing new is claimed.
@@ -226,6 +231,7 @@ export function createAgent(opts: AgentOptions): Agent {
 
   async function halt(config: AgentConfig, current: string): Promise<void> {
     halted = true;
+    haltedEnrolAt = host.now();
     approved = false;
     outOfTouch = false;
     resetAt = undefined;
@@ -616,26 +622,32 @@ export function createAgent(opts: AgentOptions): Agent {
       });
       return false;
     }
-    if (halted) {
+    if (halted && !passed(haltedEnrolAt, HALTED_SELF_ENROL_INTERVAL_MS)) {
       report({ phase: "unauthorized", serverUrl: config.serverUrl });
       return false;
     }
 
-    // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on a box must enrol even
-    // when its configured server is momentarily not an accepting primary. A LITERAL loopback
-    // origin, not config.serverUrl.
+    // Self-enrol sits BEFORE the `anyAccepting` gate ON PURPOSE: an agent on the main box must
+    // enrol even while its server briefly does not accept, and a spare's own server never accepts.
+    // A LITERAL loopback origin, not config.serverUrl.
     if ((await host.token()) === null) {
       const loopback = new URL(config.serverUrl);
       loopback.hostname = "127.0.0.1";
       const self = await client.enrolSelf(loopback.origin, config.name);
       if (self.ok) {
         await host.saveToken(self.value.token);
+        halted = false;
         approved = true;
         outOfTouch = false;
         resetAt = undefined;
         report({ phase: "running", serverUrl: config.serverUrl, current: loopback.origin });
         return false;
       }
+    }
+    if (halted) {
+      haltedEnrolAt = host.now() + HALTED_SELF_ENROL_INTERVAL_MS;
+      report({ phase: "unauthorized", serverUrl: config.serverUrl });
+      return false;
     }
 
     const r = routerFor(config);
