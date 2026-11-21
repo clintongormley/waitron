@@ -1566,7 +1566,7 @@ describe("a reset over a saved group split today", () => {
   }
 
   const deliveryDestination = (order: string) =>
-    inTx(v, (tx) =>
+    inTx(v, async (tx) =>
       tx
         .select({ tableId: workingOrders.deliveryTableId })
         .from(workingOrders)
