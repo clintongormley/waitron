@@ -1066,8 +1066,8 @@ const TABLE_RECEIPT_REFUSED = {
   es: "Ticket de la mesa {tableInvoiceNumber}: ",
 };
 const TABLE_RECEIPT_HOLDS_MONEY = {
-  en: "No money comes back on this payment on account either while that receipt has money left to give back.",
-  es: "Mientras a ese ticket le quede dinero por devolver, tampoco se devuelve dinero con este pago a cuenta.",
+  en: "While that receipt cannot be corrected and still has money to give back, no money comes back on this payment on account either.",
+  es: "Mientras ese ticket no se pueda rectificar y le quede dinero por devolver, tampoco se devuelve dinero con este pago a cuenta.",
 };
 
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
