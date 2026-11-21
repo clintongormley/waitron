@@ -15,7 +15,7 @@ The Lane F queue item and the watcher's 21 November 03:21 note record the ask.
   lower stable release at prepare and tag time.
 - [ ] Share the source rule in `scripts/release/release-source.mjs` using the
   existing version comparator. A maintenance commit's fork from main must be
-  a lower release tag. Refuse equal or higher tagged versions in its history,
+  a lower release tag of the same major (watcher clearance, 05:15). Refuse equal or higher tagged versions in its history,
   excluding the current tag in CI. Fetch origin's main, `maintenance/*` and
   release tags. First check main ancestry, including refusal when a higher tag
   is an ancestor. Otherwise require the commit to be on a remote maintenance

@@ -186,7 +186,7 @@ and its annotation is “Waitron prerelease 1.3.0-rc.1”. You can use `-alpha.N
 `-rc.N`. Each number can be zero. Leave off any leading zeroes and keep the full version within
 50 characters.
 
-On `main`, each version must be above every published version. Compare the three version numbers first. For the same
+On `main`, each version must be above every version already tagged. Compare the three version numbers first. For the same
 three numbers, alpha comes before beta, then release candidates, then stable. Within each
 suffix, the largest sequence number comes last. After `1.3.0-rc.1` you can prepare
 `1.3.0-rc.2` or `1.3.0`. A `1.2.1` patch is below that candidate and the command refuses it.
@@ -221,8 +221,9 @@ You can read the active rules for a branch before creating it with
 `gh api 'repos/{owner}/{repo}/rules/branches/maintenance%2F1.x'`. GitHub composes all applicable
 active rules. [GitHub branch rules API](https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch)
 
-For example, the administrator creates `maintenance/1.x` at `v1.2.0`. Land your fix there,
-and carry it forward by hand to each newer line that needs it. If the older release predates this
+For example, the administrator creates `maintenance/1.x` at `v1.2.0`. Land your fix there. Carry
+it forward to each newer branch that needs it with `git cherry-pick`. Keep the release histories
+separate so a tag keeps its source branch on a publish retry. If the older release predates this
 tooling, backport the release commands and CI to the maintenance branch before using them.
 
 Start `release/1.2.1` at the current `origin/maintenance/1.x` tip. Run
@@ -231,7 +232,12 @@ pull request against `maintenance/1.x` after review and green CI. Keep that revi
 pull request based on the maintenance branch. Switch to that branch, update it to the remote tip, and
 run `pnpm release tag 1.2.1`. Both commands require that the branch contain the latest stable
 release below the version you are preparing. Tag also requires a green push run for that exact
-tip. You can cut a new minor from that line the same way.
+tip. A maintenance release keeps the major version of its original release tag. You can cut a
+new minor from that line the same way.
+
+Use the release command for every tag. Only the command verifies that the branch contains the
+latest lower stable release. GitHub checks the tagged commit's history so a later tag from a
+sibling branch leaves the original release eligible for a publish retry.
 
 Keep the branch and its original tag so GitHub can still publish the version if a job needs a
 retry. If you need to retry a release from earlier main, use its existing tag and run.

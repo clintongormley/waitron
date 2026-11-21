@@ -315,7 +315,9 @@ describe("check-signoff.sh", () => {
       });
 
       it("runs on a push to main", () => {
-        expect(workflow).toMatch(/^on:\n(?: {2}.*\n)* {2}push:\n {4}branches: \[main\]\n/m);
+        expect(workflow).toMatch(
+          /^on:\n(?: {2}.*\n)* {2}push:\n {4}branches: \[main, "maintenance\/\*"\]\n/m,
+        );
       });
     });
   });

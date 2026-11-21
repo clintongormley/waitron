@@ -29,15 +29,17 @@ function releaseHistory(run, head, version, published) {
   return { merged, fork: git(run, "merge-base", "--all", head, "origin/main") };
 }
 
-function requireReleaseFork(run, fork, merged) {
-  if (
-    !fork.includes("\n") &&
-    versions(git(run, "tag", "--points-at", fork, "--list", "v*")).some((tag) =>
-      merged.includes(tag),
-    )
-  )
-    return;
-  throw new Error("the maintenance branch must fork from main at a lower release tag");
+function requireReleaseFork(run, fork, merged, version) {
+  const forkVersions = fork.includes("\n")
+    ? []
+    : versions(git(run, "tag", "--points-at", fork, "--list", "v*")).filter((tag) =>
+        merged.includes(tag),
+      );
+  if (forkVersions.length === 0)
+    throw new Error("the maintenance branch must fork from main at a lower release tag");
+  const [major] = version.split(".", 1);
+  if (!forkVersions.some((tag) => tag.startsWith(`${major}.`)))
+    throw new Error("a maintenance release must keep the major version of its release fork");
 }
 
 const namedRules = ["creation", "deletion", "non_fast_forward", "pull_request"];
@@ -75,7 +77,7 @@ export function checkMaintenanceRelease(run, { head, branch, version, released, 
     );
   if (fork === head && !preparing)
     throw new Error(`${branch} still points at a commit of main; use main to tag that commit`);
-  requireReleaseFork(run, fork, merged);
+  requireReleaseFork(run, fork, merged, version);
   if (!protectedBranch(run, branch))
     throw new Error(`${branch} is not protected by the required maintenance branch rules`);
 }
@@ -84,7 +86,7 @@ export function publishReleaseSource(run, { head, version }) {
   if (!isNumberedVersion(version)) throw new Error(`v${version} is not a release version`);
   const { merged, fork } = releaseHistory(run, head, version);
   if (fork === head) return "main";
-  requireReleaseFork(run, fork, merged);
+  requireReleaseFork(run, fork, merged, version);
   const branches = git(
     run,
     "for-each-ref",

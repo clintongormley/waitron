@@ -2457,8 +2457,10 @@ to the app build only. In order, the publish job:
    pushes both.
 
 On a `v*` tag it checks whether the annotated commit is on `main` or a protected
-`maintenance/*` branch cut from an older release tag. The commit cannot contain another release tag for the same or a higher version. The publish and root-guard checkouts fetch full history with blobs
-fetched on demand so those jobs can compare Git ancestry. The tags step accepts `vX.Y.Z` and
+`maintenance/*` branch cut from an older release tag of the same major. The commit cannot
+contain another release tag for the same or a higher version. The publish and root-guard checkouts fetch full history with blobs
+fetched on demand so those jobs can compare Git ancestry. The declaration guard requires
+a file at HEAD for each release tag in its history and compares any tagged declaration present. The tags step accepts `vX.Y.Z` and
 `vX.Y.Z-{alpha,beta,rc}.N`. Before step 7 it runs `check-release <version>` in the loaded image
 and refuses a version the registry already holds. Runs for one tag publish one at a time.
 The `release` job uses the suffix's prerelease flag when publishing the GitHub Release and

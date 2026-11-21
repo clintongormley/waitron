@@ -263,6 +263,12 @@ describe("prepareRelease", () => {
   });
 
   const refusals = [
+    [
+      "a base outside the release branches",
+      { base: "side" },
+      /base must be main or a maintenance branch/,
+      0,
+    ],
     ["a version that does not parse", { version: "1.0" }, /is not a version/, 0],
     [
       "a branch other than release/<version>",
@@ -336,7 +342,7 @@ describe("maintenance release CLI", () => {
   const base = "maintenance/1.x";
   const version = "1.2.1";
   const rulesCall = "gh api repos/{owner}/{repo}/rules/branches/maintenance%2F1.x?per_page=100";
-  const rules = JSON.stringify([
+  const rules = (context = "ci", strict = true) => [
     { type: "creation" },
     { type: "deletion" },
     { type: "non_fast_forward" },
@@ -344,11 +350,11 @@ describe("maintenance release CLI", () => {
     {
       type: "required_status_checks",
       parameters: {
-        required_status_checks: [{ context: "ci" }],
-        strict_required_status_checks_policy: true,
+        required_status_checks: [{ context }],
+        strict_required_status_checks_policy: strict,
       },
     },
-  ]);
+  ];
   const answers = {
     "git rev-parse --abbrev-ref HEAD": `release/${version}\n`,
     [`git rev-parse origin/${base}`]: `${HEAD_SHA}\n`,
@@ -358,7 +364,7 @@ describe("maintenance release CLI", () => {
     [`git tag --merged ${HEAD_SHA} --list v*`]: "v1.2.0\n",
     [`git merge-base --all ${HEAD_SHA} origin/main`]: `${HEAD_SHA}\n`,
     [`git tag --points-at ${HEAD_SHA} --list v*`]: "v1.2.0\n",
-    [rulesCall]: rules,
+    [rulesCall]: JSON.stringify(rules()),
   };
 
   it("opens the declaration PR on maintenance from a fresh release fork", async () => {
@@ -377,18 +383,21 @@ describe("maintenance release CLI", () => {
     expect(result.prompts).toEqual([]);
   });
 
-  it.each(["[]", new Error("GitHub unavailable")])(
-    "refuses to sign when GitHub cannot establish branch protection (%s)",
-    async (rulesAnswer) => {
-      const result = await prepare({
-        base,
-        version,
-        answers: { ...answers, [rulesCall]: rulesAnswer },
-      });
-      expect(result.error?.message).toContain("protected");
-      expect(result.prompts).toEqual([]);
-    },
-  );
+  it.each([
+    ["no rules", "[]"],
+    ["an unavailable API", new Error("GitHub unavailable")],
+    ["no restriction on creation", JSON.stringify(rules().slice(1))],
+    ["a loose CI rule", JSON.stringify(rules("ci", false))],
+    ["another check instead of ci", JSON.stringify(rules("lint"))],
+  ])("refuses to sign with %s", async (_, rulesAnswer) => {
+    const result = await prepare({
+      base,
+      version,
+      answers: { ...answers, [rulesCall]: rulesAnswer },
+    });
+    expect(result.error?.message).toContain("protected");
+    expect(result.prompts).toEqual([]);
+  });
 
   const runList = `gh run list --workflow ci.yml --branch ${base} --event push --commit ${HEAD_SHA} --json status,conclusion --limit 1`;
   const tagAnswers = {
@@ -408,6 +417,12 @@ describe("maintenance release CLI", () => {
   it("refuses a maintenance tag without its own green push CI", async () => {
     const { run, calls } = fakeRun({ ...tagAnswers, [runList]: "[]" });
     await expect(tagRelease({ version, run })).rejects.toThrow(`no CI run on ${base}`);
+    expect(calls.some(([file, command]) => file === "git" && command === "push")).toBe(false);
+  });
+
+  it("refuses to tag from a maintenance branch still pointing at a commit of main", async () => {
+    const { run, calls } = fakeRun({ ...answers, "git rev-parse --abbrev-ref HEAD": `${base}\n` });
+    await expect(tagRelease({ version, run })).rejects.toThrow("still points at a commit of main");
     expect(calls.some(([file, command]) => file === "git" && command === "push")).toBe(false);
   });
 

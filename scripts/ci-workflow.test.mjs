@@ -8024,6 +8024,15 @@ describe("the release job", () => {
       );
   });
 
+  it("passes the maintenance result to GitHub Release creation", () => {
+    expect(job("publish").body).toContain(
+      "      release_maintenance: ${{ steps.release_tag.outputs.release_maintenance }}",
+    );
+    expect(named(RELEASE_ATTACH_STEP).envOf("RELEASE_MAINTENANCE")).toBe(
+      "${{ needs.publish.outputs.release_maintenance }}",
+    );
+  });
+
   it("logs in to GHCR and pulls before attaching the declaration", () => {
     const login = steps().findIndex((step) => /uses: docker\/login-action@/.test(step.text));
     expect(login).toBeGreaterThan(-1);

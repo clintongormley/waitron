@@ -76,6 +76,10 @@ describe("publishReleaseSource", () => {
     expect(source(head, version)).toBe("maintenance");
   });
 
+  it("refuses a new major cut from an older maintenance line", () => {
+    expect(() => source(minorPatch, "2.0.1")).toThrow("keep the major version of its release fork");
+  });
+
   it("refuses a lower version on main after a higher release", () => {
     expect(() => source(laterMain, "1.2.1")).toThrow("v1.2.1 contains release v2.0.0");
   });
