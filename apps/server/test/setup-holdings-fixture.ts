@@ -23,7 +23,7 @@ vi.mock("@waitron/provisioning", async (importOriginal) => {
 afterEach(() => vi.restoreAllMocks());
 
 const ADJUSTMENT_REFUND = `insert into adjustment_refunds
-  (id, adjustment_id, tender_refund_id, amount, created_at)
+  (id, adjustment_id, refund_id, amount, created_at)
   values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002',
           '00000000-0000-4000-8000-000000000003', 1, '2026-10-28T00:00:00.000Z')`;
 
