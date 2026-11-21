@@ -53,8 +53,8 @@ function advanceLineText(language: string, table: string | null, orderNumber: nu
 }
 
 /* What `@waitron/verifactu`'s `validate` refuses in `DescripcionOperacion`: more than 500 code
- * points (`DESCRIPCION_LENGTH`) or a control character XML forbids (`CONTROL_CHAR`), as
- * `descriptionProblem` in packages/fiscal-verifactu/src/put-right.ts copies it. */
+ * points (`DESCRIPCION_LENGTH`) or a control character XML forbids (`CONTROL_CHAR`); the
+ * code-point edge cases in ./bill-advances.test.ts run that check over the filed record. */
 const OPERATION_DESCRIPTION_MAX = 500;
 // eslint-disable-next-line no-control-regex -- deliberately matching control characters
 const CONTROL_CHARACTER = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;

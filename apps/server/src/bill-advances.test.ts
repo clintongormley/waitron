@@ -912,6 +912,32 @@ describe("an advance's record to AEAT", () => {
     expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
   });
 
+  // The words count in code points: their em dash and each 🍷 are one code point, two UTF-16 units
+  // or more than one UTF-8 byte, so a copy counting either of those instead misplaces the edge.
+  it.each([
+    { points: 500, describedBy: "table" },
+    { points: 501, describedBy: "order" },
+  ])(
+    "at a table whose name makes the description $points code points, describes it by the $describedBy, and AEAT's record check refuses nothing",
+    async ({ points, describedBy }) => {
+      const words = (table: string) => spanish.paymentOnAccountAtTable.replace("{table}", table);
+      const suffix = `7${randomUUID()}`;
+      const fill = points - [...words(suffix)].length;
+      const tableLabel = `${"🍷".repeat(fill)}${suffix}`;
+      expect([...words(tableLabel)]).toHaveLength(points);
+      const { billId } = await bill120(tableLabel);
+
+      const paid = await cash(billId, "30.00", { ownReceipt: true });
+
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      expect(await filedDescription(billId)).toBe(
+        describedBy === "table"
+          ? words(tableLabel)
+          : forOrder(spanish, await orderNumberOf(billId)),
+      );
+    },
+  );
+
   it("at a table whose name holds a control character AEAT refuses, describes it by the bill's order number", async () => {
     // Written straight to the table's row; the floor plan's save only trims a label.
     const { billId } = await bill120(`7\u0007${randomUUID()}`);
