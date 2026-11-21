@@ -7144,3 +7144,17 @@ directory: provisioning's CLI has no direct `tsx` dependency. Its settings and C
 that source caller; the diagnosis-bundle suite also runs the declared provisioning build and
 opens through a bundled validation host beside its outputs. Passing only the fiscal package's
 source test would miss a missing child in the provisioning build.
+
+## Root receipts moved on 2026-11-21
+
+These excerpts are from `CLAUDE.md` at `b652ee03b58e6af7aed01e7cbb2381308815c76f`; they are not new
+measurements. Each heading names the root entry the excerpt was cut from; the entry keeps its rule,
+guard and pointer.
+
+### While the box's internet time service is synchronised, a till's time, a jump or the latest record's time never stops a sale
+
+> weaker than the rule: named cases only, the watch's cases on a stand-in for the filing read.
+
+### Restore and promotion start a new chain under a new installation name
+
+> the proposal the owner agreed named an administrator sign-in

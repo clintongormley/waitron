@@ -2607,3 +2607,18 @@ does not see.
 
 > The inventory guard is weaker than its name: only its till/device/schedule mounts, and
 > device-proof refusals.
+
+## Root receipts moved on 2026-11-21
+
+These excerpts are from `CLAUDE.md` at `b652ee03b58e6af7aed01e7cbb2381308815c76f`; they are not new
+measurements. Each heading names the root entry the excerpt was cut from; the entry keeps its rule,
+guard and pointer.
+
+### Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS class
+
+> weaker than its name: reads each file's text alone, so imported helpers and styles, inherited
+> methods and `class=${…}` escape it.
+
+### Every colour, spacing, radius and font reads a declared `--wt-*` token; no hex, named colours, `rem` or `em`
+
+> `scripts/style-token-names.test.ts`, weaker than its name: text match against declarations anywhere.
