@@ -156,7 +156,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/deliveries/:deliveryId/retry        | order                  | refuses POST .../deliveries/:deliveryId/retry        |
  * | POST /api/sales/:id/receipt                             | order                  | refuses POST /api/sales/:id/receipt                  |
  * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
- * | POST /api/working-orders/:id/collect                    | order                  | refuses POST /api/working-orders/:id/collect         |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
  * | POST /api/working-orders/:id/split-after-print          | order                  | refuses POST /api/working-orders/:id/split-after-print |
  * | GET  /api/tables/state, /api/zones                      | list, by table or zone | "lists only the profile's zones, tables and orders"  |
@@ -781,13 +780,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/sales/${x.deliOrder}/reprint`,
     () => ({}),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/working-orders/:id/collect",
-    "POST",
-    (x) => `/api/working-orders/${x.deliOrder}/collect`,
-    () => ({ tender: { method: "cash", amount: "2.00" } }),
     deliOrderZone,
   ],
   [

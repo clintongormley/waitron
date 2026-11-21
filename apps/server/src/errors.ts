@@ -555,11 +555,6 @@ declare module "@waitron/shared" {
         | "partial_refund";
       recoveryUrl?: string;
     };
-    /**
-     * A tender method this till does not support. `method` echoes the request so a translator can
-     * name what was attempted; it is caller-supplied text, never a secret.
-     */
-    "sale.unsupported_tender": { method: string };
     /** An extras pick on a dish not sold in whole portions: its unit has a scale (`soldBy:
      *  "weight"`), else allows decimal places (`"fraction"`), else is marked a measure such as ml
      *  (`"measure"`). A child line is priced at the dish's quantity times the pick count, so on such

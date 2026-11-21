@@ -533,6 +533,21 @@ describe("the fiscal sale path over HTTP", () => {
     expect(answer.status).toBe(404);
   });
 
+  it("returns 404 for the retired working-order collect writer", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const id = randomUUID();
+    const answer = await app.request(`/api/working-orders/${id}/collect`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ expectedEdit: null, tender: { method: "cash", amount: "5.00" } }),
+    });
+    expect(answer.status).toBe(404);
+  });
+
   it.each(["voucher", "deferred", "other"])(
     "refuses the unsupported %s payment method before saving a basket",
     async (method) => {
@@ -614,48 +629,37 @@ describe("the fiscal sale path over HTTP", () => {
     });
     expect(await suite.db.select().from(registrosFacturacion)).toHaveLength(0);
   });
-  it.each(["payments", "collect"])(
-    "manual tip validates at the HTTP boundary for %s",
-    async (route) => {
-      const { cfg, operatorId } = await setupVenue();
-      const app = new Hono();
-      mountTillApi(app, apiDeps(cfg), noopLog);
-      const deviceCookie = await enrolTillCookie(
-        cfg,
-        await seedProfileFF("till", ["hand-keyed-card-payment"]),
-      );
-      const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-      const id = randomUUID();
-      const url = `/api/working-orders/${id}/${route}`;
-      for (const addedTip of [null, -1, "-0.30", "bad", "0.001", ["0.30"]]) {
-        const answer = await app.request(url, {
-          method: "POST",
-          headers: { cookie: `${cookie}; ${deviceCookie}`, "content-type": "application/json" },
-          body: JSON.stringify(
-            route === "payments"
-              ? {
-                  submissionId: id,
-                  kind: "share",
-                  shareOf: 1,
-                  method: "card",
-                  entry: "manual",
-                  addedTip,
-                  basket: { lines: [] },
-                }
-              : {
-                  expectedEdit: null,
-                  lines: [],
-                  tender: { method: "card", amount: "1.50", addedTip },
-                },
-          ),
-        });
-        expect(answer.status).toBe(400);
-        expect(await answer.json()).toMatchObject({
-          error: { code: "management.request_invalid", params: { field: "addedTip" } },
-        });
-      }
-    },
-  );
+  it("manual tip validates at the bill payments HTTP boundary", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(
+      cfg,
+      await seedProfileFF("till", ["hand-keyed-card-payment"]),
+    );
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const id = randomUUID();
+    const url = `/api/working-orders/${id}/payments`;
+    for (const addedTip of [null, -1, "-0.30", "bad", "0.001", ["0.30"]]) {
+      const answer = await app.request(url, {
+        method: "POST",
+        headers: { cookie: `${cookie}; ${deviceCookie}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          submissionId: id,
+          kind: "share",
+          shareOf: 1,
+          method: "card",
+          entry: "manual",
+          addedTip,
+          basket: { lines: [] },
+        }),
+      });
+      expect(answer.status).toBe(400);
+      expect(await answer.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "addedTip" } },
+      });
+    }
+  });
 
   it("returns the active conflict refusal for new cash while replaying the original ticket", async () => {
     const { cfg, available, operatorId } = await setupVenue();
@@ -2826,11 +2830,7 @@ describe("handheld sales and device capability gates", () => {
     }
   });
 
-  // Place, and cancel of an order with no invoice, check no permission; collect's
-  // `payment.take` and an invoiced cancel's `sale.rectify` are checked only once the session
-  // is found, so the refusal tested here is the missing session, which a handheld meets with the
-  // same answer as a till.
-  it.each(["place", "collect", "cancel"] as const)(
+  it.each(["place", "cancel"] as const)(
     "refuses %s without an operator session with the same answer on a handheld as on a till",
     async (action) => {
       const { cfg } = await setupVenue();
@@ -2841,7 +2841,7 @@ describe("handheld sales and device capability gates", () => {
         const res = await app.request(`/api/working-orders/${randomUUID()}/${action}`, {
           method: "POST",
           headers: { "content-type": "application/json", cookie: deviceCookie },
-          body: JSON.stringify({ tender: { method: "cash", amount: "5.00" }, reason: "x" }),
+          body: JSON.stringify({ reason: "x" }),
         });
         answers.push({ status: res.status, code: (await res.json()).error.code });
       }

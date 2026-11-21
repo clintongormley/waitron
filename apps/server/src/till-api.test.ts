@@ -3031,7 +3031,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const id = randomUUID();
     const json = { "content-type": "application/json" };
     // The guard runs FIRST on each route (before any body is read or menu touched), so an
-    // unauthenticated park/list/retrieve/update/abandon/place/prep/collect/cancel all 401 with the one
+    // unauthenticated park/list/retrieve/update/abandon/place/prep/cancel all 401 with the one
     // code. (The station-operate routes have their own 401 guard test below.)
     const cases = [
       app.request("/api/working-orders", {
@@ -3049,11 +3049,6 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
       // The prep surface.
       app.request(`/api/working-orders/${id}/place`, { method: "POST" }),
-      app.request(`/api/working-orders/${id}/collect`, {
-        method: "POST",
-        headers: json,
-        body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
-      }),
       app.request(`/api/working-orders/${id}/cancel`, {
         method: "POST",
         headers: json,
@@ -3376,9 +3371,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
   });
 });
 
-// The prep surface's till routes. This suite's cfg is `prepay`, so `placeOrder`/`cancelPlacedOrder`
-// never dispatch into the fiscal backend and these routes are testable hermetically. `collectOrder`'s
-// fiscal happy path needs a real backend and lives in `till-api.fiscal-sale-paths.test.ts`.
+// This suite uses prepay, so placing and cancelling unissued orders need no fiscal backend.
 describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   it("POST places an open order (open → placed), fires a ticket item at queued, and returns { id, status }", async () => {
     const app = new Hono();
@@ -3888,23 +3881,6 @@ describe("station-display operate routes", () => {
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
     }
-  });
-});
-
-describe("/api/working-orders/:id/collect (malformed id — the fiscal happy path is till-api.fiscal-sale-paths.test.ts)", () => {
-  it("POST with a malformed id is 409 working_order.not_placed BEFORE any fiscal dispatch", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    const res = await app.request("/api/working-orders/not-a-uuid/collect", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "working_order.not_placed", params: { workingOrderId: "not-a-uuid" } },
-    });
   });
 });
 

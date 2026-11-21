@@ -1,5 +1,4 @@
 import { printReceivedPaymentSlip } from "./payment-slip-print.js";
-import { readOutsideCardDetails } from "./outside-card.js";
 import { setOptionLabelAvailability, updateProduct } from "@waitron/menu";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
@@ -79,14 +78,13 @@ import { requestCfg } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import {
-  collectOrder,
   payWorkingOrderIntegrated,
   readSettledTicket,
   reprintSale,
   printSaleReceipt,
 } from "./till-sale.js";
 import { tillReceiptPreview } from "./till-receipt-preview.js";
-import type { IntegratedPayRequest, TillTender } from "./till-sale.js";
+import type { IntegratedPayRequest } from "./till-sale.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import {
   enqueueManualDrawerOpen,
@@ -242,7 +240,6 @@ import {
   requireDeviceProof,
   tryReadDevice,
   type DeviceBinding,
-  type TenderKind,
 } from "./device-session.js";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
@@ -489,7 +486,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.ended": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
-  "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   "quantity.invalid": 400,
   // Every id column is plain `text` (`packages/db/src/schema/columns.ts`), so the database does not
@@ -1283,13 +1279,6 @@ function mountBillReady(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 }
 
-/** A till tender's card is taken here, never on a connected reader. */
-function tillTenderKind(tender: TillTender | undefined): TenderKind | undefined {
-  if (tender?.method === "cash") return "cash";
-  if (tender?.method === "card") return "hand-keyed-card";
-  return undefined;
-}
-
 /** A kitchen display cannot open a shift session. */
 function refuseKitchenSignIn(device: DeviceBinding): void {
   if (kindOfFormFactor(device.formFactor) === "kds_station")
@@ -1327,7 +1316,6 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "PUT /api/session/locale",
   // Refused inside, after their replay checks, the one place a resend is told from a new sale.
   "POST /api/pay",
-  "POST /api/working-orders/:id/collect",
   "POST /api/working-orders/:id/payments",
   // Save nothing of their own; a refused send-preview would hide the kitchen send's own refusal.
   "POST /api/dead-ends/sale",
@@ -2457,7 +2445,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The non-fiscal counter handover; the fiscal collect is `POST /api/working-orders/:id/collect`.
+  // Counter handover records delivery to the customer after payment.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "hand-over-orders" });
@@ -2877,55 +2865,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         }),
       );
       return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/working-orders/:id/collect", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { permission: "payment.take" });
-      const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
-      await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{
-        expectedEdit: BillEditExpected | null;
-        tender: TillTender;
-        receiptLanguage?: string;
-        guestCount?: unknown;
-      }>(c);
-      if (body.receiptLanguage !== undefined) {
-        requireString(body.receiptLanguage, "receiptLanguage");
-      }
-      const guestCount = readGuestCountChoice(body.guestCount);
-      assertTakesTender(session.device, tillTenderKind(body.tender));
-      if (body.tender?.method === "card") optionalMoney(body.tender.addedTip, "addedTip");
-      Object.assign(
-        body.tender ?? {},
-        readOutsideCardDetails(body.tender ?? {}, body.tender?.method === "card"),
-      );
-      await assertRequestDevice(deps, c, session);
-      const result = await collectOrder(
-        {
-          db: deps.db,
-          backend: deps.backend,
-          admission: deps.admission,
-          clock: deps.clock,
-          log,
-          attendance: deps.attendance,
-          disk: deps.disk,
-        },
-        cfg,
-        {
-          id,
-          lines: [],
-          expectedEdit: body.expectedEdit,
-          tender: body.tender,
-          receiptLanguage: body.receiptLanguage,
-          guestCount,
-        },
-        { personId, sessionId: session.sessionId },
-      );
-      return c.json(result);
     }),
   );
 

@@ -1797,6 +1797,10 @@ The two shapes we could build:
   Missing: recording a payment by transfer (collecting an issued invoice accepts only cash or card —
   `sale.unsupported_tender`, `apps/server/src/till-sale.ts`) and collecting part of what an issued
   invoice owes.
+
+  **2026-11-21 product update.** Bill payments can take part of an issued invoice in cash or by
+  card. Recording a bank transfer remains open. [Payment plan](../superpowers/plans/2026-11-19-a1308-one-way-to-pay.md)
+
 - **(b) A proforma first, the invoice on payment** (the owner's Italian example). Send a proforma
   with no fiscal value; issue the invoice only when the transfer arrives, perhaps days or weeks
   after the meal.

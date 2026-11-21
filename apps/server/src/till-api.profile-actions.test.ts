@@ -153,7 +153,6 @@ const forbidden = (action: string) => ({
 });
 
 const id = randomUUID();
-const card = { method: "card", amount: "1.00" };
 const cash = { method: "cash", amount: "1.00" };
 const billPayment = (method: "cash" | "card", entry?: "manual" | "reader") => ({
   kind: "contribution",
@@ -231,20 +230,6 @@ const ROUTES: readonly Row[] = [
       lineId: null,
       reasonId: randomUUID(),
     },
-  ],
-  [
-    "POST",
-    `/api/working-orders/${id}/collect`,
-    "take-cash",
-    { status: 403, error: { code: "device.cash_not_allowed", params: {} } },
-    { tender: cash },
-  ],
-  [
-    "POST",
-    `/api/working-orders/${id}/collect`,
-    "hand-keyed-card-payment",
-    forbidden("hand-keyed-card-payment"),
-    { tender: card },
   ],
   [
     "POST",
@@ -1169,7 +1154,6 @@ describe("a shared kitchen display", () => {
     for (const [path, body] of [
       ["/api/working-orders", { dining: "eat_in", id: randomUUID(), lines: [] }],
       ["/api/pay", { dining: "eat_in" }],
-      [`/api/working-orders/${order}/collect`, { tender: cash }],
       [`/api/working-orders/${order}/payments`, cash],
       ["/api/drawer/open", {}],
     ] as const) {

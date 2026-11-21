@@ -98,7 +98,7 @@ async function serveAt(venue: BillVenue, billId: string, at: string, { undo = fa
 }
 
 describe("a bill left open past its business day is dated by its close, never by a serving mark", () => {
-  it("keeps one date for a placed takeaway collected on Thursday", async () => {
+  it("keeps one date for a placed takeaway paid on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -115,15 +115,9 @@ describe("a bill left open past its business day is dated by its close, never by
       venue.operatorId,
     );
 
-    const collected = await send(
-      venue.appAt(clockAt(THU_1200)),
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${id}/collect`,
-      { tender: { method: "cash", amount: "10.00" } },
-    );
+    const paid = await cashSale(venue, THU_1200, id, "10.00");
 
-    expect(collected.status, JSON.stringify(collected.json)).toBe(200);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     await expectOneDate(venue, id, "2026-03-19");
   });
 

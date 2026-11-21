@@ -657,10 +657,9 @@ was (W100).
   (`drawer.not_attached`). The till shows the button only where the device equipment answer's
   `opensDrawer` is true (`deviceOpensDrawer`: the same `drawerPrinter` check, the profile's
   permission included), so a handheld with the permission but no drawer printer is offered none.
-- **Taking cash.** A cash collection
-  (`POST /api/working-orders/:id/collect`) and a cash bill payment
+- **Taking cash.** A cash bill payment
   (`POST /api/working-orders/:id/payments`, `apps/server/src/bill-payments-api.ts`) from a device
-  whose profile lacks `take-cash` ("Takes cash") are refused `device.cash_not_allowed`
+  whose profile lacks `take-cash` ("Takes cash") is refused `device.cash_not_allowed`
   (`assertTakesCash`, `apps/server/src/device-session.ts`), and the till app offers no cash choice
   there. A bill refund is checked by how its payment was taken (`refundTender`,
   `apps/server/src/bill-refunds.ts`): a cash one the same way.

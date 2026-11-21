@@ -235,7 +235,7 @@ describe("a table bill issued after the business day it was opened in ended", ()
     await expectOneDate(venue, party.tabId, "2026-03-19", 1000);
   });
 
-  it("keeps one date for a takeaway opened on Monday and collected on Thursday", async () => {
+  it("keeps one date for a takeaway opened on Monday and paid on Thursday", async () => {
     const venue = await provisionBillVenue(suite.db);
     const id = randomUUID();
     const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
@@ -253,15 +253,9 @@ describe("a table bill issued after the business day it was opened in ended", ()
       venue.operatorId,
     );
 
-    const collected = await send(
-      venue.appAt(clockAt(THU_1200)),
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${id}/collect`,
-      { tender: { method: "cash", amount: "10.00" } },
-    );
+    const paid = await cashSale(venue, THU_1200, id);
 
-    expect(collected.status, JSON.stringify(collected.json)).toBe(200);
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
     await expectOneDate(venue, id, "2026-03-19", 1000);
   });
 

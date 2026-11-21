@@ -617,14 +617,11 @@ describe("the counter's held list after a move", () => {
 });
 
 describe("paying a moved bill, by its state", () => {
-  it("refuses a partly paid bill taken to the counter by collect, which takes only a presented bill, and takes the rest as a bill payment with one invoice", async () => {
+  it("refuses replacing the basket of a partly paid bill taken to the counter, and takes the rest as a bill payment with one invoice", async () => {
     const firstParty = await seatedWith(venue, "Octopus"); // €20.00
     expect((await cashContribution(firstParty.tabId, "5.00")).status).toBe(200);
     expect((await toCounter(firstParty, venue.zoneId)).status).toBe(200);
 
-    const collected = await post(`/api/working-orders/${firstParty.tabId}/collect`, {
-      tender: { method: "cash", amount: "15.00" },
-    });
     const sold = await post(`/api/working-orders/${firstParty.tabId}/payments`, {
       dining: "eat_in",
       submissionId: randomUUID(),
@@ -637,7 +634,6 @@ describe("paying a moved bill, by its state", () => {
     const refusedPayments = await paymentRows(venue, firstParty.tabId);
     const rest = await cashContribution(firstParty.tabId, "15.00");
 
-    expect([collected.status, collected.json.code]).toEqual([409, "working_order.not_placed"]);
     expect([sold.status, sold.json.code]).toEqual([409, "bill.payments_received"]);
     expect(refusedPayments.map((p) => [p.applied, p.state])).toEqual([[500, "received"]]);
     expect(rest.status).toBe(200);

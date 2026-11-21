@@ -3049,8 +3049,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   open route still fails by itself, `storage.disk_full`, if its own save does not fit. Opening or
   closing a kitchen station for the day (`station-today-api.ts`, mounted inside `mountTillApi`) is
   refused.
-- `POST /api/pay`, `POST /api/working-orders/:id/collect` and
-  `POST /api/working-orders/:id/payments` check for a replay before refusing new money inside
+- `POST /api/pay` and `POST /api/working-orders/:id/payments` check for a replay before refusing new money inside
   their first transaction. A replay can still return the recorded result. On `POST /api/pay`, Pay again on a card already charged
   files the sale without asking the reader.
 - A card-reader payment checks the stop three times: the free-space read before its first
@@ -5412,7 +5411,7 @@ absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`)
 %j as a bad field, changing nothing` pin the two halves, and in
 `apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
 null` and `refuses guests %j as a bad %s, changing nothing` do. The payment routes' `guestCount`
-(`POST /api/pay`, `/api/working-orders/:id/collect`, and
+(`POST /api/pay` and
 `/api/working-orders/:id/payments` for the payment that completes the bill) keeps an explicit null
 as no guests line, while an absent key takes the party's default (`saleReceiptFacts`,
 `apps/server/src/receipt-guests.ts`). In `apps/server/src/receipt-guests.routes.test.ts` a pair of

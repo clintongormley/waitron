@@ -209,21 +209,4 @@ describe("a printed bill", () => {
       (await tendersOfBill(venue, party.tabId)).map((row) => row.amount).sort((a, b) => a - b),
     ).toEqual([500, 2500]);
   });
-
-  it("a whole collect of a printed bill holding a part payment is still refused", async () => {
-    const bill = await printed("Red wine bottle");
-    expect((await payInCash(bill.tabId, "5.00")).status).toBe(200);
-
-    const collected = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${bill.tabId}/collect`,
-      { tender: { method: "cash", amount: "25.00" } },
-    );
-
-    expect(collected).toMatchObject({ status: 409, json: { code: "bill.payments_received" } });
-    expect(await salesOf(bill.tabId)).toEqual([{ id: bill.saleId, total: 3000, settledAt: null }]);
-    expect(await paymentRows(venue, bill.tabId)).toHaveLength(1);
-  });
 });

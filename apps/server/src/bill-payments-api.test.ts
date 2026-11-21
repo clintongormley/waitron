@@ -711,8 +711,11 @@ describe("the balance", () => {
   it("reads a bill settled in one whole payment as owing nothing, though no bill payment records it", async () => {
     const billId = await tabWith("Cake");
     expect((await request("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
-    const collected = await request("POST", `/api/working-orders/${billId}/collect`, {
-      tender: { method: "cash", amount: "18.00" },
+    const collected = await request("POST", "/api/pay", {
+      dining: "eat_in",
+      id: billId,
+      lines: [],
+      simulationOutcome: "captured",
     });
     expect(collected.status).toBe(200);
 

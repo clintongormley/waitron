@@ -81,10 +81,7 @@ import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import {
-  collectOrderOrchestration as collectOrder,
-  fireDishesAtPayment,
-} from "./testing/whole-payment-fixture.js";
+import { fireDishesAtPayment } from "./testing/whole-payment-fixture.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -2314,67 +2311,6 @@ describe("prepare & collect — zone payment timing", () => {
     expect((await asVenue((tx) => listStationQueue(tx, station))).map((g) => g.orderId)).toEqual([
       id,
     ]);
-  });
-
-  it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
-    const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-
-    // An OPEN (parked, never placed) order → `working_order.not_placed`, files nothing. `not_placed`,
-    // not `not_open`: collect is the placed → settled operation, so an open order is a placing-state
-    // error (a false "not open" label would be the §1 defect class).
-    const openId = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id: openId,
-      zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await expect(
-      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-        id: openId,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      }),
-    ).rejects.toMatchObject({
-      code: "working_order.not_placed",
-      params: { workingOrderId: openId },
-    });
-    expect(await saleCount(openId)).toBe(0);
-
-    // An ABSENT id (the undefined branch) → the same fail-closed code.
-    const missing = randomUUID();
-    await expect(
-      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-        id: missing,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      }),
-    ).rejects.toMatchObject({
-      code: "working_order.not_placed",
-      params: { workingOrderId: missing },
-    });
-
-    // A PLACED order with an UNSUPPORTED tender → `sale.unsupported_tender`, files nothing. The `as
-    // unknown` cast is how an untrusted till sends one past the widened `"cash" | "card"` type.
-    const placedId = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id: placedId,
-      zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      placedId,
-      OPERATOR,
-    );
-    await expect(
-      collectOrder({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
-        id: placedId,
-        lines: [],
-        tender: { method: "voucher" as unknown as "cash", amount: "1.50" },
-      }),
-    ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method: "voucher" } });
-    expect(await saleCount(placedId)).toBe(0);
   });
 });
 
