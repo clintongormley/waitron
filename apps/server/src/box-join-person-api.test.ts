@@ -24,6 +24,7 @@ import { startManagementSession } from "@waitron/identity";
 import type { NodeKeyPair } from "@waitron/membership";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { readOperationAuthority, type WaitronModule } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { nodeId } from "@waitron/shared";
@@ -637,6 +638,30 @@ describe("the main box's person routes for a joining box", () => {
     expect(await approve(listed.requestId, { code: listed.code })).toEqual({
       status: 202,
       body: null,
+    });
+  });
+
+  it("reserves once when a right tap is sent again after membership.write_contended", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    await holdChartNamingOnlyMainBox();
+    await withReservingModule(listed.box.hello.newNodeId, async (moduleOperation, operators) => {
+      await db.execute(
+        sql.raw(
+          "create trigger test_node_membership_contended before update on node_membership begin select raise(ignore); end",
+        ),
+      );
+      try {
+        expect(await approve(listed.requestId, { code: listed.code, moduleOperation })).toEqual(
+          refusal(503, "membership.write_contended", { attempts: 8 }),
+        );
+      } finally {
+        await db.execute(sql.raw("drop trigger test_node_membership_contended"));
+      }
+      const again = await approve(listed.requestId, { code: listed.code, moduleOperation });
+      expect(again.status, JSON.stringify(again.body)).toBe(202);
+      // This module's reserve writes no venue row, so its calls are the reservations it made.
+      expect(await db.select().from(fiscalReservations)).toEqual([]);
+      expect(operators).toEqual([approverId]);
     });
   });
 
