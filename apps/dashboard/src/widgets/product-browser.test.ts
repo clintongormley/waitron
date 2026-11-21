@@ -660,6 +660,26 @@ it("confirms an empty top-level folder preview and keeps unrelated ticks", async
   expect(count(el)).toBe("1 selected");
   expect((await nameCell(el, "bread")).closest("tr")!.querySelector("input")!.checked).toBe(true);
 });
+it("a toolbar move uses its own selection after a folder drop was cancelled", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await dragAndClick(el, "folder:d", "folder:f");
+  const drop = dialog(el)!;
+  await drop.updateComplete;
+  const closed = dialogClosed(drop);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(el.api.moveProductItems).not.toHaveBeenCalled();
+  await press(el, "move");
+  await destination(el, "f");
+  await press(el, "confirm");
+  expect(el.api.moveProductItems).toHaveBeenCalledExactlyOnceWith(
+    { productIds: ["bread"], categoryIds: [] },
+    "f",
+  );
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+});
+
 it("refuses a folder over itself or its descendants but highlights a sibling", async () => {
   const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
   await toggleCategory(el, "d");

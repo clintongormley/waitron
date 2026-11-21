@@ -6,7 +6,12 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget, closeReportsDelivered } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  closeReportsDelivered,
+  dialogClosed,
+} from "./test-helpers.js";
 import type { ProductBrowser } from "./product-browser.js";
 import "./product-browser.js";
 registerIcons(DASHBOARD_ICONS);
@@ -142,16 +147,14 @@ async function cancel(f: Fixture, route: "cancel" | "escape") {
   await f.browser.updateComplete;
 }
 
-it("cancel closes an untouched folder drop directly and leaves its selection", async () => {
+it("Escape closes an untouched folder drop directly and leaves its selection", async () => {
   const f = await fixture("move", {}, "f");
   expect(value(f)).toBe("f");
-  expect(protectedUnload()).toBe(false);
-  const closed = new Promise((resolve) =>
-    f.modal.addEventListener("wt-close", resolve, { once: true }),
-  );
-  await cancel(f, "cancel");
-  await closed;
+  expect.soft(protectedUnload()).toBe(false);
+  const closed = dialogClosed(f.modal);
+  await cancel(f, "escape");
   expect((await question(f)).open).toBe(false);
+  await closed;
   expect(f.api.moveProductItems).not.toHaveBeenCalled();
   expect(
     f.browser.shadowRoot!.querySelector("[data-test=selected-count]")!.textContent!.trim(),
