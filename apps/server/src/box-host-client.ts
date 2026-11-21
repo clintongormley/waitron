@@ -1,10 +1,10 @@
 import { createConnection } from "node:net";
+import { isReleaseVersion } from "@waitron/shared";
 import {
   formatHostRequest,
   HOST_REPLY_MAX,
   parseHostReply,
 } from "../../../scripts/box/host-protocol.mjs";
-import { isNumberedVersion, isStableVersion } from "../../../scripts/box/release-list.mjs";
 import { isUnset } from "./env-value.js";
 
 /**
@@ -215,9 +215,10 @@ export function boxHostClient(
         !Number.isFinite(Date.parse(finishedAt)) ||
         new Date(finishedAt).toISOString() !== finishedAt ||
         typeof fromVersion !== "string" ||
-        !isNumberedVersion(fromVersion) ||
+        !isReleaseVersion(fromVersion) ||
         typeof toVersion !== "string" ||
-        !isStableVersion(toVersion) ||
+        !isReleaseVersion(toVersion) ||
+        toVersion.includes("-") ||
         (status !== "upgraded" && status !== "rolled-back")
       )
         return null;

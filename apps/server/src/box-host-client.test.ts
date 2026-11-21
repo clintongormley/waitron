@@ -79,6 +79,7 @@ describe("boxHostClient().lastOfferedUpgrade", () => {
     { ok: true, result: { ...result, finishedAt: "not a time" } },
     { ok: true, result: { ...result, status: "deferred" } },
     { ok: true, result: { ...result, toVersion: "main" } },
+    { ok: true, result: { ...result, toVersion: "1.2.3-rc.1" } },
     { ok: true, result: { ...result, fromVersion: 12 } },
     { ok: true, result: { ...result, attemptId: "" } },
   ])("omits an absent or invalid result %j", async (reply) => {
