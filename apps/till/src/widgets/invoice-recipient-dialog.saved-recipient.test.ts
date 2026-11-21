@@ -26,6 +26,7 @@ class SavedRecipientApp extends LitElement {
   readonly leave = new LeaveController(this);
   recipient?: InvoiceRecipientDetail["recipient"] | null = passport;
   saved?: InvoiceRecipientDetail["delivery"] = a4;
+  staged = false;
   remembered?: RememberedAddress;
   confirmed: (RememberedAddress | undefined)[] = [];
   options: InvoiceDeliveryOptions = {
@@ -39,6 +40,7 @@ class SavedRecipientApp extends LitElement {
     return html`<till-invoice-recipient-dialog
         .deliveryOptions=${this.options}
         .savedDelivery=${this.saved}
+        .staged=${this.staged}
         .savedRecipient=${this.recipient}
         .rememberedAddress=${this.remembered}
         @invoice-recipient-cancel=${() => this.closes++}
@@ -135,6 +137,30 @@ it("reads a saved recipient without an identifier type as a tax number", async (
     legalName: "Acme SL",
     address: "Calle Mayor 1",
   });
+});
+
+const savedFields = {
+  identifierType: "passport",
+  identifierCountryCode: "FR",
+  taxId: "X1234567",
+  legalName: "Ana García",
+  address: "Calle Mayor 1, 2º B",
+  postalCode: "28013",
+  locality: "Madrid",
+  province: "Madrid",
+  countryCode: "ES",
+};
+
+it("opens a staged invoice with a saved recipient and no saved delivery on receipt paper, quiet", async () => {
+  const { form } = await mount({ staged: true, saved: undefined });
+  expect(values(form)).toEqual({ ...savedFields, delivery: "receipt" });
+  expect(await saveState(form)).toEqual({ variant: "secondary", disabled: true });
+});
+
+it("opens an unstaged invoice with a saved recipient and no saved delivery on A4, quiet", async () => {
+  const { form } = await mount({ staged: false, saved: undefined });
+  expect(values(form)).toEqual({ ...savedFields, delivery: "a4" });
+  expect(await saveState(form)).toEqual({ variant: "secondary", disabled: true });
 });
 
 it("keeps Use full invoice quiet and disabled until a field changes", async () => {
