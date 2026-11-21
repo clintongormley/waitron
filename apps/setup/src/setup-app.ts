@@ -375,6 +375,8 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
   "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
   "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
+  "server.unreleased_build": "shell.adopt.unreleased_build",
+  "mirror.environment_mismatch": "shell.adopt.environment_mismatch",
 };
 
 const ADOPT_NO_CODE_MESSAGES: Record<string, StringKey> = {
@@ -397,7 +399,18 @@ function adoptErrorWords(
   const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
   if (finishKey !== undefined) return say(finishKey);
   if (code === "password.throttled") return describeThrottle(params);
-  const { primaryAt, standbyAt } = params ?? {};
+  const { primaryAt, standbyAt, variable } = params ?? {};
+  if (
+    (code === "server.config_missing" || code === "server.config_invalid") &&
+    typeof variable === "string"
+  )
+    return () =>
+      format(
+        code === "server.config_missing"
+          ? "shell.adopt.setting_missing"
+          : "shell.adopt.setting_unusable",
+        { variable },
+      );
   if (
     code === "mirror.clocks_apart" &&
     typeof primaryAt === "string" &&

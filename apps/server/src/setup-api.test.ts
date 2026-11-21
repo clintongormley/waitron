@@ -3180,7 +3180,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       try {
         const operations = createSetupOperationStore(dir);
         const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
-          await hooks.beforeFirstWrite();
+          await hooks.beforeFirstWrite("production");
           throw new AppError("mirror.bundle_fetch_failed", {});
         });
         const app = new Hono();
@@ -3191,6 +3191,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         await tick();
         expect(requestRestart).not.toHaveBeenCalled();
         expect((await operations.read())?.phase).toBe("venue_committed");
+        // What the next start reads when WAITRON_ENV is unset (`withUnfinishedJoinEnvironment`).
+        expect((await operations.read())?.data.environment).toBe("production");
 
         const other = await postAdopt(app, {
           ...adoptBody(),
@@ -3211,7 +3213,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         let calls = 0;
         const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
           calls += 1;
-          await hooks.beforeFirstWrite();
+          await hooks.beforeFirstWrite("preproduction");
           if (calls === 1) throw new AppError("mirror.bundle_fetch_failed", {});
           return { breakGlassSecret: BREAK_GLASS_SECRET };
         });
@@ -3246,7 +3248,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
       try {
         const operations = createSetupOperationStore(dir);
         const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
-          await hooks.beforeFirstWrite();
+          await hooks.beforeFirstWrite("preproduction");
           throw new AppError("mirror.bundle_fetch_failed", {});
         });
         const app = new Hono();
@@ -3280,7 +3282,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         const operations = createSetupOperationStore(dir);
         const adopt = vi.fn(async (req: AdoptRequest, hooks: AdoptHooks) => {
           if (req.credential.totp === undefined) throw new AppError("totp.required", {});
-          await hooks.beforeFirstWrite();
+          await hooks.beforeFirstWrite("preproduction");
           return { breakGlassSecret: BREAK_GLASS_SECRET };
         });
         const app = new Hono();
@@ -4299,7 +4301,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     requestRestart: ReturnType<typeof vi.fn>;
   }> {
     const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
-      await hooks.beforeFirstWrite();
+      await hooks.beforeFirstWrite("preproduction");
       throw new AppError("mirror.bundle_fetch_failed", {});
     });
     const stageReset = vi.fn(async () => {});

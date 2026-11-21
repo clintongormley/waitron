@@ -79,6 +79,7 @@ describe("loadConfig", () => {
     expect(config).toEqual({
       // Production numbering can never be reused, so production must be typed out.
       environment: "preproduction",
+      configuredEnvironment: null,
       staff: { host: "127.0.0.1", port: 8443 },
       // `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
@@ -670,6 +671,28 @@ describe("WAITRON_ENV=dev", () => {
   });
   it("an unknown value still throws server.config_invalid", () => {
     expect(() => deploymentEnvironment({ WAITRON_ENV: "staging" })).toThrow();
+  });
+});
+
+describe("configuredEnvironment", () => {
+  it.each([
+    [undefined, null],
+    ["", null],
+    ["dev", "preproduction"],
+    ["preproduction", "preproduction"],
+    ["production", "production"],
+  ] as const)("is %j's environment, or null when it is unset or empty", (raw, expected) => {
+    const config = loadConfig(
+      {
+        ...MIN_ENV,
+        WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+        ...(raw === undefined ? {} : { WAITRON_ENV: raw }),
+      },
+      ROOT,
+      STATE_ROOT,
+    );
+    expect(config.configuredEnvironment).toBe(expected);
   });
 });
 

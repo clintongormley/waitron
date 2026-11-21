@@ -237,7 +237,9 @@ import { createHealthState, healthApp, type HealthState } from "./health.js";
 import { abandonMailClaims, mailSendJob } from "./mail-sender.js";
 import { securityChangeMail } from "./security-change-mail.js";
 import { emailChangedMail } from "./email-changed-mail.js";
+import { isUnset } from "./env-value.js";
 import { roleMembershipMail } from "./role-membership-mail.js";
+import { withUnfinishedJoinEnvironment } from "./unfinished-join.js";
 import { accountActionMail } from "./account-mail.js";
 import { reconcilePassFor, reconcilerAsDuty, reconciliationMoneyGates } from "./reconcile-duty.js";
 import { drainJob, reconcileJob } from "./fiscal-jobs.js";
@@ -1146,13 +1148,14 @@ async function refuseLostNodeState(
  * it, so it must leave the server able to finish closing.
  */
 async function bootServer(
-  env: Record<string, string | undefined>,
+  startEnv: Record<string, string | undefined>,
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
   beforeClose: Array<() => Promise<void>>,
   announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
+  const env = await withUnfinishedJoinEnvironment(startEnv, DEFAULT_STATE_ROOT);
   const now = () => new Date();
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
     readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
@@ -1873,8 +1876,16 @@ async function bootServer(
                 }),
               advertisedOrigin: config.managementOrigin,
               spareStorePort: config.spareStorePort,
-              environment: config.environment,
+              environment: config.configuredEnvironment,
               persistTrading,
+              assertStartsWith: (trading) => {
+                // Merged as `loadBoxEnv` merges `trading.env`: a value already set wins.
+                const next = { ...env };
+                if (isUnset(next.WAITRON_NODE_ID)) next.WAITRON_NODE_ID = trading.nodeId;
+                if (isUnset(next.WAITRON_ENV)) next.WAITRON_ENV = trading.environment;
+                const nextConfig = loadConfig(next, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+                refuseUnreleasedBuild(nextConfig.environment, seams.builtRelease ?? builtRelease());
+              },
               persistModuleConfig: async (c) => {
                 await writeModuleConfig(db, c, null);
               },

@@ -924,7 +924,10 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
-  preproduction plus `config.devMode`.
+  preproduction plus `config.devMode`. A box joining as a spare with it unset takes the main box's
+  environment; set, the environment it names (`dev` names preproduction) must match or the join is
+  refused (owner, 2026-11-21). Guard: `apps/server/src/spare-join-environment.e2e.test.ts`, weaker
+  than the rule: named cases only.
 - **A production start on a bundle built without a release version refuses
   `server.unreleased_build`; a start from source is not refused.** Guards:
   `apps/server/src/release-check.test.ts` and `apps/server/src/unreleased-build.e2e.test.ts`,

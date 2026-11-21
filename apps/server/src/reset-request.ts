@@ -19,7 +19,7 @@ import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
 import { joinedAnotherBox } from "./box-tls-install.js";
 import type { Logger } from "./logger.js";
-import { createSetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, isUnfinishedAdopt } from "./setup-operation.js";
 
 const MARKER = RESET_REQUEST_FILE;
 
@@ -59,13 +59,7 @@ async function recordMatches(stateDir: string, operationId: string): Promise<boo
   const record = await createSetupOperationStore(stateDir)
     .read()
     .catch(() => null);
-  return (
-    record !== null &&
-    record.kind === "adopt" &&
-    record.phase !== "started" &&
-    record.phase !== "complete" &&
-    record.id === operationId
-  );
+  return isUnfinishedAdopt(record) && record.id === operationId;
 }
 
 async function holdsVenue(venueDir: string): Promise<boolean> {

@@ -168,7 +168,9 @@ Before `applyMigrations` runs — before any write at all — `startServer` open
 on its own short-lived handle and compares this host's `WAITRON_ENV` against the `deployment`
 table's own stamp, throwing `deployment.environment_mismatch` (see "Running it" above) rather than
 letting a host boot against another environment's database. That probe is closed again before
-migrations start.
+migrations start. With `WAITRON_ENV` unset, a box whose join to another box stopped after its first
+write compares the environment that join recorded instead (`withUnfinishedJoinEnvironment`,
+`apps/server/src/unfinished-join.ts`), so it starts in setup, where the join can be reset.
 
 **What actually writes the stamp.** Three paths do, and all call the same programmatic
 `stampDeployment` (`@waitron/db`) rather than writing the row themselves. The browser setup wizard's

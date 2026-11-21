@@ -27,6 +27,8 @@ export interface SchedulerConfig {
 export interface ServerConfig {
   installationOrigin?: "usb";
   environment: DeploymentEnvironment;
+  /** The environment `WAITRON_ENV` names, or `null` when it is unset or empty. */
+  configuredEnvironment: DeploymentEnvironment | null;
   /** `WAITRON_ENV=dev` only ({@link isDevMode}); `environment` maps `dev` to `preproduction`. */
   devMode: boolean;
   /** Setup choice used by the running box. Production implies Live. */
@@ -474,6 +476,7 @@ export function loadConfig(
     ...(staff === undefined ? {} : { staff }),
     ...(installationOrigin === "usb" ? { installationOrigin } : {}),
     environment,
+    configuredEnvironment: isUnset(env.WAITRON_ENV) ? null : environment,
     devMode: isDevMode(env),
     onboardingIntent:
       onboardingIntent(env, environment) ?? (environment === "production" ? "live" : undefined),

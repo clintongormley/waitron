@@ -105,6 +105,14 @@ export const shellEn = {
     "This server already holds saved keys for other services, and joining would make them unreadable for good. Nothing was changed. Starting again on this server would set those keys aside or delete them, with the rest of its restaurant files; to keep them, leave this server as it is.",
   "shell.adopt.vault_key_differs":
     "This server's own settings give a WAITRON_CREDENTIALS_KEY setting a value that is not the primary server's, so after joining it could not open its saved keys. Nothing was changed. Remove the WAITRON_CREDENTIALS_KEY settings from this server, or set them to the primary server's, then restart it and join again.",
+  "shell.adopt.setting_missing":
+    "This server's own settings leave out {variable}, which it needs to start after joining this primary server. Nothing was changed. Set {variable} on this server, then restart it and join again.",
+  "shell.adopt.setting_unusable":
+    "This server's own {variable} setting has a value it could not start with after joining this primary server. Nothing was changed. Correct {variable} on this server, then restart it and join again.",
+  "shell.adopt.unreleased_build":
+    "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary server is for real sales. Nothing was changed. Install a released version on this server, then join again.",
+  "shell.adopt.environment_mismatch":
+    "This server's WAITRON_ENV setting names a different mode from the primary server's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this server, or set it to the primary server's mode, then restart it and join again.",
   "shell.adopt.primary_unconfirmed":
     "The primary server's certificate wasn't compared, so nothing was sent. This is a fault in Waitron. Check the address and compare the certificate again.",
   "shell.adopt.login_failed":
@@ -347,6 +355,14 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Este servidor ya guarda claves de otros servicios y, al unirlo, dejarían de poder leerse para siempre. No se ha cambiado nada. Empezar de nuevo en este servidor apartaría o borraría esas claves junto con el resto de sus archivos del restaurante; para conservarlas, deja este servidor como está.",
   "shell.adopt.vault_key_differs":
     "La configuración propia de este servidor da a un ajuste WAITRON_CREDENTIALS_KEY un valor que no es el del servidor principal, así que, tras unirse, no podría abrir sus claves guardadas. No se ha cambiado nada. Quita los ajustes WAITRON_CREDENTIALS_KEY de este servidor o pon los del servidor principal; después reinícialo y vuelve a unirlo.",
+  "shell.adopt.setting_missing":
+    "La configuración propia de este servidor no incluye {variable}, que necesita para arrancar después de unirse a este servidor principal. No se ha cambiado nada. Pon {variable} en este servidor; después reinícialo y vuelve a unirlo.",
+  "shell.adopt.setting_unusable":
+    "El ajuste {variable} de este servidor tiene un valor con el que no podría arrancar después de unirse a este servidor principal. No se ha cambiado nada. Corrige {variable} en este servidor; después reinícialo y vuelve a unirlo.",
+  "shell.adopt.unreleased_build":
+    "Esta copia de Waitron no es una versión publicada, así que no puede funcionar para ventas reales, y este servidor principal es para ventas reales. No se ha cambiado nada. Instala una versión publicada en este servidor y vuelve a unirlo.",
+  "shell.adopt.environment_mismatch":
+    "El ajuste WAITRON_ENV de este servidor indica un modo distinto del del servidor principal: uno es para ventas reales y el otro para pruebas. No se ha cambiado nada. Quita WAITRON_ENV de este servidor o ponle el modo del servidor principal; después reinícialo y vuelve a unirlo.",
   "shell.adopt.primary_unconfirmed":
     "No se ha comparado el certificado del servidor principal, así que no se ha enviado nada. Es un fallo de Waitron. Revisa la dirección y vuelve a comparar el certificado.",
   "shell.adopt.login_failed":

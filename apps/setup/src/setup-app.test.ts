@@ -2154,6 +2154,71 @@ describe("setup-app", () => {
     },
   );
 
+  it.each([
+    [
+      "server.config_missing",
+      { variable: "WAITRON_MANAGEMENT_RP_ID" },
+      "en-GB",
+      "This server's own settings leave out WAITRON_MANAGEMENT_RP_ID, which it needs to start after joining this primary server. Nothing was changed. Set WAITRON_MANAGEMENT_RP_ID on this server, then restart it and join again.",
+    ],
+    [
+      "server.config_missing",
+      { variable: "WAITRON_MANAGEMENT_RP_ID" },
+      "es-ES",
+      "La configuración propia de este servidor no incluye WAITRON_MANAGEMENT_RP_ID, que necesita para arrancar después de unirse a este servidor principal. No se ha cambiado nada. Pon WAITRON_MANAGEMENT_RP_ID en este servidor; después reinícialo y vuelve a unirlo.",
+    ],
+    [
+      "server.config_invalid",
+      { variable: "WAITRON_MANAGEMENT_ORIGIN", reason: "not_an_origin" },
+      "en-GB",
+      "This server's own WAITRON_MANAGEMENT_ORIGIN setting has a value it could not start with after joining this primary server. Nothing was changed. Correct WAITRON_MANAGEMENT_ORIGIN on this server, then restart it and join again.",
+    ],
+    [
+      "server.config_invalid",
+      { variable: "WAITRON_MANAGEMENT_ORIGIN", reason: "not_an_origin" },
+      "es-ES",
+      "El ajuste WAITRON_MANAGEMENT_ORIGIN de este servidor tiene un valor con el que no podría arrancar después de unirse a este servidor principal. No se ha cambiado nada. Corrige WAITRON_MANAGEMENT_ORIGIN en este servidor; después reinícialo y vuelve a unirlo.",
+    ],
+    [
+      "server.unreleased_build",
+      {},
+      "en-GB",
+      "This copy of Waitron is not a released version, so it cannot run for real sales, and this primary server is for real sales. Nothing was changed. Install a released version on this server, then join again.",
+    ],
+    [
+      "server.unreleased_build",
+      {},
+      "es-ES",
+      "Esta copia de Waitron no es una versión publicada, así que no puede funcionar para ventas reales, y este servidor principal es para ventas reales. No se ha cambiado nada. Instala una versión publicada en este servidor y vuelve a unirlo.",
+    ],
+    [
+      "mirror.environment_mismatch",
+      { expected: "preproduction", actual: "production" },
+      "en-GB",
+      "This server's WAITRON_ENV setting names a different mode from the primary server's: one is for real sales, the other for testing. Nothing was changed. Remove WAITRON_ENV from this server, or set it to the primary server's mode, then restart it and join again.",
+    ],
+    [
+      "mirror.environment_mismatch",
+      { expected: "preproduction", actual: "production" },
+      "es-ES",
+      "El ajuste WAITRON_ENV de este servidor indica un modo distinto del del servidor principal: uno es para ventas reales y el otro para pruebas. No se ha cambiado nada. Quita WAITRON_ENV de este servidor o ponle el modo del servidor principal; después reinícialo y vuelve a unirlo.",
+    ],
+  ] as const)(
+    "says a server whose own settings it could not start with after joining cannot join (%s, %j, %s)",
+    async (code, params, locale, sentence) => {
+      try {
+        const adopt = vi.fn().mockRejectedValue({ code, params, status: 409 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el);
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
   describe("a join the primary server refuses", () => {
     const refusedJoin = async (
       code: string,

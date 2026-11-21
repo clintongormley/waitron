@@ -64,11 +64,11 @@ import { synchronisedBoxHost } from "./synchronised-box-host.js";
 import { offerProducts } from "./zone-offers.js";
 
 const RECOVERY_KEY = "spare-join-e2e-recovery-key";
-const MODULES_M = { modules: { "fiscal-verifactu": false } };
+export const MODULES_M = { modules: { "fiscal-verifactu": false } };
 const LOCALE_M = "en-GB";
-const ADMIN = { email: "owner@example.test", password: "dashPass123" };
+export const ADMIN = { email: "owner@example.test", password: "dashPass123" };
 /** A taxpayer whose territory selects `fiscal-none`, the one fiscal module `MODULES_M` leaves on. */
-const VENUE_M: VenueRequest = {
+export const VENUE_M: VenueRequest = {
   country: "GB",
   taxId: "GB100000001",
   legalName: "Spare Join Ltd",
