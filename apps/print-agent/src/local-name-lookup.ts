@@ -1,7 +1,7 @@
 import dgram from "node:dgram";
 import dns from "node:dns";
 import type { LookupFunction } from "node:net";
-import { buildAddressQuery, parseAddressAnswer } from "./network.js";
+import { buildAddressQuery, parseAddressAnswers } from "./network.js";
 
 const MDNS_PORT = 5353;
 const MDNS_GROUP = "224.0.0.251";
@@ -39,7 +39,8 @@ function notFound(hostname: string): NodeJS.ErrnoException {
 
 /**
  * A `lookup` for a connection: a `.local` name is asked on the local network by multicast DNS and
- * the first matching IPv4 answer wins; any other name goes to `fallback`. Neither the agent's
+ * the first reply naming it answers, with every IPv4 address that reply gives for it (the box's
+ * responder can give several in one reply); any other name goes to `fallback`. Neither the agent's
  * container nor the box's system lookup resolves a three-part `.local` name.
  *
  * The socket listens on 5353 in the group because the box's server (`multicast-dns`) answers to
@@ -65,7 +66,7 @@ export function createLocalNameLookup(deps: LocalNameLookupDeps = {}): LookupFun
     const question = buildAddressQuery(hostname);
     let settled = false;
     const timers: NodeJS.Timeout[] = [];
-    const finish = (address: string | undefined): void => {
+    const finish = (addresses: string[]): void => {
       if (settled) return;
       settled = true;
       for (const timer of timers) clearTimeout(timer);
@@ -74,25 +75,29 @@ export function createLocalNameLookup(deps: LocalNameLookupDeps = {}): LookupFun
       } catch {
         /* already closed */
       }
-      if (address === undefined) callback(notFound(hostname), "");
-      else if (options.all === true) callback(null, [{ address, family: 4 }]);
-      else callback(null, address, 4);
+      if (addresses[0] === undefined) callback(notFound(hostname), "");
+      else if (options.all === true)
+        callback(
+          null,
+          addresses.map((address) => ({ address, family: 4 })),
+        );
+      else callback(null, addresses[0], 4);
     };
     const askNetwork = (): void => {
       socket.send(question, MDNS_PORT, MDNS_GROUP);
     };
-    timers.push(setTimeout(() => finish(undefined), timeoutMs));
+    timers.push(setTimeout(() => finish([]), timeoutMs));
     socket.on("message", (msg) => {
-      const address = parseAddressAnswer(msg, hostname);
-      if (address !== undefined) finish(address);
+      const addresses = parseAddressAnswers(msg, hostname);
+      if (addresses.length > 0) finish(addresses);
     });
-    socket.on("error", () => finish(undefined));
+    socket.on("error", () => finish([]));
     socket.bind(MDNS_PORT, () => {
       if (settled) return;
       try {
         socket.addMembership(MDNS_GROUP);
       } catch {
-        finish(undefined);
+        finish([]);
         return;
       }
       askNetwork();

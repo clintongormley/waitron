@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import net from "node:net";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import type { LookupFunction } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +99,61 @@ describe("createLocalNameLookup", () => {
     await sentQuestion(socket);
     socket.fromGroup(reply([{ name: "box-1.local", rdata: [10, 0, 0, 7] }]));
     expect(await answer).toEqual({ error: null, address: "10.0.0.7", family: 4 });
+  });
+
+  it("answers every address the reply gives for the name, in its order", async () => {
+    const twoAddresses = reply([
+      { name: "box-1.local", rdata: [192, 168, 1, 20] },
+      { name: "printer.local", rdata: [10, 0, 0, 1] },
+      { name: "box-1.local", rdata: [10, 0, 0, 21] },
+    ]);
+    const listSocket = new FakeSocket();
+    const list = ask(createLocalNameLookup({ openSocket: () => listSocket }), "box-1.local", {
+      all: true,
+    });
+    await sentQuestion(listSocket);
+    listSocket.fromGroup(twoAddresses);
+    expect((await list).address).toEqual([
+      { address: "192.168.1.20", family: 4 },
+      { address: "10.0.0.21", family: 4 },
+    ]);
+    const oneSocket = new FakeSocket();
+    const one = ask(createLocalNameLookup({ openSocket: () => oneSocket }), "box-1.local", {});
+    await sentQuestion(oneSocket);
+    oneSocket.fromGroup(twoAddresses);
+    expect(await one).toEqual({ error: null, address: "192.168.1.20", family: 4 });
+  });
+
+  it("lets a connection reach the box at its second address when the first does not answer", async () => {
+    const server = net.createServer((conn) => conn.end());
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as net.AddressInfo;
+    const socket = new FakeSocket();
+    // 192.0.2.1 is a documentation address nothing answers on.
+    const sent = socket.send.bind(socket);
+    socket.send = (msg, toPort, address) => {
+      sent(msg, toPort, address);
+      socket.fromGroup(
+        reply([
+          { name: "box-1.local", rdata: [192, 0, 2, 1] },
+          { name: "box-1.local", rdata: [127, 0, 0, 1] },
+        ]),
+      );
+    };
+    const lookup = createLocalNameLookup({ openSocket: () => socket });
+    try {
+      const reached = await new Promise<string | undefined>((resolve, reject) => {
+        const conn = net.connect({ host: "box-1.local", port, lookup, autoSelectFamily: true });
+        conn.once("connect", () => {
+          resolve(conn.remoteAddress);
+          conn.destroy();
+        });
+        conn.once("error", reject);
+      });
+      expect(reached).toBe("127.0.0.1");
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it("matches the name whatever its case and with a trailing dot", async () => {

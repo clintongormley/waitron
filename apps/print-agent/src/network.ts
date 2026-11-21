@@ -114,24 +114,27 @@ export function buildAddressQuery(name: string): Buffer {
   return Buffer.concat(parts);
 }
 
-/** The first IPv4 address `packet` gives for `name` in any section, or undefined. */
-export function parseAddressAnswer(packet: Buffer, name: string): string | undefined {
+/** Every IPv4 address `packet` gives for `name`, in any section and in the packet's order; none
+ * when the packet is broken anywhere. */
+export function parseAddressAnswers(packet: Buffer, name: string): string[] {
   try {
-    if (packet.length < 12) return undefined;
+    if (packet.length < 12) return [];
     const r: Reader = { buf: packet, offset: 12 };
     const questions = packet.readUInt16BE(4);
     for (let i = 0; i < questions; i++) readQuestion(r);
     const total = packet.readUInt16BE(6) + packet.readUInt16BE(8) + packet.readUInt16BE(10);
     const wanted = key(name);
+    const addresses: string[] = [];
     for (let i = 0; i < total; i++) {
       const rec = readRecord(r);
       if (rec.type === TYPE_A && rec.rdata.length === 4 && key(rec.name) === wanted) {
-        return rec.rdata.join(".");
+        const address = rec.rdata.join(".");
+        if (!addresses.includes(address)) addresses.push(address);
       }
     }
-    return undefined;
+    return addresses;
   } catch {
-    return undefined;
+    return [];
   }
 }
 
