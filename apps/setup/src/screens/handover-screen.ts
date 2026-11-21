@@ -55,6 +55,14 @@ const HELD_SIGN_IN_REFUSALS = new Set([
   "passkey.verification_failed",
 ]);
 
+/** Refusals the person answers by signing in again, so the folded sign-in opens. */
+const SIGN_IN_REFUSAL_KEYS = new Set<StringKey>([
+  "handover.emergency.passkey_failed",
+  "handover.emergency.code_expired",
+  "handover.emergency.sign_in_failed",
+  "handover.emergency.throttled",
+  "handover.emergency.permission",
+]);
 /** Refusals a fresh passkey answer can lift: no proof cookie, a lapsed one, or a used challenge. */
 const PROOF_REFUSALS = new Set(["password.invalid", "passkey.challenge_expired"]);
 class PasskeyNotUsed extends Error {}
@@ -106,6 +114,8 @@ export class SetupHandoverScreen extends LitElement {
   /** Read once: the page later replaces its address with the operation's. */
   @property({ attribute: false }) pageUrl = location.href;
   @state() private copyPreview?: EmergencyHandoverPreview;
+  /** A checked copy folds the sign-in and backup choice away; later steps still send the sign-in. */
+  @state() private signInOpen = true;
   @state() private backup?: File;
   @state() private backupKey = "";
   @state() private needsBackupKey = false;
@@ -130,9 +140,11 @@ export class SetupHandoverScreen extends LitElement {
     noParallelRecovery: false,
     missingTailAccepted: false,
   };
-  @state() private refusalLink = "";
+  @state() private refusalLink?: { href: string; label: StringKey };
   @state() private copyRefused = false;
   @state() private declarationSaved = false;
+  /** From the declaration this page saved; a resumed one carries its time in the preview. */
+  @state() private declaredAtMs?: number;
   /** The device's own check of the main server, before the switch is offered (4d plan, D5). */
   @state() private mainCheck: "checking" | { serversUrl: string } | "clear" = "clear";
   #mainCheckController?: AbortController;
@@ -158,6 +170,28 @@ export class SetupHandoverScreen extends LitElement {
   }
   get #declared(): boolean {
     return this.declarationSaved || this.status?.scenario === "emergency";
+  }
+  /** Whether the backup choice is drawn with the sign-in: no other copy can be chosen otherwise. */
+  get #offersOtherCopy(): boolean {
+    return this.#isEmergency && !this.#declared && !this.copyPreview?.operation;
+  }
+  /** The button that opened it is gone, so focus moves to the first field it reveals. */
+  async #openSignIn(): Promise<void> {
+    this.signInOpen = true;
+    await this.updateComplete;
+    const root = this.shadowRoot!;
+    (
+      root.querySelector<HTMLElement>('[name="handover-email"]') ??
+      root.querySelector<HTMLElement>('[name="handover-sign-in-method"]')
+    )?.focus();
+  }
+  get #signInShown(): boolean {
+    return !this.copyPreview || this.signInOpen || (this.attempted && !this.#valid());
+  }
+  #leaveLink() {
+    return html`<a href=${this.#leaveHref}
+      >${t(this.#declared ? "handover.emergency.leave_saved" : "handover.emergency.leave")}</a
+    >`;
   }
   @state() private status?: HandoverStatus;
   @state() private readFailed = false;
@@ -227,6 +261,7 @@ export class SetupHandoverScreen extends LitElement {
     this.#signInChecked = false;
     this.copyPreview = undefined;
     this.declarationSaved = false;
+    this.declaredAtMs = undefined;
     this.reason = "";
     this.statements = {
       sourceSwitchedOff: false,
@@ -244,6 +279,7 @@ export class SetupHandoverScreen extends LitElement {
         this.restarting = false;
         this.#resetSelection();
         this.password = this.code = "";
+        this.attempted = false;
       }
       this.readFailed = false;
     } catch {
@@ -306,7 +342,7 @@ export class SetupHandoverScreen extends LitElement {
           >${t("handover.emergency.main_check_again")}</wt-button
         >
       </wt-form-actions>
-      <p><a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>`;
+      <p>${this.#leaveLink()}</p>`;
   }
   #resetSelection(): void {
     this.entry?.clear();
@@ -433,6 +469,7 @@ export class SetupHandoverScreen extends LitElement {
       this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
+      this.attempted = false;
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
@@ -468,18 +505,34 @@ export class SetupHandoverScreen extends LitElement {
       params?: { operationId?: string; sourceServersUrl?: string; reason?: string; min?: number };
     } | null;
     const code = error?.code;
+    const serversUrl =
+      code === "handover.source_still_answering"
+        ? (error?.params?.sourceServersUrl ?? this.copyPreview?.sourceServersUrl)
+        : undefined;
     this.refusalLink =
       typeof error?.params?.operationId === "string"
-        ? `/handover/${encodeURIComponent(error.params.operationId)}`
-        : code === "handover.source_still_answering"
-          ? (error?.params?.sourceServersUrl ?? this.copyPreview?.sourceServersUrl ?? "")
-          : "";
+        ? {
+            href: `/handover/${encodeURIComponent(error.params.operationId)}`,
+            label: "handover.emergency.progress",
+          }
+        : serversUrl
+          ? { href: serversUrl, label: "handover.emergency.servers" }
+          : undefined;
     this.copyRefused = [
       "handover.copy_damaged",
       "handover.chain_broken",
       "handover.copy_check_failed",
       "handover.copy_mismatch",
     ].includes(code ?? "");
+    const key = this.#refusalKey(code, error, cause);
+    if (SIGN_IN_REFUSAL_KEYS.has(key)) this.signInOpen = true;
+    return t(key);
+  }
+  #refusalKey(
+    code: string | undefined,
+    error: { params?: { reason?: string } } | null,
+    cause: unknown,
+  ): StringKey {
     if (
       cause instanceof PasskeyNotUsed ||
       (this.usePasskey &&
@@ -487,44 +540,46 @@ export class SetupHandoverScreen extends LitElement {
           code ?? "",
         ))
     )
-      return t("handover.emergency.passkey_failed");
+      return "handover.emergency.passkey_failed";
     if (code === "password.invalid" && this.code && this.#signInChecked)
-      return t("handover.emergency.code_expired");
+      return "handover.emergency.code_expired";
     if (code === "password.invalid" || code === "totp.required")
-      return t("handover.emergency.sign_in_failed");
-    if (code === "password.throttled") return t("handover.emergency.throttled");
-    if (code === "node.operation_page_required") return t("handover.emergency.connection");
-    if (code === "authorization.not_permitted") return t("handover.emergency.permission");
-    if (code === "handover.source_still_answering") return t("handover.emergency.source_answered");
-    if (code === "handover.controlled_unresolved") return t("handover.emergency.controlled");
-    if (code === "handover.copy_predates_destination")
-      return t("handover.emergency.backup_too_old");
-    if (code === "restore.archive_resource_limit") return t("shell.restore.archive_resource_limit");
+      return "handover.emergency.sign_in_failed";
+    if (code === "password.throttled") return "handover.emergency.throttled";
+    if (code === "node.operation_page_required") return "handover.emergency.connection";
+    if (code === "authorization.not_permitted") return "handover.emergency.permission";
+    if (code === "handover.source_still_answering") return "handover.emergency.source_answered";
+    if (code === "handover.controlled_unresolved") return "handover.emergency.controlled";
+    if (code === "handover.copy_predates_destination") return "handover.emergency.backup_too_old";
+    if (code === "restore.archive_resource_limit") return "shell.restore.archive_resource_limit";
     if (code === "restore.manifest_invalid")
-      return t(
-        error?.params?.reason === "unsupported"
-          ? "shell.restore.manifest_unsupported"
-          : "shell.restore.manifest_invalid",
-      );
-    if (code === "handover.backup_key_missing") return t("handover.emergency.backup_key_missing");
+      return error?.params?.reason === "unsupported"
+        ? "shell.restore.manifest_unsupported"
+        : "shell.restore.manifest_invalid";
+    if (code === "handover.backup_key_missing") return "handover.emergency.backup_key_missing";
     if (code === "backup.new_recovery_key_too_short")
-      return t("handover.emergency.backup_key_too_short");
+      return "handover.emergency.backup_key_too_short";
     if (
       ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
         code ?? "",
       )
     )
-      return t("handover.emergency.backup_invalid");
-    if (this.copyRefused) return t("handover.emergency.copy_failed");
+      return "handover.emergency.backup_invalid";
+    if (this.copyRefused)
+      return this.#declared
+        ? "handover.emergency.copy_failed"
+        : this.#offersOtherCopy
+          ? "handover.emergency.copy_unchecked"
+          : "handover.emergency.copy_unchecked_only";
     if (
       ["node.read_only", "handover.source_no_longer_main", "handover.step_out_of_order"].includes(
         code ?? "",
       )
     )
-      return t("handover.emergency.changed");
+      return "handover.emergency.changed";
     if (code === "handover.source_not_established" || code === "handover.peer_unknown")
-      return t("handover.emergency.trust");
-    return t("handover.emergency.failed");
+      return "handover.emergency.trust";
+    return "handover.emergency.failed";
   }
   async #resume(operationId: string): Promise<void> {
     const controller = this.#controller;
@@ -543,6 +598,7 @@ export class SetupHandoverScreen extends LitElement {
       if (activated(status) || closed(status)) {
         this.#resetSelection();
         this.password = this.code = "";
+        this.attempted = false;
       }
       this.readFailed = false;
     } catch {
@@ -558,9 +614,10 @@ export class SetupHandoverScreen extends LitElement {
   }
   async #showPreview(preview: EmergencyHandoverPreview): Promise<boolean> {
     this.copyPreview = preview;
+    this.signInOpen = false;
     this.#signInChecked = true;
     this.copyRefused = false;
-    this.refusalLink = "";
+    this.refusalLink = undefined;
     if (preview.operation !== null && preview.operation.reason !== null) {
       this.reason = preview.operation.reason;
       await this.#resume(preview.operation.operationId);
@@ -620,8 +677,10 @@ export class SetupHandoverScreen extends LitElement {
       if (refusal === undefined) {
         this.actionError = this.#emergencyError(cause);
         // A retry while catching up resends the passkey answer, whose challenge lasts two minutes.
-        if (!unlock && code === "passkey.challenge_expired")
+        if (!unlock && code === "passkey.challenge_expired") {
           this.actionError = t("handover.emergency.passkey_lapsed");
+          this.signInOpen = true;
+        }
       } else {
         this.actionError = t(refusal);
         this.heldWaiting = true;
@@ -787,7 +846,11 @@ export class SetupHandoverScreen extends LitElement {
         },
       };
       const declaration = this.#pendingDeclaration;
-      await this.#step((signIn) => this.api.declareEmergencyHandover({ ...declaration, signIn }));
+      const answer = await this.#step((signIn) =>
+        this.api.declareEmergencyHandover({ ...declaration, signIn }),
+      );
+      this.declaredAtMs = answer.declaration.body.declaredAtMs;
+      this.signInOpen = false;
       await this.#resume(this.#pendingDeclaration.operationId);
       if (this.isConnected) this.#prepareClock();
     } catch (cause) {
@@ -838,6 +901,20 @@ export class SetupHandoverScreen extends LitElement {
       }
     </p>`;
   }
+  /** What the copy holds, and for a copy from the main box, when this spare joined it. */
+  #copyLines(preview: EmergencyHandoverPreview) {
+    if (preview.copy.source === "mirror-copy")
+      return html`${this.#joinedLine(preview)}${this.#activityLine(preview.copy.lastChangeAtMs)}`;
+    return html`${this.#activityLine(preview.copy.lastChangeAtMs)}${
+      preview.copy.source === "followed-copy" && preview.joinedAtMs !== null
+        ? html`<p>
+            ${format("handover.emergency.spare_joined", {
+              joined: new Date(preview.joinedAtMs).toLocaleString(currentLocale()),
+            })}
+          </p>`
+        : nothing
+    }`;
+  }
   #activityLine(date: number | null) {
     return html`<p>
       ${date === null ? t("handover.emergency.no_date") : html`${t("handover.emergency.latest_activity")} ${new Date(date).toLocaleString(currentLocale())}`}
@@ -849,29 +926,30 @@ export class SetupHandoverScreen extends LitElement {
     return html`${this.following ? html`<p role="status">${t("handover.emergency.catching_up")}</p>` : nothing}
     ${this.heldWaiting ? html`<p role="status">${t("handover.emergency.held_waiting")}</p>` : nothing}
     ${this.following && held ? html`<p>${t("handover.emergency.still_catching_up")}</p>` : nothing}
-    ${held ? html`<section data-test="held-copy">${held.copy.source === "mirror-copy" ? this.#joinedLine(held) : nothing}${this.#activityLine(held.copy.lastChangeAtMs)}</section>` : nothing}`;
+    ${held ? html`<section data-test="held-copy">${this.#copyLines(held)}</section>` : nothing}`;
   }
   #emergencyContent() {
     const preview = this.copyPreview;
     if (!preview) return nothing;
-    const date = preview.copy.lastChangeAtMs;
+    const declaredAt = this.declaredAtMs ?? preview.operation?.declaredAtMs;
+    const about = html`${this.#copyLines(preview)}
+      <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>`;
     return html`<section data-test="emergency-copy" data-wording-version="a1018-emergency-v1">
       <h2>
         ${t(preview.copy.source === "selected-backup" ? "handover.emergency.selected_backup" : preview.copy.source === "followed-copy" && !this.heldChosen ? "handover.emergency.followed" : "handover.emergency.copy")}
       </h2>
-      <p>${preview.copy.identifier}</p>
-      ${preview.copy.source === "mirror-copy" ? this.#joinedLine(preview) : nothing}
-      ${this.#activityLine(date)}
-      <p><a href=${preview.sourceServersUrl}>${t("handover.emergency.servers")}</a></p>
       ${
         this.#declared
           ? html`<p>${t("handover.emergency.saved")}</p>
-              <p>${this.reason}</p>
-              ${preview.operation?.declaredAtMs ? html`<p>${t("handover.emergency.declared_at")} ${new Date(preview.operation.declaredAtMs).toLocaleString(currentLocale())}</p>` : nothing}`
-          : html` ${preview.operation ? html`<p><a href=${`/handover/${encodeURIComponent(preview.operation.operationId)}`}>${t("handover.emergency.controlled_link")}</a></p>` : nothing}
-              <p>${t("handover.emergency.one_way")}</p>
-              <p>${t("handover.emergency.split")}</p>
-              <p>${t("handover.emergency.returned")}</p>
+              <details data-test="emergency-details">
+                <summary>${t("handover.emergency.details")}</summary>
+                ${about}
+                <p>${this.reason}</p>
+                ${declaredAt ? html`<p>${t("handover.emergency.declared_at")} ${new Date(declaredAt).toLocaleString(currentLocale())}</p>` : nothing}
+              </details>`
+          : html`${about}
+              ${preview.operation ? html`<p><a href=${`/handover/${encodeURIComponent(preview.operation.operationId)}`}>${t("handover.emergency.controlled_link")}</a></p>` : nothing}
+              <p>${t("handover.emergency.warning")}</p>
               <div class="statements">
                 ${(["sourceSwitchedOff", "noParallelRecovery", "missingTailAccepted"] as const).map(
                   (key) =>
@@ -933,6 +1011,7 @@ export class SetupHandoverScreen extends LitElement {
             this.copyPreview = this.heldCopy = undefined;
             this.heldOffered = this.following = this.heldWaiting = this.heldChosen = false;
             this.declarationSaved = false;
+            this.declaredAtMs = undefined;
             this.reason = "";
             this.statements = {
               sourceSwitchedOff: false,
@@ -947,7 +1026,7 @@ export class SetupHandoverScreen extends LitElement {
         }}
       ></wt-input>`;
     const passkey = this.usePasskey;
-    return html`<p>
+    const signIn = html`<p>
         ${t(passkey ? "handover.emergency.sign_in_passkey" : this.#isEmergency ? "handover.emergency.sign_in" : "handover.sign_in")}
       </p>
       ${
@@ -972,7 +1051,7 @@ export class SetupHandoverScreen extends LitElement {
       }
       ${passkey ? nothing : html`${field("email", "handover.email")}${field("password", "handover.password")}${field("code", "handover.code")}`}
       ${
-        this.#isEmergency && !this.#declared && !this.copyPreview?.operation
+        this.#offersOtherCopy
           ? html`
               <p>${t("handover.emergency.backup_intro")}</p>
               <wt-file-input
@@ -1006,6 +1085,21 @@ export class SetupHandoverScreen extends LitElement {
               }
             `
           : nothing
+      }`;
+    return html`${
+        this.#signInShown
+          ? signIn
+          : this.#offersOtherCopy
+            ? html`<p>
+                <wt-button
+                  variant="ghost"
+                  data-test="different-copy"
+                  ?disabled=${this.busy}
+                  @click=${() => void this.#openSignIn()}
+                  >${t("handover.emergency.different_copy")}</wt-button
+                >
+              </p>`
+            : nothing
       }
       ${this.#isEmergency ? html`${this.#followContent()}${this.#emergencyContent()}` : nothing}
       ${
@@ -1065,7 +1159,7 @@ export class SetupHandoverScreen extends LitElement {
                   >`
         }
       </wt-form-actions>
-      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink}>${t("handover.emergency.progress")}</a>` : nothing} <a href=${this.#leaveHref}>${t("handover.emergency.stop")}</a></p>` : nothing}`;
+      ${this.#isEmergency ? html`<p>${this.refusalLink ? html`<a href=${this.refusalLink.href}>${t(this.refusalLink.label)}</a>` : nothing} ${this.#leaveLink()}</p>` : nothing}`;
   }
   #content() {
     const status = this.status;

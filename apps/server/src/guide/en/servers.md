@@ -71,11 +71,12 @@ be undone.
 
 On a till or handheld, the red **The main server is not answering** strip offers **Switch to the
 spare server** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
-spare, and **Stop** or **Continue to this box** brings you back to the till. Once the main box has
-been silent for about half a minute, a till, phone or dashboard that reloads the venue’s usual
-address also lands on this page. A main box that restarts for longer than about 20 seconds, during
-an update for example, brings a reloading device here too; if you did not mean to switch, do not
-declare anything, and reload the page once the main box is back. From any other device,
+spare, and **Don't switch, go back** (after declaring, **Leave this page (the switch is saved)**)
+or **Continue to this box** brings you back to the till. Once the main box has been silent for about half a minute, a
+till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
+box that restarts for longer than about 20 seconds, during an update for example, brings a
+reloading device here too; if you did not mean to switch, do not declare anything, and reload the
+page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
 `https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
 current authenticator code, if set up, or choose **Use your passkey**; then choose **Check this
@@ -89,12 +90,13 @@ activity. Anything newer may be missing; if no date is available, the page says 
 If the page reports too little temporary space, free disk space on the spare before choosing
 the backup again.
 
-To use an encrypted backup instead, choose its file and select **Use this backup**. If asked,
+After **Check this copy** the sign-in folds away; **Use a different copy** brings it back, with the
+backup choice. To use an encrypted backup instead, choose its file and select **Use this backup**. If asked,
 enter that backup's recovery key; this leaves the box's saved key unchanged. Keep this page open while the spare
 restarts, then review **Selected backup** and its latest activity before declaring. Choose a backup
 made after this spare joined its current main box.
 
-Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
+Tick all three statements and give your reason. Choose **Declare the old main
 box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
 the page compares the clocks, creates the new invoice series and starts the venue on this box by
 itself. If this box cannot check its time over the internet, the page first shows this box's time

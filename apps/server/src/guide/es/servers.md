@@ -76,12 +76,13 @@ registros por separado. Esta declaración no se puede deshacer.
 
 En una caja o un terminal de camarero, la franja roja **El servidor principal no responde** ofrece
 **Cambiar al servidor de reserva** en la pantalla de inicio de sesión, y a quien tenga **Gestionar
-servidores**. Abre esta página en el servidor de reserva, y **Parar** o **Continuar en este
-servidor** te devuelve a la caja. Cuando el servidor principal lleva cerca de medio minuto sin responder,
-una caja, un móvil o el panel que recargue la dirección habitual del local también llega a esta
-página. Un reinicio del servidor principal de más de unos 20 segundos, por ejemplo durante una
-actualización, también trae aquí a un dispositivo que recargue; si no querías cambiar, no declares
-nada y recarga la página cuando el servidor principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
+servidores**. Abre esta página en el servidor de reserva, y **No cambiar, volver** (tras declarar,
+**Salir de esta página (el cambio está guardado)**) o **Continuar en este servidor** te devuelve a la caja. Cuando el servidor
+principal lleva cerca de medio minuto sin responder, una caja, un móvil o el panel que recargue la
+dirección habitual del local también llega a esta página. Un reinicio del servidor principal de
+más de unos 20 segundos, por ejemplo durante una actualización, también trae aquí a un dispositivo
+que recargue; si no querías cambiar, no declares nada y recarga la página cuando el servidor
+principal vuelva. Desde cualquier otro dispositivo, abre la dirección HTTPS del
 servidor de reserva y añade `/handover/emergency`, por ejemplo
 `https://spare.example/handover/emergency`, o escanea la [etiqueta de cambio](servers.md#switch-label) del servidor de reserva. Identifícate con la contraseña de una cuenta de
 administrador y su código actual de autenticador, si está configurado, o elige **Usar tu passkey**;
@@ -94,13 +95,15 @@ ninguna fecha disponible, la página lo indica.
 Si la página indica que falta espacio temporal, libera espacio en el disco del equipo de
 reserva antes de volver a elegir la copia.
 
-Para usar una copia de seguridad cifrada, elige su archivo y pulsa **Usar esta copia de seguridad**.
+Tras **Comprobar esta copia** el inicio de sesión se pliega; **Usar otra copia** lo vuelve a mostrar,
+junto con la elección de la copia de seguridad. Para usar una copia de seguridad cifrada, elige su
+archivo y pulsa **Usar esta copia de seguridad**.
 Si se te pide, introduce la clave de esa copia; no cambia la clave guardada en este equipo.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
 se uniera a su principal actual.
 
-Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
+Marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
 el local en este servidor sola. Si este servidor no puede comprobar su hora por internet, la página

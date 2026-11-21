@@ -62,6 +62,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
         for (const stage of [
           "main-answering",
           "declaration",
+          "different-copy",
           "resume",
           "refusal",
           "clock",
@@ -87,8 +88,10 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 }),
               );
             if (String(input).endsWith("/followed"))
-              return stage === "waiting"
-                ? new Response(JSON.stringify({ state: "catching-up" }))
+              return stage === "waiting" || stage === "different-copy"
+                ? new Response(
+                    JSON.stringify({ state: stage === "waiting" ? "catching-up" : "taken" }),
+                  )
                 : new Response(JSON.stringify({ error: { code: "handover.chain_broken" } }), {
                     status: 409,
                   });
@@ -103,14 +106,14 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                   destinationNodeId: "new",
                   sourceServersUrl: "https://main.example/servers",
                   copy: {
-                    ...(stage === "declaration"
+                    ...(stage === "declaration" || stage === "different-copy"
                       ? { source: "followed-copy", sourceId: "c".repeat(64) }
                       : { source: "mirror-copy" }),
                     identifier: "a".repeat(64),
                     lastChangeAtMs: 1792147200000,
                   },
                   joinedAtMs: 1789819200000,
-                  operation: ["declaration", "waiting", "held"].includes(stage)
+                  operation: ["declaration", "different-copy", "waiting", "held"].includes(stage)
                     ? null
                     : {
                         operationId: "emergency",
@@ -164,6 +167,17 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 expect(el.shadowRoot!.querySelector("[data-test=emergency-held]")).not.toBeNull(),
               { timeout: 10_000 },
             );
+          if (stage === "different-copy") {
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector("[data-test=emergency-copy]")).not.toBeNull(),
+            );
+            await el.updateComplete;
+            await expectNoA11yViolations(host);
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=different-copy]")!.click();
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
+            );
+          }
           if (stage === "clock") {
             el.shadowRoot!.querySelector<HTMLElement>("[data-test=authenticate]")!.click();
             await vi.waitFor(() =>
