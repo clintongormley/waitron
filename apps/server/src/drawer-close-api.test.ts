@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
+import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import {
   cashPayment,
   inTx,
@@ -113,7 +114,16 @@ it("refuses another drawer's count the same way as an unknown one", async () => 
 });
 
 it("allows a manually counted close during a clock stop", async () => {
-  const app = venue.appWith({ clockUnconfirmed: () => true });
+  const holds = () => true;
+  const app = venue.appWith({
+    backend: gateSeatOnStartClock(venue.backend, holds),
+    clockUnconfirmed: holds,
+  });
+  const order = await tabWith(venue, "Croquettes");
+  expect(await cashPayment({ db: venue.db, app }, venue.cookie, order, "10.00")).toMatchObject({
+    status: 409,
+    json: { code: "clock.unconfirmed" },
+  });
   const saved = await send(app, venue.cookie, "POST", `${path}/count`, {
     printerId,
     startSequence: 0,
