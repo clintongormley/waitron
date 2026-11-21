@@ -1306,8 +1306,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   and Cloud [#1343](https://github.com/waitron-io/waitron-cloud/pull/1343).
   Configured test boxes also offer sign-in in fresh Prepare and development Live,
   then file the saved venue after restart. Prepare on configured test boxes also offers
-  [staff email through Cloud](superpowers/plans/2026-11-21-setup-cloud-staff-email.md). The hosted
-  test release and live Google qualification remain open. The address
+  [staff email through Cloud](superpowers/plans/2026-11-21-setup-cloud-staff-email.md) and lets
+  you [leave the venue mail server blank](superpowers/plans/2026-11-21-setup-cloud-email-no-server.md).
+  The hosted test release and live Google qualification remain open. The address
   picker requires one Spanish business with no tax number or venues. Adding a venue to an
   existing Cloud business still needs manual address entry and wider Cloud support.
   Cloud installs the private package with its workflow token. Remaining: the sign-in

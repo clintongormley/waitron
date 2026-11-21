@@ -47,7 +47,7 @@ export const finishEn = {
 
   "done.heading": "Setup complete",
   "done.cloud_staff_email_unavailable":
-    "Waitron Cloud staff email could not be confirmed. Your mail server settings were saved.",
+    "Waitron Cloud staff email could not be confirmed. You can add or check your mail server in System → Email.",
   "done.cloud_staff_email_help": "About staff email",
   "done.heading_rebuilt": "Rebuilt from your bucket",
   "done.heading_restored": "Restored from your backup",
@@ -184,7 +184,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
 
   "done.heading": "Configuración completada",
   "done.cloud_staff_email_unavailable":
-    "No se ha podido confirmar el correo del personal de Waitron Cloud. Se han guardado los ajustes de tu servidor de correo.",
+    "No se ha podido confirmar el correo del personal de Waitron Cloud. Puedes añadir o revisar tu servidor de correo en Sistema → Correo.",
   "done.cloud_staff_email_help": "Acerca del correo del personal",
   "done.heading_rebuilt": "Reconstruido desde tu bucket",
   "done.heading_restored": "Restaurado desde tu copia de seguridad",

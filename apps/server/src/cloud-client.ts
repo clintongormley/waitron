@@ -840,7 +840,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
               if (await requestSetupCloudEmailGrant(credentials, attempt.requestId, signal))
                 attempt.emailRelayEnabled = true;
             } catch {
-              // Mail server settings are already saved when this optional Cloud request runs.
+              // A grant refusal must still let setup record the venue for publishing.
             }
           }
         }

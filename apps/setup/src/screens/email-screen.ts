@@ -155,16 +155,29 @@ export class SetupEmailScreen extends LitElement {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.from)) invalid.add("from");
     return invalid;
   }
-  #canContinue(): boolean {
+  #canSkipMailServer(): boolean {
+    const { server, from, user, password } = this.values;
     return (
-      !this.running &&
+      this.cloudStaffEmailAvailable === true &&
+      this.staffEmail &&
+      !server.trim() &&
+      !from.trim() &&
+      !user &&
+      !password
+    );
+  }
+  #mailServerTestAccepted(): boolean {
+    return (
       this.#errors().size === 0 &&
       this.#accepted?.revision === this.#revision &&
       this.#accepted.recipient === this.adminEmail
     );
   }
+  #canContinue(): boolean {
+    return !this.running && (this.#canSkipMailServer() || this.#mailServerTestAccepted());
+  }
   async #test(): Promise<void> {
-    if (this.running || !this.isConnected) return;
+    if (this.running || !this.isConnected || this.#canSkipMailServer()) return;
     this.#feedback.press("form");
     this.#accepted = undefined;
     this.outcome = undefined;
@@ -228,7 +241,7 @@ export class SetupEmailScreen extends LitElement {
   #next(): void {
     if (!this.isConnected || !this.#canContinue()) return;
     dispatchSetupPatch(this, {
-      email: this.#settings(),
+      email: this.#canSkipMailServer() ? undefined : this.#settings(),
       ...((this.cloudStaffEmailAvailable || this.cloudStaffEmail) && {
         cloudStaffEmail: this.cloudStaffEmailAvailable !== false && this.staffEmail,
       }),
@@ -252,7 +265,7 @@ export class SetupEmailScreen extends LitElement {
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
-      ?required=${["server", "port", "from"].includes(field)}
+      ?required=${!this.#canSkipMailServer() && ["server", "port", "from"].includes(field)}
       ?invalid=${invalid}
       error=${this.refusedField === field && this.outcome && this.outcome !== "accepted" && this.outcome !== "failed" ? t(this.outcome) : invalid ? t(`email.${field}.error`) : ""}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=test]"))}
@@ -275,7 +288,8 @@ export class SetupEmailScreen extends LitElement {
     </wt-input>`;
   }
   override render(): TemplateResult {
-    const errors = this.#feedback.attempted ? this.#errors() : new Set<Field>();
+    const skipMailServer = this.#canSkipMailServer();
+    const errors = this.#feedback.attempted && !skipMailServer ? this.#errors() : new Set<Field>();
     const error =
       errors.size || this.refusedField
         ? t("email.fix_fields")
@@ -285,7 +299,11 @@ export class SetupEmailScreen extends LitElement {
             ? (this.errorMessage ?? "")
             : "";
     return html`<h1>${t("email.heading")}</h1>
-      <p class="intro">${format("email.intro", { recipient: this.adminEmail })}</p>
+      <p class="intro">
+        ${format(skipMailServer ? "email.intro_optional" : "email.intro", {
+          recipient: this.adminEmail,
+        })}
+      </p>
       ${
         this.cloudStaffEmailAvailable
           ? html`<label class="cloud-choice" for="cloud-staff-email">
@@ -315,7 +333,7 @@ export class SetupEmailScreen extends LitElement {
           name="smtp-encryption"
           data-test="encryption"
           label=${t("email.encryption.label")}
-          required
+          ?required=${!skipMailServer}
           .value=${this.values.encryption}
           .options=${[
             { value: "starttls", label: "STARTTLS" },
@@ -328,7 +346,7 @@ export class SetupEmailScreen extends LitElement {
       </div>
       <div class="pair">${this.#field("user", errors)}${this.#field("password", errors)}</div>
       ${this.#field("from", errors)}
-      ${this.#canContinue() ? html`<p class="success" role="status">${t("email.accepted")}</p>` : nothing}
+      ${this.#mailServerTestAccepted() ? html`<p class="success" role="status">${t("email.accepted")}</p>` : nothing}
       <p>
         <a
           href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/email#test-results`}
@@ -347,9 +365,9 @@ export class SetupEmailScreen extends LitElement {
         >
         <wt-button
           slot="secondary"
-          variant=${this.#feedback.attempted || !this.#errors().size ? "primary" : "secondary"}
+          variant=${!skipMailServer && (this.#feedback.attempted || !this.#errors().size) ? "primary" : "secondary"}
           data-test="test"
-          ?disabled=${this.running || errors.size > 0}
+          ?disabled=${skipMailServer || this.running || errors.size > 0}
           @click=${() => void this.#test()}
           >${t(this.running ? "email.testing" : "email.test")}</wt-button
         >

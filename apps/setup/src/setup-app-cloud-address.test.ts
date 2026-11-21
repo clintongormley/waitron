@@ -142,7 +142,7 @@ it.each(["missing", "partial"])(
   },
 );
 
-it("shows the mail-server fallback after a checked Prepare request completes", async () => {
+async function openCloudEmailStep() {
   sessionStorage.setItem(
     "waitron-setup-cloud-return",
     JSON.stringify({ mode: "prepare", locale: "en" }),
@@ -176,13 +176,44 @@ it("shows the mail-server fallback after a checked Prepare request completes", a
   await expect
     .poll(() => screen("email")?.shadowRoot?.querySelector('input[name="cloud-staff-email"]'))
     .toBeInstanceOf(HTMLInputElement);
+  return { screen, requests };
+}
+
+it("omits a previously saved mail server from the next Cloud-only Provision request", async () => {
+  const { screen, requests } = await openCloudEmailStep();
+  dispatchSetupPatch(screen("email")!, {
+    email: {
+      server: "smtp.example.test",
+      from: "venue@example.test",
+      port: 587,
+      encryption: "starttls",
+    },
+  });
+  dispatchSetupGoto(screen("email")!, "review");
+  await expect.poll(() => screen("review")).not.toBeNull();
+  dispatchSetupGoto(screen("review")!, "email");
+  await expect.poll(() => screen("email")).not.toBeNull();
+  dispatchSetupPatch(screen("email")!, { email: undefined, cloudStaffEmail: true });
+  dispatchSetupGoto(screen("email")!, "review");
+  await expect.poll(() => screen("review")).not.toBeNull();
+  dispatchProvisionRequested(screen("review")!);
+  const provision = () => requests.find(({ path }) => path === "/setup-api/provision")?.body;
+  await expect.poll(provision).toMatchObject({ cloudStaffEmail: true });
+  expect(provision()).not.toHaveProperty("email");
+});
+
+it("points to System → Email when Cloud staff email could not be confirmed", async () => {
+  const { screen, requests } = await openCloudEmailStep();
   dispatchSetupPatch(screen("email")!, { cloudStaffEmail: true });
   dispatchSetupGoto(screen("email")!, "review");
   await expect.poll(() => screen("review")).not.toBeNull();
   dispatchProvisionRequested(screen("review")!);
   const notice = () =>
     screen("done")?.shadowRoot?.querySelector('[data-test="cloud-staff-email-unavailable"]');
-  await expect.poll(() => notice()?.textContent).toContain("Your mail server settings were saved");
+  await expect
+    .poll(() => notice()?.textContent)
+    .toContain("add or check your mail server in System → Email");
+  expect(notice()?.textContent).not.toContain("settings were saved");
   expect(notice()?.querySelector("a")?.getAttribute("href")).toBe(
     "/help/en/email#cloud-staff-email",
   );

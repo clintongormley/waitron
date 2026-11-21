@@ -19,8 +19,9 @@ Los mensajes enviados por tu servidor guardado y la prueba de esta página muest
 local junto a la dirección del remitente. Si la página indica que la dirección guardada no es válida,
 elige **Cambiar servidor de correo** y corrige **Dirección del remitente** antes de repetir la prueba.
 
-Antes de completar la configuración en Preparación o En vivo, introduce los ajustes del servidor
-y envía una prueba aceptada a la dirección del administrador. En desarrollo puedes omitir este paso.
+Durante la configuración en Preparación o En vivo, introduce los ajustes del servidor de correo
+y envía una prueba a la dirección del administrador. Puedes omitir el servidor en desarrollo o si
+[eliges Cloud para el correo del personal durante la configuración de prueba](email.md#cloud-staff-email).
 Si usas tu propio servidor, al guardarlo las invitaciones y los enlaces para restablecer
 contraseñas llegan a buzones reales. Esta página muestra el estado del correo de facturas:
 las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
@@ -41,24 +42,25 @@ varios días, abre **Ventas y cobros** y elige un día anterior para consultar s
 
 ## Elegir el correo del personal durante la configuración de prueba {#cloud-staff-email}
 
-En un servidor de pruebas, abre Preparar e inicia sesión en Waitron Cloud. En el paso de correo,
-marca **Enviar el correo del personal a través de Waitron Cloud**. Prueba tu servidor de correo
-antes de continuar. **Configurar este servidor** envía tu elección a Cloud. Cuando el equipo se
-reinicie y se conecte, Cloud podrá enviar invitaciones al personal, mensajes para restablecer
-contraseñas y cambios de correo. Tu servidor de correo seguirá enviando las facturas y los avisos.
+En un servidor de pruebas, abre **Preparación** e inicia sesión en Waitron Cloud. En el paso de correo,
+marca **Enviar el correo del personal a través de Waitron Cloud**. Deja el servidor de correo
+en blanco y continúa, o introduce los datos de tu servidor y envía una prueba. Cuando el equipo se
+reinicie y se conecte, Cloud podrá enviar invitaciones al personal, enlaces para restablecer
+contraseñas y códigos de cambio de correo.
 
-Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, se han
-guardado los ajustes de tu servidor de correo. Si ha caducado tu sesión, termina de
-[conectar el servidor de pruebas](servers.md#setup-cloud-sign-in) desde **Sistema → Servicios Cloud**.
-El correo del personal usa [Cloud](email.md#cloud-account-email) cuando está activado el envío.
+Añade un servidor de correo en **Sistema → Correo** para ofrecer el envío a clientes desde la
+caja y el panel, y para enviar el informe diario, los demás avisos al personal y el aviso de
+seguridad a la dirección anterior cuando alguien del personal cambie su correo.
+
+Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
+**Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
 
 ## Correo de cuentas a través de Cloud de prueba {#cloud-account-email}
 
 Al vincular tu caja con Cloud de prueba y activar su envío de correo, las invitaciones,
 los enlaces para restablecer contraseñas y los códigos de cambio de correo se envían por Cloud,
 también en Demostración. Revisa el buzón real del destinatario en lugar de la Bandeja de correo
-de Demostración. Mantén un servidor de correo para los recibos y otros avisos, y para completar
-la configuración en Preparación o En vivo.
+de Demostración. Mantén un servidor de correo para los recibos y otros avisos.
 
 Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no

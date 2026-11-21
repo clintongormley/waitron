@@ -743,6 +743,22 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
   });
 
+  it("provisions without a mail server when Cloud staff email is selected in Prepare", async () => {
+    const app = new Hono();
+    const { deps } = makeDeps({ devMode: false });
+    mountSetup(app, deps, noopLog);
+    const body = { ...prepareBody(), email: undefined, cloudStaffEmail: true };
+
+    const result = await postProvision(app, body);
+
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({
+      provisioned: true,
+      cloudStaffEmailUnavailable: true,
+    });
+    await tick();
+  });
+
   it("provisions Prepare in preproduction and persists the distinct preparation intent", async () => {
     const app = new Hono();
     const { deps, provisionRequests, persistTrading, calls } = makeDeps();
