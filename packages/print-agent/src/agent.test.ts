@@ -1227,15 +1227,23 @@ describe("createAgent — on-node self-enrol", () => {
     expect(await host.token()).toBe("id.self");
   });
 
-  it.each(["open", "closed"] as const)(
-    "on the main box, never knocks while a refusal's wait runs, and self-enrols when it ends (pairing %s)",
-    async (pairing) => {
+  it.each([
+    ["https://127.0.0.1", "open"],
+    ["https://127.0.0.1", "closed"],
+    [A, "open"],
+    [A, "closed"],
+  ] as const)(
+    "on the main box at %s, never knocks after its server refuses during a waiting start, and self-enrols once it is up (pairing %s)",
+    async (serverUrl, pairing) => {
+      // The waiting start mounts no enrol-self route, and the client reports its 404 as a refusal.
       let now = 0;
       let up = false;
-      const host = fakeHost({ config: CONFIG, now: () => now });
+      const host = fakeHost({ config: { serverUrl, name: "kitchen-pi" }, now: () => now });
       const c = client({
         probeNode: vi.fn(async () =>
-          okR<NodeProbe>(up ? primary : { ...primary, acceptingSales: false }),
+          okR<NodeProbe>(
+            up ? primary : { ...primary, acceptingSales: false, standing: "serving-primary" },
+          ),
         ),
         join: vi.fn(async () =>
           pairing === "open"
@@ -1247,7 +1255,10 @@ describe("createAgent — on-node self-enrol", () => {
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
       up = true;
-      for (let round = 0; round < 16; round += 1) {
+      now += 2_000;
+      await agent.runOnce();
+      expect(await host.token()).toBe("id.self"); // on the round its server first answers
+      for (let round = 0; round < 15; round += 1) {
         now += 2_000;
         await agent.runOnce();
       }
@@ -1259,24 +1270,6 @@ describe("createAgent — on-node self-enrol", () => {
       }).toEqual({ token: "id.self", phase: "running", enrolSelfCalls: 2, joinCalls: 0 });
     },
   );
-
-  it("on the main box, self-enrols on the round its server first accepts after a waiting start", async () => {
-    // The waiting start mounts no enrol-self route; the client reports its 404 as a refusal.
-    let up = false;
-    const host = fakeHost({ config: CONFIG, now: () => 0 });
-    const c = client({
-      probeNode: vi.fn(async () =>
-        okR<NodeProbe>(up ? primary : { ...primary, acceptingSales: false }),
-      ),
-      enrolSelf: vi.fn(async () => (up ? okR({ token: "id.self" }) : failR({ kind: "refused" }))),
-    });
-    const agent = createAgent({ host, client: c });
-    await agent.runOnce();
-    up = true;
-    await agent.runOnce();
-    expect(await host.token()).toBe("id.self");
-    expect(c.join).not.toHaveBeenCalled();
-  });
 
   it("on the main box, asks again on the next round when its own server did not answer at all", async () => {
     // The agent can start before its box's server: nothing answers the first round, and the next

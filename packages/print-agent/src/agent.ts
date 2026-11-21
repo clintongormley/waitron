@@ -29,10 +29,10 @@ import { Router } from "./router.js";
 /** Failed pulls and active discovery passes use this interval. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
-/** After a failed ask of its own box, an agent on the spare, or a halted one, asks again at most
- * this often: two asks a minute against the enrol limit of 30 a minute (`ENROL_RATE_MAX`,
- * `apps/server/src/enrol-rate-limit.ts`), which every spare's asks share on the main box. The
- * first ask after a start, new settings or a halt goes at once. */
+/** After a failed ask of its own box, an agent whose box, at its loopback address, answers as the
+ * spare, or a halted one, asks again at most this often: two asks a minute against the enrol limit
+ * of 30 a minute (`ENROL_RATE_MAX`, `apps/server/src/enrol-rate-limit.ts`), which every spare's
+ * asks share on the main box. The first ask after a start, new settings or a halt goes at once. */
 export const SELF_ENROL_RETRY_INTERVAL_MS = 30_000;
 /** A third of the server's 60 s claim lease (`INVOICE_DELIVERY_LEASE_MS`,
  * `apps/server/src/invoice-delivery.ts`), so one renewal that does not get through leaves the claim
@@ -657,9 +657,10 @@ export function createAgent(opts: AgentOptions): Agent {
 
     const r = routerFor(config);
     const round = await r.probe();
-    // Only on the spare does a failed ask wait: its server may ask the main box for us, against the
-    // main box's limit. Anywhere else the next round asks again, so a main box whose server is
-    // still starting self-enrols on the round it first accepts.
+    // Besides a halted agent (above), a failed ask waits only when this round's probe found our own
+    // loopback box serving as the spare: its server asks the main box for us, against the main
+    // box's limit. Anywhere else the next round asks again, so a main box whose server is still
+    // starting self-enrols on the round its server first answers.
     if (askedSelf && round.configuredIsSpare)
       selfEnrolAt = host.now() + SELF_ENROL_RETRY_INTERVAL_MS;
     if (config.environment === undefined && r.environment !== undefined) {
