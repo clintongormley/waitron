@@ -654,13 +654,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
   tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a
   window's buttons sat under it. Windows now fit in the part of the page left visible (#3986);
-  that was checked only in desktop emulation. The owner opens a line note, the bill name window and
+  that was checked only by setting the keyboard's measurements by hand in a desktop browser, which
+  draws no keyboard. The owner opens a line note, the bill name window and
   Find a bill's search on the tablet in landscape. Safari is untested: there is no Apple device.
-
-- **A1565. The till's order panel squeezed on a landscape tablet.** At about 640 CSS pixels tall
-  (the Pixel tablet in landscape, no keyboard), the order panel's buttons leave the list of lines
-  a sliver one line high, on the Counter and on a table's order. Seen by the owner on 21 November,
-  and in desktop emulation at 1280 by 640. Not investigated.
 
 - **Service steps after a bill moves** (bundle of 1, size S). Holds A1333. [Detail](backlog/till.md#bundle-service-steps-after-a-bill-moves)
 
@@ -684,7 +680,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Take over offered where it is needed** (bundle of 2, size M). Holds A1349, A1289. [Detail](backlog/till.md#bundle-take-over-offered-where-it-is-needed)
 
 
-- **Table screen panels that do not fit** (bundle of 3, size S). Holds A1359, A1265, A1290. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
+- **Table screen panels that do not fit** (bundle of 4, size S). Holds A1359, A1265, A1290, A1565. [Detail](backlog/till.md#bundle-table-screen-panels-that-do-not-fit)
 
 - **One answer to "where is this order"** (bundle of 3, size S, needs the owner). Holds A1235, A1032, A678. [Detail](backlog/till.md#bundle-one-answer-to-where-is-this-order)
 

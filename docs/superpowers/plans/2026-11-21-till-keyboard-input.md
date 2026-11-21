@@ -288,6 +288,18 @@ quiet-tap explanation).
 
 ### Task 5: The till fits above a device's built-in keyboard
 
+> **As built (2026-11-22, landscape fix):** the Pixel tablet failed in landscape, so Step 3 was
+> built: `apps/till/src/state/keyboard-inset.ts` sets `--wt-keyboard-inset` and
+> `--wt-keyboard-top`; `wt-dialog` and `wt-modal` fit between them, with top and bottom margins
+> that shrink to `--wt-space-2` (a `full` modal's side margin when smaller). `apps/till/src/main.ts`
+> starts the watcher, which also scrolls the field being typed in back into view after the visible
+> area changes height. Tests are in `packages/ui/src/components/wt-dialog.keyboard-inset.test.ts`,
+> `apps/till/src/state/keyboard-inset.test.ts`, `apps/till/src/main.keyboard-inset.test.ts` and
+> `apps/till/src/widgets/modifier-picker.keyboard-inset.test.ts`. The unit tests' readings are
+> estimated from the owner's screenshots, as no remote-inspection reading was taken. This task did
+> not change `index.html`'s body height or `till-app.ts`. The re-check on the tablet is in
+> `docs/backlog.md`.
+
 The reviewer found the full fix (measure the keyboard, shrink the page and every window) touches
 `wt-dialog` and `wt-modal` (`packages/ui/src/components/wt-modal.ts:19-20, 41-42` sets its own
 `100dvh` height), which the dashboard shares, and that how Safari reports the keyboard is
