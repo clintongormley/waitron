@@ -247,6 +247,9 @@ se pone al día sola cuando vuelve el servidor.
 
 Los encargados y administradores pueden reiniciar el servidor.
 
+Durante una actualización nocturna supervisada, Waitron puede reiniciarse brevemente con la
+versión anterior si llega un pedido o un cobro mientras se detiene.
+
 ## Pon la hora desde tu propio dispositivo {#clock-own-device}
 
 El permiso de administración del servidor, que tiene Admin de forma predeterminada, te permite poner la hora desde tu propio dispositivo o aprobarla en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.

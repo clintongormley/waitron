@@ -173,6 +173,12 @@ host outside the rollback copy. Losing that file loses its replay history. You c
 overnight checks by hand for rehearsal. The first real publication, default timer activation and
 automatic installation remain open in the
 [staged-offer plan](../superpowers/plans/2026-11-19-a950-staged-offers.md).
+
+**21 November update.** You can run a [supervised offered install](../../deploy/README.md#rehearsing-an-offered-install)
+on a numbered standalone box in the quiet window. The timer still checks offers. Before default
+activation, rehearse the installed command and measure the 04:30 cutoff on the physical box. The
+new release’s stopped-data check reads the old release’s database. Keep that read working if any
+of the trading columns change, or offered installs will defer.
 A timer enabled by hand stays enabled through driver refreshes. The install slice or step 7
 decides what happens to those boxes when `waitron-upgrade.service` starts installing.
 

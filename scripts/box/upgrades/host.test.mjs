@@ -1,10 +1,10 @@
 import { describe, expect, it, onTestFinished } from "vitest";
 import { URL } from "node:url";
 import { Buffer } from "node:buffer";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
+import { checkInstalledUpgradeQuiet, installedVenueTimeZone, stopUpgradeWriters } from "./host.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
 import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
 import { useVenueDb } from "../../../packages/db/src/testing/venue-db.js";
@@ -12,10 +12,112 @@ import {
   BUSINESS_DAY_SETTINGS,
   CORE_MIGRATIONS,
   saveSettings,
+  settings,
+  workingOrders,
   withNodeTransaction,
   withTransaction,
 } from "../../../packages/db/src/index.js";
 import { NODE_MIGRATIONS, setNodeModeTx } from "../../../packages/node-db/src/index.js";
+import { PAYMENTS_MIGRATIONS } from "../../../packages/payments/src/migrations.js";
+import { applyUpgrade } from "./transaction.mjs";
+
+describe("quiet before an offered upgrade", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+  const now = Date.parse("2026-11-21T03:45:00.000Z");
+
+  it.each([
+    ["open", "2026-11-20T19:00:00.000Z", false],
+    ["placed", "2026-11-20T19:00:00.000Z", false],
+    ["abandoned", "2026-11-21T03:36:00.000Z", false],
+    ["abandoned", "2026-11-21T03:46:00.000Z", false],
+    ["abandoned", "2026-11-21T03:35:00.000Z", true],
+  ])("checks %s orders opened at %s", async (status, openedAt, quiet) => {
+    const box = await imageFixture({ onlineTrial: "pass", prepare: false });
+    const state = join(box.root, "state");
+    await mkdir(join(state, "venue"));
+    await writeFile(join(state, "trading.env"), "WAITRON_NODE_ID=one\n");
+    await suite.db.insert(workingOrders).values({
+      source: "dashboard",
+      orderNumber: 1,
+      status,
+      openedAt,
+      dining: "eat_in",
+    });
+    await suite.db.archiveTo(join(state, "venue", "venue.db"));
+    const check = checkInstalledUpgradeQuiet(box.root, box.run, now);
+    if (quiet) await expect(check).resolves.toBeUndefined();
+    else await expect(check).rejects.toThrow("venue has recent or unresolved trading activity");
+  });
+
+  it.each([true, false])(
+    "checks stopped trading only on the first stop (late order: %s)",
+    async (lateOrder) => {
+      const box = await imageFixture({ prepare: false, beforeAutomaticStop: async () => {} });
+      const venue = join(box.root, "state", "venue");
+      await mkdir(venue);
+      const writeOrder = async () => {
+        await suite.db.insert(workingOrders).values({
+          source: "dashboard",
+          orderNumber: 1,
+          dining: "eat_in",
+        });
+        await rm(join(venue, "venue.db"));
+        await suite.db.archiveTo(join(venue, "venue.db"));
+      };
+      await suite.db.archiveTo(join(venue, "venue.db"));
+      if (lateOrder) {
+        const stop = box.f.host.stop;
+        box.f.host.stop = async () => {
+          await writeOrder();
+          await stop();
+        };
+        expect(
+          await applyUpgrade({
+            directory: box.directory,
+            paths: box.f.paths,
+            mode: "automatic",
+            host: box.f.host,
+          }),
+        ).toMatchObject({
+          target: "old",
+          copied: false,
+          failure: "venue has recent or unresolved trading activity",
+        });
+      } else {
+        await mkdir(box.directory);
+        const images = await box.f.host.prepareImages();
+        try {
+          await box.f.host.stop();
+          await writeOrder();
+          await expect(box.f.host.stop()).resolves.toBeUndefined();
+        } finally {
+          await box.f.host.resume(images.old);
+        }
+      }
+    },
+  );
+});
+
+describe("an offered upgrade on a venue without the payments tables", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it.each([false, true])("checks the saved Payments setting (%s)", async (payments) => {
+    const box = await imageFixture({ onlineTrial: "pass", prepare: false });
+    const state = join(box.root, "state");
+    await mkdir(join(state, "venue"));
+    await suite.db.insert(settings).values({
+      module: "modules",
+      version: 1,
+      revision: 1,
+      doc: { modules: { payments } },
+      updatedAt: "2026-11-20T18:00:00.000Z",
+    });
+    await suite.db.archiveTo(join(state, "venue", "venue.db"));
+    const check = checkInstalledUpgradeQuiet(box.root, box.run);
+    if (payments) await expect(check).rejects.toThrow("payment data is unavailable");
+    else await expect(check).resolves.toBeUndefined();
+  });
+});
 
 describe("upgrade admission against the current node schema", () => {
   const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
@@ -115,6 +217,14 @@ it("requires a completed app shutdown before stopping every remaining writer inc
   expect(f.calls[receipt]).toContain("--timestamps");
 });
 
+it("defers an offered install when the app has already stopped", async () => {
+  const f = dockerFixture({ running: false });
+  await expect(
+    stopUpgradeWriters({ run: f.run, compose: ["compose"], requireRunning: true }),
+  ).rejects.toThrow("app already stopped");
+  expect(f.calls.some((args) => args.includes("stop"))).toBe(false);
+});
+
 it.each([
   { event: "server.shutdown_timeout", exitCode: 0 },
   { event: "server.stopped", exitCode: 0 },
@@ -142,6 +252,7 @@ async function imageFixture({
   reopenFailure = false,
   serviceChange = false,
   prepareCandidate,
+  beforeAutomaticStop,
   writers = false,
   onlineTrial,
 } = {}) {
@@ -182,9 +293,17 @@ async function imageFixture({
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
   const resolved = new Map();
+  const shutdown = beforeAutomaticStop ? dockerFixture() : null;
   let opened = false;
   const run = async (file, args, input, options) => {
     calls.push([file, ...args]);
+    if (
+      shutdown &&
+      (["logs", "stop"].includes(args[0]) ||
+        (args[0] === "inspect" && args.length === 2) ||
+        (args.includes("ps") && args.at(-1) === "app"))
+    )
+      return shutdown.run(file, args);
     if (args[0] === "run" && ["capture", "trial"].some((mode) => args.includes(mode))) {
       expect(options.timeout).toBe(180_000);
       const mode = args.includes("capture") ? "capture" : "trial";
@@ -322,6 +441,7 @@ async function imageFixture({
     directory,
     candidate: realCompose ? shipped : candidate,
     prepareCandidate: prepareCandidate && (() => prepareCandidate({ candidate, calls })),
+    beforeAutomaticStop,
     run,
     checkCandidate: async () => [{ name: "sale", ok: true }],
   });

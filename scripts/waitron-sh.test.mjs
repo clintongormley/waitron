@@ -469,6 +469,13 @@ case "$1" in
   -e|*/verify-release.mjs) exec "$WT_REAL_NODE" "$@" ;;
 esac
 case "$2" in
+  download-upgrade-offer)
+    printf 'signed fixture\n'; exit 0 ;;
+  check-offered-upgrade)
+    test "$(cat "$6")" = 'signed fixture' || exit 90
+    printf '{"status":"offered","version":"1.2.3"}\n'; exit 0 ;;
+  apply-offered-upgrade)
+    printf '{"status":"upgraded"}\n'; exit 0 ;;
   apply)
     if [ "\${WT_RUN_CANDIDATE:-0}" = 1 ]; then
       shift 3
@@ -1588,6 +1595,44 @@ function signedRelease(
 }
 
 describe("waitron.sh install of a release", () => {
+  it.each([false, true])("requires an offered-install driver before refresh (old: %s)", (older) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const release = signedRelease(sb);
+    const driver = join(sb.root, "offered-driver.sh");
+    const source = readFileSync(SCRIPT, "utf8");
+    writeFileSync(
+      driver,
+      older ? source.replace(/^ {4}install-offered-upgrade\).*$/m, "") : source,
+    );
+    writeFileSync(sb.log, "");
+    const result = run(sb, ["install-offered-upgrade"], {
+      ...release,
+      WT_INSTALLED_RELEASE_REF: "v1.2.2",
+      WT_SELF_SCRIPT: driver,
+    });
+    const calls = loggedCalls(sb);
+    expect(result.stderr).not.toContain("unknown command");
+    const check = calls.findIndex((call) => call.includes("cli.mjs check-offered-upgrade"));
+    const sourceFetch = calls.findIndex((call) =>
+      call.includes(`/${signedSource}/deploy/waitron.sh`),
+    );
+    expect(check).toBeGreaterThan(calls.indexOf("flock -n 9"));
+    expect(calls.indexOf("flock -n 9")).toBeGreaterThanOrEqual(0);
+    expect(sourceFetch).toBeGreaterThan(check);
+    if (older) {
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("cannot apply an offered upgrade");
+      expect(calls.some((call) => call.startsWith("bootstrap "))).toBe(false);
+    } else {
+      expect(result.status, result.stderr).toBe(0);
+      expect(calls).toContainEqual(
+        expect.stringContaining(`cli.mjs apply-offered-upgrade ${sb.boxDir} 1.2.2 1.2.3`),
+      );
+      expect(result.stdout).toBe('{"status":"upgraded"}\n');
+    }
+  });
+
   it("installs a signed release whose driver predates the upgrade timer", () => {
     const sb = sandbox({ systemd: true });
     installedBox(sb);

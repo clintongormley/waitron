@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, URL } from "node:url";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { signUpgradeOffer } from "../release-list.mjs";
-import { runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
+import { recheckOfferedUpgrade, runUpgradeCli, runUpgradeCliMain } from "./cli.mjs";
 
 async function fixture() {
   const root = await fs.mkdtemp(join(tmpdir(), "upgrade-cli-"));
@@ -191,21 +191,51 @@ async function offerFixture() {
       },
       privateKey.export({ type: "pkcs8", format: "pem" }),
     );
+  const run = async (command, args) => {
+    if (command === "docker" && args.includes("config"))
+      return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
+    if (command === "docker" && args.join(" ") === "volume inspect test_state")
+      return { stdout: JSON.stringify([{ Mountpoint: state }]) };
+    throw new Error(`unexpected command ${command} ${args.join(" ")}`);
+  };
   const check = async (bytes, version = "1.2.3-rc.1", trustDirectory = link) => {
     const stagedOffer = join(root, "offer");
     await fs.writeFile(stagedOffer, bytes);
-    return runUpgradeCli([offerVerb, box, version, trustDirectory, stagedOffer], {
-      run: async (command, args) => {
-        if (command === "docker" && args.includes("config"))
-          return { stdout: JSON.stringify({ volumes: { state: { name: "test_state" } } }) };
-        if (command === "docker" && args.join(" ") === "volume inspect test_state")
-          return { stdout: JSON.stringify([{ Mountpoint: state }]) };
-        throw new Error(`unexpected command ${command} ${args.join(" ")}`);
-      },
-    });
+    return runUpgradeCli([offerVerb, box, version, trustDirectory, stagedOffer], { run });
   };
-  return { check, offer, state, trust, record: `${box}.upgrade-offer.json` };
+  return { box, check, link, offer, run, state, trust, record: `${box}.upgrade-offer.json` };
 }
+
+it.each([
+  ["none", "03:29:00", "offer-changed"],
+  ["1.2.4", "03:29:00", "offer-changed"],
+  ["1.2.3", "03:30:01", "outside the offered upgrade start window"],
+  ["1.2.3", "03:30:00", null],
+])("rechecks target %s at %s UTC while this attempt is preparing", async (target, time, reason) => {
+  const f = await offerFixture();
+  await f.check(f.offer(4, "1.2.3"));
+  await fs.mkdir(join(`${f.box}.upgrades`, "preparing"), { recursive: true });
+  await fs.mkdir(join(f.state, "venue"));
+  const database = new DatabaseSync(join(f.state, "venue/venue.db"));
+  try {
+    database.exec(`create table settings (module text, version integer, doc text);
+      insert into settings values ('business_day', 1, '{"timeZone":"Europe/Madrid"}');`);
+  } finally {
+    database.close();
+  }
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => vi.useRealTimers());
+  vi.setSystemTime(new Date(`2026-11-21T${time}Z`));
+  const bytes = f.offer(5, target);
+  const run = (command, args) => (command === "curl" ? { stdout: bytes } : f.run(command, args));
+  const recheck = recheckOfferedUpgrade(f.box, "1.2.3-rc.1", "1.2.3", f.link, run);
+  if (reason) await expect(recheck).rejects.toThrow(reason);
+  else await expect(recheck).resolves.toBeUndefined();
+  expect(JSON.parse(await fs.readFile(f.record, "utf8"))).toEqual({
+    serial: 5,
+    digest: createHash("sha256").update(bytes).digest("hex"),
+  });
+});
 
 it("checks the installed box's signed offer and remembers a newer pause across calls", async () => {
   const f = await offerFixture();
