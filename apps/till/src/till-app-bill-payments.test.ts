@@ -6910,11 +6910,20 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
   });
 
+  const stopErrors: Partial<Record<string, unknown>> = {
+    "profile-refusal": { code: "device.forbidden_action", action: "pay", status: 403 },
+    "request-timeout": { code: "server.internal", status: 408 },
+    "server-error": { code: "server.internal", status: 500 },
+    disconnected: new TypeError("Failed to fetch"),
+  };
   it.each([
     ["requested", "declined", "No payment was taken."],
     ["requested", "received", null],
     ["refused", "declined", null],
     ["profile-refusal", "declined", null],
+    ["request-timeout", "declined", null],
+    ["server-error", "declined", null],
+    ["disconnected", "declined", null],
   ] as const)(
     "keeps waiting after a %s stop and uses the original %s payment answer",
     async (stopOutcome, finalOutcome, message) => {
@@ -6926,13 +6935,8 @@ describe("till-app: a bill payment on the card reader", () => {
           }),
       );
       const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: stopOutcome });
-      if (stopOutcome === "profile-refusal") {
-        cancelBillReaderPayment.mockRejectedValueOnce({
-          code: "device.forbidden_action",
-          action: "pay",
-          status: 403,
-        });
-      }
+      const stopError = stopErrors[stopOutcome];
+      if (stopError !== undefined) cancelBillReaderPayment.mockRejectedValueOnce(stopError);
       const el = await takeOnReader(takeBillPayment, {
         cancelBillReaderPayment,
         getTill: vi.fn().mockResolvedValue({
@@ -6956,12 +6960,17 @@ describe("till-app: a bill payment on the card reader", () => {
         if (stopOutcome === "profile-refusal") {
           expect(status).toContain(t("card_reader.not_set_up"));
           expect(inDialog(el, "[data-pay-cancel-reader]")!.disabled).toBe(false);
+        } else if (stopError !== undefined) {
+          expect(status).toContain(t("bill_pay.stop_unknown"));
+          expect(inDialog(el, "[data-pay-cancel-reader]")!.disabled).toBe(true);
         } else {
           expect(status).toContain(
             stopOutcome === "requested" ? "Stop requested" : "Could not stop the reader",
           );
         }
-        expect(inDialog(el, "[data-pay-collecting]") !== null).toBe(stopOutcome !== "requested");
+        expect(inDialog(el, "[data-pay-collecting]") !== null).toBe(
+          stopOutcome === "refused" || stopOutcome === "profile-refusal",
+        );
         expect(inDialog(el, "[data-pay-taken]")).toBeNull();
       } finally {
         settle(

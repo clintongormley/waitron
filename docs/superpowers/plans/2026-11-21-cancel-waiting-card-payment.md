@@ -45,8 +45,9 @@ Estimate 210 added lines of production code and 210 of tests.
 1. Start with failing cases in `till-app-handheld-pay.test.ts` and `till-app.test.ts` for the
    counter and table entry points. In `api/client.ts`, report the submission ID through
    `pay(req, { onSubmission })` just before the POST, including a reused ID. Wire the same
-   action and outcome through `till-app.ts` and `widgets/card-waiting.ts` for table Pay, and
-   `widgets/tender-pay.ts` via `screens/till-counter-screen.ts` for counter Pay.
+   action, outcome and server refusal reason through `till-app.ts` and
+   `widgets/card-waiting.ts` for table Pay, and `widgets/tender-pay.ts` via
+   `screens/till-counter-screen.ts` for counter Pay.
 2. Extend the shared Pay note in `apps/server/src/guide/{en,es}/table-service.md` to cover the
    direct Counter and table screens. Add a dated pointer to item 9 of
    the [A796 handheld payments design](../specs/2026-10-19-a796-handheld-payments-design.md).
