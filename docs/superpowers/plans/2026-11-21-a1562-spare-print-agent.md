@@ -9,8 +9,8 @@ in the answer to the connection, and passes the name to the normal lookup when n
 within 1.5 s; the main box counts a request against its rate limit only once the signature checks,
 and refuses a request signed by itself; every print agent's sign-in (`requireAgent`,
 `apps/server/src/print-agent-session.ts`) refuses an agent whose box the held chart has removed,
-before it is marked as seen; and an agent its own box refuses asks again at most every 30 seconds,
-including one stopped after its token was refused.
+before it is marked as seen; and an agent stopped after its token was refused asks its own box for
+a new one again, at most every 30 seconds, as does a spare's agent its box refuses.
 
 ## What the owner asked for
 
