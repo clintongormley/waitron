@@ -317,7 +317,7 @@ describe("HEAVY_FILES", () => {
 
 describe("shardFiles", () => {
   it("packs db sales whole exactly once alongside the other whole files", () => {
-    const all = Array.from({ length: 13 }, (_, i) => shardFilesOf("db", i + 1, 13, root)).flat();
+    const all = Array.from({ length: 16 }, (_, i) => shardFilesOf("db", i + 1, 16, root)).flat();
     expect(all.filter((path) => path.startsWith("src/schema/sales.ts"))).toEqual([
       "src/schema/sales.ts",
     ]);
