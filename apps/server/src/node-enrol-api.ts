@@ -1,5 +1,5 @@
 import "./errors.js";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { createErrorBoundary, readJsonBody, requireString } from "@waitron/server-kit";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
@@ -30,6 +30,8 @@ export interface NodeEnrolApiDeps {
    */
   spare?: { node: NodeDatabase; ring: KeyRing; exchange: SpareSettingsExchange };
   enrolRateLimiter?: EnrolRateLimiter;
+  /** The fail-closed check for a request from this box; tests replace it. */
+  requestProvenFromBox?: (c: Context) => boolean;
 }
 
 const STATUS = {
@@ -59,6 +61,7 @@ const MAIN_REFUSALS: ReadonlySet<string> = new Set([
 export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "node.failed");
   const limiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
+  const fromBox = deps.requestProvenFromBox ?? requestProvenFromBox;
   // The agent asks again every round while refused, so the forwarding warning is written only when
   // its reason changes; the error boundary still logs each refusal it answers.
   let lastFailure: string | undefined;
@@ -122,7 +125,7 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
   app.post("/api/node/enrol-self", (c) =>
     run(c, log, async () => {
       limiter.check(); // throws device.join_rate_limited (429)
-      if (!requestProvenFromBox(c)) throw new AppError("node.enrol_not_local", {});
+      if (!fromBox(c)) throw new AppError("node.enrol_not_local", {});
       if (!deps.isPrimary && deps.spare === undefined)
         throw new AppError("node.enrol_unavailable", {});
       const body = await readJsonBody<{ name?: unknown }>(c);

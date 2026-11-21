@@ -3023,6 +3023,7 @@ async function bootServer(
       db,
       nodeId: tradingContext.nodeId,
       isPrimary: isSingletonPrimary && !fencedOrMirror,
+      requestProvenFromBox: seams.requestProvenFromBox,
       ...(isMirror && !fenced
         ? {
             spare: {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { taxpayer, writeNodeMembership } from "@waitron/db";
@@ -65,7 +65,13 @@ function cfgOf(): TradingContext {
   };
 }
 
-function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}): {
+function buildApp(
+  opts: {
+    isPrimary?: boolean;
+    limiter?: EnrolRateLimiter;
+    requestProvenFromBox?: (c: Context) => boolean;
+  } = {},
+): {
   app: Hono;
   cfg: TradingContext;
 } {
@@ -78,6 +84,9 @@ function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}
       nodeId: cfg.nodeId,
       isPrimary: opts.isPrimary ?? true,
       enrolRateLimiter: opts.limiter,
+      ...(opts.requestProvenFromBox === undefined
+        ? {}
+        : { requestProvenFromBox: opts.requestProvenFromBox }),
     },
     noopLog,
   );
@@ -149,6 +158,16 @@ describe("POST /api/node/enrol-self", () => {
     expect(await errorCodeOf(res)).toBe("node.enrol_not_local");
     // Refused before any database work, so no row exists.
     expect(await agentRowCount(cfg)).toBe(0);
+  });
+
+  it("asks boot's replaceable from-this-box check, not the caller's address", async () => {
+    const trusted = buildApp({ requestProvenFromBox: () => true });
+    expect((await post(trusted.app, { name: "box" }, "192.168.1.50")).status).toBe(201);
+    const refused = buildApp({ requestProvenFromBox: () => false });
+    const res = await post(refused.app, { name: "box" }, "127.0.0.1");
+    expect(res.status).toBe(403);
+    expect(await errorCodeOf(res)).toBe("node.enrol_not_local");
+    expect(await agentRowCount(refused.cfg)).toBe(0);
   });
 
   it("accepts the IPv6 loopback forms", async () => {
