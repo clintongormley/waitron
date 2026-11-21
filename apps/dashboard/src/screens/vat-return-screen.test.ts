@@ -354,6 +354,22 @@ describe("dashboard-vat-return-screen", () => {
       },
     );
 
+    it("shows its own refusal at the bottom while a missing declaration type is marked, until the file is pressed again", async () => {
+      const api = stubApi(undefined, () => Promise.reject({ code: "authorization.not_permitted" }));
+      const el = await mount(api);
+      await press(el);
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+
+      await pressCorrections(el);
+
+      expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
+      expect(field(el, "declarationType").error).toBe(t("vat_return.type_required"));
+
+      await press(el);
+
+      expect(await bottom(el)).toBe(t("form.fix_fields"));
+    });
+
     it("clears a refusal the file left once the corrections button is pressed", async () => {
       const api = stubApi(
         () => Promise.reject({ code: "authorization.not_permitted" }),

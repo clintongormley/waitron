@@ -85,7 +85,10 @@ export class VatReturnScreen extends LitElement {
   @state() private correctionsBusy = false;
   /** A refusal's sentence under the field it names, until that field changes or the next press. */
   @state() private refused: Partial<Record<Field, string>> = {};
-  /** A refusal that names no field shown here. */
+  /**
+   * The latest press's refusal that names no field shown here. Every press clears it, so it wins
+   * over a mark an earlier press left.
+   */
   @state() private refusal = "";
 
   constructor() {
@@ -231,7 +234,7 @@ export class VatReturnScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) =>
             this.#change("declarationType", event.detail.value)}
         ></wt-combobox>
-        <wt-form-actions .error=${marked ? t("form.fix_fields") : this.refusal}>
+        <wt-form-actions .error=${this.refusal || (marked ? t("form.fix_fields") : "")}>
           <wt-button
             variant="primary"
             data-test="download"
