@@ -186,13 +186,9 @@ taking the next payment. After the final payment, use **Customer document**. The
 when your device has a payment slip printer. A slip shows the payment and how it was made. For
 **Other card machine**, it includes the machine and operation number you entered.
 
-If a card payment is not taken, the
-slip says **PAYMENT NOT TAKEN**. If the reader's answer is lost, the slip prints once the payment is
-settled, which can be later, at the device where the payment began.
-
-A slip prints once; the till cannot print it again. To replace a lost slip, use **Reprint** in
-[Print Queue](printers.md#print-queue). If the till says **Payment received, but the payment slip
-could not print.**, the payment is recorded: do not take it again.
+If the till says **Payment received, but the payment slip could not print.**, you can retry the
+slip from the same button. To replace a slip that already printed, use **Reprint** in
+[Print Queue](printers.md#print-queue).
 
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
 reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves

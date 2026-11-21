@@ -11,3 +11,5 @@ In Lane F's OTHER-CARD-MACHINE-SLIP item, the owner said “i think there should
 - [ ] **Verify and guide.** Observe red then green in the focused server and Chromium tests. Run the changed suites and route inventory checks. Look at phone and desktop widths, both themes and EN/ES. Update `apps/server/src/guide/{en,es}/table-service.md`, the payment contract in `docs/developers/design-system.md` and the physical check in `docs/backlog/printers.md`.
 
 Estimate +310/−260 production and +260/−340 tests, plus guides and backlog wording. Reuses the queue and adds no schema or provider call.
+
+On 21 November at 01:03, the watcher cleared the confirmed-payment PR and reserved the decline action and late Resolve printing for the owner's decision. The till sends the received bill-payment ID for every supported tender. The new route requires that ID. Existing slip request handling stays in place for payments that already requested a slip.

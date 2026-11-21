@@ -201,14 +201,9 @@ la confirmación antes de cobrar el siguiente. Tras el último pago, usa **Docum
 El botón aparece cuando tu dispositivo tiene impresora de justificantes. El justificante muestra el
 pago y cómo se hizo. Con **Otro datáfono**, incluye el datáfono y el número de operación que indicaste.
 
-Si un pago con tarjeta no se realiza, el justificante dice **PAGO NO REALIZADO**. Si se pierde la
-respuesta del lector, el justificante se imprime cuando el pago se resuelve, que puede ser más tarde,
-en el dispositivo donde empezó el pago.
-
-Un justificante se imprime una sola vez; la caja no puede volver a imprimirlo. Para sustituir uno
-perdido, usa **Reimprimir** en la [Cola de impresión](printers.md#print-queue). Si la caja muestra
-**Pago recibido, pero no se pudo imprimir el justificante de pago.**, el pago está registrado: no
-lo cobres de nuevo.
+Si la caja muestra **Pago recibido, pero no se pudo imprimir el justificante de pago.**, puedes
+volver a intentarlo con el mismo botón. Para sustituir un justificante que ya se imprimió, usa
+**Reimprimir** en la [Cola de impresión](printers.md#print-queue).
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
 panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige

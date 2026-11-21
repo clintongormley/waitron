@@ -1020,7 +1020,7 @@ describe("a payment after the ticket was issued", () => {
     },
   );
 
-  it("retries a slip after an enqueue refusal on a single-tender sale", async () => {
+  it("does not infer a payment to print from a settled order", async () => {
     const bill = await billPrintedByPrintTheBill();
     const before = await jobCount();
     const paid = await send(
@@ -1034,8 +1034,34 @@ describe("a payment after the ticket was issued", () => {
       },
     );
     expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const response = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${bill.id}/payment-slip`,
+      {},
+    );
+    expect(response.status).toBe(400);
+    expect(response.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "paymentId" },
+    });
+    expect(await slipsSince(before)).toHaveLength(0);
+  });
+
+  it("retries a slip after an enqueue refusal on a paid bill", async () => {
+    const bill = await billPrintedByPrintTheBill();
+    const before = await jobCount();
+    const paid = await billPayment(bill.id, cash("30.00"));
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [payment] = await venue.db
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, bill.id));
     const print = () =>
-      send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/payment-slip`, {});
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${bill.id}/payment-slip`, {
+        paymentId: payment!.id,
+      });
     expect(await slipsSince(before)).toHaveLength(0);
 
     refuseSlips();

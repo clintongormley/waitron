@@ -2566,10 +2566,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       await assertRequestDevice(deps, c, session);
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const body = await readJsonBody<{ paymentId?: unknown }>(c);
-      const paymentId =
-        body.paymentId === undefined
-          ? undefined
-          : requireBodyUuid(body.paymentId, "paymentId").toLowerCase();
+      const paymentId = requireBodyUuid(body.paymentId, "paymentId").toLowerCase();
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ orderId }]);
         await printReceivedPaymentSlip(tx, requestCfg(deps.cfg, session), orderId, paymentId);

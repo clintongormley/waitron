@@ -724,7 +724,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/payment-slip",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/payment-slip`,
-    () => ({}),
+    (x) => ({ paymentId: x.deliOrder }),
     deliOrderZone,
   ],
   [

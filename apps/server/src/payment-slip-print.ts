@@ -1,13 +1,12 @@
 import "./errors.js";
 import type { Logger } from "./logger.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   billPayments,
   BUSINESS_DAY_SETTINGS,
   decodeSettingsRow,
   workingOrders,
   printJobs,
-  tenders,
   settings,
   taxpayer,
   sales,
@@ -311,79 +310,31 @@ export async function printCapturedCardSlip(
   }
 }
 
-async function receivedSlipPayment(tx: Transaction, orderId: string, paymentId?: string) {
-  if (paymentId !== undefined) {
-    const [payment] = await tx
-      .select()
-      .from(billPayments)
-      .where(
-        and(
-          eq(billPayments.workingOrderId, orderId),
-          eq(billPayments.id, paymentId),
-          eq(billPayments.state, "received"),
-        ),
-      );
-    if (payment?.receivedAt == null) throw new AppError("bill.payment_not_found", { paymentId });
-    if (payment.slipWanted) return;
-    const [provided] = await tx
-      .select()
-      .from(payments)
-      .where(eq(payments.billPaymentId, paymentId));
-    return {
-      id: payment.id,
-      method: payment.method,
-      charged: payment.applied + payment.tip,
-      tip: payment.tip,
-      paidAt: payment.receivedAt,
-      provided,
-    };
-  }
-
-  const [tender, extra] = await tx
-    .select({ tender: tenders })
-    .from(sales)
-    .innerJoin(tenders, eq(tenders.saleId, sales.id))
-    .where(and(eq(sales.workingOrderId, orderId), isNull(tenders.billPaymentId)))
-    .limit(2);
-  if (
-    tender === undefined ||
-    extra !== undefined ||
-    (tender.tender.method !== "cash" && tender.tender.method !== "card")
-  )
-    throw new AppError("working_order.not_found", { workingOrderId: orderId });
-  const { id, saleId, method, amount, tipAmount, settledAt } = tender.tender;
-  const [provided] =
-    method === "cash"
-      ? []
-      : await tx
-          .select()
-          .from(payments)
-          .where(and(eq(payments.saleId, saleId), isNull(payments.billPaymentId)));
-  return {
-    id,
-    method,
-    charged: amount,
-    tip: tipAmount,
-    paidAt: settledAt,
-    provided,
-  };
-}
-
 export async function printReceivedPaymentSlip(
   tx: Transaction,
   cfg: OriginConfig,
   orderId: string,
-  paymentId?: string,
+  paymentId: string,
 ): Promise<void> {
-  const payment = await receivedSlipPayment(tx, orderId, paymentId);
-  if (payment === undefined) return;
+  const [payment] = await tx
+    .select()
+    .from(billPayments)
+    .where(
+      and(
+        eq(billPayments.workingOrderId, orderId),
+        eq(billPayments.id, paymentId),
+        eq(billPayments.state, "received"),
+      ),
+    );
+  if (payment?.receivedAt == null) throw new AppError("bill.payment_not_found", { paymentId });
+  if (payment.slipWanted) return;
   const [existing] = await tx
     .select({ id: printJobs.id })
     .from(printJobs)
     .where(eq(printJobs.id, payment.id));
   if (existing !== undefined) return;
 
-  const { provided } = payment;
+  const [provided] = await tx.select().from(payments).where(eq(payments.billPaymentId, paymentId));
   if (provided?.readerId != null) {
     const [reader] = await tx
       .select({ ownSlip: cardReaders.printsOwnSlipAutomatically })
@@ -401,9 +352,9 @@ export async function printReceivedPaymentSlip(
     [
       {
         ...(readerPayment ? {} : { method: payment.method }),
-        charged: payment.charged,
+        charged: payment.applied + payment.tip,
         tip: payment.tip,
-        paidAt: readerPayment ? (provided.settledAt ?? payment.paidAt) : payment.paidAt,
+        paidAt: readerPayment ? (provided.settledAt ?? payment.receivedAt) : payment.receivedAt,
         reference: readerPayment ? null : provided?.externalRef,
         machine: readerPayment ? null : provided?.externalMachine,
         scheme: provided?.cardScheme ?? null,
