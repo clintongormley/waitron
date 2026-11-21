@@ -1541,7 +1541,7 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
     submissionId: "pending-submission",
     fingerprint: "pending-fingerprint",
     appliedAmount: 0,
-    tipAmount: 100,
+    tipAmount: 40,
     reason: "Goodwill",
     authorizedBy: "manager",
     requestedBy: "operator",
@@ -1570,6 +1570,12 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
   expect(await receive()).toEqual({ complete: true });
   expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(batch!.captures);
   expect(receiver.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(batch!.orders);
+  const conflicting = structuredClone(batch!);
+  conflicting.refunds[0]!.id = "another-refund";
+  conflicting.refunds[0]!.submission_id = "another-submission";
+  await expect(receive(conflicting)).rejects.toThrow(
+    "UNIQUE constraint failed: refunds.provider, refunds.provider_payment_ref",
+  );
   await receiver.db.execute(sql`update refunds set state = 'completed',
     completed_at = '2026-07-20T17:22:00.000Z' where id = 'pending-refund'`);
   await receiver.db.execute(sql`update payments set state = 'refunded',

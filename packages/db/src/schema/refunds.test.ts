@@ -6,10 +6,11 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
 import { REFUND_CHANGE_REFUSAL, REFUND_DELETE_REFUSAL } from "../trigger-refusals.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedDevice, seedNode, seedPerson, seedVenue } from "../testing/seed.js";
+import { seedDevice, seedNode, seedPerson, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { isRefusal } from "../unique-violation.js";
+import { billPayments } from "./bill-payments.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 
@@ -105,6 +106,7 @@ describe("settled-tender refund ledger", () => {
   function insert(overrides: Record<string, string | number | null> = {}) {
     const r = {
       id: randomUUID(),
+      bill_payment_id: null,
       sale_id: saleId,
       tender_id: tenderId,
       submission_id: randomUUID(),
@@ -138,11 +140,11 @@ describe("settled-tender refund ledger", () => {
     };
     return withTransaction(suite.db, async (tx) => {
       await tx.run(sql`insert into refunds
-        (id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
+        (id, bill_payment_id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
          authorized_by, requested_by, source, device_id, node_id, method, manual,
          provider, provider_payment_ref, state, created_at, completed_at, failed_at, sent_at, send_count,
          refs_before_send, provider_refund_ref, provider_status, last_lookup_at, next_retry_at, attested_by, attestation_note)
-        values (${r.id}, ${r.sale_id}, ${r.tender_id}, ${r.submission_id}, ${r.fingerprint}, ${r.applied_amount},
+        values (${r.id}, ${r.bill_payment_id}, ${r.sale_id}, ${r.tender_id}, ${r.submission_id}, ${r.fingerprint}, ${r.applied_amount},
          ${r.tip_amount}, ${r.reason}, ${r.authorized_by}, ${r.requested_by}, ${r.source}, ${r.device_id},
          ${r.node_id}, ${r.method}, ${r.manual}, ${r.provider}, ${r.provider_payment_ref},
          ${r.state}, ${r.created_at}, ${r.completed_at}, ${r.failed_at}, ${r.sent_at}, ${r.send_count},
@@ -157,6 +159,44 @@ describe("settled-tender refund ledger", () => {
       await tx.run(sql`update refunds set ${assignment} where id = ${refundId}`);
     });
   }
+
+  it("requires a bill payment or a sale and tender as the sole parent", async () => {
+    const order = await seedWorkingOrder(suite.db);
+    const [payment] = await suite.db
+      .insert(billPayments)
+      .values({
+        workingOrderId: order.id,
+        submissionId: randomUUID(),
+        fingerprint: "bill card",
+        kind: "contribution",
+        method: "card",
+        applied: 500,
+        state: "received",
+        source: "device",
+        deviceId,
+        requestedBy: PERSON,
+        receivedAt: AT,
+      })
+      .returning({ id: billPayments.id });
+    const bill = { bill_payment_id: payment!.id, provider_payment_ref: "pi_bill" };
+    for (const parent of [
+      bill,
+      { tender_id: null },
+      { ...bill, sale_id: null },
+      { sale_id: null, tender_id: null },
+    ]) {
+      const error = await captureError(() => insert(parent));
+      expect(checkFailed(error, "refunds_parent_ck")).toBe(true);
+    }
+    await insert({ ...bill, sale_id: null, tender_id: null });
+    await insert();
+    expect(
+      suite.db.all(sql`select bill_payment_id, sale_id, tender_id from refunds order by rowid`),
+    ).toEqual([
+      { bill_payment_id: bill.bill_payment_id, sale_id: null, tender_id: null },
+      { bill_payment_id: null, sale_id: saleId, tender_id: tenderId },
+    ]);
+  });
 
   it("only records a refund against a stored authorizer", async () => {
     const missingPerson = "ffffffff-0000-4000-8000-000000000001";
@@ -389,6 +429,28 @@ describe("settled-tender refund ledger", () => {
     }
     expect(suite.db.all(sql`select drawer_opened_at from refunds`)).toEqual([
       { drawer_opened_at: AT },
+    ]);
+  });
+
+  it.each([
+    ["pending cash", { method: "cash", provider: null, provider_payment_ref: null }],
+    [
+      "failed cash",
+      {
+        method: "cash",
+        provider: null,
+        provider_payment_ref: null,
+        state: "failed",
+        failed_at: AT,
+      },
+    ],
+    ["completed card", { state: "completed", completed_at: AT }],
+  ] as const)("refuses a drawer stamp on a %s refund", async (_kind, fields) => {
+    const refundId = await insert(fields);
+    const error = await captureError(() => update(refundId, sql`drawer_opened_at = ${AT}`));
+    expect(triggerRaised(error, REFUND_CHANGE_REFUSAL)).toBe(true);
+    expect(suite.db.all(sql`select drawer_opened_at from refunds`)).toEqual([
+      { drawer_opened_at: null },
     ]);
   });
 

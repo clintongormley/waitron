@@ -430,14 +430,6 @@ export async function receiveReturnedOriginals(
           table: "refunds",
           columns: ["sale_id", "submission_id"],
         }) &&
-        !refusalOn(error, UNIQUE_VIOLATION, {
-          table: "refunds",
-          columns: ["provider", "provider_payment_ref"],
-        }) &&
-        !refusalOn(error, UNIQUE_VIOLATION, {
-          table: "refunds",
-          columns: ["provider", "provider_payment_ref", "provider_refund_ref"],
-        }) &&
         !triggerRaised(error, COVERAGE_REFUSAL) &&
         !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
       )

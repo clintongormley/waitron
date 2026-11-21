@@ -980,6 +980,10 @@ describe("the provider refunds another refund of the payment already accounts fo
     const [completed, failed, pending] = await refundRowsOf(card.id);
     // The provider's id may arrive on a refund still pending; it is this refund's own.
     venue.db.run(sql`update refunds set provider_refund_ref = 'own-ref' where id = ${pending!.id}`);
+    venue.db.run(sql`insert into payment_refunds
+      (id, payment_id, amount, state, provider_refund_ref, created_at)
+      select ${randomUUID()}, id, 100, 'failed', 'own-ref', ${new Date().toISOString()}
+      from payments where bill_payment_id = ${card.id}`);
 
     await withProvider({ lookups: { kind: "none" } }, () =>
       resumeCardRefund(

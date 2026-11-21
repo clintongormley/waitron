@@ -1148,8 +1148,14 @@ describe("settled-tender refund evidence and interruption boundaries", () => {
     deps.refundProviderFor = async () => provider;
     await store.db
       .update(refunds)
-      .set({ sentAt: AT, sendCount: 1 })
+      .set({ sentAt: AT, sendCount: 1, providerRefundRef: "own-ref" })
       .where(eq(refunds.id, pending.id));
+    await store.db.insert(paymentRefunds).values({
+      paymentId: payment!.id,
+      amount: 100,
+      state: "failed",
+      providerRefundRef: "own-ref",
+    });
     const pendingRow = await row(pending.id);
     await store.db.insert(refunds).values({
       ...pendingRow,

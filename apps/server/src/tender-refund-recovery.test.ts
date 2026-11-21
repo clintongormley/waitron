@@ -96,6 +96,48 @@ async function billRefund() {
     },
   };
 }
+it("recovers bill and receipt refunds only through their own sender", async () => {
+  const bill = await billRefund();
+  vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
+  const { refund: pendingBill } = await refundBillPayment(
+    v.deps,
+    v.cfg,
+    bill.id,
+    bill.paymentId,
+    bill.request,
+    v.operator,
+    "reader-card",
+  );
+  const { refund: pendingSale } = await retained(true);
+  const read = (id: string) => v.db.select().from(refunds).where(eq(refunds.id, id)).get();
+
+  await expect(resumeTenderRefund(v.deps, pendingBill.id, "loop")).rejects.toMatchObject({
+    code: "tender.refund_not_found",
+  });
+  await expect(resumeCardRefund(v.deps, pendingSale.id, "loop", "stored")).rejects.toMatchObject({
+    code: "bill.refund_not_found",
+  });
+
+  const lookup = vi.spyOn(v.card, "lookupRefund").mockImplementation(async () => ({
+    kind: "match",
+    providerRefundRef: randomUUID(),
+    outcome: "completed",
+    providerStatus: "completed",
+  }));
+  const beforeBill = read(pendingBill.id);
+  expect(beforeBill).toMatchObject({ state: "pending", nextRetryAt: null });
+  await recoverTenderRefunds(v.deps);
+  expect(lookup.mock.calls.map(([ask]) => ask.refundId)).toEqual([pendingSale.id]);
+  expect(read(pendingBill.id)).toEqual(beforeBill);
+  expect(read(pendingSale.id)).toMatchObject({ state: "completed" });
+
+  lookup.mockClear();
+  const pass = await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+  expect(pass).toMatchObject({ refundsCompleted: 1, errors: [] });
+  expect(lookup.mock.calls.map(([ask]) => ask.refundId)).toEqual([pendingBill.id]);
+  expect(read(pendingBill.id)).toMatchObject({ state: "completed" });
+});
+
 describe("settled tender recovery admission", () => {
   it.each(["unchecked", "missing", "invalid", "restart_required"])(
     "%s refuses a worker pass without changing saved refund evidence",
