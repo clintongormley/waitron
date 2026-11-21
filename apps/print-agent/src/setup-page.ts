@@ -155,7 +155,7 @@ ${lastError}
     }
     case "spare_box":
       return `<h1>Waitron print agent</h1>
-<p>This box is the venue's spare. This agent starts printing again if this box becomes the main box.</p>`;
+<p>This box is the venue's spare and cannot reach the main box. This agent prints again when it can, or when this box becomes the main box.</p>`;
   }
 }
 

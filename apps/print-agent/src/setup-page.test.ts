@@ -562,7 +562,7 @@ describe("createSetupApp — mutations", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain(
-      "This box is the venue's spare. This agent starts printing again if this box becomes the main box.",
+      "This box is the venue's spare and cannot reach the main box. This agent prints again when it can, or when this box becomes the main box.",
     );
     expect(html).not.toContain("Can't reach");
     expect(html).not.toContain("This agent cannot reach its venue");

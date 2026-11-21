@@ -101,6 +101,41 @@ interface SrvRecord {
   target: string;
 }
 
+/** A one-question mDNS query for `name`'s A record, sent from an ephemeral port so responders
+ * answer by unicast (RFC 6762 §6.7). */
+export function buildAddressQuery(name: string): Buffer {
+  const header = Buffer.alloc(12);
+  header.writeUInt16BE(1, 4);
+  const parts: Buffer[] = [header];
+  for (const label of name.replace(/\.$/, "").split(".")) {
+    const b = Buffer.from(label, "ascii");
+    parts.push(Buffer.from([b.length]), b);
+  }
+  parts.push(Buffer.from([0, 0, TYPE_A, 0, 1]));
+  return Buffer.concat(parts);
+}
+
+/** The first IPv4 address `packet` gives for `name` in any section, or undefined. */
+export function parseAddressAnswer(packet: Buffer, name: string): string | undefined {
+  try {
+    if (packet.length < 12) return undefined;
+    const r: Reader = { buf: packet, offset: 12 };
+    const questions = packet.readUInt16BE(4);
+    for (let i = 0; i < questions; i++) readQuestion(r);
+    const total = packet.readUInt16BE(6) + packet.readUInt16BE(8) + packet.readUInt16BE(10);
+    const wanted = key(name);
+    for (let i = 0; i < total; i++) {
+      const rec = readRecord(r);
+      if (rec.type === TYPE_A && rec.rdata.length === 4 && key(rec.name) === wanted) {
+        return rec.rdata.join(".");
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parsePdlResponse(packet: Buffer): DiscoveredDevice[] {
   try {
     if (packet.length < 12) return [];
