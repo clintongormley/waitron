@@ -1602,10 +1602,10 @@ describe("a reset over a saved group split today", () => {
     },
   );
 
-  it("an open, unsent delivery keeps the saved group split until it is abandoned", async () => {
+  it.each(["c3", "c5"] as const)("an open order to %s keeps the group split", async (key) => {
     const { zoneId, table } = await longTable();
     await split(table.c3!, [table.c5!], 6);
-    const order = await delivery(table.c5!, false);
+    const order = await delivery(table[key]!, false);
     const before = await todayRow(table.c5!);
     const splitGroup = await mergeOf(v, table.c3!);
     expect(
@@ -1622,9 +1622,8 @@ describe("a reset over a saved group split today", () => {
     await reset(zoneId);
     expect(await todayRow(table.c5!)).toEqual(before);
     expect(await mergeOf(v, table.c3!)).toEqual(splitGroup);
-    expect(await mergeOf(v, table.c5!)).toBeNull();
     expect(await readyToMoveIn(zoneId)).toEqual([]);
-    expect(await deliveryDestination(order)).toEqual({ tableId: table.c5 });
+    expect(await deliveryDestination(order)).toEqual({ tableId: table[key] });
 
     await abandonHeldOrder({ db: v.db }, v.cfg, order);
     await catchUp(zoneId);
@@ -1646,6 +1645,7 @@ describe("a reset over a saved group split today", () => {
 
     expect(await todayRow(table.c5!)).toMatchObject({ x: 56 });
     expect(await deliveryDestination(order)).toEqual({ tableId: table.c5 });
+    expect((await mergeOf(v, table.c5!))?.members).toHaveLength(3);
     expect(await pendingRows(zoneId)).toEqual([]);
   });
 
