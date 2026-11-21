@@ -726,10 +726,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   whether such a control should stack its choices instead.
   [Detail](backlog/till.md#segmented-choices-still-break-words-when-whole-words-cannot-fit-left-by-a773-2-b4b)
 
-- **Custom item on the Counter (A738 residual; undecided).** The dashed + Custom item tile and its
-  window remain unbuilt. The window needs a name, price, required VAT rate and destination
-  (nowhere or a station). Decide the permission and whether an underlying product supplies the
-  menu, reports and invoice-line identity before building an arbitrary-price path.
+- **A1564. Custom item on the Counter (A738 residual; owner, 2026-11-21; queued for building).**
+  A dashed + Custom item tile for the rare thing not on the menu: typed name and price, the
+  takeaway VAT rate asked only on a takeaway order, a kitchen station or none. Each line sits on
+  a hidden product per takeaway rate; a new permission, `order.custom_item`, or a supervisor's PIN.
+  Design `docs/superpowers/specs/2026-11-21-counter-custom-item-design.md`, plan
+  `docs/superpowers/plans/2026-11-21-counter-custom-item.md` (10 tasks, reviewed once). After
+  A1563, whose number pad it uses. The VAT rates work (piece A) revisits the places the plan's
+  Global Constraints list.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).

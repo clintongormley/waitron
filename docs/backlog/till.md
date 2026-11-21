@@ -2501,10 +2501,11 @@ order off a short screen.
 
 ### Custom item on the Counter (A738 residual)
 
-The dashed + Custom item tile and its window remain unbuilt. Keep the requested fields together:
-name, price, required VAT rate and destination (nowhere or a station). Decide who may use it and
-whether it needs an underlying product for the menu, reports and invoice lines. A weighed
-product does not supply an arbitrary-price path. The cleanup below does not settle those choices.
+A1564. Decided by the owner on 2026-11-21 and queued for building:
+[design](../superpowers/specs/2026-11-21-counter-custom-item-design.md) and
+[plan](../superpowers/plans/2026-11-21-counter-custom-item.md). A hidden product per takeaway VAT
+rate sits behind each line; the permission `order.custom_item` can be given to anyone, and
+supervisors and managers hold it by default. The plan's last task deletes this entry.
 
 ### A738. The counter screen: fewer distractions
 
