@@ -26,6 +26,7 @@ export { computeOverdueOrders } from "./overdue-orders.js";
 export { computeVatReturn, saleVatDay } from "./vat-return.js";
 export { vatMovements } from "./vat-movements.js";
 export type { VatMovement, VatMovementKind } from "./vat-movements.js";
+export { computeVatCorrections } from "./vat-corrections.js";
 export { computeInputVat } from "./input-vat.js";
 export type { InputVatInput } from "./input-vat.js";
 export { parsePeriodToken } from "./period.js";
@@ -68,6 +69,11 @@ export type {
   TopSeller,
   TopSellerVariant,
   TopSellersInput,
+  VatCorrectionDirection,
+  VatCorrectionInvoice,
+  VatCorrectionRow,
+  VatCorrections,
+  VatCorrectionSummaryLine,
   VatRateLine,
   VatReturn,
   VatReturnInput,
