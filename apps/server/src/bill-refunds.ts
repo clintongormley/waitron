@@ -46,6 +46,11 @@ import {
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
+import {
+  claimTenderRefund,
+  resolveClaimedRefund,
+  tenderRefundIsLive,
+} from "./tender-refund-sends.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
@@ -242,7 +247,7 @@ export async function clockStopsRefund(
 const liveRefundsOf = perDatabase(() => new Set<string>());
 
 export function billRefundIsLive(db: Database, refundId: string): boolean {
-  return liveRefundsOf(db).has(refundId);
+  return liveRefundsOf(db).has(refundId) || tenderRefundIsLive(db, refundId);
 }
 
 /** A card refund, its payment's bill and its provider's `payments` row. */
@@ -515,7 +520,8 @@ export async function resumeCardRefund(
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const found = await readCardRefund(tx, refundId);
     if (found === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (found.refund.state !== "pending" || live.has(refundId)) return { found, release: null };
+    if (found.refund.state !== "pending" || billRefundIsLive(deps.db, refundId))
+      return { found, release: null };
     return { found, release: claimLive(live, refundId) };
   });
   if (target.release === null) return { claimed: false, refund: target.found.refund };
@@ -575,7 +581,7 @@ export async function attestCardRefund(
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const target = await readCardRefund(tx, refundId);
     if (target === undefined) throw new AppError("bill.refund_not_found", { refundId });
-    if (target.refund.state !== "pending" || live.has(refundId)) {
+    if (target.refund.state !== "pending" || billRefundIsLive(deps.db, refundId)) {
       throw new AppError("bill.refund_not_stuck", { refundId });
     }
     if (outcome === "completed" && target.refund.sentAt === null) {
@@ -592,7 +598,7 @@ export async function attestCardRefund(
       attestation,
     );
   } finally {
-    release();
+    release?.();
   }
 }
 
@@ -666,7 +672,7 @@ export async function refundBillPayment(
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
   const toCheck = await refundOverrideToCheck(deps.db, tender, req, operator.sessionId);
-  let release = (): void => {};
+  let release: (() => void) | undefined;
   try {
     const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {
       const override = withCheck(req.override, checked);
@@ -842,7 +848,7 @@ export async function refundBillPayment(
           .returning();
         await captureRefundAttendance(tx, refund!, deps.attendance, "pending");
         // Inside the transaction, so no loop pass runs between the insert and the claim.
-        release = claimLive(liveRefundsOf(deps.db), refund!.id);
+        release = claimTenderRefund(deps.db, refund!.id);
         return { kind: "send" as const, refundId: refund!.id, provider };
       });
     });
@@ -852,7 +858,15 @@ export async function refundBillPayment(
       refusalReason = reason;
     };
     if (begun.kind === "send") {
-      await sendCardRefund(deps, begun.provider, begun.refundId, cfg.origin, refused);
+      const held = release!;
+      release = undefined;
+      const result = await resolveClaimedRefund(
+        { ...deps, refundProviderFor: async () => begun.provider },
+        begun.refundId,
+        "retry",
+        held,
+      );
+      refusalReason = result.refusalReason;
     } else {
       await resumeCardRefund(deps, begun.refundId, "retry", cfg.origin, refused);
     }
@@ -866,6 +880,6 @@ export async function refundBillPayment(
       return result;
     });
   } finally {
-    release();
+    release?.();
   }
 }

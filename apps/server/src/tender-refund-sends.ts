@@ -1,6 +1,12 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { refunds, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  billPayments,
+  refunds,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   payments,
   recordRefund,
@@ -11,7 +17,8 @@ import {
 } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { AppError, centsToDecimal } from "@waitron/shared";
-import { raiseTenderRefundConflict } from "./bill-refund-alerts.js";
+import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
+import { alertOrigin } from "./request-config.js";
 import {
   clockStopsRefund,
   refundRefused,
@@ -76,13 +83,35 @@ export function claimTenderRefund(db: Database, refundId: string): () => void {
   return claimLive(liveOf(db), refundId);
 }
 async function read(tx: Transaction, id: string): Promise<RefundRow> {
-  const [row] = await tx
-    .select()
-    .from(refunds)
-    .where(and(eq(refunds.id, id), isNotNull(refunds.saleId)));
+  const [row] = await tx.select().from(refunds).where(eq(refunds.id, id));
   if (row === undefined) throw new AppError("tender.refund_not_found", { refundId: id });
   return row;
 }
+
+async function readTenderRefund(tx: Transaction, id: string): Promise<RefundRow> {
+  const refund = await read(tx, id);
+  if (refund.saleId === null) throw new AppError("tender.refund_not_found", { refundId: id });
+  return refund;
+}
+
+async function raiseConflict(tx: Transaction, refund: RefundRow, ref: string | null, now: Date) {
+  if (refund.billPaymentId === null) {
+    return raiseTenderRefundConflict(tx, refund, ref, now);
+  }
+  const [parent] = await tx
+    .select({ workingOrderId: billPayments.workingOrderId })
+    .from(billPayments)
+    .where(eq(billPayments.id, refund.billPaymentId));
+  return raiseRefundOutcomeConflict(
+    tx,
+    refund,
+    parent!.workingOrderId,
+    ref,
+    now,
+    alertOrigin("stored", refund),
+  );
+}
+
 async function capture(tx: Transaction, refund: RefundRow) {
   const [row] = await tx
     .select()
@@ -152,7 +181,7 @@ async function recordOutcomeIn(
         : null;
   if (refund.state !== "pending") {
     if (outcome !== "pending" && outcome !== refund.state)
-      await raiseTenderRefundConflict(tx, refund, providerRef, reading.instant);
+      await raiseConflict(tx, refund, providerRef, reading.instant);
     return refund;
   }
   if (
@@ -160,7 +189,7 @@ async function recordOutcomeIn(
     ((refund.providerRefundRef !== null && refund.providerRefundRef !== providerRef) ||
       (await excludedRefs(tx, refund)).includes(providerRef))
   ) {
-    await raiseTenderRefundConflict(tx, refund, providerRef, reading.instant);
+    await raiseConflict(tx, refund, providerRef, reading.instant);
     return refund;
   }
   if (outcome !== "pending" && (await clockStopsRefund(tx, deps, evidence, reading))) return refund;
@@ -194,7 +223,7 @@ export async function readStuckTenderRefund(
   db: Database,
   id: string,
 ): Promise<RefundRow> {
-  const refund = await read(tx, id);
+  const refund = await readTenderRefund(tx, id);
   if (
     refund.state !== "pending" ||
     refund.method !== "card" ||
@@ -397,7 +426,7 @@ export async function resumeTenderRefund(
   const live = liveOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
-    const refund = await read(tx, refundId);
+    const refund = await readTenderRefund(tx, refundId);
     const release =
       refund.state === "pending" &&
       refund.method === "card" &&
@@ -413,6 +442,19 @@ export async function resumeTenderRefund(
 }
 
 export async function resolveClaimedTenderRefund(
+  deps: TenderRefundDeps,
+  refundId: string,
+  resolver: "retry" | "manager" | "loop",
+  release: () => void,
+) {
+  const { refund, refusalReason } = await resolveClaimedRefund(deps, refundId, resolver, release);
+  return {
+    ...toTenderRefundView(refund),
+    ...(refusalReason === undefined ? {} : { refusalReason }),
+  };
+}
+
+export async function resolveClaimedRefund(
   deps: TenderRefundDeps,
   refundId: string,
   resolver: "retry" | "manager" | "loop",
@@ -459,10 +501,10 @@ export async function resolveClaimedTenderRefund(
   try {
     return await Promise.race([
       task.then((row) => ({
-        ...toTenderRefundView(row),
-        ...(row.state === "failed" && refusalReason !== undefined ? { refusalReason } : {}),
+        refund: row,
+        refusalReason: row.state === "failed" ? refusalReason : undefined,
       })),
-      deadline.then(toTenderRefundView),
+      deadline.then((refund) => ({ refund, refusalReason: undefined })),
     ]);
   } finally {
     clearTimeout(timer!);

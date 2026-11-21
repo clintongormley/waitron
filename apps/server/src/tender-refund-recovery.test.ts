@@ -4,7 +4,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { refunds, tenders, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { payments } from "@waitron/payments";
+import { payments, type RefundAnswer } from "@waitron/payments";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
 import { takeReaderBillPayment } from "./bill-payments.js";
 import { refundBillPayment, resumeCardRefund, attestCardRefund } from "./bill-refunds.js";
@@ -96,6 +96,50 @@ async function billRefund() {
     },
   };
 }
+it("answers a bill refund at the response deadline while its provider finishes", async () => {
+  const bill = await billRefund();
+  let release!: (answer: RefundAnswer) => void;
+  const providerAnswer = new Promise<RefundAnswer>((resolve) => {
+    release = resolve;
+  });
+  const send = vi.spyOn(v.card, "sendRefund").mockImplementation(() => providerAnswer);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const request = refundBillPayment(
+    v.deps,
+    v.cfg,
+    bill.id,
+    bill.paymentId,
+    bill.request,
+    v.operator,
+    "reader-card",
+  );
+  try {
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await Promise.race([request, Promise.resolve("waiting")])).toMatchObject({
+      refund: { state: "pending" },
+    });
+  } finally {
+    release({
+      kind: "outcome",
+      outcome: "completed",
+      providerRefundRef: "bill-refund-after-deadline",
+      providerStatus: "completed",
+    });
+    await request;
+    vi.useRealTimers();
+  }
+  await vi.waitFor(async () => {
+    const saved = await v.db
+      .select()
+      .from(refunds)
+      .where(eq(refunds.billPaymentId, bill.paymentId));
+    expect(saved).toMatchObject([
+      { state: "completed", providerRefundRef: "bill-refund-after-deadline" },
+    ]);
+  });
+});
+
 it("recovers bill and receipt refunds only through their own sender", async () => {
   const bill = await billRefund();
   vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
