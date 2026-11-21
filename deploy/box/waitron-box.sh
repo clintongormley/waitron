@@ -104,6 +104,21 @@ upgrade_status() {
   answer "{\"ok\":true,\"result\":$result}"
 }
 
+upgrade_settings() (
+  local host="${WAITRON_HOST_DIR:-${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host}"
+  local box="${WAITRON_DIR:-/opt/waitron}" reply
+  if [ "$1" = save-upgrade-settings ]; then
+    umask 077
+    exec 9>"$box.upgrade-settings.lock" || { refuse host_failed; return; }
+    if ! flock -n 9; then refuse busy; return; fi
+  fi
+  if reply="$("$host/node-v26.7.0/bin/node" "$host/box/upgrades/cli.mjs" "$1" "$box" "${@:2}")"; then
+    answer "$reply"
+  else
+    refuse host_failed
+  fi
+)
+
 clock_status() {
   local ntp synced unit unit_json=null service last=null
   ntp="$(ntp_property NTP)"
@@ -319,6 +334,8 @@ main() {
   case "$line" in
     clock.status) clock_status ;;
     upgrade.status) upgrade_status ;;
+    upgrade.settings) upgrade_settings read-upgrade-settings ;;
+    "upgrade.settings.set "*) upgrade_settings save-upgrade-settings "${line#upgrade.settings.set }" ;;
     clock.sync-on) clock_sync_on ;;
     clock.retry) clock_retry ;;
     "clock.set "*)

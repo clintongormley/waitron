@@ -88,6 +88,36 @@ describe("boxHostClient().lastOfferedUpgrade", () => {
   });
 });
 
+describe("boxHostClient().upgradeSettings", () => {
+  const edit = { revision: 2, automatic: false, start: null, end: null };
+  const settings = { ...edit, version: 1, revision: 3 };
+
+  it("exchanges the fixed settings requests over the socket", async () => {
+    const h = await host(answer({ ok: true, result: settings }));
+    const client = boxHostClient({ socketPath: h.path });
+    expect(await client.readUpgradeSettings()).toEqual({ ok: true, settings });
+    expect(await client.saveUpgradeSettings(edit)).toEqual({ ok: true, settings });
+    expect(h.lines).toEqual([
+      "upgrade.settings",
+      'upgrade.settings.set {"revision":2,"automatic":false,"start":null,"end":null}',
+    ]);
+  });
+
+  it.each([
+    [{ ok: false, reason: "unknown_request" }, "unavailable"],
+    [{ ok: false, reason: "settings_stale" }, "stale"],
+    [{ ok: false, reason: "settings_invalid" }, "invalid"],
+    [{ ok: false, reason: "busy" }, "busy"],
+    [{ ok: true, result: { ...settings, version: 2 } }, "unavailable"],
+  ])("interprets a host response %j", async (reply, reason) => {
+    const h = await host(answer(reply));
+    expect(await boxHostClient({ socketPath: h.path }).saveUpgradeSettings(edit)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+});
+
 describe("boxHostClient().clockStatus", () => {
   it("reads the host's time service state", async () => {
     const h = await host(answer(STATUS));

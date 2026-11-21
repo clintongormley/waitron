@@ -231,6 +231,9 @@ declare module "@waitron/shared" {
     /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     "node.read_only": Record<string, never>;
+    "upgrade.settings_stale": Record<string, never>;
+    "upgrade.settings_busy": Record<string, never>;
+    "upgrade.settings_unavailable": Record<string, never>;
     "node.spare": Record<string, never>;
     /**
      * This box's node.db holds neither a mode row nor a signing key for it, yet the held chart names

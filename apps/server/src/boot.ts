@@ -4093,6 +4093,7 @@ async function bootServer(
     app,
     {
       db,
+      upgradeSettings: hostClient,
       readHealth: () =>
         collectBoxHealth(db, {
           now,

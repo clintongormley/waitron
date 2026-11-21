@@ -44,7 +44,38 @@ export interface LastOfferedUpgrade {
   status: "upgraded" | "rolled-back";
 }
 
+export interface UpgradeSettingsEdit {
+  revision: number;
+  automatic: boolean;
+  start: string | null;
+  end: string | null;
+}
+
+export type UpgradeSettingsAnswer =
+  | { ok: true; settings: UpgradeSettingsEdit & { version: 1 } }
+  | { ok: false; reason: "invalid" | "stale" | "busy" | "unavailable" };
+
+export function upgradeSettingsEdit(value: unknown): UpgradeSettingsEdit | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { revision, automatic, start, end } = value as Record<string, unknown>;
+  const hour = (time: unknown): time is string | null =>
+    time === null ||
+    (typeof time === "string" && time.length === 5 && /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
+  if (
+    typeof revision !== "number" ||
+    !Number.isSafeInteger(revision) ||
+    revision < 0 ||
+    typeof automatic !== "boolean" ||
+    !hour(start) ||
+    !hour(end)
+  )
+    return null;
+  return { revision, automatic, start, end };
+}
+
 export interface BoxHostClient {
+  readUpgradeSettings?(): Promise<UpgradeSettingsAnswer>;
+  saveUpgradeSettings?(edit: UpgradeSettingsEdit): Promise<UpgradeSettingsAnswer>;
   lastOfferedUpgrade?(): Promise<LastOfferedUpgrade | null>;
   clockStatus(): Promise<ClockServiceStatus>;
   /** Switches the host's automatic time back on (`clock.sync-on`); test fakes may leave it out. */
@@ -168,7 +199,34 @@ export function boxHostClient(
   deps: { socketPath?: string; statusMs?: number; setMs?: number; retryMs?: number } = {},
 ): Required<BoxHostClient> {
   const socketPath = isUnset(deps.socketPath) ? DEFAULT_SOCKET_PATH : deps.socketPath;
+  async function askUpgradeSettings(line: string, limitMs: number): Promise<UpgradeSettingsAnswer> {
+    const response = await exchange(socketPath, line, limitMs);
+    if (!response.ok) {
+      switch (response.refusal) {
+        case "settings_invalid":
+          return { ok: false, reason: "invalid" };
+        case "settings_stale":
+          return { ok: false, reason: "stale" };
+        case "busy":
+          return { ok: false, reason: "busy" };
+        default:
+          return { ok: false, reason: "unavailable" };
+      }
+    }
+    const value = response.reply.result;
+    const fields = upgradeSettingsEdit(value);
+    if (fields === null || (value as { version?: unknown }).version !== 1)
+      return { ok: false, reason: "unavailable" };
+    return { ok: true, settings: { version: 1, ...fields } };
+  }
   return {
+    readUpgradeSettings: () =>
+      askUpgradeSettings("upgrade.settings", deps.statusMs ?? DEFAULT_STATUS_MS),
+    saveUpgradeSettings: (edit) =>
+      askUpgradeSettings(
+        `upgrade.settings.set ${JSON.stringify(edit)}`,
+        deps.setMs ?? DEFAULT_SET_MS,
+      ),
     async clockStatus() {
       const result = await exchange(socketPath, "clock.status", deps.statusMs ?? DEFAULT_STATUS_MS);
       if (!result.ok) {

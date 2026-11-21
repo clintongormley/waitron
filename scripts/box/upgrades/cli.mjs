@@ -51,6 +51,73 @@ const offerVerb = "check-upgrade-offer";
 const offeredCheckVerb = "check-offered-upgrade";
 const offeredApplyVerb = "apply-offered-upgrade";
 const windowVerb = "check-upgrade-window";
+const readSettingsVerb = "read-upgrade-settings";
+const saveSettingsVerb = "save-upgrade-settings";
+const defaultSettings = { version: 1, revision: 0, automatic: true, start: "03:00", end: "05:00" };
+const settingsFields = ["revision", "automatic", "start", "end"];
+const settingsRefusal = (reason) => ({ ok: false, reason });
+
+function hasSettingsFields(value, fields) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value).length === fields.length &&
+    fields.every((field) => Object.hasOwn(value, field))
+  );
+}
+
+function validSettings({ revision, automatic, start, end }) {
+  if (!Number.isSafeInteger(revision) || revision < 0 || typeof automatic !== "boolean")
+    return false;
+  if (start === null && end === null) return true;
+  const hour = (value) =>
+    typeof value === "string" && value.length === 5 && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+  if (!hour(start) || !hour(end)) return false;
+  const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+  return (minutes(end) - minutes(start) + 1440) % 1440 >= 60;
+}
+
+async function readUpgradeSettings(file) {
+  let value;
+  try {
+    value = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return defaultSettings;
+    throw error;
+  }
+  if (
+    !hasSettingsFields(value, ["version", ...settingsFields]) ||
+    value.version !== 1 ||
+    !validSettings(value)
+  )
+    throw new Error("unreadable upgrade settings");
+  return value;
+}
+
+async function upgradeSettingsCommand(file, edit) {
+  let draft;
+  if (edit !== undefined) {
+    try {
+      draft = JSON.parse(edit);
+    } catch {
+      return settingsRefusal("settings_invalid");
+    }
+    if (!hasSettingsFields(draft, settingsFields) || !validSettings(draft))
+      return settingsRefusal("settings_invalid");
+  }
+  try {
+    const saved = await readUpgradeSettings(file);
+    if (draft === undefined) return { ok: true, result: saved };
+    if (draft.revision !== saved.revision || saved.revision === Number.MAX_SAFE_INTEGER)
+      return settingsRefusal("settings_stale");
+    const result = { version: 1, ...draft, revision: saved.revision + 1 };
+    await writeFileDurable(file, result);
+    return { ok: true, result };
+  } catch {
+    return settingsRefusal("host_failed");
+  }
+}
 const downloadOfferVerb = "download-upgrade-offer";
 const deferred = (reason) => ({ status: "deferred", reason });
 const offerUrl =
@@ -187,6 +254,18 @@ async function checkUpgradeOffer(
 }
 
 async function checkUpgradeWindow(boxDirectory, run, offeredInstall = false) {
+  let saved;
+  try {
+    saved = await readUpgradeSettings(`${boxDirectory}.upgrade-settings.json`);
+  } catch {
+    throw new Error("upgrade check skipped: the saved upgrade settings are unreadable");
+  }
+  if (offeredInstall) {
+    if (!saved.automatic) throw new Error("automatic upgrades are paused");
+    if (saved.start === null) throw new Error("automatic upgrade hours are cleared");
+  }
+  const start = saved.start ?? defaultSettings.start;
+  const end = saved.end ?? defaultSettings.end;
   let timeZone;
   try {
     timeZone = await installedVenueTimeZone(boxDirectory, run);
@@ -197,26 +276,35 @@ async function checkUpgradeWindow(boxDirectory, run, offeredInstall = false) {
     throw new Error("upgrade check skipped: the venue time zone is missing");
   const invalid = "upgrade check skipped: the saved venue time zone is invalid";
   if (typeof timeZone !== "string") throw new Error(invalid);
-  let formatter;
+  const now = Date.now();
+  let local;
   try {
-    formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    });
+    local = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO(timeZone);
   } catch {
     throw new Error(invalid);
   }
-  if (/^[+-]/.test(formatter.resolvedOptions().timeZone)) throw new Error(invalid);
-  const time = formatter.format(new Date());
-  if (offeredInstall && (time < "03:00:00" || time > "04:30:00"))
-    throw new Error(
-      "outside the offered upgrade start window (03:00–04:30 in the venue time zone)",
-    );
-  if (time < "03:00:00" || time >= "05:00:00")
-    throw new Error("upgrade check skipped: outside 03:00–05:00 in the venue time zone");
+  if (/^[+-]/.test(local.timeZoneId)) throw new Error(invalid);
+
+  const today = local.toPlainDate();
+  const crossesMidnight = end < start;
+  const days = crossesMidnight ? [today, today.subtract({ days: 1 })] : [today];
+  for (const day of days) {
+    const endDay = crossesMidnight ? day.add({ days: 1 }) : day;
+    const endpoint = (date, time) =>
+      date.toPlainDateTime(time).toZonedDateTime(timeZone, { disambiguation: "reject" })
+        .epochMilliseconds;
+    let startMs, endMs;
+    try {
+      startMs = endpoint(day, start);
+      endMs = endpoint(endDay, end);
+    } catch {
+      continue; // A missing or repeated endpoint gives that occurrence no single window.
+    }
+    if (now >= startMs && now < endMs && (!offeredInstall || now <= endMs - 30 * 60_000)) return;
+  }
+  if (offeredInstall)
+    throw new Error("outside the offered upgrade start window in the venue time zone");
+  throw new Error(`upgrade check skipped: outside ${start}–${end} in the venue time zone`);
 }
 
 class OfferedUpgradeDeferred extends Error {}
@@ -240,7 +328,7 @@ export async function recheckOfferedUpgrade(
   }
 }
 
-// Mutating callers hold <box>.upgrade.lock; status takes no lock and writes nothing.
+// Upgrade writes hold <box>.upgrade.lock. The host socket serialises settings saves separately.
 export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = command } = {}) {
   if (
     ![
@@ -254,6 +342,8 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
       offeredCheckVerb,
       offeredApplyVerb,
       windowVerb,
+      readSettingsVerb,
+      saveSettingsVerb,
       downloadOfferVerb,
     ].includes(verb) ||
     !boxDirectory?.startsWith("/")
@@ -261,6 +351,11 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
     throw new Error(
       "Expected apply, status, restore, keep or offline-recovery, or check-upgrade-offer, and an absolute box directory",
     );
+  if (verb === readSettingsVerb || verb === saveSettingsVerb) {
+    if (prepare.length !== (verb === saveSettingsVerb ? 1 : 0))
+      return settingsRefusal("settings_invalid");
+    return upgradeSettingsCommand(`${boxDirectory}.upgrade-settings.json`, prepare[0]);
+  }
   if (verb === windowVerb) return checkUpgradeWindow(boxDirectory, run);
   if (verb === downloadOfferVerb) return downloadUpgradeOffer(run);
   if (verb === offerVerb || verb === offeredCheckVerb)
@@ -341,6 +436,7 @@ export async function runUpgradeCliMain(args, { stdout, stderr, run } = process)
     if (args[0] === windowVerb) return 0;
     if (args[0] === downloadOfferVerb && result === null) return 1;
     stdout.write(args[0] === downloadOfferVerb ? result : JSON.stringify(result) + "\n");
+    if (args[0] === readSettingsVerb && !result.ok) return 1;
     return [offerVerb, offeredCheckVerb, offeredApplyVerb].includes(args[0]) &&
       result.status === "deferred"
       ? 1

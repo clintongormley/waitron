@@ -84,6 +84,8 @@ describe("the lists", () => {
       "clock.sync-on",
       "clock.retry",
       "upgrade.status",
+      "upgrade.settings",
+      "upgrade.settings.set",
     ]);
     expect(HOST_VERBS.filter((verb) => SHELL_VERBS.includes(verb))).toEqual([]);
     expect(Object.isFrozen(HOST_VERBS)).toBe(true);

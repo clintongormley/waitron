@@ -1133,6 +1133,8 @@ cmd_checked_install() (
   if [ "$mode" = automatic ]; then
     grep -Eq '^[[:blank:]]+install-offered-upgrade[[:blank:]]*\)' "$stage/waitron.sh" \
       || die "release $ref cannot apply an offered upgrade"
+    "$HOST_NODE" "$stage/cli.mjs" read-upgrade-settings "$WAITRON_DIR" > /dev/null \
+      || die "release $ref cannot read the saved upgrade settings"
   fi
   ensure_host_node_libraries >&"$progress_fd"
   bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR" >&"$progress_fd"
