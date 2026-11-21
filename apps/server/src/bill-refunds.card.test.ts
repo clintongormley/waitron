@@ -1917,44 +1917,7 @@ describe("the single-payment routes on a bill whose only card payment was refund
     expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
-  it("refuses collecting a counter order presented with no invoice, which would issue one linking no card", async () => {
-    const id = randomUUID();
-    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
-    await parkOrder(deps, venue.cfg, {
-      id,
-      lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
-      zoneId: venue.zoneId,
-      operatorId: venue.operatorId,
-    });
-    await placeOrder(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      id,
-      venue.operatorId,
-    );
-    const card = await pay(id, "card", "5.00");
-    expect(card.answer.status, JSON.stringify(card.answer)).toBe(200);
-    await refund(id, card.id, { applied: "5.00" });
-
-    const collected = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${id}/collect`,
-      {
-        tender: { method: "cash", amount: "50.00" },
-      },
-    );
-
-    expect(collected).toEqual({
-      status: 409,
-      json: { code: "bill.payments_received", params: { workingOrderId: id } },
-    });
-    expect(fiscalRecordCount(venue, id)).toBe(0);
-    expect(await statusOf(venue, id)).toBe("placed");
-  });
-
-  it("refuses placing the bill, which would leave it for a collect that is refused too", async () => {
+  it("refuses placing the bill", async () => {
     const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     await refund(billId, card.id, { applied: "20.00" });
@@ -1969,6 +1932,42 @@ describe("the single-payment routes on a bill whose only card payment was refund
     expect(placed.status).toBe(409);
     expect(placed.json).toMatchObject({ code: "bill.payments_received" });
     expect(await statusOf(venue, billId)).toBe("open");
+  });
+
+  it("links a fully refunded card to the invoice when cash pays the placed order", async () => {
+    const id = randomUUID();
+    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+    await parkOrder(deps, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }],
+      zoneId: venue.zoneId,
+      operatorId: venue.operatorId,
+    });
+    await placeOrder(
+      { ...deps, admission: testTradingAdmission() },
+      venue.cfg,
+      id,
+      venue.operatorId,
+    );
+
+    const card = await pay(id, "card", "5.00");
+    expect(card.answer.status, JSON.stringify(card.answer)).toBe(200);
+    const back = await refund(id, card.id, { applied: "5.00" });
+    expect(back.answer.json).toMatchObject({ refund: { state: "completed" } });
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(fiscalRecordCount(venue, id)).toBe(0);
+
+    const rest = await pay(id, "cash", "20.00");
+    expect(rest.answer.status, JSON.stringify(rest.answer)).toBe(200);
+    expect(rest.answer.json).toMatchObject({ invoice: { total: "20.00" } });
+    const linked = venue.db.all<{ state: string; linked: number }>(
+      sql`select p.state, p.sale_id = s.id as linked from payments p
+          join sales s on s.working_order_id = p.working_order_id
+          where p.bill_payment_id = ${card.id}`,
+    );
+    expect(linked).toEqual([{ state: "refunded", linked: 1 }]);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
+    expect(await statusOf(venue, id)).toBe("settled");
   });
 });
 

@@ -1,4 +1,4 @@
-import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
+import { outsideCardDetails } from "./outside-card.js";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -17,11 +17,7 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import {
-  enqueueRequestedPaymentSlip,
-  freezeCardSlip,
-  printCapturedCardSlip,
-} from "./payment-slip-print.js";
+import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { cardOf } from "./card-details.js";
 import { readReceiptPayments, type BillTenderLine } from "./receipt-payments.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
@@ -56,7 +52,6 @@ import {
   associatePaymentWithSale,
   findCapturedPaymentForWorkingOrder,
   findCaptureWarning,
-  recordManualCardPayment,
 } from "@waitron/payments";
 import type {
   CaptureMismatch,
@@ -128,7 +123,6 @@ import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./tradin
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
-  enqueueSaleDrawer,
   enqueueOriginalReceipt,
   enqueueReceiptReprint,
   refreshWaitingOriginals,
@@ -174,15 +168,6 @@ function signedInAdmission(cfg: DeviceRequestConfig, operator: TillMoneyOperator
     });
 }
 
-export function collectOrder(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: PayWorkingOrderRequest,
-  operator: TillMoneyOperator,
-): Promise<TillSaleResult> {
-  return runCollectOrder(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
-}
-
 export function payWorkingOrderIntegrated(
   deps: IntegratedPayDeps,
   cfg: DeviceRequestConfig,
@@ -190,17 +175,6 @@ export function payWorkingOrderIntegrated(
   operator: TillMoneyOperator,
 ): Promise<IntegratedPayOutcome> {
   return runIntegratedPay(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
-}
-
-/**
- * A `cash` or manual `card` tender. `externalRef` is the optional hand-keyed acquirer / terminal
- * operation number, meaningful only for `card`.
- */
-export interface TillTender extends OutsideCardDetails {
-  method: "cash" | "card";
-  amount: string;
-  externalRef?: string;
-  addedTip?: string;
 }
 
 /**
@@ -440,48 +414,6 @@ const CARD_COLUMNS = {
   authCode: payments.cardAuthCode,
 };
 
-/**
- * A pay-and-settle over a PERSISTED working order, keyed by its client-minted id. `id` is the
- * idempotency key: `sales_working_order_id_key` makes at most one sale per working order.
- *
- * How `lines` is used depends on the shape:
- *  - WALK-UP (no `working_orders` row for `id`): `lines` is the unpriced basket; the server prices it
- *    (`createOpenOrder`), creates the order OPEN with those lines, and files that price.
- *  - RETRIEVED order (the row exists): `lines` is IGNORED. The order files its STORED
- *    `working_order_lines`, whose gross was locked at add-time, so a menu price change between
- *    park and pay never moves the filed total.
- */
-export interface PayWorkingOrderRequest {
-  expectedEdit: BillEditExpected | null;
-  id: string;
-  kitchenNote?: string | null;
-  /** The walk-up basket, ignored for a retrieved order. */
-  lines: ({
-    menuItemId: string;
-    quantity: string;
-    extras?: ExtraSelection[];
-    options?: OptionSelection[];
-  } & LineExtras)[];
-  tender: TillTender;
-  printCardSlip?: boolean;
-  invoiceType?: unknown;
-  recipient?: unknown;
-  /** Deliver a WALK-UP sale to a dining table; ignored for a retrieved order. An unknown id is
-   *  refused `table.not_found`. */
-  deliveryTableId?: string;
-  /** The selected service zone for a new counter order. Existing orders use their stored context. */
-  zoneId?: string;
-  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
-  receiptLanguage?: string;
-  /** The guest count the sale's simplified receipts print; absent takes the default (`saleReceiptFacts`). */
-  guestCount?: number | null;
-  /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
-  lateSend?: LateSendConfirmation;
-  /** The way the till showed: a new order's is checked against its department, an existing
-   *  order's against its own (`working_order.out_of_date`). Absent, neither is checked. */
-  dining?: Dining;
-}
-
 export function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
   if (invoiceType !== undefined && invoiceType !== "F1" && invoiceType !== "F2") {
     throw new AppError("management.request_invalid", { field: "invoiceType" });
@@ -512,8 +444,7 @@ export async function storeSentReceiptLanguage(
 }
 
 /**
- * A pay over an INTEGRATED card terminal, keyed like {@link PayWorkingOrderRequest} by the
- * working-order id. It carries NO tender — the provider drives the card. Same basket semantics:
+ * A connected-reader payment keyed by working-order id. The provider drives the card.
  *  - WALK-UP (no `working_orders` row for `id`): `lines` is the basket to price and file.
  *  - RETRIEVED / PLACED order (the row exists): `lines` is IGNORED — the order files its own STORED
  *    locked lines (`priceStoredOrderForIssuance`).
@@ -597,12 +528,10 @@ async function fireAndFileSale(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
-  tender: TillTender | null,
   order: GrossOrder,
   partyId: string | null,
   guestCount: GuestCountChoice,
   operatorId?: string,
-  printSlip?: boolean,
 ): Promise<TillSaleResult> {
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
 
@@ -611,11 +540,9 @@ async function fireAndFileSale(
     deps,
     cfg,
     workingOrderId,
-    tender,
     order,
     guestCount,
     operatorId,
-    printSlip,
   );
   if (notSent !== null) {
     const [sale] = await tx
@@ -775,52 +702,15 @@ export async function printSaleReceipt(
   });
 }
 
-function manualTip(
-  tender: TillTender | null,
-  cfg: DeviceRequestConfig,
-  due: Decimal,
-  workingOrderId: string,
-): Decimal {
-  const tip =
-    tender?.method === "card"
-      ? decimal(tender.addedTip === undefined ? "0" : tender.addedTip)
-      : ZERO;
-  if (compareDecimal(tip, ZERO) > 0 && (!cfg.tipsEnabled || compareDecimal(due, ZERO) <= 0))
-    throw new AppError("bill.tip_not_allowed", { workingOrderId, chargeable: due });
-  return tip;
-}
-
-/** Cash covers the settled total; short cash is passed through so settlement rejects it atomically. */
-function settlementFor(tender: TillTender, total: string): { settledAmount: string } {
-  return {
-    settledAmount:
-      tender.method === "card" || compareDecimal(decimal(tender.amount), decimal(total)) >= 0
-        ? total
-        : tender.amount,
-  };
-}
-
-/**
- * File an IMMEDIATE cash/card sale from an order's gross lines and settle it on the caller's `tx`,
- * so the sale, its tender/settlement, its chained fiscal record and the → `settled` transition commit
- * as one unit. It does NOT read or guard the order status: the caller resolved it, and one write
- * transaction runs on the venue file at a time, so nothing has moved the row in between.
- *
- * A sale whose total is zero (every line given away, or free) is settled with no tender, no
- * `payments` row and no drawer opening, as {@link settleOwingNothing} settles an invoice that owes
- * nothing. `tender` is `null` only where nothing can be owed; a `null` tender on a sale that owes
- * something is refused `sale.tender_shortfall`.
- */
+/** Close a reader request that owes nothing without asking the reader or writing a tender. */
 async function fileImmediateSale(
   tx: Transaction,
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   workingOrderId: string,
-  tender: TillTender | null,
   order: GrossOrder,
   guestCount: GuestCountChoice,
   operatorId?: string,
-  printSlip?: boolean,
 ): Promise<TillSaleResult> {
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
     kind: "order",
@@ -833,12 +723,6 @@ async function fileImmediateSale(
     workingOrderId,
     await issuancePass(tx, workingOrderId, order),
   );
-  // Before the owes-nothing check, so a malformed cash amount is refused whatever is owed.
-  const settled = tender === null ? null : { ...tender, ...settlementFor(tender, priced.total) };
-  const tip = manualTip(tender, cfg, decimal(priced.total), workingOrderId);
-  const taken = compareDecimal(decimal(priced.total), ZERO) > 0 ? settled : null;
-
-  // The issue reading, shared by the invoice, the tender and the order's `settled_at`.
   const settledAt = clock.now().instant;
 
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
@@ -861,38 +745,9 @@ async function fileImmediateSale(
     clock,
     operationDate,
     operatorId,
-    settlement: {
-      kind: "immediate",
-      tenders:
-        taken === null
-          ? []
-          : [
-              {
-                method: taken.method,
-                amount: addDecimal(decimal(taken.settledAmount), tip),
-                tipAmount: tip,
-                cashTendered: taken.method === "cash" ? taken.amount : null,
-                settledAt,
-              },
-            ],
-    },
+    settlement: { kind: "immediate", tenders: [] },
   });
   await linkSaleDishes(tx, saleId, order.identities);
-
-  // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
-  // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
-  if (taken?.method === "card") {
-    const { provider, paymentRef } = await recordManualCardPayment(tx, {
-      origin: cfg.origin,
-      workingOrderId,
-      nodeId: cfg.nodeId,
-      amount: addDecimal(decimal(priced.total), tip),
-      settledAt,
-      externalRef: taken.externalRef,
-      ...outsideCardDetails(taken),
-    });
-    await associatePaymentWithSale(tx, { provider, paymentRef, saleId });
-  }
 
   await tx
     .update(workingOrders)
@@ -906,7 +761,6 @@ async function fileImmediateSale(
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 
-  // After both writes above, so a manual acquirer reference is visible.
   const tenderBlock = await readTenderBlock(tx, saleId, workingOrderId);
 
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
@@ -927,24 +781,7 @@ async function fileImmediateSale(
 
   const printers = printerLookup(tx, cfg.origin);
   await enqueueSaleReceipt(tx, cfg, ticket, saleId, printers);
-  if (taken === null) return ticket;
-  await enqueueSaleDrawer(tx, cfg, saleId, taken.method, operatorId, printers);
-  const slip = await enqueueRequestedPaymentSlip(
-    tx,
-    cfg,
-    workingOrderId,
-    printSlip,
-    {
-      method: taken.method,
-      charged: decimalToCents(addDecimal(decimal(taken.settledAmount), tip)),
-      tip: decimalToCents(tip),
-      paidAt: settledAt.toISOString(),
-      reference: taken.externalRef ?? null,
-      machine: outsideCardDetails(taken).externalMachine ?? null,
-    },
-    printers,
-  );
-  return { ...ticket, ...slip };
+  return ticket;
 }
 
 export async function readOutstandingSaleForOrder(
@@ -1179,13 +1016,12 @@ async function payIntegrated(
       const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
       const issuing = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const ticket = wasPlaced
-        ? await fileImmediateSale(tx, issuing, cfg, req.id, null, order, req.guestCount, operatorId)
+        ? await fileImmediateSale(tx, issuing, cfg, req.id, order, req.guestCount, operatorId)
         : await fireAndFileSale(
             tx,
             issuing,
             cfg,
             req.id,
-            null,
             order,
             locked?.partyId ?? null,
             req.guestCount,
@@ -2039,164 +1875,6 @@ export function toPayOutcome(
       ? { failureReason: result.failureReason }
       : {}),
   };
-}
-
-/**
- * Collect and settle a PLACED order, in one transaction, by whether a sale already names it, not by
- * its zone's service mode:
- *  - a sale exists: collect SETTLES it and files NO second fiscal record. When something is owed,
- *    a `card` tender also writes the manual-card `payments` row, so reconciliation sees it. A bill
- *    whose amount due is exactly zero settles with no tender, no `payments` row and no drawer
- *    opening; one below zero is refused with `sale.tender_shortfall` and stays placed
- *    (`recordCorrection` refuses a correction that would make one: `sale.correction_exceeds_total`).
- *  - no sale: collect files one from the order's stored locked lines (`fileImmediateSale`).
- *
- * No duplicate backstop is needed: a concurrent collect's whole transaction runs after the winner
- * committed, reads the order `settled`, and replays. `sales_working_order_id_key` and
- * `sale_settlements_sale_key` still refuse a duplicate from any writer.
- *
- * `req.lines` is IGNORED. `operatorId` is the collecting operator.
- */
-export function collectOrderOrchestration(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: PayWorkingOrderRequest,
-  operatorId?: string,
-): Promise<TillSaleResult> {
-  return runCollectOrder(deps, cfg, req, operatorId, trustedWrite);
-}
-
-async function runCollectOrder(
-  deps: TillSaleDeps,
-  cfg: DeviceRequestConfig,
-  req: PayWorkingOrderRequest,
-  operatorId: string | undefined,
-  admit: WriteAdmission,
-): Promise<TillSaleResult> {
-  // Awaited only while `since()` names a refusal: otherwise the collect enters the write queue in
-  // this turn.
-  const preRead = deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());
-  return withIssuanceTransaction(
-    deps.db,
-    async (tx) => {
-      await admit(tx);
-      const [locked] = await tx
-        .select({
-          status: workingOrders.status,
-          revision: workingOrders.revision,
-          receiptLocale: workingOrders.receiptLocale,
-        })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, req.id));
-
-      if (locked?.status === "settled") {
-        return readSettledTicket(deps.backend, tx, cfg, req.id);
-      }
-      if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
-      const reading = deps.clock.now();
-      await deps.backend.refuseUntilRecordable(tx, reading);
-      await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
-
-      await requireEconomicWrite(tx, cfg, deps.admission);
-      const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
-
-      if (locked === undefined || locked.status !== "placed") {
-        throw new AppError("working_order.not_placed", { workingOrderId: req.id });
-      }
-      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
-      if (outstanding !== undefined) await refuseBillHoldingMoney(tx, [req.id]);
-      else await refuseBillWithPayments(tx, req.id);
-      await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
-
-      await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
-      await assertBillHasNoUnsent(tx, req.id);
-
-      // AFTER the replay check, so a retry is never refused for its body shape.
-      if (req.tender.method !== "cash" && req.tender.method !== "card") {
-        throw new AppError("sale.unsupported_tender", { method: req.tender.method });
-      }
-
-      if (outstanding !== undefined) {
-        // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
-        const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
-        const tip = manualTip(req.tender, cfg, outstanding.amountDue, req.id);
-        if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
-          const ticket = await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
-          await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-          return ticket;
-        }
-        const settledAt = reading.instant;
-
-        await settleSale(tx, {
-          saleId: outstanding.saleId,
-          tenders: [
-            {
-              method: req.tender.method,
-              amount: addDecimal(decimal(settledAmount), tip),
-              tipAmount: tip,
-              cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
-              settledAt,
-            },
-          ],
-        });
-
-        if (req.tender.method === "card") {
-          const { provider, paymentRef } = await recordManualCardPayment(tx, {
-            origin: cfg.origin,
-            workingOrderId: req.id,
-            nodeId: cfg.nodeId,
-            amount: addDecimal(outstanding.amountDue, tip),
-            settledAt,
-            externalRef: req.tender.externalRef,
-            ...outsideCardDetails(req.tender),
-          });
-          await associatePaymentWithSale(tx, {
-            provider,
-            paymentRef,
-            saleId: outstanding.saleId,
-          });
-        }
-
-        await tx
-          .update(workingOrders)
-          .set({ status: "settled", settledAt: settledAt.toISOString() })
-          .where(eq(workingOrders.id, req.id));
-        await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [req.id]);
-        await clearBillRequestIfPaid(tx, req.id, deps.log);
-        await refreshWaitingOriginals(deps.backend, tx, cfg, req.id);
-
-        const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-        const printers = printerLookup(tx, cfg.origin);
-        await enqueueSaleDrawer(
-          tx,
-          cfg,
-          outstanding.saleId,
-          req.tender.method,
-          operatorId,
-          printers,
-        );
-        await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-        return ticket;
-      }
-
-      await refuseUnavailableFullInvoice(tx, req.id);
-      await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
-      const order = await priceStoredOrderForIssuance(tx, req.id);
-      const ticket = await fileImmediateSale(
-        tx,
-        { ...deps, clock: pinnedAt(deps.clock, reading) },
-        cfg,
-        req.id,
-        req.tender,
-        order,
-        req.guestCount,
-        operatorId,
-      );
-      await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
-      return ticket;
-    },
-    deps.log,
-  );
 }
 
 /**

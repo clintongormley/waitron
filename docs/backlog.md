@@ -1592,7 +1592,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The till can take whole or part payments on a presented bill before its invoice is issued.
   The counter saves its basket and takes payment in one request.
   [One way to pay](superpowers/plans/2026-11-19-a1308-one-way-to-pay.md) still needs the separate
-  collection and reader payment requests and their recovery retired before the refund slices.
+  reader payment request and its recovery retired before the refund slices.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
@@ -1999,7 +1999,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows)    | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17)                                                     | S3, S6, S10 (A445, A447) |
 | Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); the whole-order cancel credit and A802's part corrections call it                                                                                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
 | Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126)                                                                                                  | S7 |
-| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | the till's server closes such a bill as a deferred payment, invoice issued at the meal (`POST /api/working-orders/:id/close-deferred`, A275); the open bill's, the presented bill's and the Counter's Pay windows send it (A275 Task 7). The Pay route refuses every tender but cash and card (`sale.unsupported_tender`) | Option 2 not lawful for a consumer; deposits S8, unpaid debts S6 |
+| Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | the till's server closes such a bill as a deferred payment, invoice issued at the meal (`POST /api/working-orders/:id/close-deferred`, A275); the open bill's, the presented bill's and the Counter's Pay windows send it (A275 Task 7). The bill payment route accepts cash and card | Option 2 not lawful for a consumer; deposits S8, unpaid debts S6 |
 
 **The laboral advisor** (a _graduado social / gestoría_) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;

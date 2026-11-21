@@ -10,12 +10,7 @@ import { insertCapturedPayment } from "@waitron/payments";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraft } from "./order-drafts.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
-import {
-  collectOrderOrchestration,
-  payWorkingOrderIntegratedOrchestration,
-  type PayWorkingOrderRequest,
-  type IntegratedPayRequest,
-} from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration, type IntegratedPayRequest } from "./till-sale.js";
 import {
   inTx,
   provisionBillVenue,
@@ -33,7 +28,7 @@ useVenueDb({
     venue = await provisionBillVenue(db);
   },
 });
-const modes = ["collect", "reader", "reader-placed"] as const;
+const modes = ["reader", "reader-placed"] as const;
 type Mode = (typeof modes)[number];
 const deps = () => ({ db: venue.db, backend: venue.backend, clock: venue.clock });
 const edit = (id: string) => inTx(venue, (tx) => readBillEditState(tx, id));
@@ -47,7 +42,7 @@ async function fixture(mode: Mode, counter = false, draftOwnerId?: string) {
     });
   const [open] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
   const owned = draftOwnerId === undefined ? null : await owner(open!, draftOwnerId);
-  if (mode === "collect" || mode === "reader-placed")
+  if (mode === "reader-placed")
     await inTx(venue, (tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
@@ -84,28 +79,15 @@ function request(p: Fixture, expectedEdit: unknown) {
     id: p.id,
     expectedEdit,
     lines: [],
-    tender: { method: "cash", amount: "35.00" },
     dining: "eat_in",
   };
 }
-function run(
-  mode: Mode,
-  p: Fixture,
-  expectedEdit: unknown,
-  operatorId: string | undefined = venue.operatorId,
-) {
+function run(p: Fixture, expectedEdit: unknown, operatorId: string | undefined = venue.operatorId) {
   const ask = request(p, expectedEdit);
-  if (mode === "reader" || mode === "reader-placed")
-    return payWorkingOrderIntegratedOrchestration(
-      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-      venue.cfg,
-      ask as IntegratedPayRequest,
-      operatorId,
-    );
-  return collectOrderOrchestration(
-    { ...deps(), admission: testTradingAdmission() },
+  return payWorkingOrderIntegratedOrchestration(
+    { admission: testTradingAdmission(), ...deps(), provider: venue.card },
     venue.cfg,
-    ask as PayWorkingOrderRequest,
+    ask as IntegratedPayRequest,
     operatorId,
   );
 }
@@ -116,7 +98,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
       owned = p.owned!,
       before = frozen(),
       calls = venue.card.collectCalls.length;
-    await expect(run(mode, p, owned.edit)).rejects.toMatchObject({
+    await expect(run(p, owned.edit)).rejects.toMatchObject({
       code: "draft.taken_over",
       params: {
         billId: p.id,
@@ -149,20 +131,12 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
       // An explicit undefined actor must reach the raw orchestration function.
       const ask = request(p, wanted);
       const operator = kind === "no-actor" ? undefined : venue.operatorId;
-      const attempt =
-        mode === "reader" || mode === "reader-placed"
-          ? payWorkingOrderIntegratedOrchestration(
-              { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-              venue.cfg,
-              ask as IntegratedPayRequest,
-              operator,
-            )
-          : collectOrderOrchestration(
-              { ...deps(), admission: testTradingAdmission() },
-              venue.cfg,
-              ask as PayWorkingOrderRequest,
-              operator,
-            );
+      const attempt = payWorkingOrderIntegratedOrchestration(
+        { admission: testTradingAdmission(), ...deps(), provider: venue.card },
+        venue.cfg,
+        ask as IntegratedPayRequest,
+        operator,
+      );
       await expect(attempt).rejects.toMatchObject({
         code: "management.request_invalid",
         params: {
@@ -184,7 +158,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
       current = await edit(p.id),
       before = frozen();
     await expect(
-      run(mode, p, { ...current, editorVersion: current.editorVersion + 1 }),
+      run(p, { ...current, editorVersion: current.editorVersion + 1 }),
     ).rejects.toMatchObject({
       code: "draft.out_of_date",
       params: { billId: p.id, draftId: null, revision: null, edit: current },
@@ -195,7 +169,7 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
     const p = await fixture(mode, false, venue.operatorId),
       owned = p.owned!,
       before = frozen();
-    await expect(run(mode, p, owned.edit)).rejects.toMatchObject({
+    await expect(run(p, owned.edit)).rejects.toMatchObject({
       code: "bill.unsent_dishes",
       params: { billId: p.id },
     });
@@ -214,12 +188,8 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
     const [other] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
     const owned = await owner(other!, venue.adminId),
       current = await edit(p.id);
-    const result = await run(mode, p, current);
-    expect(result).toMatchObject(
-      mode.startsWith("reader")
-        ? { outcome: "captured", ticket: { total: "35.00" } }
-        : { total: "35.00" },
-    );
+    const result = await run(p, current);
+    expect(result).toMatchObject({ outcome: "captured", ticket: { total: "35.00" } });
     expect(fiscalRecordCount(venue, p.id)).toBe(1);
     expect(await edit(p.id)).toEqual(current);
     expect(await edit(id)).toEqual(owned.edit);
@@ -228,31 +198,21 @@ describe.each(modes)("%s whole payment bill authority", (mode) => {
     const p = await fixture(mode, true),
       current = await edit(p.id);
     const ask = request(p, null);
-    const result = mode.startsWith("reader")
-      ? await payWorkingOrderIntegratedOrchestration(
-          { admission: testTradingAdmission(), ...deps(), provider: venue.card },
-          venue.cfg,
-          ask as IntegratedPayRequest,
-        )
-      : await collectOrderOrchestration(
-          { ...deps(), admission: testTradingAdmission() },
-          venue.cfg,
-          ask as PayWorkingOrderRequest,
-        );
-    expect(result).toMatchObject(
-      mode.startsWith("reader")
-        ? { outcome: "captured", ticket: { total: "35.00" } }
-        : { total: "35.00" },
+    const result = await payWorkingOrderIntegratedOrchestration(
+      { admission: testTradingAdmission(), ...deps(), provider: venue.card },
+      venue.cfg,
+      ask as IntegratedPayRequest,
     );
+    expect(result).toMatchObject({ outcome: "captured", ticket: { total: "35.00" } });
     expect(await edit(p.id)).toEqual(current);
   });
   it("replays the original completed payment before checking fresh editor metadata", async () => {
     const p = await fixture(mode),
       current = await edit(p.id);
-    const original = await run(mode, p, current),
+    const original = await run(p, current),
       before = frozen(),
       calls = venue.card.collectCalls.length;
-    expect(await run(mode, p, { ...current, editorVersion: 999 })).toEqual(original);
+    expect(await run(p, { ...current, editorVersion: 999 })).toEqual(original);
     expect(frozen()).toEqual(before);
     expect(venue.card.collectCalls.length).toBe(calls);
   });
@@ -275,7 +235,7 @@ describe.each(["reader", "reader-placed"] as const)("%s captured recovery", (mod
         settledAt: new Date(),
       }),
     );
-    const outcome = await run(mode, p, null);
+    const outcome = await run(p, null);
     expect(outcome).toMatchObject({ outcome: "captured", ticket: { total: "35.00" } });
     expect(venue.card.collectCalls.length).toBe(calls);
     expect(fiscalRecordCount(venue, p.id)).toBe(1);
@@ -283,10 +243,9 @@ describe.each(["reader", "reader-placed"] as const)("%s captured recovery", (mod
   });
 });
 
-describe.each(["collect", "reader"] as const)("%s HTTP authority", (mode) => {
+describe("reader HTTP authority", () => {
   async function http(p: Fixture, expectedEdit: unknown, extra = {}) {
-    const path = mode === "reader" ? "/api/pay" : `/api/working-orders/${p.id}/collect`;
-    const response = await venue.app.request(path, {
+    const response = await venue.app.request("/api/pay", {
       method: "POST",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({ ...request(p, expectedEdit), ...extra }),
@@ -295,7 +254,7 @@ describe.each(["collect", "reader"] as const)("%s HTTP authority", (mode) => {
     return { status: response.status, json: parsed.error ?? parsed };
   }
   it("uses the authenticated actor rather than a body editor", async () => {
-    const p = await fixture(mode, false, venue.adminId),
+    const p = await fixture("reader", false, venue.adminId),
       owned = p.owned!,
       before = frozen(true),
       calls = venue.card.collectCalls.length;
@@ -312,7 +271,7 @@ describe.each(["collect", "reader"] as const)("%s HTTP authority", (mode) => {
     expect(venue.card.collectCalls.length).toBe(calls);
   });
   it("requires an observation on a party bill", async () => {
-    const p = await fixture(mode),
+    const p = await fixture("reader"),
       before = frozen(true);
     expect(await http(p, undefined)).toMatchObject({
       status: 400,
@@ -321,14 +280,11 @@ describe.each(["collect", "reader"] as const)("%s HTTP authority", (mode) => {
     expect(frozen(true)).toEqual(before);
   });
   it("passes the submitted observation to the writer", async () => {
-    const p = await fixture(mode),
+    const p = await fixture("reader"),
       current = await edit(p.id);
     expect(await http(p, current)).toMatchObject({
       status: 200,
-      json:
-        mode === "reader"
-          ? { outcome: "captured", ticket: { total: "35.00" } }
-          : { total: "35.00" },
+      json: { outcome: "captured", ticket: { total: "35.00" } },
     });
     expect(fiscalRecordCount(venue, p.id)).toBe(1);
     expect(await edit(p.id)).toEqual(current);

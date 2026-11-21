@@ -7802,8 +7802,8 @@ export interface IssuedInvoice {
 }
 
 /**
- * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
- * on an order still open, save the label it was issued under. A placed order's label can change
+ * File the priced invoice without taking payment. On an order still open, save the label it was
+ * issued under. A placed order's label can change
  * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
  */
 export async function issueUnpaidInvoice(

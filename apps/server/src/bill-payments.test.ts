@@ -89,7 +89,6 @@ import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
-  collectOrderOrchestration as collectOrder,
   readBillTenderLines,
   readSettledTicket,
   printSaleReceipt,
@@ -763,24 +762,6 @@ describe("the writers with no route of their own", () => {
 });
 
 describe("a bill holding money", () => {
-  it("is refused by the collect of a placed order", async () => {
-    const billId = await tabWith("Steak");
-    await take(billId, cash("10.00"));
-    await inTx((tx) =>
-      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, billId)),
-    );
-
-    const code = await codeOf(
-      collectOrder({ ...fiscal(), admission: testTradingAdmission() }, venue.cfg, {
-        id: billId,
-        lines: [],
-        tender: { method: "cash", amount: "25.00" },
-      }),
-    );
-
-    expect(code).toBe("bill.payments_received");
-  });
-
   it("can be abandoned once every payment on it is refunded in full, tip included", async () => {
     const billId = await tabWith("Steak");
     const paid = await take(billId, cash("10.00"));

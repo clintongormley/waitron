@@ -864,29 +864,3 @@ export async function enqueueTenderRefundDrawer(
   });
   await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }
-
-/**
- * A sale paid in cash, or by a card hand-keyed on a machine Waitron does not talk to (whose slip is
- * kept in the drawer), opens the drawer {@link drawerPrinter} finds, independently of document
- * printing.
- */
-export async function enqueueSaleDrawer(
-  tx: Transaction,
-  cfg: OriginConfig,
-  saleId: string,
-  method: "cash" | "card",
-  operatorId?: string,
-  printers: PrinterLookup = printerLookup(tx, cfg.origin),
-): Promise<void> {
-  if (operatorId === undefined) return;
-  const printer = await drawerPrinter(printers);
-  if (printer === undefined) return;
-  await tx.insert(drawerOpens).values({
-    deviceId: cfg.origin.deviceId,
-    printerId: printer.id,
-    personId: operatorId,
-    reason: method === "cash" ? "cash_sale" : "card_slip",
-    saleId,
-  });
-  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
-}

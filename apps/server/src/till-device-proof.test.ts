@@ -164,8 +164,7 @@ describe("till action device proof over HTTP", () => {
   );
 });
 
-type PaymentRoute =
-  "bill-counter" | "reader" | "collect" | "bill-cash" | "bill-manual" | "bill-reader";
+type PaymentRoute = "bill-counter" | "reader" | "bill-cash" | "bill-manual" | "bill-reader";
 
 async function paymentRequest(kind: PaymentRoute) {
   const id = randomUUID();
@@ -200,23 +199,6 @@ async function paymentRequest(kind: PaymentRoute) {
   const order = await place(`${sessionCookie}; ${deviceCookie}`, id);
   expect(order.status).toBe(200);
   await order.arrayBuffer();
-  if (kind === "collect") {
-    const placed = await post(
-      `/api/working-orders/${id}/place`,
-      `${sessionCookie}; ${deviceCookie}`,
-      { expectedEdit: null },
-    );
-    expect(placed.status).toBe(200);
-    await placed.arrayBuffer();
-    return {
-      id,
-      path: `/api/working-orders/${id}/collect`,
-      body: {
-        expectedEdit: null,
-        tender: { method: "cash", amount: "12.00" },
-      },
-    };
-  }
   return {
     id,
     path: `/api/working-orders/${id}/payments`,
@@ -240,7 +222,6 @@ async function paymentRequest(kind: PaymentRoute) {
 const paymentRoutes: PaymentRoute[] = [
   "bill-counter",
   "reader",
-  "collect",
   "bill-cash",
   "bill-manual",
   "bill-reader",
