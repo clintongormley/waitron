@@ -29,6 +29,7 @@ describe.each(["en-GB", "es-ES"])("handover page %s", (locale) => {
                   sourceNodeId: "old",
                   destinationNodeId: "new",
                   waitingReason: null,
+                  timeZone: "Europe/Madrid",
                   ...value,
                 },
               }),
@@ -84,6 +85,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                     sourceNodeId: "old",
                     destinationNodeId: "new",
                     waitingReason: null,
+                    timeZone: "Europe/Madrid",
                   },
                 }),
               );

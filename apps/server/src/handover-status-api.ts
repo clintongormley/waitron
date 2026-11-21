@@ -10,12 +10,18 @@ import { signAsThisBox } from "./handover-signing.js";
 import { HANDOVER_EVENT } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import type { PeerOperationStatus, PeerStatusApiDeps } from "./peer-status-api.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 import "./errors.js";
 
 export interface HandoverStatusBody extends PeerOperationStatus {
   waitingReason: string | null;
   handoverPage?: string;
   copyPlaced?: boolean;
+}
+
+/** The body `GET /api/node/handover/:operationId` signs; the offer's answer carries no zone. */
+export interface HandoverPageStatusBody extends HandoverStatusBody {
+  timeZone: string;
 }
 
 const STATUS = {
@@ -54,6 +60,7 @@ export async function handoverPageOf(
 export async function signedHandoverStatus(
   deps: PeerStatusApiDeps,
   operation: HandoverOperation,
+  timeZone?: string,
 ): Promise<SignedHandoverEnvelope<CanonicalValue>> {
   const handoverPage = await handoverPageOf(deps, operation);
   const copyPlaced =
@@ -64,7 +71,7 @@ export async function signedHandoverStatus(
       operation.operationId,
       HANDOVER_EVENT.copyPlaced,
     )) !== null;
-  const body: HandoverStatusBody = {
+  const body: HandoverStatusBody & { timeZone?: string } = {
     operationId: operation.operationId,
     role: operation.role,
     scenario: operation.scenario,
@@ -72,6 +79,7 @@ export async function signedHandoverStatus(
     sourceNodeId: operation.sourceNodeId,
     destinationNodeId: operation.destinationNodeId,
     waitingReason: operation.waitingReason,
+    ...(timeZone === undefined ? {} : { timeZone }),
     ...(handoverPage === undefined ? {} : { handoverPage }),
     ...(copyPlaced ? { copyPlaced: true } : {}),
   };
@@ -91,7 +99,10 @@ export function mountHandoverStatusApi(app: Hono, deps: PeerStatusApiDeps, log: 
       }
       const operation = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       if (operation === null) throw new AppError("handover.operation_unknown", { operationId });
-      return c.json(await signedHandoverStatus(deps, operation), 200);
+      // Not readVenueTimeZone: its `withTransaction` takes the write lock and drains `change_log`,
+      // and this route also answers on a stepped-down box, which writes nothing to venue.db.
+      const timeZone = await venueTimeZoneIn(deps.db);
+      return c.json(await signedHandoverStatus(deps, operation, timeZone), 200);
     }),
   );
 }

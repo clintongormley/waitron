@@ -30,6 +30,11 @@ const preview = {
   operation: null,
 };
 const heldActivityMs = 1790078400000;
+// A zone the browser running this test is not in, so passing the device's zone fails.
+const venueZone =
+  Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Madrid"
+    ? "Atlantic/Canary"
+    : "Europe/Madrid";
 const status = {
   operationId: saved.operationId,
   role: "destination",
@@ -38,6 +43,7 @@ const status = {
   sourceNodeId: "old",
   destinationNodeId: "new",
   waitingReason: null,
+  timeZone: venueZone,
 };
 const binding = {
   module: "fiscal-verifactu",
@@ -774,8 +780,12 @@ it("the switch page's clock step is told it is the switch page", async () => {
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
-  const entry = q<LitElement & { context: { scenario: string } }>(el, "vf-recovery-hour");
+  const entry = q<LitElement & { context: { scenario: string; timeZone: string } }>(
+    el,
+    "vf-recovery-hour",
+  );
   expect(entry.context.scenario).toBe("emergency");
+  expect(entry.context.timeZone).toBe(venueZone);
 });
 
 it("keeps the reason and statements when a code expires, and retries the same declaration with the new code", async () => {

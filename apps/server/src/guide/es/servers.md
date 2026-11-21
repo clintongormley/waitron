@@ -111,7 +111,7 @@ Marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
 el local en este servidor sola. Si este servidor no puede comprobar su hora por internet, la página
-muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas y
+muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y
 elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
 hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
@@ -167,7 +167,7 @@ transferencia. Cuando la copia esté lista, introduce la misma cuenta de adminis
 **Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
 cualquier espera, y después inicia el local en el servidor de reserva. Si el servidor de reserva no
 puede comprobar su hora por internet, la página muestra antes la hora del servidor de reserva y la de
-este dispositivo: comprueba que las dos son correctas y elige **Confirmar la hora**. Si los relojes
+este dispositivo: comprueba que las dos son correctas (las dos se muestran en la zona horaria del local) y elige **Confirmar la hora**. Si los relojes
 no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
 hora del servidor de reserva con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Un código del autenticador dura

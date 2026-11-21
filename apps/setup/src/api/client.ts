@@ -315,6 +315,7 @@ export interface HandoverStatus {
   sourceNodeId: string;
   destinationNodeId: string;
   waitingReason: string | null;
+  timeZone: string;
   handoverPage?: string;
   copyPlaced?: boolean;
 }

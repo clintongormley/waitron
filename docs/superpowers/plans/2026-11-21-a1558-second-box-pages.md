@@ -14,6 +14,7 @@
 - **The fix.** The emergency preview and the controlled handover's status gain a `timeZone` field. It is read from the box's own copy with `readVenue(...).timeZone`, falling back to UTC as `apps/server/src/restricted-page.ts:58-63` does. The screen passes that field, and shows "UTC" as UTC when it falls back.
 - **Wording.** `handover.zone` ("Times are shown in your device's time zone", `apps/setup/src/i18n/strings/handover.ts:32,199`) becomes "Times are in the venue's time zone".
 - **Test first.** A screen test where the browser's zone differs from the venue's, and a route test for the new field.
+- **As built (21 November).** Only the status read (`GET /api/node/handover/:operationId`) carries `timeZone`, through `venueTimeZoneIn`, which `restricted-page.ts` now calls too; the emergency preview and the offer's answer carry none. The note above the clock step reads "Times below are in the venue's time zone"; the emergency page's other dates stay in this device's zone, as before.
 - **Fiscal checks.** `packages/fiscal-verifactu` probably does not change. Whatever the PR touches, the golden huella test and `inmutabilidad` pass unedited.
 
 ## PR 2: the new invoice series are named and the page waits (fiscal-adjacent: the owner lands it)

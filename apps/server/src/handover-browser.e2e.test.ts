@@ -157,6 +157,7 @@ it("opens the built handover page and its relative assets, including after a rel
         sourceNodeId: SOURCE,
         destinationNodeId: NODE,
         waitingReason: null,
+        timeZone: "Europe/Madrid",
       },
     }),
   );

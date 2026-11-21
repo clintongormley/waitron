@@ -11,14 +11,13 @@ export function knownZone(timeZone: string): string {
 }
 
 /**
- * Email times and the pairing window's answer use the venue's zone; onboarding derives it from the
- * address.
+ * The venue's saved zone as the runtime names it; UTC when no venue is set up or the runtime does not
+ * know the zone.
  */
 export async function venueTimeZoneIn(tx: Transaction): Promise<string> {
   try {
     return knownZone((await readVenue(tx)).timeZone);
   } catch (error) {
-    // No venue is set up yet: times still show, in UTC.
     if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
     throw error;
   }

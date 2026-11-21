@@ -1,13 +1,7 @@
 import type { ReturnState } from "./return-records.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import {
-  nodes,
-  readNodeMembership,
-  readVenue,
-  type Database,
-  type NodeDatabase,
-} from "@waitron/db";
+import { nodes, readNodeMembership, type Database, type NodeDatabase } from "@waitron/db";
 import { initialState } from "@waitron/handover";
 import {
   nodeHandoverEvents,
@@ -15,7 +9,7 @@ import {
   readHandoverRestriction,
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
-import { AppError, FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, isDashboardPath, type SupportedLocale } from "@waitron/shared";
 import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -27,7 +21,7 @@ import {
   RESTRICTED_STEP_WORDS,
   type RestrictedStepKind,
 } from "./i18n/restricted-page.js";
-import { knownZone } from "./venue-time-zone.js";
+import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
   venue: Database;
@@ -56,19 +50,6 @@ interface RestrictedView {
 function stepText(kind: string, locale: SupportedLocale): string {
   if (!Object.hasOwn(RESTRICTED_STEP_WORDS, kind)) return kind;
   return RESTRICTED_STEP_WORDS[kind as RestrictedStepKind][locale];
-}
-
-/**
- * Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and this
- * box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
- */
-async function readTimeZone(venue: Database): Promise<string> {
-  try {
-    return knownZone((await readVenue(venue)).timeZone);
-  } catch (error) {
-    if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
-    throw error;
-  }
 }
 
 /** A link's address, or none when reading it fails: the page stands without its links. */
@@ -131,7 +112,9 @@ async function readView(deps: RestrictedPageDeps, requestId: string): Promise<Re
     successorUrl,
     successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
     steps,
-    timeZone: await readTimeZone(deps.venue),
+    // Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and
+    // this box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
+    timeZone: await venueTimeZoneIn(deps.venue),
     handoverPage:
       operation === null
         ? undefined
