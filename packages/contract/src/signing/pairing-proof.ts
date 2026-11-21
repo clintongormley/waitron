@@ -173,10 +173,20 @@ export type PairingV4Claims = {
   issuedAt: number;
 } & PairingV4Operation;
 
+type PairingProofVersion = "waitron-cloud-pair-v4" | "waitron-cloud-pair-v5";
+
 export function pairingV4Payload(c: PairingV4Claims): Buffer {
+  return pairingVersionPayload(c, "waitron-cloud-pair-v4");
+}
+
+export function pairingV5Payload(c: PairingV4Claims): Buffer {
+  return pairingVersionPayload(c, "waitron-cloud-pair-v5");
+}
+
+function pairingVersionPayload(c: PairingV4Claims, version: PairingProofVersion): Buffer {
   return Buffer.from(
     JSON.stringify([
-      "waitron-cloud-pair-v4",
+      version,
       c.origin,
       c.action,
       c.requestId,
@@ -258,6 +268,41 @@ export function verifyPairingV4Proof(
   action: string,
   now = Date.now(),
 ): PairingV4Claims {
+  return verifyPairingVersionProof(
+    payload,
+    signature,
+    origin,
+    action,
+    now,
+    "waitron-cloud-pair-v4",
+  );
+}
+
+export function verifyPairingV5Proof(
+  payload: string,
+  signature: string,
+  origin: string,
+  action: string,
+  now = Date.now(),
+): PairingV4Claims {
+  return verifyPairingVersionProof(
+    payload,
+    signature,
+    origin,
+    action,
+    now,
+    "waitron-cloud-pair-v5",
+  );
+}
+
+function verifyPairingVersionProof(
+  payload: string,
+  signature: string,
+  origin: string,
+  action: string,
+  now: number,
+  expectedVersion: PairingProofVersion,
+): PairingV4Claims {
   try {
     const bytes = decode(payload, 8192);
     const values: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -266,7 +311,7 @@ export function verifyPairingV4Proof(
       values;
     const request = { action, args };
     if (
-      version !== "waitron-cloud-pair-v4" ||
+      version !== expectedVersion ||
       audience !== origin ||
       operation !== action ||
       !isPairingUuid(requestId) ||
@@ -278,7 +323,10 @@ export function verifyPairingV4Proof(
     )
       throw new Error();
     const claims = { origin, requestId, publicKey, issuedAt, ...request };
-    if (!pairingV4Payload(claims).equals(bytes) || !verifySignature(bytes, publicKey, signature))
+    if (
+      !pairingVersionPayload(claims, expectedVersion).equals(bytes) ||
+      !verifySignature(bytes, publicKey, signature)
+    )
       throw new Error();
     return claims;
   } catch {

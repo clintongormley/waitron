@@ -1298,7 +1298,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   box builds pairing and machine requests through the database-free workspace package `@waitron/contract`,
   which also supplies the access-lease format. The box still reads leases through its own saved-state adapter.
   The UI publisher now checks and uploads both packages, including `@waitron-io/contract`.
-  The v4 signing format is published in `@waitron-io/contract@0.2.37`. The installed test-box
+  The v4 signing format is published in `@waitron-io/contract@0.2.37`. The contract also provides
+  a separate v5 encoder and verifier for early setup sign-in. The installed test-box
   [sign-in integration](superpowers/plans/2026-11-20-setup-cloud-sign-in.md) still needs a joint
   test with Cloud. Early setup sign-in and its basic service grants come next.
   Cloud installs the private package with its workflow token. Remaining: the sign-in

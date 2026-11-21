@@ -1,11 +1,13 @@
 export {
   pairingPayload,
   pairingV4Payload,
+  pairingV5Payload,
   isPairingV4Profile,
   pairingVenueName,
   PAIRING_VENUE_NAME_MAX,
   verifyPairingProof,
   verifyPairingV4Proof,
+  verifyPairingV5Proof,
   PairingError,
   type PairingClaims,
   type PairingAction,
