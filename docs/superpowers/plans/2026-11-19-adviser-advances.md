@@ -1342,7 +1342,7 @@ corrective, learn the line that takes an advance off. `recordCorrection` itself 
   line included" (example 1: −81.82/−8.18; example 8: −3.92/−0.43; `assertReversesLineForLine`
   and `wholeInvoiceBreakdown` pass); "a refund larger than the rest's invoice is refused, and the
   whole of the rest's invoice can be corrected" (correcting the advance itself is refused once the
-  rest's invoice took it off: owner, 20 November, 14:26); "correcting an advance before the meal ends
+  rest's invoice took it off: owner, 20 November, 14:26; 2026-11-21: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md).); "correcting an advance before the meal ends
   reduces what the rest's invoice takes off"; "an item advance corrected to zero frees its lines";
   "the correction lines of a rest's invoice list its dishes and not the advance's line"
   (`GET /api/transactions/:saleId/corrections/lines`).
@@ -1356,7 +1356,8 @@ corrective, learn the line that takes an advance off. `recordCorrection` itself 
 (`paidQuantitiesOf`, left unchanged); tests beside each.
 
 - Category sales and top sellers leave out lines with either role, so the dishes count once and
-  neither an advance's line nor a deduction line appears as a product. `paidQuantitiesOf` (`apps/server/src/bill-payments.ts:471`) is left
+  neither an advance's line nor a deduction line appears as a product. (2026-11-21, category sales
+  only, top sellers unchanged: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md).) `paidQuantitiesOf` (`apps/server/src/bill-payments.ts:471`) is left
   unchanged: advance and deduction lines never reach it, since its lines come only from the bill's
   own dish lines. Task 1.6b's reviewer ran it on b73e75b18f, through the till's routes: a bill with an
   advance for two of its dishes listed only those two dish lines, before and after the rest's
@@ -1388,7 +1389,7 @@ and the advance's `saleId`); tests in `bill-pay-dialog.test.ts`, `bill-pay-dialo
   `ownReceipt: true`, **No** sends without it; answering it changes no payment-slip choice. Never asked: **Whole
   bill**; an amount that pays the bill off; a bill with an invoice; a bill set for a full invoice.
   **Refund** on a payment with `hasTicket`, on a bill with no invoice yet, opens **Correct invoice**
-  (`invoice-correction-dialog.ts`) on that ticket. Axe in both themes for the question. Spy on the API client, not on screen text.
+  (`invoice-correction-dialog.ts`) on that ticket. (2026-11-21: replaced by [the refund-after-final plan](2026-11-21-advance-refund-after-final.md).) Axe in both themes for the question. Spy on the API client, not on screen text.
 - [ ] **Steps 2–5:** run (`pnpm --filter @waitron/till exec vitest run <files>`), implement, run,
   commit.
 

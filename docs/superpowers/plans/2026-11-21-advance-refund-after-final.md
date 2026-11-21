@@ -147,6 +147,9 @@ here is **not settled**: adviser questions A1 and A2.
 3. **A correction opened before the table's invoice (server).** Keep `advance.taken_off_final_invoice`
    only on a correction's refund legs (`apps/server/src/tender-refund-reservation.ts:216`), narrowed
    to a correction opened before the table's invoice was issued; rewrite the comment at `:214-215`.
+   (As built, after review: the leg meets Design 1's check, and the stored times only choose this
+   code over `advance.final_invoice_first` when it refuses, so a backward clock step cannot strand
+   a correction; a correction opened before a €0.00 table's invoice gives its money back.)
    `advance.correction_open` stays: it still makes the table's invoice take off the advance as
    corrected.
 4. **Plain refunds (server).** A plain or bill refund of an advance's money keeps
@@ -170,6 +173,9 @@ here is **not settled**: adviser questions A1 and A2.
      account." / "El ticket de la mesa{invoiceNumber} todavía puede devolver {moneyLeft} de platos al
      {rate} % de IVA, el tipo de este pago a cuenta. Usa primero Rectificar factura en ese ticket.
      Cuando ya no le quede ningún plato a ese tipo por rectificar, rectifica este pago a cuenta."
+     As built, each last sentence reads "Once it has given back all it can at that rate, correct
+     this payment on account." / "Cuando ya haya devuelto todo lo que puede a ese tipo, rectifica
+     este pago a cuenta."
    - `advance.rate_below_advance`, only under O2 (i): "This bill has a dish at {rate}% VAT, below this payment on
      account's rate, so the till cannot yet give this money back after the table's
      receipt{invoiceNumber}: how to record it is with the tax adviser. Nothing has been given back."
@@ -245,7 +251,7 @@ here is **not settled**: adviser questions A1 and A2.
   none.
 - **Watcher W2: the settled bill's `received` figure.** It predates advances (control RUN) and this
   change does not make it worse. Recommended: under the loose-ends rule, one line in the PR thread,
-  not fixed here.
+  not fixed here. (Overtaken: the watcher, 04:35, asked for it to be fixed here; Task 5.)
 
 ## Changed test checks
 
