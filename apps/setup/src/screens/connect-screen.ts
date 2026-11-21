@@ -11,7 +11,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { actionsStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles, helpLinkStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
 import { SetupApi, type AdoptBody, type PrimaryCertificate } from "../api/client.js";
 import { passwordVisibility, t } from "../i18n/t.js";
@@ -46,6 +46,12 @@ function originOf(typed: string): string {
   } catch {
     return typed;
   }
+}
+
+/** The dashboard's Servers screen on the main box, or nothing for an address that is not a URL. */
+function serversPageOf(typed: string): string | undefined {
+  const origin = originOf(typed);
+  return /^https?:\/\//.test(origin) ? `${origin}/servers` : undefined;
 }
 
 interface FieldText {
@@ -89,6 +95,7 @@ export class SetupConnectScreen extends LitElement {
     baseStyles,
     fieldStyles,
     actionsStyles,
+    helpLinkStyles,
     css`
       :host {
         display: block;
@@ -451,7 +458,18 @@ export class SetupConnectScreen extends LitElement {
         return nothing;
       case "compare": {
         const fingerprint = breakAfterColons(this.certificate?.fingerprint256 ?? "");
-        return html`<p data-test="compare">${t("connect.compare.intro")}</p>
+        const servers = serversPageOf(this.values.primaryUrl.trim());
+        return html`<p data-test="compare">
+            ${t("connect.compare.open")}
+            ${
+              servers
+                ? html`<a data-test="servers-link" href=${servers} target="_blank" rel="noopener"
+                    >${t("connect.compare.servers_link")}</a
+                  >`
+                : t("connect.compare.servers_link")
+            }
+            ${t("connect.compare.rest")}
+          </p>
           <p class="fingerprint-label">${t("connect.compare.label")}</p>
           <p class="fingerprint" data-test="fingerprint">${fingerprint}</p>`;
       }

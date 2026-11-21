@@ -534,8 +534,13 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(api.primaryCertificate).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
     expect(text(q(el, "[data-test=fingerprint]")!)).toBe(CERT.fingerprint256);
     expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "On a device already signed in to your primary server's dashboard, open System, then Servers. The public certificate fingerprint shown there must match this one.",
+      "Open your primary server's Servers page on a device already signed in to it. The public certificate fingerprint shown there must match this one.",
     );
+    const servers = q(el, "[data-test=servers-link]")!;
+    expect(text(servers)).toBe("your primary server's Servers page");
+    expect(servers.getAttribute("href")).toBe("https://waitron.local/servers");
+    expect(servers.getAttribute("target")).toBe("_blank");
+    expect(servers.getAttribute("rel")).toBe("noopener");
     expect(q(el, "[data-test=password]")).toBeNull();
     expect(q(el, "[data-test=connect]")).toBeNull();
     expect(events).toEqual([]);
@@ -860,6 +865,26 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     expect(q(el, "[data-test=email]")).not.toBeNull();
   });
 
+  it("links to the Servers page of the address as compared, never the address as typed", async () => {
+    const { el } = await mount();
+    await type(el, "primaryUrl", "  https://192.168.1.20:8443/dashboard/sales?x=1#top  ");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
+    expect(q(el, "[data-test=servers-link]")!.getAttribute("href")).toBe(
+      "https://192.168.1.20:8443/servers",
+    );
+  });
+
+  it("draws no link for an address that is not a web address", async () => {
+    const { el } = await mount();
+    await type(el, "primaryUrl", "javascript:alert(1)");
+    await pressed(el, "continue");
+    await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
+    expect(q(el, "[data-test=servers-link]")).toBeNull();
+    expect(q(el, "[data-test=compare] a")).toBeNull();
+    expect(text(q(el, "[data-test=compare]")!)).toContain("your primary server's Servers page");
+  });
+
   it("asks for the comparison in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mount();
@@ -868,7 +893,7 @@ describe("setup-connect-screen: comparing the primary server's fingerprint", () 
     await pressed(el, "continue");
     await vi.waitFor(() => expect(q(el, "[data-test=fingerprint]")).not.toBeNull());
     expect(text(q(el, "[data-test=compare]")!)).toBe(
-      "En un dispositivo que ya tenga la sesión iniciada en el panel de tu servidor principal, abre Sistema y luego Servidores. La huella del certificado público que aparece allí debe coincidir con esta.",
+      "Abre la página Servidores de tu servidor principal en un dispositivo que ya tenga la sesión iniciada en él. La huella del certificado público que aparece allí debe coincidir con esta.",
     );
     expect(text(q(el, "[data-test=matches]")!)).toBe("Coincide");
     expect(text(q(el, "[data-test=mismatch]")!)).toBe("No coincide");

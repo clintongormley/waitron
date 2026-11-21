@@ -4122,6 +4122,50 @@ describe("connection checks", () => {
     expect(getStatus).toHaveBeenCalledTimes(2);
   });
 
+  it("Join or recover checks the server, then goes to the join-or-recover choice, not the mode screen", async () => {
+    const getStatus = vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] });
+    const firstSetupStatus = vi.fn().mockResolvedValue({ claimed: false });
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        firstSetupStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    const connection = await screenHost(el, "connection");
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await flush(el);
+    await flush(el);
+    expect(getStatus).toHaveBeenCalledTimes(2);
+    expect(firstSetupStatus).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
+    goto(el, "mode");
+    await flush(el);
+    const mode = await screenHost(el, "mode");
+    expect(mode.shadowRoot!.querySelector("[data-test=cert-note]")).toBeNull();
+  });
+
+  it("Join or recover stays on the connection screen with the reason when the server does not answer", async () => {
+    const getStatus = vi
+      .fn()
+      .mockResolvedValueOnce({ environment: "preproduction", needs: ["venue"] })
+      .mockRejectedValue(new TypeError("network down"));
+    const el = await mountSetupApp(
+      stubApi({
+        getStatus,
+        getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: true }),
+      }),
+    );
+    const connection = await screenHost(el, "connection");
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-role]")).toBeNull();
+    expect(
+      (await screenHost(el, "connection")).shadowRoot!.querySelector("[role=alert]"),
+    ).not.toBeNull();
+  });
+
   it("ignores a boot read that answers after a newer check already succeeded", async () => {
     const boot = deferred<SetupStatus>();
     const getStatus = vi

@@ -165,8 +165,11 @@ it("shows a QR only when one was rendered, and says nothing when there is none",
   expect(withQr).not.toContain("This QR opens the box address.");
 });
 
-it("calls it a server, never a box", () => {
-  const html = renderTrustPage(base);
+it.each([
+  ["plain", {}],
+  ["with the spare's lead line", { ownAddress: "https://192.168.1.50" }],
+])("calls it a server, never a box (%s)", (_name, extra) => {
+  const html = renderTrustPage({ ...base, ...extra });
   expect(html).not.toMatch(/\bbox(es)?\b/i);
   expect(html).not.toContain("numeric network address");
 });
@@ -204,7 +207,7 @@ it("gives a safe device alternative when certificate removal or installation is 
 
 describe("a page opened while another box answers waitron.local", () => {
   const LEAD =
-    "Adding a spare? You don't need this box's certificate: open this address " +
+    "Adding a spare? You don't need this server's certificate: open this address " +
     '(<a href="https://192.168.1.50">https://192.168.1.50</a>) and accept your browser\'s warning once.';
 
   it("leads with the spare's way in, above the certificate steps, and keeps those steps", () => {

@@ -34,12 +34,14 @@ configurado.
 
 Conecta el servidor nuevo a la red del local y enciéndelo; no necesita conexión a internet. Como
 `waitron.local` lleva al servidor principal, abre la dirección que la pantalla del servidor nuevo
-muestra después de **Use this box's own address**. Elige **Unirse o recuperar** y después
-**Añadir un nodo réplica**.
+muestra después de **Use this box's own address**. No hace falta instalar el certificado del
+servidor nuevo: acepta una vez el aviso del navegador, elige **Unirse o recuperar** en la primera
+pantalla y después **Añadir un nodo réplica**.
 
 Introduce la dirección del servidor principal por su nombre, `https://waitron.local`, y elige **Continuar**; su dirección IP, como `https://192.168.1.10`, se rechaza. En un dispositivo que ya
-tenga la sesión iniciada en el panel del servidor principal, abre **Sistema → Servidores** y compara
-**Huella del certificado público de este servidor** con la que muestra el servidor nuevo. Elige
+tenga la sesión iniciada en el servidor principal, abre su página Servidores desde el enlace de la
+página del servidor nuevo y compara **Huella del certificado público de este servidor** con la que
+muestra el servidor nuevo. Elige
 **Coincide** solo si son iguales. Introduce el correo y la contraseña de la cuenta. Puedes usar
 el botón con el icono de ojo para comprobar lo que has escrito. Elige **Conectar**. Si la cuenta
 usa un autenticador, la página te pide su código actual. Escríbelo y elige **Conectar** otra vez.

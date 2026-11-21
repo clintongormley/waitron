@@ -399,6 +399,25 @@ describe("setup mode leaves the root draft", () => {
     expect(api.provision).not.toHaveBeenCalled();
   });
 
+  it("the connection screen's Join or recover asks before abandoning a root draft", async () => {
+    const { el, api } = await modeDraft();
+    goto(el, "connection");
+    await expect.poll(() => (el as unknown as State).screen).toBe("connection");
+    const connection = el.shadowRoot!.querySelector("setup-connection-screen")!;
+    await connection.updateComplete;
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).screen).toBe("connection");
+    await choose(el, "keep");
+    expect((el as unknown as State).screen).toBe("connection");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    connection.shadowRoot!.querySelector<HTMLElement>("[data-test=join]")!.click();
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("role");
+    expect(api.provision).not.toHaveBeenCalled();
+  });
+
   it("the Live safety confirmation asks before replacing a Demo draft", async () => {
     const { el, modeScreen } = await modeDraft("demo");
     modeChoice(modeScreen, "choose-live");

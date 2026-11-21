@@ -134,6 +134,53 @@ describe("setup-connection-screen", () => {
   });
 });
 
+describe("setup-connection-screen: joining or recovering", () => {
+  it("offers Join or recover beside Continue, and says a spare or recovery needs no certificate from this server", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    const join = q(el, "[data-test=join]")!;
+    expect(text(join)).toBe("Join or recover");
+    expect(join.parentElement).toBe(q(el, "wt-form-actions"));
+    expect(join.getAttribute("slot")).toBe("secondary");
+    expect(join.getAttribute("variant")).toBe("secondary");
+    expect(text(q(el, "[data-test=join-hint]")!)).toBe(
+      "Joining or recovering uses your restaurant's certificate, not this one.",
+    );
+  });
+
+  it("asks the shell to check the connection and join when Join or recover is clicked", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    const requested = new Promise<boolean>((resolve) =>
+      el.addEventListener("connection-join", () => resolve(true)),
+    );
+    q(el, "[data-test=join]")!.click();
+    expect(await requested).toBe(true);
+  });
+
+  it("disables Join or recover while a check is in flight", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
+      checking: true,
+    });
+    expect(q(el, "[data-test=join]")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("drops Join or recover with Continue when this server cannot be set up from here", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
+      setupUnavailable: true,
+    });
+    expect(q(el, "[data-test=join]")).toBeNull();
+    expect(q(el, "[data-test=join-hint]")).toBeNull();
+  });
+
+  it("offers Join or recover in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    expect(text(q(el, "[data-test=join]")!)).toBe("Unirse o recuperar");
+    expect(text(q(el, "[data-test=join-hint]")!)).toBe(
+      "Para unirse o recuperar se usa el certificado de tu restaurante, no este.",
+    );
+  });
+});
+
 describe("setup-connection-screen in Spanish", () => {
   it("asks the question, names the browser's Spanish warning and offers both actions in Spanish", async () => {
     setLocale("es-ES");

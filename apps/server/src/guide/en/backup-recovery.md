@@ -52,8 +52,8 @@ bucket**, as on a new box; restoring needs the backup encryption key (for a back
 (for your bucket), and that backup's server key. After
 **Start again**, **Reconnect** opens "Set up this Waitron server", where you choose how to set up
 this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
-chose and opens its first screen. If that screen asks "Is this page secure?", press **Continue to
-setup**; then, to restore, choose **Join or recover**.
+chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
+there to restore.
 
 If the page says "Deletion interrupted", after **Start again** or after **Recover from backup**,
 reload it to continue.
@@ -85,7 +85,8 @@ only one person should recover this taxpayer at a time.
 
 ## Choose your copy {#source}
 
-On "Join or recover an existing restaurant", choose **Restore from backup** for a backup file, or
+On a new box you do not need to install its certificate: accept your browser's warning once and
+choose **Join or recover** on the first screen. On "Join or recover an existing restaurant", choose **Restore from backup** for a backup file, or
 **Restore from my bucket** for the continuous copy in your own storage bucket. For a Waitron Cloud
 copy, choose **Restore from backup** and then **Restore from Waitron Cloud**.
 
