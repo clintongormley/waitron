@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash, X509Certificate } from "node:crypto";
+import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Socket, type AddressInfo } from "node:net";
@@ -75,6 +75,81 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
       environment: "preproduction",
       needs: ["venue"],
     });
+  });
+
+  it("starts and returns Cloud sign-in only from the configured setup page and browser", async () => {
+    const app = new Hono();
+    const startSignIn = vi.fn<NonNullable<SetupDeps["cloudSignIn"]>["connection"]["startSignIn"]>(
+      async () => ({ authorizationUrl: "https://cloud.example/login" }),
+    );
+    const returnSignIn = vi.fn<NonNullable<SetupDeps["cloudSignIn"]>["connection"]["returnSignIn"]>(
+      async () => {},
+    );
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        cloudSignIn: {
+          origin: "https://box.test",
+          connection: {
+            setupSignInAvailable: async () => true,
+            startSignIn,
+            returnSignIn,
+            publishSetupSignIn: async () => {},
+          },
+        },
+      },
+      noopLog,
+    );
+    const socket = new TLSSocket(new Socket());
+    const tab = randomUUID();
+    const input = {
+      tab,
+      requestId: randomUUID(),
+      state: randomBytes(32).toString("base64url"),
+      code: randomBytes(32).toString("base64url"),
+    };
+    const post = (action: string, body: unknown, headers: Record<string, string>) =>
+      app.request(
+        "https://box.test/setup-api/cloud/sign-in/" + action,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify(body),
+        },
+        { incoming: { socket } },
+      );
+    try {
+      const status = await app.request(
+        "https://box.test/setup-api/status",
+        {},
+        { incoming: { socket } },
+      );
+      expect(await status.json()).toMatchObject({ cloudSignInAvailable: true });
+      const foreign = await app.request(
+        "https://other.test/setup-api/status",
+        {},
+        { incoming: { socket } },
+      );
+      expect(await foreign.json()).not.toHaveProperty("cloudSignInAvailable");
+      expect((await post("start", { tab }, { origin: "https://other.test" })).status).toBe(403);
+      expect(startSignIn).not.toHaveBeenCalled();
+      const origin = { origin: "https://box.test" };
+      const started = await post("start", { tab }, origin);
+      expect(started.status).toBe(200);
+      const setCookie = started.headers.get("set-cookie")!;
+      expect(setCookie).toMatch(/^__Host-waitron-setup-cloud=[\w-]+;/);
+      for (const attribute of ["Secure", "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age="])
+        expect(setCookie).toContain(attribute);
+      expect((await post("return", input, origin)).status).toBe(403);
+      expect(returnSignIn).not.toHaveBeenCalled();
+      expect(
+        (await post("return", input, { ...origin, cookie: setCookie.split(";")[0]! })).status,
+      ).toBe(204);
+      expect(returnSignIn.mock.calls[0]?.[0]).toEqual(startSignIn.mock.calls[0]?.[0]);
+    } finally {
+      socket.destroy();
+    }
   });
 
   it("reflects the deployment environment it was given", async () => {
@@ -557,6 +632,44 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       environment: "preproduction",
       onboardingIntent: "demo",
     });
+  });
+
+  it("keeps the Prepare save successful when recording Cloud publication fails", async () => {
+    const app = new Hono();
+    const { deps, calls } = makeDeps();
+    const tab = randomUUID();
+    const session = randomBytes(32).toString("base64url");
+    const publishSetupSignIn = vi.fn(async () => {
+      expect(calls.at(-1)).toBe("persistTrading");
+      throw new Error("Cloud state could not be written");
+    });
+    mountSetup(
+      app,
+      {
+        ...deps,
+        cloudSignIn: {
+          origin: "https://box.test",
+          connection: {
+            setupSignInAvailable: async () => true,
+            startSignIn: async () => ({}),
+            returnSignIn: async () => {},
+            publishSetupSignIn,
+          },
+        },
+      },
+      noopLog,
+    );
+    const result = await postProvision(app, prepareBody(), {
+      origin: "https://box.test",
+      cookie: "__Host-waitron-setup-cloud=" + session,
+      "x-waitron-setup-cloud-tab": tab,
+    });
+    expect(result.status).toBe(200);
+    expect(publishSetupSignIn).toHaveBeenCalledExactlyOnceWith(
+      { kind: "setup", tab, session },
+      NODE_ID,
+    );
+    await tick();
   });
 
   it("provisions Prepare in preproduction and persists the distinct preparation intent", async () => {

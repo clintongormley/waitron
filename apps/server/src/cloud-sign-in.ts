@@ -10,6 +10,7 @@ export type CloudSignInProfile = Extract<PairingV4Operation, { action: "complete
 export interface CloudSignInBinding {
   tab: string;
   session: string;
+  kind?: "setup";
 }
 export type CloudSignInReturn = { requestId: string; state: string } & (
   { code: string } | { error: "access_denied" | "expired" }
@@ -21,6 +22,8 @@ type Attempt = CloudSignInBinding & {
   expiresAt: string;
   phase: "awaiting_cloud" | "redeeming" | "account_bound";
   profile?: CloudSignInProfile;
+  publishedNodeId?: string;
+  provisionalRegistration?: CloudRegistration;
 };
 export interface CloudSignInState {
   version: 4;
@@ -49,6 +52,19 @@ export function readCloudSignInReturn(value: Record<string, unknown>): CloudSign
   throw new AppError("cloud.request_invalid", {});
 }
 
+function readRegistration(value: unknown): CloudRegistration | undefined {
+  if (
+    !record(value) ||
+    !cloudSignInId(value.venueId) ||
+    !cloudSignInId(value.installationId) ||
+    !cloudSignInId(value.organisationId) ||
+    !cloudSignInId(value.legalBusinessId)
+  )
+    return;
+  const { venueId, installationId, organisationId, legalBusinessId } = value;
+  return { venueId, installationId, organisationId, legalBusinessId };
+}
+
 export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
   if (value === undefined) return;
   if (
@@ -61,10 +77,22 @@ export function readCloudSignInAttempt(value: unknown): Attempt | undefined {
     !token(value.verifier) ||
     !instant(value.expiresAt) ||
     !["awaiting_cloud", "redeeming", "account_bound"].includes(value.phase as string) ||
-    (value.profile !== undefined && !isPairingV4Profile(value.profile))
+    (value.profile !== undefined && !isPairingV4Profile(value.profile)) ||
+    (value.kind !== undefined && value.kind !== "setup") ||
+    (value.publishedNodeId !== undefined &&
+      (value.kind !== "setup" ||
+        value.phase !== "account_bound" ||
+        !cloudSignInId(value.publishedNodeId))) ||
+    (value.provisionalRegistration !== undefined && value.kind !== "setup")
   )
     throw new AppError("cloud.state_invalid", {});
-  return value as unknown as Attempt;
+  const attempt = value as unknown as Attempt;
+  if (attempt.provisionalRegistration !== undefined) {
+    const registration = readRegistration(attempt.provisionalRegistration);
+    if (!registration) throw new AppError("cloud.state_invalid", {});
+    attempt.provisionalRegistration = registration;
+  }
+  return attempt;
 }
 
 export function newCloudSignInAttempt(binding: CloudSignInBinding): Attempt {
@@ -79,7 +107,8 @@ export function newCloudSignInAttempt(binding: CloudSignInBinding): Attempt {
 }
 
 type Reply =
-  | { state: "awaiting_cloud" | "account_bound"; expiresAt: string }
+  | { state: "awaiting_cloud"; expiresAt: string }
+  | { state: "account_bound"; expiresAt: string; provisionalRegistration?: CloudRegistration }
   | { state: "complete"; expiresAt: string; registration: CloudRegistration };
 
 export function readCloudSignInReply(
@@ -112,32 +141,35 @@ export function readCloudSignInReply(
       throw new Error();
     return { state: "awaiting_cloud", expiresAt, authorizationUrl: url.href };
   }
-  if (
-    (action === "status" && result.state === "awaiting_cloud") ||
-    ((action === "redeem" || action === "status") && result.state === "account_bound")
-  ) {
+  if ((action === "redeem" || action === "status") && result.state === "account_bound") {
     if (Object.hasOwn(result, "registration")) throw new Error();
-    return { state: result.state, expiresAt };
+    const provisionalRegistration = result.provisionalRegistration;
+    if (provisionalRegistration !== undefined) {
+      const provisional = readRegistration(provisionalRegistration);
+      if (attempt.kind !== "setup" || !provisional) throw new Error();
+      return { state: "account_bound", expiresAt, provisionalRegistration: provisional };
+    }
+    return { state: "account_bound", expiresAt };
   }
   if (
-    (action === "complete" || action === "status") &&
-    result.state === "complete" &&
-    record(registration) &&
-    cloudSignInId(registration.venueId) &&
-    cloudSignInId(registration.installationId) &&
-    cloudSignInId(registration.organisationId) &&
-    cloudSignInId(registration.legalBusinessId)
+    action === "status" &&
+    result.state === "awaiting_cloud" &&
+    !Object.hasOwn(result, "registration") &&
+    !Object.hasOwn(result, "provisionalRegistration")
   )
-    return {
-      state: "complete",
-      expiresAt,
-      registration: {
-        venueId: registration.venueId,
-        installationId: registration.installationId,
-        organisationId: registration.organisationId,
-        legalBusinessId: registration.legalBusinessId,
-      },
-    };
+    return { state: "awaiting_cloud", expiresAt };
+  if ((action === "complete" || action === "status") && result.state === "complete") {
+    const final = readRegistration(registration);
+    if (
+      !final ||
+      (attempt.provisionalRegistration &&
+        Object.entries(attempt.provisionalRegistration).some(
+          ([key, id]) => final[key as keyof CloudRegistration] !== id,
+        ))
+    )
+      throw new Error();
+    return { state: "complete", expiresAt, registration: final };
+  }
   throw new Error();
 }
 

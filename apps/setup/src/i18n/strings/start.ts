@@ -1,6 +1,14 @@
 // The connection, role, connect, mode and admin screens, the old-box question and server-fields.ts.
 
 export const startEn = {
+  "cloud_sign_in.heading": "Connect to Waitron Cloud",
+  "cloud_sign_in.copy":
+    "Sign in or create an account. Waitron will connect this box when you save the venue.",
+  "cloud_sign_in.sign_in": "Sign in to Waitron Cloud",
+  "cloud_sign_in.skip": "Skip",
+  "cloud_sign_in.error":
+    "Cloud sign-in didn’t finish. Try again or skip and connect later from Cloud services.",
+
   "emergency.heading": "Start the venue in the cloud",
   "emergency.authenticator":
     "You need an authenticator app, set up in Waitron before the box failed. You cannot set one up here.",
@@ -182,6 +190,14 @@ export const startEn = {
 } as const;
 
 export const startEs: Record<keyof typeof startEn, string> = {
+  "cloud_sign_in.heading": "Conecta con Waitron Cloud",
+  "cloud_sign_in.copy":
+    "Inicia sesión o crea una cuenta. Waitron conectará este servidor cuando guardes el local.",
+  "cloud_sign_in.sign_in": "Iniciar sesión en Waitron Cloud",
+  "cloud_sign_in.skip": "Omitir",
+  "cloud_sign_in.error":
+    "No se ha completado el inicio de sesión en Cloud. Inténtalo de nuevo u omite este paso y conéctate más tarde desde Servicios de Cloud.",
+
   "emergency.heading": "Iniciar el local en la nube",
   "emergency.authenticator":
     "Necesitas una aplicación de autenticación configurada en Waitron antes de que fallara el servidor. No puedes configurarla aquí.",

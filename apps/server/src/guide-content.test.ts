@@ -151,6 +151,7 @@ describe("the user guides", () => {
       "reconciliation",
       "waiting",
       "carry-on",
+      "setup-cloud-sign-in",
       "remote-access",
       "cloud-owner-recovery",
       "cloud-emergency",

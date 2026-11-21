@@ -3,7 +3,10 @@ import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { mintBoxAuthority } from "./testing/box-authority.js";
 import { chromium } from "playwright";
+import { mountCloudSignInCallback } from "./cloud-sign-in-callback.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -77,9 +80,13 @@ it.each([
   },
 );
 
-it.each([204, 400])(
-  "returns from a different site without exposing the code when the box answers %s",
-  async (status) => {
+it.each([
+  [204, false],
+  [400, false],
+  [204, true],
+] as const)(
+  "returns across sites without the code in the URL (status %s, setup %s)",
+  async (status, setup) => {
     const app = new Hono();
     const posts: { cookie?: string; from?: string; body: unknown }[] = [];
     const gets: (string | undefined)[] = [];
@@ -92,56 +99,72 @@ it.each([204, 400])(
       code,
     });
     const callback = "/cloud/pairing/callback";
+    const handler = getRequestListener(app.fetch);
+    const authority = setup ? await mintBoxAuthority() : undefined;
     const listener = await retainHttpListener(
       "127.0.0.1",
-      createServer(getRequestListener(app.fetch)),
+      authority
+        ? createHttpsServer({ key: authority.keyPem, cert: authority.certPem }, handler)
+        : createServer(handler),
     );
-    const box = `http://127.0.0.1:${listener.port}`;
-    const cloud = `http://localhost:${listener.port}`;
-    app.get("/cloud", (c) => c.html('<a href="' + cloud + '/login">Sign in</a>'));
+    const protocol = setup ? "https" : "http";
+    const box = `${protocol}://127.0.0.1:${listener.port}`;
+    const cloud = `${protocol}://localhost:${listener.port}`;
+    const destination = setup ? "/" : "/cloud";
+    const tabKey = setup ? "waitron-setup-cloud-tab" : "waitron-cloud-sign-in-tab";
+    const cookie = setup ? "__Host-waitron-setup-cloud" : MANAGEMENT_COOKIE;
+    app.get(destination, (c) => c.html('<a href="' + cloud + '/login">Sign in</a>'));
     app.get("/login", (c) => c.html('<a href="' + box + callback + "?" + query + '">Return</a>'));
     app.use(callback, (c, next) => {
       gets.push(c.req.header("cookie"));
       return next();
     });
-    mountCloudApi(
-      app,
-      { db: suite.db, managementOrigin: box, signInCallback: true, isPrimary: () => true },
-      () => {},
-    );
+    if (setup) mountCloudSignInCallback(app, () => true, true);
+    else
+      mountCloudApi(
+        app,
+        { db: suite.db, managementOrigin: box, signInCallback: true, isPrimary: () => true },
+        () => {},
+      );
     const browser = await chromium.launch().catch(async (error) => {
       await listener.close();
       throw error;
     });
     try {
-      const page = await browser.newPage();
+      const page = await browser.newPage({ ignoreHTTPSErrors: setup });
       await page
         .context()
         .addCookies([
-          { name: MANAGEMENT_COOKIE, value: "test-session", url: box, sameSite: "Strict" },
+          {
+            name: cookie,
+            value: "test-session",
+            url: box,
+            sameSite: "Strict",
+            ...(setup && { secure: true }),
+          },
         ]);
       // Intercept only the box-side receiver. The browser still sends the actual same-origin request.
-      await page.route("**/management-api/cloud/sign-in/return", async (route) => {
-        const headers = await route.request().allHeaders();
-        posts.push({
-          cookie: headers.cookie,
-          ...(headers.referer === undefined ? {} : { from: headers.referer }),
-          body: route.request().postDataJSON(),
-        });
-        await route.fulfill(
-          status === 204
-            ? { status }
-            : {
-                status,
-                json: { error: { code: "management_session.proof_required", params: {} } },
-              },
-        );
-      });
-      await page.goto(box + "/cloud");
-      await page.evaluate(
-        (marker) => sessionStorage.setItem("waitron-cloud-sign-in-tab", marker),
-        tab,
+      await page.route(
+        setup ? "**/setup-api/cloud/sign-in/return" : "**/management-api/cloud/sign-in/return",
+        async (route) => {
+          const headers = await route.request().allHeaders();
+          posts.push({
+            cookie: headers.cookie,
+            ...(headers.referer === undefined ? {} : { from: headers.referer }),
+            body: route.request().postDataJSON(),
+          });
+          await route.fulfill(
+            status === 204
+              ? { status }
+              : {
+                  status,
+                  json: { error: { code: "management_session.proof_required", params: {} } },
+                },
+          );
+        },
       );
+      await page.goto(box + destination);
+      await page.evaluate(([key, marker]) => sessionStorage.setItem(key!, marker!), [tabKey, tab]);
       await page.getByRole("link", { name: "Sign in" }).click();
       await page.waitForURL(cloud + "/login");
       const callbackResponse = page.waitForResponse((r) =>
@@ -152,17 +175,18 @@ it.each([204, 400])(
       expect(response.status()).toBe(200);
       expect(response.headers()["cache-control"]).toBe("no-store");
       expect(response.headers()["referrer-policy"]).toBe("no-referrer");
-      await page.waitForURL(box + "/cloud");
+      await page.waitForURL(box + destination);
       expect(gets).toEqual([undefined]);
       expect(posts).toEqual([
         {
-          cookie: `${MANAGEMENT_COOKIE}=test-session`,
+          cookie: `${cookie}=test-session`,
           body: { requestId: query.get("request_id"), state, code, tab },
         },
       ]);
       const saved = await page.evaluate(() => ({ ...sessionStorage }));
       expect(saved).toEqual({
-        "waitron-cloud-sign-in-tab": tab,
+        [tabKey]: tab,
+        ...(setup ? { "waitron-setup-cloud-result": "signed-in" } : {}),
         ...(status === 400 ? { "waitron-cloud-sign-in-result": "retry" } : {}),
       });
       await page.goBack();

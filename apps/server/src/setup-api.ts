@@ -1,3 +1,9 @@
+import {
+  mountSetupCloudSignIn,
+  recordSetupCloudPublication,
+  setupCloudSignInAvailable,
+  type SetupCloudSignIn,
+} from "./setup-cloud-sign-in.js";
 import { saveSmtpSettings } from "./mail-settings.js";
 import {
   mountRecoveryPreparationApi,
@@ -130,6 +136,7 @@ function recoveryCredentials(
  */
 export interface SetupDeps {
   installationOrigin?: "usb";
+  cloudSignIn?: SetupCloudSignIn;
   environment: DeploymentEnvironment;
   sendEmailTest?: typeof sendSmtpTestMessage;
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
@@ -727,6 +734,19 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       deps.devMode === true ? "preproduction" : "production",
       deps,
     );
+  const cloudSignIn = deps.cloudSignIn;
+  if (cloudSignIn && deps.environment === "preproduction") {
+    mountSetupCloudSignIn(
+      app,
+      cloudSignIn,
+      async () => {
+        if (setupBusy() || (await deps.operations?.read()) != null)
+          throw new AppError("setup.already_provisioning", {});
+        await deps.firstSetup?.assertOtherAllowed();
+      },
+      log,
+    );
+  }
   if (deps.firstSetup !== undefined) {
     const firstSetup = deps.firstSetup;
     const boundary = createErrorBoundary(
@@ -801,6 +821,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           : { installationOrigin: deps.installationOrigin }),
         ...(deps.devMode === true ? { developmentMode: true } : {}),
         needs: ["venue"],
+        ...(cloudSignIn &&
+          deps.environment === "preproduction" &&
+          (await setupCloudSignInAvailable(c, cloudSignIn, log)) && { cloudSignInAvailable: true }),
         ...(operationBlocked ? { operationBlocked: true } : {}),
         ...(operation === undefined || operation === null
           ? {}
@@ -1027,12 +1050,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
                 );
           key = { ...minted, secret: keyOutput.format(minted.secret) };
         }
-        await persistTrading({
+        const trading: TradingConfig = {
           nodeId: result.nodeId,
           environment,
           ...(deps.devMode === true ? { developmentMode: true } : {}),
           onboardingIntent: mode,
-        });
+        };
+        await persistTrading(trading);
+        if (!request.configurationImport)
+          await recordSetupCloudPublication(c, cloudSignIn, trading, log);
         await deps.clearConfiguration?.();
         await operation?.advance("publishing");
       }
