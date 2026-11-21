@@ -341,6 +341,7 @@ const PERSON_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.join_not_found": 404,
   "mirror.join_wrong_code": 409,
   "mirror.join_in_progress": 409,
+  "mirror.join_stopped_after_listing": 409,
   ...ISSUE_STATUS,
 };
 
@@ -441,15 +442,21 @@ export function mountBoxJoinPersonApi(
               ),
             );
         }
+        // Read first, so a retried tap never follows a failure after the chart write committed.
+        const mainPrivateKey = await readNodeIdentityKey(
+          deps.node,
+          deps.ring,
+          deps.designated.nodeId,
+        );
         const bundle = await issue();
         const locked = lockJoinBundle({
           requestId,
           encryptionKey: begun.encryptionKey,
           bundle: Buffer.from(JSON.stringify(bundle)),
-          mainPrivateKey: await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId),
+          mainPrivateKey,
         });
         if (!requests.approve.finish(requestId, locked))
-          throw new AppError("mirror.join_not_found", {});
+          throw new AppError("mirror.join_stopped_after_listing", {});
       } catch (error) {
         requests.approve.abandon(requestId);
         throw error;

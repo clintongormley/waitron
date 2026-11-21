@@ -80,6 +80,9 @@ interface JoinRequest extends Omit<HeldJoinRequest, "revealed"> {
   id: string;
   mainNonce: Buffer;
   helloAt: number;
+  /** Wall times taken once at the hello, so every read reports the same ones. */
+  askedAt: string;
+  expiresAt: string;
   lastSeq: number;
   latestAt: string;
   latestAtReceived: number;
@@ -226,6 +229,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     if (held) return held;
     const id = newId();
     const mainNonce = newMainNonce(id);
+    const expiresAt = wallAt(now + JOIN_REQUEST_TTL_MS);
     requests.set(id, {
       id,
       address: input.address,
@@ -233,6 +237,8 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       main: input.main,
       mainNonce,
       helloAt: now,
+      askedAt: wallAt(now),
+      expiresAt,
       lastSeq: 0,
       latestAt: input.at,
       latestAtReceived: now,
@@ -241,7 +247,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
     return {
       requestId: id,
       commitment: commitmentFor(id, mainNonce),
-      expiresAt: wallAt(now + JOIN_REQUEST_TTL_MS),
+      expiresAt,
     };
   }
 
@@ -366,8 +372,8 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       return listedRequests().map((r) => ({
         id: r.id,
         address: r.address,
-        askedAt: wallAt(r.helloAt),
-        expiresAt: wallAt(r.helloAt + JOIN_REQUEST_TTL_MS),
+        askedAt: r.askedAt,
+        expiresAt: r.expiresAt,
         startedAgain: r.revealed!.startedAgain,
       }));
     },
@@ -387,7 +393,7 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
       if (!r || !isListed(r)) return { refused: "not_found" };
       return {
         address: r.address,
-        askedAt: wallAt(r.helloAt),
+        askedAt: r.askedAt,
         startedAgain: r.revealed!.startedAgain,
         choices: [...r.revealed!.choices],
         at: r.latestAt,

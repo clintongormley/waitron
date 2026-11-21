@@ -229,6 +229,19 @@ describe("reveal", () => {
     for (let n = 0; n < 20; n++) expect(order()).toEqual(first);
   });
 
+  it("reports the same asked time on every read, however the two clocks have moved", () => {
+    const { store, revealFrom, clock } = setup();
+    const { id } = revealFrom("10.0.0.1");
+    const asked = () => {
+      const check = store.check(id);
+      return "refused" in check ? null : check.askedAt;
+    };
+    const first = asked();
+    clock.steady += 5;
+    clock.wall += 7;
+    expect([asked(), store.listed()[0]!.askedAt]).toEqual([first, first]);
+  });
+
   it("hands Check a copy of the codes, so a caller cannot reorder the stored list", () => {
     const { store, revealFrom } = setup();
     const { id } = revealFrom("10.0.0.1");

@@ -87,6 +87,7 @@ let app: Hono;
 let cookie: string;
 let approverId: string;
 let nifCounter = 0;
+let afterIssue: () => void = () => {};
 
 interface NewBox {
   hello: JoinHello;
@@ -365,7 +366,7 @@ function mount(store: BoxJoinRequests = createBoxJoinRequests()): void {
     stateDir,
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.deli.test",
-    wakeSpareJoin: () => {},
+    wakeSpareJoin: () => afterIssue(),
   });
 }
 
@@ -424,6 +425,7 @@ beforeEach(async () => {
   approverId = await personHolding(db, ["node.manage"]);
   cookie = await sessionFor(approverId);
   socket = new TLSSocket(new Socket());
+  afterIssue = () => {};
   mount();
 }, 60_000);
 
@@ -465,6 +467,13 @@ describe("the main box's person routes for a joining box", () => {
       refusal(400, "management_session.proof_required"),
     );
     expect((await check(requestId)).status).toBe(200);
+  });
+
+  it("refuses another page's request that does not come through Cloud", async () => {
+    const { requestId } = await listedRequest("192.168.1.20");
+    expect(await check(requestId, { headers: { origin: "https://elsewhere.example" } })).toEqual(
+      refusal(403, "node.operation_page_required"),
+    );
   });
 
   it("refuses Cloud remote access on every route, and dismisses on a stale sign-in", async () => {
@@ -581,13 +590,27 @@ describe("the main box's person routes for a joining box", () => {
     });
     const bundle = JSON.parse(opened!.toString("utf8")) as MirrorBundle;
     expect(bundle.designated.nodeId).toBe(designated.nodeId);
-    const kept = JSON.stringify(answer);
+    const kept = [JSON.stringify(answer), JSON.stringify(requests.requestFor(listed.requestId))];
     for (const secret of [bundle.store.secretAccessKey, bundle.boxCaKeyPem, bundle.boxCaPem])
-      expect(kept).not.toContain(secret);
+      for (const place of kept) expect(place).not.toContain(secret);
     expect((await readNodeMembership(db))?.body.nodes.map((n) => n.contactUrl)).toContain(
       listed.box.hello.contactUrl,
     );
     expect(await check(listed.requestId)).toEqual(refusal(404, "mirror.join_not_found"));
+  });
+
+  it("says the spare was listed when its request ended while the copy was built", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    afterIssue = () => {
+      afterIssue = () => {};
+      requests.dismiss(listed.requestId);
+    };
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+      refusal(409, "mirror.join_stopped_after_listing"),
+    );
+    expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).toContain(
+      listed.box.hello.newNodeId,
+    );
   });
 
   it("reaches the module with the approver as the operation's authority", async () => {
