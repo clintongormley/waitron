@@ -234,7 +234,8 @@ entero y después esos artículos pueden pagarse de nuevo.
 
 **Devolver** junto a un pago que tiene su propio ticket abre **Rectificar factura** en ese ticket.
 Cuando la cuenta ya esté pagada, abre ese ticket desde **Buscar cuenta**. Si el ticket de la mesa
-tiene que devolver el dinero primero, la caja te lo indica.
+tiene que devolver el dinero primero, la caja te lo indica. Lo que el ticket de la mesa no pueda
+devolver se devuelve con el ticket propio del pago.
 
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
 encargado introduce su PIN. En una devolución en efectivo, entrega el dinero al cliente cuando el

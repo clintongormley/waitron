@@ -219,7 +219,8 @@ those items can then be paid for again.
 
 **Refund** beside a payment that has a ticket of its own opens **Correct invoice** on that ticket
 instead. Once the bill is paid, open that ticket from **Find a bill**. If the table's receipt has
-to give the money back first, the till says so.
+to give the money back first, the till says so. What the table's receipt cannot give back comes
+back on the payment's own ticket.
 
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you
