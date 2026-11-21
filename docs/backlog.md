@@ -117,7 +117,6 @@ close the day, then A947 and its handover bundles.
 - [Query plans and indexes, measured on a year of data](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 - [The spare's wait loop: back-off, reasons, stop signals](backlog/replication-cloud.md#bundle-the-spares-wait-loop-back-off-reasons-stop-signals): chart answers and accepted-copy recognition.
 - [Remaining setup and failover gaps](backlog/replication-cloud.md#bundle-remaining-setup-and-failover-gaps)
-- [Joined-table writers keep their rows right](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 - [Everything needing a third box or a Cloud peer](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
 - [Business-day start checks after A760](backlog/service-periods.md#bundle-business-day-start-checks-after-a760)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
@@ -760,8 +759,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **Show a table's short name where the full name does not fit** (bundle of 4, 3 important, size S, needs the owner). Holds A561, A562, A1101. [Detail](backlog/till.md#bundle-show-a-tables-short-name-where-the-full-name-does-not-fit)
-
-- **Joined-table writers keep their rows right** (bundle of 1, size M, waits for another entry). Holds A594. [Detail](backlog/till.md#bundle-joined-table-writers-keep-their-rows-right)
 
 - **One rule for what holds a table back at a reset** (bundle of 3, 1 important, size M, waits for another entry). Holds A565, A566, A860. [Detail](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 

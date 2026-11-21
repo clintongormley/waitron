@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { Hono } from "hono";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -622,7 +622,7 @@ describe("Split tables… on a group with guests seated", () => {
   });
 });
 
-/** A counter order moved to `tableId`, which opens a party holding that table alone; its id. */
+/** Seed a partially seated group for Split tables. Cases add any departed memberships separately. */
 async function partyAloneAt(tableId: string): Promise<string> {
   const billId = await counterOrder(v, "Paella");
   await ok(
@@ -643,6 +643,11 @@ async function partyAloneAt(tableId: string): Promise<string> {
     ),
   );
   const partyId = (await billRow(v, billId)).partyId!;
+  await inTx(v, (tx) =>
+    tx
+      .delete(partyTables)
+      .where(and(eq(partyTables.partyId, partyId), ne(partyTables.tableId, tableId))),
+  );
   expect(await activeTablesOf(v, partyId)).toEqual([tableId]);
   return partyId;
 }

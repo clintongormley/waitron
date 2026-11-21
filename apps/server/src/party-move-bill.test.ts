@@ -58,7 +58,9 @@ import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { needingMoving } from "./testing/floor-today-venue.js";
+import { needingMoving, plannedZone } from "./testing/floor-today-venue.js";
+import { writeMerge } from "./floor-today-merges.js";
+import { nameToday } from "./floor-today-name.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
@@ -424,6 +426,34 @@ describe("what a move refuses, changing nothing", () => {
     expect(await snapshot(partyIds, bills, tableIds)).toEqual(before);
     return error;
   }
+
+  it("refuses a move into a partly held joined group", async () => {
+    const source = await seat(v, await v.table("Table refused group move"));
+    const { table } = await plannedZone(v, [
+      { key: "free" },
+      { key: "held", place: { x: 20, y: 0 } },
+    ]);
+    const free = table.free!;
+    const held = table.held!;
+    const occupied = await seat(v, held);
+    await inTx(v, (tx) =>
+      writeMerge(tx, { movingId: free, targetId: held, side: "right", seats: 8, free: false }),
+    );
+    await order(v, source.tabId, "Burger");
+    const before = await snapshot([source.partyId, occupied.partyId], [source.tabId], [free, held]);
+
+    await expect(
+      move(source.tabId, { tableId: free }, { otherPartyId: null }),
+    ).rejects.toMatchObject({
+      code: "tab.already_open",
+      params: { tableId: held },
+    });
+
+    expect(
+      await snapshot([source.partyId, occupied.partyId], [source.tabId], [free, held]),
+    ).toEqual(before);
+    expect(await partyAt(v, free)).toBeNull();
+  });
 
   it("refuses a paid bill", async () => {
     const p = await twoParties("Table paid");
@@ -1374,6 +1404,61 @@ describe("MOVED notices", () => {
       splitNotices: noticesOn([second]),
     };
   }
+
+  it("seats the whole free joined group and prints its name", async () => {
+    const { table } = await plannedZone(v, [
+      { key: "chosen", label: "Table 7", place: { x: 20, y: 0 } },
+      { key: "ten", label: "Table 10", place: { x: 40, y: 0 } },
+      { key: "two", label: "Table 2" },
+    ]);
+    const { chosen, ten, two } = table as Record<"chosen" | "ten" | "two", string>;
+    await inTx(v, async (tx) => {
+      await writeMerge(tx, {
+        movingId: ten,
+        targetId: chosen,
+        side: "right",
+        seats: 8,
+        free: true,
+      });
+      await writeMerge(tx, {
+        movingId: two,
+        targetId: chosen,
+        side: "left",
+        seats: 12,
+        free: true,
+      });
+      await nameToday(tx, v.cfg, chosen, "The window group");
+    });
+    const source = await seat(v, await v.table("Table bill move source"));
+    await order(v, source.tabId, "Burger", "Burger");
+    const movedBill = await splitOff(source.partyId, source.tabId, [2]);
+    const printerId = await printerFor(movedBill);
+
+    const { partyId } = await move(movedBill, { tableId: chosen }, { otherPartyId: null });
+
+    expect(await activeTablesOf(v, partyId!)).toEqual([chosen, two, ten]);
+    const moveSlips = () => printedBy(printerId).map((lines) => [lines[0], ...lines.slice(2, 5)]);
+    const movedOrder = (await billRow(v, movedBill)).orderNumber;
+    const sourceOrder = (await billRow(v, source.tabId)).orderNumber;
+    const route = ["De: Table bill move source", "A:  The window group"];
+    const billSlip = ["*** MOVIDO ***", `Pedido ${movedOrder}`, ...route];
+    expect(moveSlips()).toEqual([billSlip]);
+
+    const leaving = await commandFor(v, source.partyId);
+    const receiving = await revisionOf(v, partyId!);
+    const guests = await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, source.partyId, ten, {
+        ...leaving,
+        otherPartyId: partyId,
+        expectedOtherPartyRevision: receiving,
+      }),
+    );
+
+    expect(guests.partyId).toBe(partyId);
+    expect((await billRow(v, source.tabId)).partyId).toBe(partyId);
+    expect(await activeTablesOf(v, guests.partyId)).toEqual([chosen, two, ten]);
+    expect(moveSlips()).toEqual([billSlip, ["*** MOVIDO ***", `Pedido ${sourceOrder}`, ...route]]);
+  });
 
   it("tells the kitchen of each sent dish of a bill moved to another party, naming its tables", async () => {
     const { anna, second, mainNotices, splitNotices } = await sentSplit("Table notice 1");
