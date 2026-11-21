@@ -557,6 +557,11 @@ const REFUSALS: [route: "check" | "approve", error: object, words: string][] = [
   ],
   [
     "approve",
+    { code: "mirror.join_other_approved" },
+    "Another box was approved to join a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+  ],
+  [
+    "approve",
     { code: "mirror.join_stopped_after_listing" },
     "The new box stopped asking to join while its copy was being prepared, so nothing was sent. Remove it from the list on this page, then choose Start again on the new box.",
   ],

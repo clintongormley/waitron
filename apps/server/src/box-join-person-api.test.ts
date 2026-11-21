@@ -604,6 +604,28 @@ describe("the main box's person routes for a joining box", () => {
     expect([first, second]).toContainEqual({ status: 202, body: null });
   });
 
+  it("refuses a tap on a second box while the first is approved, keeping the first's pair link", async () => {
+    const first = await listedRequest("192.168.1.20");
+    const second = await listedRequest("192.168.1.21");
+    expect(requests.approve.begin(first.requestId, first.code)).not.toHaveProperty("refused");
+    expect(await approve(second.requestId, { code: second.code })).toEqual(
+      refusal(409, "mirror.join_other_approved"),
+    );
+    requests.approve.abandon(first.requestId);
+
+    expect((await approve(first.requestId, { code: first.code })).status).toBe(202);
+    expect(await approve(second.requestId, { code: second.code })).toEqual(
+      refusal(409, "mirror.join_other_approved"),
+    );
+    expect((await readPairLink(suite.node, designated.nodeId))?.peerNodeId).toBe(
+      first.box.hello.newNodeId,
+    );
+    expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).not.toContain(
+      second.box.hello.newNodeId,
+    );
+    expect(await poll(second)).toEqual({ state: "waiting" });
+  });
+
   it("answers mirror.join_not_found for an unknown request", async () => {
     const unknown = "00000000-0000-4000-8000-000000000000";
     expect(await check(unknown)).toEqual(refusal(404, "mirror.join_not_found"));

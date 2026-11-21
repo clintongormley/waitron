@@ -1584,6 +1584,11 @@ declare module "@waitron/shared" {
      * it; the request goes on, and the new box keeps waiting for the answer.
      */
     "mirror.join_approving": Record<string, never>;
+    /**
+     * A right tap while another request's copy is being prepared, or was approved less than 2
+     * minutes ago; the request stays waiting.
+     */
+    "mirror.join_other_approved": Record<string, never>;
     /** The request ended while its copy was built, after the chart had listed the spare. */
     "mirror.join_stopped_after_listing": Record<string, never>;
     /** This box already has a join attempt, or is starting one; it must be cancelled first. */

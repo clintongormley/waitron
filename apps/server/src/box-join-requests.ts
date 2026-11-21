@@ -439,7 +439,8 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         | { encryptionKey: string }
         | JoinNotFound
         | { refused: "in_progress" }
-        | { refused: "wrong_code" } {
+        | { refused: "wrong_code" }
+        | { refused: "other_approved" } {
         const r = held(requestId);
         if (!r || !isListed(r)) return { refused: "not_found" };
         if (r.phase === "building") return { refused: "in_progress" };
@@ -447,6 +448,12 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
           end(r, "wrong_code", steadyNow());
           freePlace(r.id);
           return { refused: "wrong_code" };
+        }
+        // The venue holds one pending pair link, so a second approval would take the first box's.
+        // Once the first is forgotten, a new approval may replace its pair if it never finished.
+        for (const other of requests.values()) {
+          if (other.phase === "building" || other.phase === "approved")
+            return { refused: "other_approved" };
         }
         r.phase = "building";
         return { encryptionKey: r.hello.encryptionKey };

@@ -470,3 +470,29 @@ describe("stopping a request while it is approved", () => {
     });
   });
 });
+
+describe("one approval at a time", () => {
+  it("refuses a tap on another request while one is built or approved, until that one is forgotten", () => {
+    const { store, revealFrom, advance } = setup();
+    const a = revealFrom("10.0.0.1").id;
+    const b = revealFrom("10.0.0.2").id;
+    store.approve.begin(a, codeOf(a, "10.0.0.1"));
+    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({ refused: "other_approved" });
+    store.approve.finish(a, locked("a"));
+    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({ refused: "other_approved" });
+    expect(store.poll({ requestId: b, seq: 2, at: iso(0) })).toEqual({ state: "waiting" });
+    advance(2 * 60_000);
+    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).toEqual({
+      encryptionKey: helloFrom("10.0.0.2").encryptionKey,
+    });
+  });
+
+  it("takes a tap on another request once a failed build has left the first waiting", () => {
+    const { store, revealFrom } = setup();
+    const a = revealFrom("10.0.0.1").id;
+    const b = revealFrom("10.0.0.2").id;
+    store.approve.begin(a, codeOf(a, "10.0.0.1"));
+    store.approve.abandon(a);
+    expect(store.approve.begin(b, codeOf(b, "10.0.0.2"))).not.toHaveProperty("refused");
+  });
+});

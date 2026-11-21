@@ -1376,3 +1376,37 @@ it.each([
 ])("explains a missing menu item in %s", (locale, explanation) => {
   expect(codeMessage("menu_item.not_found", locale)).toContain(explanation);
 });
+
+it("has a sentence in both languages for each refusal of a box asking to join", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "membership.held_untrusted",
+    "mirror.join_not_found",
+    "mirror.join_wrong_code",
+    "mirror.join_in_progress",
+    "mirror.join_other_approved",
+    "mirror.join_stopped_after_listing",
+    "mirror.spare_already_joined",
+    "mirror.bucket_stream_active",
+    "mirror.clocks_apart",
+    "mirror.standby_name_taken",
+    "mirror.membership_full",
+    "mirror.standby_removed",
+    "mirror.standby_invalid",
+    "mirror.not_provisioned",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es"), code).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});
+
+it("words a tap refused because another box was just approved as a next step", () => {
+  expect(codeMessage("mirror.join_other_approved", "en")).toBe(
+    "Another box was approved to join a moment ago. Choose Finish joining on that box first. If it will not finish, try this one again in a few minutes.",
+  );
+  expect(codeMessage("mirror.join_other_approved", "es")).toBe(
+    "Hace un momento se aprobó la unión de otro servidor. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
+  );
+});

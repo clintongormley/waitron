@@ -341,6 +341,7 @@ const PERSON_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.join_wrong_code": 409,
   "mirror.join_in_progress": 409,
   "mirror.join_stopped_after_listing": 409,
+  "mirror.join_other_approved": 409,
   ...ISSUE_STATUS,
 };
 
@@ -411,6 +412,8 @@ export function mountBoxJoinPersonApi(
       if ("refused" in begun) {
         if (begun.refused === "wrong_code") throw new AppError("mirror.join_wrong_code", {});
         if (begun.refused === "in_progress") throw new AppError("mirror.join_in_progress", {});
+        if (begun.refused === "other_approved")
+          throw new AppError("mirror.join_other_approved", {});
         throw new AppError("mirror.join_not_found", {});
       }
       try {
