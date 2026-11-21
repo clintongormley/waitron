@@ -1,7 +1,7 @@
 import type { DeploymentEnvironment } from "@waitron/db";
 import { resolveConfigDir } from "./config.js";
 import { isUnset } from "./env-value.js";
-import { createSetupOperationStore } from "./setup-operation.js";
+import { createSetupOperationStore, isUnfinishedAdopt } from "./setup-operation.js";
 
 /**
  * `env` with `WAITRON_ENV` set to the main box's environment while a join this box started is past
@@ -19,13 +19,7 @@ export async function withUnfinishedJoinEnvironment(
   const record = await createSetupOperationStore(stateDir)
     .read()
     .catch(() => null);
-  if (
-    record === null ||
-    record.kind !== "adopt" ||
-    record.phase === "started" ||
-    record.phase === "complete"
-  )
-    return env;
+  if (!isUnfinishedAdopt(record)) return env;
   const environment = record.data.environment;
   return environment === "production" || environment === "preproduction"
     ? { ...env, WAITRON_ENV: environment satisfies DeploymentEnvironment }

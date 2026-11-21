@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import type { DeploymentEnvironment } from "@waitron/db";
-import { startServer } from "./boot.js";
+import { startServer, type StartServerSeams } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { BOX_HOSTNAME, ownContactUrl } from "./box-name.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
@@ -75,13 +75,17 @@ describe("a joining box's environment", () => {
   });
 
   /** M provisioned in `main` with a recovery key and no bucket copy, and S's empty folder, both
-   * started; S's own WAITRON_ENV is `joining` (undefined leaves it out), and S's environment
-   * leaves out the variables `leftOutOfS` names. */
+   * started; S's own WAITRON_ENV is `joining` (undefined leaves it out). `s.leftOut` names
+   * variables S's environment leaves out, `s.set` adds to it, and `s.seams` are S's start seams. */
   async function startPair(
     name: string,
     main: DeploymentEnvironment,
     joining: string | undefined,
-    leftOutOfS: readonly string[] = [],
+    s: {
+      leftOut?: readonly string[];
+      set?: NodeJS.ProcessEnv;
+      seams?: StartServerSeams;
+    } = {},
   ): Promise<Pair> {
     const root = scratch!;
     const [listenerM, listenerS, storeListener] = await Promise.all([
@@ -121,9 +125,10 @@ describe("a joining box's environment", () => {
       ...(joining === undefined ? {} : { WAITRON_ENV: joining }),
       WAITRON_SPARE_STORE_PORT: String(storeListener.port),
       WAITRON_SPARE_STORE_LOOPBACK_PORT: String(await freePort()),
+      ...s.set,
     };
-    for (const variable of leftOutOfS) delete envS[variable];
-    const boxS = new TestBox(dirsS, listenerS.port, envS, {});
+    for (const variable of s.leftOut ?? []) delete envS[variable];
+    const boxS = new TestBox(dirsS, listenerS.port, envS, s.seams ?? {});
     boxes.push(boxS);
 
     const adoption = adoptRetainedListeners([listenerM, listenerS]);
@@ -243,9 +248,9 @@ describe("a joining box's environment", () => {
   it(
     "refuses a box with WAITRON_ENV unset joining a production main box when it could not start in production",
     async () => {
-      const pair = await startPair("no-rp-id", "production", undefined, [
-        "WAITRON_MANAGEMENT_RP_ID",
-      ]);
+      const pair = await startPair("no-rp-id", "production", undefined, {
+        leftOut: ["WAITRON_MANAGEMENT_RP_ID"],
+      });
       const refused = await pair.adopt();
       expect(refused.status, JSON.stringify(refused.body)).toBe(409);
       expect(refused.body).toEqual({
@@ -258,6 +263,39 @@ describe("a joining box's environment", () => {
       const status = await setupStatus(pair.urlS, await viaNow(pair.dirsS));
       expect(status).toMatchObject({ environment: "preproduction" });
       expect(status).not.toHaveProperty("operation");
+    },
+    ADOPT_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a box with WAITRON_ENV unset joining a production main box when its build carries no release version",
+    async () => {
+      const pair = await startPair("unreleased", "production", undefined, {
+        seams: { builtRelease: { bundled: true, version: null } },
+      });
+      const refused = await pair.adopt();
+      expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+      expect(refused.body).toEqual({ error: { code: "server.unreleased_build", params: {} } });
+      expect(existsSync(join(pair.dirsS.state, "trading.env"))).toBe(false);
+    },
+    ADOPT_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses a box with WAITRON_ENV unset joining a production main box when a setting it holds is refused in production",
+    async () => {
+      const pair = await startPair("prepare-intent", "production", undefined, {
+        set: { WAITRON_ONBOARDING_INTENT: "prepare" },
+      });
+      const refused = await pair.adopt();
+      expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+      expect(refused.body).toEqual({
+        error: {
+          code: "server.config_invalid",
+          params: { variable: "WAITRON_ONBOARDING_INTENT", reason: "intent_environment_mismatch" },
+        },
+      });
+      expect(existsSync(join(pair.dirsS.state, "trading.env"))).toBe(false);
     },
     ADOPT_TIMEOUT_MS,
   );

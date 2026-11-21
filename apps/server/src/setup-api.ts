@@ -52,10 +52,11 @@ import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
-import type {
-  ActiveSetupOperation,
-  SetupOperationPhase,
-  SetupOperationStore,
+import {
+  isUnfinishedAdopt,
+  type ActiveSetupOperation,
+  type SetupOperationPhase,
+  type SetupOperationStore,
 } from "./setup-operation.js";
 import type { ArchiveRequest } from "./restore-request.js";
 import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
@@ -1233,12 +1234,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const email = asString(body.email, "email");
         const password = asString(body.password, "password");
         const record = await operations.read();
-        if (
-          record === null ||
-          record.kind !== "adopt" ||
-          record.phase === "started" ||
-          record.phase === "complete"
-        ) {
+        if (!isUnfinishedAdopt(record)) {
           throw new AppError("setup.reset_unavailable", {});
         }
         // Keyed by the saved operation, not the submitted email: only its one saved login can
