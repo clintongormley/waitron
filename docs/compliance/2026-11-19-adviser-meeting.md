@@ -464,4 +464,5 @@ AEAT's test service accepted the records question 12 describes (the advances pla
 verifactu live run [44707265624](https://github.com/waitron-io/verifactu/actions/runs/44707265624),
 mode `advance-rest`, verifactu `main` at `e5d065b40f`. All eight records, among them the negative
 10% line beside a positive 21% line (Q2) and the rest whose VAT is not its base times the rate
-(Q3), returned `EstadoEnvio` and `EstadoRegistro` `Correcto`.
+(Q3), returned `EstadoEnvio` and `EstadoRegistro` `Correcto`. Their descriptions were test text;
+the advance's own words, «Pago a cuenta — consumo en mesa 7», were not sent.

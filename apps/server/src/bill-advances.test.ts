@@ -941,8 +941,8 @@ describe("an advance's record to AEAT", () => {
     expect(await filedDescription(billId)).toBe(forOrder(spanish, await orderNumberOf(billId)));
   });
 
-  // The words count in code points: their em dash and each 🍷 are one code point, two UTF-16 units
-  // or more than one UTF-8 byte, so a copy counting either of those instead misplaces the edge.
+  // The words count in code points: each 🍷 is one code point but two UTF-16 units, and it and the
+  // em dash are more than one UTF-8 byte, so a copy counting either misplaces the edge.
   it.each([
     { points: 500, describedBy: "table" },
     { points: 501, describedBy: "order" },

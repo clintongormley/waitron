@@ -646,7 +646,8 @@ queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
 imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
-o sin enviar, o con una rectificación abierta de un pago que tiene su propio ticket, sigue abierta.
+o sin enviar sigue abierta. Una cuenta con una rectificación abierta de un pago que tiene su propio
+ticket sigue abierta hasta que esa rectificación se termine o se descarte.
 
 Si la cuenta se emitió al terminar el día de trabajo, selecciona el día en que se abrió en
 **Ventas y recaudación**. Para los impuestos, consulta **Modelo 303 (IVA)**. Las fechas registradas
