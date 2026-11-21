@@ -64,6 +64,7 @@ import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { mountSetup } from "./setup-api.js";
 import { createRecoveryEntryRunner } from "./recovery-entry.js";
 import { readSetupDatabase } from "./first-setup-database-holdings.js";
+import { approvedJoinAttempt, finishJoining } from "./testing/setup-join.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
@@ -1711,20 +1712,16 @@ it.each<[string, (p: Pending) => Promise<void>]>([
             coordinator: f.host.coordinator,
             assertOtherAllowed: () => assertOtherFirstSetupAllowed(f.venueDir, f.store),
           },
-          adopt: async () => {
+          joinAttempt: approvedJoinAttempt(() => {
+            throw new Error("the join must not start");
+          }),
+          adoptJoined: async () => {
             throw new Error("adopt must not run");
           },
         },
         () => {},
       );
-      const response = await app.request("http://box.test/setup-api/adopt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          primaryUrl: "https://primary.example",
-          credential: { email: "owner@example.test", password: "x" },
-        }),
-      });
+      const response = await finishJoining(app);
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
         error: { code: "setup.start_again_incomplete", params: {} },

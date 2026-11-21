@@ -2071,12 +2071,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         {},
         async ({ post, kills, extraPorts: [unreachable] }) => {
-          const response = await post("/setup-api/adopt", {
+          const response = await post("/setup-api/join/start", {
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              primaryUrl: `http://127.0.0.1:${unreachable}`,
-              credential: { email: "owner@example.test", password: "x" },
-            }),
+            body: JSON.stringify({ primaryUrl: `http://127.0.0.1:${unreachable}` }),
           });
           const body = (await response.json()) as { error?: { code: string } };
           expect(response.status).toBe(502);
@@ -2094,7 +2091,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("stages the reset of an adopt that stopped partway and requests a restart", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const email = "owner@example.test";
     const operationId = "44444444-4444-4444-8444-444444444444";
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
@@ -2107,14 +2103,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             kind: "adopt",
             requestHash: "a-request",
             phase: "venue_committed",
-            data: { resetProof: { email, passwordHash: hashPassword("the-password") } },
+            data: {},
             updatedAt: "2026-09-26T00:00:00.000Z",
           }),
         );
-        const response = await post("/setup-api/reset-incomplete-adopt", {
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email, password: "the-password" }),
-        });
+        const response = await post("/setup-api/reset-incomplete-adopt", {});
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ resetStaged: true, restarting: true });
         expect(JSON.parse(await readFile(join(stateDir, "reset-request.json"), "utf8"))).toEqual({

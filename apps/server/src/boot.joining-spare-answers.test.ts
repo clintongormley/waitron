@@ -4,7 +4,6 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
@@ -25,18 +24,15 @@ import { enabledModules } from "@waitron/module";
 import { readNodeMode } from "@waitron/node-db";
 import { planVenue } from "@waitron/provisioning";
 import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { adoptWithPassword, type AdoptCredential } from "./adopt.js";
+import { adoptFromPrimary } from "./adopt.js";
 import type { StartedServer } from "./boot.js";
 import { readPendingAdoption } from "./finish-adoption.js";
-import type { MirrorBundle } from "./mirror-bundle.js";
 import { boxExchange, CheckedAddresses } from "./mirror-bundle-fetch.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import {
@@ -45,6 +41,7 @@ import {
   type RetainedHttpListener,
 } from "./testing/retained-http-listener.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { collectJoin, mirrorBundleApp } from "./testing/veri-factu-join.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -194,19 +191,11 @@ async function joinedPair() {
     )
   ).rows as [{ email: string }];
   await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
-  const bundleApp = new Hono();
-  mountMirrorBundleApi(bundleApp, {
-    appDb: mainBox.db,
-    node: mainBox.node,
-    ring: RING,
-    stateDir: mainState,
-    boxHostname: "waitron.local",
-    advertisedOrigin: MAIN_URL,
-    designated: { nodeId: mainId },
-
-    credentialKeyRing: TOTP_KEY_RING,
-    wakeSpareJoin: () => {},
-  });
+  const bundleApp = mirrorBundleApp(
+    { db: mainBox.db, node: mainBox.node, stateDir: mainState, ring: RING },
+    mainId,
+    MAIN_URL,
+  );
 
   // The spare's chart entry names its own box name at a fixed port; its leaf covers that name,
   // under the venue authority the join copied to it.
@@ -217,36 +206,19 @@ async function joinedPair() {
   const sparePort = spareListener.port;
   const storePort = storeListener.port;
   const loopbackPort = await freePort();
-  let standby!: { nodeId: string; publicKey: string };
   let spareId!: string;
-  await adoptWithPassword(
+  const joined = await collectJoin(
+    { bundleApp, email: adminEmail },
+    { spareUrl: `https://waitron.local:${sparePort}`, storePort },
+  );
+  const standby = { nodeId: joined.identity.nodeId, publicKey: joined.identity.publicKey };
+  await adoptFromPrimary(
     {
       ownerDb: spareBox.db,
       ownerNode: spareBox.node,
       environmentKeys: {},
       ring: RING,
       persistCredentialsRing: async () => {},
-      fetchBundle: async (_url, credential: AdoptCredential, sent) => {
-        standby = { nodeId: sent.nodeId, publicKey: sent.publicKey };
-        const response = await bundleApp.request("/management-api/mirror-bundle", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            email: credential.email,
-            password: credential.password,
-            standbyNodeId: sent.nodeId,
-            standbyPublicKey: sent.publicKey,
-            standbyContactUrl: sent.contactUrl,
-            standbyStoreUrl: sent.storeUrl,
-            standbyAt: sent.at,
-          }),
-        });
-        const bundle = await response.json();
-        expect(response.status, JSON.stringify(bundle)).toBe(200);
-        return bundle as MirrorBundle;
-      },
-      advertisedOrigin: `https://waitron.local:${sparePort}`,
-      spareStorePort: storePort,
       assertStartsWith: () => {},
       environment: "preproduction",
       persistTrading: async (args) => {
@@ -261,7 +233,7 @@ async function joinedPair() {
       listIpv4: () => [],
       now: () => new Date(),
     },
-    { primaryUrl: MAIN_URL, credential: { email: adminEmail, password: PASSWORD } },
+    joined,
     { beforeFirstWrite: async () => {} },
   );
   expect((await readNodeMode(spareBox.node, spareId)).mode).toBe("mirror");

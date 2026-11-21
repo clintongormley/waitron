@@ -28,6 +28,7 @@ import {
   revealAnswerFields,
   verifyJoinMessage,
 } from "../box-join-code.js";
+import type { JoinedBox } from "../box-join-attempt.js";
 import type { LockedJoinBundle } from "../box-join-seal.js";
 import { isMirrorBundle } from "../mirror-bundle-fetch.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
@@ -170,23 +171,21 @@ async function holdBoxSecrets(stateDir: string): Promise<void> {
 let joinAddresses = 0;
 
 /**
- * The spare joins `main` by code: it asks, the administrator `email` taps its code on the main box,
- * and the bundle it collects goes to the real `adoptFromPrimary`, as `adoptJoined` hands it in
- * `boot.ts`. It throws where `createBoxJoinAttempt` refuses the main box's answers.
+ * A new box at `spareUrl` asks `main` to join by code and the administrator `email` taps its code
+ * on the main box; answers what the new box then holds, as Finish joining hands it to
+ * `adoptFromPrimary`. It throws where `createBoxJoinAttempt` refuses the main box's answers.
  */
-export async function joinSpare(
-  boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
+export async function collectJoin(
   main: { bundleApp: Hono; email: string },
-  { spareUrl = SPARE_URL }: { spareUrl?: string } = {},
-) {
-  const { spareBox, spareState, ring } = boxes;
+  { spareUrl = SPARE_URL, storePort = 7443 }: { spareUrl?: string; storePort?: number } = {},
+): Promise<JoinedBox> {
   const mainDb = MAIN_DATABASES.get(main.bundleApp);
-  if (mainDb === undefined) throw new Error("joinSpare needs an app from mirrorBundleApp");
+  if (mainDb === undefined) throw new Error("collectJoin needs an app from mirrorBundleApp");
   const identity = generateStandbyIdentity();
   const contactUrl = ownContactUrl(spareUrl, identity.nodeId);
   const store = new URL(contactUrl);
   store.protocol = "https:";
-  store.port = "7443";
+  store.port = String(storePort);
   const storeUrl = store.origin;
   joinAddresses += 1;
   const box = joiningBox(`10.40.0.${joinAddresses}`, { identity, contactUrl, storeUrl });
@@ -235,6 +234,20 @@ export async function joinSpare(
     bundle.designated.nodeId !== answer.mainNodeId
   )
     throw new Error("the collected bundle does not name the main box that answered the hello");
+  return { identity, bundle, storeUrl };
+}
+
+/**
+ * The spare joins `main` by code ({@link collectJoin}), and what it collects goes to the real
+ * `adoptFromPrimary`, as `adoptJoined` hands it in `boot.ts`.
+ */
+export async function joinSpare(
+  boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
+  main: { bundleApp: Hono; email: string },
+  options: { spareUrl?: string } = {},
+) {
+  const { spareBox, spareState, ring } = boxes;
+  const { identity, bundle, storeUrl } = await collectJoin(main, options);
   const standby = { nodeId: identity.nodeId, publicKey: identity.publicKey };
   let spareId!: string;
   await adoptFromPrimary(

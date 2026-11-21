@@ -31,13 +31,17 @@ import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { StreamHost, writeStreamSettings } from "./stream-host.js";
-import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
 import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import {
+  joinAsBundleAnswer,
+  joiningBox,
+  mountBoxJoin,
+  signedInCookie,
+} from "./testing/box-join.js";
 import { signEnvelope } from "@waitron/handover";
 import {
   generateNodeKeyPair,
@@ -255,7 +259,7 @@ async function boot(
     );
     const held = fixture.request("reserve");
     const app = new Hono();
-    mountMirrorBundleApi(app, {
+    mountBoxJoin(app, {
       appDb: suite.db,
       node: suite.node,
       ring,
@@ -263,8 +267,6 @@ async function boot(
       boxHostname: "waitron.local",
       advertisedOrigin: OWN_URL,
       designated: { nodeId },
-
-      credentialKeyRing: TOTP_KEY_RING,
       wakeSpareJoin: () => {},
     });
     const original = [...ALL_MODULES];
@@ -274,19 +276,14 @@ async function boot(
       ...allocatedStandbyModules(original, fixture),
     );
     try {
-      const response = await app.request("/management-api/mirror-bundle", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          email: "owner@example.test",
-          password: "dashPass123",
-          standbyNodeId: SPARE.nodeId,
-          standbyPublicKey: SPARE.publicKey,
-          standbyContactUrl: options.spareUrl,
-          standbyStoreUrl: `https://${new URL(options.spareUrl).hostname}:7443`,
-          standbyAt: Date.now(),
-          moduleOperation: { binding: held.binding, input: held.input },
+      const response = await joinAsBundleAnswer(app, {
+        box: joiningBox("10.40.0.1", {
+          identity: SPARE,
+          contactUrl: options.spareUrl,
+          storeUrl: `https://${new URL(options.spareUrl).hostname}:7443`,
         }),
+        sent: { cookie: await signedInCookie(suite.db, admin!.id) },
+        moduleOperation: { binding: held.binding, input: held.input },
       });
       expect(response.status, JSON.stringify(await response.json())).toBe(200);
     } finally {
