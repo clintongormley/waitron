@@ -17,7 +17,12 @@ import {
   type Permission,
 } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
+import {
+  codeOf,
+  createErrorBoundary,
+  readJsonBody,
+  requireManagementSession,
+} from "@waitron/server-kit";
 import { readSavedSmtp, resolveEmailDeliveryIn } from "./email-delivery.js";
 import { MAIL_SETTINGS, saveSmtpSettings } from "./mail-settings.js";
 import { venueSmtpFrom } from "./email-sender-name.js";
@@ -34,6 +39,7 @@ interface EmailSettingsApiDeps {
   db: Database;
   ring: KeyRing;
   sendTest?: typeof sendSmtpTestMessage;
+  refreshCloudMail?: () => Promise<unknown>;
   config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean };
 }
 
@@ -162,18 +168,32 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
   );
   app.delete("/management-api/email/settings", (c) =>
     run(c, log, async () => {
-      await withTransaction(deps.db, async (tx) => {
+      const removed = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorize(tx, c, "system.box_admin");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
         await requireFreshManagementSignIn(tx, requireManagementSession(c));
-        await deleteCredential(tx, { personId: authorizedBy, purpose: "email.smtp" });
+        const credentialRemoved = await deleteCredential(tx, {
+          personId: authorizedBy,
+          purpose: "email.smtp",
+        });
         const { revision } = await readSettings(tx, MAIL_SETTINGS);
         await saveSettings(tx, MAIL_SETTINGS, {
           doc: { from: null },
           expectedRevision: revision,
           personId: authorizedBy,
         });
+        return credentialRemoved;
       });
+      if (removed && deps.refreshCloudMail) {
+        try {
+          await deps.refreshCloudMail();
+        } catch (error) {
+          log("warn", "mail.delivery_unavailable", {
+            rule: "cloud_relay",
+            errorCode: codeOf(error),
+          });
+        }
+      }
       return c.json({ removed: true });
     }),
   );

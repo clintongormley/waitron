@@ -4,7 +4,7 @@ import { runTestJob } from "./testing/run-job.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { queueAccountMail } from "@waitron/identity";
+import { queueAccountMail, startManagementSession } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { readVenue, saveCloudVenueId } from "@waitron/db";
@@ -24,7 +24,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import type { EmailDelivery } from "./email-delivery.js";
+import { hasSavedSmtp, type EmailDelivery } from "./email-delivery.js";
 type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"] | "cloud">;
 import { mailSendJob, runMailPass } from "./mail-sender.js";
 import { AppError } from "@waitron/shared";
@@ -34,7 +34,7 @@ import type { Alert } from "@waitron/module";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import type { StartedServer, StartServerSeams } from "./boot.js";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { boxEmailMessage, type createBoxEmailDuty } from "./box-alert-email.js";
@@ -48,6 +48,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { boxHostClient, type LastOfferedUpgrade } from "./box-host-client.js";
 import { UPGRADE_ROLLBACK_EMAIL_WORDS } from "./i18n/box-emails.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 useTestProducer();
 
@@ -457,9 +458,11 @@ describe("the running server's notice and email checks", () => {
     ["prepare", false, "venue@example.test", "unconfigured", 7],
     ["demo", true, "venue@example.test", "smtp", 5],
     ["demo", false, "venue@example.test", "cloud", 5],
+    ["prepare", false, "venue@example.test", "smtp", 5, "enabled"],
+    ["prepare", false, "venue@example.test", "smtp", 5, "offline"],
   ] as const)(
-    "routes paired %s account mail with development=%s and saved sender %s through %s (key %s)",
-    async (intent, development, from, mode, keyByte) => {
+    "routes paired %s account mail with development=%s and saved sender %s through %s (key %s, removal %s)",
+    async (intent, development, from, mode, keyByte, removal?) => {
       const venue = await setupVenue(suite.db);
       const booted: Booted = {};
       let submitted: Record<string, unknown> | undefined;
@@ -491,17 +494,13 @@ describe("the running server's notice and email checks", () => {
           await saveCloudVenueId(tx, f.venueId);
           await queueAccountMail(tx, { personId: person!.id, purpose: "password_reset" });
         });
-        f.patch({
-          emailRelay: {
-            version: 1,
-            grant: {
-              id: randomUUID(),
-              revision: 1,
-              enabled: true,
-              expiresAt: new Date(Date.now() + 3600000).toISOString(),
-            },
-          },
-        });
+        const grant = {
+          id: randomUUID(),
+          revision: 1,
+          enabled: true,
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        };
+        f.patch({ emailRelay: { version: 1, grant: removal === "enabled" ? null : grant } });
         holder.pauseMail = true;
         await bootServer(
           booted,
@@ -515,16 +514,18 @@ describe("the running server's notice and email checks", () => {
           },
         );
         await holder.cloudPass;
-        expect(await holder.mail!.resolveAccountRelay!(holder.mail!.signal)).toMatchObject({
-          revision: 1,
-        });
-        expect(await withTransaction(suite.db, holder.managementMode!)).toBe("cloud");
+        const beforeSave = await holder.mail!.resolveAccountRelay!(holder.mail!.signal);
+        expect(beforeSave?.revision ?? null).toBe(removal === "enabled" ? null : 1);
+        expect(await withTransaction(suite.db, holder.managementMode!)).toBe(
+          removal === "enabled" ? "unconfigured" : "cloud",
+        );
         const url = "smtp://smtp.example.test:2525";
         const ring = loadKeyRing({
           WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, keyByte).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
         });
         await withTransaction(suite.db, (tx) => saveSmtpForTest(tx, ring, { url, from }));
+        f.patch({ emailRelay: { version: 1, grant } });
         const requestsBeforeSend = f.requests.length;
 
         expect(await withTransaction(suite.db, holder.managementMode!)).toBe(mode);
@@ -548,6 +549,38 @@ describe("the running server's notice and email checks", () => {
         expect(
           suite.db.get(sql`select status from outgoing_mail where kind='account_action'`),
         ).toMatchObject({ status: mode === "unconfigured" ? "pending" : "sent" });
+        if (removal !== undefined) {
+          if (removal === "offline") f.offline();
+          const token = await withTransaction(suite.db, async (tx) => {
+            const [admin] = await tx
+              .select({ id: persons.id })
+              .from(persons)
+              .where(eq(persons.email, "owner@example.test"));
+            const session = await startManagementSession(tx, {
+              method: "password",
+              personId: admin!.id,
+            });
+            await setFreshManagementSignIn(tx, session.token);
+            return session.token;
+          });
+          const requestsBeforeRemoval = f.requests.length;
+          let savedDuringRefresh: boolean | undefined;
+          f.delay(async () => {
+            savedDuringRefresh = await hasSavedSmtp(suite.db);
+          });
+          const boxOrigin = `http://127.0.0.1:${httpPort()}`;
+          const response = await fetch(`${boxOrigin}/management-api/email/settings`, {
+            method: "DELETE",
+            headers: { origin: boxOrigin, cookie: `${MANAGEMENT_COOKIE}=${token}` },
+          });
+          expect(response.status).toBe(200);
+          expect(await response.json()).toEqual({ removed: true });
+          expect(await withTransaction(suite.db, holder.managementMode!)).toBe("cloud");
+          expect(f.requests.slice(requestsBeforeRemoval).map((request) => request[2])).toEqual([
+            "configuration",
+          ]);
+          expect(savedDuringRefresh).toBe(false);
+        }
       } finally {
         await shutDown(booted);
         origin.mockRestore();

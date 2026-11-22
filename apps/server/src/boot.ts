@@ -3438,7 +3438,16 @@ async function bootServer(
       log,
     );
   }
-  mountEmailSettingsApi(app, { db, ring, config }, log);
+  mountEmailSettingsApi(
+    app,
+    {
+      db,
+      ring,
+      config,
+      ...(cloudConnection && { refreshCloudMail: () => cloudConnection.emailRelay() }),
+    },
+    log,
+  );
   const certificateDiagnosis =
     enabledFiscal.certificate?.diagnose !== undefined &&
     enabledFiscal.certificate.diagnoseInChild !== undefined
