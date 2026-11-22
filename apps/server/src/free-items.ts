@@ -1,4 +1,4 @@
-import { eq, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { asc, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import {
   listAdjustmentEntries,
   MAX_ENTRY_PAGE_SIZE,
@@ -6,7 +6,7 @@ import {
   type EntryCursor,
 } from "@waitron/adjustments";
 import {
-  adjustments,
+  adjustmentLines,
   departments,
   invoiceSeries,
   sales,
@@ -29,7 +29,6 @@ import {
   multiplyDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  toScale,
   vatRateOn,
   type BusinessDayClock,
   type Decimal,
@@ -48,7 +47,8 @@ export interface FreeItem {
   quantity: Decimal | null;
   kind: "comp" | "discount";
   department: string | null;
-  /** The list value of what was given free. */
+  /** The list value of what was given free; for a whole bill, of the rows it took money off that
+   * are still on a bill. */
   menuPrice: Decimal;
   amountTakenOff: Decimal;
   /** Null when the department, or the bill, has no estimated margin. */
@@ -58,10 +58,8 @@ export interface FreeItem {
 }
 
 const HUNDRED = decimal("100");
+const ONE = decimal("1");
 const WHOLE_BP = decimal("10000");
-// Each price without VAT is a quotient that need not terminate; this many places keeps the
-// rounding to the cent the one an exact quotient would give for any price the till can hold.
-const NET_SCALE = 20;
 
 /**
  * The prices without VAT, summed, less the margin: `Σ gross ÷ (1 + rate) × (10000 − margin) ÷
@@ -72,13 +70,26 @@ export function estimatedCost(
   marginBp: number | null,
 ): Decimal | null {
   if (marginBp === null) return null;
-  const net = sumDecimals(
-    prices.map(({ gross, rate }) =>
-      divideDecimal(multiplyDecimal(gross, HUNDRED), addDecimal(HUNDRED, rate), NET_SCALE),
+  // A price without VAT need not end as a decimal, so the sum is taken over one common
+  // denominator, the product of each rate's (100 + rate), and divided only for the final cent.
+  const grossByRate = new Map<Decimal, Decimal>();
+  for (const { gross, rate } of prices) {
+    grossByRate.set(rate, addDecimal(grossByRate.get(rate) ?? decimal("0"), gross));
+  }
+  const divisors = [...grossByRate.keys()].map((rate) => addDecimal(HUNDRED, rate));
+  const numerator = sumDecimals(
+    [...grossByRate.values()].map((gross, i) =>
+      divisors.reduce(
+        (product, divisor, j) => (i === j ? product : multiplyDecimal(product, divisor)),
+        multiplyDecimal(gross, HUNDRED),
+      ),
     ),
   );
-  const kept = divideDecimal(decimal(String(10000 - marginBp)), WHOLE_BP, 4);
-  return toScale(multiplyDecimal(net, kept), 2);
+  return divideDecimal(
+    multiplyDecimal(numerator, decimal(String(10000 - marginBp))),
+    multiplyDecimal(divisors.reduce(multiplyDecimal, ONE), WHOLE_BP),
+    2,
+  );
 }
 
 function among(column: SQLWrapper, ids: readonly string[]): SQL {
@@ -123,37 +134,13 @@ export async function listFreeItems(
   if (entries.length === 0) return [];
   entries.reverse();
 
-  const shapes = await tx
+  // The rows each adjustment took money off that are still on a bill.
+  const reduced = await tx
     .select({
-      id: adjustments.id,
-      lineId: adjustments.lineId,
-      splits: adjustments.splits,
-      quantity: adjustments.quantity,
-      lineQuantity: adjustments.lineQuantity,
-    })
-    .from(adjustments)
-    .where(
-      among(
-        adjustments.id,
-        entries.flatMap((entry) => (entry.lineId === null ? [] : [entry.id])),
-      ),
-    );
-  // A comp of part of a line names the line as it stood, which then holds the part NOT given;
-  // the part given was split off into the rows its splits lead to.
-  const candidates = new Map(
-    shapes.map((shape) => [
-      shape.id,
-      [
-        ...(shape.quantity === shape.lineQuantity ? [shape.lineId!] : []),
-        ...shape.splits.map((split) => split.to),
-      ],
-    ]),
-  );
-  const wholeBills = entries.filter((entry) => entry.lineId === null).map((e) => e.workingOrderId);
-  const lines = await tx
-    .select({
+      adjustmentId: adjustmentLines.adjustmentId,
       id: workingOrderLines.id,
       workingOrderId: workingOrderLines.workingOrderId,
+      parentLineId: workingOrderLines.parentLineId,
       offerDepartmentId: workingOrderLines.offerDepartmentId,
       vatClass: workingOrderLines.vatClass,
       takeawayVatClass: workingOrderLines.takeawayVatClass,
@@ -162,19 +149,20 @@ export async function listFreeItems(
       quantity: workingOrderLines.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
     })
-    .from(workingOrderLines)
+    .from(adjustmentLines)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
     .where(
-      or(
-        among(workingOrderLines.id, [...candidates.values()].flat()),
-        among(workingOrderLines.workingOrderId, wholeBills),
+      among(
+        adjustmentLines.adjustmentId,
+        entries.map((entry) => entry.id),
       ),
-    );
-  const lineById = new Map(lines.map((line) => [line.id, line]));
-  const linesOfBill = new Map<string, typeof lines>();
-  for (const line of lines) {
-    const list = linesOfBill.get(line.workingOrderId) ?? [];
+    )
+    .orderBy(asc(workingOrderLines.lineNo));
+  const linesOf = new Map<string, typeof reduced>();
+  for (const line of reduced) {
+    const list = linesOf.get(line.adjustmentId) ?? [];
     list.push(line);
-    linesOfBill.set(line.workingOrderId, list);
+    linesOf.set(line.adjustmentId, list);
   }
   const bills = await tx
     .select({
@@ -190,12 +178,12 @@ export async function listFreeItems(
     .where(
       among(workingOrders.id, [
         ...entries.map((entry) => entry.workingOrderId),
-        ...lines.map((line) => line.workingOrderId),
+        ...reduced.map((line) => line.workingOrderId),
       ]),
     );
   const billById = new Map(bills.map((bill) => [bill.id, bill]));
   const departmentIds = [
-    ...lines.flatMap((line) => line.offerDepartmentId ?? []),
+    ...reduced.flatMap((line) => line.offerDepartmentId ?? []),
     ...bills.flatMap((bill) => bill.departmentId ?? []),
   ];
   const named = await tx
@@ -211,15 +199,17 @@ export async function listFreeItems(
   const items: FreeItem[] = [];
   for (const entry of entries) {
     const date = civilDateOf(new Date(entry.createdAt), clock.timeZone);
-    const rateOf = (line: (typeof lines)[number], dining: string): Decimal =>
+    const rateOf = (line: (typeof reduced)[number], dining: string): Decimal =>
       vatRateOn((dining === "takeaway" ? line.takeawayVatClass : line.vatClass) as VatClass, date);
+    const lines = linesOf.get(entry.id) ?? [];
     let bill: (typeof bills)[number];
     let departmentId: string | null;
+    let menuPrice: Decimal;
     let prices: { gross: Decimal; rate: Decimal }[];
     if (entry.lineId === null) {
       bill = billById.get(entry.workingOrderId)!;
       departmentId = bill.departmentId;
-      prices = (linesOfBill.get(bill.id) ?? []).map((line) => ({
+      prices = lines.map((line) => ({
         gross: divideDecimal(
           multiplyDecimal(
             centsToDecimal(line.listUnitPriceGross ?? line.unitPriceGross),
@@ -228,16 +218,15 @@ export async function listFreeItems(
           thousandthsToDecimal(line.priceQuantity),
           2,
         ),
-        rate: rateOf(line, bill.dining),
+        rate: rateOf(line, billById.get(line.workingOrderId)!.dining),
       }));
+      menuPrice = sumDecimals(prices.map(({ gross }) => gross));
     } else {
-      const line = candidates
-        .get(entry.id)!
-        .map((id) => lineById.get(id))
-        .find((found) => found !== undefined);
+      const line = lines.find((one) => one.parentLineId === null) ?? lines[0];
       if (line === undefined) continue;
       bill = billById.get(line.workingOrderId)!;
       departmentId = line.offerDepartmentId ?? bill.departmentId;
+      menuPrice = entry.nominalValue;
       prices = [{ gross: entry.nominalValue, rate: rateOf(line, bill.dining) }];
     }
     const department = departmentId === null ? undefined : departmentById.get(departmentId);
@@ -252,7 +241,7 @@ export async function listFreeItems(
       quantity: entry.quantity,
       kind: entry.action === "comp" ? "comp" : "discount",
       department: department?.name ?? null,
-      menuPrice: entry.nominalValue,
+      menuPrice,
       amountTakenOff: entry.reduction,
       estimatedCost: estimatedCost(prices, department?.marginBp ?? null),
       reason: entry.reasonName,

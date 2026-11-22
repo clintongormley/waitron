@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
+import { currentBusinessDay, periodDays, resolveVenueClock } from "@waitron/reporting";
 import { createDepartment } from "@waitron/venue-service";
 import { decimal, type AdjustmentAction } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
@@ -26,11 +26,14 @@ import {
   inTx,
   lineIdOf,
   provisionAdjustmentVenue,
+  rowsOf,
   todayLine,
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { moveLinesToGroup } from "./order-groups.js";
+import { partyRevision } from "./parties.js";
 import { serveLine } from "./testing/serve-line.js";
 import { openTillSession } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -261,6 +264,57 @@ describe("which adjustment a free row stands for", () => {
     expect(await freeOn(billId)).toEqual([row({})]);
   });
 
+  it("lists a comp of a dish's three portions while two of them stay on the bill", async () => {
+    const { billId } = await bill([{ name: "Burger", quantity: "3" }]);
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+    await cancel(billId, 1, "remove_charge");
+    expect(
+      (await rowsOf(venue, billId)).map(({ quantity, lineTotal }) => [quantity, lineTotal]),
+    ).toEqual([
+      ["1.000", "0.00"],
+      ["1.000", "0.00"],
+    ]);
+    expect(await freeOn(billId)).toEqual([
+      row({
+        quantity: decimal("3.000"),
+        menuPrice: decimal("36.00"),
+        amountTakenOff: decimal("36.00"),
+      }),
+    ]);
+  });
+
+  it("lists a comp of a grouped line still on the bill after a cut moved part of it to a new course", async () => {
+    const { partyId, billId } = await bill([{ name: "Burger", quantity: "3" }], {
+      shape: "grouped",
+      release: "hold",
+    });
+    const line = await lineIdOf(venue, billId, 1);
+    await adjust(billId, { lineId: line, action: "comp" });
+    await inTx(venue, async (tx) =>
+      moveLinesToGroup(tx, venue.cfg, partyId, [{ lineId: line, quantity: "1.000" }], "new", {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, partyId),
+        operatorId: venue.staffId,
+        expectedEdits: [await readBillEditState(tx, billId)],
+      }),
+    );
+    await cancel(billId, 1, "remove_charge");
+    expect(
+      (await rowsOf(venue, billId)).map(({ id, quantity, lineTotal }) => [
+        id === line,
+        quantity,
+        lineTotal,
+      ]),
+    ).toEqual([[false, "1.000", "0.00"]]);
+    expect(await freeOn(billId)).toEqual([
+      row({
+        quantity: decimal("3.000"),
+        menuPrice: decimal("36.00"),
+        amountTakenOff: decimal("36.00"),
+      }),
+    ]);
+  });
+
   it("lists a comp whose bill was settled, under the bill's invoice", async () => {
     const { billId } = await bill([{ name: "Burger" }, { name: "Salad" }]);
     await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
@@ -382,6 +436,25 @@ describe("the free list", () => {
     const lastYear = await listed({ year: today.year - 1, month: today.month });
     expect(lastYear.filter((entry) => ids.has(entry.adjustmentId))).toEqual([]);
   });
+  it("leaves out a bill opened on the first business day after the period", async () => {
+    const { billId } = await bill([{ name: "Burger" }, { name: "Salad" }]);
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    const { next } = periodDays(today.year, { kind: "month", month: today.month });
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ openedAt: `${next}T12:00:00.000Z` })
+        .where(eq(workingOrders.id, billId)),
+    );
+    const ids = new Set((await recordedOn(billId)).map((entry) => entry.id));
+    const thisPeriod = await listed();
+    expect(thisPeriod.filter((entry) => ids.has(entry.adjustmentId))).toEqual([]);
+    const nextPeriod = await listed({
+      year: Number(next.slice(0, 4)),
+      month: Number(next.slice(5, 7)),
+    });
+    expect(nextPeriod.filter((entry) => ids.has(entry.adjustmentId))).toHaveLength(1);
+  });
 });
 
 describe("the estimated cost", () => {
@@ -400,6 +473,20 @@ describe("the estimated cost", () => {
         3000,
       ),
     ).toBe("14.00");
+    // 10.00 ÷ 1.21 × 0.70 is 5.785…; a price without VAT rounded to the cent first gives 5.78.
+    expect(estimatedCost([{ gross: decimal("10.00"), rate: decimal("21.00") }], 3000)).toBe("5.79");
+    // 1.21 without VAT is exactly 1.00, × 0.695 is exactly half a cent over 0.69, which rounds up,
+    // though each of the three prices without VAT is a quotient that does not end.
+    expect(
+      estimatedCost(
+        ["0.01", "0.02", "1.18"].map((gross) => ({
+          gross: decimal(gross),
+          rate: decimal("21.00"),
+        })),
+        3050,
+      ),
+    ).toBe("0.70");
+    expect(estimatedCost([], 3000)).toBe("0.00");
     expect(estimatedCost([{ gross: decimal("11.00"), rate: decimal("10.00") }], null)).toBeNull();
   });
 
@@ -428,6 +515,31 @@ describe("the estimated cost", () => {
         menuPrice: decimal("23.10"),
         amountTakenOff: decimal("23.10"),
         estimatedCost: decimal("14.00"),
+      }),
+    ]);
+  });
+
+  it("counts in a whole-bill discount only the dishes it took money off", async () => {
+    await setMargin(departmentId, 3000);
+    const { billId } = await bill([{ name: "Bread" }, { name: "Salad" }]);
+    await reprice(billId, 1, 1100, "reduced");
+    await reprice(billId, 2, 1210, "general");
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { action: "discount_percent", percentBp: 10000 });
+    expect(await freeOn(billId)).toEqual([
+      row({
+        item: "Bread",
+        menuPrice: decimal("11.00"),
+        amountTakenOff: decimal("11.00"),
+        estimatedCost: decimal("7.00"),
+      }),
+      row({
+        item: null,
+        quantity: null,
+        kind: "discount",
+        menuPrice: decimal("12.10"),
+        amountTakenOff: decimal("12.10"),
+        estimatedCost: decimal("7.00"),
       }),
     ]);
   });
