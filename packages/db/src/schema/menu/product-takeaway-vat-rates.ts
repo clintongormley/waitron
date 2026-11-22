@@ -24,5 +24,9 @@ export const productTakeawayVatRates = table(
       .on(t.productId)
       .where(sql`${t.startsOn} is null`),
     check("product_takeaway_vat_rates_rate_ck", sql`${t.rate} between 0 and 10000`),
+    check(
+      "product_takeaway_vat_rates_starts_on_ck",
+      sql`length(${t.startsOn}) = 10 and ${t.startsOn} glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
+    ),
   ],
 );

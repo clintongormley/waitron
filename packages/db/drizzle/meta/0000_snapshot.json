@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8ba13ac8-dac9-4ef0-98e8-726347d6aa72",
+  "id": "b494f89d-5336-4b9f-959e-26d497f5dfcf",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15233,6 +15233,10 @@
         "product_takeaway_vat_rates_rate_ck": {
           "name": "product_takeaway_vat_rates_rate_ck",
           "value": "\"product_takeaway_vat_rates\".\"rate\" between 0 and 10000"
+        },
+        "product_takeaway_vat_rates_starts_on_ck": {
+          "name": "product_takeaway_vat_rates_starts_on_ck",
+          "value": "length(\"product_takeaway_vat_rates\".\"starts_on\") = 10 and \"product_takeaway_vat_rates\".\"starts_on\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
         }
       }
     },

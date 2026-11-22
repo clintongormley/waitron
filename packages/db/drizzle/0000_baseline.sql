@@ -2320,7 +2320,8 @@ CREATE TABLE `product_takeaway_vat_rates` (
 	`starts_on` text,
 	`rate` integer NOT NULL,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "product_takeaway_vat_rates_rate_ck" CHECK("product_takeaway_vat_rates"."rate" between 0 and 10000)
+	CONSTRAINT "product_takeaway_vat_rates_rate_ck" CHECK("product_takeaway_vat_rates"."rate" between 0 and 10000),
+	CONSTRAINT "product_takeaway_vat_rates_starts_on_ck" CHECK(length("product_takeaway_vat_rates"."starts_on") = 10 and "product_takeaway_vat_rates"."starts_on" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `product_takeaway_vat_rates_product_day_key` ON `product_takeaway_vat_rates` (`product_id`,`starts_on`);--> statement-breakpoint

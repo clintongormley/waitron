@@ -730,6 +730,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "printers_kind_fields_ck",
   "product_modifiers_one_reference_ck",
   "product_takeaway_vat_rates_rate_ck",
+  "product_takeaway_vat_rates_starts_on_ck",
   "menus_handheld_columns_ck",
   "menus_handheld_tiles_ck",
   "menus_handheld_order_ck",

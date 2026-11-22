@@ -83,6 +83,21 @@ describe("product_takeaway_vat_rates", () => {
     ]);
   });
 
+  it("refuses a day that is not written as yyyy-mm-dd", async () => {
+    const id = await product();
+    for (const startsOn of ["2026-1-01", "2026-01-01T00:00", "tomorrow", "2026/01/01", ""]) {
+      const error = await captureError(() => rateRow(id, startsOn, 1000));
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toContain("product_takeaway_vat_rates_starts_on_ck");
+    }
+    await rateRow(id, null, 1000);
+    await rateRow(id, "2026-01-01", 2100);
+    expect(await ratesOf(id)).toEqual([
+      { startsOn: null, rate: 1000 },
+      { startsOn: "2026-01-01", rate: 2100 },
+    ]);
+  });
+
   it("refuses a row for no product", async () => {
     const error = await captureError(() => rateRow("no-such-product", null, 1000));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
