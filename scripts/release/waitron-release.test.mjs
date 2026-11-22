@@ -1,13 +1,14 @@
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp, cp, rm } from "node:fs/promises";
+import { mkdtemp, cp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { runDeclarationCommand } from "../../packages/fiscal-verifactu/src/declaration/command.ts";
+import { withReleaseBlocker } from "../../packages/fiscal-verifactu/test/declaration.ts";
 import {
   declarationArgs,
   main,
@@ -845,7 +846,9 @@ describe("the package command", () => {
     const root = await mkdtemp(join(tmpdir(), "waitron-release-declaration-"));
     try {
       await cp(DECLARATIONS, join(root, "declarations"), { recursive: true });
-      await cp(join(DECLARATIONS, "template.md"), join(root, "declarations/v1.0.0.md"));
+      const blocked = withReleaseBlocker(await readFile(join(DECLARATIONS, "template.md"), "utf8"));
+      await writeFile(join(root, "declarations/template.md"), blocked);
+      await writeFile(join(root, "declarations/v1.0.0.md"), blocked);
       let stderr = "";
       const status = await runDeclarationCommand(args.slice(3), {
         root,

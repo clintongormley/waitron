@@ -98,7 +98,7 @@ describe("writeReleaseFolder", () => {
     const dir = join(base, "blocked");
 
     await expect(
-      writeReleaseFolder(dir, declarationSourceFor("1.2.3"), producer),
+      writeReleaseFolder(dir, declarationSourceFor("1.2.3", { blocked: true }), producer),
     ).rejects.toMatchObject({ code: "declaration.release_blocked", params: { count: 1 } });
     await expect(stat(dir)).rejects.toMatchObject({ code: "ENOENT" });
   });
