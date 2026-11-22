@@ -29,6 +29,17 @@ function namesTheBoxAServer(text: string): boolean {
   );
 }
 
+it("reads every table", () => {
+  expect(texts("en").map(([key]) => key)).toEqual(
+    expect.arrayContaining([
+      "aeat_certificate.diagnosis.title",
+      "conflict_recovery.title",
+      "fiscal.certificate_changed",
+      "cert_help.aria_label",
+    ]),
+  );
+});
+
 it("calls the Waitron machine the box in English and never el equipo in Spanish", () => {
   expect(texts("en").filter(([, text]) => namesTheBoxAServer(text))).toEqual([]);
   expect(texts("es").filter(([, text]) => /\bequipos?\b/i.test(text))).toEqual([]);

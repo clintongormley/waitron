@@ -175,7 +175,7 @@ function countdown(resetAt: number, now: number): string {
 
 function resetCard(snapshot: AgentSetupSnapshot, now: number): string {
   if (snapshot.resetAt === undefined) {
-    return `<h2>Connect to another venue box</h2>
+    return `<h2>Connect to another venue's box</h2>
 <p>This agent cannot reach its venue. Starting a reset gives the current box five minutes to recover before this agent forgets its approval.</p>
 <form method="post" action="/network/reset"><button type="submit">Join a new network</button></form>`;
   }

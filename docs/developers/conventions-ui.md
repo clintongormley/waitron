@@ -1710,7 +1710,7 @@ Three guards read named string tables; each is weaker than its name.
   "equipo" or "equipos".
 
 None of them reads the user guides, setup, the pages `apps/server` renders itself (the recovery,
-waiting and handover pages among them), the print agent's setup page, emails, the recovery pack,
+waiting and restricted pages among them), the print agent's setup page, emails, the recovery pack,
 another module's dashboard strings (`packages/*/src/dashboard/strings.ts` other than
 fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
 component or a message function, such as the sentences `codes.ts`'s `codeMessage` builds inline.

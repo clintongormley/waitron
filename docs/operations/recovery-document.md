@@ -8,7 +8,7 @@ and a secure (HTTPS) connection to that server.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
-2. Tick **Also make a new box key** only if the pack or sheet holding the current server key is
+2. Tick **Also make a new box key** only if the pack or sheet holding the current key is
    lost. Without the tick the pack does not change the key: its server key page names the pack or
    sheet that holds it.
 3. Choose **Make pack**. When Waitron asks you to confirm it is you, use your password or

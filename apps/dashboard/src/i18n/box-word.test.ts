@@ -74,6 +74,22 @@ function namesTheBoxEquipo(key: string, text: string): boolean {
   return EQUIPO.test(phrases.reduce((rest, phrase) => rest.replace(phrase, ""), text));
 }
 
+it("reads every table, nested alert wording included", () => {
+  const keys = texts("en").map(([key]) => key);
+  expect(keys).toEqual(
+    expect.arrayContaining([
+      "servers.title",
+      "code:backup.spare_stream_active",
+      "set-menu-field:setPrice",
+      "disk-stop:several-days",
+      "alert:payment.capture_mismatch.items",
+      "alert:backup.archives_deleted.one",
+      "alert:backup.run_stopped.spaceLow",
+      "alert-word:spare_copy_phase.upload",
+    ]),
+  );
+});
+
 it("calls the Waitron machine the box in English", () => {
   const offending = texts("en")
     .filter(([key, text]) => namesTheBoxAServer(key, text))

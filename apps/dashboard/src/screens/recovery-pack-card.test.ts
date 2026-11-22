@@ -272,7 +272,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     { part: "server-key", state: "not-set-up" },
   ];
 
-  it("says the box has no box key yet, not that the pack is incomplete", async () => {
+  it("says the box has no key yet, not that the pack is incomplete", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(
