@@ -301,7 +301,7 @@ After the restore, follow the guide's
 
 Ordinary reboot and exact completion keep the current activation.
 They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
-key each retained backup needs, and check the restored server's outcome before using the till. The
+key each retained backup needs, and check the restored box's outcome before using the till. The
 pack setup makes holds only the box key (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`,
 "the command path writes recovery pack 1 holding only the staged key, in %s").
 

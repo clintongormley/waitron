@@ -1685,7 +1685,7 @@ receipt layout.
 
 The owner's words (2026-11-22): “we've been using server or box interchangably, i think we need to
 change all references to use "box"”, then “box in english, servidor in spanish, not equipo”. The
-dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page".
+dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page" or gives its menu path, **System → Servers**.
 
 Each guard below reads named string tables or rendered pages, and each is weaker than its name.
 
@@ -1757,10 +1757,11 @@ Each guard below reads named string tables or rendered pages, and each is weaker
   English and "equipo" in Spanish with no exceptions. It does not read the box scripts' other
   output.
 
-Apart from the rendered pages named above, none of them reads words written inline in a screen, a
-component or a message function (setup's screens, the sentences `codes.ts`'s `codeMessage` builds inline among them), emails other than
+Apart from the rendered pages and the function calls named above, none of them reads words written
+inline in a screen, a component or any other message function (setup's screens, the sentences `codes.ts`'s `codeMessage` builds inline among them), emails other than
 those in `apps/server/src/i18n/`, another module's dashboard strings (`packages/*/src/dashboard/strings.ts`
-other than fiscal-verifactu's), or the name tables in the dashboard's `domain.ts`.
+other than fiscal-verifactu's), or the name tables in the dashboard's `domain.ts`. None of them reads Spanish "caja", so a "caja"
+meaning the box passes every guard.
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 

@@ -17,7 +17,7 @@ and a secure (HTTPS) connection to that box.
    or until your session ends.
 4. Choose **Download PDF**, **Open to print**, or both. The box keeps no copy, so save or print the
    pack before you leave the page. Keep it locked away, off the box.
-5. Keep older packs and sheets for older backups. With the tick, new backups use the new server
+5. Keep older packs and sheets for older backups. With the tick, new backups use the new box
    key, and an older backup still needs the key it was made with. A new key cannot unlock an older
    backup whose matching key you have lost.
 

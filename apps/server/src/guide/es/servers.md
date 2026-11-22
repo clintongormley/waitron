@@ -211,7 +211,7 @@ menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página
 servidor se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este servidor**.
 Los pagos ya registrados se conservan en la copia transferida.
 
-Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el
+Si se pierde una respuesta en la página Servidores, mantén abierto el diálogo y elige **Consultar el
 progreso del traspaso**. En la página de traspaso del servidor de reserva puedes recargar para
 consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
 mantén los dos servidores conectados mientras vuelven a intentarlo.

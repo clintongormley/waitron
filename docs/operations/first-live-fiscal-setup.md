@@ -167,7 +167,7 @@ you did not report.
 
 Choose **Download recovery pack**, which makes `waitron-recovery-pack-1.pdf` and downloads it; the
 page then offers it again to download or to print. Both
-actions use the same document within that delivery session. Check the business, venue, server ID
+actions use the same document within that delivery session. Check the business, venue, box ID
 and key name on its box key page, then tick **I kept the recovery pack.** before continuing.
 There is no separate signing key, custodian computer, register or downloadable tool.
 

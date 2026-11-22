@@ -106,7 +106,7 @@ describe("setup-provisioning-screen", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  it("offers Reset this server, which moves the wizard to the reset screen, when canReset is set", async () => {
+  it("offers Reset this box, which moves the wizard to the reset screen, when canReset is set", async () => {
     const { el, host } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
       message: "A previous attempt to join this server stopped partway.",
       canReset: true,
