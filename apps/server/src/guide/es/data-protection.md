@@ -35,7 +35,9 @@ Waitron te ayuda con las solicitudes de las personas de estas formas:
 - Cada persona que inicia sesión en el panel puede descargar una copia de sus propios datos, en
   **Configuración de la cuenta**, **Tus datos**, **Copia de tus datos**. La copia incluye sus
   movimientos de efectivo y cierres de cajón, cómo intervino en los pagos de cuentas, las
-  reimpresiones de recibos que pidió y sus decisiones sobre pagos retenidos. Consulta
+  reimpresiones de recibos que pidió y sus decisiones sobre pagos retenidos. También incluye
+  las ediciones de carta que publicó, programó o canceló y, si Reservas está activado, las reservas
+  que creó. Consulta
   [Descargar tus datos](staff.md#own-data).
 - Un administrador puede descargar la copia de otra persona desde **Usuarios**, con **Descargar sus
   datos** en el menú de la fila de la persona. Consulta

@@ -6,7 +6,9 @@
 // in MODULE_SCHEMAS, and, for the tables the root does not export, the newest core drizzle
 // snapshot's columns. The adjustments module's actor columns are classified by
 // packages/adjustments/src/personal-data.coverage.test.ts and payments' by
-// packages/payments/src/personal-data.coverage.test.ts. The remaining modules are in the backlog.
+// packages/payments/src/personal-data.coverage.test.ts. Menu and Bookings have their own guards
+// at packages/menu/src/personal-data.coverage.test.ts and
+// packages/bookings/src/personal-data.coverage.test.ts. The remaining modules are in the backlog.
 // And it proves a column was classified, not that the actions part honours the classification
 // (personal-data-actions.test.ts does that).
 import { readFileSync, readdirSync } from "node:fs";

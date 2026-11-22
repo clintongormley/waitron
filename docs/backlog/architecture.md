@@ -926,6 +926,8 @@ handle closed orders and their receipts. The timed sale starts with a fresh orde
 Size M.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
+Include `menu_versions.created_by` when indexing the menu history. On a development Mac, the staff
+download's first write-lock turn took a median 25 ms with a seeded year and 216 ms with five years.
 
 - **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`envios`: decide the remaining DELETE restriction (A805 follow-up).**

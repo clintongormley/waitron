@@ -13,3 +13,40 @@ it("describes signed drawer amounts and the recorded payment outcome time in Spa
   expect(readme).toContain("lo que se retiró para el banco como un importe positivo o cero.");
   expect(readme).toContain("cuándo consta que se recibió o falló el pago.");
 });
+
+it.each([
+  [
+    "en",
+    "today’s menu name",
+    "created covers publishing, scheduling and edits to a live menu",
+    "the time of the original creation or the cancellation",
+    "keeps the original author and time",
+    "when you created it",
+  ],
+  [
+    "es",
+    "el nombre actual de la carta",
+    "created abarca la publicación, la programación y los cambios en una carta publicada",
+    "la hora de creación original o la de cancelación",
+    "conserva la autoría y la hora originales",
+    "cuándo la creaste",
+  ],
+] as const)(
+  "explains menu and booking entries in %s",
+  (language, menuName, action, original, replacement, created) => {
+    const readme = personalDataReadme({
+      language,
+      venue: "Example Bar",
+      person: "Martha",
+      date: "2026-11-22",
+      files: ["menu-publications.json", "bookings-created.json"],
+    });
+    expect(readme).toContain("- menu-publications.json: ");
+    expect(readme).toContain(menuName);
+    expect(readme).toContain(action);
+    expect(readme).toContain(original);
+    expect(readme).toContain(replacement);
+    expect(readme).toContain("- bookings-created.json: ");
+    expect(readme).toContain(created);
+  },
+);

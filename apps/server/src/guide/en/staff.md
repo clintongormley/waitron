@@ -121,6 +121,10 @@ decided any payment holds, look for `payment-holds.json`.
 Check `service-actions.json` for your order and table service actions and
 `department-transfers.json` for the transfers between departments you resolved.
 
+Look in `menu-publications.json` for the menu editions you published or scheduled and the
+cancellations recorded under your name. If Bookings is on, `bookings-created.json` lists the
+bookings you created.
+
 A `README.txt` explains each file, who else receives the data, how long it is kept and your
 rights. The download never holds a secret such as your PIN or password. For anything else about
 your data, ask the venue.
