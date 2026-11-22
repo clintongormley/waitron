@@ -196,6 +196,7 @@ const states: Record<string, () => Promise<void>> = {
     const el = await painter({
       read: async () => ({
         ...specialDayStaffing(),
+        dates: [],
         areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
       }),
     });
