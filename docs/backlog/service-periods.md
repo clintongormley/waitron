@@ -62,11 +62,6 @@ Found while building A788 (the business-day start changes at the next changeover
 says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
 code, not run again here.
 
-- **A869, a one-off day after the change.** While 03:00 waits, a one-off special day on 2026-11-05
-  with 04:00–12:00, which fits the 03:00 start that date will have, is refused
-  `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
-  already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
-  code.
 - **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
   hours, a season range past the 24th hour is cut at it when any special day is painted on that
   date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
@@ -116,6 +111,11 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   [Detail](service-periods.md#loose-ends-left-by-a506-4-1597)
 
 ## Decisions and deliberate limits
+
+- **A869, watcher 2026-11-22.** While a business-day start change waits (until the next
+  changeover, at most two days: `planBusinessDayStart` sets it for tomorrow or the day after), a
+  one-off special day that fits only the new start is refused; it saves once
+  that start is in force.
 
 - **A874, watcher 2026-11-22.** The New start row stays up at most until the next 60-second refresh after the box's boundary, while the page is open and reads succeed.
 
