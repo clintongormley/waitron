@@ -87,15 +87,15 @@ const actions = (el: TillAdjustmentDialog) =>
 const field = (el: TillAdjustmentDialog, name: string) =>
   root(el).querySelector<
     HTMLElement & { error: string; required: boolean; updateComplete: Promise<unknown> }
-  >(`wt-input[name="${name}"]`)!;
+  >(`:is(wt-input, wt-price-input)[name="${name}"]`)!;
 const fieldsetError = (el: TillAdjustmentDialog, which: string) =>
   root(el).querySelector(`[data-error-for="${which}"]`)?.textContent?.trim() ?? "";
 
 /** Every message the form shows: under each field, and above the action. */
 const shownMessages = (el: TillAdjustmentDialog) => [
-  ...[...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input")].map(
-    (input) => input.error,
-  ),
+  ...[
+    ...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input, wt-price-input"),
+  ].map((input) => input.error),
   ...[...root(el).querySelectorAll("[data-error-for]")].map((error) => error.textContent!.trim()),
   actions(el).error,
 ];
@@ -955,6 +955,40 @@ for (const locale of ["en", "es"]) {
       { action: "discount_amount", reasonId: "Staff meal", note: null, amount: "2.80" },
     ]);
   });
+
+  it(`draws the euro sign inside the amount box in ${locale}, not in its label`, async () => {
+    setLocale(locale);
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [staffMeal] });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Staff meal");
+    const amount = root(el).querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      'wt-price-input[name="amount"]',
+    );
+    expect(amount).not.toBeNull();
+    await amount!.updateComplete;
+    const box = amount!.shadowRoot!;
+    expect(box.querySelector('[part="currency"]')?.textContent?.trim()).toBe("€");
+    expect(
+      box.querySelector(".amount-box")!.classList.contains(locale === "es" ? "after" : "before"),
+    ).toBe(true);
+    expect(box.querySelector("label")!.textContent).not.toContain("€");
+    await type(el, "amount", locale === "es" ? "2,50" : "2.50");
+    amount!
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(asked).toEqual([
+      { action: "discount_amount", reasonId: "Staff meal", note: null, amount: "2.50" },
+    ]);
+  });
+
+  it(`keeps the percentage a plain field without a currency sign in ${locale}`, async () => {
+    setLocale(locale);
+    const el = await mount({ kind: "discount", target: wholeBill, reasons: [regular] });
+    await choose(el, "discountKind", "percent");
+    expect(root(el).querySelector('wt-input[name="percent"]')).not.toBeNull();
+    expect(root(el).querySelector("wt-price-input")).toBeNull();
+  });
 }
 
 describe("till-adjustment-dialog: comping the whole bill", () => {
@@ -993,7 +1027,7 @@ describe("till-adjustment-dialog: comping the whole bill", () => {
     const el = await mountBill();
     await choose(el, "discountKind", "free");
     expect(root(el).querySelector('wt-input[name="percent"]')).toBeNull();
-    expect(root(el).querySelector('wt-input[name="amount"]')).toBeNull();
+    expect(root(el).querySelector('[name="amount"]')).toBeNull();
     expect(reasonNames(el)).toEqual(["Complaint"]);
     await chooseReason(el, "Complaint");
     const previews = capture<AdjustmentChoice>(el, "adjust-preview");
@@ -1046,9 +1080,9 @@ describe("till-adjustment-dialog: comping the whole bill", () => {
       [...root(el).querySelectorAll("[data-error-for]")].map((error) => error.textContent!.trim()),
     ).not.toContain(message);
     expect(
-      [...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input")].map(
-        (input) => input.error,
-      ),
+      [
+        ...root(el).querySelectorAll<HTMLElement & { error: string }>("wt-input, wt-price-input"),
+      ].map((input) => input.error),
     ).not.toContain(message);
   });
 });

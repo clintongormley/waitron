@@ -5,6 +5,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } fro
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
 import { trackDialog } from "./track-dialog.js";
@@ -925,27 +926,42 @@ export class TillAdjustmentDialog extends LitElement {
           </fieldset>`
         : nothing
     }
-    ${
-      this.#billFree()
-        ? nothing
-        : html`<wt-input
-            name=${this.kind === "comp" ? this.compKind : this.discountKind}
-            decimal-locale=${currentLocale()}
-            autocomplete="off"
-            .disabled=${this.busy}
-            required
-            .label=${t((this.kind === "comp" ? this.compKind : this.discountKind) === "percent" ? "adjust.percent" : "adjust.amount")}
-            .value=${live(this.value)}
-            .error=${error ?? ""}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              if (!this.isConnected || !this.active || this.busy) return;
-              this.value = event.detail.value;
-              this.#changed("value");
-            }}
-            @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-          ></wt-input>`
-    }`;
+    ${this.#billFree() ? nothing : this.#valueField(error)}`;
+  }
+
+  #valueField(error: string | undefined): TemplateResult {
+    const change = (event: CustomEvent<{ value: string }>) => {
+      event.stopPropagation();
+      if (!this.isConnected || !this.active || this.busy) return;
+      this.value = event.detail.value;
+      this.#changed("value");
+    };
+    const enter = (event: KeyboardEvent) => this.#enter(event);
+    if ((this.kind === "comp" ? this.compKind : this.discountKind) === "percent")
+      return html`<wt-input
+        name="percent"
+        decimal-locale=${currentLocale()}
+        autocomplete="off"
+        .disabled=${this.busy}
+        required
+        .label=${t("adjust.percent")}
+        .value=${live(this.value)}
+        .error=${error ?? ""}
+        @wt-change=${change}
+        @keydown=${enter}
+      ></wt-input>`;
+    return html`<wt-price-input
+      name="amount"
+      fixed-unit
+      required
+      .label=${t("adjust.amount")}
+      .locale=${currentLocale()}
+      .disabled=${this.busy}
+      .value=${live(this.value)}
+      .error=${error ?? ""}
+      @wt-change=${change}
+      @keydown=${enter}
+    ></wt-price-input>`;
   }
 
   #reasonChoice(error: string | undefined): TemplateResult {

@@ -184,7 +184,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await pressed(el, 'input[name="discountKind"][value="amount"]');
     await pressed(el, 'input[name="reason"]');
     const input = el
-      .shadowRoot!.querySelector('wt-input[name="amount"]')!
+      .shadowRoot!.querySelector('wt-price-input[name="amount"]')!
       .shadowRoot!.querySelector("input")!;
     input.value = "3,27";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
