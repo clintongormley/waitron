@@ -25,6 +25,9 @@ import { renderDeviceProfileWho } from "../widgets/device-profile-who.js";
 import {
   renderDeviceProfilePrinterLists,
   renderDeviceProfileReaders,
+  type PrinterChoice,
+  type PrinterList,
+  type PrinterListKey,
 } from "../widgets/device-profile-equipment.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -81,17 +84,9 @@ import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
 /** Every printer list and default a profile holds; the save sends the drawer, invoice list and
  * defaults apart. */
 type PrinterDraft = ProfilePrinterLists & ProfileEquipmentDefaults;
-type PrinterListKey =
-  "receiptPrinterIds" | "paymentSlipPrinterIds" | "cashDrawerPrinterIds" | "invoicePrinterIds";
 type PrinterRead = "printers" | "pages";
-type PrinterDefaultKey =
-  | "receiptPrinterDefaultId"
-  | "paymentSlipPrinterDefaultId"
-  | "cashDrawerPrinterDefaultId"
-  | "invoicePrinterDefaultId";
 /** A receipt printer, or on the invoice list an A4 printer too. */
 type ListablePrinter = Pick<Printer, "id" | "name" | "active">;
-type PrinterChoice = { printer: ListablePrinter; listed: boolean; label: string };
 
 function equipmentInOrder<T extends { id: string; active: boolean }>(
   pool: readonly T[],
@@ -174,14 +169,7 @@ const PRINTER_LISTS = [
     heading: "device_profiles.invoice_printers",
     defaultLabel: "device_profiles.invoice_default",
   },
-] as const satisfies readonly {
-  key: PrinterListKey;
-  defaultKey: PrinterDefaultKey;
-  defaultField: EditorField;
-  test: string;
-  heading: StringKey;
-  defaultLabel: StringKey;
-}[];
+] as const satisfies readonly (PrinterList & { defaultField: EditorField })[];
 
 const NO_EQUIPMENT: ProfileEquipmentDefaults = {
   cashDrawerPrinterIds: [],
