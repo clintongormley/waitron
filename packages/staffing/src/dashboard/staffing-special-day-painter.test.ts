@@ -339,8 +339,8 @@ it("after a save, takes in the fresh read but keeps a date edited while it was o
   await paint(painter, "eve", null);
   const fresh = specialDayStaffing();
   fresh.areas[0]!.dates = [
-    { dateId: "eve", date: "2026-12-24", blocks: [headChef, dinner] },
-    { dateId: "day", date: "2026-12-25", blocks: [dinner] },
+    { dateId: "eve", date: "2026-12-24", blocks: [headChef, dinner], seasonBlocks: [] },
+    { dateId: "day", date: "2026-12-25", blocks: [dinner], seasonBlocks: [] },
   ];
   held.answer(fresh);
   await settle(painter);
@@ -410,7 +410,9 @@ it("any other refusal shows its message beside Save and keeps the draft", async 
 
 it("opens Opening hours for the same stored special day", async () => {
   const { painter, open } = await mount({ readOnly: true });
-  const control = root(painter).querySelector("wt-segmented-control[slot=picker]")!;
+  const control = root(painter).querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+    "wt-segmented-control[slot=picker]",
+  )!;
   expect(control.value).toBe("staffing");
   await page.getByRole("radio", { name: "Opening hours", exact: true }).click();
   expect(open).toHaveBeenCalledWith(
@@ -1103,7 +1105,12 @@ it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Can
         const read = specialDayStaffing();
         read.dates = scattered.map((date) => ({ dateId: date, date }));
         for (const area of read.areas)
-          area.dates = scattered.map((date) => ({ dateId: date, date, blocks: null }));
+          area.dates = scattered.map((date) => ({
+            dateId: date,
+            date,
+            blocks: null,
+            seasonBlocks: [],
+          }));
         read.guides = {};
         return read;
       },

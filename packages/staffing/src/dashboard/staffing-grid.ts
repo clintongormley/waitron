@@ -214,8 +214,7 @@ export class StaffingGrid extends LitElement {
         pointer-events: none;
       }
       .follows {
-        grid-column: 1 / -1;
-        padding-block-end: var(--wt-space-1);
+        display: block;
         font-weight: var(--wt-font-weight-normal);
         color: var(--wt-color-text-muted);
         white-space: normal;
@@ -850,7 +849,16 @@ export class StaffingGrid extends LitElement {
                 data-column=${column.key}
                 ?data-error=${this.columnErrors.has(column.key)}
               >
-                <span>${column.label}</span>${
+                <span>
+                  ${column.label}
+                  ${
+                    this.#value(column.key) === null
+                      ? html`<span class="follows" id=${`follows-${column.key}`}
+                          >${t("staffing.grid.follows_season")}</span
+                        >`
+                      : nothing
+                  } </span
+                >${
                   this.columnErrors.has(column.key)
                     ? html`<span
                         part="column-error"
@@ -877,13 +885,6 @@ export class StaffingGrid extends LitElement {
                             ]
                           : [],
                       )
-                }
-                ${
-                  this.#value(column.key) === null
-                    ? html`<span class="follows" id=${`follows-${column.key}`}
-                        >${t("staffing.grid.follows_season")}</span
-                      >`
-                    : nothing
                 }
               </div>`,
           )}

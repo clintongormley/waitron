@@ -560,7 +560,9 @@ it.each([
 ])("opens the matching Opening hours season from %s", async (area, params) => {
   const { painter, open } = await mount({ readOnly: true });
   await pick(painter, area);
-  const control = root(painter).querySelector("wt-segmented-control[slot=picker]")!;
+  const control = root(painter).querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+    "wt-segmented-control[slot=picker]",
+  )!;
   expect(control.value).toBe("staffing");
   await page.getByRole("radio", { name: "Opening hours", exact: true }).click();
   expect(open).toHaveBeenCalledWith("season", params, { replace: true });

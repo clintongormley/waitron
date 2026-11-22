@@ -57,7 +57,7 @@ En **Calendario** → **Personal**, elige una fecha para ver cuántas personas n
 
 Para planificar el personal de una temporada, abre la temporada desde el mes que quieres planificar. Revisa los cambios del inicio del día de trabajo indicados encima de la cuadrícula. En el editor de **Personal**, selecciona **Horario de apertura** para ver el horario de la misma temporada o del mismo día especial.
 
-En un día especial, las fechas que siguen su temporada muestran los bloques de personal de esa temporada en tonos suaves. Al dibujar un bloque, empiezas a editar la fecha con esos bloques ya colocados. Usa el menú **⋯** de la fecha para volver a **Seguir la temporada** o **Borrar** el personal de esa fecha.
+En un día especial, las fechas que siguen su temporada muestran los bloques de personal de esa temporada en tonos suaves. Al dibujar un bloque, empiezas a editar la fecha con esos bloques ya colocados. Usa el menú **⋯** de la fecha para volver a **Seguir la temporada** o **Vaciar** el personal de esa fecha. Si copias una fecha que sigue su temporada, cada fecha de destino pasa a seguir la suya.
 
 Abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
 

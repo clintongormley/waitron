@@ -1278,8 +1278,10 @@ test("Copy to… copies the day by value, one change per ticked day that differs
   expect(chooser(el).matches(":popover-open")).toBe(false);
 });
 
-test("copying a day that follows the season makes the ticked days follow it", async () => {
+test("copying a day that follows the season makes the ticked days follow their own seasons", async () => {
   const el = await grid({ mon: null, tue: [headChef] }, { followable: true });
+  el.seasonBlocks = new Map([["mon", [sous]]]);
+  await el.updateComplete;
   const seen = changes(el);
   await userEvent.click(columnMenu(el, "mon"));
   await userEvent.click(columnAction(el, "mon", "Copy to…")!);
