@@ -52,7 +52,7 @@ box.
 
 Back on the new box, choose **Finish joining**. The
 new box takes its first copy over the venue's network and restarts by itself as the spare. Its page
-lists what is left to do: save the server key, and, once the box has joined, print the
+lists what is left to do: save the box key, and, once the box has joined, print the
 [switch labels](servers.md#switch-label).
 
 On the main box, open **System → Servers** to check the spare's delay in seconds and **Last copy received**.
@@ -127,7 +127,7 @@ Tick all three statements and give your reason. Choose **Declare the old main
 box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
 the page compares the clocks, creates the new invoice series and lists each with what it is for. If this box cannot check its time over the internet, the page first shows this box's time
 and this device's: check that both are right (both are shown in the venue's time zone), then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets this box's time from
-the device you are using and the page carries on; after **The server** or **Both times are wrong**,
+the device you are using and the page carries on; after **The box** or **Both times are wrong**,
 correct this device's time and reconnect. Choose **Continue** to start the venue on this box. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. With a passkey, the page asks for it when
 the spare needs it, usually once, and again after 15 minutes. Your reason and statements stay in place.
@@ -186,7 +186,7 @@ copy is ready, enter the same administrator account and choose **Continue to clo
 new invoice series by itself, including after any wait, and lists each with what it is for. If
 the spare cannot check its time over the internet, the page first shows the spare's time and this
 device's: check that both are right (both are shown in the venue's time zone), then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets the spare's time from
-the device you are using and the page carries on; after **The server** or **Both times are wrong**,
+the device you are using and the page carries on; after **The box** or **Both times are wrong**,
 correct this device's time and reconnect. Choose **Continue** to start the venue on the spare.
 An authenticator code lasts under a minute. If yours runs out before the page uses it, the page asks
 you to check your password and code: enter a fresh code and choose **Try again** to carry on.
@@ -194,7 +194,7 @@ Before **Proceed**, **Edit these details** goes back to the sign-in.
 If the page says this box is restarting, keep it open until **Continue to this box** appears.
 Payments already recorded remain in the transferred copy.
 
-If an answer is lost in Servers, keep the dialog open and choose **Check handover progress**.
+If an answer is lost on the Servers page, keep the dialog open and choose **Check handover progress**.
 On the spare’s handover page, you can reload to read progress. Do not start another handover.
 A waiting message describes the last attempt; keep both boxes connected while they try again.
 If the copy check keeps failing, read [how to switch to a spare](servers.md#emergency).
@@ -359,12 +359,12 @@ you can connect; this page does not test that connection. If a change fails, che
 
 You can opt in on **Review and provision** during setup or in **System → Cloud
 services**. Choose **Turn on error reports** to help Waitron identify errors in a
-release. Your choice takes effect on this server. A new or replacement server
+release. Your choice takes effect on this box. A new or replacement box
 starts with reporting off.
 
-Once the server is connected to Waitron Cloud, it sends error codes, their
-sources, the Waitron version, times and incident counts under this server’s Cloud
-registration. If the same open incident repeats, it counts once. The server holds
+Once the box is connected to Waitron Cloud, it sends error codes, their
+sources, the Waitron version, times and incident counts under this box’s Cloud
+registration. If the same open incident repeats, it counts once. The box holds
 reports while it cannot reach Cloud. Choose **Turn off error reports** to discard
 the reports still waiting to be sent.
 

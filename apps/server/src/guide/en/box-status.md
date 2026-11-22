@@ -151,7 +151,7 @@ says why they stopped.
 If this box stops issuing invoices because its identity conflicts with a filing response or an
 AEAT lookup, keep any old or copied box offline. A new identity does not stop another machine from selling.
 
-Open `/recovery/fiscal-conflict` on this box over HTTPS. You need its current server key;
+Open `/recovery/fiscal-conflict` on this box over HTTPS. You need its current box key;
 signing in to the dashboard does not replace that key. Enter the key and choose **Check conflict**
 to see the affected invoice and identity. Confirm that the old or copied box is offline and that
 nobody else is recovering it, then choose **Compare clocks**. If the box cannot check its time over
@@ -191,7 +191,7 @@ While a backup is running, **Free** leaves the backup's working folder alone, in
 cut-off backup left there, and the page says those files are not counted.
 
 The sizes under **Disk space** show what is filling the disk. On **Backups**, you can choose how
-many archives to keep. Leave without changing the settings to stop. Keep your database, server key, backup
+many archives to keep. Leave without changing the settings to stop. Keep your database, box key, backup
 encryption key and saved backups.
 
 Before each backup, when the disk is short of space, the box can delete its oldest backups on that
@@ -214,7 +214,7 @@ This page cannot remove other files or move your data to a larger disk.
 When the bell says **Backup not made**, open **Box status** and check **Disk space**. Use **Free**
 if it is available, or leave without pressing it to skip cleanup. Freeing space does not start a
 backup. If the cleanup is not enough, **Free** cannot remove other files for you; keep your
-database, server key, backup encryption key and saved backups.
+database, box key, backup encryption key and saved backups.
 
 ## When the box is out of space {#out-of-space}
 

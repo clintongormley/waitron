@@ -14,8 +14,8 @@ Para abrirla:
 - En una pantalla de estación, en la pantalla de inicio de sesión de una caja o de un terminal de
   camarero, en las pantallas **Configurar este dispositivo** y **Esperando aprobación**, y en el
   asistente de configuración, elige **ⓘ**.
-- Antes de configurar el equipo, o mientras está detenido, abre `/legal/declaration` en la
-  dirección del equipo.
+- Antes de configurar el servidor, o mientras está detenido, abre `/legal/declaration` en la
+  dirección del servidor.
 
 Cuando un inspector o tu asesor pidan una copia, elige **Descargar PDF** bajo la declaración y
 envíales el archivo.

@@ -1687,7 +1687,7 @@ The owner's words (2026-11-22): “we've been using server or box interchangably
 change all references to use "box"”, then “box in english, servidor in spanish, not equipo”. The
 dashboard page keeps its name, "Servers", and a sentence naming it says "the Servers page".
 
-Five guards read named string tables, and one of them two rendered pages; each is weaker than its name.
+Seven guards read named string tables or files, and one of them two rendered pages; each is weaker than its name.
 
 - `apps/till/src/i18n/box-word.test.ts` reads English only: `en` in the till's `strings.ts`,
   `helpEn` in `help-strings.ts`, and every `en` string nested in `CODE_TABLES` in `codes.ts`. It
@@ -1731,7 +1731,20 @@ Five guards read named string tables, and one of them two rendered pages; each i
   field's label among them), the series register PDF's or the emergency record's inline
   sentences, or the offline custody tool.
 
-None of them reads the user guides, setup's own screens, the recovery pack's other pages, the print
+- `apps/server/src/guide-box-word.test.ts` reads English and Spanish: the text of every user guide
+  page in `apps/server/src/guide/en/` and `apps/server/src/guide/es/`. In English it allows "mail
+  server", "email server", "SMTP server" and "time server" (singular or plural, across a line
+  break or hyphenated), "the Servers page", the bold page name (`**Servers**`, `**System →
+  Servers**`), the `# Servers` title, `servers.md` link targets and `{#id}` anchors. In Spanish it
+  refuses "equipo" or "equipos" except the phrases it lists per page, each meaning a staff team or
+  a piece of equipment and each allowed once; a phrase the page no longer holds fails the run. It
+  does not read "caja" (a till, and in places the box), nor any other way of naming the box.
+- The box-word case in `scripts/box/installer-presentation.test.mjs` reads English and Spanish:
+  every value of `INSTALLER_WORDS` in `scripts/box/i18n/installer.mjs`, refusing "server" in
+  English and "equipo" in Spanish with no exceptions. It does not read the box scripts' other
+  output.
+
+None of them reads setup's own screens, the recovery pack's other pages, the print
 agent's setup page, emails other than those in `apps/server/src/i18n/`, another module's dashboard
 strings (`packages/*/src/dashboard/strings.ts` other than fiscal-verifactu's), the name tables in the dashboard's `domain.ts`, or words written inside a
 component or a message function, such as the sentences `codes.ts`'s `codeMessage` builds inline.

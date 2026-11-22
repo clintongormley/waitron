@@ -113,7 +113,7 @@ campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, intro
 muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y después elige
 **Comprobar la aprobación**. La recuperación de Cloud requiere un servicio compatible.
 
-Elige un equipo con espacio libre suficiente para la base de datos recuperada y las copias
+Elige un servidor con espacio libre suficiente para la base de datos recuperada y las copias
 temporales necesarias para abrir la copia de seguridad.
 
 Para una copia grande, conecta el dispositivo por cable o a la red del local antes de cargarla.

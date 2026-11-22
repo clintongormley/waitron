@@ -9,7 +9,7 @@ Antes de guardar o quitar el servidor de correo, confirma tu identidad en la ven
 
 ## Configura un servidor de correo {#set-up}
 
-Fuera de Demostración, abre **Sistema → Correo**. Con el permiso de administración del equipo
+Fuera de Demostración, abre **Sistema → Correo**. Con el permiso de administración del servidor
 (Admin de forma predeterminada), elige **Configurar servidor de correo** o **Cambiar servidor de
 correo**, introduce los ajustes de tu proveedor y envía una prueba antes de guardar. Introduce
 de nuevo los datos de acceso al cambiar un servidor con autenticación; Waitron nunca muestra la
@@ -27,7 +27,7 @@ autenticación** puede quedar desactivado. Puedes omitir el servidor en desarrol
 [eliges Cloud para el correo del personal durante la configuración de prueba](email.md#cloud-staff-email).
 Si usas tu propio servidor, al guardarlo las invitaciones y los enlaces para restablecer
 contraseñas llegan a buzones reales. Esta página muestra el estado del correo de facturas:
-las cajas de desarrollo guardan las facturas localmente aunque el correo de cuentas use
+los servidores de desarrollo guardan las facturas localmente aunque el correo de cuentas use
 un servidor guardado o Cloud.
 
 En Demostración, usa **Bandeja de correo** en la barra superior. Inicia sesión como encargado o administrador
@@ -43,14 +43,14 @@ impresora y pulsa **Imprimir ventas por categoría**, o pulsa **Descargar para t
 si puedes exportar informes.
 
 Waitron envía el informe del último día de actividad terminado cuando concluye el cierre
-automático. También puedes recibirlo después de un reinicio de la caja. Tras un cierre que abarque
+automático. También puedes recibirlo después de un reinicio del servidor. Tras un cierre que abarque
 varios días, abre **Ventas y cobros** y elige un día anterior para consultar sus cifras.
 
 ## Elegir el correo del personal durante la configuración de prueba {#cloud-staff-email}
 
 En un servidor de pruebas, abre **Preparación** e inicia sesión en Waitron Cloud. En el paso de correo,
 marca **Enviar el correo del personal a través de Waitron Cloud**. Deja el servidor de correo
-en blanco y continúa. Cuando el equipo se reinicie y se conecte, Cloud podrá enviar invitaciones
+en blanco y continúa. Cuando el servidor se reinicie y se conecte, Cloud podrá enviar invitaciones
 al personal, enlaces para restablecer contraseñas y códigos de cambio de correo.
 
 Si eliges Cloud y dejas en blanco el servidor de correo, Cloud también envía los avisos sobre
@@ -59,7 +59,7 @@ persona cambia el correo de un miembro del personal en **Usuarios**. Los encarga
 electrónico también pueden recibir alertas por falta de espacio, copias de seguridad eliminadas o
 detenidas, actualizaciones revertidas y correcciones del reloj. Si añades tu propio servidor de
 correo, Waitron lo usa para esos mensajes. Para enviar correos a clientes, enviar el informe diario
-o recibir otras alertas del equipo por correo, añade un servidor en **Sistema → Correo**.
+o recibir otras alertas del servidor por correo, añade un servidor en **Sistema → Correo**.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
 **Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
@@ -76,7 +76,7 @@ En un servidor configurado para enviar registros fiscales de prueba, los encarga
 electrónico pueden recibir recordatorios de caducidad del certificado a través de Cloud de prueba
 si activas el correo de Cloud y dejas en blanco el servidor de correo.
 
-Los enlaces de Cloud vuelven a tu caja. Ábrelos desde una red que pueda acceder a ella. La
+Los enlaces de Cloud vuelven a tu servidor. Ábrelos desde una red que pueda acceder a él. La
 invitación de Cloud no incluye tus roles ni el enlace opcional de privacidad del local. Si no
 llega un correo, solicita un enlace o código nuevo; un mensaje anterior aún puede llegar después.
 Si dependes del correo de Cloud y deja de estar disponible, restablece Cloud. Fuera de
@@ -108,12 +108,12 @@ esos ajustes para esa dirección.
 
 ## Quita un servidor de correo {#remove}
 
-Con el permiso de administración del equipo (Admin de forma predeterminada), elige **Quitar servidor de correo** y lee la confirmación. **Parar** conserva
+Con el permiso de administración del servidor (Admin de forma predeterminada), elige **Quitar servidor de correo** y lee la confirmación. **Parar** conserva
 los ajustes. Al quitar el servidor también se borran sus datos de acceso; introdúcelos de nuevo
 si lo configuras más adelante.
 
 Fuera de desarrollo, conserva un servidor de correo para enviar recibos, el informe diario y los
 avisos que Cloud no gestiona. Si has activado el correo de Cloud de prueba, Cloud puede enviar el
-[correo de cuentas](email.md#cloud-account-email). Las ventas continúan. En una caja de desarrollo
+[correo de cuentas](email.md#cloud-account-email). Las ventas continúan. En un servidor de desarrollo
 sin correo de Cloud, consulta el buzón de prueba. Si los ajustes no se cargan tras quitar el servidor,
 vuelve a cargarlos. El servidor ya se ha quitado.
