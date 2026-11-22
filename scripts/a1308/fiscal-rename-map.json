@@ -1,0 +1,78 @@
+{
+  "sql": {
+    "registros_facturacion": "verifactu_records",
+    "envios": "verifactu_submissions",
+    "registro_sif": "verifactu_identities",
+    "envio_flujo": "verifactu_sending_state",
+    "fiscal_certificate_installs": "verifactu_certificates",
+    "fiscal_series_conflicts": "verifactu_series_conflicts",
+    "registros_facturacion_source_ck": "verifactu_records_source_ck",
+    "registros_facturacion_source_device_ck": "verifactu_records_source_device_ck",
+    "registros_tipo_registro_ck": "verifactu_records_tipo_registro_ck",
+    "registros_tipo_huella_ck": "verifactu_records_tipo_huella_ck",
+    "registros_huella_ck": "verifactu_records_huella_ck",
+    "registros_secuencia_ck": "verifactu_records_secuencia_ck",
+    "registros_entorno_ck": "verifactu_records_entorno_ck",
+    "registros_tipo_rectificativa_ck": "verifactu_records_tipo_rectificativa_ck",
+    "registros_tipo_factura_rectificativa_ck": "verifactu_records_tipo_factura_rectificativa_ck",
+    "registros_facturas_sustituidas_f3_ck": "verifactu_records_facturas_sustituidas_f3_ck",
+    "registros_encadenamiento_ck": "verifactu_records_encadenamiento_ck",
+    "registros_corrects_registro_uq": "verifactu_records_corrects_registro_uq",
+    "registros_identidad_uq": "verifactu_records_identidad_uq",
+    "registros_sale_idx": "verifactu_records_sale_idx",
+    "registros_node_secuencia_idx": "verifactu_records_node_secuencia_idx",
+    "registros_generado_idx": "verifactu_records_generado_idx",
+    "envios_estado_ck": "verifactu_submissions_estado_ck",
+    "envios_drenaje_idx": "verifactu_submissions_drenaje_idx",
+    "envios_confirmado_idx": "verifactu_submissions_confirmado_idx",
+    "envio_flujo_singleton_ck": "verifactu_sending_state_singleton_ck",
+    "registro_sif_numero_ck": "verifactu_identities_numero_ck",
+    "registro_sif_instalacion_uq": "verifactu_identities_instalacion_uq",
+    "registro_sif_activo_uq": "verifactu_identities_activo_uq",
+    "fiscal_certificate_installs_source_ck": "verifactu_certificates_source_ck",
+    "fiscal_certificate_installs_kind_ck": "verifactu_certificates_kind_ck",
+    "fiscal_certificate_installs_dashboard_ck": "verifactu_certificates_dashboard_ck",
+    "fiscal_certificate_installs_node_idx": "verifactu_certificates_node_idx",
+    "fiscal_series_conflicts_invoice_uq": "verifactu_series_conflicts_invoice_uq",
+    "registros_tenant_node_secuencia_uq": "verifactu_records_node_secuencia_uq",
+    "registros_facturacion_append_only_update": "verifactu_records_append_only_update",
+    "registros_facturacion_append_only_delete": "verifactu_records_append_only_delete",
+    "fiscal_certificate_installs_append_only_update": "verifactu_certificates_append_only_update",
+    "fiscal_certificate_installs_append_only_delete": "verifactu_certificates_append_only_delete",
+    "fiscal_series_conflicts_append_only_update": "verifactu_series_conflicts_append_only_update",
+    "fiscal_series_conflicts_append_only_delete": "verifactu_series_conflicts_append_only_delete"
+  },
+  "identifiers": {
+    "registrosFacturacion": "verifactuRecords",
+    "envios": "verifactuSubmissions",
+    "registroSif": "verifactuIdentities",
+    "envioFlujo": "verifactuSendingState",
+    "fiscalCertificateInstalls": "verifactuCertificates",
+    "fiscalSeriesConflicts": "verifactuSeriesConflicts",
+    "TenantTransport": "AeatTransport",
+    "tenantsWithWork": "passesWithWork",
+    "TENANT_A": "TAXPAYER_A",
+    "TENANT_B": "TAXPAYER_B",
+    "seedTenantWithSif": "seedTaxpayerWithSif",
+    "seedTenantNodeSif": "seedTaxpayerNodeSif",
+    "seedTenants": "seedTaxpayers"
+  },
+  "strings": {
+    "drain.tenant_skipped": "drain.skipped"
+  },
+  "files": {
+    "packages/fiscal-verifactu/src/schema/registros.ts": "packages/fiscal-verifactu/src/schema/verifactu-records.ts",
+    "packages/fiscal-verifactu/src/schema/envios.ts": "packages/fiscal-verifactu/src/schema/verifactu-submissions.ts",
+    "packages/fiscal-verifactu/src/schema/sif.ts": "packages/fiscal-verifactu/src/schema/verifactu-identities.ts",
+    "packages/fiscal-verifactu/src/schema/envio-flujo.ts": "packages/fiscal-verifactu/src/schema/verifactu-sending-state.ts",
+    "packages/fiscal-verifactu/src/schema/certificate-installs.ts": "packages/fiscal-verifactu/src/schema/verifactu-certificates.ts",
+    "packages/fiscal-verifactu/src/schema/series-conflicts.ts": "packages/fiscal-verifactu/src/schema/verifactu-series-conflicts.ts",
+    "packages/fiscal-verifactu/src/schema/series-conflicts.test.ts": "packages/fiscal-verifactu/src/schema/verifactu-series-conflicts.test.ts"
+  },
+  "keep": [
+    {
+      "file": "docs/backlog/architecture.md",
+      "text": "including `registros` and `envios`"
+    }
+  ]
+}
