@@ -1034,7 +1034,11 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
       }),
     });
     expect(parkRes.status).toBe(200);
-    expect(await parkRes.json()).toEqual({ id: workingOrderId, orderNumber: 1 });
+    expect(await parkRes.json()).toEqual({
+      id: workingOrderId,
+      orderNumber: 1,
+      serviceMode: "prepay",
+    });
 
     // 3. Retrieve it — the held list carries it, and GET /:id rebuilds its basket inputs.
     const list = await app.request("/api/working-orders", { headers: { cookie } });

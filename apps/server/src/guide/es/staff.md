@@ -207,6 +207,11 @@ iniciar sesión. Un perfil nuevo empieza con todos los puestos actuales seleccio
 un perfil se conservan sus selecciones. Si añades un puesto después, selecciónalo en los perfiles
 donde sus titulares necesiten iniciar sesión.
 
+Si cambias el tiempo de inactividad, el fichaje o las pantallas disponibles en
+un perfil de dispositivo, el TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV
+reciba la nueva pantalla de inicio, cierra la sesión y vuelve a iniciarla para
+abrirla.
+
 ## Horas y descansos {#hours}
 
 Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.

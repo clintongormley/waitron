@@ -604,9 +604,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **`isLocalDate` reads years 0 to 99 as 1900 to 1999**
   [Detail](backlog/service-periods.md#islocaldate-reads-years-0-to-99-as-1900-to-1999)
 
-- **Refresh service settings on an open till**
-  [Detail](backlog/service-periods.md#refresh-service-settings-on-an-open-till)
-
 - **Split an order's recorded service mode into two facts (owner, 2026-10-09) — future work.**
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
 
@@ -715,8 +712,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1033. A full invoice's later copies change their guests line when a bill moves to the counter
   (left open by A758-7).** A simplified receipt keeps the count stored at payment.
   [Detail](backlog/till.md#a1033-a-full-invoices-later-copies-change-their-guests-line-when-a-bill-moves-to-the-counter-left-open-by-a758-7)
-
-- **What an open till picks up from a setup change** (bundle of 1, size S). Holds A787. [Detail](backlog/till.md#bundle-what-an-open-till-picks-up-from-a-setup-change)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642.

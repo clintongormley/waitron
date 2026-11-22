@@ -1482,7 +1482,11 @@ describe("a dish whose period ended earlier today", () => {
     expect(first.status).toBe(200);
     const retried = await parkWith(v, v.toast.midday, body, first.id);
     expect(retried).toMatchObject({ status: 200, body: first.body });
-    expect(retried.body).toEqual({ id: first.id, orderNumber: expect.any(Number) });
+    expect(retried.body).toEqual({
+      id: first.id,
+      orderNumber: expect.any(Number),
+      serviceMode: "prepay",
+    });
     expect(await marksOf(first.id)).toHaveLength(1);
   });
 

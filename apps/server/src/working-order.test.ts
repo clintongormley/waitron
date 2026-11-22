@@ -100,7 +100,11 @@ import {
 } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { setRoutingCell, type RouteTarget } from "@waitron/venue-service";
+import {
+  setRoutingCell,
+  setZoneSalePolicyOverride,
+  type RouteTarget,
+} from "@waitron/venue-service";
 import {
   WEEK_DISPLAY_ORDER,
   departments,
@@ -1003,7 +1007,7 @@ describe("parkOrder", () => {
     // The re-sent park (a lost-response retry) REPLAYS the committed order rather than PK-colliding into
     // an opaque 500 — same id, same allocated number, nothing new filed.
     const replay = await parkProducts(cfg, { id, lines, label: "John" });
-    expect(replay).toEqual({ id, orderNumber: 1 });
+    expect(replay).toEqual({ id, orderNumber: 1, serviceMode: "prepay" });
 
     // Exactly ONE order and its two coffee lines survive: the replay re-inserted neither the order
     // nor its lines.
@@ -1018,6 +1022,27 @@ describe("parkOrder", () => {
       [1, 1000],
       [2, 1000],
     ]);
+  });
+
+  it("returns the mode saved at park even after the zone's payment flow changes", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    const offers = await counterOffers(cfg);
+    const id = randomUUID();
+    const req = {
+      id,
+      zoneId: offers.zoneId,
+      lines: offers.toOfferLines([{ productId: coffeeId, quantity: "1" }]),
+    };
+    const setMode = (mode: "prepay" | "ticket_then_pay") =>
+      withTransaction(db, (tx) => setZoneSalePolicyOverride(tx, offers.zoneId, "paidWhen", mode));
+
+    await setMode("ticket_then_pay");
+    const parked = await parkOrder({ db }, cfg, req);
+    await setMode("prepay");
+
+    expect(parked).toMatchObject({ serviceMode: "ticket_then_pay" });
+    expect(await parkOrder({ db }, cfg, req)).toEqual(parked);
+    expect(await getHeldOrder({ db }, id)).toMatchObject({ serviceMode: "ticket_then_pay" });
   });
 
   it("replays the ORIGINAL order when a re-sent park carries a DIFFERENT basket (id is the idempotency key)", async () => {
@@ -1040,7 +1065,7 @@ describe("parkOrder", () => {
       id,
       lines: [{ productId: waterId, quantity: "5" }],
     });
-    expect(replay).toEqual({ id, orderNumber: 1 });
+    expect(replay).toEqual({ id, orderNumber: 1, serviceMode: "prepay" });
 
     // The one surviving line is the ORIGINAL Espresso line — the re-park's Water line was never inserted.
     const woLines = await db
@@ -2215,6 +2240,7 @@ describe("getHeldOrder", () => {
     }).toEqual({
       id,
       zoneId: offers.zoneId,
+      serviceMode: "prepay",
       expectedEdit: null,
       orderNumber: 1,
       label: "Table 7",

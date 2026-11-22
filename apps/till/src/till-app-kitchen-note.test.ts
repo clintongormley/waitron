@@ -850,15 +850,24 @@ describe("Waiting kitchen note editor", () => {
 describe("fresh persisted counter notes", () => {
   it.each(["card", "place"])("adopts canonical note metadata after fresh %s", async (action) => {
     let id = "";
-    const getKitchenNote = vi.fn(async () => ({
+    const snapshot = () => ({
       scope: { workingOrderId: id },
       note: "Initial",
       revision: 1,
       ownerRevision: 0,
+    });
+    const getKitchenNote = vi.fn(async () => snapshot());
+    const retrieveWorkingOrder = vi.fn(async (workingOrderId: string) => ({
+      ...heldOrder(0),
+      id: workingOrderId,
+      zoneId: "zone-counter",
+      serviceMode: "prepay",
+      kitchenNote: snapshot(),
     }));
     const el = await mounted(
       {
         getKitchenNote,
+        retrieveWorkingOrder,
         pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
         setKitchenNote: vi.fn(async () => ({
           scope: { workingOrderId: id },
@@ -875,7 +884,8 @@ describe("fresh persisted counter notes", () => {
     id = store.id;
     emit(counter(el), action === "card" ? "collect-card" : "place-order", {});
     await flush(el);
-    expect(getKitchenNote).toHaveBeenCalledWith({ workingOrderId: id });
+    if (action === "card") expect(retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith(id);
+    else expect(getKitchenNote).toHaveBeenCalledWith({ workingOrderId: id });
     expect(store.persisted).toBe(true);
     expect(store.kitchenNoteRevision).toBe(1);
     expect(store.kitchenNoteDirty).toBe(false);
@@ -1348,7 +1358,11 @@ it("recovers persisted note ownership after a fresh card request loses its respo
     ownerRevision: 0,
   }));
   const el = await mounted(
-    { pay: vi.fn().mockRejectedValue(new TypeError("network")), getKitchenNote },
+    {
+      pay: vi.fn().mockRejectedValue(new TypeError("network")),
+      retrieveWorkingOrder: vi.fn().mockRejectedValue(new TypeError("network")),
+      getKitchenNote,
+    },
     false,
   );
   const store = basket(el).store;

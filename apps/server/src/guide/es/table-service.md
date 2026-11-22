@@ -30,6 +30,9 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+Si **Enviar** desaparece tras un cambio en los ajustes de cobro de tu zona de
+servicio, pulsa **Cobrar** para continuar.
+
 Si se rechaza el cobro en efectivo de un pedido aparcado que has editado, los cambios siguen en
 la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guardar los cambios sin cobrar.
 

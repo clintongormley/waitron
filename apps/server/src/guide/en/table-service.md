@@ -28,6 +28,9 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
+If **Send** disappears after a change to your service area’s payment settings,
+choose **Pay** to continue.
+
 If cash is refused while you pay an edited parked order, your edits stay in the basket.
 Correct the payment amount and try again, or park the order to save the edits without paying.
 

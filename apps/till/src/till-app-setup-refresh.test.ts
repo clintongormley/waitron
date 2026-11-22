@@ -1,5 +1,6 @@
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
-import { deviceZonesFixture } from "../test/device-zones.js";
+import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
+import { clockState, deferred } from "../test/clock-app.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
@@ -10,6 +11,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { SessionActivity } from "./session-activity.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
@@ -412,6 +414,286 @@ describe("A768 the till follows the venue's setup revision", () => {
 
   const noCourses = { ...till(drillFormFactor), courses: [], setupRevision: "s1" };
   const moved = { ...till(drillFormFactor), courses, setupRevision: "s2" };
+
+  const counterMenu = (serviceMode: "prepay" | "ticket_then_pay"): ZoneOffers => {
+    const offers = menu("v1");
+    return { ...offers, context: { ...offers.context, serviceMode } };
+  };
+
+  async function counterBasket(overrides: Record<string, unknown> = {}) {
+    const collection = counterMenu("ticket_then_pay");
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(collection)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(collection),
+      listZoneOffers: vi.fn().mockResolvedValue(collection),
+      getKitchenNote: vi.fn(async (scope) => ({
+        scope,
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      })),
+      ...overrides,
+    });
+    await flush(el);
+    await signIn(el);
+    const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
+    counter.store.addProduct(counter.products[0]!, "1");
+    await flush(el);
+    const controls = counter.shadowRoot!.querySelector("till-tender-pay")!.shadowRoot!;
+    return { el, counter, send: () => controls.querySelector(".place") };
+  }
+
+  function changeToPrepay(): void {
+    const prepay = counterMenu("prepay");
+    api.getDeviceZones.mockResolvedValue({ ...deviceZonesFor(prepay), snapshot: "prepay" });
+    api.listZoneOffers.mockResolvedValue(prepay);
+  }
+
+  it("updates the payment controls without dropping the dishes in an unsaved counter basket", async () => {
+    const { el, counter, send } = await counterBasket();
+    expect(send()).not.toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    changeToPrepay();
+    await poll(el);
+
+    expect(send()).toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("uses the mode recorded by first save before sending an order", async () => {
+    const placeOrder = vi.fn().mockResolvedValue(undefined);
+    const parkOrder = vi.fn(async ({ id }) => ({ id, orderNumber: 1, serviceMode: "prepay" }));
+    const { el, counter, send } = await counterBasket({
+      parkOrder,
+      placeOrder,
+      getTill: vi.fn().mockResolvedValue({ ...till("till"), receiptLanguages: ["es-ES", "en-GB"] }),
+      setOrderReceiptLanguage: vi.fn().mockResolvedValue({ revision: 1 }),
+      askSaleDeadEnds: vi.fn().mockResolvedValue({ sends: true, deadEnds: [], stations: [] }),
+    });
+    expect(send()).not.toBeNull();
+
+    emit(counter, "choose-receipt-language");
+    await flush(el);
+    emit(
+      el.shadowRoot!.querySelector("till-reprint-language-dialog")!,
+      "reprint-language-confirm",
+      {
+        language: "en-GB",
+      },
+    );
+    emit(counter, "place-order");
+    await flush(el);
+
+    expect(parkOrder).toHaveBeenCalledOnce();
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(send()).toBeNull();
+    expect(counter.store.persisted).toBe(true);
+    expect(api.setOrderReceiptLanguage).toHaveBeenCalledWith(counter.store.id, {
+      expectedEdit: null,
+      revision: 0,
+      language: "en-GB",
+    });
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    emit(counter, "park-order", {});
+    await flush(el);
+    expect(counter.store.lines).toHaveLength(0);
+    counter.store.addProduct(counter.products[0]!, "1");
+    await flush(el);
+    expect(send()).not.toBeNull();
+  });
+
+  it("applies the polled flow after a refused tender finishes", async () => {
+    let refuse!: (error: unknown) => void;
+    const recordSale = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const prepay = counterMenu("prepay");
+    const { el, counter, send } = await counterBasket({
+      recordSale,
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(prepay)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(prepay),
+    });
+    expect(send()).toBeNull();
+    emit(counter, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledOnce();
+
+    const collection = counterMenu("ticket_then_pay");
+    api.getDeviceZones.mockResolvedValue({ ...deviceZonesFor(collection), snapshot: "collection" });
+    await poll(el);
+    expect(send()).toBeNull();
+
+    refuse({ code: "cash.insufficient" });
+    await flush(el);
+    expect(send()).not.toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("uses the recorded flow after a declined card leaves a saved basket", async () => {
+    let decline!: (reply: { outcome: "declined" }) => void;
+    const pay = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          decline = resolve;
+        }),
+    );
+    const retrieveWorkingOrder = vi.fn(async (id: string) => ({
+      id,
+      zoneId: "z1",
+      serviceMode: "prepay",
+      orderNumber: 1,
+      label: null,
+      revision: 0,
+      expectedEdit: null,
+      invoiceType: "F2",
+      dining: "eat_in",
+      diningChoice: "none",
+      lines: [{ menuItemId: "offer-beer", productId: "product-offer-beer", quantity: "1.000" }],
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    }));
+    const { el, counter, send } = await counterBasket({
+      pay,
+      retrieveWorkingOrder,
+      getTill: vi.fn().mockResolvedValue({
+        ...till("till"),
+        cardProvider: "simulator",
+        capabilities: ["integrated-card-payment"],
+      }),
+    });
+    expect(send()).not.toBeNull();
+    emit(counter, "collect-card", { readerId: "reader-2" });
+    await flush(el);
+    expect(pay).toHaveBeenCalledOnce();
+
+    // The counter still shows collection while the order was saved under prepay.
+    decline({ outcome: "declined" });
+    await flush(el);
+    counter
+      .shadowRoot!.querySelector("till-tender-pay")!
+      .shadowRoot!.querySelector<HTMLElement>(".switch-tender")!
+      .click();
+    await flush(el);
+
+    expect(counter.store.persisted).toBe(true);
+    expect(send()).toBeNull();
+    expect(counter.store.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("arms a changed idle timeout from a revision-only poll", async () => {
+    let now = 0;
+    let idle = () => {};
+    const setTimer = vi.fn((callback: () => void) => {
+      idle = callback;
+      return 1;
+    });
+    const activity = new SessionActivity({ now: () => now, setTimer, clearTimer: vi.fn() });
+    const { el } = await mountApp({}, activity);
+    await flush(el);
+    await signIn(el);
+    expect(setTimer).not.toHaveBeenCalled();
+
+    api.getTill.mockResolvedValue({
+      ...noCourses,
+      setupRevision: "s2",
+      inactivityTimeoutSeconds: 45,
+    });
+    api.menuState.mockResolvedValue(state("v1", "lf-1", "s2"));
+    await poll(el);
+
+    expect(setTimer).toHaveBeenLastCalledWith(expect.any(Function), 45_000);
+    now = 45_000;
+    idle();
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("uses a profile read that answers after sign-out at the next sign-in", async () => {
+    const activity = new SessionActivity();
+    const configure = vi.spyOn(activity, "configure");
+    const { el } = await mountApp({}, activity);
+    await flush(el);
+    await signIn(el);
+
+    const newProfile = { ...noCourses, setupRevision: "s2", inactivityTimeoutSeconds: 45 };
+    const next = deferred<typeof newProfile>();
+    api.getTill.mockReturnValueOnce(next.promise);
+    api.menuState.mockResolvedValue(state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(api.getTill).toHaveBeenCalledTimes(2);
+
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    next.resolve(newProfile);
+    await flush(el);
+
+    await signIn(el);
+    expect(configure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ loggedIn: true, timeoutSeconds: 45 }),
+    );
+  });
+
+  it("starts the clock controls after clearing the basket and removes them when disabled", async () => {
+    const getClockState = vi.fn().mockResolvedValue(clockState());
+    const { el, counter } = await counterBasket({
+      getClockState,
+      getAttendanceInbox: vi.fn().mockResolvedValue({
+        personId: "p1",
+        revision: "revision",
+        prompts: [],
+        items: [],
+        timeZone: "Europe/Madrid",
+      }),
+    });
+    const clockIn = () => shell(el).shadowRoot!.querySelector('[data-clock-action="in"]');
+    const base = till("till");
+    const enabled = {
+      ...base,
+      setupRevision: "s2",
+      clockingAvailable: true,
+      capabilities: ["print-receipt", "clock-in"],
+    };
+
+    api.getTill.mockResolvedValue(enabled);
+    api.menuState.mockResolvedValue(state("v1", "lf-1", "s2"));
+    await poll(el);
+    expect(clockIn()).toBeNull();
+
+    counter.store.clear();
+    await flush(el);
+    expect(clockIn()).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-clock-in-screen")).toBeNull();
+
+    api.getTill.mockResolvedValue({ ...base, setupRevision: "s3", clockingAvailable: false });
+    api.menuState.mockResolvedValue(state("v1", "lf-1", "s3"));
+    await poll(el);
+    expect(clockIn()).toBeNull();
+  });
+
+  it("selects the new layout's home once an order clears after reassignment", async () => {
+    const { el, counter } = await counterBasket();
+    const currentShell = () => el.shadowRoot!.querySelector("till-shell")!;
+    expect(currentShell().activeScreen).toBe("counter");
+
+    api.getDeviceZones.mockResolvedValue({
+      ...deviceZonesFixture(["z1"], ["room"]),
+      profileId: "handheld",
+      snapshot: "tablet-profile",
+    });
+    api.getTill.mockResolvedValue({ ...till("tablet-landscape"), setupRevision: "s2" });
+    await poll(el);
+    expect(currentShell().activeScreen).toBe("counter");
+
+    counter.store.clear();
+    await flush(el);
+    expect(currentShell().formFactor).toBe("tablet-landscape");
+    expect(currentShell().activeScreen).toBe("floor");
+  });
 
   it("refreshes screen navigation when the profile's screen changes", async () => {
     const info = { ...noCourses, capabilities: ["show-station", "show-expo"] };

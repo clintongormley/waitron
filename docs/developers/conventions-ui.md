@@ -2135,15 +2135,20 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
 - `membership`: the server's signed chart. The router keeps the newest it was given
   (`ServerRouter.offerChart`) and posts it to a server answering an older term or none; a newer
   chart reaches an open till only when it starts again.
-- The profile's values: form factor, capabilities, idle logout, starting screen and whether clocking
-  is offered. `#applyProfileSetup` applies them at start, on a profile switch
-  (`#enterSwitchedProfile`) and when the device's zone selection changes
-  (`#reconcileSavedDeviceZones`), and at no other time. They change the layout and which screens the
-  till offers; applied mid-session they could take away the screen the person is on, and at those
-  three points the till already lays itself out again (the default A768 chose; whether to change it is backlog A787).
-- A kitchen screen in device mode: the profile's values above. A station's bump mode is not a
-  setup value: each order of its queue carries it (`StationQueueGroup.bumpMode`), read every 15 s
-  in both modes (`REFRESH_MS`, `apps/till/src/screens/till-station-screen.ts`).
+- A kitchen screen in device mode keeps its start profile. A station's bump mode is read from
+  each order of its queue every 15 seconds (`REFRESH_MS`, `apps/till/src/screens/till-station-screen.ts`).
+
+On a signed-in till, the setup revision and device-zone reads both queue profile changes. The
+latest answer takes effect once the till has no order open, its order requests have settled and
+its edits are clear. This updates the idle timeout, clock controls and available screens. If a read
+finishes after sign-out, the profile is ready for the next sign-in.
+The starting screen is used at sign-in after the till receives the change. The server refuses a
+layout change to an assigned profile with `device_profile.in_use`.
+
+A changed zone's payment timing reaches the till through the device-zone read. New and unsaved
+counter baskets use that timing after any payment or send in progress settles. Park and held-order
+reads return the saved order's mode. If the first save returns Pay before preparation during Send,
+the till keeps the saved basket and offers Pay.
 
 Pinned by `apps/till/src/till-app-setup-refresh.test.ts` ("A768 the till follows the venue's setup
 revision"): courses reach an open table, the
@@ -2151,6 +2156,7 @@ same revision reads nothing, a failed read is tried again, and an older read nev
 one across a poll, a profile switch, a change of zones and a server switch.
 That suite checks the default reader beside a profile switch. The other values listed above ride on
 the same assignment in `#applyVenueSetup`.
+The same suite checks live profile timing and counter payment controls.
 The Equipment poll also picks up a replaced profile reader for **Pay**. Run the
 "offers the changed profile default" case in `apps/till/src/till-app.test.ts`.
 On the server, `apps/server/src/till-api.setup-revision.test.ts` checks that the revision matches on both
