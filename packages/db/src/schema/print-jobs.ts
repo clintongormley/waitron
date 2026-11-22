@@ -43,14 +43,10 @@ export const printJobs = table(
     id: id("id").primaryKey().$defaultFn(newId),
     printerId: id("printer_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => printers.id),
-    /* v8 ignore stop */
     // The agent holding the latest claim. For jobs without an invoice receipt claim, unpairing
     // stamps the agent whose pull ended the job.
-    /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
-    /* v8 ignore stop */
     // Office pages are rendered on request. Thermal jobs carry their ESC/POS bytes.
     payload: binary("payload"),
     // Drawer pulses share transport delivery but are claimed once and cannot be resent.
@@ -80,14 +76,10 @@ export const printJobs = table(
     deliveredAt: tsString("delivered_at"),
     // The job a resend copies, always the first of its chain: a resend of a resend names the same
     // job (`resendPrintJob`, packages/printing/src/outbox.ts).
-    /* v8 ignore start */
     resendOf: id("resend_of").references((): AnySQLiteColumn => printJobs.id),
-    /* v8 ignore stop */
     // The sale a till receipt prints, original or duplicate (`apps/server/src/receipt-print.ts`); a
     // resend copies it.
-    /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
-    /* v8 ignore stop */
     tenderRefundId: id("tender_refund_id").references(() => refunds.id),
   },
   (t) => [

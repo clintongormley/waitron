@@ -118,12 +118,8 @@ export const products = table(
     // A variant's position among its parent's variants; unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
     // The main reporting category; null is Uncategorised, and on a variant means its parent's.
-    /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
-    /* v8 ignore stop */
-    /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
-    /* v8 ignore stop */
     // Staff-facing product name, shown on the dashboard, till buttons/basket and reports.
     name: label("name").notNull(),
     // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,
@@ -132,9 +128,7 @@ export const products = table(
     description: json<Record<string, string>>("description"),
     kitchenName: label("kitchen_name"),
     dietaryDeclarations: json<string[]>("dietary_declarations").default([]),
-    /* v8 ignore start */
     unitId: id("unit_id").references(() => units.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     unitPrice: money("unit_price"),
     vatClass: label("vat_class"),
     // The class charged when the product is taken away; how a blank resolves:

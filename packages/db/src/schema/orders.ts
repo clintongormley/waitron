@@ -69,9 +69,7 @@ export const workingOrders = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     source: sourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
     // leaving room for a future writer with no node to omit it.
     nodeId: id("node_id"),
@@ -90,9 +88,7 @@ export const workingOrders = table(
     beforeRestore: flag("before_restore").notNull().default(false),
     settledAt: tsString("settled_at"),
     // Set ⇒ this counter order is delivered to that table; a party's bill names its party instead.
-    /* v8 ignore start */
     deliveryTableId: id("delivery_table_id").references(() => diningTables.id),
-    /* v8 ignore stop */
     // The delivery table's name, kept once the order lets go of a removed table.
     deliveryTableLabel: label("delivery_table_label"),
     collectedAt: tsString("collected_at"),

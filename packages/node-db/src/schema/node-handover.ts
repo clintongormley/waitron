@@ -48,7 +48,6 @@ export const nodeHandoverOperations = table(
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
-  /* v8 ignore start */
   (t) => [
     primaryKey({ columns: [t.nodeId, t.operationId], name: "node_handover_operations_pk" }),
     check("node_handover_operations_role_ck", enumCheck(t.role)),
@@ -63,7 +62,6 @@ export const nodeHandoverOperations = table(
         )})`.inlineParams(),
       ),
   ],
-  /* v8 ignore stop */
 );
 
 /** What this box decided and received during handovers. Insert-only: its writer has no update. */
@@ -96,7 +94,5 @@ export const nodeHandoverRestriction = table(
     membershipTerm: count("membership_term").notNull(),
     recordedAt: ts("recorded_at").notNull().$defaultFn(now),
   },
-  /* v8 ignore start */
   (t) => [check("node_handover_restriction_kind_ck", enumCheck(t.kind))],
-  /* v8 ignore stop */
 );

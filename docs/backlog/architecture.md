@@ -1031,8 +1031,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Server comment pruning notes** — found by #656 while pruning comments.
   [Detail](box.md#server-comment-pruning-notes)
 
-- **Schema files keep `v8 ignore` pairs with no stated reason.**
-  [Detail](ci.md#schema-files-keep-v8-ignore-pairs-with-no-stated-reason).
+- **fiscal-verifactu's schema files keep `v8 ignore` pairs with no stated reason.**
+  [Detail](ci.md#fiscal-verifactus-schema-files-keep-v8-ignore-pairs-with-no-stated-reason).
 - **Fiscal source comments still describe the migration sets A760 retired.**
   `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
   `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);

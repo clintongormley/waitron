@@ -39,21 +39,15 @@ export const ticketItems = table(
     id: id("id").primaryKey().$defaultFn(newId),
     workingOrderLineId: id("working_order_line_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => workingOrderLines.id, { onDelete: "cascade" }),
-    /* v8 ignore stop */
     stationId: id("station_id")
       .notNull()
-      /* v8 ignore start */
       .references(() => kitchenStations.id),
-    /* v8 ignore stop */
     state: ticketState("state").notNull().default("queued"),
     queuedAt: tsString("queued_at").notNull().$defaultFn(nowIso),
     preparingAt: tsString("preparing_at"),
     readyAt: tsString("ready_at"),
-    /* v8 ignore start */
     courseId: id("course_id").references(() => kitchenCourses.id),
-    /* v8 ignore stop */
     firedAt: tsString("fired_at"),
     requestedAt: tsString("requested_at"),
     passControlled: flag("pass_controlled").notNull().default(false),

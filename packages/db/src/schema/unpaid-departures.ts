@@ -25,9 +25,7 @@ export const unpaidDepartures = table(
     recordedBy: id("recorded_by").notNull(),
     authorizedBy: id("authorized_by").notNull(),
     source: sourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     recordedAt: tsString("recorded_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

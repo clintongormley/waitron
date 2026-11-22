@@ -19,7 +19,5 @@ export const nodeMembership = table(
     document: json<SignedMembershipDocument>("document").notNull(),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
   },
-  /* v8 ignore start */
   (t) => [check("node_membership_singleton_ck", sql`${t.id} = 1`)],
-  /* v8 ignore stop */
 );

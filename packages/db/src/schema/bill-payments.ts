@@ -49,9 +49,7 @@ export const billPayments = table(
     state: billPaymentState("state").notNull(),
     requestedBy: id("requested_by").notNull(),
     source: saleSourceColumn("source").notNull(),
-    /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     receivedAt: tsString("received_at"),
     failedAt: tsString("failed_at"),
