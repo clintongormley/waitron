@@ -5351,7 +5351,7 @@ it("a Comp amount refusal returns to its amount field and permits correction", a
   });
   await flush(el);
   await press(el, inDialog(el, 'input[name="reason"]'));
-  const field = inDialog(el, 'wt-input[name="amount"]') as HTMLElement & {
+  const field = inDialog(el, 'wt-price-input[name="amount"]') as HTMLElement & {
     updateComplete: Promise<unknown>;
   };
   await field.updateComplete;
@@ -5360,7 +5360,9 @@ it("a Comp amount refusal returns to its amount field and permits correction", a
   await flush(el);
   await press(el, inDialog(el, "[data-adjust-continue]"));
   await press(el, inDialog(el, "[data-adjust-confirm]"));
-  const corrected = inDialog(el, 'wt-input[name="amount"]') as HTMLElement & { error: string };
+  const corrected = inDialog(el, 'wt-price-input[name="amount"]') as HTMLElement & {
+    error: string;
+  };
   expect(corrected).not.toBeNull();
   expect(corrected.error).toBe(codeMessage("adjustment.exceeds_amount"));
   expect(
