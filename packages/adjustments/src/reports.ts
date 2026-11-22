@@ -108,7 +108,10 @@ export interface AdjustmentEntry {
   reasonName: string;
   note: string | null;
   lineName: string | null;
-  /** The bill line this adjusted; null on a discount on the whole bill. */
+  /**
+   * The bill line this adjusted, as it stood; null on a discount on the whole bill. When it covered
+   * part of the line, the part adjusted was split off into a new row and this line holds the rest.
+   */
   lineId: string | null;
   /** How much of the line was adjusted; null on a discount on the whole bill. */
   quantity: Decimal | null;
