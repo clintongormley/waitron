@@ -11,7 +11,7 @@ import { trackDialog } from "./track-dialog.js";
 
 export interface BillEditConflictsPrompt {
   rows: readonly BillEditConflict[];
-  moveDishes?: boolean;
+  resume?: "dishes" | "table";
   takeOver: (row: BillEditConflict) => Promise<string | TemplateResult | null>;
   close: (review: boolean) => void;
 }
@@ -99,7 +99,7 @@ export class BillEditConflictsDialog extends LitElement {
     const { prompt, selected } = this;
     const name = selected?.ownerName ?? "";
     const remaining = prompt.rows.filter((row) => !this.taken.has(row));
-    const hasReview = prompt.moveDishes === true;
+    const hasReview = prompt.resume === "dishes";
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -120,9 +120,7 @@ export class BillEditConflictsDialog extends LitElement {
             ? hasReview
               ? nothing
               : html`<p>${t("table.try_action_again")}</p>`
-            : html`<p>
-                  ${t(prompt.moveDishes ? "table.move_dish_conflicts" : "table.edit_conflicts")}
-                </p>
+            : html`<p>${t(hasReview ? "table.move_dish_conflicts" : "table.edit_conflicts")}</p>
                 <ul>
                   ${remaining.map(
                     (row) =>
@@ -185,7 +183,7 @@ export class BillEditConflictsDialog extends LitElement {
                 ? html`<wt-button
                     data-finish-conflicts
                     variant="primary"
-                    @click=${() => this.#close(hasReview)}
+                    @click=${() => this.#close(prompt.resume !== undefined)}
                     >${t(hasReview ? "table.review_after_take_over" : "table.submitted_close")}</wt-button
                   >`
                 : nothing

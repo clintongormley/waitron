@@ -141,6 +141,12 @@ export class TillHeldOrders extends LitElement {
     button?.shadowRoot?.querySelector<HTMLButtonElement>("button")?.focus();
   }
 
+  chooseMoveTableAgain(orderId: string): void {
+    const order = this.orders.find(({ id }) => id === orderId);
+    if (this.isConnected && this.moving === null && order?.partyId === null)
+      this.#openPicker(order);
+  }
+
   @state() private expanded = new Set<string>();
 
   protected override willUpdate(changed: PropertyValues<this>): void {

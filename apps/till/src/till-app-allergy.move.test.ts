@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { AllergyMoveRead } from "@waitron/module";
 import type { WtInput } from "@waitron/ui";
 import { codeMessage } from "./i18n/codes.js";
-import type { TillApi } from "./api/client.js";
+import type { HeldOrderSummary, TillApi } from "./api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, measured } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import {
@@ -115,6 +115,192 @@ async function counter(
     });
   return { ...mounted, screen, move };
 }
+
+const held: HeldOrderSummary = {
+  id: "counter-bill",
+  orderNumber: 5,
+  label: null,
+  partyId: null,
+  billNumber: null,
+  billName: null,
+  zoneId: null,
+  openedAt: "2026-10-20T10:00:00Z",
+  total: "3.00",
+  outstanding: "3.00",
+  hasPayments: false,
+  items: [],
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
+  signals: [],
+};
+
+const ownedCounter = {
+  workingOrderId: "counter-bill",
+  partyId: null,
+  edit: { ...sourceEdit, editorId: "p1", editorName: "Ana", draftId: "d1", draftRevision: 1 },
+};
+
+it.each(["preview", "write"])(
+  "a held-order move takes over a destination draft refused by the %s",
+  async (stage) => {
+    const edit = { billId: "b2", editorVersion: 4, draftId: "d2", draftRevision: 2 };
+    const conflict = { ...edit, editorId: "luis", editorName: "Luis" };
+    const error = { code: "draft.taken_over", conflicts: [conflict] };
+    const updated = { ...edit, editorVersion: 5 };
+    let received = conflict;
+    const answer = stage === "write" ? "allergies" : "none";
+    const read = vi.fn<TillApi["previewBillMoveAllergy"]>().mockResolvedValue(preview(answer));
+    const write = vi
+      .fn<TillApi["moveBill"]>()
+      .mockResolvedValue({ partyId: "v1", billId: "counter-bill" });
+    (stage === "preview" ? read : write).mockRejectedValueOnce(error);
+    const takeOverDraft = vi.fn(async () => {
+      received = { ...updated, editorId: "p1", editorName: "Ana" };
+    });
+    const { el, screen } = await counter(
+      {
+        listWorkingOrders: vi.fn().mockResolvedValue([held]),
+        getFindBill: vi.fn().mockResolvedValue(ownedCounter),
+        listDrafts: vi.fn(async () => ({ drafts: [], billEdits: [received] })),
+        previewBillMoveAllergy: read,
+        moveBill: write,
+        takeOverDraft,
+      },
+      answer,
+    );
+    screen.orderList = "parked";
+    await screen.updateComplete;
+    const list = screen.shadowRoot!.querySelector("till-held-orders")!;
+    await list.updateComplete;
+    const controls = list.shadowRoot!;
+    const button = (selector: string) =>
+      controls.querySelector(selector)?.shadowRoot?.querySelector("button");
+    await vi.waitFor(() => expect(button(".move")).not.toBeNull());
+    await userEvent.click(button(".move")!);
+    const target = () => button('[data-target="destination"]');
+    const chooseTarget = async () => {
+      await vi.waitFor(() => expect(target()).not.toBeNull());
+      await userEvent.click(target()!);
+      if (stage === "write") {
+        await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+        await userEvent.click(
+          dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-primary]")!,
+        );
+      }
+    };
+    await chooseTarget();
+    const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+    await vi.waitFor(() => expect(prompt()).not.toBeNull());
+    expect(dialog(el)).toBeNull();
+    const buttons = prompt()!.shadowRoot!;
+    await userEvent.click(buttons.querySelector<HTMLElement>('[data-split-take-over="b2"]')!);
+    await userEvent.click(buttons.querySelector<HTMLElement>("[data-confirm-take-over]")!);
+    expect(takeOverDraft).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "d2",
+      { revision: 2, expectedEdit: edit, submissionId: expect.any(String) },
+      { signal: expect.any(AbortSignal) },
+    );
+    await userEvent.click(buttons.querySelector<HTMLElement>("[data-finish-conflicts]")!);
+    await vi.waitFor(() => {
+      expect(prompt()).toBeNull();
+      expect(target()).not.toBeNull();
+    });
+    expect(read).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledTimes(stage === "preview" ? 0 : 1);
+    await chooseTarget();
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(stage === "preview" ? 1 : 2));
+    expect(write.mock.lastCall?.[2].expectedEdits).toContainEqual(updated);
+  },
+);
+
+it("retires a counter take-over when browser history leaves the counter", async () => {
+  const conflict = {
+    ...ownedCounter.edit,
+    billId: "b2",
+    editorId: "luis",
+    editorName: "Luis",
+    draftId: "d2",
+  };
+  const { el, move } = await counter(
+    {
+      getFindBill: vi.fn().mockResolvedValue(ownedCounter),
+      listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [conflict] }),
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockRejectedValue({ code: "draft.taken_over", conflicts: [conflict] }),
+    },
+    "none",
+  );
+  const screenShown = () => el.shadowRoot!.querySelector("till-shell")?.activeScreen;
+  for (const screen of ["floor", "counter"]) {
+    emit(shell(el), "screen-select", { screen });
+    await flush(el);
+    expect(screenShown()).toBe(screen);
+  }
+  const prompt = () => el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog");
+  move();
+  await vi.waitFor(() => expect(prompt()).not.toBeNull());
+  for (const screen of ["floor", "counter"]) {
+    const moved = new Promise<void>((done) =>
+      window.addEventListener("popstate", () => done(), { once: true }),
+    );
+    if (screen === "floor") history.back();
+    else history.forward();
+    await moved;
+    await flush(el);
+    expect(screenShown()).toBe(screen);
+    expect(prompt()).toBeNull();
+  }
+});
+
+it("explains what staff can do when the counter order itself has an unsent draft", async () => {
+  const conflict = {
+    ...sourceEdit,
+    editorId: "luis",
+    editorName: "Luis",
+    draftId: "d1",
+    draftRevision: 1,
+  };
+  const takeOverDraft = vi.fn();
+  const write = vi.fn();
+  const { el, move } = await counter(
+    {
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue({ workingOrderId: "counter-bill", partyId: null, edit: conflict }),
+      listDrafts: vi.fn().mockResolvedValue({
+        drafts: [],
+        billEdits: [
+          {
+            billId: "b2",
+            editorId: "p1",
+            editorName: "Ana",
+            editorVersion: 1,
+            draftId: "d2",
+            draftRevision: 1,
+          },
+        ],
+      }),
+      previewBillMoveAllergy: vi
+        .fn()
+        .mockRejectedValue({ code: "draft.taken_over", conflicts: [conflict] }),
+      moveBill: write,
+      takeOverDraft,
+    },
+    "none",
+  );
+  const heldReads = api.listWorkingOrders!;
+  const before = heldReads.mock.calls.length;
+  move();
+  await vi.waitFor(() => expect(heldReads.mock.calls).toHaveLength(before + 1));
+  await flush(el);
+  expect(el.shadowRoot!.textContent).toContain(
+    "Someone else has unsent dishes on this parked order. Choose a table with no unsent orders, or leave the order where it is.",
+  );
+  expect(el.shadowRoot!.querySelector("till-bill-edit-conflicts-dialog")).toBeNull();
+  expect(takeOverDraft).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+});
 
 describe("A669 counter move refusal recovery", () => {
   it("shows a repeated guest refusal after correcting and retrying a move", async () => {
