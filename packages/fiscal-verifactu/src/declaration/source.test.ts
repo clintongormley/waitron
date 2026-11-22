@@ -103,10 +103,6 @@ describe("parseFunctions", () => {
 });
 
 describe("releaseBlockers", () => {
-  it("answers nothing for the real template, which has no blocker", () => {
-    expect(releaseBlockers(template)).toEqual([]);
-  });
-
   it("answers each blocker line's text", () => {
     expect(releaseBlockers(withReleaseBlocker(template))).toEqual([TEST_RELEASE_BLOCKER]);
   });

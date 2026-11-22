@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { declarationSource as source, testProducer as producer } from "../../test/declaration.js";
+import {
+  declarationSourceFor,
+  declarationSource as source,
+  testProducer as producer,
+} from "../../test/declaration.js";
 import { declarationBlocks, fillProducer, renderDeclaration } from "./render.js";
 import { declarationItems } from "./source.js";
 
@@ -15,6 +19,13 @@ describe("renderDeclaration", () => {
       expect(output).not.toContain("release-blocker");
       expect(output).not.toContain("**");
     }
+  });
+
+  it("leaves a release blocker's comment line out of the text and HTML", () => {
+    const blocked = renderDeclaration(declarationSourceFor("1.2.3", { blocked: true }), producer);
+    expect(blocked.text).not.toContain("release-blocker");
+    expect(blocked.html).not.toContain("release-blocker");
+    expect(blocked.text).toBe(renderDeclaration(source, producer).text);
   });
 
   it("writes the text one paragraph per line and one list item per line", () => {

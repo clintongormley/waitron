@@ -4,9 +4,11 @@ import { prepareDeclarationSource } from "../src/declaration/source.js";
 
 export const TEST_RELEASE_BLOCKER = "A test's stand-in for an unfinished item.";
 
-/** The template with one release blocker line put back at its top. */
+const RELEASE_BLOCKER_LINE = /^<!-- release-blocker: .* -->(?:\n|$)/gm;
+
+/** The template with exactly one release-blocker line, at its top. */
 export function withReleaseBlocker(template: string): string {
-  return `<!-- release-blocker: ${TEST_RELEASE_BLOCKER} -->\n${template}`;
+  return `<!-- release-blocker: ${TEST_RELEASE_BLOCKER} -->\n${template.replace(RELEASE_BLOCKER_LINE, "")}`;
 }
 
 export function declarationSourceFor(
@@ -18,7 +20,7 @@ export function declarationSourceFor(
   }: { date?: string; releasable?: boolean; blocked?: boolean } = {},
 ): string {
   const real = readFileSync(new URL("../declarations/template.md", import.meta.url), "utf8");
-  const template = releasable ? real.replace(/^<!-- release-blocker: .* -->\n/gm, "") : real;
+  const template = releasable ? real.replace(RELEASE_BLOCKER_LINE, "") : real;
   return prepareDeclarationSource({
     template: blocked ? withReleaseBlocker(template) : template,
     functions: readFileSync(new URL("../declarations/functions.md", import.meta.url), "utf8"),
