@@ -121,7 +121,7 @@ export class SetupModeScreen extends LitElement {
   }
 
   /** Joining or recovering is not a fresh primary, so it writes no mode. */
-  #chooseExisting(screen: "role" | "connect" | "restore"): void {
+  #chooseExisting(screen: "role" | "connect"): void {
     this.#requestChoice(undefined, () => dispatchSetupGoto(this, screen));
   }
 
@@ -205,7 +205,7 @@ export class SetupModeScreen extends LitElement {
             ? html`<wt-choice-row
                 data-test="choose-recover"
                 heading=${t("mode.recover.heading")}
-                @click=${() => this.#chooseExisting("restore")}
+                @click=${() => this.#chooseExisting("role")}
                 >${t("mode.recover.copy")}</wt-choice-row
               >`
             : html`<wt-choice-row

@@ -89,10 +89,10 @@ describe("setup's first page and another box answering the venue's name", () => 
     expect(await otherBoxLine(el)).not.toBeNull();
   });
 
-  it("Join it as a spare opens the join page and Recover a restaurant the restore page", async () => {
+  it("Join it as a spare opens the join page and Recover a restaurant the join-or-recover choice page", async () => {
     for (const [choice, screen] of [
       ["choose-join-spare", "connect"],
-      ["choose-recover", "restore"],
+      ["choose-recover", "role"],
     ] as const) {
       const el = await mount(answers("other-box-answers"));
       (await modeScreen(el))

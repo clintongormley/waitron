@@ -401,9 +401,9 @@ describe("setup mode leaves the root draft", () => {
 
   it.each([
     ["choose-join-spare", "connect"],
-    ["choose-recover", "restore"],
+    ["choose-recover", "role"],
   ] as const)(
-    "with another box found, %s asks before abandoning a root draft, then opens %s directly",
+    "with another box found, %s asks before abandoning a root draft, then opens %s",
     async (choice, destination) => {
       const { el, modeScreen, api } = await modeDraft();
       Object.assign(el, { otherBoxFound: true });

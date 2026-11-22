@@ -205,13 +205,13 @@ describe("setup-mode-screen", () => {
       expect(events).toEqual([{ kind: "goto", detail: { screen: "connect" } }]);
     });
 
-    it("Recover a restaurant opens the restore page directly, writing no mode", async () => {
+    it("Recover a restaurant opens the join-or-recover choice page, writing no mode", async () => {
       const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
         otherBoxFound: true,
       });
       const events = collect(host);
       q(el, "[data-test=choose-recover]")!.click();
-      expect(events).toEqual([{ kind: "goto", detail: { screen: "restore" } }]);
+      expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
     });
 
     it("asks beforeChoice first, as a mode-less choice, and goes nowhere until it proceeds", async () => {
@@ -229,7 +229,7 @@ describe("setup-mode-screen", () => {
       asked[1]!.proceed();
       expect(events).toEqual([
         { kind: "goto", detail: { screen: "connect" } },
-        { kind: "goto", detail: { screen: "restore" } },
+        { kind: "goto", detail: { screen: "role" } },
       ]);
     });
   });
