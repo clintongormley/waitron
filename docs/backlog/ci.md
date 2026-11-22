@@ -130,9 +130,6 @@ keep `probeRefusal` and its `ECONNREFUSED` requirement unchanged.
 - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
   for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
   exactly the broadening that would publish a backwards tag. It matters only to a fork.
-- **The guard's concurrency cases see ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that
-  one file as text for them, so a future push-triggered workflow that groups by ref is seen by
-  nothing.
 
 ## Unexplained incidents, each seen once or twice; on recurrence retain the log before retrying
 

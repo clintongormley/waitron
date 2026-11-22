@@ -2368,14 +2368,22 @@ here is a reading of a window rather than a count of the thing.
 
 The fix is separation, not a cancellation policy: on a push the group carries `github.run_id`, so a
 push is never grouped with anything, and a pull request keeps the ref so a force-push still
-supersedes the run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads the block as
-text — it pins how the expression is written, not what GitHub evaluates it to.
+supersedes the run it made stale. Guard: `scripts/ci-workflow.test.mjs`, which reads ci.yml's block
+as text for ci.yml's own cases and parses every workflow as YAML for the all-workflows case — it
+pins how the expression is written, not what GitHub evaluates it to.
 
 Cost: a code merge that got NO run at all — no image published, no unfiltered main suite, and
 nothing red anywhere, so check after a merge that its own run exists.
 
-**What the guard does not see.** The concurrency cases of `scripts/ci-workflow.test.mjs` read ci.yml
-alone, as TEXT, so another workflow's group is not seen.
+**What the guard does not see.** The all-workflows case checks the parsed top-level `concurrency`
+of every workflow whose `on` names `push`, not what GitHub evaluates it to. `publish-ui.yml` is
+allowed its fixed group by name, and only while it keeps `queue: max` and
+`cancel-in-progress: false`. Every other push workflow must either have no top-level group or use
+ci.yml's per-push expression exactly, spacing inside `${{ }}` aside, so another group that is also
+safe, such as `${{ github.run_id }}` alone, is refused. Of the job-level groups only ci.yml's
+`publish` job's is read, by the separate "the publish job's concurrency group" cases. A workflow
+started through `workflow_call` or `workflow_run` is not checked. Whether the `yaml` package reads
+every file the way GitHub does is unmeasured.
 
 ### Recover a main commit whose CI run was never created
 

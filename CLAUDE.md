@@ -144,9 +144,11 @@ hook, or how tests are scheduled. What named guards miss:
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
   copies sharp into `/app/node_modules`.** Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke
   (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
-- **Two pushes to `main` must never share a CI concurrency group.** Check after a merge that its own
-  run exists. Publishing asks `scripts/main-tag-guard.sh` before moving `:main`. Guards:
-  `scripts/ci-workflow.test.mjs` (reads ci.yml alone, as TEXT) and
+- **Two pushes to `main` must never share a CI concurrency group; `publish-ui.yml`'s fixed group is
+  the exception while it keeps `queue: max` and `cancel-in-progress: false` (#2526).** Check after a
+  merge that its own run exists. Publishing asks `scripts/main-tag-guard.sh` before moving `:main`.
+  Guards: `scripts/ci-workflow.test.mjs`, weaker than its name: it parses each push workflow's
+  top-level group, not other job-level groups or the workflows a push run calls; and
   `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.

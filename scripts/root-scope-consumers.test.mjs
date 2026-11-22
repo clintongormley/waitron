@@ -94,7 +94,7 @@ function rootScriptReaders(files, members, exists) {
 /**
  * ci.yml's jobs as arrays of lines. A job id is the only key at two-space indent below `jobs:`;
  * scanning from `jobs:` keeps `on:`'s own keys, at that same indent, out. The same line matching
- * scripts/ci-workflow.test.mjs uses, since there is no YAML library in this workspace.
+ * most of scripts/ci-workflow.test.mjs uses.
  */
 function workflowJobs(text) {
   const lines = text.split("\n");
