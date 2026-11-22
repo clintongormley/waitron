@@ -851,18 +851,20 @@ describe("runEntry", () => {
       const entry = runEntry(d);
       await vi.waitFor(() => expect(d.installShutdownHandlers).toHaveBeenCalled());
       started.fail(
-        new Error("Failed query", {
+        new Error("Failed to run the query 'select legal_name from taxpayer'", {
           cause: Object.assign(new Error("no such column: legal_name"), {
             errcode: 1,
             code: "ERR_SQLITE_ERROR",
           }),
         }),
       );
-      await expect(entry).rejects.toThrow("Failed query");
+      await expect(entry).rejects.toThrow("Failed to run the query");
       expect(writeRecoveryState.mock.calls.at(-1)![1].lastErrorCode).toBe(
         "provisioning.schema_mismatch",
       );
-      expect(reportFailure).toHaveBeenCalledWith(expect.stringContaining("Failed query"));
+      expect(reportFailure).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to run the query"),
+      );
       expect(d.scheduleStayedUp).not.toHaveBeenCalled();
     });
   });
@@ -879,7 +881,7 @@ describe("runEntry", () => {
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() =>
             Promise.reject(
-              new Error("Failed query", {
+              new Error("Failed to run the query 'select legal_name from taxpayer'", {
                 cause: Object.assign(new Error("no such column: legal_name"), {
                   errcode: 1,
                   code: "ERR_SQLITE_ERROR",
@@ -902,14 +904,16 @@ describe("runEntry", () => {
         deps({
           reportFailure,
           startServer: vi.fn<StartServer>(() =>
-            Promise.reject(new Error("connect failed: postgres://waitron:hunter2@db:5432/waitron")),
+            Promise.reject(
+              new Error("connect failed: https://waitron:hunter2@bucket.example:9000/waitron"),
+            ),
           ),
         }),
       ),
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     // The message must arrive, minus the secret.
-    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).toContain("https://waitron:***@bucket.example:9000/waitron");
     expect(reported).not.toContain("hunter2");
   });
 
@@ -921,9 +925,11 @@ describe("runEntry", () => {
           reportFailure,
           startServer: vi.fn<StartServer>(() =>
             Promise.reject(
-              new Error("Failed query: select absent_column\nparams: ", {
-                cause: Object.assign(new Error('column "absent_column" does not exist'), {
-                  code: "42703",
+              new Error("Failed to run the query 'select absent_column from t'", {
+                cause: Object.assign(new Error("no such column: absent_column"), {
+                  code: "ERR_SQLITE_ERROR",
+                  errcode: 1,
+                  errstr: "SQL logic error",
                 }),
               }),
             ),
@@ -932,9 +938,9 @@ describe("runEntry", () => {
       ),
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
-    expect(reported).toContain('column "absent_column" does not exist');
+    expect(reported).toContain("no such column: absent_column");
     // The outer wrapper still travels: the query text is diagnostic too.
-    expect(reported).toContain("Failed query: select absent_column");
+    expect(reported).toContain("Failed to run the query 'select absent_column from t'");
   });
 
   // An `AppError`'s params are the diagnosis: `migrations.incomplete`'s counts say how far a
@@ -1130,8 +1136,8 @@ describe("runEntry", () => {
 
   // The message is injected as a real boot failure and followed to both channels: a test rendering
   // a page the message never reached would pass against an implementation that leaks everywhere.
-  it("masks a leaked connection string on the page and in the installer's channel", async () => {
-    const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
+  it("masks a password in a leaked URL on the page and in the installer's channel", async () => {
+    const message = "connect failed: https://waitron:hunter2@bucket.example:9000/waitron";
     const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
     const reportFailure = vi.fn();
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
@@ -1155,12 +1161,12 @@ describe("runEntry", () => {
     ).text();
     expect(body).not.toContain("hunter2");
     // Present, masked: without this the line above would pass against a page showing no detail.
-    expect(body).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(body).toContain("https://waitron:***@bucket.example:9000/waitron");
 
     // The CONTROL, in the other direction: the same failure DOES reach the installer, scrubbed.
     // Without it, a page that rendered nothing at all would pass the assertions above.
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
-    expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
+    expect(reported).toContain("https://waitron:***@bucket.example:9000/waitron");
     expect(reported).not.toContain("hunter2");
   });
 

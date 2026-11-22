@@ -16,6 +16,8 @@ import {
 // undo-after-clear one also runs with the lock held around the write alone (`NO_LOCK=1`), where the
 // same schedule must lose a write — which is what shows it races at all. That control still locks
 // the write itself, because two writers clashing on `recovery.json.tmp` crash rather than lose one.
+// Weaker than its name: it proves `updateRecoveryState`'s lock, not that every writer of
+// `recovery.json` goes through it.
 
 const HOLD_MS = 1_000;
 const CHILD_DEADLINE_MS = 20_000;

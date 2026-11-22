@@ -14,7 +14,9 @@ function failedMigration(errcode: number): Error {
     errcode,
     code: "ERR_SQLITE_ERROR",
   });
-  return Object.assign(new Error("Failed query"), { cause: driver });
+  return new Error("Failed to run the query 'INSERT INTO `categories` (`id`) VALUES (1);'", {
+    cause: driver,
+  });
 }
 
 /** A REAL refusal from the engine, so one case does not rest on a chosen number. */
