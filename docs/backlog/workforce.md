@@ -47,11 +47,6 @@ Before adding cadence editing, decide how the first partial period follows a clo
 Keep saved periods and snapshots intact. The
 [owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
-## A763 point 9. The Rota tab opens the week last picked
-
-**Owner, 2026-10-16.** The Rota tab opens the week of the day last picked in Staffing, or the current week.
-[Original request and plan](../superpowers/plans/2026-11-22-d-a763-9-staffing-rota-week.md).
-
 ## A586. Each person's contract terms
 
 **Owner, 2026-10-22.** Kept per person, because one venue can hold different contracts:
@@ -173,11 +168,6 @@ exists unused. Shown in A585's picker and warnings. After A586.
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
   in the backlog until then.
   [Receipt and next step](workforce.md#pay-period-changes-after-closure).
-
-## Bundle: Staffing month day box
-
-- **A763 point 9. The Rota tab opens the week last picked (owner, 2026-10-16).**
-  [Detail](#a763-point-9-the-rota-tab-opens-the-week-last-picked).
 
 ## Decisions and deliberate limits
 
