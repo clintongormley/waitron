@@ -1,4 +1,4 @@
-import { formatChangeoverMoment, formatDayAndMonth } from "@waitron/dashboard-kit";
+import { formatChangeoverMoment, formatDayAndMonth, pickLocale } from "@waitron/dashboard-kit";
 import type { BusinessDayClockConflict } from "@waitron/module";
 import { format } from "./hours-view.js";
 import type { Refusal } from "./refusal.js";
@@ -17,12 +17,11 @@ export function clockChangeConflictText(refusal: Refusal): string | undefined {
     conflicts: readonly BusinessDayClockConflict[];
   };
   const first = params.conflicts[0]!;
+  const weekday = first.weekday === undefined ? undefined : weekdayLabel(first.weekday);
   const day =
-    first.date === undefined
-      ? first.weekday === undefined
-        ? undefined
-        : weekdayLabel(first.weekday)
-      : formatDayAndMonth(first.date);
+    first.date !== undefined
+      ? formatDayAndMonth(first.date, pickLocale({ en: "en-GB", es: "es" }))
+      : weekday && pickLocale({ en: weekday, es: weekday.toLowerCase() });
   return format("hours.clock_change_conflict", {
     range: [
       first.specialDayName ?? first.seasonName,

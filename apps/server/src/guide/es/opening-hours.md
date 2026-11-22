@@ -10,7 +10,7 @@ Para cambiar el horario habitual, sigue el enlace **Horario habitual** de la tem
 
 ## Resuelve un conflicto con el inicio del día de trabajo {#business-day-start}
 
-Busca el tramo indicado en el mensaje por departamento, día y horas. Abre la temporada o el día especial que se indica y comprueba la zona y el periodo si aparecen en el mensaje. Ajusta el tramo o elige otra hora de inicio.
+Busca el tramo por el departamento, el día y las horas que se indican en el conflicto. En la vista previa del inicio, elige **Revisar horarios**. Abre la temporada o el día especial indicado y comprueba la zona o el periodo si aparecen. Ajusta el horario o elige otra hora de inicio.
 
 Si cambia el inicio del día de trabajo mientras editas la hora de inicio, cierra y vuelve a abrir el editor. Comprueba la hora actual y la vista previa antes de guardar.
 

@@ -43,7 +43,7 @@ it("names the clashing range, the new start, when it takes effect and why", () =
 it("says it in Spanish", () => {
   setLocale("es");
   expect(clockChangeConflictText(conflict("transition_strip"))).toBe(
-    "Restaurant · Viernes · Dinner · 21:00–02:45 choca con el nuevo inicio del día de trabajo, 03:00 desde mié 21 oct, 03:00: El horario coincide con el cambio de inicio.",
+    "Restaurant · viernes · Dinner · 21:00–02:45 choca con el nuevo inicio del día de trabajo, 03:00 desde mié 21 oct, 03:00: El horario coincide con el cambio de inicio.",
   );
 });
 
@@ -75,7 +75,6 @@ it("identifies zone and department hours without a period", () => {
 });
 
 it("names the special day and date instead of the weekly hours", () => {
-  setLocale("en-GB");
   expect(
     clockChangeConflictText(
       conflict("range", { specialDayName: "Festival", date: "2026-10-24", periodName: "Dinner" }),

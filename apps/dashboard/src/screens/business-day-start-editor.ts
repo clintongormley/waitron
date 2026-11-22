@@ -16,6 +16,7 @@ import {
 import {
   baseStyles,
   draftScopeFor,
+  FormFeedback,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -99,11 +100,11 @@ export class BusinessDayStartEditor extends LitElement {
   @state() private draft?: Draft;
   @state() private preview?: BusinessDayStartPreview;
   @state() private busy = false;
-  @state() private attempted = false;
   @state() private errors: Partial<Record<keyof Draft, string>> = {};
   @state() private actionError = "";
   @state() private previewError = "";
   @state() private previewFieldError = "";
+  readonly #feedback = new FormFeedback(this);
   #baseline?: Draft;
   #revision = 0;
   #clockIdentity = "";
@@ -213,7 +214,7 @@ export class BusinessDayStartEditor extends LitElement {
         this.draft = value;
         this.errors = {};
         this.actionError = "";
-        this.attempted = false;
+        this.#feedback.reset();
         this.#refreshPreview();
       },
     });
@@ -229,9 +230,8 @@ export class BusinessDayStartEditor extends LitElement {
     this.#baseline = { dayCutover: this.#waiting().at(-1)?.dayCutover ?? this.#inForce() };
     this.draft = { ...this.#baseline };
     this.actionError = "";
-    this.#clockChangeRefusal = "";
     this.errors = {};
-    this.attempted = false;
+    this.#feedback.reset();
     this.#register();
     this.#refreshPreview();
   }
@@ -323,14 +323,13 @@ export class BusinessDayStartEditor extends LitElement {
     if (!this.draft || this.busy || this.readOnly) return;
     this.draft = { ...this.draft, [field]: event.detail.value };
     this.#scope?.changed();
-    this.errors = this.attempted ? this.#problems() : {};
-    if (this.actionError === t("form.fix_fields") && !Object.keys(this.errors).length)
-      this.actionError = "";
+    this.errors = this.#feedback.attempted ? this.#problems() : {};
+    this.actionError = this.errors.dayCutover ? t("form.fix_fields") : "";
     this.#refreshPreview();
   }
   async #save(): Promise<void> {
     if (!this.draft || this.busy || this.readOnly || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.errors = this.#problems();
     if (Object.keys(this.errors).length) {
       this.actionError = t("form.fix_fields");
@@ -623,7 +622,7 @@ export class BusinessDayStartEditor extends LitElement {
                   ><wt-button
                     data-test="save"
                     variant=${ready ? saveAction.variant : "secondary"}
-                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.attempted && Object.keys(this.#problems()).length > 0)}
+                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.#feedback.attempted && Object.keys(this.#problems()).length > 0)}
                     @click=${() => {
                       if (active()) void this.#save();
                     }}

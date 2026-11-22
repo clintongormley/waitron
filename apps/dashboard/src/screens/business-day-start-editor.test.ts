@@ -249,6 +249,25 @@ it("shows a server field refusal without disabling a retry", async () => {
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBeTruthy();
   expect(save(el).disabled).toBe(false);
 });
+it("shows the new draft's preview refusal after a failed Save of the previous draft", async () => {
+  setLocale("en-GB");
+  const { el } = await rig({
+    previewBusinessDayStart: async ({ dayCutover }) => {
+      if (dayCutover === "03:00") return preview();
+      throw { code: "venue.business_day_invalid", params: { field: "dayCutover" } };
+    },
+    putBusinessDayStart: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  await ready(el);
+  await click(el, "save");
+  const footer = q<WtFormActions>(el, "wt-form-actions")!;
+  expect(footer.error).toContain("This browser could not connect to Waitron.");
+  await change(el, "dayCutover", "04:00");
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("Check the start time.");
+  expect(footer.error).toBe("Check the start time.");
+});
 it("shows schedule conflicts and keeps Save disabled", async () => {
   const { el } = await rig({
     previewBusinessDayStart: async () => ({
