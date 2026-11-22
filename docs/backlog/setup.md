@@ -227,19 +227,10 @@ for these boxes, is still open to the owner.
   archive. Decide whether those tests should
   place archives through `runStagedRestore` instead, then delete it. Left open by A1131bc slice 4.
 
-## Recovery operations still buffer whole database files
+## Stream recovery archive uploads and configuration imports
 
-A1334 separates ordinary first-setup admission from exact recovery snapshots. The remaining
-whole-file reads are separate work:
-
-- `packages/provisioning/src/first-setup-resolution-inspection.ts` fingerprints `venue.db` and its
-  WAL for the repair inspection and captures originals with `readFile`. Each database artifact is
-  capped at 128 MiB. Keep content-change detection when replacing those buffers. A1159's Start
-  again work remains open.
-- The unused archive branch of `/recovery/preparation` and emergency handover still buffer archives
-  within 256 MiB.
-  Configuration transfer retains its separate buffer.
-  These are transfer limits and buffers, not ordinary-start database admission.
+The unused archive branch of `/recovery/preparation` and emergency handover buffer archive uploads
+within 256 MiB. Configuration imports have their own buffer.
 
 ## Qualify year-sized Cloud backups and revisit incremental copies with venue measurements
 

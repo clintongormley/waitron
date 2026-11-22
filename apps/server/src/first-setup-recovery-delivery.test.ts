@@ -265,13 +265,23 @@ it("kept confirmation installs the delivered verifier once, with only public met
   const verifier = await readRecoveryKeyVerifier(suite.node, f.staged.key.nodeId);
   expect(verifier).toBe(f.staged.stage.verifier);
   expect(await verifySecretAsync(f.staged.key.secret, verifier!)).toBe(true);
+  const database = join(f.venueDir, "venue.db");
+  await suite.db.archiveTo(database);
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
-  const originals = snapshot.originals.filter((entry) => entry.bytes !== null);
-  expect(originals.some((entry) => entry.name === "state/flows/setup/record.json")).toBe(true);
-  for (const entry of originals) {
-    expect(Buffer.from(entry.bytes!).toString()).not.toContain(f.staged.key.secret);
-    expect(Buffer.from(entry.bytes!).toString()).not.toContain(PASSWORD);
-    expect(Buffer.from(entry.bytes!).toString()).not.toContain("%PDF-");
+  expect(
+    snapshot.originals.some(
+      (entry) => entry.name === "state/flows/setup/record.json" && entry.bytes !== null,
+    ),
+  ).toBe(true);
+  const contents = snapshot.originals.flatMap(({ bytes }) => (bytes === null ? [] : [bytes]));
+  contents.push(await readFile(database));
+  if ((await readdir(f.venueDir)).includes("venue.db-wal"))
+    contents.push(await readFile(join(f.venueDir, "venue.db-wal")));
+  for (const bytes of contents) {
+    const text = bytes.toString();
+    expect(text).not.toContain(f.staged.key.secret);
+    expect(text).not.toContain(PASSWORD);
+    expect(text).not.toContain("%PDF-");
   }
   expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toMatchObject(f.ref);
   await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({

@@ -42,6 +42,7 @@ import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import { quoteIdent } from "./identifiers.js";
+import { fingerprintFileHandle } from "./file-handle-fingerprint.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -334,15 +335,7 @@ async function sha256(path: string): Promise<StartAgainFingerprint> {
   try {
     const handle = await open(path);
     try {
-      const hash = createHash("sha256");
-      let size = 0;
-      for await (const chunk of handle.createReadStream({
-        autoClose: false,
-      }) as AsyncIterable<Buffer>) {
-        hash.update(chunk);
-        size += chunk.length;
-      }
-      return { size, sha256: hash.digest("hex") };
+      return await fingerprintFileHandle(handle);
     } finally {
       await handle.close();
     }

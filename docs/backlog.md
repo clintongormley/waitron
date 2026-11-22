@@ -405,13 +405,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **Recovery operations still buffer whole database files.** First-setup repair snapshots retain
-  their 128 MiB budget.
-  Replace these buffers with file-based processing while preserving their
-  exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
-  The unused archive-preparation route and emergency handover still buffer uploads within 256 MiB.
-  Configuration imports keep their separate buffer.
-  [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+- **Stream recovery archive uploads and configuration imports.**
+  The unused archive-preparation route and emergency handover buffer uploads within 256 MiB.
+  Configuration imports have their own buffer.
+  [Detail](backlog/setup.md#stream-recovery-archive-uploads-and-configuration-imports).
 
 - **Qualify year-sized Cloud backups and revisit incremental copies with venue measurements.**
   Pair the box and Cloud release candidates on a year-sized backup and near-cap publication.

@@ -6618,8 +6618,10 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
 Use `inspectFirstSetupDatabase` for admission. It checks the regular file through a no-follow,
 nonblocking open, then reads the taxpayer and venue rows through SQLite. The resumable record reader
 checks the matching ownership pair; the start repeats admission while holding the venue lock.
-Recovery inspection still fingerprints artifacts and captures exact originals under its separate
-128 MiB snapshot budget. That budget must not decide whether an existing database is readable.
+First-setup repair streams a SHA-256 fingerprint of the database and its write-ahead log after
+SQLite closes. Each file has a 128 MiB snapshot limit. Capture compares the opening and closing
+inspection IDs and keeps the bytes of setup records and delivery evidence it uses. Ordinary
+first-setup admission reads SQLite without the snapshot limit.
 
 Measured on 5 November 2026 with `pnpm --filter @waitron/server exec vitest run
 src/first-setup-growth.test.ts`: real HTTPS first setup completed, its records remained complete,
@@ -6642,8 +6644,9 @@ to cross the size boundary quickly; it does not measure photo preparation throug
 Run `pnpm --filter @waitron/provisioning exec vitest run
 src/first-setup-resolution-inspection.test.ts` for damaged/missing/symlink refusal checks, inspection
 fingerprints and snapshot limits. A large valid database is classified from its SQLite rows even
-when its exact recovery snapshot is over budget. Remaining whole-file recovery reads are tracked
-in [the setup backlog](../backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
+when its repair snapshot is over the limit. The
+[setup backlog](../backlog/setup.md#stream-recovery-archive-uploads-and-configuration-imports)
+tracks the remaining transfer buffers.
 
 ## An open FileHandle ends the process when it is collected
 
