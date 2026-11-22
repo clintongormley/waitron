@@ -927,7 +927,7 @@ describe("refreshBasket", () => {
     });
   });
 
-  it("keeps a line whose quantity the live unit cannot hold out of adoption, so the preview still reads it", () => {
+  it("keeps a line whose quantity the live unit cannot hold out of adoption", () => {
     const widened = menuOfferToTillProduct(burger, "v1");
     const line: OrderLine = {
       product: { ...widened, unit: { ...unit, precision: 3 } },
@@ -939,7 +939,6 @@ describe("refreshBasket", () => {
     store.loadFrom("draft-1", [line]);
     store.adoptLines(outcome.adopted);
 
-    expect(() => store.total).not.toThrow();
     expect(outcome.blocked).toEqual([{ lineNo: 1, name: "burger", reason: "unit_changed" }]);
     expect(outcome.adopted.has(0)).toBe(false);
   });

@@ -910,8 +910,7 @@ answered "yes" on 2026-11-22; pieces B and C have no plan yet. From M7v, owner r
 at landing (2026-09-27): invoice-first issues at placing, so it takes the placing day's rate; a
 box holding order lines is reset rather than given data-migration code; and every invoice path
 reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-add.test.ts`
-copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
-a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
+copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it.
 
 ## Offer 2%, 5% and 7.5% taken away once modelo 303 can report them
 

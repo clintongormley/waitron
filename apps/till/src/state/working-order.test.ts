@@ -443,6 +443,35 @@ describe("WorkingOrderStore", () => {
     expect(s.lines).toHaveLength(0);
   });
 
+  it("totals a product without changing its source facts", () => {
+    const product = {
+      id: "dish",
+      name: "Staff dish",
+      customerName: { fr: "Other dish" },
+      variantId: "variant",
+      variantName: "Staff large",
+      variantCustomerName: { es: "Requested large" },
+      unitPrice: "12.10",
+      vatClass: "general" as const,
+      category: null,
+      allergens: null,
+      unit: {
+        id: "unit",
+        staffName: "Staff portion",
+        staffAbbreviation: "sp",
+        name: { fr: "Other portion" },
+        abbreviation: { fr: "op" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+    };
+    const before = structuredClone(product);
+    const store = new WorkingOrderStore();
+    store.addProduct(product, "2");
+    expect(store.total).toBe("24.20");
+    expect(product).toEqual(before);
+  });
+
   it("notifies subscribers on add and on clear, then empties the lines", () => {
     const s = new WorkingOrderStore();
     let n = 0;
