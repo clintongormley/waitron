@@ -1917,6 +1917,22 @@ it("emits a country pack with no provinces or validators as the operator typed i
   }
 });
 
+it.each(["constructor", "toString", "__proto__"])(
+  "labels a pack's receipt language %s with its code",
+  async (code) => {
+    const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
+    const pack: CountryPack = { ...SPARSE_PACK, invoiceLocales: [code] };
+    packs.push(pack);
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      await type(el, "country", "ZZ");
+      expect(q(el, `[data-test=locale-${code}]`)!.parentElement!.textContent!.trim()).toBe(code);
+    } finally {
+      packs.splice(packs.indexOf(pack), 1);
+    }
+  },
+);
+
 describe("setup-venue-screen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 

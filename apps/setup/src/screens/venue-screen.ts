@@ -1315,7 +1315,7 @@ export class SetupVenueScreen extends LitElement {
                       ?disabled=${fixed !== undefined}
                       @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
                     />
-                    ${RECEIPT_LANGUAGES[locale] === undefined ? locale : t(RECEIPT_LANGUAGES[locale].selectionLabel)}
+                    ${Object.hasOwn(RECEIPT_LANGUAGES, locale) ? t(RECEIPT_LANGUAGES[locale].selectionLabel) : locale}
                   </label>`,
               )}
               ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
