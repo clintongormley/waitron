@@ -196,7 +196,6 @@ describe("future order customer fallback", () => {
           tx,
           venue.cfg,
           randomUUID(),
-          "eat_in",
           [{ menuItemId: setup.offers.offerFor(setup.dish.id), quantity: "1" }],
           setup.offers.zoneId,
         ),
@@ -264,7 +263,6 @@ describe("future order customer fallback", () => {
         tx,
         venue.cfg,
         randomUUID(),
-        "eat_in",
         [
           {
             menuItemId: setup.offers.offerFor(setup.dish.id),

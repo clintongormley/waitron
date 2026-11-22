@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   products,
@@ -42,6 +42,19 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
+
+// Passes every call through, counting the reads of the products' takeaway rates.
+const rateReads = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@waitron/menu", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/menu")>();
+  return {
+    ...actual,
+    readTakeawayVatSchedules: (...args: Parameters<typeof actual.readTakeawayVatSchedules>) => {
+      rateReads.count++;
+      return actual.readTakeawayVatSchedules(...args);
+    },
+  };
+});
 
 // Taken away, a product line files at its product's own takeaway rate as it stands when the invoice
 // is issued, never at a label frozen on the line. Every product here is labelled `reduced` (10%)
@@ -325,6 +338,39 @@ describe("a takeaway product with no rate", () => {
     ).rejects.toMatchObject({ code: "vat_rate.unavailable", params: { lineNo: 1 } });
     expect(filedRates(venue.db, tabId)).toEqual([]);
   });
+
+  it("refuses a walk-up payment vat_rate.unavailable, leaving no order and no payment", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    await inTx(venue, tillChoiceEverywhere);
+    const croquettes = await productNamed(venue, "Croquettes");
+    await replaceRows(venue, croquettes, []);
+    const id = randomUUID();
+
+    const refused = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "20.00",
+        dining: "takeaway",
+        basket: { lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }] },
+      },
+    );
+
+    expect(refused).toMatchObject({
+      status: 400,
+      json: { code: "vat_rate.unavailable", params: { lineNo: 1 } },
+    });
+    expect(venue.db.all(sql`select id from working_orders where id = ${id}`)).toEqual([]);
+    expect(venue.db.all(sql`select id from bill_payments where working_order_id = ${id}`)).toEqual(
+      [],
+    );
+  });
 });
 
 describe("a takeaway set-menu bill paid by a captured card", () => {
@@ -388,5 +434,54 @@ describe("a takeaway set-menu bill paid by a captured card", () => {
         .from(payments)
         .where(eq(payments.workingOrderId, tabId)),
     ).toEqual([{ state: "captured" }]);
+  });
+});
+
+describe("the products' takeaway rates are read once per basket", () => {
+  async function twentyLines() {
+    const venue = await provisionBillVenue(suite.db);
+    const { menu, counter } = await inTx(venue, async (tx) => {
+      await tillChoiceEverywhere(tx);
+      const menu = await seedTakeawayProducts(tx);
+      return { menu, counter: await offerProducts(tx, venue.cfg) };
+    });
+    const lines = Array.from({ length: 20 }, (_, i) => ({
+      menuItemId: counter.offerFor(i % 2 === 0 ? menu.cola : menu.cheese),
+      quantity: "1",
+    }));
+    return { venue, counter, lines };
+  }
+
+  it("by a walk-up payment", async () => {
+    const { venue, counter, lines } = await twentyLines();
+    const id = randomUUID();
+
+    rateReads.count = 0;
+    const sold = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "60.00",
+      dining: "takeaway",
+      basket: { zoneId: counter.zoneId, lines },
+    });
+
+    expect(sold.status).toBe(200);
+    expect(rateReads.count).toBe(1);
+    expect(filedRates(venue.db, id)).toEqual(
+      Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? 2100 : 400)),
+    );
+  });
+
+  it("when a parked order is paid, and not when it is parked", async () => {
+    const { venue, counter, lines } = await twentyLines();
+
+    rateReads.count = 0;
+    const id = await park(venue, counter, "takeaway", lines);
+    expect(rateReads.count).toBe(0);
+    await paidInCash(venue, id, "58.00");
+
+    expect(rateReads.count).toBe(1);
   });
 });

@@ -68,7 +68,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { receiptQr, readSettledTicket } from "./till-sale.js";
-import { createOpenOrder, getHeldOrder } from "./working-order.js";
+import { createOpenOrder, getHeldOrder, priceStoredOrderForIssuance } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { recordSale } from "@waitron/core";
@@ -1732,8 +1732,6 @@ describe("ordering extras and options — parent + child lines", () => {
       workingOrderId,
     );
 
-    // A walk-up files from the price `createOpenOrder` returns, not the stored lock, so the answers
-    // must ride on that price too.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed.map((line) => line.optionSnapshots)).toEqual([[largeSnapshot(v.defaultLanguage)]]);
   });
@@ -1852,7 +1850,13 @@ describe("ordering extras and options — parent + child lines", () => {
         null,
         { zoneId: v.zoneId },
       );
-      return rateLines(gross, "2026-09-27");
+      // Rated with the rates the issue reads, which the add-time price does not carry.
+      const { gross: stored } = await priceStoredOrderForIssuance(tx, workingOrderId);
+      const rated = gross.lines.map((line, i) => ({
+        ...line,
+        vatRates: stored.lines[i]!.vatRates,
+      }));
+      return rateLines({ ...gross, lines: rated }, "2026-09-27");
     });
 
     // RETRIEVE + PAY with no basket, so the children are re-priced from their stored lock.

@@ -1829,8 +1829,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                 tx,
                 cfg,
                 body.workingOrderId ?? newId(),
-                // Priced only for its dishes' routes, never for a class.
-                "eat_in",
                 active.map(({ line }) => line),
                 zoneId ?? undefined,
                 undefined,
@@ -3921,8 +3919,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           tx,
           cfg,
           newId(),
-          // Priced only for its dishes' routes, never for a class.
-          "eat_in",
           lines.map((line) => ({
             menuItemId: line.menuItemId,
             quantity: line.quantity,

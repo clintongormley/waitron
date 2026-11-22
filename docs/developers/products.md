@@ -180,8 +180,9 @@ product's current ones. A line added to a held order or a tab stores that class
 which a bill, payment or filing rates the line at; it is fixed once the kitchen has any of the
 order, a payment has started or the order is no longer open (`working_orders_dining_fixed`); a
 walk-up sale is priced at payment, from the version live then (`priceOrderLines`,
-`apps/server/src/working-order.ts`). Both pricing a line and reading stored lines for a bill,
-payment or filing take each line's rate list from `readLineVatRates`
+`apps/server/src/working-order.ts`), which leaves a line without rates, and is filed from the
+lines it stored. Reading stored lines for a bill, payment or filing takes each line's rate list
+from `readLineVatRates`
 (`apps/server/src/line-vat-rates.ts`): eaten here, its class's list in `VAT_RATE_TABLE`; taken
 away, a set-menu line its set menu's takeaway class, and any other line its product's rows in
 `product_takeaway_vat_rates`, or its parent's when a variant has none

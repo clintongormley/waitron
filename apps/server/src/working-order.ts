@@ -295,12 +295,7 @@ import {
 } from "./bill-advances.js";
 import type { AdvanceCredit } from "./advance-deduction.js";
 import { VENUE_SERVICE } from "./modules.js";
-import {
-  readOrderDinings,
-  requireOrderDining,
-  storedOrderDining,
-  type DiningChoice,
-} from "./order-dining.js";
+import { readOrderDinings, requireOrderDining, type DiningChoice } from "./order-dining.js";
 import { readMadeHereStations } from "./made-here.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -651,16 +646,13 @@ const STORED_SET_MENU_OFFER = Symbol("storedSetMenuOffer");
 type StoredSetMenuOffer = NonNullable<ReturnType<SetMenuOfferLookup["offerFor"]>>;
 
 /**
- * Return insertable snapshots and their gross lines together, so a caller filing
- * the same basket rates those rather than pricing it twice. The stored gross unit price and
- * classification are what the line files, at its class for the order's way of selling.
+ * Return insertable snapshots and their gross lines together. The gross lines total but carry no
+ * rates, so they cannot be rated: an order is filed from its stored lines, rated at issue.
  */
 export async function priceOrderLines(
   tx: Transaction,
   cfg: TradingContext,
   workingOrderId: string,
-  /** The gross lines are priced at this way's classes; the rows store both. */
-  dining: Dining,
   // `courseId` absent or null = the offer's default course; a string is an override.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
@@ -954,7 +946,7 @@ export async function priceOrderLines(
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: classes.vatClass,
-      // Set below from `readLineVatRates`, once every line's extras are known.
+      // Empty, so rating these lines refuses: a line's rate is read when its order is issued.
       vatRates: [] as readonly DatedRate[],
       category: selection.category,
       courseId: selection.courseId,
@@ -1081,23 +1073,6 @@ export async function priceOrderLines(
     else await requireLiveCourse(tx, courseId);
   }
 
-  const rates = await readLineVatRates(
-    tx,
-    dining,
-    lineMeta.map((meta) => ({
-      productId: meta.productId,
-      setMenuRole: null,
-      vatClass: meta.vatClass,
-      takeawayVatClass: meta.takeawayVatClass,
-    })),
-  );
-  // `lineMeta` lists each item's product, then its options, as `items` does.
-  let rated = 0;
-  for (const item of items) {
-    item.product.vatRates = rates[rated++]!;
-    for (const option of item.options) option.vatRates = rates[rated++]!;
-  }
-
   const gross = grossBasketWithOptions(items);
   const classification = await loadClassification(tx, [
     ...new Set(lineMeta.map((meta) => meta.productId)),
@@ -1135,8 +1110,6 @@ export async function priceOrderLines(
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // Read off the gross line, so this row and a walk-up's sale filed from the same `gross`
-      // result cannot describe different answers.
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
@@ -1681,7 +1654,6 @@ export async function createOpenOrder(
     tx,
     cfg,
     id,
-    dining,
     lines,
     effectiveZoneId,
     undefined,
@@ -3251,7 +3223,6 @@ export async function priceTabRound(
     tx,
     cfg,
     tabId,
-    await storedOrderDining(tx, tabId),
     lines,
     context?.zoneId,
     undefined,
@@ -5912,7 +5883,7 @@ interface LineIntent {
   extras: { set: unknown } | null;
 }
 
-type RequestedLine = Parameters<typeof priceOrderLines>[4][number];
+type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
 
 /**
  * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
@@ -6617,7 +6588,6 @@ async function applyLineEdits(
     tx,
     cfg,
     orderId,
-    await storedOrderDining(tx, orderId),
     pricing,
     context?.zoneId,
     snapshot,
