@@ -258,9 +258,6 @@ Left open:
   another group still refuses a partial move of a line with extras (`tab.transfer_modifier_line`):
   part of a weighed dish.
   **Next action:** decide whether that partial move should split extras too.
-- The till's "Amount off (€)" writes the euro sign into the label rather than taking the
-  venue's currency. How a comp or discount appears on the invoice was asesor Q29: its discount lines were answered
-  from primary sources, and a free item's share of the price by the adviser's answer 1.10 (A445).
 
 ## Task 16 (#981, counter handover; with B25, B26, B29, B30)
 

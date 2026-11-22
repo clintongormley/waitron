@@ -56,7 +56,9 @@ async function mount(over: Partial<Pick<AdjustmentLeaveApp, "kind" | "target" | 
   return { app, form };
 }
 async function fill(form: TillAdjustmentDialog, name: string, value: string) {
-  const field = form.shadowRoot!.querySelector<WtInput>(`wt-input[name=${name}]`)!;
+  const field = form.shadowRoot!.querySelector<WtInput>(
+    `:is(wt-input, wt-price-input)[name=${name}]`,
+  )!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   await userEvent.fill(page.elementLocator(input), value);
