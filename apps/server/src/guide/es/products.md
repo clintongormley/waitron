@@ -350,8 +350,8 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
 Abre **Vista previa** para revisar tus cambios antes de publicar. Si un cambio ofrece
-**Deshacer**, púlsalo para recuperar el valor publicado. Si cambiaste cómo se mostraba una carta incluida, la
-recuperas tal como estaba publicada, directamente o como carpeta con sus nombres, foto y color.
+**Deshacer**, púlsalo para recuperar el valor publicado. En una carta incluida, recuperas
+la presentación directa o la carpeta con los nombres, la foto y el color que tenía al publicarse.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
