@@ -21,7 +21,7 @@ the same readers. Scope comes from Lane F's A980-DOWNLOAD-DRAWER-PAYMENTS queue 
   response took 116 ms and exported 7,500 bill payments. Lane F receipts hold the probe and raw times.
 - For `drawer_entries.person_id` include cash in, cash out, count, recount and finish, with
   kind, time and the signed recorded amount in decimal money. Finish records the amount taken
-  to bank. The derived count difference includes cash other staff moved, so omit it (watcher,
+  to bank, which the watcher confirmed at 09:40. The derived count difference includes cash other staff moved, so omit it (watcher,
   09:14). The payment and refund rows repeat the requesters already covered in the bill
   payment and refund sections. State that reason at the filter and in the column inventory.
 - For `bill_payments.requested_by` and `attested_by`, include method, applied amount, tip, state,
