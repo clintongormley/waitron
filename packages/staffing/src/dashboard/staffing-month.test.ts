@@ -1098,7 +1098,8 @@ describe("the day box", () => {
     });
 
     it("above a day in the bottom row of a phone, when below it does not fit", async () => {
-      await useViewport(390, 800);
+      // Keep room above the trigger for nine wrapped area rows and the phase line.
+      await useViewport(390, 1000);
       const { el } = await mount({
         api: manyAreas(),
         width: "390px",
