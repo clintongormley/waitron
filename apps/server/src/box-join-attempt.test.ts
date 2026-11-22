@@ -611,10 +611,10 @@ describe("the new box's join attempt", () => {
     expect(attempt.joined()?.bundle).toEqual(bundle);
   });
 
-  it.each([
+  it.each<[string, () => Promise<{ bundle: unknown; signingKey?: string }>]>([
     ["approved", async () => ({ bundle: await bundleFor() })],
     ["failed", async () => ({ bundle: await bundleFor(), signingKey: otherKey() })],
-  ] as const)(
+  ])(
     "forgets a join that is %s here when the main box refuses its cancel, so a new one can start",
     async (state, make) => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });

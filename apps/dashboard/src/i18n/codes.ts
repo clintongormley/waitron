@@ -1654,8 +1654,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Hace un momento se aprobó la unión de otro servidor. Elige primero Terminar la unión en ese servidor. Si no va a terminar, vuelve a intentarlo con este dentro de unos minutos.",
   },
   "mirror.join_stopped_after_listing": {
-    en: "The new box stopped asking to join while its copy was being prepared, so nothing was sent. Remove it from the list on this page, then choose Start again on the new box.",
-    es: "El servidor nuevo dejó de pedir unirse mientras se preparaba su copia, así que no se ha enviado nada. Retíralo de la lista de esta página y elige Empezar de nuevo en el servidor nuevo.",
+    en: "This join stopped while the new box's copy was being prepared, so nothing was sent, but this page now lists the new box. Choose Remove in its row, then Clear from list, then choose Start again on the new box.",
+    es: "Esta unión se detuvo mientras se preparaba la copia del servidor nuevo, así que no se ha enviado nada, pero esta página ya muestra el servidor nuevo. Elige Retirar en su fila y después Quitar de la lista; luego elige Empezar de nuevo en el servidor nuevo.",
   },
   "mirror.spare_already_joined": {
     en: "This venue already has a spare box. Remove it on this page before adding another.",

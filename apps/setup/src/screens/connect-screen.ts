@@ -50,6 +50,7 @@ const ENDED_WORDS: Record<string, StringKey> = {
   cancelled: "connect.ended.cancelled",
   code_taken: "connect.ended.code_taken",
   invalid: "connect.ended.invalid",
+  stopped: "connect.ended.stopped",
 };
 
 const FAILED_WORDS: Record<string, StringKey> = {

@@ -28,6 +28,7 @@ export const JOIN_END_REASONS = [
   "cancelled",
   "code_taken",
   "invalid",
+  "stopped",
 ] as const;
 export type JoinEndReason = (typeof JOIN_END_REASONS)[number];
 
@@ -458,6 +459,12 @@ export function createBoxJoinRequests(options: BoxJoinRequestsOptions = {}) {
         r.keptUntil = steadyNow() + ENDED_KEPT_MS;
         changed();
         return true;
+      },
+
+      /** The approval failed after the chart listed the spare, so the request cannot go back. */
+      stop(requestId: string): void {
+        const r = held(requestId);
+        if (r?.phase === "building") end(r, "stopped", steadyNow());
       },
 
       /** A build refusal leaves the request waiting, so a right tap can be sent again. */

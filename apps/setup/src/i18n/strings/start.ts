@@ -118,6 +118,8 @@ export const startEn = {
     "The main box's Servers page dismissed this request. Choose Start again to ask again.",
   "connect.ended.cancelled":
     "This request was cancelled, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
+  "connect.ended.stopped":
+    "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
   "connect.ended.unknown":
     "The main box ended this request, so its code no longer counts and nothing was sent. Choose Start again for a new code.",
   "connect.ended.code_taken": "The main box needs this box to ask again. Choose Start again.",
@@ -358,6 +360,8 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "En la página Servidores del servidor principal se descartó esta solicitud. Elige Empezar de nuevo para volver a pedir la unión.",
   "connect.ended.cancelled":
     "Esta solicitud se canceló, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
+  "connect.ended.stopped":
+    "El servidor principal se detuvo a medias al aprobar este servidor, así que no se ha instalado nada. En la página Servidores del servidor principal, elige Retirar en la fila de este servidor y después Quitar de la lista. Luego elige Empezar de nuevo aquí.",
   "connect.ended.unknown":
     "El servidor principal terminó esta solicitud, así que su código ya no vale y no se ha enviado nada. Elige Empezar de nuevo para obtener un código nuevo.",
   "connect.ended.code_taken":

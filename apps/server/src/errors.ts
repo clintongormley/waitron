@@ -1593,7 +1593,10 @@ declare module "@waitron/shared" {
      * minutes ago; the request stays waiting.
      */
     "mirror.join_other_approved": Record<string, never>;
-    /** The request ended while its copy was built, after the chart had listed the spare. */
+    /**
+     * The request ended while its copy was built, or the approval failed after the chart had
+     * listed the spare; either way the chart lists it.
+     */
     "mirror.join_stopped_after_listing": Record<string, never>;
     /**
      * This box already has a join attempt, or is starting or cancelling one; a held attempt must be

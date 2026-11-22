@@ -422,6 +422,10 @@ describe("setup-connect-screen: the words of every state", () => {
       "The main box could not read this box's request. Choose Start again. If it happens again, check that both boxes run the same Waitron version.",
     ],
     [
+      { state: "ended", reason: "stopped" },
+      "The main box stopped partway through approving this box, so nothing was installed. On the main box's Servers page, choose Remove in this box's row, then Clear from list. Then choose Start again here.",
+    ],
+    [
       { state: "ended", reason: "unknown" },
       `The main box ended this request, so its code no longer counts and nothing was sent. ${START_AGAIN_FOR_CODE}`,
     ],

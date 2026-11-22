@@ -106,13 +106,15 @@ interface JoiningSpare {
  * Reserves the spare's identity, lists it in the chart and records its pending pair link, then
  * answers its bundle. `signingKey` is this box's node key, which the caller has unsealed before
  * anything is written; the check below, the bundle's endorsement and every chart round sign or
- * verify with it. `moduleOperations` carry the caller's authority to each module.
+ * verify with it. `moduleOperations` carry the caller's authority to each module. `listed` is called
+ * once the chart naming the spare has committed, so a caller can tell a failure after that apart.
  */
 export async function issueMirrorBundle(
   deps: MirrorBundleIssueDeps,
   spare: JoiningSpare,
   signingKey: string,
   moduleOperations?: ModuleOperations,
+  listed: () => void = () => {},
 ): Promise<MirrorBundle> {
   const { standby } = spare;
   // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
@@ -149,15 +151,18 @@ export async function issueMirrorBundle(
       primaryPrivateKey: signingKey,
       // With the reservation, so no bundle is handed out for a node the chart omits (a till
       // reroutes by the chart's `contactUrl`), and a chart write that gives up reserves nothing.
-      reservationTransaction: (endorsement, reserve) =>
-        listStandbyThenReserve(
+      reservationTransaction: async (endorsement, reserve) => {
+        const reserved = await listStandbyThenReserve(
           deps,
           signingKey,
           standby.nodeId,
           spare.contactUrl,
           endorsement,
           reserve,
-        ),
+        );
+        listed();
+        return reserved;
+      },
     });
     await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
       role: "streams",

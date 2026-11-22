@@ -6,7 +6,7 @@ import { createPublicKey } from "node:crypto";
 import { isIP } from "node:net";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isAppError, isUuid } from "@waitron/shared";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -407,6 +407,7 @@ export function mountBoxJoinPersonApi(
           throw new AppError("mirror.join_other_approved", {});
         throw new AppError("mirror.join_not_found", {});
       }
+      let listed = false;
       try {
         // Before anything is written, so a key that cannot lock the copy leaves nothing behind.
         const lock = prepareJoinLock({ requestId, encryptionKey: begun.encryptionKey });
@@ -417,7 +418,9 @@ export function mountBoxJoinPersonApi(
           storeUrl: hello.storeUrl,
           at: newBoxNow(view),
         };
-        let issue = (signingKey: string) => issueMirrorBundle(deps, spare, signingKey);
+        const onListed = () => (listed = true);
+        let issue = (signingKey: string) =>
+          issueMirrorBundle(deps, spare, signingKey, undefined, onListed);
         if (body.moduleOperation !== undefined) {
           const operation = parseStandbyOperationInput(body.moduleOperation);
           if (operation === null)
@@ -436,6 +439,7 @@ export function mountBoxJoinPersonApi(
                 spare,
                 signingKey,
                 new Map([[binding.module, { ...operation, authority }]]),
+                onListed,
               ),
             );
         }
@@ -450,8 +454,17 @@ export function mountBoxJoinPersonApi(
         if (!requests.approve.finish(requestId, locked))
           throw new AppError("mirror.join_stopped_after_listing", {});
       } catch (error) {
-        requests.approve.abandon(requestId);
-        throw error;
+        if (!listed) {
+          requests.approve.abandon(requestId);
+          throw error;
+        }
+        // The chart names the spare now, so a second tap or the new box's cancel must not follow.
+        requests.approve.stop(requestId);
+        throw new AppError(
+          "mirror.join_stopped_after_listing",
+          {},
+          { reason: isAppError(error) ? error.code : "server.internal" },
+        );
       }
       return c.body(null, 202);
     }),

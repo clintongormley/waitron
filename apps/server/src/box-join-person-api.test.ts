@@ -506,6 +506,24 @@ describe("the main box's person routes for a joining box", () => {
     expect(await poll(listed)).toEqual({ state: "ended", reason: "cancelled" });
   });
 
+  it("ends the request and says the spare was listed when the approval fails after listing it", async () => {
+    const listed = await listedRequest("192.168.1.20");
+    afterIssue = () => {
+      afterIssue = () => {};
+      throw new Error("failed after the chart was saved");
+    };
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+      refusal(409, "mirror.join_stopped_after_listing"),
+    );
+    expect((await readNodeMembership(db))?.body.nodes.map((n) => n.nodeId)).toContain(
+      listed.box.hello.newNodeId,
+    );
+    expect(await poll(listed)).toEqual({ state: "ended", reason: "stopped" });
+    expect(await approve(listed.requestId, { code: listed.code })).toEqual(
+      refusal(404, "mirror.join_not_found"),
+    );
+  });
+
   it("says the spare was listed when its request ended while the copy was built", async () => {
     const listed = await listedRequest("192.168.1.20");
     // The new box lost its attempt and asked again, which replaces the request being approved.
