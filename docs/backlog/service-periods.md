@@ -42,13 +42,12 @@ read by separately written queries in `special-days.ts` and `business-day-schedu
 `specialDateIn` and `sharedSpecialDate` live in the database module `special-days.ts` rather than
 the browser-safe repeat rules. Each could collapse to one place.
 
-## Two date helpers read years 0 to 99 as 1900 to 1999
+## `isLocalDate` reads years 0 to 99 as 1900 to 1999
 
-`isLocalDate` (`packages/venue-service/src/hours-rules.ts`) and `addMonths`
-(`packages/venue-service/src/dashboard/calendar-grid.ts`) still build dates with `Date.UTC`, which
-reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unreachable from the screens,
-which start at year 100; changing `isLocalDate` would change which dates the server accepts from
-outside (menu publication dates, imports), so it needs a decision.
+`isLocalDate` (`packages/venue-service/src/hours-rules.ts`) still builds its date with `Date.UTC`,
+which reads years 0–99 as 1900–1999, so it refuses every date in those years (#1616 fixed `addDays`
+and `weekdayOf`). Changing it would change which dates the server accepts from outside (menu
+publication dates, imports), so it needs a decision.
 
 ## A special-day grid uses the first date's changeover
 

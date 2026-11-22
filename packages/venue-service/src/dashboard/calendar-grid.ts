@@ -13,7 +13,10 @@ export const LAST_MONTH = "9998-12";
 
 export function addMonths(month: Month, months: number): Month {
   const [year, number] = month.split("-").map(Number) as [number, number];
-  return new Date(Date.UTC(year, number - 1 + months, 1)).toISOString().slice(0, 7);
+  const total = year * 12 + number - 1 + months;
+  const resultYear = Math.floor(total / 12);
+  const resultMonth = total - resultYear * 12 + 1;
+  return `${String(resultYear).padStart(4, "0")}-${String(resultMonth).padStart(2, "0")}`;
 }
 
 export function mondayOf(date: LocalDate): LocalDate {
