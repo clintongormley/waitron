@@ -1,49 +1,31 @@
-# Release translation jobs the box ends
+# Record what Cloud needs to abandon translation work
 
-Lane H's TRANSLATION-JOB-RELEASE assignment comes from the watcher's 2026-11-22 03:25 queue
-note and [Translate all followups](../../backlog/menu.md#bundle-translate-all-followups).
+The watcher assigned TRANSLATION-JOB-RELEASE in Lane H's queue on 22 November at 03:25.
+This plan proposes a documentation change for [Translate all followups](../../backlog/menu.md#bundle-translate-all-followups),
+with the Cloud change to be routed by the watcher. Claude reviewed the first draft and identified
+the contract restriction below. The revised scope awaits watcher clearance.
 
 ## What this delivers
 
-The box asks Cloud to release a known job after it ends locally because time ran out, the
-installation's translation service went off, or a status or collect request or its final page
-was rejected. Cloud can clear finished results then, including results whose good pages the box
-already saved. Keep the local ending and its counts even when Cloud refuses or cannot answer.
-A job Cloud already reports missing, expired or collected needs no release.
-
-Cloud's existing release answers 409 for queued or running work. Its submit reuses an existing job
-for the same operation id and body, but it can create a new job while the service is ready if the
-first request never arrived. Cloud also answers 503 to every translation action when its operator
-turns off the routes. These are source readings from Waitron Cloud at
-`2af67c8495aa03c2c1f3134b6c102ddf49977fe4`, in
-`packages/translation/src/{machine.ts:71–101,job-store.ts:29–30,64–71}` and
-`packages/account-http/src/{app.ts:129,201,translation.ts:8–15}`.
-
-A complete fix for active work and lost submit replies needs a Cloud action that can abandon an
-existing job by operation id even when it is still active, without creating one. The watcher can
-route that contract to Lane G. Keep those cases and an unavailable Cloud in the backlog. Leave the
-service switched off and leave Cloud code, storage, routes and the ordinary completed-job retry
-path alone.
+The backlog records why a new Translate all request can be refused after the box ends an earlier
+job, and what Cloud needs to support before the box can clear that work. Cloud's contract says
+“Release tells Cloud the box has durably stored every page.” The box can also release a job Cloud
+reports as failed, which has no pages. A queued or running Cloud job returns 409 to release and
+blocks the next submit. Repeating submit by operation id can recover an accepted job, but can also
+create a job if that operation never reached Cloud while submissions are allowed. These statements
+are from Waitron Cloud at `2af67c8495aa03c2c1f3134b6c102ddf49977fe4`,
+`docs/waitron-integration-contract.md:1439–1445` and
+`packages/translation/src/{machine.ts:71–101,job-store.ts:29–30,64–71}`.
 
 ## Build and check
 
-- [ ] Start with the existing HTTP runner cases in
-  `apps/server/src/content-suggestion-runner.test.ts`. Make the service-off mid-collection and
-  cursor-refusal cases expect release of the actual job and Cloud state `collected`. Preserve
-  the saved page, local refusal and notice checks. Cover a final page that fails the store's item
-  accounting, and change the local expiry case to expect one release attempt and a local
-  `expired` result when Cloud answers 409. Keep the lost-submit and revoked-connection controls.
-  Run the changed cases before the fix. The release action or Cloud-state assertions must fail.
-- [ ] In `apps/server/src/content-suggestion-runner.ts`, reuse `translation.release` once after
-  the local transaction commits. Use it from `close` for a known job and after
-  `storeSuggestionPage` returns `ended`. Skip calls for a missing id, a revoked or missing
-  connection, or a terminal Cloud reply. Use the current abort signal and release timeout. A
-  refusal or unavailable Cloud leaves the local end as recorded and permits a fresh run. Move
-  the test fixture's per-installation readiness check to new submission only, matching Cloud's
-  existing-job routes (`apps/server/test/translation-cloud-fixture.ts`).
-- [ ] Run the server runner and API suites, the menu job and store suites, and Lane H's unchanged
-  fiscal and menu Review Focus checks. Narrow the backlog entry and its bundle link. Sign off the
-  commit and take the normal review and CI path.
+- [ ] Narrow the entry and bundle line in `docs/backlog/menu.md`. Keep the existing entry link.
+  Record the two cases for Cloud: an active job still blocks the next submit, and a lost submit
+  reply leaves the box without Cloud's job id. Cloud needs a way to abandon an existing job by
+  operation id, including active work, with zero jobs created on a miss. Ask the watcher to route
+  that request to Lane G. Box integration follows the Cloud contract.
+- [ ] Check the backlog link and the diff, and run the existing runner cases for local expiry,
+  incomplete collection and lost submit replies. Sign off and use the docs-only landing path
+  after watcher clearance.
 
-Expected size is 35–55 added production lines and 35–65 added test lines, mostly changed runner
-assertions and one fixture edit, plus the backlog wording.
+Expect 10–15 lines of backlog text and zero production or test lines. Translation is switched off.
