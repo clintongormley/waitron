@@ -14,8 +14,7 @@ export type OptionReader = { reads: "kitchen" } | { reads: "staff" };
 
 /**
  * One `<list>: <label>` line per frozen options answer. The wording rules live in
- * `packages/menu/src/option-snapshot-labels.ts`, which the printed kitchen ticket and receipt
- * call too, so a screen and its paper twin cannot disagree.
+ * `packages/menu/src/option-snapshot-labels.ts`.
  *
  * Extras are not here: each pick is its own priced child line.
  */

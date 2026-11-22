@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { staffNoticeText } from "./staff-notices.js";
 import { en, es } from "./strings.js";
 import { clockTime, setLocale } from "./t.js";
@@ -261,46 +261,69 @@ describe.each(LANGUAGES)(
   },
 );
 
-describe("staffNoticeText for an invoice waiting at an office printer", () => {
-  beforeEach(() => setLocale("en-GB"));
-  const office = (params: Record<string, unknown>) =>
-    staffNoticeText({ code: "invoice_delivery.office_print", params });
+describe.each(LANGUAGES)(
+  "staffNoticeText for an invoice waiting at an office printer, in %s",
+  (locale, words) => {
+    const office = (params: Record<string, unknown>) =>
+      staffNoticeText({ code: "invoice_delivery.office_print", params });
 
-  it.each([{}, { printer: "" }, { printer: 3 }])(
-    "words the notice as unknown when its printer is %o",
-    (params) => {
-      expect(office(params).main).toBe(en["staff_notice.unknown"]);
-    },
-  );
+    it.each([{}, { printer: "" }, { printer: 3 }])(
+      "words the notice as unknown when its printer is %o",
+      (params) => {
+        setLocale(locale);
+        expect(office(params)).toEqual({
+          main: words["staff_notice.unknown"],
+          hint: words["staff_notice.see_box_status"],
+        });
+      },
+    );
 
-  it("names the printer an invoice failed at", () => {
-    expect(office({ printer: "Office", reason: "failed" })).toEqual({
-      main: "An invoice failed to print at Office. Check the printer before trying again.",
-      hint: "",
-    });
-  });
-
-  it.each(["uncertain", "uncertain_held"])(
-    "says an invoice may have printed when its outcome is %s",
-    (reason) => {
-      expect(office({ printer: "Office", reason })).toEqual({
-        main: "An invoice may have printed at Office. Check the printer before trying again.",
+    it("names the printer an invoice is waiting at", () => {
+      setLocale(locale);
+      expect(office({ printer: "Office" })).toEqual({
+        main: words["staff_notice.invoice_delivery.office_print"].replace("{printer}", "Office"),
         hint: "",
       });
-    },
-  );
-
-  it("words a hold the till knows with its reason and the printer", () => {
-    expect(office({ printer: "Office", hold: "paper_jam" })).toEqual({
-      main: "A full invoice is waiting to print.",
-      hint: "Waiting at Office (paper jam). Check the printer. It will print when ready.",
     });
-  });
 
-  it("words a hold the till does not know without a reason", () => {
-    expect(office({ printer: "Office", hold: "on_fire" })).toEqual({
-      main: "A full invoice is waiting to print.",
-      hint: "Waiting at the office printer.",
+    it("names the printer an invoice failed at", () => {
+      setLocale(locale);
+      expect(office({ printer: "Office", reason: "failed" })).toEqual({
+        main: words["staff_notice.invoice_delivery.office_failed"].replace("{printer}", "Office"),
+        hint: "",
+      });
     });
-  });
-});
+
+    it.each(["uncertain", "uncertain_held"])(
+      "says an invoice may have printed when its outcome is %s",
+      (reason) => {
+        setLocale(locale);
+        expect(office({ printer: "Office", reason })).toEqual({
+          main: words["staff_notice.invoice_delivery.office_uncertain"].replace(
+            "{printer}",
+            "Office",
+          ),
+          hint: "",
+        });
+      },
+    );
+
+    it("words a hold the till knows with its reason and the printer", () => {
+      setLocale(locale);
+      expect(office({ printer: "Office", hold: "paper_jam" })).toEqual({
+        main: words["staff_notice.invoice_delivery.office_held"],
+        hint: words["invoice.office_hold"]
+          .replace("{reason}", words["invoice.delivery_hold_paper_jam"])
+          .replace("{printer}", "Office"),
+      });
+    });
+
+    it("words a hold the till does not know without a reason", () => {
+      setLocale(locale);
+      expect(office({ printer: "Office", hold: "on_fire" })).toEqual({
+        main: words["staff_notice.invoice_delivery.office_held"],
+        hint: words["invoice.delivery_held_no_reason"],
+      });
+    });
+  },
+);

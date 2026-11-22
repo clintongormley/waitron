@@ -189,22 +189,48 @@ it.each([
     (save: ReturnType<typeof deferred<DailyReportSettingsView>>) =>
       save.reject({ code: "connection.failed" }),
   ],
-])("draws nothing from a save that %s after the form left the page", async (_, finish) => {
-  const sending = deferred<DailyReportSettingsView>();
-  const el = await mount({
-    getDailyReportSettings: vi.fn().mockResolvedValue(view()),
-    saveDailyReportSettings: vi.fn().mockReturnValue(sending.promise),
-  });
-  const enabled = () =>
-    q<HTMLElementTagNameMap["wt-switch"]>(el, "[data-test=daily-report-enabled]");
-  await vi.waitFor(() => expect(enabled()).not.toBeNull());
-  await flip(el, enabled()!, false);
-  save(el).click();
-  el.remove();
-  finish(sending);
-  await sending.promise.catch(() => undefined);
-  await new Promise((resolve) => setTimeout(resolve));
-  await el.updateComplete;
-  expect(enabled()).toBeNull();
-  expect(q(el, "[role=alert]")).toBeNull();
-});
+])(
+  "leaves the form's own save alone when an earlier save %s after the form left and came back",
+  async (_, finish) => {
+    const earlier = deferred<DailyReportSettingsView>();
+    const later = deferred<DailyReportSettingsView>();
+    const saveDailyReportSettings = vi
+      .fn()
+      .mockReturnValueOnce(earlier.promise)
+      .mockReturnValueOnce(later.promise);
+    const el = await mount({
+      getDailyReportSettings: vi.fn().mockResolvedValue(view()),
+      saveDailyReportSettings,
+    });
+    const enabled = () =>
+      q<HTMLElementTagNameMap["wt-switch"]>(el, "[data-test=daily-report-enabled]");
+    await vi.waitFor(() => expect(enabled()).not.toBeNull());
+    await flip(el, enabled()!, false);
+    save(el).click();
+    const host = el.parentElement!;
+    el.remove();
+    host.append(el);
+    await vi.waitFor(() => expect(recipient(el, "Sam")).toBeDefined());
+    await flip(el, recipient(el, "Sam"), true);
+    save(el).click();
+    await el.updateComplete;
+    expect(enabled()!.disabled).toBe(true);
+
+    finish(earlier);
+    await earlier.promise.catch(() => undefined);
+    await el.updateComplete;
+    expect(enabled()!.disabled).toBe(true);
+    expect(enabled()!.checked).toBe(true);
+    expect(recipient(el, "Sam").checked).toBe(true);
+    expect(await message(el)).toBe("");
+
+    later.resolve(view({ recipientIds: ["staff-1", "staff-2"], revision: 4 }));
+    await vi.waitFor(() => expect(enabled()!.disabled).toBe(false));
+    expect(save(el).disabled).toBe(true);
+    expect(saveDailyReportSettings).toHaveBeenNthCalledWith(2, {
+      enabled: true,
+      revision: 3,
+      recipientIds: ["staff-1", "staff-2"],
+    });
+  },
+);

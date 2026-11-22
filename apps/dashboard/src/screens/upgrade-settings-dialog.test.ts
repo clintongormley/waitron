@@ -189,7 +189,9 @@ it("saves on Enter in an hour field", async () => {
   field(dialog, "start").shadowRoot!.querySelector("input")!.focus();
   await userEvent.keyboard("{Enter}");
   await closed;
-  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toMatchObject({
+  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+    revision: 7,
+    automatic: true,
     start: "02:00",
     end: "05:00",
   });
@@ -278,7 +280,12 @@ it("ignores edits and a second Save while one is being sent", async () => {
   const closed = dialogClosed(dialog);
   sent.resolve(Response.json({ ...SETTINGS, revision: 8, start: "01:00" }));
   await closed;
-  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toMatchObject({ start: "01:00" });
+  expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+    revision: 7,
+    automatic: true,
+    start: "01:00",
+    end: "05:00",
+  });
 });
 
 it.each([
@@ -299,16 +306,17 @@ it.each([
     const { dialog, opener } = await open(fetchImpl);
     const el = document.querySelector("dashboard-upgrade-settings-dialog")!;
     const host = el.parentElement!;
+    const saving = vi.spyOn(el.api, "saveBoxUpgradeSettings");
     await edit(dialog, "start", "01:00");
     await userEvent.click(save(dialog));
-    await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
+    await expect.poll(() => saving.mock.results.length).toBe(1);
     el.remove();
     host.append(el);
     await el.show(opener);
     await el.updateComplete;
     const reopened = el.shadowRoot!.querySelector("wt-dialog")!;
     sent.resolve(answer());
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await saving.mock.results[0]!.value.catch(() => undefined);
     await el.updateComplete;
     expect(reopened.open).toBe(true);
     expect(field(reopened, "start").value).toBe("03:00");

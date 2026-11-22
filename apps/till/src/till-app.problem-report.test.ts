@@ -5,6 +5,7 @@ import { clockApp, signIn, working } from "../test/clock-app.js";
 import { cleanupWidgets, resetPage } from "./widgets/test-helpers.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
+import { setReportBuild } from "./diagnostics.js";
 
 const locale = currentLocale();
 afterEach(async () => {
@@ -172,4 +173,14 @@ it("keeps the opening locale and theme in the file while the open dialog follows
   await expect.poll(() => dialog.copy?.heading).toBe("Informar de un problema");
   await editReport(dialog, "The screen was slow.");
   expect(data(preview(dialog)).client).toEqual(opening.client);
+});
+
+// Last in the file: the build cannot be unset, so every later case would see it.
+it("leaves the build empty until setReportBuild gives it one, then names it in the report", async () => {
+  const before = await openStrip((await clockApp()).el);
+  expect(data(preview(before)).client.build).toBeNull();
+  cleanupWidgets();
+  setReportBuild("v1.4.0");
+  const after = await openStrip((await clockApp()).el);
+  expect(data(preview(after)).client.build).toBe("v1.4.0");
 });

@@ -211,7 +211,8 @@ const footerError = (el: TillDrawerClose) => el.shadowRoot?.querySelector("wt-fo
 it("does not kick the drawer when the dialog closed before its read answered", async () => {
   const requests = api();
   let answer!: (value: unknown) => void;
-  requests.readDrawerClose.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+  const read = new Promise((resolve) => (answer = resolve));
+  requests.readDrawerClose.mockReturnValue(read);
   const { el } = await mountWidget<TillDrawerClose>("till-drawer-close", {
     api: requests,
     printerId: "bar",
@@ -219,7 +220,7 @@ it("does not kick the drawer when the dialog closed before its read answered", a
   });
   el.remove();
   answer({ ...drawer, state: "new", startSequence: 7 });
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await read;
   expect(requests.openDrawer).not.toHaveBeenCalled();
 });
 

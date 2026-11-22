@@ -7109,20 +7109,16 @@ describe("the way an order sells on every sale, pay, park and round body (A1522)
 
 describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   const cash = { method: "cash" as const, amount: "10.00" };
-  const ticket = { invoiceNumber: "A/9" };
-  const reads = (balance: object, payment: object = {}) =>
-    vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
-      if (url === "/api/sales/wo1") return jsonResponse(ticket);
-      return init.method === "GET" ? jsonResponse(balance) : jsonResponse(payment);
-    });
 
   it("answers a reader payment on a settled bill as captured with its filed ticket", async () => {
-    const fetchStub = reads({
-      status: "settled",
-      total: "10.00",
-      outstanding: "0.00",
-      payments: [],
-    });
+    const ticket = { invoiceNumber: "A/9" };
+    const fetchStub = vi
+      .fn()
+      .mockImplementation(async (url: string) =>
+        url === "/api/working-orders/wo1/payments"
+          ? jsonResponse({ status: "settled", total: "10.00", outstanding: "0.00", payments: [] })
+          : jsonResponse(ticket),
+      );
     await expect(
       new TillApi("", fetchStub).pay({
         id: "wo1",
@@ -7132,11 +7128,14 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
         readerId: "r2",
       }),
     ).resolves.toEqual({ outcome: "captured", ticket });
-    expect(postedBodies(fetchStub)).toEqual([]);
+    expect(fetchStub.mock.calls.map(([url, { method }]) => [method, url])).toEqual([
+      ["GET", "/api/working-orders/wo1/payments"],
+      ["GET", "/api/sales/wo1"],
+    ]);
   });
 
   it("refuses to collect a placed order whose bill is open again", async () => {
-    const fetchStub = reads({ status: "open", total: "10.00", outstanding: "10.00", payments: [] });
+    const fetchStub = wholeBillReplies("open", "10.00");
     await expect(
       new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
     ).rejects.toEqual({ code: "working_order.not_placed", workingOrderId: "wo1" });
@@ -7144,12 +7143,7 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   });
 
   it("refuses to ring up an open order whose bill was placed meanwhile", async () => {
-    const fetchStub = reads({
-      status: "placed",
-      total: "10.00",
-      outstanding: "10.00",
-      payments: [],
-    });
+    const fetchStub = wholeBillReplies("placed", "10.00");
     const expectedEdit = { billId: "wo1", editorVersion: 2, draftId: null, draftRevision: null };
     await expect(
       new TillApi("", fetchStub).recordSale(
@@ -7169,12 +7163,14 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   });
 
   it("refuses to collect while another payment on the bill is still pending", async () => {
-    const fetchStub = reads({
-      status: "placed",
-      total: "10.00",
-      outstanding: "10.00",
-      payments: [{ state: "pending" }],
-    });
+    const fetchStub = vi.fn().mockImplementation(async () =>
+      jsonResponse({
+        status: "placed",
+        total: "10.00",
+        outstanding: "10.00",
+        payments: [{ state: "pending" }],
+      }),
+    );
     await expect(
       new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
     ).rejects.toEqual({ code: "order.payment_in_flight", workingOrderId: "wo1" });
@@ -7182,12 +7178,7 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   });
 
   it("refuses cash that does not cover what is still owed", async () => {
-    const fetchStub = reads({
-      status: "placed",
-      total: "12.00",
-      outstanding: "12.00",
-      payments: [],
-    });
+    const fetchStub = wholeBillReplies("placed", "12.00");
     await expect(
       new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
     ).rejects.toEqual({ code: "sale.tender_shortfall", workingOrderId: "wo1" });
@@ -7195,10 +7186,7 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   });
 
   it("says payments were received when the payment answers without a ticket", async () => {
-    const fetchStub = reads(
-      { status: "placed", total: "10.00", outstanding: "10.00", payments: [] },
-      { outcome: "received", balance: { status: "placed", outstanding: "0.00" } },
-    );
+    const fetchStub = wholeBillReplies("placed", "10.00", { outcome: "received" });
     await expect(
       new TillApi("", fetchStub).collectOrder("wo1", cash, undefined, null, null),
     ).rejects.toEqual({ code: "bill.payments_received", workingOrderId: "wo1" });
@@ -7206,14 +7194,14 @@ describe("TillApi: collecting a whole bill whose balance has moved on", () => {
   });
 
   it("words a counter sale's refused tendered amount as a shortfall", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: { code: "management.request_invalid", params: { field: "tendered" } },
-        }),
-        { status: 400, headers: { "content-type": "application/json" } },
-      ),
-    );
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "tendered" } } },
+          400,
+        ),
+      );
     await expect(
       new TillApi("", fetchStub).recordSale(
         [{ menuItemId: "mi-p", quantity: "2" }],
