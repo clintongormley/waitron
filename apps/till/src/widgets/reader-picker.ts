@@ -1,21 +1,16 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles } from "@waitron/ui";
 import { menuOptionStyles } from "@waitron/ui/src/menu-popover.js";
 import { t } from "../i18n/t.js";
 
-/**
- * Deliberately its OWN shape, not imported from `../api/client.js`, so this widget has no
- * server-shape dependency. `online` is optional because `GET /api/till` carries no per-reader
- * liveness signal. An offline reader stays SELECTABLE: a reader that looks offline may simply have
- * a stale liveness read.
- */
+/** Deliberately its OWN shape, not imported from `../api/client.js`, so this widget has no
+ * server-shape dependency. */
 export interface ReaderOption {
   id: string;
   name: string;
   provider: string;
-  online?: boolean;
 }
 
 @customElement("till-reader-picker")
@@ -35,11 +30,6 @@ export class TillReaderPicker extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-2);
-      }
-
-      .status {
-        color: var(--wt-color-text-muted);
-        font-weight: var(--wt-font-weight-normal);
       }
 
       .empty {
@@ -88,7 +78,7 @@ export class TillReaderPicker extends LitElement {
   }
 
   /** A native button, so the role and `aria-checked` land on the real focusable node rather than a
-   * `wt-button` host. Offline is a text mark, never `disabled` — see `ReaderOption`. */
+   * `wt-button` host. */
   #renderOption(reader: ReaderOption) {
     const checked = reader.id === this.selectedReaderId;
     return html`
@@ -101,13 +91,6 @@ export class TillReaderPicker extends LitElement {
         @click=${() => this.#choose(reader.id)}
       >
         <span class="name">${reader.name}</span>
-        ${
-          reader.online === false
-            ? html`<span class="status" data-test="reader-${reader.id}-offline"
-                >${t("reader_picker.offline")}</span
-              >`
-            : nothing
-        }
       </button>
     `;
   }

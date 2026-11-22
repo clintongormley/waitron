@@ -287,7 +287,6 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
       id: "r2",
       name: "Bar",
       provider: "stripe_terminal" as const,
-      online: false,
     },
   ];
 
@@ -302,7 +301,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the reader picker dialog open, including an offline-marked reader", async () => {
+  it("has no violations with the reader picker dialog open", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "2");
     const { el, host } = await mountWidget<TillTenderPay>(
