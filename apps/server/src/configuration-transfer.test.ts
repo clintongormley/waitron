@@ -475,7 +475,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 55,
+  version: 56,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3983,6 +3983,47 @@ describe("a department's late-send manager setting in a configuration transfer",
   });
 });
 
+describe("a department's estimated margin in a configuration transfer", () => {
+  it("carries it on the exported departments row and to the importing venue", async () => {
+    const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, { name: "Margin terrace" });
+      await tx
+        .update(departments)
+        .set({ estimatedMarginBp: 3000 })
+        .where(eq(departments.id, department.id));
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-19T12:00:00Z"),
+      versions,
+    );
+    const exported = transferred.tables.departments!.find((row) => row.name === "Margin terrace");
+    expect(exported?.estimated_margin_bp).toBe(3000);
+    await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+    });
+    const [imported] = await withTransaction(targetSuite.db, (tx) =>
+      tx
+        .select({ estimatedMarginBp: departments.estimatedMarginBp })
+        .from(departments)
+        .where(eq(departments.name, "Margin terrace")),
+    );
+    expect(imported).toEqual({ estimatedMarginBp: 3000 });
+  });
+});
+
 it("carries a department's course firing and reminder minutes to remapped rows in the importing venue", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
@@ -6119,7 +6160,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(55);
+  expect(exported.version).toBe(56);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
