@@ -222,7 +222,7 @@ it("refuses a menu colour no save would store", () => {
   );
 });
 
-it("carries only the payment switches and keeps the destination's provider choice", async () => {
+it("carries tips and keeps the destination's provider and practice choices", async () => {
   await withTransaction(suite.db, (tx) =>
     saveSettings(tx, payments, {
       doc: { providers: { stripe: false }, tipsEnabled: true, testProviders: true },
@@ -232,11 +232,11 @@ it("carries only the payment switches and keeps the destination's provider choic
   );
   const exported = await exportSettingsDocuments(suite.db, ALL_MODULES);
   expect(exported).toEqual({
-    payments: { version: 1, doc: { tipsEnabled: true, testProviders: true } },
+    payments: { version: 1, doc: { tipsEnabled: true } },
   });
   await withTransaction(suite.db, async (tx) => {
     await saveSettings(tx, payments, {
-      doc: { providers: { sumup: false }, tipsEnabled: false, testProviders: false },
+      doc: { providers: { sumup: false }, tipsEnabled: false, testProviders: true },
       expectedRevision: 1,
       personId: null,
     });
@@ -249,16 +249,19 @@ it("carries only the payment switches and keeps the destination's provider choic
   });
 });
 
-it("refuses a provider choice in an imported payment document", () => {
+it.each([
+  ["providers", { stripe: false }],
+  ["testProviders", true],
+])("refuses %s in an imported payment document", (field, value) => {
   expect(() =>
     checkImportedSettings(
-      { payments: { version: 1, doc: { providers: { stripe: false }, tipsEnabled: true } } },
+      { payments: { version: 1, doc: { [field]: value, tipsEnabled: true } } },
       ALL_MODULES,
     ),
   ).toThrow(
     expect.objectContaining({
       code: "setup.request_invalid",
-      params: { field: "settings.payments.providers" },
+      params: { field: `settings.payments.${field}` },
     }),
   );
 });

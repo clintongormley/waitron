@@ -146,7 +146,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
 

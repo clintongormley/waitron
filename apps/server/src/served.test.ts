@@ -161,7 +161,6 @@ async function setupVenue(): Promise<Venue> {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {

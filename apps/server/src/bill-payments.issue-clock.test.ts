@@ -125,7 +125,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const rows = await db.select().from(departments);

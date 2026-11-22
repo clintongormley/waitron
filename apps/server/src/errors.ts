@@ -511,7 +511,7 @@ declare module "@waitron/shared" {
     "payment.webhook_unresolved": { provider: string; externalRef: string };
     "payment.provider_in_use": { activeReaders: number; readerNames?: string[] };
     "payment.provider_disabled": { providerId: string };
-    "payments.test_providers_prepare_only": Record<string, never>;
+    "payment.test_providers_prepare_only": Record<string, never>;
     "payment.not_stuck": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
     "payment.outcome_unknown": {

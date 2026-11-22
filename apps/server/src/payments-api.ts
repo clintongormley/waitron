@@ -183,7 +183,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "payment.provider_merchant_ambiguous": 409,
   "payment.provider_in_use": 409,
   "payment.provider_disabled": 409,
-  "payments.test_providers_prepare_only": 409,
+  "payment.test_providers_prepare_only": 409,
   "module.disabled": 409,
   "settings.out_of_date": 409,
   "settings.invalid": 500,
@@ -899,7 +899,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         throw new AppError("management.request_invalid", { field: "revision" });
       const { saved, practiceChanged } = await gated(sessionId, async (tx, personId) => {
         if (testProviders && !testProvidersAvailable)
-          throw new AppError("payments.test_providers_prepare_only", {});
+          throw new AppError("payment.test_providers_prepare_only", {});
         const { doc } = await readPaymentsSettings(tx);
         const saved = await saveSettings(tx, PAYMENTS_SETTINGS, {
           doc: { ...doc, tipsEnabled, testProviders },

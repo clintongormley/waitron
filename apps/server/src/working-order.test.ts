@@ -278,7 +278,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     seriesId: brandSeriesId(randomUUID()),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.

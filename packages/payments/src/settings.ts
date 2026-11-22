@@ -13,7 +13,7 @@ interface PaymentsDocument {
 export const PAYMENTS_SETTINGS = defineSettingsDocument<PaymentsDocument>({
   module: "payments",
   version: 1,
-  transfers: ["tipsEnabled", "testProviders"] satisfies (keyof PaymentsDocument)[],
+  transfers: ["tipsEnabled"] satisfies (keyof PaymentsDocument)[],
   defaults: () => ({ providers: {}, tipsEnabled: false, testProviders: false }),
   parse(doc) {
     if (typeof doc !== "object" || doc === null || Array.isArray(doc))

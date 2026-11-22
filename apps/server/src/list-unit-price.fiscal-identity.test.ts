@@ -127,7 +127,6 @@ async function fileOneSale(db: Database) {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {

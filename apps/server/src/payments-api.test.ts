@@ -3352,10 +3352,10 @@ describe("payments settings", () => {
     }
   });
 
-  it("lets a tips save clear an imported practice switch on Live and preserves provider choices", async () => {
+  it("saves tips on Live, refuses practice providers and preserves provider choices", async () => {
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { stripe: false }, tipsEnabled: false, testProviders: true },
+        doc: { providers: { stripe: false }, tipsEnabled: false, testProviders: false },
         expectedRevision: 0,
         personId: null,
       }),
@@ -3363,7 +3363,7 @@ describe("payments settings", () => {
     const denied = await put({ tipsEnabled: true, testProviders: true, revision: 1 });
     expect(denied.status).toBe(409);
     expect(await denied.json()).toEqual({
-      error: { code: "payments.test_providers_prepare_only", params: {} },
+      error: { code: "payment.test_providers_prepare_only", params: {} },
     });
     expect((await readPaymentsSettings(suite.db)).revision).toBe(1);
 

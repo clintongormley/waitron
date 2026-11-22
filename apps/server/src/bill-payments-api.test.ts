@@ -151,6 +151,7 @@ interface Venue {
   /** Product id by the staff name. */
   productIds: Map<string, string>;
   app: Hono;
+  useSimulator: (enabled: boolean) => void;
   cookie: string;
   /** The till device `cookie` names, which its session is on. */
   deviceId: string;
@@ -360,6 +361,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}, cash_drawer_printer_id = ${seeded.printerId}`,
   );
   const app = new Hono();
+  const simulator = new SimulatorPaymentProvider(db);
+  let useSimulator = true;
   mountTillApi(
     app,
     {
@@ -370,7 +373,10 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       cfg,
       secureCookies: false,
       venueLocale: LOCALE,
-      cardProvider: new SimulatorPaymentProvider(db),
+      get cardProvider() {
+        return useSimulator ? simulator : undefined;
+      },
+      refundSimulator: simulator,
       invoiceEmailAvailable: async (tx) => {
         const delivery = await resolveMailDeliveryIn(
           tx,
@@ -389,6 +395,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     offers: seeded.offers,
     productIds: seeded.productIds,
     app,
+    useSimulator: (enabled) => {
+      useSimulator = enabled;
+    },
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
     deviceId: device.deviceId,
@@ -4458,6 +4467,34 @@ describe("a cash refund before the invoice (design §6)", () => {
 
     expect(voided.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["35.00"]);
+  });
+
+  it("refunds an earlier simulator payment after new collections switch providers", async () => {
+    const billId = await bill120();
+    const paid = await request("POST", `/api/working-orders/${billId}/payments`, {
+      kind: "contribution",
+      amount: "40.00",
+      method: "card",
+      entry: "reader",
+      applied: "40.00",
+      tip: "0.00",
+      submissionId: randomUUID(),
+      simulationOutcome: "captured",
+    });
+    expect(paid.status).toBe(200);
+    const paymentId = paymentIdOf(paid);
+
+    venue.useSimulator(false);
+    try {
+      const refunded = await refund(billId, paymentId, {
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+      });
+      expect(refunded.status).toBe(200);
+      expect(refunded.json).toMatchObject({ refund: { paymentId, state: "completed" } });
+    } finally {
+      venue.useSimulator(true);
+    }
   });
 
   it("refuses refunding a card charged on a terminal Waitron does not drive, writing nothing", async () => {

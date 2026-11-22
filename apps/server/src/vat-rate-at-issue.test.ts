@@ -173,7 +173,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
 

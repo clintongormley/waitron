@@ -210,7 +210,6 @@ async function setup(
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(suite.db, async (tx) => {

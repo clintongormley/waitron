@@ -86,14 +86,14 @@ it("saves the revised Prepare choices after the manager confirms a stale edit", 
 it("explains a Prepare-only refusal beside Save and keeps the draft", async () => {
   const savePaymentSettings = vi
     .fn()
-    .mockRejectedValue({ code: "payments.test_providers_prepare_only" });
+    .mockRejectedValue({ code: "payment.test_providers_prepare_only" });
   await mount(true, savePaymentSettings);
   const tips = page.getByRole("switch", { name: "Offer tips at the till" });
   await tips.click();
   const save = page.getByRole("button", { name: "Save", exact: true });
   await save.click();
   await expect
-    .element(page.getByText(codeMessage("payments.test_providers_prepare_only")))
+    .element(page.getByText(codeMessage("payment.test_providers_prepare_only")))
     .toBeVisible();
   await expect.element(tips).toBeChecked();
   await expect.element(save).toBeEnabled();

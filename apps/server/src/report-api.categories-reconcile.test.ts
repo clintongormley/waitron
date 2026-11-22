@@ -111,7 +111,6 @@ describe("the category report reconciles with the till's sales", () => {
       seriesId: brandSeriesId(venue.seriesIds[0]!),
       locale: LOCALE,
       invoiceLocales: [LOCALE],
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     });
 

@@ -377,7 +377,6 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
     const cfg = {
       nodeId: brandNodeId(box.nodeId),
       locale: LOCALE_M,
-      tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     } as unknown as TradingContext;
     const seeded = await withTransaction(db, async (tx) => {
