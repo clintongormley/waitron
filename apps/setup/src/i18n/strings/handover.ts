@@ -98,7 +98,8 @@ export const handoverEn = {
   "handover.emergency.reason_long": "Use no more than 500 characters.",
   "handover.emergency.check": "Check this copy",
   "handover.emergency.declare": "Declare the old main box switched off",
-  "handover.emergency.leave": "Don't switch, go back",
+  "handover.emergency.leave": "Go back",
+  "handover.emergency.leave_till": "Go back to the till",
   "handover.emergency.leave_saved": "Leave this page (the switch is saved)",
   "handover.emergency.different_copy": "Use a different copy",
   "handover.emergency.progress": "Open handover progress",
@@ -128,10 +129,29 @@ export const handoverEn = {
     "The old main box’s identity or address could not be checked. Check its connection and address in Servers before trying again.",
   "handover.emergency.failed":
     "This step could not finish. Check this copy again before trying to continue.",
-  "handover.emergency.main_checking": "Checking whether the main server is answering…",
-  "handover.emergency.main_answering":
-    "The main server is still answering. Open its Servers page to hand over, or switch it off and check again.",
+  "handover.emergency.checking_heading": "Checking the main box",
+  "handover.emergency.spare_intro":
+    "This is the venue's spare box. It keeps a copy of the venue and can take over if the main box has failed.",
+  "handover.emergency.main_checking": "Checking whether the main box answers…",
+  "handover.emergency.main_answering": "The main box is answering",
+  "handover.emergency.main_answering_body":
+    "It answered this device, so no switch is needed. Go back and carry on.",
+  "handover.emergency.still_move": "I still need to move the venue to this box",
+  "handover.emergency.still_move_body":
+    "Open the main box's Servers page to hand over. If it is broken, switch it off, then check again.",
+  "handover.emergency.main_servers": "Open the main box's Servers page",
   "handover.emergency.main_check_again": "Check again",
+  "handover.emergency.silent_heading": "The main box is not answering",
+  "handover.emergency.silent_for": "It has not answered for {duration}.",
+  "handover.emergency.silent_copy":
+    "This spare box holds a copy of the venue and can take over from the old box.",
+  "handover.emergency.before_heading": "Before you switch",
+  "handover.emergency.before_body":
+    "Check the main box is plugged in and the network cable is connected. If it starts working again, then return to using it as the main box.",
+  "handover.emergency.what_heading": "What switching does",
+  "handover.emergency.what_body":
+    "This spare box will become the new main box. The old main box must be switched off before making the change. This cannot be undone.",
+  "handover.emergency.start": "Start switching",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.selected_backup": "Copia de seguridad seleccionada",
@@ -234,7 +254,8 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
   "handover.emergency.check": "Comprobar esta copia",
   "handover.emergency.declare": "Declarar apagado el servidor principal anterior",
-  "handover.emergency.leave": "No cambiar, volver",
+  "handover.emergency.leave": "Volver",
+  "handover.emergency.leave_till": "Volver a la caja",
   "handover.emergency.leave_saved": "Salir de esta página (el cambio está guardado)",
   "handover.emergency.different_copy": "Usar otra copia",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
@@ -265,8 +286,27 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
+  "handover.emergency.checking_heading": "Comprobando el servidor principal",
+  "handover.emergency.spare_intro":
+    "Este es el servidor de reserva del local. Guarda una copia del local y puede tomar el relevo si el servidor principal ha fallado.",
   "handover.emergency.main_checking": "Comprobando si el servidor principal responde…",
-  "handover.emergency.main_answering":
-    "El servidor principal todavía responde. Abre su página Servidores para hacer el traspaso, o apágalo y vuelve a comprobarlo.",
+  "handover.emergency.main_answering": "El servidor principal responde",
+  "handover.emergency.main_answering_body":
+    "Ha respondido a este dispositivo, así que no hace falta cambiar. Vuelve y sigue trabajando.",
+  "handover.emergency.still_move": "Aun así necesito pasar el local a este servidor",
+  "handover.emergency.still_move_body":
+    "Abre la página Servidores del servidor principal para hacer el traspaso. Si está averiado, apágalo y vuelve a comprobar.",
+  "handover.emergency.main_servers": "Abrir la página Servidores del servidor principal",
   "handover.emergency.main_check_again": "Comprobar otra vez",
+  "handover.emergency.silent_heading": "El servidor principal no responde",
+  "handover.emergency.silent_for": "No responde desde hace {duration}.",
+  "handover.emergency.silent_copy":
+    "Este servidor de reserva guarda una copia del local y puede tomar el relevo del servidor antiguo.",
+  "handover.emergency.before_heading": "Antes de cambiar",
+  "handover.emergency.before_body":
+    "Comprueba que el servidor principal está enchufado y que el cable de red está conectado. Si vuelve a funcionar, sigue usándolo como servidor principal.",
+  "handover.emergency.what_heading": "Qué hace el cambio",
+  "handover.emergency.what_body":
+    "Este servidor de reserva pasará a ser el nuevo servidor principal. El servidor principal antiguo debe estar apagado antes de hacer el cambio. No se puede deshacer.",
+  "handover.emergency.start": "Empezar el cambio",
 };

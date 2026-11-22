@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
 import { mountMainServerApi, mountNodeApi } from "./node-api.js";
 import type { Logger, LogLevel } from "./logger.js";
+import type { MainSilenceState } from "./main-silence-watch.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 const NODE = "33333333-3333-4333-8333-333333333333";
@@ -118,18 +119,48 @@ describe("GET /api/node/main", () => {
     ).request("/api/node/main");
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ mainUrl: "https://box-aaaa.waitron.local" });
+    expect(await res.json()).toEqual({
+      mainUrl: "https://box-aaaa.waitron.local",
+      silentForMs: null,
+    });
   });
 
   it("answers null with no chart, or a chart naming no serving primary", async () => {
     expect(await (await mountMain(null).request("/api/node/main")).json()).toEqual({
       mainUrl: null,
+      silentForMs: null,
     });
     const none = doc([
       { nodeId: NODE, contactUrl: "https://box-3333.waitron.local", standing: "serving-secondary" },
     ]);
     expect(await (await mountMain(none).request("/api/node/main")).json()).toEqual({
       mainUrl: null,
+      silentForMs: null,
     });
+  });
+
+  it("answers how long the spare has found the main box silent, by the spare's clock", async () => {
+    const answer = async (main: MainSilenceState | undefined) => {
+      const app = new Hono();
+      mountMainServerApi(
+        app,
+        { readMembership: () => Promise.resolve(null), main: () => main, now: () => 50_000 },
+        collect([]),
+      );
+      return (await app.request("/api/node/main")).json();
+    };
+    expect(await answer({ silent: true, silentSinceMs: 20_000, reached: true })).toEqual({
+      mainUrl: null,
+      silentForMs: 30_000,
+    });
+    expect(await answer({ silent: false, silentSinceMs: 45_000, reached: true })).toEqual({
+      mainUrl: null,
+      silentForMs: 5_000,
+    });
+    expect(await answer({ silent: false, silentSinceMs: null, reached: true })).toEqual({
+      mainUrl: null,
+      silentForMs: null,
+    });
+    expect(await answer(undefined)).toEqual({ mainUrl: null, silentForMs: null });
   });
 });

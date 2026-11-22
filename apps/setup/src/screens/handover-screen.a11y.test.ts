@@ -58,10 +58,21 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
     async (theme) => {
       const { page } = await import("vitest/browser");
       setLocale(locale);
+      /** With VITE_EMERGENCY_SHOTS=1, saves the page as a person sees it at 400px. */
+      const shoot = async (stage: string) => {
+        if (import.meta.env.VITE_EMERGENCY_SHOTS !== "1") return;
+        await page.viewport(400, 900);
+        await page.screenshot({
+          path: `__screenshots__/emergency-${stage}-${locale}-${theme}.png`,
+        });
+        await page.viewport(390, 2000);
+      };
       try {
         await page.viewport(390, 2000);
         for (const stage of [
+          "main-checking",
           "main-answering",
+          "explanation",
           "declaration",
           "different-copy",
           "resume",
@@ -71,9 +82,12 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
           "held",
         ]) {
           const api = new SetupApi("", async (input, init) => {
-            if (stage === "main-answering" && String(input) === "/api/node/main")
+            if (stage.startsWith("main-") && String(input) === "/api/node/main")
               return new Response(JSON.stringify({ mainUrl: "https://main.example" }));
-            if (String(input) === "https://main.example/api/node") return new Response(null);
+            if (String(input) === "/api/node/main")
+              return new Response(JSON.stringify({ mainUrl: null, silentForMs: 65_000 }));
+            if (String(input) === "https://main.example/api/node")
+              return stage === "main-checking" ? new Promise(() => {}) : new Response(null);
             if (init?.method === "GET")
               return new Response(
                 JSON.stringify({
@@ -132,14 +146,34 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
             { api, emergency: true },
             theme,
           );
-          if (stage === "main-answering") {
+          if (stage === "main-checking" || stage === "main-answering") {
             await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector("[data-test=main-check-again]")).not.toBeNull(),
+              expect(
+                el.shadowRoot!.querySelector(
+                  stage === "main-checking" ? "wt-spinner" : "[data-test=main-check-again]",
+                ),
+              ).not.toBeNull(),
             );
             await expectNoA11yViolations(host);
+            await shoot(stage);
+            if (stage === "main-answering") {
+              el.shadowRoot!.querySelector("details")!.open = true;
+              await expectNoA11yViolations(host);
+              await shoot(`${stage}-open`);
+            }
             host.remove();
             continue;
           }
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector("[data-test=start-switching]")).not.toBeNull(),
+          );
+          if (stage === "explanation") {
+            await expectNoA11yViolations(host);
+            await shoot(stage);
+            host.remove();
+            continue;
+          }
+          el.shadowRoot!.querySelector<HTMLElement>("[data-test=start-switching]")!.click();
           await vi.waitFor(() =>
             expect(el.shadowRoot!.querySelector('[name="handover-email"]')).not.toBeNull(),
           );

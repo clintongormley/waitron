@@ -83,14 +83,27 @@ be undone.
 On a till or handheld, **The main box is not answering.** fills the sign-in screen in red, in place
 of the PIN pad while the main box stays silent, and shows as a red strip on other screens. It offers **Switch to
 the spare box** on the sign-in screen, and to anyone with **Manage boxes**. It opens this page on the
-spare, and **Don't switch, go back** (after declaring, **Leave this page (the switch is saved)**)
-or **Continue to this box** brings you back to the till. Once the main box has been silent for about half a minute, a
+spare. Once the main box has been silent for about half a minute, a
 till, phone or dashboard that reloads the venue’s usual address also lands on this page. A main
 box that restarts for longer than about 20 seconds, during an update for example, brings a
 reloading device here too; if you did not mean to switch, do not declare anything, and reload the
 page once the main box is back. From any other device,
 open the spare’s HTTPS address with `/handover/emergency` at the end, for example
-`https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label). Sign in with an administrator account’s password and
+`https://spare.example/handover/emergency`, or scan the spare's [switch label](servers.md#switch-label).
+
+The page first checks whether the main box answers your device. If it does, the page says **The
+main box is answering**: choose **Go back to the till** (**Go back** when you did not come from a
+till) and carry on. If you still need to move the venue, open **I still need to move the venue
+to this box** for the link to the main box's Servers page and [hand over](servers.md#hand-over)
+from there; if the main box is broken, switch it off and choose **Check again**.
+
+If the main box is silent, the page says what switching does and, when the spare knows, for how
+long. Check that the main box is plugged in and its network cable is connected; if it starts
+working again, keep using it. Until you declare, **Go back to the till** (**Go back** when you did
+not come from a till) leaves without switching; after declaring, **Leave this page (the switch is
+saved)** or **Continue to this box** brings you back.
+
+Choose **Start switching**, then sign in with an administrator account’s password and
 current authenticator code, if set up, or choose **Use your passkey**; then choose **Check this
 copy**, and with a passkey, use it when the page asks. Type the password
 carefully: a wrong one restarts the spare, which then brings its copy up to date before you can try
@@ -122,9 +135,8 @@ again.
 
 If an answer is lost, keep the page open and check the copy again before retrying. Reloading or
 opening the address on another device finds your saved declaration; sign in and continue with the
-clock check. An unfinished controlled handover offers its own progress page. If the old main box
-answers, open its **Servers** link or switch it off and check again. If the copy cannot be
-verified against the declaration, stop and keep both boxes’ data intact.
+clock check. An unfinished controlled handover offers its own progress page. If the copy cannot
+be verified against the declaration, stop and keep both boxes’ data intact.
 
 If emergency hosting is available for your venue, the red strip or panel also offers **Start the venue in the cloud**, even without a spare. The option is visible on the sign-in screen and to all staff. [Check what you need](servers.md#cloud-emergency) before opening it.
 

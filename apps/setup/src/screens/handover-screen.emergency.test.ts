@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
+import { formatDuration } from "@waitron/shared";
 import { SetupApi } from "../api/client.js";
 import { format, setLocale, t } from "../i18n/t.js";
 import { handoverEs } from "../i18n/strings/handover.js";
@@ -126,6 +127,10 @@ async function mount(
     pageUrl?: string;
     /** What `GET /api/node/main` answers; a string mounts without waiting for the first step. */
     mainUrl?: string | null;
+    /** How long `GET /api/node/main` says the spare has found the main box silent. */
+    silentForMs?: number | null;
+    /** Mounts on the page that explains the switch, without pressing Start switching. */
+    explanation?: boolean;
     /** Replaces the answer to `GET /api/node/main`. */
     mainRead?: () => Promise<Response>;
     /** How `${MAIN}/api/node` answers the page's own check, by call from 0. */
@@ -165,7 +170,13 @@ async function mount(
     const path = String(input);
     if (path === "/api/node/main")
       return (
-        options.mainRead?.() ?? new Response(JSON.stringify({ mainUrl: options.mainUrl ?? null }))
+        options.mainRead?.() ??
+        new Response(
+          JSON.stringify({
+            mainUrl: options.mainUrl ?? null,
+            ...(options.silentForMs === undefined ? {} : { silentForMs: options.silentForMs }),
+          }),
+        )
       );
     if (path === `${MAIN}/api/node`) {
       probes.push(init);
@@ -421,9 +432,16 @@ async function mount(
     },
     options.theme,
   );
-  if (typeof options.mainUrl !== "string")
-    await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  if (options.explanation)
+    await vi.waitFor(() => expect(q(el, "[data-test=start-switching]")).not.toBeNull());
+  else if (typeof options.mainUrl !== "string") await startSwitching(el);
   return { el, host, posts, probes };
+}
+/** Presses Start switching on the page that explains the switch, which opens the sign-in. */
+async function startSwitching(el: SetupHandoverScreen) {
+  await vi.waitFor(() => expect(q(el, "[data-test=start-switching]")).not.toBeNull());
+  q(el, "[data-test=start-switching]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
 }
 interface SwitchProof {
   cookie: boolean;
@@ -1678,8 +1696,8 @@ const spareSwitchPage = (back: string) =>
 
 async function stopAndContinueLinks(pageUrl: string) {
   const { el } = await mount({ saved: true, pageUrl });
-  const stop = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
-    (link) => link.textContent === t("handover.emergency.leave"),
+  const stop = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find((link) =>
+    [t("handover.emergency.leave"), t("handover.emergency.leave_till")].includes(link.textContent!),
   )!;
   const stopHref = stop.getAttribute("href");
   await authenticate(el);
@@ -1777,7 +1795,7 @@ async function mainAnsweringRefusal(el: SetupHandoverScreen) {
   const link = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
     (candidate) => candidate.getAttribute("href") === `${MAIN}/servers`,
   );
-  expect(link?.textContent).toBe(`${MAIN}/servers`);
+  expect(link?.textContent).toBe(t("handover.emergency.main_servers"));
   expect(q(el, "[data-test=emergency-preview]")).toBeNull();
 }
 const answers = () => Promise.resolve(new Response(null));
@@ -1803,7 +1821,7 @@ it("Check again lets the switch go on once the main server is silent, and Check 
   await mainAnsweringRefusal(el);
   answering = false;
   q(el, "[data-test=main-check-again]").click();
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  await startSwitching(el);
   expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
   answering = true;
   await edit(el, "handover-email", signIn.email);
@@ -1819,7 +1837,7 @@ it("a main server that comes back before Declare stops the switch there, sending
     mainUrl: MAIN,
     mainAnswers: () => (answering ? answers() : silent()),
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+  await startSwitching(el);
   await authenticate(el);
   await declarationFields(el);
   answering = true;
@@ -1869,9 +1887,10 @@ it.each(["the address read", "the main server's answer"])(
     await vi.advanceTimersByTimeAsync(2999);
     await el.updateComplete;
     expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+    expect(q(el, "[data-test=start-switching]")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_checking"));
     await vi.advanceTimersByTimeAsync(1);
-    await vi.waitFor(() => expect(q(el, "[data-test=emergency-preview]")).not.toBeNull());
+    await vi.waitFor(() => expect(q(el, "[data-test=start-switching]")).not.toBeNull());
     expect(el.shadowRoot!.textContent).not.toContain(t("handover.emergency.main_answering"));
   },
 );
@@ -1880,6 +1899,232 @@ it("no mainUrl lets the switch go on", async () => {
   const { el, probes } = await mount({ mainUrl: null });
   expect(q(el, "[data-test=emergency-preview]")).not.toBeNull();
   expect(probes).toEqual([]);
+});
+
+it.each([
+  { outcome: "answers", mainAnswers: answers, key: "handover.emergency.main_answering" },
+  { outcome: "is silent", mainAnswers: silent, key: "handover.emergency.silent_heading" },
+] as const)(
+  "when the check finds the main box $outcome, focus moves to the new page's heading",
+  async ({ mainAnswers, key }) => {
+    const { el } = await mount({ mainUrl: MAIN, mainAnswers });
+    await vi.waitFor(() => expect(heading(el)).toBe(t(key)));
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "h1"));
+  },
+);
+
+it.each(["Check this copy", "Declare"])(
+  "a check at %s that finds the main box answering moves focus to the heading",
+  async (step) => {
+    let answering = false;
+    const { el } = await mount({
+      mainUrl: MAIN,
+      mainAnswers: () => (answering ? answers() : silent()),
+    });
+    await startSwitching(el);
+    if (step === "Declare") {
+      await authenticate(el);
+      await declarationFields(el);
+    } else {
+      await edit(el, "handover-email", signIn.email);
+      await edit(el, "handover-password", signIn.password);
+    }
+    (el.shadowRoot!.activeElement as HTMLElement | null)?.blur();
+    expect(el.shadowRoot!.activeElement).toBeNull();
+    answering = true;
+    q(
+      el,
+      step === "Declare" ? "[data-test=emergency-declare]" : "[data-test=emergency-preview]",
+    ).click();
+    await mainAnsweringRefusal(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "h1"));
+  },
+);
+
+it("a check that settles after the page is hidden starts no count and moves no focus", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  let release: (() => void) | undefined;
+  const { el } = await mount({
+    mainUrl: MAIN,
+    mainRead: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve(new Response(JSON.stringify({ mainUrl: null, silentForMs: 1_000 })));
+      }),
+  });
+  await vi.waitFor(() => expect(release).toBeDefined());
+  window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  release!();
+  for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(vi.getTimerCount()).toBe(0);
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
+const heading = (el: SetupHandoverScreen) => q(el, "h1").textContent!.trim();
+const goBack = (el: SetupHandoverScreen) => q<HTMLAnchorElement>(el, "[data-test=go-back]");
+const TILL = "https://waitron.local/till/tabs";
+
+it("while the main box is being checked, says so and offers nothing to press", async () => {
+  const { el } = await mount({ mainUrl: MAIN, mainAnswers: () => new Promise(() => {}) });
+  await vi.waitFor(() => expect(heading(el)).toBe(t("handover.emergency.checking_heading")));
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.spare_intro"));
+  const status = q(el, '[role="status"]');
+  expect(status.textContent!.trim()).toBe(t("handover.emergency.main_checking"));
+  expect(status.querySelector("wt-spinner")).not.toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("wt-button, a, input, wt-input")).toHaveLength(0);
+});
+
+it("when the main box answers, going back is the main action and the handover is folded away", async () => {
+  let answering = true;
+  const { el } = await mount({
+    mainUrl: MAIN,
+    pageUrl: spareSwitchPage(TILL),
+    mainAnswers: () => (answering ? answers() : silent()),
+  });
+  await mainAnsweringRefusal(el);
+  expect(heading(el)).toBe(t("handover.emergency.main_answering"));
+  expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.main_answering_body"));
+  expect(goBack(el).getAttribute("href")).toBe(TILL);
+  expect(goBack(el).textContent!.trim()).toBe(t("handover.emergency.leave_till"));
+  expect(goBack(el).classList.contains("primary")).toBe(true);
+  const details = q<HTMLDetailsElement>(el, "details");
+  expect(details.open).toBe(false);
+  expect(details.querySelector("summary")!.textContent!.trim()).toBe(
+    t("handover.emergency.still_move"),
+  );
+  expect(details.textContent).toContain(t("handover.emergency.still_move_body"));
+  expect(details.querySelector(`a[href="${MAIN}/servers"]`)).not.toBeNull();
+  expect(details.contains(q(el, "[data-test=main-check-again]"))).toBe(true);
+  answering = false;
+  q(el, "[data-test=main-check-again]").click();
+  await vi.waitFor(() => expect(q(el, "[data-test=start-switching]")).not.toBeNull());
+  expect(heading(el)).toBe(t("handover.emergency.silent_heading"));
+});
+
+it.each(["en-GB", "es-ES"])(
+  "when the main box is silent, explains the switch before offering it (%s)",
+  async (locale) => {
+    setLocale(locale);
+    const { el } = await mount({ explanation: true });
+    expect(heading(el)).toBe(t("handover.emergency.silent_heading"));
+    const text = el.shadowRoot!.textContent!;
+    for (const key of [
+      "handover.emergency.silent_copy",
+      "handover.emergency.before_heading",
+      "handover.emergency.before_body",
+      "handover.emergency.what_heading",
+      "handover.emergency.what_body",
+    ] as const)
+      expect(text).toContain(t(key));
+    // The spare did not say how long, so no sentence guesses.
+    expect(q(el, "h1 + p").textContent!.trim()).toBe(t("handover.emergency.silent_copy"));
+    expect(q(el, "[data-test=start-switching]").getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=start-switching]").textContent!.trim()).toBe(
+      t("handover.emergency.start"),
+    );
+    expect(goBack(el).getAttribute("href")).toBe("/");
+    expect(goBack(el).textContent!.trim()).toBe(t("handover.emergency.leave"));
+    expect(goBack(el).classList.contains("primary")).toBe(false);
+    expect(q(el, '[name="handover-email"]')).toBeNull();
+    expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+  },
+);
+
+it("counts up how long the spare has found the main box silent, from the spare's own figure", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  const { el } = await mount({ explanation: true, silentForMs: 65_000 });
+  const sentence = (ms: number) =>
+    format("handover.emergency.silent_for", { duration: formatDuration(ms, "en-GB") });
+  expect(el.shadowRoot!.textContent).toContain(sentence(65_000));
+  await vi.advanceTimersByTimeAsync(5_000);
+  await el.updateComplete;
+  expect(el.shadowRoot!.textContent).toContain(sentence(70_000));
+  q(el, "[data-test=start-switching]").click();
+  await el.updateComplete;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each(["light", "dark"] as const)(
+  "the secondary Go back link is painted like a secondary wt-button, at rest and hovered (%s)",
+  async (theme) => {
+    const { el } = await mount({ explanation: true, theme });
+    const probe = document.createElement("wt-button");
+    probe.setAttribute("variant", "secondary");
+    probe.textContent = "probe";
+    q(el, ".choices").append(probe);
+    await (probe as LitElement).updateComplete;
+    const button = probe.shadowRoot!.querySelector("button")!;
+    const paint = (node: Element) => {
+      const style = getComputedStyle(node);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+        border: `${style.borderTopWidth} ${style.borderTopStyle} ${style.borderTopColor}`,
+        radius: style.borderTopLeftRadius,
+        weight: style.fontWeight,
+        padding: style.padding,
+        minHeight: style.minHeight,
+      };
+    };
+    // The pointer stays where the previous case left it, which can be over this link.
+    await userEvent.hover(q(el, "h1"));
+    expect(paint(goBack(el))).toEqual(paint(button));
+    await userEvent.hover(button);
+    const hoveredButton = paint(button);
+    await userEvent.hover(goBack(el));
+    expect(paint(goBack(el))).toEqual(hoveredButton);
+  },
+);
+
+it("stops counting when the page is hidden", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  await mount({ explanation: true, silentForMs: 1_000 });
+  expect(vi.getTimerCount()).toBe(1);
+  window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("Start switching opens the sign-in under the usual heading and moves focus to it", async () => {
+  const { el } = await mount({ explanation: true });
+  q(el, "[data-test=start-switching]").click();
+  await vi.waitFor(() => expect(q(el, '[name="handover-email"]')).not.toBeNull());
+  expect(heading(el)).toBe(t("handover.heading"));
+  expect(el.shadowRoot!.activeElement).toBe(q(el, "h1"));
+  expect(q(el, "[data-test=start-switching]")).toBeNull();
+});
+
+it.each([
+  { back: TILL, href: TILL, label: "handover.emergency.leave_till" },
+  { back: "https://evil.example/", href: "/", label: "handover.emergency.leave" },
+] as const)(
+  "names the till in Go back only when the page has a till to go back to: $back",
+  async ({ back, href, label }) => {
+    const { el } = await mount({ explanation: true, pageUrl: spareSwitchPage(back) });
+    expect(goBack(el).getAttribute("href")).toBe(href);
+    expect(goBack(el).textContent!.trim()).toBe(t(label));
+    await startSwitching(el);
+    const leave = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a")].find(
+      (link) => link.getAttribute("href") === href,
+    )!;
+    expect(leave.textContent!.trim()).toBe(t(label));
+  },
+);
+
+it("a page reopened on a declared switch goes straight to the sign-in", async () => {
+  const fetcher = vi.fn<typeof fetch>(
+    async () => new Response(JSON.stringify({ body: { ...status, waitingReason: null } })),
+  );
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api: new SetupApi("", fetcher),
+    operationId: saved.operationId,
+  });
+  await vi.waitFor(() => expect(q(el, '[name="handover-email"]')).not.toBeNull());
+  expect(q(el, "[data-test=start-switching]")).toBeNull();
+  expect(heading(el)).toBe(t("handover.heading"));
+  expect(fetcher.mock.calls.map(([input]) => String(input))).not.toContain("/api/node/main");
 });
 
 it("offers a passkey beside the password, and the passkey needs no email or password", async () => {

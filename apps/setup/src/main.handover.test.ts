@@ -36,7 +36,7 @@ it("opens the literal emergency entry without reading an operation named emergen
   expect(screen.emergency).toBe(true);
   expect(screen.operationId).toBe("");
   await vi.waitFor(() =>
-    expect(screen.shadowRoot!.querySelector("[data-test=emergency-preview]")).not.toBeNull(),
+    expect(screen.shadowRoot!.querySelector("[data-test=start-switching]")).not.toBeNull(),
   );
   expect(requests).toEqual(["/api/node/main"]);
 });
