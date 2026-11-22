@@ -224,15 +224,6 @@ Left open:
   it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
   an order be handed over before it is paid but did not decide this. **Next action:** decide
   whether a placed order can be adjusted before it is collected.
-- **Override PIN limits (C89, #951), for the owner:** the two PIN prompts say "wait a moment"
-  rather than counting down the seconds the server sends, as the sign-in screen does, and the
-  approver prompt hides the message as soon as someone types; the limit is an optional
-  argument, so a future route taking an approver's PIN could leave it off unnoticed; and the
-  till's sign-in route still repeats the steps `verifyThrottledCredential`
-  (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
-  wrong PINs share the drawer's and adjustments' count, or that the sign-in and override counts
-  are separate. **Next action:** the owner decides whether to
-  add the countdown and make the limit required.
 - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
   (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
   till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
